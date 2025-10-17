@@ -13,15 +13,29 @@ Club membership management system with separate applications for viewing and for
 
 **Production Deployment:**
 ```bash
-# Clone and configure
+# Clone the repository
+cd /opt
+git clone https://github.com/angeeinstein/jaeronautics.git
+cd jaeronautics/viewer
+
+# Install (creates .env automatically if missing)
+sudo ./install.sh
+
+# Configure your database credentials
+nano .env
+
+# Start the service
+sudo systemctl start jaeronautics
+```
+
+**Or configure .env first, then install:**
+```bash
 cd /opt
 git clone https://github.com/angeeinstein/jaeronautics.git
 cd jaeronautics/viewer
 cp .env.example .env
-nano .env  # Add your database credentials
-
-# Install (one command!)
-sudo ./install.sh
+nano .env  # Configure now
+sudo ./install.sh  # Detects configured .env and starts automatically
 ```
 
 **Updates:**
