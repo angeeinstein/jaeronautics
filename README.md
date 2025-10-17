@@ -11,19 +11,29 @@ Club membership management system with separate applications for viewing and for
 
 ### Viewer App (Member Database Viewer)
 
-**Quick Production Deployment:**
+**Production Deployment:**
 ```bash
+# Clone and configure
 cd /opt
 git clone https://github.com/angeeinstein/jaeronautics.git
 cd jaeronautics/viewer
 cp .env.example .env
-nano .env  # Configure your database credentials
+nano .env  # Add your database credentials
+
+# Install (one command!)
 sudo ./install.sh
 ```
 
-See documentation:
-- [DEPLOYMENT.md](viewer/DEPLOYMENT.md) - Quick deployment guide
-- [DEPLOYMENT_WORKFLOW.md](viewer/DEPLOYMENT_WORKFLOW.md) - How deployment works
+**Updates:**
+```bash
+cd /opt/jaeronautics/viewer
+git pull
+sudo ./install.sh  # Same script handles updates!
+```
+
+**Documentation:**
+- [DEPLOYMENT.md](viewer/DEPLOYMENT.md) - Complete deployment guide
+- [QUICK_REFERENCE.md](viewer/QUICK_REFERENCE.md) - Command cheat sheet
 - [setup_instructions.md](viewer/setup_instructions.md) - Detailed manual setup
 
 **Local Development:**

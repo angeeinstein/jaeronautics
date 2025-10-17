@@ -1,108 +1,183 @@
-# Quick Deployment Guide
+# Deployment Guide
 
-## First Time Setup
+## Quick Start
 
-1. **Clone the repository on your server:**
-   ```bash
-   cd /opt  # or wherever you want to install
-   git clone https://github.com/angeeinstein/jaeronautics.git
-   cd jaeronautics/viewer
-   ```
-
-2. **Configure environment variables:**
-   ```bash
-   cp .env.example .env
-   nano .env
-   # Fill in your database credentials and secrets
-   ```
-
-3. **Run the installation script:**
-   ```bash
-   sudo ./install.sh
-   ```
-
-4. **Start the service:**
-   ```bash
-   sudo systemctl start jaeronautics
-   sudo systemctl status jaeronautics
-   ```
-
-## Updating After Git Pull
-
-When you make changes and push to GitHub:
+### First Time Setup
 
 ```bash
-# On your server
+# 1. Clone and configure
+cd /opt
+git clone https://github.com/angeeinstein/jaeronautics.git
+cd jaeronautics/viewer
+cp .env.example .env
+nano .env  # Edit with your database credentials
+
+# 2. Install (one command!)
+chmod +x install.sh
+sudo ./install.sh
+```
+
+### Updates After Changes
+
+```bash
 cd /opt/jaeronautics/viewer
 git pull
-sudo ./update.sh
+sudo ./install.sh  # Same script!
 ```
 
-The update script will:
-- Stop the service
-- Update Python dependencies
-- Fix permissions
-- Restart the service
+**That's it!** The script handles everything automatically.
 
-## Manual Commands
+---
 
-### View logs:
+## What install.sh Does
+
+The script is **intelligent** and works for both fresh installations and updates:
+
+### Auto-Detection
+- Checks if service exists → **UPDATE mode** (stops, updates, restarts)
+- No service found → **INSTALL mode** (full setup)
+- Checks .env configuration → Starts service if ready
+
+### Fresh Install
+1. ✓ Checks system requirements (OS, Python, MySQL)
+2. ✓ Installs missing packages (only what's needed)
+3. ✓ Creates application user (`jaeronautics`)
+4. ✓ Sets up Python virtual environment
+5. ✓ Installs Python packages
+6. ✓ Creates log directory
+7. ✓ Creates .env from template (if missing)
+8. ✓ Installs systemd service
+9. ✓ Starts service (if .env configured)
+
+### Update Mode
+1. ✓ Stops the running service
+2. ✓ Updates Python dependencies
+3. ✓ Updates service configuration
+4. ✓ Restarts the service
+
+**Safe to run multiple times!**
+
+---
+
+## Common Tasks
+
+### Service Management
 ```bash
-sudo journalctl -u jaeronautics -f
+sudo systemctl start jaeronautics      # Start
+sudo systemctl stop jaeronautics       # Stop
+sudo systemctl restart jaeronautics    # Restart
+sudo systemctl status jaeronautics     # Check status
 ```
 
-### Restart service:
+### View Logs
 ```bash
+sudo journalctl -u jaeronautics -f                    # Follow (live)
+sudo journalctl -u jaeronautics -n 50                 # Last 50 lines
+sudo journalctl -u jaeronautics --since "1 hour ago"  # Last hour
+```
+
+### Configuration
+```bash
+nano /opt/jaeronautics/viewer/.env     # Edit configuration
+sudo systemctl restart jaeronautics    # Apply changes
+```
+
+### Pre-Installation Check (Optional)
+```bash
+./check_requirements.sh                # Check system requirements
+```
+
+---
+
+## .env Configuration
+
+Required values in your `.env` file:
+
+```bash
+# Database
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=membership_db
+DB_USER=your_user
+DB_PASSWORD=your_password
+
+# Flask
+SECRET_KEY=generate_random_key    # Use: python3 -c 'import secrets; print(secrets.token_hex(32))'
+
+# Login
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=secure_password
+```
+
+---
+
+## File Locations
+
+| What | Where |
+|------|-------|
+| Application | `/opt/jaeronautics/viewer/` |
+| Configuration | `/opt/jaeronautics/viewer/.env` |
+| Systemd service | `/etc/systemd/system/jaeronautics.service` |
+| Logs | `/var/log/jaeronautics/` |
+| Virtual env | `/opt/jaeronautics/viewer/venv/` |
+
+---
+
+## Troubleshooting
+
+### Service Won't Start
+```bash
+# Check logs for errors
+sudo journalctl -u jaeronautics -n 50
+
+# Verify .env configuration
+cat /opt/jaeronautics/viewer/.env
+
+# Re-run install script
+sudo ./install.sh
+```
+
+### Database Connection Failed
+```bash
+# Test database connection
+mysql -h DB_HOST -u DB_USER -p DB_NAME
+
+# Fix credentials in .env
+nano /opt/jaeronautics/viewer/.env
 sudo systemctl restart jaeronautics
 ```
 
-### Check service status:
+### Port Already in Use
 ```bash
-sudo systemctl status jaeronautics
+# Find what's using port 5000
+sudo netstat -tlnp | grep 5000
+# or
+sudo ss -tlnp | grep 5000
 ```
 
-### Stop service:
+### Permission Issues
 ```bash
-sudo systemctl stop jaeronautics
+cd /opt/jaeronautics/viewer
+sudo chown -R jaeronautics:jaeronautics .
+sudo chmod 600 .env
+sudo systemctl restart jaeronautics
 ```
 
-## File Locations After Installation
-
-- **Application files:** `/opt/jaeronautics/viewer/` (or wherever you cloned)
-- **Systemd service:** `/etc/systemd/system/jaeronautics.service`
-- **Logs:** `/var/log/jaeronautics/`
-- **Application user:** `jaeronautics`
+---
 
 ## Uninstalling
 
 ```bash
 cd /opt/jaeronautics/viewer
 sudo ./uninstall.sh
-# Then manually remove application directory if desired:
+# Optionally remove application directory:
 # sudo rm -rf /opt/jaeronautics
 ```
 
-## Troubleshooting
+---
 
-### Service won't start
-```bash
-sudo journalctl -u jaeronautics -n 50
-```
+## Additional Resources
 
-### Check if port is in use
-```bash
-sudo netstat -tlnp | grep 5000
-```
-
-### Permission issues
-```bash
-cd /opt/jaeronautics/viewer
-sudo chown -R jaeronautics:jaeronautics .
-sudo chmod 600 .env
-```
-
-### Database connection issues
-```bash
-# Test database connection
-mysql -h DB_HOST -u DB_USER -p DB_NAME
-```
+- **QUICK_REFERENCE.md** - Command cheat sheet
+- **setup_instructions.md** - Detailed manual setup guide
+- **check_requirements.sh** - Pre-installation system check
