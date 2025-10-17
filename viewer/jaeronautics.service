@@ -1,0 +1,19 @@
+[Unit]
+Description=Jaeronautics Club Membership Flask App
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/jaeronautics-1/viewer
+Environment="PATH=/path/to/jaeronautics-1/viewer/venv/bin"
+ExecStart=/path/to/jaeronautics-1/viewer/venv/bin/gunicorn --config gunicorn_config.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

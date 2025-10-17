@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Members - Club Membership{% endblock %}
+
+{% block extra_css %}
+<style>
+    .members-header {
+        margin-bottom: 20px;
+    }
+    
+    .members-header h2 {
+        color: #333;
+        margin-bottom: 10px;
+    }
+    
+    .members-count {
+        color: #666;
+        font-size: 14px;
+    }
+    
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    
+    thead {
+        background: #667eea;
+        color: white;
+    }
+    
+    th, td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    th {
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 14px;
+    }
+    
+    tbody tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .no-members {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+    
+    .error-message {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 20px;
+        border-radius: 5px;
+        border: 1px solid #f5c6cb;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="members-header">
+    <h2>Club Members</h2>
+    {% if not error and members %}
+        <p class="members-count">Total Members: {{ members|length }}</p>
+    {% endif %}
+</div>
+
+{% if error %}
+    <div class="error-message">
+        <strong>Database Error:</strong> Unable to retrieve members. Please check your database configuration.
+    </div>
+{% elif not members %}
+    <div class="no-members">
+        <p>No members found in the database.</p>
+    </div>
+{% else %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    {% for key in members[0].keys() %}
+                        <th>{{ key|replace('_', ' ')|title }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for member in members %}
+                    <tr>
+                        {% for value in member.values() %}
+                            <td>{{ value if value is not none else '-' }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+{% endblock %}

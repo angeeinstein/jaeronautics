@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}500 - Server Error{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-container {
+        text-align: center;
+        padding: 60px 20px;
+    }
+    
+    .error-code {
+        font-size: 72px;
+        font-weight: bold;
+        color: #dc3545;
+        margin-bottom: 20px;
+    }
+    
+    .error-message {
+        font-size: 24px;
+        color: #333;
+        margin-bottom: 30px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <div class="error-code">500</div>
+    <div class="error-message">Internal Server Error</div>
+    <p>Something went wrong. Please try again later.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">Go to Home</a>
+</div>
+{% endblock %}
