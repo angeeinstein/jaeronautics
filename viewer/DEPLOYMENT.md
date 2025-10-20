@@ -89,6 +89,18 @@ sudo systemctl restart jaeronautics    # Apply changes
 
 ---
 
+## Network Access
+
+The application is configured to be accessible from:
+
+- **Localhost:** `http://localhost:5000` or `http://127.0.0.1:5000`
+- **LAN Access:** `http://192.168.1.244:5000` (replace with your server's IP)
+- **Internet:** Via Cloudflare Tunnel (see setup_instructions.md)
+
+**Note:** The service binds to `0.0.0.0:5000` which allows access from any IP address on your network.
+
+---
+
 ## .env Configuration
 
 Required values in your `.env` file:

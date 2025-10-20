@@ -102,7 +102,9 @@ source venv/bin/activate
 python app.py
 ```
 
-Visit `http://localhost:5000` to test the application.
+Test the application:
+- **Locally:** `http://localhost:5000` or `http://127.0.0.1:5000`
+- **From LAN:** `http://192.168.1.244:5000` (replace with your server's IP)
 
 ### 5. Setup Systemd Service
 
@@ -163,7 +165,7 @@ credentials-file: /home/YOUR_USER/.cloudflared/YOUR_TUNNEL_ID.json
 
 ingress:
   - hostname: your-domain.com
-    service: http://127.0.0.1:5000
+    service: http://127.0.0.1:5000  # Cloudflare connects locally
   - service: http_status:404
 ```
 

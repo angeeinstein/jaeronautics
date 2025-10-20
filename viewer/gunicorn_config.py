@@ -1,8 +1,9 @@
 """Gunicorn configuration file"""
 import multiprocessing
 
-# Bind to localhost only (Cloudflare tunnel will connect to this)
-bind = "127.0.0.1:5000"
+# Bind to all interfaces (accessible from LAN and localhost)
+# 0.0.0.0 allows access from any IP on the network
+bind = "0.0.0.0:5000"
 
 # Worker processes
 workers = multiprocessing.cpu_count() * 2 + 1
