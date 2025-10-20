@@ -1,31 +1,37 @@
 # Deployment Guide
 
-## Quick Start
+## Ultra-Simple Workflow
 
-### First Time Setup
+### First Time Setup (Only TWO Commands!)
 
 ```bash
-# 1. Clone and configure
+# 1. Clone the repository
 cd /opt
 git clone https://github.com/angeeinstein/jaeronautics.git
 cd jaeronautics/viewer
-cp .env.example .env
-nano .env  # Edit with your database credentials
 
-# 2. Install (one command!)
+# 2. Install everything
 chmod +x install.sh
 sudo ./install.sh
+
+# Then just configure .env and you're done!
+nano .env  # Add your database credentials
+sudo systemctl start jaeronautics  # Start if needed
 ```
 
-### Updates After Changes
+### Updates (Only ONE Command!)
 
 ```bash
 cd /opt/jaeronautics/viewer
-git pull
-sudo ./install.sh  # Same script!
+sudo ./install.sh  # Automatically does git pull + updates everything!
 ```
 
-**That's it!** The script handles everything automatically.
+**That's it!** The script handles **everything** automatically:
+- Git pull (for updates)
+- System dependencies
+- Python packages  
+- Service configuration
+- Automatic restart
 
 ---
 

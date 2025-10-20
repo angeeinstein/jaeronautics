@@ -3,12 +3,12 @@
 ## Installation & Updates - ONE COMMAND
 
 ```bash
-sudo ./install.sh
+chmod +x install.sh && sudo ./install.sh
 ```
 
 That's it! Use it for:
-- ✅ Fresh installation
-- ✅ Updates after `git pull`
+- ✅ Fresh installation  
+- ✅ Updates (automatically does git pull)
 - ✅ Fixing broken installations
 - ✅ Reconfiguring services
 
@@ -22,17 +22,17 @@ That's it! Use it for:
 git clone https://github.com/angeeinstein/jaeronautics.git
 cd jaeronautics/viewer
 
-# 2. Configure
-cp .env.example .env
-nano .env
-
-# 3. Install
+# 2. Install (handles everything!)
+chmod +x install.sh
 sudo ./install.sh
+
+# 3. Configure
+nano .env
 ```
 
-### Regular Updates
+### Updates
 ```bash
-git pull && sudo ./install.sh
+sudo ./install.sh  # Automatically pulls latest code!
 ```
 
 ---

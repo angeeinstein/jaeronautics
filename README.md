@@ -11,38 +11,44 @@ Club membership management system with separate applications for viewing and for
 
 ### Viewer App (Member Database Viewer)
 
-**Production Deployment:**
+**Simple Deployment (Two Commands Only!):**
 ```bash
-# Clone the repository
+# 1. Clone the repository
 cd /opt
 git clone https://github.com/angeeinstein/jaeronautics.git
 cd jaeronautics/viewer
 
-# Install (creates .env automatically if missing)
+# 2. Install everything (handles .env creation, dependencies, service setup)
+chmod +x install.sh
 sudo ./install.sh
 
-# Configure your database credentials
+# 3. Configure your database credentials
 nano .env
 
-# Start the service
+# 4. Start the service
 sudo systemctl start jaeronautics
 ```
 
-**Or configure .env first, then install:**
+**Alternative (Configure First):**
 ```bash
+# Same clone step
 cd /opt
 git clone https://github.com/angeeinstein/jaeronautics.git
 cd jaeronautics/viewer
+
+# Configure before install
 cp .env.example .env
-nano .env  # Configure now
-sudo ./install.sh  # Detects configured .env and starts automatically
+nano .env  # Configure database credentials
+
+# Install (detects configured .env and starts automatically)
+chmod +x install.sh
+sudo ./install.sh
 ```
 
-**Updates:**
+**Updates (ONE Command!):**
 ```bash
 cd /opt/jaeronautics/viewer
-git pull
-sudo ./install.sh  # Same script handles updates!
+sudo ./install.sh  # Automatically does git pull + updates everything!
 ```
 
 **Documentation:**

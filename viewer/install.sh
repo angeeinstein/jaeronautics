@@ -1,9 +1,12 @@
 #!/bin/bash
-# Installation/Update script for Jaeronautics Viewer App
+# All-in-One Installation/Update script for Jaeronautics Viewer App
 # Run with: sudo ./install.sh
 # 
-# This script is idempotent - safe to run multiple times
-# Use for both initial installation AND updates after git pull
+# This script handles EVERYTHING:
+# - Fresh installation (after git clone)
+# - Updates (automatically does git pull)
+# - Dependency management
+# - Service configuration
 
 set -e  # Exit on error
 
@@ -33,10 +36,41 @@ fi
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 APP_DIR="$SCRIPT_DIR"
 
-echo -e "${YELLOW}Installing from: $APP_DIR${NC}"
+echo -e "${YELLOW}Working directory: $APP_DIR${NC}"
 
-# 0. Check system requirements
-echo -e "${GREEN}Step 0: Checking system requirements...${NC}"
+# 0. Git operations (for updates)
+if [ "$INSTALL_TYPE" = "update" ]; then
+    echo -e "${GREEN}Step 0a: Updating code from Git...${NC}"
+    
+    # Check if this is a git repository
+    if [ -d "$APP_DIR/../.git" ]; then
+        cd "$APP_DIR/.."  # Go to repo root
+        
+        # Check if there are uncommitted changes
+        if ! git diff-index --quiet HEAD --; then
+            echo -e "${YELLOW}  Warning: Uncommitted changes detected!${NC}"
+            echo -e "${YELLOW}  Stashing changes temporarily...${NC}"
+            git stash push -m "Auto-stash before install.sh update $(date)"
+        fi
+        
+        # Pull latest changes
+        echo -e "${YELLOW}  Pulling latest changes...${NC}"
+        if git pull; then
+            echo -e "${GREEN}  ✓ Code updated successfully${NC}"
+        else
+            echo -e "${RED}  ✗ Git pull failed${NC}"
+            echo -e "${YELLOW}  Continuing with current code...${NC}"
+        fi
+        
+        cd "$APP_DIR"  # Return to viewer directory
+    else
+        echo -e "${YELLOW}  Warning: Not a git repository, skipping git pull${NC}"
+    fi
+    echo ""
+fi
+
+# 1. Check system requirements
+echo -e "${GREEN}Step 1: Checking system requirements...${NC}"
 
 # Check OS
 if [ -f /etc/os-release ]; then
@@ -91,8 +125,8 @@ else
     echo -e "${YELLOW}  Warning: git not found. You may need it for updates.${NC}"
 fi
 
-# 1. Install system dependencies
-echo -e "${GREEN}Step 1: Installing system dependencies...${NC}"
+# 2. Install system dependencies
+echo -e "${GREEN}Step 2: Installing system dependencies...${NC}"
 apt-get update
 
 # Install only what's needed
@@ -131,8 +165,8 @@ else
     echo "All required packages already installed"
 fi
 
-# 2. Create application user if doesn't exist
-echo -e "${GREEN}Step 2: Setting up application user...${NC}"
+# 3. Create application user if doesn't exist
+echo -e "${GREEN}Step 3: Setting up application user...${NC}"
 if ! id "jaeronautics" &>/dev/null; then
     useradd -r -s /bin/bash -d /opt/jaeronautics jaeronautics
     echo "Created user: jaeronautics"
@@ -140,8 +174,8 @@ else
     echo "User jaeronautics already exists - skipping"
 fi
 
-# 3. Setup virtual environment
-echo -e "${GREEN}Step 3: Setting up Python virtual environment...${NC}"
+# 4. Setup virtual environment
+echo -e "${GREEN}Step 4: Setting up Python virtual environment...${NC}"
 
 # Stop service if running (for updates)
 if [ "$INSTALL_TYPE" = "update" ]; then
@@ -165,8 +199,8 @@ pip install -r "$APP_DIR/requirements.txt" -q
 deactivate
 echo "Python packages installed successfully"
 
-# 4. Create log directory
-echo -e "${GREEN}Step 4: Creating log directory...${NC}"
+# 5. Create log directory
+echo -e "${GREEN}Step 5: Creating log directory...${NC}"
 if [ ! -d /var/log/jaeronautics ]; then
     mkdir -p /var/log/jaeronautics
     echo "Log directory created"
@@ -174,8 +208,8 @@ fi
 chown jaeronautics:jaeronautics /var/log/jaeronautics
 echo "Log directory permissions set"
 
-# 5. Set permissions
-echo -e "${GREEN}Step 5: Setting permissions...${NC}"
+# 6. Set permissions
+echo -e "${GREEN}Step 6: Setting permissions...${NC}"
 chown -R jaeronautics:jaeronautics "$APP_DIR"
 
 # Check if .env exists and handle it
@@ -207,8 +241,8 @@ else
     fi
 fi
 
-# 6. Install systemd service
-echo -e "${GREEN}Step 6: Configuring systemd service...${NC}"
+# 7. Install systemd service
+echo -e "${GREEN}Step 7: Configuring systemd service...${NC}"
 # Update the service file with actual paths
 sed "s|/path/to/jaeronautics-1/viewer|$APP_DIR|g" "$APP_DIR/jaeronautics.service" > /tmp/jaeronautics.service.tmp
 sed -i "s|User=www-data|User=jaeronautics|g" /tmp/jaeronautics.service.tmp
@@ -219,12 +253,12 @@ cp /tmp/jaeronautics.service.tmp /etc/systemd/system/jaeronautics.service
 rm /tmp/jaeronautics.service.tmp
 echo "Service file installed to /etc/systemd/system/"
 
-# 7. Reload systemd
-echo -e "${GREEN}Step 7: Reloading systemd daemon...${NC}"
+# 8. Reload systemd
+echo -e "${GREEN}Step 8: Reloading systemd daemon...${NC}"
 systemctl daemon-reload
 
-# 8. Enable service (if not already enabled)
-echo -e "${GREEN}Step 8: Enabling service...${NC}"
+# 9. Enable service (if not already enabled)
+echo -e "${GREEN}Step 9: Enabling service...${NC}"
 if systemctl is-enabled jaeronautics &>/dev/null; then
     echo "Service already enabled"
 else
@@ -232,8 +266,8 @@ else
     echo "Service enabled to start on boot"
 fi
 
-# 9. Start or restart service if .env is configured
-echo -e "${GREEN}Step 9: Service management...${NC}"
+# 10. Start or restart service if .env is configured
+echo -e "${GREEN}Step 10: Service management...${NC}"
 SERVICE_SHOULD_START=false
 
 if [ "$ENV_NEEDS_CONFIGURATION" = false ]; then
