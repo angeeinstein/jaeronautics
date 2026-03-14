@@ -206,6 +206,7 @@ normalize_repo_url() {
 git_in_dir() {
     local target_dir="$1"
     shift
+    git config --global --add safe.directory "${target_dir}" >/dev/null 2>&1 || true
     git -c safe.directory="${target_dir}" -C "${target_dir}" "$@"
 }
 
