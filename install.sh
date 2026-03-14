@@ -184,7 +184,7 @@ detect_repo_url() {
         while [[ "${current}" != "/" ]]; do
             if [[ -d "${current}/.git" ]]; then
                 local remote
-                remote="$(git -C "${current}" config --get remote.origin.url || true)"
+                remote="$(git_in_dir "${current}" config --get remote.origin.url || true)"
                 if [[ -n "${remote}" ]]; then
                     printf '%s\n' "${remote}"
                     return
@@ -201,6 +201,12 @@ normalize_repo_url() {
     local url="$1"
     url="${url%.git}"
     printf '%s\n' "${url}"
+}
+
+git_in_dir() {
+    local target_dir="$1"
+    shift
+    git -c safe.directory="${target_dir}" -C "${target_dir}" "$@"
 }
 
 load_state() {
@@ -608,9 +614,9 @@ backup_local_repo_changes() {
         return
     fi
 
-    if [[ -n "$(git -C "${target_dir}" status --porcelain)" ]]; then
+    if [[ -n "$(git_in_dir "${target_dir}" status --porcelain)" ]]; then
         local patch_file="${target_dir}/.installer-local-changes-$(date +%Y%m%d%H%M%S).patch"
-        git -C "${target_dir}" diff HEAD > "${patch_file}" || true
+        git_in_dir "${target_dir}" diff HEAD > "${patch_file}" || true
         warn "Local git changes were detected and backed up to ${patch_file}."
     fi
 }
@@ -625,10 +631,10 @@ sync_repo_to_dir() {
     if [[ -d "${target_dir}/.git" ]]; then
         backup_local_repo_changes "${target_dir}"
         info "Updating repository in ${target_dir}"
-        git -C "${target_dir}" remote set-url origin "${repo_url}" || true
-        retry 3 git -C "${target_dir}" fetch --prune origin
-        git -C "${target_dir}" checkout -B "${branch}" "origin/${branch}"
-        git -C "${target_dir}" reset --hard "origin/${branch}"
+        git_in_dir "${target_dir}" remote set-url origin "${repo_url}" || true
+        retry 3 git_in_dir "${target_dir}" fetch --prune origin
+        git_in_dir "${target_dir}" checkout -B "${branch}" "origin/${branch}"
+        git_in_dir "${target_dir}" reset --hard "origin/${branch}"
         return
     fi
 
@@ -658,7 +664,7 @@ bootstrap_self_update() {
     local bootstrap_target="${BOOTSTRAP_DIR}"
     local existing_remote=""
     if [[ -d "${INSTALL_DIR}/.git" ]]; then
-        existing_remote="$(git -C "${INSTALL_DIR}" config --get remote.origin.url || true)"
+        existing_remote="$(git_in_dir "${INSTALL_DIR}" config --get remote.origin.url || true)"
     fi
     if [[ -f "${STATE_FILE}" || ( -n "${existing_remote}" && "$(normalize_repo_url "${existing_remote}")" == "$(normalize_repo_url "${REPO_URL}")" ) ]]; then
         bootstrap_target="${INSTALL_DIR}"
