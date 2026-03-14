@@ -469,7 +469,7 @@ prompt_yes_no() {
 
 validate_json_object() {
     local json_input="${1:-{}}"
-    python - "${json_input}" <<'PY'
+    python3 - "${json_input}" <<'PY'
 import json
 import sys
 
@@ -486,7 +486,7 @@ PY
 
 mail_accounts_count() {
     local json_input="${1:-{}}"
-    python - "${json_input}" <<'PY'
+    python3 - "${json_input}" <<'PY'
 import json
 import sys
 
@@ -532,7 +532,7 @@ collect_mail_accounts() {
             prompt_yes_no account_starttls "Use STARTTLS for ${account_name}?" "0"
         fi
 
-        python - "${account_name}" "${account_host}" "${account_port}" "${account_user}" "${account_password}" "${account_starttls}" <<'PY' >> "${tmp_file}"
+        python3 - "${account_name}" "${account_host}" "${account_port}" "${account_user}" "${account_password}" "${account_starttls}" <<'PY' >> "${tmp_file}"
 import json
 import sys
 
@@ -555,7 +555,7 @@ PY
         prompt_yes_no add_more "Add another SMTP account?" "0"
     done
 
-    MAIL_ACCOUNTS_JSON="$(python - "${tmp_file}" <<'PY'
+    MAIL_ACCOUNTS_JSON="$(python3 - "${tmp_file}" <<'PY'
 import json
 import pathlib
 import sys
@@ -610,7 +610,7 @@ backup_local_repo_changes() {
 
     if [[ -n "$(git -C "${target_dir}" status --porcelain)" ]]; then
         local patch_file="${target_dir}/.installer-local-changes-$(date +%Y%m%d%H%M%S).patch"
-        git -C "${target_dir}" diff > "${patch_file}" || true
+        git -C "${target_dir}" diff HEAD > "${patch_file}" || true
         warn "Local git changes were detected and backed up to ${patch_file}."
     fi
 }
@@ -750,6 +750,8 @@ ensure_virtualenv() {
         step "Creating Python virtual environment"
         python3 -m venv "${INSTALL_DIR}/.venv"
     fi
+
+    chown -R "${APP_USER}:${APP_GROUP}" "${INSTALL_DIR}/.venv"
 
     step "Installing Python dependencies"
     run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --upgrade pip wheel
@@ -956,7 +958,7 @@ FLUSH PRIVILEGES;"
 
 initialize_database_schema() {
     step "Initializing database schema"
-    env PYTHONPATH="${INSTALL_DIR}" run_as_app_user "${INSTALL_DIR}/.venv/bin/flask" --app aeronautics_members.app:create_app db-init
+    run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/flask" --app aeronautics_members.app:create_app db-init
 }
 
 render_service_file() {
