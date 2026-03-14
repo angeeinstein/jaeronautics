@@ -1434,7 +1434,7 @@ uninstall_everything() {
         nginx -t && systemctl reload nginx || true
     fi
 
-    if [[ "${ENABLE_SSL:-0}" == "1" && -n "${DOMAIN:-}" && "${DOMAIN}" != "_" && command_exists certbot ]]; then
+    if [[ "${ENABLE_SSL:-0}" == "1" && -n "${DOMAIN:-}" && "${DOMAIN}" != "_" ]] && command_exists certbot; then
         certbot delete --cert-name "${DOMAIN}" --non-interactive || true
     fi
 
