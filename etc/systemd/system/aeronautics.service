@@ -1,0 +1,27 @@
+[Unit]
+Description=Gunicorn instance to serve the Aeronautics Membership App
+After=network.target
+
+[Service]
+
+#WARNING: Running as root is a major security risk.
+#We should use a dedicated, low-privilege user like 'www-data'.
+#I am setting it to www-data for deployment best practices.
+User=www-data
+Group=www-data
+
+#The absolute path to your project directory.
+#FIX: Moved from /root to the secure /var/www location.
+WorkingDirectory=/var/www/aeronautics-members
+
+#The absolute path to the Python executable inside your VIRTUAL ENVIRONMENT.
+#FIX: Updated path to reflect new project location.
+ExecStart=/var/www/aeronautics-members/venv/bin/gunicorn --workers 5 --bind 127.0.0.1:8000 app:application
+
+Restart=always
+TimeoutSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

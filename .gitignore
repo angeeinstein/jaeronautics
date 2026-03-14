@@ -1,0 +1,22 @@
+# Environment variables
+# Ignore all .env files to keep secrets out of version control.
+**/.env
+
+# Virtual Environment
+# Ignore the virtual environment directory.
+.venv/
+venv/
+env/
+
+# Python cache files
+# Ignore Python bytecode and cache directories.
+**/__pycache__/
+*.pyc
+
+# Compiled translation files
+# These are generated from the .po files, so they don't need to be in version control.
+*.mo
+
+# IDE/Editor specific files
+.vscode/
+.idea/

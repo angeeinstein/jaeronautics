@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Admin Area') }}{% endblock %}
+{% block content %}
+<div class="container mt-5 mb-5">
+    <h2>{{ _('Admin Area') }}</h2>
+    {% if current_user.is_authenticated %}
+        <p>{{ _('Welcome,') }} {{ current_user.email }}!</p>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4>{{ _('Settings') }}</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin') }}">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="invoice_payments_enabled" id="invoice_payments_enabled"
+                            {% if settings.get('invoice_payments_enabled') == 'True' %}checked{% endif %}>
+                        <label class="form-check-label" for="invoice_payments_enabled">
+                            {{ _('Enable Invoice Payments') }}
+                        </label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="automatic_emails_enabled" id="automatic_emails_enabled"
+                            {% if settings.get('automatic_emails_enabled') == 'True' %}checked{% endif %}>
+                        <label class="form-check-label" for="automatic_emails_enabled">
+                            {{ _('Enable Automatic Emails') }}
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="welcome_email_sender" class="form-label">{{ _('Send Welcome Email From:') }}</label>
+                        <select class="form-select" name="welcome_email_sender" id="welcome_email_sender">
+                            {% for choice, label in sender_choices %}
+                                <option value="{{ choice }}" {% if settings.get('welcome_email_sender') == choice %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="automatic_email_template" class="form-label">{{ _('Automatic Email Template:') }}</label>
+                        <select class="form-select" name="automatic_email_template" id="automatic_email_template">
+                            {% for choice, label in template_choices %}
+                                <option value="{{ choice }}" {% if settings.get('automatic_email_template') == choice %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <button type="submit" name="save_settings" class="btn btn-primary mt-3">{{ _('Save Settings') }}</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4>{{ _('Send Test Email') }}</h4>
+            </div>
+            <div class="card-body">
+                {% if test_email_form.sender.choices %}
+                    <form method="POST" action="{{ url_for('send_test_email') }}">
+                        {{ test_email_form.hidden_tag() }}
+                        <div class="mb-3">
+                            {{ test_email_form.sender.label(class="form-label") }}
+                            {{ test_email_form.sender(class="form-select") }}
+                        </div>
+                        <div class="mb-3">
+                            {{ test_email_form.recipient.label(class="form-label") }}
+                            {{ test_email_form.recipient(class="form-control", placeholder=_('recipient@example.com')) }}
+                        </div>
+                        <div class="mb-3">
+                            {{ test_email_form.template.label(class="form-label") }}
+                            {{ test_email_form.template(class="form-select") }}
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" name="send_generic_test" class="btn btn-primary">{{ _('Send Test Email') }}</button>
+                        </div>
+                    </form>
+                {% else %}
+                    <div class="alert alert-warning" role="alert">
+                        {{ _('No sender email accounts are configured. Please set the MAIL_ACCOUNTS_JSON variable in your .env file to use this feature.') }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <a href="{{ url_for('logout') }}" class="btn btn-danger mt-4">{{ _('Logout') }}</a>
+        <a href="{{ url_for('change_password') }}" class="btn btn-secondary mt-4">{{ _('Change Password') }}</a>
+    {% else %}
+        <p>{{ _('Please log in to access the admin area.') }}</p>
+        <a href="{{ url_for('login') }}" class="btn btn-primary">{{ _('Login') }}</a>
+        <a href="{{ url_for('register') }}" class="btn btn-secondary">{{ _('Register') }}</a>
+    {% endif %}
+</div>
+{% endblock %}

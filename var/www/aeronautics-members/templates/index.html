@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-white p-6 sm:p-10 rounded-xl shadow-2xl">
+    <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 border-b pb-3">
+        {{ _('Required Information') }}
+    </h2>
+    <form method="POST" action="{{ url_for('process_membership') }}" class="space-y-6">
+        {{ form.hidden_tag() }} <!-- Adds CSRF protection -->
+
+        <!-- Row 1: Salutation, Title -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <label for="salutation" class="block text-sm font-medium text-gray-700">{{ _(form.salutation.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.salutation(class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+            <div class="md:col-span-2">
+                <label for="title" class="block text-sm font-medium text-gray-700">{{ _(form.title.label.text) }}</label>
+                {{ form.title(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+        </div>
+
+        <!-- Row 2: First Name, Last Name -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label for="first_name" class="block text-sm font-medium text-gray-700">{{ _(form.first_name.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.first_name(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                <label for="last_name" class="block text-sm font-medium text-gray-700">{{ _(form.last_name.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.last_name(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+        </div>
+
+        <!-- Row 3: Street and House Number -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2">
+                <label for="street" class="block text-sm font-medium text-gray-700">{{ _(form.street.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.street(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                <label for="house_number" class="block text-sm font-medium text-gray-700">{{ _(form.house_number.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.house_number(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+        </div>
+
+        <!-- Row 4: Postal Code, City -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label for="postal_code" class="block text-sm font-medium text-gray-700">{{ _(form.postal_code.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.postal_code(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                <label for="city" class="block text-sm font-medium text-gray-700">{{ _(form.city.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.city(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+        </div>
+
+        <!-- Row 5: Country, Private Phone -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label for="country" class="block text-sm font-medium text-gray-700">{{ _(form.country.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.country(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm", placeholder=_('e.g., Austria or Germany')) }}
+            </div>
+            <div>
+                <label for="phone_private" class="block text-sm font-medium text-gray-700">{{ _(form.phone_private.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.phone_private(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+        </div>
+
+        <!-- Row 6: Private Email -->
+        <div class="grid grid-cols-1">
+            <label for="email_private" class="block text-sm font-medium text-gray-700">{{ _(form.email_private.label.text) }}<span class="text-red-500">*</span></label>
+            {{ form.email_private(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+        </div>
+        
+        <!-- Row 7: Work Phone, Work Email (Moved Up) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label for="phone_work" class="block text-sm font-medium text-gray-700">{{ _(form.phone_work.label.text) }}</label>
+                {{ form.phone_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+            <div>
+                <label for="email_work" class="block text-sm font-medium text-gray-700">{{ _(form.email_work.label.text) }}</label>
+                {{ form.email_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            </div>
+        </div>
+
+        <!-- Row 8: Year Group (Moved Up) -->
+        <div class="grid grid-cols-1">
+            <label for="year_group" class="block text-sm font-medium text-gray-700">{{ _(form.year_group.label.text) }}<span class="text-red-500">*</span></label>
+            {{ form.year_group(
+                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm", 
+                placeholder="e.g. LAV25", 
+                oninput="this.value = this.value.toUpperCase()",
+                pattern="[A-Z]+[0-9]{2}",
+                title=_("Invalid format. Please use uppercase letters followed by two numbers, like LAV25.")
+            ) }}
+        </div>
+
+        <!-- Payment Method Selection (Conditional) -->
+        {% if settings.get('invoice_payments_enabled') == 'True' %}
+        <div class="pt-4">
+            <label class="block text-sm font-medium text-gray-700">{{ _(form.payment_method.label.text) }}<span class="text-red-500">*</span></label>
+            <div class="mt-2 space-y-2">
+                {% for subfield in form.payment_method %}
+                    <div class="form-check">
+                        {{ subfield(class="form-check-input") }}
+                        {{ subfield.label(class="form-check-label") }}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Terms and Conditions -->
+        <div class="mt-4 d-flex justify-content-center">
+            <div class="form-check">
+                {{ form.terms_accepted(class="form-check-input") }}
+                <label class="form-check-label" for="{{ form.terms_accepted.id }}">
+                    {{ _('I accept the') }} <a href="{{ url_for('legal_texts') }}" target="_blank" class="text-primary underline">{{ _('Terms and Conditions') }}</a><span class="text-danger">*</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="mt-6">
+            {{ form.submit(class="btn btn-primary w-100 btn-lg") }}
+        </div>
+    </form>
+</div>
+{% endblock content %}

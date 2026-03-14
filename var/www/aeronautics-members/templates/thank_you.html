@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Thank You!') }}{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card text-center shadow-lg border-0">
+                <div class="card-body p-5">
+                    {% if method == 'invoice' %}
+                        <h2 class="card-title text-primary mb-4">{{ _('Thank You for Your Application!') }}</h2>
+                        <p class="lead">{{ _('Your membership application has been submitted. An invoice will be sent to your email address shortly.') }}</p>
+                        <p class="text-muted">{{ _('Your membership will be activated once the invoice is paid.') }}</p>
+                    {% else %}
+                        <h2 class="card-title text-success mb-4">{{ _('Thank You!') }}</h2>
+                        <p class="lead">{{ _('Your membership application has been successfully submitted. A confirmation has been sent to your email.') }}</p>
+                        <p class="text-muted">{{ _('You will be redirected shortly.') }}</p>
+                    {% endif %}
+                    <div class="mt-5">
+                        <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg">{{ _('Return to Homepage') }}</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

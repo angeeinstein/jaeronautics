@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ subject }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .header { background-color: #087990; color: #ffffff; padding: 10px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { padding: 20px; }
+        .footer { margin-top: 20px; font-size: 0.8em; text-align: center; color: #777; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ _('Test Email') }}</h1>
+        </div>
+        <div class="content">
+            <p>{{ _('Hello') }} {{ first_name }},</p>
+            <p>{{ _('This is a test email sent from the admin panel of the Joanneum Aeronautics membership site.') }}</p>
+            <p>{{ _('If you are seeing this, it means the email configuration for the sender account is working correctly.') }}</p>
+            <p><strong>{{ _('Sent at:') }}</strong> {{ timestamp }}</p>
+            <p>{{ _('Best regards,') }}<br>{{ _('The Joanneum Aeronautics Team') }}</p>
+        </div>
+        <div class="footer">
+            <p>&copy; {{ now.year }} Joanneum Aeronautics. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

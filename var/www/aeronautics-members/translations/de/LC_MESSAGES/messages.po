@@ -1,0 +1,418 @@
+# German translations for the membership application.
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-10-12 20:30+0200\n"
+"PO-Revision-Date: 2023-10-27 12:00+0000\n"
+"Last-Translator: \n"
+"Language: de\n"
+"Language-Team: \n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.17.0\n"
+
+#: templates/404.html:2 templates/404.html:10
+msgid "Page Not Found"
+msgstr "Seite nicht gefunden"
+
+#: templates/404.html:11
+#, fuzzy
+msgid "Sorry, we couldn't find the page you were looking for."
+msgstr "Entschuldigung, wir konnten die gesuchte Seite nicht finden."
+
+#: templates/404.html:13 templates/500.html:13 templates/cancel.html:16
+#: templates/thank_you.html:19
+#, fuzzy
+msgid "Return to Homepage"
+msgstr "Zurück zur Hauptseite"
+
+#: templates/500.html:2 templates/500.html:10
+msgid "Internal Server Error"
+msgstr "Interner Serverfehler"
+
+#: templates/500.html:11
+#, fuzzy
+msgid ""
+"Sorry, something went wrong on our end. We've been notified and are "
+"looking into it."
+msgstr ""
+"Entschuldigung, bei uns ist etwas schief gelaufen. Wir wurden "
+"benachrichtigt und untersuchen das Problem."
+
+#: templates/base.html:6
+msgid "Joanneum Aeronautics Membership"
+msgstr "Joanneum Aeronautics Mitgliedschaft"
+
+#: templates/base.html:25
+msgid "Admin"
+msgstr "Admin"
+
+#: templates/admin/index.html:89 templates/base.html:28
+msgid "Logout"
+msgstr "Abmelden"
+
+#: templates/admin/index.html:93 templates/base.html:32
+msgid "Login"
+msgstr "Anmelden"
+
+#: templates/cancel.html:3 templates/cancel.html:11
+#, fuzzy
+msgid "Payment Canceled"
+msgstr "Zahlung abgebrochen"
+
+#: templates/cancel.html:14
+msgid "Your payment process has been canceled. You have not been charged."
+msgstr "Ihr Zahlungsvorgang wurde abgebrochen. Es wurde Ihnen nichts berechnet."
+
+#: templates/cancel.html:15
+msgid "If you wish to try again, you can return to the homepage."
+msgstr "Wenn Sie es erneut versuchen möchten, können Sie zur Startseite zurückkehren."
+
+#: templates/index.html:6
+msgid "Required Information"
+msgstr "Erforderliche Angaben"
+
+#: templates/index.html:63
+msgid "e.g., Austria or Germany"
+msgstr "z.B. Österreich oder Deutschland"
+
+#: templates/index.html:97
+msgid ""
+"Invalid format. Please use uppercase letters followed by two numbers, "
+"like LAV25."
+msgstr ""
+"Ungültiges Format. Bitte verwenden Sie Großbuchstaben gefolgt von zwei "
+"Zahlen, wie LAV25."
+
+#: templates/index.html:121
+msgid "I accept the"
+msgstr "Ich akzeptiere die"
+
+#: templates/index.html:121
+msgid "Terms and Conditions"
+msgstr "Allgemeinen Geschäftsbedingungen"
+
+#: templates/legal_texts.html:7 templates/legal_texts.html:103
+msgid "Back to Application"
+msgstr "Zurück zum Antrag"
+
+#: templates/legal_texts.html:11
+msgid "Legal Texts and Regulations"
+msgstr "Rechtstexte und Vorschriften"
+
+#: templates/legal_texts.html:16
+msgid "Statutes"
+msgstr "Satzung"
+
+#: templates/legal_texts.html:79
+msgid "Rules of Procedure"
+msgstr "Geschäftsordnung"
+
+#: templates/thank_you.html:2 templates/thank_you.html:14
+msgid "Thank You!"
+msgstr "Vielen Dank!"
+
+#: templates/thank_you.html:10
+#, fuzzy
+msgid "Thank You for Your Application!"
+msgstr "Vielen Dank für Ihre Bewerbung!"
+
+#: templates/thank_you.html:11
+#, fuzzy
+msgid ""
+"Your membership application has been submitted. An invoice will be sent "
+"to your email address shortly."
+msgstr ""
+"Ihr Mitgliedsantrag wurde erfolgreich übermittelt. Eine Bestätigung wurde"
+" an Ihre E-Mail gesendet."
+
+#: templates/thank_you.html:12
+msgid "Your membership will be activated once the invoice is paid."
+msgstr "Ihre Mitgliedschaft wird aktiviert, sobald die Rechnung bezahlt ist."
+
+#: templates/thank_you.html:15
+msgid ""
+"Your membership application has been successfully submitted. A "
+"confirmation has been sent to your email."
+msgstr ""
+"Ihr Mitgliedsantrag wurde erfolgreich übermittelt. Eine Bestätigung wurde"
+" an Ihre E-Mail gesendet."
+
+#: templates/thank_you.html:16
+#, fuzzy
+msgid "You will be redirected shortly."
+msgstr "Sie werden in Kürze zur Hauptseite weitergeleitet."
+
+#: templates/admin/change_password.html:2 templates/admin/index.html:90
+msgid "Change Password"
+msgstr "Passwort ändern"
+
+#: templates/admin/change_password.html:9
+msgid "Change Your Password"
+msgstr "Ändern Sie Ihr Passwort"
+
+#: templates/admin/change_password.html:16
+msgid "Enter your current password"
+msgstr "Geben Sie Ihr aktuelles Passwort ein"
+
+#: templates/admin/change_password.html:20
+msgid "Enter your new password"
+msgstr "Geben Sie Ihr neues Passwort ein"
+
+#: templates/admin/change_password.html:24
+msgid "Confirm your new password"
+msgstr "Bestätigen Sie Ihr neues Passwort"
+
+#: templates/admin/index.html:2 templates/admin/index.html:5
+msgid "Admin Area"
+msgstr "Admin-Bereich"
+
+#: templates/admin/index.html:7
+msgid "Welcome,"
+msgstr "Willkommen,"
+
+#: templates/admin/index.html:11
+msgid "Settings"
+msgstr "Einstellungen"
+
+#: templates/admin/index.html:19
+msgid "Enable Invoice Payments"
+msgstr "Rechnungszahlung aktivieren"
+
+#: templates/admin/index.html:26
+msgid "Enable Automatic Emails"
+msgstr "Automatische E-Mails aktivieren"
+
+#: templates/admin/index.html:31
+msgid "Send Welcome Email From:"
+msgstr "Willkommens-E-Mail senden von:"
+
+#: templates/admin/index.html:42
+msgid "Automatic Email Template:"
+msgstr "Automatische E-Mail-Vorlage:"
+
+#: templates/admin/index.html:52
+msgid "Save Settings"
+msgstr "Einstellungen speichern"
+
+#: templates/admin/index.html:59 templates/admin/index.html:78
+msgid "Send Test Email"
+msgstr "Test-E-Mail senden"
+
+#: templates/admin/index.html:71
+msgid "recipient@example.com"
+msgstr "empfaenger@beispiel.com"
+
+#: templates/admin/index.html:83
+msgid ""
+"No sender email accounts are configured. Please set the "
+"MAIL_ACCOUNTS_JSON variable in your .env file to use this feature."
+msgstr ""
+"Es sind keine Absender-E-Mail-Konten konfiguriert. Bitte setzen Sie die "
+"Variable MAIL_ACCOUNTS_JSON in Ihrer .env-Datei, um diese Funktion zu "
+"nutzen."
+
+#: templates/admin/index.html:92
+msgid "Please log in to access the admin area."
+msgstr "Bitte melden Sie sich an, um auf den Admin-Bereich zuzugreifen."
+
+#: templates/admin/index.html:94 templates/admin/register.html:2
+msgid "Register"
+msgstr "Registrieren"
+
+#: templates/admin/login.html:2 templates/admin/login.html:9
+msgid "Admin Login"
+msgstr "Admin-Anmeldung"
+
+#: templates/admin/login.html:16 templates/admin/register.html:16
+msgid "your.email@example.com"
+msgstr "ihre.email@beispiel.com"
+
+#: templates/admin/login.html:20
+msgid "Your Password"
+msgstr "Ihr Passwort"
+
+#: templates/admin/login.html:28
+msgid "Don't have an account?"
+msgstr "Haben Sie noch kein Konto?"
+
+#: templates/admin/login.html:28
+msgid "Register here"
+msgstr "Hier registrieren"
+
+#: templates/admin/register.html:9
+msgid "Create Your Account"
+msgstr "Erstellen Sie Ihr Konto"
+
+#: templates/admin/register.html:20
+msgid "Create a secure password"
+msgstr "Erstellen Sie ein sicheres Passwort"
+
+#: templates/admin/register.html:24
+msgid "Confirm your password"
+msgstr "Bestätigen Sie Ihr Passwort"
+
+#: templates/admin/register.html:32
+msgid "Already have an account?"
+msgstr "Haben Sie bereits ein Konto?"
+
+#: templates/admin/register.html:32
+msgid "Login here"
+msgstr "Hier anmelden"
+
+#: templates/emails/test_email.html:18
+#, fuzzy
+msgid "Test Email"
+msgstr "Test-E-Mail"
+
+#: templates/emails/test_email.html:21 templates/emails/welcome_email.html:31
+msgid "Hello"
+msgstr "Hallo"
+
+#: templates/emails/test_email.html:22
+msgid ""
+"This is a test email sent from the admin panel of the Joanneum "
+"Aeronautics membership site."
+msgstr ""
+"Dies ist eine Test-E-Mail, die vom Admin-Panel der Joanneum Aeronautics-"
+"Mitgliederseite gesendet wurde."
+
+#: templates/emails/test_email.html:23
+msgid ""
+"If you are seeing this, it means the email configuration for the sender "
+"account is working correctly."
+msgstr ""
+"Wenn Sie dies sehen, bedeutet das, dass die E-Mail-Konfiguration für das "
+"Absenderkonto korrekt funktioniert."
+
+#: templates/emails/test_email.html:24
+msgid "Sent at:"
+msgstr "Gesendet am:"
+
+#: templates/emails/test_email.html:25 templates/emails/welcome_email.html:35
+msgid "Best regards,"
+msgstr "Mit freundlichen Grüßen,"
+
+#: templates/emails/test_email.html:25 templates/emails/welcome_email.html:35
+#, fuzzy
+msgid "The Joanneum Aeronautics Team"
+msgstr "Das Joanneum Aeronautics Team"
+
+#: templates/emails/welcome_email.html:32
+msgid ""
+"We are thrilled to welcome you as a new member of Joanneum Aeronautics. "
+"Your membership is now active!"
+msgstr ""
+"Wir freuen uns, Sie als neues Mitglied bei Joanneum Aeronautics begrüßen zu "
+"dürfen. Ihre Mitgliedschaft ist jetzt aktiv!"
+
+#: templates/emails/welcome_email.html:33
+msgid ""
+"Your payment has been successfully processed, and you are now a full "
+"member of our community."
+msgstr ""
+"Ihre Zahlung wurde erfolgreich verarbeitet, und Sie sind jetzt ein "
+"vollwertiges Mitglied unserer Gemeinschaft."
+
+#: templates/emails/welcome_email.html:34
+msgid "If you have any questions, feel free to contact us."
+msgstr "Wenn Sie Fragen haben, zögern Sie nicht, uns zu kontaktieren."
+
+msgid "Go Back Home"
+msgstr "Zurück zur Startseite"
+
+msgid "Aeronautics Membership Application"
+msgstr "Antrag auf Mitgliedschaft in der Aeronautics Gesellschaft"
+
+msgid "Application Cancelled"
+msgstr "Antrag abgebrochen"
+
+msgid "You have cancelled the payment process. Your details were not saved."
+msgstr ""
+"Sie haben den Zahlungsvorgang abgebrochen. "
+"Ihre Daten wurden nicht gespeichert."
+
+msgid "Go back to application form"
+msgstr "Zurück zum Antragsformular"
+
+msgid "Language"
+msgstr "Sprache"
+
+msgid "Optional Information"
+msgstr "Optionale Angaben"
+
+msgid "Salutation"
+msgstr "Anrede"
+
+msgid "Title (optional)"
+msgstr "Titel (optional)"
+
+msgid "First Name"
+msgstr "Vorname"
+
+msgid "Last Name"
+msgstr "Nachname"
+
+msgid "Street"
+msgstr "Straße"
+
+msgid "House Number (optional)"
+msgstr "Hausnummer (optional)"
+
+msgid "Postal Code"
+msgstr "Postleitzahl"
+
+msgid "City"
+msgstr "Ort"
+
+msgid "Country"
+msgstr "Land"
+
+msgid "Private Phone"
+msgstr "Private Telefonnummer"
+
+msgid "Work Phone"
+msgstr "Geschäftliche Telefonnummer"
+
+msgid "Work Email"
+msgstr "Geschäftliche/FH Email-Adresse"
+
+msgid "Year Group"
+msgstr "Jahrgang"
+
+msgid "Proceed to Payment"
+msgstr "Weiter zur Zahlung"
+
+msgid "Payment was not completed. Please try again or contact support."
+msgstr ""
+"Die Zahlung wurde nicht abgeschlossen. "
+"Bitte versuchen Sie es erneut oder "
+"wenden Sie sich an den Support."
+
+msgid "An unexpected error occurred: %(error)s"
+msgstr "Ein unerwarteter Fehler ist aufgetreten: %(error)s"
+
+msgid "Payment setup failed: %(error)s"
+msgstr "Fehler bei der Zahlungsabwicklung: %(error)s"
+
+msgid "Please fill in all required fields."
+msgstr "Bitte füllen Sie alle erforderlichen Felder aus."
+
+msgid "Membership application cancelled. You can try again below."
+msgstr "Mitgliedsantrag abgebrochen. Sie können es unten erneut versuchen."
+
+msgid ""
+"Your session has expired or the "
+"form is invalid. Please try submitting"
+" again."
+msgstr ""
+"Ihre Sitzung ist abgelaufen oder das "
+"Formular ist ungültig. Bitte versuchen "
+"Sie es erneut."
+
+msgid "House Number"
+msgstr "Hausnummer"
+

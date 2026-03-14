@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Internal Server Error') }}{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card text-center shadow-lg border-0">
+                <div class="card-body p-5">
+                    <h1 class="display-1 text-danger">500</h1>
+                    <h2 class="card-title mb-4">{{ _('Internal Server Error') }}</h2>
+                    <p class="lead">{{ _("Sorry, something went wrong on our end. We've been notified and are looking into it.") }}</p>
+                    <div class="mt-5">
+                        <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg">{{ _('Return to Homepage') }}</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
