@@ -10,6 +10,8 @@ cleanup() {
 trap cleanup EXIT
 
 download_installer() {
+    echo "[INFO] Downloading jaeronautics installer..."
+
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL "${INSTALL_URL}" -o "${TMP_SCRIPT}"
         return
@@ -26,6 +28,7 @@ download_installer() {
 
 run_installer() {
     chmod +x "${TMP_SCRIPT}"
+    echo "[INFO] Starting jaeronautics installer..."
 
     if [[ "${EUID}" -eq 0 ]]; then
         exec bash "${TMP_SCRIPT}" "$@"

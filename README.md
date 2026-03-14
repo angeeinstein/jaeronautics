@@ -4,10 +4,16 @@ Membership management app for Joanneum Aeronautics, built with Flask, Stripe, SQ
 
 ## Quick Install
 
-Run this on a clean Linux server. It bootstraps `curl` if needed, downloads the latest installer, and then the installer handles install, update, repair, or full uninstall.
+Run this on a clean Linux server. It downloads a tiny GitHub-hosted bootstrap script, and that bootstrap fetches and runs the latest installer. After the repo is installed, use the local `install.sh` for update, repair, or uninstall.
 
 ```bash
-bash -lc 'set -e; SUDO=""; if [ "$(id -u)" -ne 0 ]; then if ! command -v sudo >/dev/null 2>&1; then echo "Please run as root or install sudo."; exit 1; fi; SUDO="sudo"; fi; if command -v curl >/dev/null 2>&1; then FETCH="curl -fsSL"; elif command -v wget >/dev/null 2>&1; then FETCH="wget -qO-"; else if command -v apt-get >/dev/null 2>&1; then $SUDO apt-get update && $SUDO apt-get install -y curl; elif command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y curl; elif command -v yum >/dev/null 2>&1; then $SUDO yum install -y curl; else echo "Could not install curl automatically."; exit 1; fi; FETCH="curl -fsSL"; fi; $FETCH https://raw.githubusercontent.com/angeeinstein/jaeronautics/main/install.sh | $SUDO bash'
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/angeeinstein/jaeronautics/main/bootstrap.sh)"
+```
+
+If `curl` is not installed but `wget` is available:
+
+```bash
+bash -c "$(wget -qO- https://raw.githubusercontent.com/angeeinstein/jaeronautics/main/bootstrap.sh)"
 ```
 
 During installation the script can ask for:
