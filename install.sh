@@ -31,6 +31,8 @@ APP_PORT="${BOOTSTRAP_APP_PORT:-$DEFAULT_APP_PORT}"
 DOMAIN="${BOOTSTRAP_DOMAIN:-}"
 ENABLE_SSL="${BOOTSTRAP_ENABLE_SSL:-}"
 SSL_EMAIL="${BOOTSTRAP_SSL_EMAIL:-}"
+USE_CLOUDFLARE_TUNNEL="${BOOTSTRAP_USE_CLOUDFLARE_TUNNEL:-0}"
+CLOUDFLARE_ORIGIN_HOST="${BOOTSTRAP_CLOUDFLARE_ORIGIN_HOST:-}"
 NONINTERACTIVE="${BOOTSTRAP_NONINTERACTIVE:-0}"
 
 PACKAGE_MANAGER=""
@@ -102,6 +104,7 @@ Options:
   --branch BRANCH
   --install-dir PATH
   --domain DOMAIN
+  --origin-host HOST
   --enable-ssl
   --disable-ssl
   --ssl-email EMAIL
@@ -138,6 +141,24 @@ retry() {
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+detect_reachable_ipv4() {
+    local detected=""
+
+    if command_exists ip; then
+        detected="$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}')"
+    fi
+
+    if [[ -z "${detected}" ]] && command_exists hostname; then
+        detected="$(hostname -I 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i !~ /^127\./ && $i ~ /^([0-9]{1,3}\.){3}[0-9]{1,3}$/) {print $i; exit}}')"
+    fi
+
+    if [[ -z "${detected}" ]] && command_exists ip; then
+        detected="$(ip -4 addr show scope global up 2>/dev/null | awk '/inet / {sub(/\/.*/, "", $2); if ($2 !~ /^127\./) {print $2; exit}}')"
+    fi
+
+    printf '%s' "${detected}"
 }
 
 require_root() {
@@ -210,6 +231,10 @@ parse_args() {
                 ;;
             --domain)
                 DOMAIN="${2:-}"
+                shift 2
+                ;;
+            --origin-host)
+                CLOUDFLARE_ORIGIN_HOST="${2:-}"
                 shift 2
                 ;;
             --enable-ssl)
@@ -442,6 +467,114 @@ prompt_yes_no() {
     done
 }
 
+validate_json_object() {
+    local json_input="${1:-{}}"
+    python - "${json_input}" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
+try:
+    data = json.loads(raw or "{}")
+except Exception:
+    sys.exit(1)
+
+if not isinstance(data, dict):
+    sys.exit(1)
+PY
+}
+
+mail_accounts_count() {
+    local json_input="${1:-{}}"
+    python - "${json_input}" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
+try:
+    data = json.loads(raw or "{}")
+except Exception:
+    data = {}
+
+if not isinstance(data, dict):
+    data = {}
+
+print(len(data))
+PY
+}
+
+collect_mail_accounts() {
+    local tmp_file
+    local add_more="1"
+    local account_name=""
+    local account_host=""
+    local account_port=""
+    local account_user=""
+    local account_password=""
+    local account_starttls=""
+
+    tmp_file="$(mktemp)"
+
+    tty_print "\n${COLOR_BOLD}SMTP account setup${COLOR_RESET}\n"
+    tty_print "Add one or more sender accounts. Common names are 'office', 'it', or 'noreply'.\n\n"
+
+    while [[ "${add_more}" == "1" ]]; do
+        prompt_value account_name "Mail account key" "" 0 1
+        prompt_value account_host "SMTP host for ${account_name}" "" 0 1
+        prompt_value account_port "SMTP port for ${account_name}" "587" 0 1
+        prompt_value account_user "SMTP username/email for ${account_name}" "" 0 1
+        prompt_value account_password "SMTP password for ${account_name}" "" 1 1
+
+        if [[ "${account_port}" == "587" ]]; then
+            account_starttls="1"
+            prompt_yes_no account_starttls "Use STARTTLS for ${account_name}?" "1"
+        else
+            prompt_yes_no account_starttls "Use STARTTLS for ${account_name}?" "0"
+        fi
+
+        python - "${account_name}" "${account_host}" "${account_port}" "${account_user}" "${account_password}" "${account_starttls}" <<'PY' >> "${tmp_file}"
+import json
+import sys
+
+name, host, port, user, password, starttls = sys.argv[1:7]
+record = {
+    "name": name,
+    "config": {
+        "host": host,
+        "port": int(port),
+        "user": user,
+        "pass": password,
+    },
+}
+if starttls == "1":
+    record["config"]["starttls"] = True
+
+print(json.dumps(record))
+PY
+
+        prompt_yes_no add_more "Add another SMTP account?" "0"
+    done
+
+    MAIL_ACCOUNTS_JSON="$(python - "${tmp_file}" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+accounts = {}
+for line in path.read_text(encoding="utf-8").splitlines():
+    if not line.strip():
+        continue
+    record = json.loads(line)
+    accounts[record["name"]] = record["config"]
+
+print(json.dumps(accounts, separators=(",", ":")))
+PY
+)"
+
+    rm -f "${tmp_file}"
+}
+
 choose_existing_install_action() {
     local choice=""
     tty_print "\n${COLOR_BOLD}Existing installation detected.${COLOR_RESET}\n"
@@ -548,6 +681,8 @@ bootstrap_self_update() {
         BOOTSTRAP_DOMAIN="${DOMAIN}" \
         BOOTSTRAP_ENABLE_SSL="${ENABLE_SSL}" \
         BOOTSTRAP_SSL_EMAIL="${SSL_EMAIL}" \
+        BOOTSTRAP_USE_CLOUDFLARE_TUNNEL="${USE_CLOUDFLARE_TUNNEL}" \
+        BOOTSTRAP_CLOUDFLARE_ORIGIN_HOST="${CLOUDFLARE_ORIGIN_HOST}" \
         BOOTSTRAP_NONINTERACTIVE="${NONINTERACTIVE}" \
         bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}"
     exit $?
@@ -624,6 +759,9 @@ ensure_virtualenv() {
 collect_configuration() {
     source_existing_env
     local reconfigure_all="0"
+    local configure_mail_accounts_now="0"
+    local existing_mail_accounts="0"
+    local detected_origin_host=""
 
     if [[ "${MODE}" == "install" || "${MODE}" == "repair" ]]; then
         reconfigure_all="1"
@@ -639,6 +777,11 @@ collect_configuration() {
     DB_NAME="${DB_NAME:-$DEFAULT_DB_NAME}"
     DB_USER="${DB_USER:-$DEFAULT_DB_USER}"
     MAIL_ACCOUNTS_JSON="${MAIL_ACCOUNTS_JSON:-{}}"
+    if ! validate_json_object "${MAIL_ACCOUNTS_JSON}"; then
+        warn "Existing MAIL_ACCOUNTS_JSON is invalid. Resetting it to an empty object."
+        MAIL_ACCOUNTS_JSON="{}"
+    fi
+    existing_mail_accounts="$(mail_accounts_count "${MAIL_ACCOUNTS_JSON}")"
 
     if [[ "${DB_HOST:-127.0.0.1}" == "127.0.0.1" || "${DB_HOST:-localhost}" == "localhost" ]]; then
         USE_LOCAL_DB="1"
@@ -649,6 +792,24 @@ collect_configuration() {
     local domain_default="${DOMAIN:-$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "_")}"
     if [[ "${reconfigure_all}" == "1" || -z "${DOMAIN:-}" ]]; then
         prompt_value DOMAIN "Domain for nginx (use _ for a catch-all server)" "${domain_default}" 0 1
+    fi
+
+    if [[ "${reconfigure_all}" == "1" || -z "${USE_CLOUDFLARE_TUNNEL:-}" ]]; then
+        prompt_yes_no USE_CLOUDFLARE_TUNNEL "Will this site be exposed through a Cloudflare Tunnel?" "${USE_CLOUDFLARE_TUNNEL:-0}"
+    fi
+    if [[ "${USE_CLOUDFLARE_TUNNEL}" == "1" && "${DOMAIN}" == "_" ]]; then
+        prompt_value DOMAIN "Public hostname for the Cloudflare Tunnel" "" 0 1
+    fi
+    if [[ "${USE_CLOUDFLARE_TUNNEL}" == "1" ]]; then
+        detected_origin_host="${CLOUDFLARE_ORIGIN_HOST:-$(detect_reachable_ipv4)}"
+        if [[ -z "${detected_origin_host}" ]]; then
+            detected_origin_host="127.0.0.1"
+        fi
+        if [[ "${reconfigure_all}" == "1" || -z "${CLOUDFLARE_ORIGIN_HOST:-}" ]]; then
+            prompt_value CLOUDFLARE_ORIGIN_HOST "Reachable internal origin host/IP for the Cloudflare Tunnel" "${detected_origin_host}" 0 1
+        fi
+    else
+        CLOUDFLARE_ORIGIN_HOST=""
     fi
 
     if [[ "${reconfigure_all}" == "1" || -z "${DB_HOST:-}" ]]; then
@@ -708,13 +869,23 @@ collect_configuration() {
         prompt_value STRIPE_WEBHOOK_SECRET "Stripe webhook secret" "${STRIPE_WEBHOOK_SECRET:-}" 1 1
     fi
 
-    if [[ "${MAIL_ACCOUNTS_JSON}" == "{}" && "${NONINTERACTIVE}" != "1" ]]; then
-        warn "MAIL_ACCOUNTS_JSON is currently empty. The site will run, but SMTP-based features will need configuration later."
+    if [[ "${reconfigure_all}" == "1" || "${existing_mail_accounts}" == "0" ]]; then
+        prompt_yes_no configure_mail_accounts_now "Configure SMTP sender accounts now?" "$( [[ "${existing_mail_accounts}" -gt 0 ]] && printf '0' || printf '1' )"
+        if [[ "${configure_mail_accounts_now}" == "1" ]]; then
+            collect_mail_accounts
+            existing_mail_accounts="$(mail_accounts_count "${MAIL_ACCOUNTS_JSON}")"
+        fi
+    fi
+
+    if [[ "${existing_mail_accounts}" == "0" && "${NONINTERACTIVE}" != "1" ]]; then
+        warn "MAIL_ACCOUNTS_JSON is empty. The site will run, but email sending will stay disabled until you add sender accounts."
     fi
 
     if [[ "${reconfigure_all}" == "1" || -z "${ENABLE_SSL}" ]]; then
         if [[ "${DOMAIN}" == "_" ]]; then
             ENABLE_SSL="0"
+        elif [[ "${USE_CLOUDFLARE_TUNNEL}" == "1" ]]; then
+            prompt_yes_no ENABLE_SSL "Also configure origin HTTPS with Let's Encrypt? This is usually not necessary behind Cloudflare Tunnel." "0"
         else
             prompt_yes_no ENABLE_SSL "Configure HTTPS with Let's Encrypt?" "0"
         fi
@@ -910,6 +1081,134 @@ EOF
     fi
 }
 
+write_cloudflare_tunnel_files() {
+    if [[ "${USE_CLOUDFLARE_TUNNEL}" != "1" ]]; then
+        return
+    fi
+
+    step "Writing Cloudflare Tunnel guidance files"
+    local cloudflare_dir="${INSTALL_DIR}/cloudflare"
+    local origin_scheme="http"
+    local origin_port="80"
+    mkdir -p "${cloudflare_dir}"
+
+    if [[ "${ENABLE_SSL}" == "1" ]]; then
+        origin_scheme="https"
+        origin_port="443"
+    fi
+
+    cat > "${cloudflare_dir}/cloudflared-config.yml.example" <<EOF
+tunnel: REPLACE_WITH_YOUR_TUNNEL_ID
+credentials-file: /etc/cloudflared/REPLACE_WITH_YOUR_TUNNEL_ID.json
+
+ingress:
+  - hostname: ${DOMAIN}
+    service: ${origin_scheme}://${CLOUDFLARE_ORIGIN_HOST}
+EOF
+
+    if [[ "${ENABLE_SSL}" == "1" ]]; then
+        cat >> "${cloudflare_dir}/cloudflared-config.yml.example" <<'EOF'
+    originRequest:
+      noTLSVerify: true
+EOF
+    fi
+
+    cat >> "${cloudflare_dir}/cloudflared-config.yml.example" <<EOF
+  - service: http_status:404
+EOF
+
+    cat > "${cloudflare_dir}/README.txt" <<EOF
+Cloudflare Tunnel setup for ${APP_NAME}
+
+Recommended public hostname:
+  ${DOMAIN}
+
+Recommended Cloudflare origin:
+  ${origin_scheme}://${CLOUDFLARE_ORIGIN_HOST}
+
+Origin host/IP and port:
+  ${CLOUDFLARE_ORIGIN_HOST}:${origin_port} (nginx)
+
+Application upstream:
+  127.0.0.1:${APP_PORT} (gunicorn)
+
+Health endpoints:
+  Direct app: http://127.0.0.1:${APP_PORT}/__health
+  Through nginx: ${origin_scheme}://${DOMAIN}/__health
+  Public URL: https://${DOMAIN}/__health
+
+Suggested next steps:
+  1. Install cloudflared on the server.
+  2. Run: cloudflared tunnel login
+  3. Run: cloudflared tunnel create ${APP_NAME}
+  4. Copy cloudflared-config.yml.example to /etc/cloudflared/config.yml
+  5. Replace the tunnel ID and credentials path in that config.
+  6. In Cloudflare DNS, route ${DOMAIN} to the tunnel.
+  7. Start the tunnel:
+       cloudflared service install
+       systemctl enable --now cloudflared
+EOF
+
+    if [[ "${ENABLE_SSL}" == "1" ]]; then
+        cat >> "${cloudflare_dir}/README.txt" <<'EOF'
+
+Origin HTTPS note:
+  This install uses nginx on port 443 and redirects port 80 to HTTPS.
+  The example cloudflared config therefore includes `noTLSVerify: true`
+  for the local origin. If you keep origin HTTPS enabled, leave that in place
+  unless you replace it with your own validated local certificate strategy.
+EOF
+    fi
+
+    chown -R "${APP_USER}:${APP_GROUP}" "${cloudflare_dir}"
+}
+
+print_cloudflare_tunnel_help() {
+    if [[ "${USE_CLOUDFLARE_TUNNEL}" != "1" ]]; then
+        return
+    fi
+
+    local origin_scheme="http"
+    local origin_port="80"
+    local local_public_url="http://${DOMAIN}/__health"
+    if [[ "${ENABLE_SSL}" == "1" ]]; then
+        origin_scheme="https"
+        origin_port="443"
+        local_public_url="https://${DOMAIN}/__health"
+    fi
+
+    printf '\n%b%s%b\n' "${COLOR_BOLD}" "Cloudflare Tunnel" "${COLOR_RESET}"
+    printf '  Public hostname: %s\n' "${DOMAIN}"
+    printf '  Recommended origin: %s://%s\n' "${origin_scheme}" "${CLOUDFLARE_ORIGIN_HOST}"
+    printf '  Origin host/IP and port: %s:%s (nginx)\n' "${CLOUDFLARE_ORIGIN_HOST}" "${origin_port}"
+    printf '  App upstream: 127.0.0.1:%s (gunicorn)\n' "${APP_PORT}"
+    printf '  Direct app health: http://127.0.0.1:%s/__health\n' "${APP_PORT}"
+    printf '  Local nginx health: %s\n' "${local_public_url}"
+    printf '  Public health target: https://%s/__health\n' "${DOMAIN}"
+    printf '  Example config: %s\n' "${INSTALL_DIR}/cloudflare/cloudflared-config.yml.example"
+    printf '  Notes: %s\n' "${INSTALL_DIR}/cloudflare/README.txt"
+    printf '\n'
+}
+
+check_health_endpoint() {
+    local url="$1"
+    shift || true
+    local response=""
+
+    if ! response="$(curl -fsS -L --max-time 20 "$@" "${url}")"; then
+        return 1
+    fi
+
+    python3 - "${response}" <<'PY'
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+if data.get("status") != "ok":
+    raise SystemExit(1)
+PY
+}
+
 configure_selinux() {
     if command_exists getenforce && [[ "$(getenforce)" == "Enforcing" ]] && command_exists setsebool; then
         setsebool -P httpd_can_network_connect 1 || true
@@ -968,8 +1267,95 @@ verify_installation() {
     fi
     systemctl is-active --quiet nginx
     systemctl is-active --quiet "${SERVICE_NAME}"
-    curl -fsS "http://127.0.0.1:${APP_PORT}/" >/dev/null
+    check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
     success "The application is responding on 127.0.0.1:${APP_PORT}"
+
+    if [[ "${USE_CLOUDFLARE_TUNNEL}" == "1" && -n "${CLOUDFLARE_ORIGIN_HOST:-}" ]]; then
+        if [[ "${ENABLE_SSL}" == "1" ]]; then
+            check_health_endpoint "https://${CLOUDFLARE_ORIGIN_HOST}/__health" -k -H "Host: ${DOMAIN}"
+        else
+            check_health_endpoint "http://${CLOUDFLARE_ORIGIN_HOST}/__health" -H "Host: ${DOMAIN}"
+        fi
+        success "The selected Cloudflare origin address ${CLOUDFLARE_ORIGIN_HOST} is reachable"
+    fi
+
+    if [[ -n "${DOMAIN:-}" && "${DOMAIN}" != "_" ]]; then
+        if [[ "${ENABLE_SSL}" == "1" ]]; then
+            check_health_endpoint "https://${DOMAIN}/__health" --resolve "${DOMAIN}:443:127.0.0.1"
+        else
+            check_health_endpoint "http://${DOMAIN}/__health" --resolve "${DOMAIN}:80:127.0.0.1"
+        fi
+    else
+        check_health_endpoint "http://127.0.0.1/__health"
+    fi
+    success "nginx is proxying /__health correctly"
+}
+
+verify_cloudflare_tunnel() {
+    if [[ "${USE_CLOUDFLARE_TUNNEL}" != "1" ]]; then
+        return
+    fi
+
+    local origin_scheme="http"
+    local origin_port="80"
+    local public_health_url=""
+    local wait_for_tunnel="1"
+    local retry_test="1"
+    local change_url="0"
+    local readiness_input=""
+
+    if [[ "${ENABLE_SSL}" == "1" ]]; then
+        origin_scheme="https"
+        origin_port="443"
+    fi
+
+    if [[ -n "${DOMAIN:-}" && "${DOMAIN}" != "_" ]]; then
+        public_health_url="https://${DOMAIN}/__health"
+    fi
+
+    print_cloudflare_tunnel_help
+
+    if [[ "${NONINTERACTIVE}" == "1" ]]; then
+        info "Skipping interactive Cloudflare Tunnel verification in non-interactive mode."
+        return
+    fi
+
+    prompt_yes_no wait_for_tunnel "Wait for your Cloudflare Tunnel and test the public URL now?" "1"
+    if [[ "${wait_for_tunnel}" != "1" ]]; then
+        return
+    fi
+
+    prompt_value public_health_url "Public health-check URL to test" "${public_health_url}" 0 1
+
+    while true; do
+        printf '\n%b%s%b\n' "${COLOR_BOLD}" "Cloudflare Tunnel Test" "${COLOR_RESET}"
+        printf '  Configure cloudflared to point at %s://%s (port %s).\n' "${origin_scheme}" "${CLOUDFLARE_ORIGIN_HOST}" "${origin_port}"
+        printf '  The app itself listens on 127.0.0.1:%s.\n' "${APP_PORT}"
+        printf '  When the tunnel is up, the installer will test: %s\n' "${public_health_url}"
+        if has_tty; then
+            tty_print "${COLOR_MAGENTA}?${COLOR_RESET} Press Enter when the tunnel is ready, or type skip to continue without testing: "
+            IFS= read -r readiness_input < /dev/tty
+            if [[ "${readiness_input}" == "skip" ]]; then
+                warn "Skipping Cloudflare Tunnel verification."
+                return
+            fi
+        fi
+
+        if check_health_endpoint "${public_health_url}"; then
+            success "The public Cloudflare Tunnel URL reached the server successfully."
+            return
+        fi
+
+        warn "The public URL did not return a healthy response yet. DNS propagation, tunnel startup, or origin settings may still be in progress."
+        prompt_yes_no retry_test "Try the Cloudflare Tunnel check again?" "1"
+        if [[ "${retry_test}" != "1" ]]; then
+            return
+        fi
+        prompt_yes_no change_url "Change the public health-check URL before retrying?" "0"
+        if [[ "${change_url}" == "1" ]]; then
+            prompt_value public_health_url "Public health-check URL to test" "${public_health_url}" 0 1
+        fi
+    done
 }
 
 write_state_file() {
@@ -984,6 +1370,8 @@ APP_GROUP=$(dotenv_quote "${APP_GROUP}")
 APP_PORT=$(dotenv_quote "${APP_PORT}")
 DOMAIN=$(dotenv_quote "${DOMAIN}")
 ENABLE_SSL=$(dotenv_quote "${ENABLE_SSL}")
+USE_CLOUDFLARE_TUNNEL=$(dotenv_quote "${USE_CLOUDFLARE_TUNNEL}")
+CLOUDFLARE_ORIGIN_HOST=$(dotenv_quote "${CLOUDFLARE_ORIGIN_HOST}")
 SSL_EMAIL=$(dotenv_quote "${SSL_EMAIL}")
 DB_NAME=$(dotenv_quote "${DB_NAME}")
 DB_USER=$(dotenv_quote "${DB_USER}")
@@ -1017,10 +1405,12 @@ install_or_update() {
     render_service_file
     obtain_ssl_certificate
     render_nginx_config
+    write_cloudflare_tunnel_files
     reload_services
     configure_firewall
     write_state_file
     verify_installation
+    verify_cloudflare_tunnel
 }
 
 uninstall_everything() {
@@ -1087,6 +1477,10 @@ print_summary() {
     printf '  Domain:       %s\n' "${DOMAIN}"
     printf '  Service:      %s\n' "${SERVICE_NAME}"
     printf '  HTTPS:        %s\n' "$( [[ "${ENABLE_SSL}" == "1" ]] && printf yes || printf no )"
+    printf '  Cloudflare:   %s\n' "$( [[ "${USE_CLOUDFLARE_TUNNEL}" == "1" ]] && printf yes || printf no )"
+    if [[ -n "${CLOUDFLARE_ORIGIN_HOST:-}" ]]; then
+        printf '  Origin host:  %s\n' "${CLOUDFLARE_ORIGIN_HOST}"
+    fi
     printf '\n'
 }
 
@@ -1114,6 +1508,7 @@ main() {
             print_summary
             install_or_update
             cleanup_bootstrap_dir
+            print_cloudflare_tunnel_help
             success "Installation finished successfully."
             ;;
         uninstall)

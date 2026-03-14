@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from flask import (
     Flask,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -167,7 +168,7 @@ def create_app():
             cleaned_args=cleaned_args,
         )
 
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
     stripe.api_key = STRIPE_SECRET_KEY
 
     @app.cli.command("db-init")
@@ -308,6 +309,17 @@ def create_app():
     @app.route("/legal")
     def legal_texts():
         return render_template("legal_texts.html")
+
+    @app.route("/__health", methods=["GET"])
+    def health_check():
+        return jsonify(
+            {
+                "status": "ok",
+                "app": "jaeronautics",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "host": request.host,
+            }
+        )
 
     @app.route("/admin", methods=["GET", "POST"])
     @login_required
