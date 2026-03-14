@@ -87,7 +87,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or current_user.role != "admin":
             flash(_("You do not have permission to access this page."), "danger")
-            return redirect(url_for("login"))
+            return redirect(url_for("index"))
         return f(*args, **kwargs)
 
     return decorated_function
@@ -212,6 +212,29 @@ def create_app():
         if MESSAGES_POT.exists():
             MESSAGES_POT.unlink()
         click.echo("Translation files updated.")
+
+    @app.cli.command("create-admin")
+    @click.argument("email")
+    @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+    @with_appcontext
+    def create_admin(email, password):
+        """Creates or promotes an admin user."""
+        user = db.session.execute(db.select(User).filter_by(email=email)).scalar_one_or_none()
+        created = user is None
+
+        if created:
+            user = User(email=email, role="admin")
+            db.session.add(user)
+        else:
+            user.role = "admin"
+
+        user.set_password(password)
+        db.session.commit()
+
+        if created:
+            click.echo(click.style(f"Created admin user: {email}", fg="green"))
+        else:
+            click.echo(click.style(f"Promoted existing user to admin: {email}", fg="green"))
 
     @app.route("/", methods=["GET"])
     def index():
@@ -443,20 +466,27 @@ def create_app():
     @app.route("/login", methods=["POST", "GET"])
     def login():
         if current_user.is_authenticated:
-            return redirect(url_for("admin"))
+            if current_user.role == "admin":
+                return redirect(url_for("admin"))
+            return redirect(url_for("index"))
         form = LoginForm()
         if form.validate_on_submit():
             user = db.session.execute(db.select(User).filter_by(email=form.email.data)).scalar_one_or_none()
             if user and user.check_password(form.password.data):
                 login_user(user)
-                return redirect(url_for("admin"))
+                if user.role == "admin":
+                    return redirect(url_for("admin"))
+                flash(_("Login successful, but this account does not have admin access."), "info")
+                return redirect(url_for("index"))
             flash(_("Invalid email or password"), "danger")
         return render_template("admin/login.html", form=form)
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
         if current_user.is_authenticated:
-            return redirect(url_for("admin"))
+            if current_user.role == "admin":
+                return redirect(url_for("admin"))
+            return redirect(url_for("index"))
         form = RegistrationForm()
         if form.validate_on_submit():
             user = User(email=form.email.data)
@@ -482,7 +512,9 @@ def create_app():
                 current_user.set_password(form.new_password.data)
                 db.session.commit()
                 flash(_("Your password has been updated!"), "success")
-                return redirect(url_for("admin"))
+                if current_user.role == "admin":
+                    return redirect(url_for("admin"))
+                return redirect(url_for("index"))
             flash(_("Invalid current password"), "danger")
         return render_template("admin/change_password.html", form=form)
 
