@@ -25,9 +25,9 @@
                             <a class="nav-link" href="{{ url_for('admin') }}">{{ _('Admin') }}</a>
                         </li>
                         <li class="nav-item">
-                            <form method="POST" action="{{ url_for('logout') }}" class="d-inline">
+                            <form method="POST" action="{{ url_for('logout') }}" class="d-flex align-items-center mb-0">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="nav-link btn btn-link p-0 border-0">{{ _('Logout') }}</button>
+                                <button type="submit" class="nav-link btn btn-link border-0 bg-transparent">{{ _('Logout') }}</button>
                             </form>
                         </li>
                     {% else %}

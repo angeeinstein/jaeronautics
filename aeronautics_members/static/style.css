@@ -142,6 +142,113 @@ img,video{max-width:100%;height:auto}
     color: #ffffff !important;
 }
 
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: #07697d !important;
+    border-color: #07697d !important;
+    color: #ffffff !important;
+}
+
+.btn-secondary {
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+    color: #ffffff !important;
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus {
+    background-color: #5c636a !important;
+    border-color: #565e64 !important;
+    color: #ffffff !important;
+}
+
+.btn-danger {
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+    color: #ffffff !important;
+}
+
+.btn-danger:hover,
+.btn-danger:focus {
+    background-color: #bb2d3b !important;
+    border-color: #b02a37 !important;
+    color: #ffffff !important;
+}
+
+.btn-outline-primary {
+    background-color: transparent !important;
+    border: 1px solid var(--ja-cyan) !important;
+    color: var(--ja-cyan) !important;
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus {
+    background-color: var(--ja-cyan) !important;
+    border-color: var(--ja-cyan) !important;
+    color: #ffffff !important;
+}
+
+.btn-outline-secondary {
+    background-color: transparent !important;
+    border: 1px solid #6c757d !important;
+    color: #6c757d !important;
+}
+
+.btn-outline-secondary:hover,
+.btn-outline-secondary:focus {
+    background-color: #6c757d !important;
+    border-color: #6c757d !important;
+    color: #ffffff !important;
+}
+
+.btn-outline-danger {
+    background-color: transparent !important;
+    border: 1px solid #dc3545 !important;
+    color: #dc3545 !important;
+}
+
+.btn-outline-danger:hover,
+.btn-outline-danger:focus {
+    background-color: #dc3545 !important;
+    border-color: #dc3545 !important;
+    color: #ffffff !important;
+}
+
+.btn-link {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    color: var(--ja-cyan) !important;
+}
+
+.btn-link:hover,
+.btn-link:focus {
+    color: #065a69 !important;
+}
+
+.navbar .navbar-nav {
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.navbar .nav-item,
+.navbar .nav-item form {
+    display: flex;
+    align-items: center;
+    margin: 0;
+}
+
+.navbar .nav-link,
+.navbar .nav-link.btn-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.5rem;
+    padding: 0.5rem 0.25rem;
+}
+
+.navbar .dropdown-toggle::after {
+    margin-left: 0.4rem;
+}
+
 .bg-primary {
     background-color: var(--ja-cyan) !important;
 }

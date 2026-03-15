@@ -61,7 +61,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ _('Mail Accounts') }}</h4>
                 {% if editing_mail_account %}
-                    <a href="{{ url_for('admin') }}" class="btn btn-sm btn-outline-secondary">{{ _('Cancel Edit') }}</a>
+                    <a href="{{ url_for('admin') }}" class="btn btn-sm btn-secondary">{{ _('Cancel Edit') }}</a>
                 {% endif %}
             </div>
             <div class="card-body">
@@ -94,11 +94,11 @@
                         {{ mail_account_form.starttls(class="form-check-input") }}
                         {{ mail_account_form.starttls.label(class="form-check-label") }}
                     </div>
-                    <div class="d-flex gap-2 mt-3">
+                    <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
                         <button type="submit" class="btn btn-primary">
                             {% if editing_mail_account %}{{ _('Update Mail Account') }}{% else %}{{ _('Add Mail Account') }}{% endif %}
                         </button>
-                        <small class="text-muted align-self-center">
+                        <small class="text-muted">
                             {% if editing_mail_account %}
                                 {{ _('Leave the password blank to keep the current SMTP password.') }}
                             {% else %}
@@ -130,10 +130,10 @@
                                         <td>{{ mail_account.username }}</td>
                                         <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
                                         <td class="text-end">
-                                            <a href="{{ url_for('admin', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-outline-primary">{{ _('Edit') }}</a>
+                                            <a href="{{ url_for('admin', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
                                             <form method="POST" action="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}" class="d-inline-block ms-2">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('{{ _('Delete this mail account?') }}');">{{ _('Delete') }}</button>
+                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('{{ _('Delete this mail account?') }}');">{{ _('Delete') }}</button>
                                             </form>
                                         </td>
                                     </tr>
@@ -181,11 +181,13 @@
             </div>
         </div>
 
-        <form method="POST" action="{{ url_for('logout') }}" class="d-inline-block mt-4 me-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-danger">{{ _('Logout') }}</button>
-        </form>
-        <a href="{{ url_for('change_password') }}" class="btn btn-secondary mt-4">{{ _('Change Password') }}</a>
+        <div class="d-flex flex-wrap gap-2 align-items-center mt-4">
+            <form method="POST" action="{{ url_for('logout') }}" class="mb-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger">{{ _('Logout') }}</button>
+            </form>
+            <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
+        </div>
     {% else %}
         <p>{{ _('Please log in to access the admin area.') }}</p>
         <a href="{{ url_for('login') }}" class="btn btn-primary">{{ _('Login') }}</a>
