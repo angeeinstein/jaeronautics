@@ -532,7 +532,10 @@ small.text-muted {
 }
 
 .form-control,
-.form-select {
+.form-select,
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]),
+select,
+textarea {
     background-color: #1b1b1c !important;
     border: 1px solid #3a3d40 !important;
     color: var(--ja-text) !important;
@@ -543,7 +546,8 @@ small.text-muted {
     line-height: 1.35;
 }
 
-textarea.form-control {
+textarea.form-control,
+textarea {
     min-height: 8rem;
 }
 
@@ -554,18 +558,23 @@ textarea::placeholder {
 }
 
 .form-control:focus,
-.form-select:focus {
+.form-select:focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):focus,
+select:focus,
+textarea:focus {
     background-color: #1b1b1c !important;
     border-color: var(--ja-accent) !important;
     color: var(--ja-text) !important;
     box-shadow: 0 0 0 0.14rem rgba(0, 223, 255, 0.18) !important;
 }
 
-.form-select {
+.form-select,
+select {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
 }
 
-.form-select option {
+.form-select option,
+select option {
     background-color: var(--ja-surface) !important;
     color: var(--ja-text) !important;
 }
@@ -577,6 +586,12 @@ textarea::placeholder {
 .form-select:-webkit-autofill,
 .form-select:-webkit-autofill:hover,
 .form-select:-webkit-autofill:focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):-webkit-autofill,
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):-webkit-autofill:hover,
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus,
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
