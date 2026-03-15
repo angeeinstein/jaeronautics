@@ -14,6 +14,7 @@ import stripe
 from dotenv import load_dotenv
 from flask import (
     Flask,
+    current_app,
     flash,
     jsonify,
     redirect,
@@ -28,28 +29,37 @@ from flask_limiter.errors import RateLimitExceeded
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from sqlalchemy import inspect, text as sql_text
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 try:
-    from .db_models import db, MailAccount, Member, Setting, User
+    from .db_models import db, MailAccount, Member, MemberProfileChangeRequest, Setting, User
     from .forms import (
         ChangePasswordForm,
+        EmailRequestForm,
+        IdentityChangeRequestForm,
         LoginForm,
         MailAccountForm,
+        MemberProfileForm,
         MembershipForm,
         RegistrationForm,
+        SetPasswordForm,
         TestEmailForm,
     )
     from .mail_utils import load_mail_accounts_config, send_mail
 except ImportError:
-    from db_models import db, MailAccount, Member, Setting, User
+    from db_models import db, MailAccount, Member, MemberProfileChangeRequest, Setting, User
     from forms import (
         ChangePasswordForm,
+        EmailRequestForm,
+        IdentityChangeRequestForm,
         LoginForm,
         MailAccountForm,
+        MemberProfileForm,
         MembershipForm,
         RegistrationForm,
+        SetPasswordForm,
         TestEmailForm,
     )
     from mail_utils import load_mail_accounts_config, send_mail
@@ -130,14 +140,66 @@ def admin_required(f):
     return decorated_function
 
 
+DIRECT_MEMBER_PROFILE_FIELDS = (
+    "street",
+    "house_number",
+    "postal_code",
+    "city",
+    "country",
+    "phone_private",
+    "email_private",
+    "phone_work",
+    "email_work",
+)
+
+IDENTITY_MEMBER_FIELDS = (
+    "salutation",
+    "title",
+    "first_name",
+    "last_name",
+    "year_group",
+)
+
+MEMBER_PROFILE_FIELDS = IDENTITY_MEMBER_FIELDS + DIRECT_MEMBER_PROFILE_FIELDS
+ACTIVE_MEMBER_STATUSES = {"paid", "free_period", "canceled", "cancel_scheduled"}
+RESUMABLE_MEMBER_STATUSES = {"pending_checkout", "processing", "failed", "unpaid"}
+TOKEN_MAX_AGE_VERIFY_EMAIL = 60 * 60 * 24 * 7
+TOKEN_MAX_AGE_PASSWORD_RESET = 60 * 60 * 24
+TOKEN_MAX_AGE_ACCOUNT_CLAIM = 60 * 60 * 24 * 7
+PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
+
+
+def build_forum_username_base(first_name, last_name, year_group):
+    last_name_cleaned = "".join(filter(str.isalnum, last_name or "")).capitalize()
+    first_name_initial = first_name[0].upper() if first_name else ""
+    study_field_initial = year_group[0].upper() if year_group else ""
+    year_short = year_group[-2:] if year_group and len(year_group) > 2 else ""
+    return f"{last_name_cleaned}{first_name_initial}_{study_field_initial}{year_short}"
+
+
 
 def generate_suggested_username(member):
-    """Generates a suggested username for LAV-Board."""
-    last_name_cleaned = "".join(filter(str.isalnum, member.last_name)).capitalize()
-    first_name_initial = member.first_name[0].upper() if member.first_name else ""
-    study_field_initial = member.year_group[0].upper() if member.year_group else ""
-    year_short = member.year_group[-2:] if member.year_group and len(member.year_group) > 2 else ""
-    return f"{last_name_cleaned}{first_name_initial}_{study_field_initial}{year_short}"
+    """Generates the base forum username using the legacy welcome-email scheme."""
+    return build_forum_username_base(member.first_name, member.last_name, member.year_group)
+
+
+
+def generate_unique_forum_username(first_name, last_name, year_group, exclude_user_id=None, preferred=None):
+    base = preferred or build_forum_username_base(first_name, last_name, year_group)
+    if not base:
+        base = "Member"
+
+    candidate = base
+    suffix = 2
+    while True:
+        query = db.select(User).filter_by(forum_username=candidate)
+        if exclude_user_id is not None:
+            query = query.filter(User.id != exclude_user_id)
+        existing_user = db.session.execute(query).scalar_one_or_none()
+        if existing_user is None:
+            return candidate
+        candidate = f"{base}-{suffix}"
+        suffix += 1
 
 
 
@@ -147,6 +209,7 @@ def get_email_template_choices(app):
     if os.path.isdir(email_template_dir):
         template_choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
     return template_choices
+
 
 
 def get_db_mail_accounts():
@@ -171,34 +234,19 @@ def static_asset_version(app, filename):
 
 
 
-
-MEMBER_PROFILE_FIELDS = (
-    "salutation",
-    "title",
-    "first_name",
-    "last_name",
-    "street",
-    "house_number",
-    "postal_code",
-    "city",
-    "country",
-    "phone_private",
-    "email_private",
-    "phone_work",
-    "email_work",
-    "year_group",
-)
-
-
-ACTIVE_MEMBER_STATUSES = {"paid", "free_period", "canceled", "cancel_scheduled"}
-
-
 def get_membership_now():
     return datetime.now(timezone.utc).astimezone(MEMBERSHIP_TIMEZONE)
 
 
+
 def get_membership_today():
     return get_membership_now().date()
+
+
+
+def get_now_utc():
+    return datetime.now(timezone.utc)
+
 
 
 def parse_iso_date(value):
@@ -210,23 +258,28 @@ def parse_iso_date(value):
         return None
 
 
+
 def to_membership_date(unix_timestamp):
     if not unix_timestamp:
         return get_membership_today()
     return datetime.fromtimestamp(unix_timestamp, timezone.utc).astimezone(MEMBERSHIP_TIMEZONE).date()
 
 
+
 def first_day_of_year(year):
     return date(year, 1, 1)
+
 
 
 def last_day_of_year(year):
     return date(year, 12, 31)
 
 
+
 def start_of_day_unix(day_value):
     local_start = datetime.combine(day_value, datetime.min.time(), tzinfo=MEMBERSHIP_TIMEZONE)
     return int(local_start.astimezone(timezone.utc).timestamp())
+
 
 
 def build_membership_cycle(join_date, annual_amount_cents):
@@ -260,6 +313,7 @@ def build_membership_cycle(join_date, annual_amount_cents):
     }
 
 
+
 def get_stripe_membership_price():
     price = stripe.Price.retrieve(STRIPE_PRICE_ID, expand=["product"])
     recurring = price.get("recurring") or {}
@@ -285,12 +339,14 @@ def get_stripe_membership_price():
     }
 
 
+
 def format_membership_date_display(value):
     locale = str(get_locale()) if get_locale() else None
     try:
         return format_date(value, format="long", locale=locale)
     except Exception:
         return value.isoformat()
+
 
 
 def format_checkout_amount(amount_cents, currency):
@@ -300,6 +356,7 @@ def format_checkout_amount(amount_cents, currency):
         return format_currency(amount, currency.upper(), locale=locale)
     except Exception:
         return f"{amount:.2f} {currency.upper()}"
+
 
 
 def build_checkout_submit_message(cycle, price_details):
@@ -327,6 +384,7 @@ def build_checkout_submit_message(cycle, price_details):
     )
 
 
+
 def build_prorated_line_item(cycle, price_details):
     if cycle["prorated_amount_cents"] <= 0:
         return None
@@ -346,13 +404,28 @@ def build_prorated_line_item(cycle, price_details):
     }
 
 
-def apply_member_profile(member, form_data):
-    for field_name in MEMBER_PROFILE_FIELDS:
-        value = form_data.get(field_name)
-        if value == "" and field_name in {"title", "phone_work", "email_work"}:
-            value = None
+
+def normalize_optional_member_value(field_name, value):
+    if value == "" and field_name in {"title", "phone_work", "email_work"}:
+        return None
+    return value
+
+
+
+def apply_member_profile(member, form_data, fields=MEMBER_PROFILE_FIELDS):
+    for field_name in fields:
+        value = normalize_optional_member_value(field_name, form_data.get(field_name))
         setattr(member, field_name, value)
-    member.terms_accepted = True
+    if "terms_accepted" in form_data:
+        member.terms_accepted = bool(form_data.get("terms_accepted"))
+
+
+
+def build_member_payload(member):
+    payload = {field_name: getattr(member, field_name) for field_name in MEMBER_PROFILE_FIELDS}
+    payload["terms_accepted"] = True
+    return payload
+
 
 
 def member_has_active_access(member, on_date=None):
@@ -362,6 +435,7 @@ def member_has_active_access(member, on_date=None):
     if not member.membership_ends_on or member.membership_ends_on < today:
         return False
     return member.payment_status in ACTIVE_MEMBER_STATUSES or member.is_active
+
 
 
 def sync_member_active_state(member, on_date=None):
@@ -383,6 +457,7 @@ def sync_member_active_state(member, on_date=None):
     return changed
 
 
+
 def set_member_membership_window(member, starts_on, ends_on, renewal_due_on, payment_status, is_active, cancel_at_period_end=False):
     member.membership_starts_on = starts_on
     member.membership_ends_on = ends_on
@@ -392,7 +467,16 @@ def set_member_membership_window(member, starts_on, ends_on, renewal_due_on, pay
     member.cancel_at_period_end = cancel_at_period_end
 
 
-def get_member_by_stripe_reference(customer_id=None, subscription_id=None):
+
+def get_member_by_stripe_reference(customer_id=None, subscription_id=None, member_id=None, user_id=None):
+    if member_id:
+        member = db.session.get(Member, int(member_id))
+        if member is not None:
+            return member
+    if user_id:
+        member = db.session.execute(db.select(Member).filter_by(user_id=int(user_id))).scalar_one_or_none()
+        if member is not None:
+            return member
     if subscription_id:
         member = Member.query.filter_by(stripe_subscription_id=subscription_id).first()
         if member is not None:
@@ -400,6 +484,7 @@ def get_member_by_stripe_reference(customer_id=None, subscription_id=None):
     if customer_id:
         return Member.query.filter_by(stripe_customer_id=customer_id).first()
     return None
+
 
 
 def update_member_paid_coverage(member, paid_on):
@@ -422,6 +507,332 @@ def update_member_paid_coverage(member, paid_on):
     )
 
 
+
+def get_default_sender_account():
+    settings = {s.key: s.value for s in Setting.query.all()}
+    preferred_sender = settings.get("welcome_email_sender")
+    if preferred_sender:
+        return preferred_sender
+
+    try:
+        mail_accounts = load_mail_accounts_config()
+        return next(iter(mail_accounts.keys()), None)
+    except Exception:
+        return None
+
+
+
+def send_account_action_email(app, to_email, subject, preview_text, action_url, action_label, heading, body_lines):
+    sender_account = get_default_sender_account()
+    if not sender_account:
+        app.logger.warning("Could not send account email to %s because no sender account is configured.", to_email)
+        return False
+
+    logo_path = os.path.join(app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
+    attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
+    return send_mail(
+        from_account=sender_account,
+        to_email=to_email,
+        subject=subject,
+        template_name="member_account_action.html",
+        attachments=attachments,
+        preview_text=preview_text,
+        action_url=action_url,
+        action_label=action_label,
+        heading=heading,
+        body_lines=body_lines,
+        now=get_now_utc(),
+    )
+
+
+
+def get_token_serializer():
+    return URLSafeTimedSerializer(SECRET_KEY)
+
+
+
+def generate_token(purpose, **payload):
+    return get_token_serializer().dumps(payload, salt=f"jaeronautics-{purpose}")
+
+
+
+def read_token(token, purpose, max_age):
+    return get_token_serializer().loads(token, salt=f"jaeronautics-{purpose}", max_age=max_age)
+
+
+
+def send_email_verification_email(app, user):
+    token = generate_token("verify-email", user_id=user.id)
+    verify_url = url_for("verify_email", token=token, _external=True)
+    return send_account_action_email(
+        app,
+        to_email=user.email,
+        subject=_("Verify your Joanneum Aeronautics email"),
+        preview_text=_("Confirm your email address for your Joanneum Aeronautics account."),
+        action_url=verify_url,
+        action_label=_("Verify Email"),
+        heading=_("Confirm your email address"),
+        body_lines=[
+            _("Please confirm your email address so future account services like forum SSO can be enabled safely."),
+            _("You can already use the membership portal, but verification will be required for additional integrations later on."),
+        ],
+    )
+
+
+
+def send_password_reset_email(app, user):
+    token = generate_token("reset-password", user_id=user.id)
+    reset_url = url_for("reset_password", token=token, _external=True)
+    return send_account_action_email(
+        app,
+        to_email=user.email,
+        subject=_("Reset your Joanneum Aeronautics password"),
+        preview_text=_("Use this link to choose a new password for your account."),
+        action_url=reset_url,
+        action_label=_("Reset Password"),
+        heading=_("Reset your password"),
+        body_lines=[
+            _("A password reset was requested for your Joanneum Aeronautics account."),
+            _("If this was you, use the link below to set a new password. If not, you can ignore this email."),
+        ],
+    )
+
+
+
+def send_account_claim_email(app, member):
+    token = generate_token("claim-account", member_id=member.id, email=member.email_private)
+    claim_url = url_for("claim_account_token", token=token, _external=True)
+    return send_account_action_email(
+        app,
+        to_email=member.email_private,
+        subject=_("Claim your Joanneum Aeronautics account"),
+        preview_text=_("Create your password to access your membership account."),
+        action_url=claim_url,
+        action_label=_("Claim Account"),
+        heading=_("Finish setting up your account"),
+        body_lines=[
+            _("We found an existing membership profile for this email address."),
+            _("Use the link below to create your password and connect it to your member account."),
+        ],
+    )
+
+
+
+def sync_member_primary_email(member, new_email):
+    new_email = (new_email or "").strip().lower()
+    if not new_email:
+        raise ValueError(_("The private email address is required."))
+
+    existing_member = db.session.execute(
+        db.select(Member).filter(Member.email_private == new_email, Member.id != member.id)
+    ).scalar_one_or_none()
+    if existing_member is not None:
+        raise ValueError(_("A membership profile with this email address already exists."))
+
+    if member.user is not None:
+        existing_user = db.session.execute(
+            db.select(User).filter(User.email == new_email, User.id != member.user.id)
+        ).scalar_one_or_none()
+        if existing_user is not None:
+            raise ValueError(_("An account with this email address already exists."))
+
+    email_changed = member.email_private != new_email
+    member.email_private = new_email
+
+    if member.user is not None and member.user.email != new_email:
+        member.user.email = new_email
+        member.user.email_verified_at = None
+
+    if email_changed and member.stripe_customer_id:
+        try:
+            stripe.Customer.modify(member.stripe_customer_id, email=new_email)
+        except Exception as exc:
+            current_app.logger.warning(
+                "Could not sync Stripe customer email for member_id=%s customer_id=%s: %s",
+                member.id,
+                member.stripe_customer_id,
+                exc,
+            )
+
+    return email_changed
+
+
+
+def create_identity_change_request(member, requested_by_user, form_data):
+    if member.open_identity_change_request is not None:
+        raise ValueError(_("You already have a pending identity change request."))
+
+    request_record = MemberProfileChangeRequest(
+        member=member,
+        requested_by=requested_by_user,
+        requested_salutation=form_data["salutation"],
+        requested_title=normalize_optional_member_value("title", form_data.get("title")),
+        requested_first_name=form_data["first_name"],
+        requested_last_name=form_data["last_name"],
+        requested_year_group=form_data["year_group"],
+        member_note=(form_data.get("member_note") or "").strip() or None,
+        status="pending",
+    )
+    db.session.add(request_record)
+    return request_record
+
+
+
+def has_identity_changes(member, form_data):
+    for field_name in IDENTITY_MEMBER_FIELDS:
+        current_value = getattr(member, field_name)
+        requested_value = normalize_optional_member_value(field_name, form_data.get(field_name))
+        if current_value != requested_value:
+            return True
+    member_note = (form_data.get("member_note") or "").strip()
+    return bool(member_note)
+
+
+
+def get_current_member_for_user(user):
+    if user is None:
+        return None
+    return user.member
+
+
+
+def can_resume_payment(member):
+    if member is None:
+        return False
+    if member_has_active_access(member):
+        return False
+    if member.payment_status not in RESUMABLE_MEMBER_STATUSES:
+        return False
+    return not member.stripe_customer_id
+
+
+
+def get_member_portal_target(user):
+    if user.role == "admin":
+        return "admin"
+    return "account"
+
+
+
+def build_membership_metadata(member, cycle, activation_mode):
+    return {
+        "membership_starts_on": cycle["coverage_start"].isoformat(),
+        "membership_ends_on": cycle["coverage_end"].isoformat(),
+        "renewal_due_on": cycle["renewal_due_on"].isoformat(),
+        "activation_mode": activation_mode,
+        "member_email": member.email_private,
+        "member_id": str(member.id),
+        "user_id": str(member.user_id) if member.user_id else "",
+    }
+
+
+
+def create_checkout_session_for_member(member):
+    price_details = get_stripe_membership_price()
+    join_date = get_membership_today()
+    cycle = build_membership_cycle(join_date, price_details["unit_amount"])
+    activation_mode = "free_period" if cycle["free_period"] else "paid_now"
+    membership_metadata = build_membership_metadata(member, cycle, activation_mode)
+    line_items = [{"price": STRIPE_PRICE_ID, "quantity": 1}]
+    prorated_line_item = build_prorated_line_item(cycle, price_details)
+    if prorated_line_item is not None:
+        line_items.insert(0, prorated_line_item)
+
+    checkout_payload = build_member_payload(member)
+    session = stripe.checkout.Session.create(
+        payment_method_types=["card", "sepa_debit"],
+        line_items=line_items,
+        mode="subscription",
+        metadata={**membership_metadata, "member_data": json.dumps(checkout_payload)},
+        subscription_data={
+            "trial_end": cycle["trial_end_unix"],
+            "metadata": membership_metadata,
+        },
+        custom_text={
+            "submit": {
+                "message": build_checkout_submit_message(cycle, price_details),
+            }
+        },
+        payment_method_collection="always",
+        customer_email=member.email_private,
+        success_url=url_for(
+            "thank_you",
+            _external=True,
+            method="checkout",
+            phase=cycle["thank_you_phase"],
+        ),
+        cancel_url=url_for("cancel", _external=True),
+    )
+    member.pending_checkout_started_at = get_now_utc()
+    return session, cycle
+
+
+
+def create_invoice_membership_for_member(member):
+    price_details = get_stripe_membership_price()
+    join_date = get_membership_today()
+    cycle = build_membership_cycle(join_date, price_details["unit_amount"])
+    activation_mode = "free_period" if cycle["free_period"] else "paid_now"
+    membership_metadata = build_membership_metadata(member, cycle, activation_mode)
+
+    customer = stripe.Customer.create(
+        email=member.email_private,
+        name=f"{member.first_name} {member.last_name}",
+    )
+
+    subscription_params = {
+        "customer": customer.id,
+        "items": [{"price": STRIPE_PRICE_ID}],
+        "collection_method": "send_invoice",
+        "days_until_due": 30,
+        "trial_end": cycle["trial_end_unix"],
+        "metadata": membership_metadata,
+    }
+    prorated_line_item = build_prorated_line_item(cycle, price_details)
+    if prorated_line_item is not None:
+        subscription_params["add_invoice_items"] = [prorated_line_item]
+
+    subscription = stripe.Subscription.create(**subscription_params)
+    member.pending_checkout_started_at = get_now_utc()
+    member.stripe_customer_id = customer.id
+    member.stripe_subscription_id = subscription.id
+
+    if cycle["free_period"]:
+        set_member_membership_window(
+            member,
+            starts_on=cycle["coverage_start"],
+            ends_on=cycle["coverage_end"],
+            renewal_due_on=cycle["renewal_due_on"],
+            payment_status="free_period",
+            is_active=True,
+            cancel_at_period_end=False,
+        )
+    else:
+        set_member_membership_window(
+            member,
+            starts_on=cycle["coverage_start"],
+            ends_on=cycle["coverage_end"],
+            renewal_due_on=cycle["renewal_due_on"],
+            payment_status="unpaid",
+            is_active=False,
+            cancel_at_period_end=False,
+        )
+
+    return subscription, cycle
+
+
+
+def get_portal_session(member):
+    if not member or not member.stripe_customer_id:
+        raise ValueError(_("No Stripe billing profile is available for this membership yet."))
+
+    return stripe.billing_portal.Session.create(
+        customer=member.stripe_customer_id,
+        return_url=url_for("account", _external=True),
+    )
+
+
+
 def send_member_welcome_email(app, member, force_send=False):
     settings = {s.key: s.value for s in Setting.query.all()}
     if not force_send and settings.get("automatic_emails_enabled") != "True":
@@ -434,9 +845,9 @@ def send_member_welcome_email(app, member, force_send=False):
             raise ValueError("Email sender or template is not configured in the admin settings.")
         return False
 
-    suggested_username = generate_suggested_username(member)
+    suggested_username = member.user.forum_username if member.user and member.user.forum_username else generate_suggested_username(member)
     logo_path = os.path.join(app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
-    attachments = [{"path": logo_path, "cid": "logo"}]
+    attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
 
     return send_mail(
         from_account=sender_account,
@@ -449,8 +860,44 @@ def send_member_welcome_email(app, member, force_send=False):
         membership_starts_on=member.membership_starts_on,
         membership_ends_on=member.membership_ends_on,
         renewal_due_on=member.renewal_due_on,
-        now=datetime.now(timezone.utc),
+        now=get_now_utc(),
     )
+
+
+
+def ensure_user_schema():
+    inspector = inspect(db.engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    alter_statements = []
+    if "forum_username" not in columns:
+        alter_statements.append("ALTER TABLE users ADD COLUMN forum_username VARCHAR(255) NULL")
+    if "email_verified_at" not in columns:
+        alter_statements.append("ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL")
+
+    with db.engine.begin() as connection:
+        for statement in alter_statements:
+            connection.execute(sql_text(statement))
+
+        connection.execute(sql_text("UPDATE users SET role = 'member' WHERE role IS NULL OR role = 'user'"))
+
+        inspector = inspect(connection)
+        unique_constraints = inspector.get_unique_constraints("users")
+        indexes = inspector.get_indexes("users")
+        has_forum_username_unique = any(
+            constraint.get("column_names") == ["forum_username"]
+            for constraint in unique_constraints
+        ) or any(
+            index.get("unique") and index.get("column_names") == ["forum_username"]
+            for index in indexes
+        )
+        if not has_forum_username_unique:
+            connection.execute(
+                sql_text("CREATE UNIQUE INDEX uq_users_forum_username ON users (forum_username)")
+            )
+
 
 
 def ensure_member_schema():
@@ -461,6 +908,10 @@ def ensure_member_schema():
     columns = {column["name"] for column in inspector.get_columns("member")}
     alter_statements = []
 
+    if "user_id" not in columns:
+        alter_statements.append("ALTER TABLE member ADD COLUMN user_id INTEGER NULL")
+    if "pending_checkout_started_at" not in columns:
+        alter_statements.append("ALTER TABLE member ADD COLUMN pending_checkout_started_at DATETIME NULL")
     if "stripe_subscription_id" not in columns:
         alter_statements.append("ALTER TABLE member ADD COLUMN stripe_subscription_id VARCHAR(255) NULL")
     if "membership_starts_on" not in columns:
@@ -488,10 +939,48 @@ def ensure_member_schema():
         )
         if not has_subscription_unique:
             connection.execute(
-                sql_text(
-                    "CREATE UNIQUE INDEX uq_member_stripe_subscription_id ON member (stripe_subscription_id)"
-                )
+                sql_text("CREATE UNIQUE INDEX uq_member_stripe_subscription_id ON member (stripe_subscription_id)")
             )
+
+        has_user_unique = any(
+            constraint.get("column_names") == ["user_id"]
+            for constraint in unique_constraints
+        ) or any(
+            index.get("unique") and index.get("column_names") == ["user_id"]
+            for index in indexes
+        )
+        if not has_user_unique:
+            connection.execute(sql_text("CREATE UNIQUE INDEX uq_member_user_id ON member (user_id)"))
+
+
+
+def backfill_member_user_links():
+    changed = False
+    members = db.session.execute(db.select(Member).order_by(Member.id.asc())).scalars().all()
+    for member in members:
+        if member.user is None:
+            matched_user = db.session.execute(db.select(User).filter_by(email=member.email_private)).scalar_one_or_none()
+            if matched_user is not None:
+                member.user = matched_user
+                if matched_user.role != "admin":
+                    matched_user.role = "member"
+                changed = True
+
+        if member.user is not None and not member.user.forum_username:
+            member.user.forum_username = generate_unique_forum_username(
+                member.first_name,
+                member.last_name,
+                member.year_group,
+                exclude_user_id=member.user.id,
+            )
+            changed = True
+
+        if member.payment_status in RESUMABLE_MEMBER_STATUSES and member.pending_checkout_started_at is None:
+            member.pending_checkout_started_at = member.created_at
+            changed = True
+
+    if changed:
+        db.session.commit()
 
 
 def create_app():
@@ -577,11 +1066,13 @@ def create_app():
     @app.cli.command("db-init")
     @with_appcontext
     def db_init():
-        """Creates database tables if they do not exist and adds newer membership columns when needed."""
+        """Creates database tables if they do not exist and upgrades newer account and membership columns when needed."""
         click.echo("Creating database tables...")
         try:
             db.create_all()
+            ensure_user_schema()
             ensure_member_schema()
+            backfill_member_user_links()
             click.echo("Database tables created successfully.")
         except Exception as e:
             click.echo(f"Error creating tables: {e}", err=True)
@@ -640,6 +1131,111 @@ def create_app():
         else:
             click.echo(click.style(f"Promoted existing user to admin: {email}", fg="green"))
 
+    @app.cli.command("cleanup-pending-signups")
+    @click.option("--days", default=PENDING_SIGNUP_RETENTION_DAYS, show_default=True, type=int)
+    @with_appcontext
+    def cleanup_pending_signups(days):
+        """Deletes stale pending signups that never completed Checkout."""
+        cutoff = get_now_utc() - timedelta(days=days)
+        stale_members = db.session.execute(
+            db.select(Member)
+            .filter(Member.payment_status == "pending_checkout")
+            .filter(Member.is_active.is_(False))
+            .filter(Member.pending_checkout_started_at.is_not(None))
+            .filter(Member.pending_checkout_started_at < cutoff)
+            .filter(Member.stripe_customer_id.is_(None))
+            .filter(Member.stripe_subscription_id.is_(None))
+        ).scalars().all()
+
+        deleted_count = 0
+        for member in stale_members:
+            user = member.user
+            db.session.delete(member)
+            if user is not None and user.role == "member":
+                db.session.delete(user)
+            deleted_count += 1
+
+        if deleted_count:
+            db.session.commit()
+        click.echo(click.style(f"Deleted {deleted_count} stale pending signup(s).", fg="green"))
+
+    def populate_member_profile_form(form, member):
+        for field_name in DIRECT_MEMBER_PROFILE_FIELDS:
+            getattr(form, field_name).data = getattr(member, field_name)
+
+    def populate_identity_change_form(form, member, pending_request=None):
+        if pending_request is not None:
+            form.salutation.data = pending_request.requested_salutation
+            form.title.data = pending_request.requested_title
+            form.first_name.data = pending_request.requested_first_name
+            form.last_name.data = pending_request.requested_last_name
+            form.year_group.data = pending_request.requested_year_group
+            form.member_note.data = pending_request.member_note
+            return
+
+        form.salutation.data = member.salutation
+        form.title.data = member.title
+        form.first_name.data = member.first_name
+        form.last_name.data = member.last_name
+        form.year_group.data = member.year_group
+
+    def decorate_pending_identity_requests(requests_):
+        for request_record in requests_:
+            request_record.current_forum_username = (
+                request_record.member.user.forum_username if request_record.member and request_record.member.user else None
+            )
+            request_record.suggested_forum_username = generate_unique_forum_username(
+                request_record.requested_first_name,
+                request_record.requested_last_name,
+                request_record.requested_year_group,
+                exclude_user_id=request_record.member.user.id if request_record.member and request_record.member.user else None,
+            )
+            request_record.username_would_change = bool(
+                request_record.current_forum_username
+                and request_record.current_forum_username != request_record.suggested_forum_username
+            )
+        return requests_
+
+    def render_account_dashboard(profile_form=None, identity_form=None):
+        member = get_current_member_for_user(current_user)
+        if member is None:
+            if current_user.role == "admin":
+                return redirect(url_for("admin"))
+            flash(_("No membership profile is linked to this account yet."), "warning")
+            return redirect(url_for("index"))
+
+        if sync_member_active_state(member):
+            db.session.commit()
+
+        pending_request = member.open_identity_change_request
+        profile_form = profile_form or MemberProfileForm(prefix="profile")
+        identity_form = identity_form or IdentityChangeRequestForm(prefix="identity")
+
+        if not profile_form.is_submitted():
+            populate_member_profile_form(profile_form, member)
+        if not identity_form.is_submitted():
+            populate_identity_change_form(identity_form, member, pending_request=pending_request)
+
+        suggested_username_from_request = None
+        if pending_request is not None and member.user is not None:
+            suggested_username_from_request = generate_unique_forum_username(
+                pending_request.requested_first_name,
+                pending_request.requested_last_name,
+                pending_request.requested_year_group,
+                exclude_user_id=member.user.id,
+            )
+
+        return render_template(
+            "account/index.html",
+            member=member,
+            profile_form=profile_form,
+            identity_form=identity_form,
+            pending_request=pending_request,
+            suggested_username_from_request=suggested_username_from_request,
+            can_manage_billing=bool(member.stripe_customer_id),
+            can_resume_payment=can_resume_payment(member),
+        )
+
     @app.route("/", methods=["GET"])
     def index():
         form = MembershipForm()
@@ -659,119 +1255,74 @@ def create_app():
             form_data = form.data
             form_data.pop("csrf_token", None)
             form_data.pop("submit", None)
+            password = form_data.pop("password")
+            form_data.pop("confirm_password", None)
 
             payment_method = form_data.pop("payment_method", "checkout")
-            existing_member = Member.query.filter_by(email_private=form_data["email_private"]).first()
+            form_data["email_private"] = form_data["email_private"].strip().lower()
+            email_address = form_data["email_private"]
+
+            existing_member = db.session.execute(db.select(Member).filter_by(email_private=email_address)).scalar_one_or_none()
+            existing_user = db.session.execute(db.select(User).filter_by(email=email_address)).scalar_one_or_none()
 
             if existing_member and sync_member_active_state(existing_member):
                 db.session.commit()
 
-            if existing_member and member_has_active_access(existing_member):
-                flash(_("An active membership already exists for this email address."), "warning")
-                return redirect(url_for("index"))
+            if existing_member is not None:
+                if existing_member.user_id:
+                    flash(_("An account with this email address already exists. Please log in to manage or resume your membership."), "warning")
+                    return redirect(url_for("login"))
+                flash(_("A membership profile with this email address already exists. Please claim your account first."), "warning")
+                return redirect(url_for("claim_account"))
+
+            if existing_user is not None:
+                flash(_("An account with this email address already exists. Please log in instead."), "warning")
+                return redirect(url_for("login"))
 
             if settings.get("invoice_payments_enabled") != "True":
                 payment_method = "checkout"
 
+            member = Member(
+                created_at=get_now_utc(),
+                payment_status="pending_checkout",
+                is_active=False,
+                pending_checkout_started_at=get_now_utc(),
+            )
+            apply_member_profile(member, {**form_data, "terms_accepted": True})
+
+            user = User(
+                email=email_address,
+                role="member",
+                forum_username=generate_unique_forum_username(
+                    member.first_name,
+                    member.last_name,
+                    member.year_group,
+                ),
+            )
+            user.set_password(password)
+            member.user = user
+
+            db.session.add(user)
+            db.session.add(member)
+            db.session.commit()
+            login_user(user)
+
             try:
-                price_details = get_stripe_membership_price()
-                join_date = get_membership_today()
-                cycle = build_membership_cycle(join_date, price_details["unit_amount"])
-                activation_mode = "free_period" if cycle["free_period"] else "paid_now"
-                membership_metadata = {
-                    "membership_starts_on": cycle["coverage_start"].isoformat(),
-                    "membership_ends_on": cycle["coverage_end"].isoformat(),
-                    "renewal_due_on": cycle["renewal_due_on"].isoformat(),
-                    "activation_mode": activation_mode,
-                    "member_email": form_data["email_private"],
-                }
+                try:
+                    send_email_verification_email(app, user)
+                except Exception as email_exc:
+                    app.logger.warning("Could not send verification email for user_id=%s: %s", user.id, email_exc)
 
                 if payment_method == "checkout":
-                    line_items = [{"price": STRIPE_PRICE_ID, "quantity": 1}]
-                    prorated_line_item = build_prorated_line_item(cycle, price_details)
-                    if prorated_line_item is not None:
-                        line_items.insert(0, prorated_line_item)
-
-                    session = stripe.checkout.Session.create(
-                        payment_method_types=["card", "sepa_debit"],
-                        line_items=line_items,
-                        mode="subscription",
-                        metadata={**membership_metadata, "member_data": json.dumps(form_data)},
-                        subscription_data={
-                            "trial_end": cycle["trial_end_unix"],
-                            "metadata": membership_metadata,
-                        },
-                        custom_text={
-                            "submit": {
-                                "message": build_checkout_submit_message(cycle, price_details),
-                            }
-                        },
-                        payment_method_collection="always",
-                        customer_email=form_data["email_private"],
-                        success_url=url_for(
-                            "thank_you",
-                            _external=True,
-                            method="checkout",
-                            phase=cycle["thank_you_phase"],
-                        ),
-                        cancel_url=url_for("cancel", _external=True),
-                    )
+                    session, _cycle = create_checkout_session_for_member(member)
+                    db.session.commit()
                     return redirect(session.url, code=303)
 
                 if payment_method == "invoice":
-                    customer = stripe.Customer.create(
-                        email=form_data["email_private"],
-                        name=f"{form_data['first_name']} {form_data['last_name']}",
-                    )
-
-                    subscription_params = {
-                        "customer": customer.id,
-                        "items": [{"price": STRIPE_PRICE_ID}],
-                        "collection_method": "send_invoice",
-                        "days_until_due": 30,
-                        "trial_end": cycle["trial_end_unix"],
-                        "metadata": membership_metadata,
-                    }
-                    prorated_line_item = build_prorated_line_item(cycle, price_details)
-                    if prorated_line_item is not None:
-                        subscription_params["add_invoice_items"] = [prorated_line_item]
-
-                    subscription = stripe.Subscription.create(**subscription_params)
-
-                    member = existing_member or Member(created_at=datetime.now(timezone.utc))
-                    apply_member_profile(member, form_data)
-                    member.stripe_customer_id = customer.id
-                    member.stripe_subscription_id = subscription.id
-
-                    if cycle["free_period"]:
-                        set_member_membership_window(
-                            member,
-                            starts_on=cycle["coverage_start"],
-                            ends_on=cycle["coverage_end"],
-                            renewal_due_on=cycle["renewal_due_on"],
-                            payment_status="free_period",
-                            is_active=True,
-                            cancel_at_period_end=False,
-                        )
-                    else:
-                        set_member_membership_window(
-                            member,
-                            starts_on=cycle["coverage_start"],
-                            ends_on=cycle["coverage_end"],
-                            renewal_due_on=cycle["renewal_due_on"],
-                            payment_status="unpaid",
-                            is_active=False,
-                            cancel_at_period_end=False,
-                        )
-
-                    if existing_member is None:
-                        db.session.add(member)
-
+                    _subscription, cycle = create_invoice_membership_for_member(member)
                     db.session.commit()
-
                     if cycle["free_period"]:
                         send_member_welcome_email(app, member)
-
                     return redirect(
                         url_for(
                             "thank_you",
@@ -784,7 +1335,7 @@ def create_app():
                 error_body = getattr(e, "json_body", {}) or {}
                 error_details = error_body.get("error", {}) if isinstance(error_body, dict) else {}
                 app.logger.error(
-                    "Stripe Error during membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s join_date=%s phase=%s prorated_amount_cents=%s renewal_due_on=%s",
+                    "Stripe Error during membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s member_id=%s",
                     type(e).__name__,
                     str(e),
                     error_details.get("message"),
@@ -793,22 +1344,20 @@ def create_app():
                     getattr(e, "request_id", None),
                     getattr(e, "http_status", None),
                     payment_method,
-                    form_data.get("email_private"),
-                    cycle.get("join_date") if 'cycle' in locals() else None,
-                    cycle.get("thank_you_phase") if 'cycle' in locals() else None,
-                    cycle.get("prorated_amount_cents") if 'cycle' in locals() else None,
-                    cycle.get("renewal_due_on") if 'cycle' in locals() else None,
+                    email_address,
+                    member.id,
                 )
-                flash(_("Error processing payment. Please try again."), "danger")
-            except Exception as e:
+                flash(_("Your account was created, but payment could not be started. Please log in and resume your membership from your account page."), "warning")
+            except Exception:
                 app.logger.exception(
-                    "Unexpected error during membership signup for email=%s payment_method=%s",
-                    form_data.get("email_private"),
+                    "Unexpected error during membership signup for email=%s payment_method=%s member_id=%s",
+                    email_address,
                     payment_method,
+                    member.id,
                 )
-                flash(_("An unexpected error occurred. Please try again."), "danger")
+                flash(_("Your account was created, but an unexpected error occurred while starting billing. Please log in and resume your membership from your account page."), "warning")
 
-            return redirect(url_for("index"))
+            return redirect(url_for("account"))
 
         app.logger.warning(f"Form validation failed. Errors: {form.errors}")
         flash(_("Please correct the errors below and try again."), "danger")
@@ -839,6 +1388,295 @@ def create_app():
             }
         )
 
+    @app.route("/account", methods=["GET"])
+    @login_required
+    def account():
+        return render_account_dashboard()
+
+    @app.route("/account/profile", methods=["POST"])
+    @login_required
+    def save_member_profile():
+        member = get_current_member_for_user(current_user)
+        if member is None:
+            flash(_("No membership profile is linked to this account yet."), "warning")
+            return redirect(url_for("index"))
+
+        profile_form = MemberProfileForm(prefix="profile")
+        identity_form = IdentityChangeRequestForm(prefix="identity")
+        if profile_form.validate_on_submit():
+            try:
+                email_changed = sync_member_primary_email(member, profile_form.email_private.data)
+            except ValueError as exc:
+                flash(str(exc), "danger")
+                return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
+
+            for field_name in DIRECT_MEMBER_PROFILE_FIELDS:
+                if field_name == "email_private":
+                    continue
+                setattr(member, field_name, normalize_optional_member_value(field_name, getattr(profile_form, field_name).data))
+
+            db.session.commit()
+            if email_changed:
+                try:
+                    send_email_verification_email(app, current_user)
+                    flash(_("Your profile was updated. Please verify your new email address using the link we sent you."), "success")
+                except Exception as exc:
+                    app.logger.warning("Could not send verification email after profile update for user_id=%s: %s", current_user.id, exc)
+                    flash(_("Your profile was updated."), "success")
+            else:
+                flash(_("Your profile was updated."), "success")
+            return redirect(url_for("account"))
+
+        flash(_("Please correct the profile form and try again."), "danger")
+        return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
+
+    @app.route("/account/identity-request", methods=["POST"])
+    @login_required
+    def submit_identity_change_request():
+        member = get_current_member_for_user(current_user)
+        if member is None:
+            flash(_("No membership profile is linked to this account yet."), "warning")
+            return redirect(url_for("index"))
+
+        identity_form = IdentityChangeRequestForm(prefix="identity")
+        profile_form = MemberProfileForm(prefix="profile")
+        if identity_form.validate_on_submit():
+            form_data = identity_form.data
+            form_data.pop("csrf_token", None)
+            form_data.pop("submit", None)
+
+            if not has_identity_changes(member, form_data):
+                flash(_("There are no identity changes to request."), "warning")
+                return redirect(url_for("account"))
+
+            try:
+                create_identity_change_request(member, current_user, form_data)
+                db.session.commit()
+                flash(_("Your identity change request has been submitted for admin review."), "success")
+                return redirect(url_for("account"))
+            except ValueError as exc:
+                flash(str(exc), "warning")
+                return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
+
+        flash(_("Please correct the identity change form and try again."), "danger")
+        return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
+
+    @app.route("/account/identity-request/<int:request_id>/cancel", methods=["POST"])
+    @login_required
+    def cancel_identity_change_request(request_id):
+        member = get_current_member_for_user(current_user)
+        request_record = db.session.get(MemberProfileChangeRequest, request_id)
+        if request_record is None or member is None or request_record.member_id != member.id or request_record.status != "pending":
+            flash(_("The selected change request could not be canceled."), "warning")
+            return redirect(url_for("account"))
+
+        request_record.status = "canceled"
+        request_record.reviewed_by = current_user
+        request_record.reviewed_at = get_now_utc()
+        db.session.commit()
+        flash(_("Your pending identity change request was canceled."), "success")
+        return redirect(url_for("account"))
+
+    @app.route("/account/billing", methods=["POST"])
+    @login_required
+    def manage_member_billing():
+        member = get_current_member_for_user(current_user)
+        if member is None:
+            flash(_("No membership profile is linked to this account yet."), "warning")
+            return redirect(url_for("index"))
+
+        try:
+            portal_session = get_portal_session(member)
+            return redirect(portal_session.url, code=303)
+        except ValueError as exc:
+            flash(str(exc), "warning")
+        except stripe.StripeError as exc:
+            app.logger.error("Could not create Stripe portal session for member_id=%s: %s", member.id, exc)
+            flash(_("Could not open the Stripe customer portal right now. Please try again later."), "danger")
+        return redirect(url_for("account"))
+
+    @app.route("/account/resume-payment", methods=["POST"])
+    @login_required
+    def resume_member_payment():
+        member = get_current_member_for_user(current_user)
+        if member is None:
+            flash(_("No membership profile is linked to this account yet."), "warning")
+            return redirect(url_for("index"))
+        if not can_resume_payment(member):
+            flash(_("This membership cannot be resumed from here. Use billing management instead if a Stripe customer already exists."), "warning")
+            return redirect(url_for("account"))
+
+        try:
+            session, _cycle = create_checkout_session_for_member(member)
+            db.session.commit()
+            return redirect(session.url, code=303)
+        except stripe.StripeError as exc:
+            app.logger.error("Could not resume Checkout for member_id=%s: %s", member.id, exc)
+            flash(_("Could not restart the Stripe Checkout session right now. Please try again later."), "danger")
+        except Exception:
+            app.logger.exception("Unexpected error while resuming payment for member_id=%s", member.id)
+            flash(_("Could not restart the membership payment right now."), "danger")
+        return redirect(url_for("account"))
+
+    @app.route("/account/resend-verification", methods=["POST"])
+    @login_required
+    def resend_verification_email():
+        if current_user.email_is_verified:
+            flash(_("Your email address is already verified."), "info")
+            return redirect(url_for("account"))
+
+        try:
+            if send_email_verification_email(app, current_user):
+                flash(_("We sent you a new verification email."), "success")
+            else:
+                flash(_("We could not send a verification email because no sender account is configured yet."), "warning")
+        except Exception as exc:
+            app.logger.warning("Could not resend verification email for user_id=%s: %s", current_user.id, exc)
+            flash(_("We could not send a verification email right now."), "danger")
+        return redirect(url_for("account"))
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    @limiter.limit(RATELIMIT_REGISTER, methods=["POST"])
+    def forgot_password():
+        if current_user.is_authenticated:
+            return redirect(url_for(get_member_portal_target(current_user)))
+
+        form = EmailRequestForm()
+        if form.validate_on_submit():
+            email_address = form.email.data.strip().lower()
+            user = db.session.execute(db.select(User).filter_by(email=email_address)).scalar_one_or_none()
+            if user is not None:
+                try:
+                    send_password_reset_email(app, user)
+                except Exception as exc:
+                    app.logger.warning("Could not send password reset email for user_id=%s: %s", user.id, exc)
+            flash(_("If an account with that email address exists and email sending is configured, a password reset link is available."), "info")
+            return redirect(url_for("login"))
+        return render_template(
+            "account/email_request.html",
+            form=form,
+            title=_("Reset Password"),
+            heading=_("Reset your password"),
+            description=_("Enter the email address of your Joanneum Aeronautics account and we will send you a reset link."),
+        )
+
+    @app.route("/reset-password/<token>", methods=["GET", "POST"])
+    def reset_password(token):
+        try:
+            token_data = read_token(token, "reset-password", TOKEN_MAX_AGE_PASSWORD_RESET)
+            user = db.session.get(User, int(token_data.get("user_id")))
+        except (BadSignature, SignatureExpired, ValueError, TypeError):
+            user = None
+
+        if user is None:
+            flash(_("This password reset link is invalid or has expired."), "danger")
+            return redirect(url_for("forgot_password"))
+
+        form = SetPasswordForm()
+        if form.validate_on_submit():
+            user.set_password(form.password.data)
+            db.session.commit()
+            flash(_("Your password has been updated. You can log in now."), "success")
+            return redirect(url_for("login"))
+        return render_template(
+            "account/set_password.html",
+            form=form,
+            title=_("Choose a New Password"),
+            heading=_("Choose a new password"),
+            description=_("Set a new password for your Joanneum Aeronautics account."),
+        )
+
+    @app.route("/claim-account", methods=["GET", "POST"])
+    @limiter.limit(RATELIMIT_REGISTER, methods=["POST"])
+    def claim_account():
+        if current_user.is_authenticated:
+            return redirect(url_for(get_member_portal_target(current_user)))
+
+        form = EmailRequestForm()
+        if form.validate_on_submit():
+            email_address = form.email.data.strip().lower()
+            member = db.session.execute(
+                db.select(Member).filter_by(email_private=email_address, user_id=None)
+            ).scalar_one_or_none()
+            if member is not None:
+                try:
+                    send_account_claim_email(app, member)
+                except Exception as exc:
+                    app.logger.warning("Could not send account claim email for member_id=%s: %s", member.id, exc)
+            flash(_("If an unclaimed membership profile exists for that email address and email sending is configured, a claim link is available."), "info")
+            return redirect(url_for("login"))
+        return render_template(
+            "account/email_request.html",
+            form=form,
+            title=_("Claim Account"),
+            heading=_("Claim your member account"),
+            description=_("If you already have a membership profile but no login account yet, enter your email and we will send you a setup link."),
+        )
+
+    @app.route("/claim-account/<token>", methods=["GET", "POST"])
+    def claim_account_token(token):
+        token_data = None
+        try:
+            token_data = read_token(token, "claim-account", TOKEN_MAX_AGE_ACCOUNT_CLAIM)
+            member = db.session.get(Member, int(token_data.get("member_id")))
+        except (BadSignature, SignatureExpired, ValueError, TypeError):
+            member = None
+
+        if member is None or member.email_private != token_data.get("email"):
+            flash(_("This account claim link is invalid or has expired."), "danger")
+            return redirect(url_for("claim_account"))
+
+        if member.user is not None:
+            flash(_("This membership profile already has an account. Please log in instead."), "info")
+            return redirect(url_for("login"))
+
+        form = SetPasswordForm()
+        if form.validate_on_submit():
+            existing_user = db.session.execute(db.select(User).filter_by(email=member.email_private)).scalar_one_or_none()
+            if existing_user is not None:
+                flash(_("An account with this email address already exists. Please use password reset instead."), "warning")
+                return redirect(url_for("forgot_password"))
+
+            user = User(
+                email=member.email_private,
+                role="member",
+                forum_username=generate_unique_forum_username(member.first_name, member.last_name, member.year_group),
+                email_verified_at=get_now_utc(),
+            )
+            user.set_password(form.password.data)
+            member.user = user
+            db.session.add(user)
+            db.session.commit()
+            login_user(user)
+            flash(_("Your account is ready. Welcome back!"), "success")
+            return redirect(url_for("account"))
+        return render_template(
+            "account/set_password.html",
+            form=form,
+            title=_("Finish Account Setup"),
+            heading=_("Create your password"),
+            description=_("Choose a password to connect this membership profile to your account."),
+        )
+
+    @app.route("/verify-email/<token>")
+    def verify_email(token):
+        try:
+            token_data = read_token(token, "verify-email", TOKEN_MAX_AGE_VERIFY_EMAIL)
+            user = db.session.get(User, int(token_data.get("user_id")))
+        except (BadSignature, SignatureExpired, ValueError, TypeError):
+            user = None
+
+        if user is None:
+            flash(_("This verification link is invalid or has expired."), "danger")
+            return redirect(url_for("login"))
+
+        if not user.email_is_verified:
+            user.email_verified_at = get_now_utc()
+            db.session.commit()
+        flash(_("Your email address has been verified."), "success")
+        if current_user.is_authenticated and current_user.id == user.id:
+            return redirect(url_for(get_member_portal_target(current_user)))
+        return redirect(url_for("login"))
+
     @app.route("/admin", methods=["GET", "POST"])
     @login_required
     @admin_required
@@ -850,6 +1688,12 @@ def create_app():
         sender_choices = []
         template_choices = get_email_template_choices(app)
         mail_account_records = get_db_mail_accounts()
+        pending_identity_requests = db.session.execute(
+            db.select(MemberProfileChangeRequest)
+            .filter_by(status="pending")
+            .order_by(MemberProfileChangeRequest.created_at.asc())
+        ).scalars().all()
+        decorate_pending_identity_requests(pending_identity_requests)
         try:
             mail_accounts = load_mail_accounts_config()
             sender_choices = [(acc, acc) for acc in mail_accounts.keys()]
@@ -940,7 +1784,61 @@ def create_app():
             editing_mail_account=editing_mail_account,
             sender_choices=sender_choices,
             template_choices=template_choices,
+            pending_identity_requests=pending_identity_requests,
         )
+
+    @app.route("/admin/profile-requests/<int:request_id>/approve", methods=["POST"])
+    @login_required
+    @admin_required
+    def approve_profile_change_request(request_id):
+        request_record = db.session.get(MemberProfileChangeRequest, request_id)
+        if request_record is None or request_record.status != "pending":
+            flash(_("The selected change request could not be found."), "warning")
+            return redirect(url_for("admin"))
+
+        member = request_record.member
+        member.salutation = request_record.requested_salutation
+        member.title = request_record.requested_title
+        member.first_name = request_record.requested_first_name
+        member.last_name = request_record.requested_last_name
+        member.year_group = request_record.requested_year_group
+
+        if member.user is not None and request.form.get("override_forum_username") == "1":
+            preferred_username = (request.form.get("forum_username_override") or "").strip()
+            if not preferred_username:
+                preferred_username = build_forum_username_base(member.first_name, member.last_name, member.year_group)
+            member.user.forum_username = generate_unique_forum_username(
+                member.first_name,
+                member.last_name,
+                member.year_group,
+                exclude_user_id=member.user.id,
+                preferred=preferred_username,
+            )
+
+        request_record.status = "approved"
+        request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
+        request_record.reviewed_by = current_user
+        request_record.reviewed_at = get_now_utc()
+        db.session.commit()
+        flash(_("Identity change request approved."), "success")
+        return redirect(url_for("admin"))
+
+    @app.route("/admin/profile-requests/<int:request_id>/reject", methods=["POST"])
+    @login_required
+    @admin_required
+    def reject_profile_change_request(request_id):
+        request_record = db.session.get(MemberProfileChangeRequest, request_id)
+        if request_record is None or request_record.status != "pending":
+            flash(_("The selected change request could not be found."), "warning")
+            return redirect(url_for("admin"))
+
+        request_record.status = "rejected"
+        request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
+        request_record.reviewed_by = current_user
+        request_record.reviewed_at = get_now_utc()
+        db.session.commit()
+        flash(_("Identity change request rejected."), "success")
+        return redirect(url_for("admin"))
 
     @app.route("/admin/mail-accounts", methods=["POST"])
     @login_required
@@ -1072,47 +1970,20 @@ def create_app():
     @limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
     def login():
         if current_user.is_authenticated:
-            if current_user.role == "admin":
-                return redirect(url_for("admin"))
-            return redirect(url_for("index"))
+            return redirect(url_for(get_member_portal_target(current_user)))
         form = LoginForm()
         if form.validate_on_submit():
-            user = db.session.execute(db.select(User).filter_by(email=form.email.data)).scalar_one_or_none()
+            user = db.session.execute(db.select(User).filter_by(email=form.email.data.strip().lower())).scalar_one_or_none()
             if user and user.check_password(form.password.data):
                 login_user(user)
-                if user.role == "admin":
-                    return redirect(url_for("admin"))
-                flash(_("Login successful, but this account does not have admin access."), "info")
-                return redirect(url_for("index"))
+                return redirect(url_for(get_member_portal_target(user)))
             flash(_("Invalid email or password"), "danger")
         return render_template("admin/login.html", form=form)
 
     @app.route("/register", methods=["GET", "POST"])
-    @limiter.limit(RATELIMIT_REGISTER, methods=["POST"])
     def register():
-        if current_user.is_authenticated:
-            if current_user.role == "admin":
-                return redirect(url_for("admin"))
-            return redirect(url_for("index"))
-        form = RegistrationForm()
-        if form.validate_on_submit():
-            existing_user = db.session.execute(db.select(User).filter_by(email=form.email.data)).scalar_one_or_none()
-            if existing_user is not None:
-                flash(_("An account with this email address already exists. Please log in instead."), "warning")
-                return redirect(url_for("login"))
-
-            user = User(email=form.email.data)
-            user.set_password(form.password.data)
-            db.session.add(user)
-            try:
-                db.session.commit()
-            except IntegrityError:
-                db.session.rollback()
-                flash(_("An account with this email address already exists. Please log in instead."), "warning")
-                return redirect(url_for("login"))
-            flash(_("Congratulations, you are now a registered user!"), "success")
-            return redirect(url_for("login"))
-        return render_template("admin/register.html", form=form)
+        flash(_("Accounts are created automatically when you sign up for a membership."), "info")
+        return redirect(url_for("index"))
 
     @app.route("/logout", methods=["POST"])
     @login_required
@@ -1130,9 +2001,7 @@ def create_app():
                 current_user.set_password(form.new_password.data)
                 db.session.commit()
                 flash(_("Your password has been updated!"), "success")
-                if current_user.role == "admin":
-                    return redirect(url_for("admin"))
-                return redirect(url_for("index"))
+                return redirect(url_for(get_member_portal_target(current_user)))
             flash(_("Invalid current password"), "danger")
         return render_template("admin/change_password.html", form=form)
 
@@ -1163,23 +2032,38 @@ def create_app():
 
             try:
                 member_data = json.loads(member_data_json)
-                email = member_data.get("email_private")
                 customer_id = session.get("customer")
                 subscription_id = session.get("subscription")
-                if not email or not customer_id:
-                    app.logger.error("Webhook missing email or customer ID in session.")
-                    return "Missing data", 400
-
-                member = Member.query.filter_by(email_private=email).first()
+                member = get_member_by_stripe_reference(
+                    customer_id=customer_id,
+                    subscription_id=subscription_id,
+                    member_id=metadata.get("member_id"),
+                    user_id=metadata.get("user_id"),
+                )
+                if member is None:
+                    member = Member.query.filter_by(email_private=member_data.get("email_private")).first()
                 previously_active = member_has_active_access(member)
                 if member is None:
-                    member = Member(created_at=datetime.now(timezone.utc))
+                    member = Member(created_at=get_now_utc(), payment_status="pending_checkout", is_active=False)
                     db.session.add(member)
 
-                apply_member_profile(member, member_data)
+                apply_member_profile(member, {**member_data, "terms_accepted": True})
+                member.pending_checkout_started_at = member.pending_checkout_started_at or get_now_utc()
                 member.stripe_customer_id = customer_id
                 if subscription_id and isinstance(subscription_id, str) and subscription_id.startswith("sub_"):
                     member.stripe_subscription_id = subscription_id
+
+                if member.user is not None:
+                    member.user.email = member.email_private
+                    if member.user.role != "admin":
+                        member.user.role = "member"
+                    if not member.user.forum_username:
+                        member.user.forum_username = generate_unique_forum_username(
+                            member.first_name,
+                            member.last_name,
+                            member.year_group,
+                            exclude_user_id=member.user.id,
+                        )
 
                 starts_on = parse_iso_date(metadata.get("membership_starts_on")) or get_membership_today()
                 ends_on = parse_iso_date(metadata.get("membership_ends_on")) or last_day_of_year(starts_on.year)
@@ -1197,6 +2081,7 @@ def create_app():
                         is_active=True,
                         cancel_at_period_end=False,
                     )
+                    member.pending_checkout_started_at = None
                 elif session_payment_status == "paid":
                     set_member_membership_window(
                         member,
@@ -1207,6 +2092,7 @@ def create_app():
                         is_active=True,
                         cancel_at_period_end=False,
                     )
+                    member.pending_checkout_started_at = None
                 else:
                     set_member_membership_window(
                         member,
@@ -1224,10 +2110,12 @@ def create_app():
                     send_member_welcome_email(app, member)
 
                 app.logger.info(
-                    f"SUCCESS: Membership checkout completed for {member.email_private}. Session ID: {session.get('id')}"
+                    "SUCCESS: Membership checkout completed for %s. Session ID: %s",
+                    member.email_private,
+                    session.get("id"),
                 )
-            except Exception as e:
-                app.logger.error(f"FATAL DB ERROR on Webhook for session {session.get('id')}: {e}")
+            except Exception:
+                app.logger.exception("FATAL DB ERROR on Webhook for session %s", session.get("id"))
                 db.session.rollback()
                 return "Database save failed", 500
 
@@ -1238,7 +2126,7 @@ def create_app():
             if member and not member_has_active_access(member):
                 member.payment_status = "processing"
                 db.session.commit()
-                app.logger.info(f"Payment is processing for Stripe Customer ID: {customer_id}")
+                app.logger.info("Payment is processing for Stripe Customer ID: %s", customer_id)
 
         elif event_type in ["payment_intent.succeeded", "invoice.paid", "invoice.payment_succeeded"]:
             data_object = event["data"]["object"]
@@ -1258,16 +2146,20 @@ def create_app():
                 paid_on = to_membership_date(paid_timestamp)
 
                 update_member_paid_coverage(member, paid_on)
+                member.pending_checkout_started_at = None
                 db.session.commit()
                 app.logger.info(
-                    f"SUCCESS: Payment confirmed and member coverage updated for Stripe Customer ID: {customer_id}"
+                    "SUCCESS: Payment confirmed and member coverage updated for Stripe Customer ID: %s",
+                    customer_id,
                 )
 
-                if member_has_active_access(member) and previous_status in {"unpaid", "processing"}:
+                if member_has_active_access(member) and previous_status in {"unpaid", "processing", "pending_checkout", "failed"}:
                     send_member_welcome_email(app, member)
             else:
                 app.logger.warning(
-                    f"Webhook for successful payment received, but no member found for Stripe reference customer={customer_id} subscription={subscription_id}"
+                    "Webhook for successful payment received, but no member found for Stripe reference customer=%s subscription=%s",
+                    customer_id,
+                    subscription_id,
                 )
 
         elif event_type == "customer.subscription.updated":
@@ -1294,7 +2186,7 @@ def create_app():
                 if not member_has_active_access(member):
                     member.is_active = False
                 db.session.commit()
-                app.logger.warning(f"Payment failed for Stripe Customer ID: {customer_id}")
+                app.logger.warning("Payment failed for Stripe Customer ID: %s", customer_id)
             else:
                 app.logger.warning(
                     "Webhook for failed payment received, but no Stripe Customer ID was provided."
@@ -1316,21 +2208,24 @@ def create_app():
                     member.payment_status = "failed"
                     member.is_active = False
                     app.logger.warning(
-                        f"Subscription for Stripe Customer ID: {customer_id} was canceled due to failed payment."
+                        "Subscription for Stripe Customer ID: %s was canceled due to failed payment.",
+                        customer_id,
                     )
                 else:
                     member.payment_status = "canceled"
                     member.is_active = member_has_active_access(member, event_date)
                     app.logger.info(
-                        f"Subscription canceled for Stripe Customer ID: {customer_id}. Coverage remains valid until the covered year ends."
+                        "Subscription canceled for Stripe Customer ID: %s. Coverage remains valid until the covered year ends.",
+                        customer_id,
                     )
 
-                if sync_member_active_state(member, event_date):
-                    pass
+                sync_member_active_state(member, event_date)
                 db.session.commit()
             else:
                 app.logger.warning(
-                    f"Webhook for subscription cancellation received, but no member found for Stripe reference customer={customer_id} subscription={subscription_id}"
+                    "Webhook for subscription cancellation received, but no member found for Stripe reference customer=%s subscription=%s",
+                    customer_id,
+                    subscription_id,
                 )
 
         elif event_type == "charge.dispute.closed":
@@ -1347,7 +2242,8 @@ def create_app():
                             member.payment_status = "dispute_lost"
                             db.session.commit()
                             app.logger.error(
-                                f"DISPUTE LOST for Stripe Customer ID: {customer_id}. Member has been deactivated."
+                                "DISPUTE LOST for Stripe Customer ID: %s. Member has been deactivated.",
+                                customer_id,
                             )
                 except Exception as e:
                     app.logger.error(f"Error handling dispute for charge {charge_id}: {e}")
@@ -1357,7 +2253,7 @@ def create_app():
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash(_("Your session has expired or the form is invalid. Please try submitting again."), "warning")
-        return redirect(url_for("index"))
+        return redirect(request.referrer or url_for("index"))
 
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):

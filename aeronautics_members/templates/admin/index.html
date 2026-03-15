@@ -2,221 +2,249 @@
 {% block title %}{{ _('Admin Area') }}{% endblock %}
 {% block content %}
 <div class="container mt-5 mb-5">
-    <h2>{{ _('Admin Area') }}</h2>
-    {% if current_user.is_authenticated %}
-        <p>{{ _('Welcome,') }} {{ current_user.email }}!</p>
-        
-        <div class="card mt-4">
-            <div class="card-header">
-                <h4>{{ _('Settings') }}</h4>
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('admin') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" name="invoice_payments_enabled" id="invoice_payments_enabled"
-                            {% if settings.get('invoice_payments_enabled') == 'True' %}checked{% endif %}>
-                        <label class="form-check-label" for="invoice_payments_enabled">
-                            {{ _('Enable Invoice Payments') }}
-                        </label>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" name="automatic_emails_enabled" id="automatic_emails_enabled"
-                            {% if settings.get('automatic_emails_enabled') == 'True' %}checked{% endif %}>
-                        <label class="form-check-label" for="automatic_emails_enabled">
-                            {{ _('Enable Automatic Emails') }}
-                        </label>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="welcome_email_sender" class="form-label">{{ _('Send Welcome Email From:') }}</label>
-                        <select class="form-select" name="welcome_email_sender" id="welcome_email_sender">
-                            <option value="">{{ _('Do not send a welcome email') }}</option>
-                            {% for choice, label in sender_choices %}
-                                <option value="{{ choice }}" {% if settings.get('welcome_email_sender') == choice %}selected{% endif %}>
-                                    {{ label }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="automatic_email_template" class="form-label">{{ _('Automatic Email Template:') }}</label>
-                        <select class="form-select" name="automatic_email_template" id="automatic_email_template">
-                            <option value="">{{ _('No automatic email template') }}</option>
-                            {% for choice, label in template_choices %}
-                                <option value="{{ choice }}" {% if settings.get('automatic_email_template') == choice %}selected{% endif %}>
-                                    {{ label }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <button type="submit" name="save_settings" class="btn btn-primary mt-3">{{ _('Save Settings') }}</button>
-                </form>
-            </div>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-4">
+        <div>
+            <h2 class="mb-1">{{ _('Admin Area') }}</h2>
+            <p class="text-muted mb-0">{{ _('Welcome,') }} {{ current_user.email }}</p>
         </div>
-
-        <div class="card mt-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">{{ _('Mail Accounts') }}</h4>
-                {% if editing_mail_account %}
-                    <a href="{{ url_for('admin') }}" class="btn btn-sm btn-secondary">{{ _('Cancel Edit') }}</a>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('save_mail_account') }}">
-                    {{ mail_account_form.hidden_tag() }}
-                    {{ mail_account_form.mail_account_id }}
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            {{ mail_account_form.account_key.label(class="form-label") }}
-                            {{ mail_account_form.account_key(class="form-control", placeholder=_('e.g. office')) }}
-                        </div>
-                        <div class="col-md-4">
-                            {{ mail_account_form.host.label(class="form-label") }}
-                            {{ mail_account_form.host(class="form-control", placeholder=_('smtp.example.com')) }}
-                        </div>
-                        <div class="col-md-4">
-                            {{ mail_account_form.port.label(class="form-label") }}
-                            {{ mail_account_form.port(class="form-control", placeholder='587') }}
-                        </div>
-                        <div class="col-md-6">
-                            {{ mail_account_form.username.label(class="form-label") }}
-                            {{ mail_account_form.username(class="form-control", placeholder=_('noreply@example.com')) }}
-                        </div>
-                        <div class="col-md-6">
-                            {{ mail_account_form.password.label(class="form-label") }}
-                            {{ mail_account_form.password(class="form-control", placeholder=editing_mail_account and _('Leave blank to keep the current password') or _('SMTP password')) }}
-                        </div>
-                    </div>
-                    <div class="form-check mt-3">
-                        {{ mail_account_form.starttls(class="form-check-input") }}
-                        {{ mail_account_form.starttls.label(class="form-check-label") }}
-                    </div>
-                    <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
-                        <button type="submit" class="btn btn-primary">
-                            {% if editing_mail_account %}{{ _('Update Mail Account') }}{% else %}{{ _('Add Mail Account') }}{% endif %}
-                        </button>
-                        <small class="text-muted">
-                            {% if editing_mail_account %}
-                                {{ _('Leave the password blank to keep the current SMTP password.') }}
-                            {% else %}
-                                {{ _('Stored sender accounts become available immediately in the welcome-email and test-email settings.') }}
-                            {% endif %}
-                        </small>
-                    </div>
-                </form>
-
-                {% if mail_account_records %}
-                    <div class="table-responsive mt-4">
-                        <table class="table table-striped align-middle">
-                            <thead>
-                                <tr>
-                                    <th>{{ _('Key') }}</th>
-                                    <th>{{ _('Host') }}</th>
-                                    <th>{{ _('Port') }}</th>
-                                    <th>{{ _('Username') }}</th>
-                                    <th>{{ _('Security') }}</th>
-                                    <th class="text-end">{{ _('Actions') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for mail_account in mail_account_records %}
-                                    <tr>
-                                        <td>{{ mail_account.account_key }}</td>
-                                        <td>{{ mail_account.host }}</td>
-                                        <td>{{ mail_account.port }}</td>
-                                        <td>{{ mail_account.username }}</td>
-                                        <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
-                                        <td class="text-end">
-                                            <a href="{{ url_for('admin', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-danger ms-2"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#deleteMailAccountModal"
-                                                data-delete-url="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}"
-                                                data-account-key="{{ mail_account.account_key }}"
-                                            >{{ _('Delete') }}</button>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="alert alert-warning mt-4" role="alert">
-                        {{ _('No database-managed sender accounts are configured yet. Add one above to enable email sending from the admin area.') }}
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="card mt-4">
-            <div class="card-header">
-                <h4>{{ _('Send Test Email') }}</h4>
-            </div>
-            <div class="card-body">
-                {% if test_email_form.sender.choices %}
-                    <form method="POST" action="{{ url_for('send_test_email') }}">
-                        {{ test_email_form.hidden_tag() }}
-                        <div class="mb-3">
-                            {{ test_email_form.sender.label(class="form-label") }}
-                            {{ test_email_form.sender(class="form-select") }}
-                        </div>
-                        <div class="mb-3">
-                            {{ test_email_form.recipient.label(class="form-label") }}
-                            {{ test_email_form.recipient(class="form-control", placeholder=_('recipient@example.com')) }}
-                        </div>
-                        <div class="mb-3">
-                            {{ test_email_form.template.label(class="form-label") }}
-                            {{ test_email_form.template(class="form-select") }}
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="submit" name="send_generic_test" class="btn btn-primary">{{ _('Send Test Email') }}</button>
-                        </div>
-                    </form>
-                {% else %}
-                    <div class="alert alert-warning" role="alert">
-                        {{ _('No sender email accounts are configured yet. Add one in the Mail Accounts section to use this feature.') }}
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="d-flex flex-wrap gap-2 align-items-center mt-4">
+        <div class="d-flex flex-wrap gap-2">
+            {% if current_user.member %}
+                <a href="{{ url_for('account') }}" class="btn btn-secondary">{{ _('Open My Account') }}</a>
+            {% endif %}
+            <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
             <form method="POST" action="{{ url_for('logout') }}" class="mb-0">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-danger">{{ _('Logout') }}</button>
             </form>
-            <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
         </div>
-        <div class="modal fade" id="deleteMailAccountModal" tabindex="-1" aria-labelledby="deleteMailAccountModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="deleteMailAccountModalLabel">{{ _('Delete Mail Account') }}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="mb-0">{{ _('Do you really want to delete this mail account?') }} <strong id="delete-mail-account-name"></strong></p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
-                        <form method="POST" action="#" id="delete-mail-account-form" class="mb-0">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-danger">{{ _('Delete') }}</button>
-                        </form>
-                    </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4 class="mb-0">{{ _('Pending Identity Change Requests') }}</h4>
+        </div>
+        <div class="card-body">
+            {% if pending_identity_requests %}
+                <div class="accordion" id="identityRequestAccordion">
+                    {% for request_record in pending_identity_requests %}
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="identity-request-heading-{{ request_record.id }}">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#identity-request-body-{{ request_record.id }}" aria-expanded="false" aria-controls="identity-request-body-{{ request_record.id }}">
+                                    <span>
+                                        {{ request_record.member.email_private }}
+                                        <span class="text-muted">- {{ request_record.member.first_name }} {{ request_record.member.last_name }} -> {{ request_record.requested_full_name }}</span>
+                                    </span>
+                                </button>
+                            </h2>
+                            <div id="identity-request-body-{{ request_record.id }}" class="accordion-collapse collapse" aria-labelledby="identity-request-heading-{{ request_record.id }}" data-bs-parent="#identityRequestAccordion">
+                                <div class="accordion-body">
+                                    <div class="row g-4">
+                                        <div class="col-lg-6">
+                                            <div class="border p-3 h-100">
+                                                <h5>{{ _('Current Data') }}</h5>
+                                                <p class="mb-2"><strong>{{ _('Name:') }}</strong> {{ request_record.member.title or '' }} {{ request_record.member.first_name }} {{ request_record.member.last_name }}</p>
+                                                <p class="mb-2"><strong>{{ _('Salutation:') }}</strong> {{ request_record.member.salutation }}</p>
+                                                <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.member.year_group }}</p>
+                                                <p class="mb-0"><strong>{{ _('Forum Username:') }}</strong> {{ request_record.current_forum_username or _('Not set') }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="col-lg-6">
+                                            <div class="border p-3 h-100">
+                                                <h5>{{ _('Requested Data') }}</h5>
+                                                <p class="mb-2"><strong>{{ _('Name:') }}</strong> {{ request_record.requested_title or '' }} {{ request_record.requested_first_name }} {{ request_record.requested_last_name }}</p>
+                                                <p class="mb-2"><strong>{{ _('Salutation:') }}</strong> {{ request_record.requested_salutation }}</p>
+                                                <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.requested_year_group }}</p>
+                                                <p class="mb-2"><strong>{{ _('Suggested Forum Username:') }}</strong> {{ request_record.suggested_forum_username }}</p>
+                                                {% if request_record.member_note %}
+                                                    <p class="mb-0"><strong>{{ _('Member Note:') }}</strong> {{ request_record.member_note }}</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row g-4 mt-1">
+                                        <div class="col-lg-6">
+                                            <form method="POST" action="{{ url_for('approve_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <h5>{{ _('Approve Request') }}</h5>
+                                                {% if request_record.username_would_change %}
+                                                    <div class="form-check mb-3">
+                                                        <input class="form-check-input" type="checkbox" name="override_forum_username" id="override_forum_username_{{ request_record.id }}" value="1">
+                                                        <label class="form-check-label" for="override_forum_username_{{ request_record.id }}">
+                                                            {{ _('Also update the stored forum username') }}
+                                                        </label>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label for="forum_username_override_{{ request_record.id }}" class="form-label">{{ _('Forum Username Override') }}</label>
+                                                        <input type="text" class="form-control" name="forum_username_override" id="forum_username_override_{{ request_record.id }}" value="{{ request_record.suggested_forum_username }}">
+                                                        <small class="text-muted">{{ _('Leave the suggested value or enter a custom username. A numeric suffix will be added automatically if needed.') }}</small>
+                                                    </div>
+                                                {% endif %}
+                                                <div class="mb-3">
+                                                    <label for="approve_admin_note_{{ request_record.id }}" class="form-label">{{ _('Admin Note') }}</label>
+                                                    <textarea class="form-control" name="admin_note" id="approve_admin_note_{{ request_record.id }}" rows="3" placeholder="{{ _('Optional note for the member or audit trail') }}"></textarea>
+                                                </div>
+                                                <button type="submit" class="btn btn-primary">{{ _('Approve Request') }}</button>
+                                            </form>
+                                        </div>
+                                        <div class="col-lg-6">
+                                            <form method="POST" action="{{ url_for('reject_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <h5>{{ _('Reject Request') }}</h5>
+                                                <div class="mb-3">
+                                                    <label for="reject_admin_note_{{ request_record.id }}" class="form-label">{{ _('Admin Note') }}</label>
+                                                    <textarea class="form-control" name="admin_note" id="reject_admin_note_{{ request_record.id }}" rows="3" placeholder="{{ _('Optional explanation for the rejection') }}"></textarea>
+                                                </div>
+                                                <button type="submit" class="btn btn-danger">{{ _('Reject Request') }}</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info mb-0">{{ _('There are no pending identity change requests right now.') }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h4>{{ _('Settings') }}</h4>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="invoice_payments_enabled" id="invoice_payments_enabled" {% if settings.get('invoice_payments_enabled') == 'True' %}checked{% endif %}>
+                    <label class="form-check-label" for="invoice_payments_enabled">{{ _('Enable Invoice Payments') }}</label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" name="automatic_emails_enabled" id="automatic_emails_enabled" {% if settings.get('automatic_emails_enabled') == 'True' %}checked{% endif %}>
+                    <label class="form-check-label" for="automatic_emails_enabled">{{ _('Enable Automatic Emails') }}</label>
+                </div>
+                <div class="mb-3">
+                    <label for="welcome_email_sender" class="form-label">{{ _('Send Welcome Email From:') }}</label>
+                    <select class="form-select" name="welcome_email_sender" id="welcome_email_sender">
+                        <option value="">{{ _('Do not send a welcome email') }}</option>
+                        {% for choice, label in sender_choices %}
+                            <option value="{{ choice }}" {% if settings.get('welcome_email_sender') == choice %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="automatic_email_template" class="form-label">{{ _('Automatic Email Template:') }}</label>
+                    <select class="form-select" name="automatic_email_template" id="automatic_email_template">
+                        <option value="">{{ _('No automatic email template') }}</option>
+                        {% for choice, label in template_choices %}
+                            <option value="{{ choice }}" {% if settings.get('automatic_email_template') == choice %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" name="save_settings" class="btn btn-primary mt-3">{{ _('Save Settings') }}</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">{{ _('Mail Accounts') }}</h4>
+            {% if editing_mail_account %}
+                <a href="{{ url_for('admin') }}" class="btn btn-sm btn-secondary">{{ _('Cancel Edit') }}</a>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('save_mail_account') }}">
+                {{ mail_account_form.hidden_tag() }}
+                {{ mail_account_form.mail_account_id }}
+                <div class="row g-3">
+                    <div class="col-md-4">{{ mail_account_form.account_key.label(class="form-label") }}{{ mail_account_form.account_key(class="form-control", placeholder=_('e.g. office')) }}</div>
+                    <div class="col-md-4">{{ mail_account_form.host.label(class="form-label") }}{{ mail_account_form.host(class="form-control", placeholder=_('smtp.example.com')) }}</div>
+                    <div class="col-md-4">{{ mail_account_form.port.label(class="form-label") }}{{ mail_account_form.port(class="form-control", placeholder='587') }}</div>
+                    <div class="col-md-6">{{ mail_account_form.username.label(class="form-label") }}{{ mail_account_form.username(class="form-control", placeholder=_('noreply@example.com')) }}</div>
+                    <div class="col-md-6">{{ mail_account_form.password.label(class="form-label") }}{{ mail_account_form.password(class="form-control", placeholder=editing_mail_account and _('Leave blank to keep the current password') or _('SMTP password')) }}</div>
+                </div>
+                <div class="form-check mt-3">{{ mail_account_form.starttls(class="form-check-input") }}{{ mail_account_form.starttls.label(class="form-check-label") }}</div>
+                <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+                    <button type="submit" class="btn btn-primary">{% if editing_mail_account %}{{ _('Update Mail Account') }}{% else %}{{ _('Add Mail Account') }}{% endif %}</button>
+                    <small class="text-muted">{% if editing_mail_account %}{{ _('Leave the password blank to keep the current SMTP password.') }}{% else %}{{ _('Stored sender accounts become available immediately in the welcome-email and test-email settings.') }}{% endif %}</small>
+                </div>
+            </form>
+
+            {% if mail_account_records %}
+                <div class="table-responsive mt-4">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>{{ _('Key') }}</th>
+                                <th>{{ _('Host') }}</th>
+                                <th>{{ _('Port') }}</th>
+                                <th>{{ _('Username') }}</th>
+                                <th>{{ _('Security') }}</th>
+                                <th class="text-end">{{ _('Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for mail_account in mail_account_records %}
+                                <tr>
+                                    <td>{{ mail_account.account_key }}</td>
+                                    <td>{{ mail_account.host }}</td>
+                                    <td>{{ mail_account.port }}</td>
+                                    <td>{{ mail_account.username }}</td>
+                                    <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
+                                    <td class="text-end">
+                                        <a href="{{ url_for('admin', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
+                                        <button type="button" class="btn btn-sm btn-danger ms-2" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-warning mt-4" role="alert">{{ _('No database-managed sender accounts are configured yet. Add one above to enable email sending from the admin area.') }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header"><h4>{{ _('Send Test Email') }}</h4></div>
+        <div class="card-body">
+            {% if test_email_form.sender.choices %}
+                <form method="POST" action="{{ url_for('send_test_email') }}">
+                    {{ test_email_form.hidden_tag() }}
+                    <div class="mb-3">{{ test_email_form.sender.label(class="form-label") }}{{ test_email_form.sender(class="form-select") }}</div>
+                    <div class="mb-3">{{ test_email_form.recipient.label(class="form-label") }}{{ test_email_form.recipient(class="form-control", placeholder=_('recipient@example.com')) }}</div>
+                    <div class="mb-3">{{ test_email_form.template.label(class="form-label") }}{{ test_email_form.template(class="form-select") }}</div>
+                    <div class="d-flex gap-2"><button type="submit" name="send_generic_test" class="btn btn-primary">{{ _('Send Test Email') }}</button></div>
+                </form>
+            {% else %}
+                <div class="alert alert-warning" role="alert">{{ _('No sender email accounts are configured yet. Add one in the Mail Accounts section to use this feature.') }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="modal fade" id="deleteMailAccountModal" tabindex="-1" aria-labelledby="deleteMailAccountModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteMailAccountModalLabel">{{ _('Delete Mail Account') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">{{ _('Do you really want to delete this mail account?') }} <strong id="delete-mail-account-name"></strong></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                    <form method="POST" action="#" id="delete-mail-account-form" class="mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger">{{ _('Delete') }}</button>
+                    </form>
                 </div>
             </div>
         </div>
-    {% else %}
-        <p>{{ _('Please log in to access the admin area.') }}</p>
-        <a href="{{ url_for('login') }}" class="btn btn-primary">{{ _('Login') }}</a>
-        <a href="{{ url_for('register') }}" class="btn btn-secondary">{{ _('Register') }}</a>
-    {% endif %}
+    </div>
 </div>
 <script>
 document.addEventListener('DOMContentLoaded', function () {

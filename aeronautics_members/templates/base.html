@@ -14,19 +14,26 @@
             <a class="navbar-brand" href="{{ url_for('index') }}" aria-label="{{ _('Joanneum Aeronautics') }}">
                 <img src="{{ url_for('static', filename='logo_joanneum_aeronautics_negativ.svg') }}" alt="{{ _('Joanneum Aeronautics') }}">
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="{{ _('Toggle navigation') }}">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav ms-auto align-items-lg-center">
                     {% if current_user.is_authenticated %}
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('admin') }}">{{ _('Admin') }}</a>
-                        </li>
+                        {% if current_user.member %}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('account') }}">{{ _('My Account') }}</a>
+                            </li>
+                        {% endif %}
+                        {% if current_user.role == 'admin' %}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('admin') }}">{{ _('Admin') }}</a>
+                            </li>
+                        {% endif %}
                         <li class="nav-item">
                             <form method="POST" action="{{ url_for('logout') }}" class="d-flex align-items-center mb-0">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="nav-link btn btn-link border-0 bg-transparent">{{ _('Logout') }}</button>
+                                <button type="submit" class="nav-link btn btn-link border-0 bg-transparent p-0">{{ _('Logout') }}</button>
                             </form>
                         </li>
                     {% else %}
@@ -52,7 +59,6 @@
     </nav>
 
     <div class="container mt-4">
-        <!-- Flash Messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -60,8 +66,7 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        
-        <!-- Content Block -->
+
         {% block content %}{% endblock %}
     </div>
 

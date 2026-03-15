@@ -34,6 +34,8 @@ ENABLE_SSL="${BOOTSTRAP_ENABLE_SSL:-}"
 SSL_EMAIL="${BOOTSTRAP_SSL_EMAIL:-}"
 USE_CLOUDFLARE_TUNNEL="${BOOTSTRAP_USE_CLOUDFLARE_TUNNEL:-0}"
 CLOUDFLARE_ORIGIN_HOST="${BOOTSTRAP_CLOUDFLARE_ORIGIN_HOST:-}"
+ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-}"
+ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-}"
 NONINTERACTIVE="${BOOTSTRAP_NONINTERACTIVE:-0}"
 
 PACKAGE_MANAGER=""
@@ -110,6 +112,8 @@ Options:
   --enable-ssl
   --disable-ssl
   --ssl-email EMAIL
+  --admin-email EMAIL
+  --admin-password PASSWORD
   --yes, --non-interactive
   -h, --help
 EOF
@@ -256,6 +260,14 @@ parse_args() {
                 ;;
             --ssl-email)
                 SSL_EMAIL="${2:-}"
+                shift 2
+                ;;
+            --admin-email)
+                ADMIN_EMAIL="${2:-}"
+                shift 2
+                ;;
+            --admin-password)
+                ADMIN_PASSWORD="${2:-}"
                 shift 2
                 ;;
             --yes|--non-interactive)
@@ -727,9 +739,17 @@ backup_local_repo_changes() {
     fi
 
     if [[ -n "$(git_in_dir "${target_dir}" status --porcelain)" ]]; then
-        local patch_file="${target_dir}/.installer-local-changes-$(date +%Y%m%d%H%M%S).patch"
+        local backup_stamp="$(date +%Y%m%d%H%M%S)"
+        local patch_file="${target_dir}/.installer-local-changes-${backup_stamp}.patch"
         git_in_dir "${target_dir}" diff HEAD > "${patch_file}" || true
         warn "Local git changes were detected and backed up to ${patch_file}."
+
+        mapfile -t untracked_files < <(git_in_dir "${target_dir}" ls-files --others --exclude-standard)
+        if (( ${#untracked_files[@]} > 0 )); then
+            local archive_file="${target_dir}/.installer-untracked-files-${backup_stamp}.tar"
+            tar -C "${target_dir}" -cf "${archive_file}" "${untracked_files[@]}" || true
+            warn "Untracked files were backed up to ${archive_file}."
+        fi
     fi
 }
 
@@ -801,6 +821,8 @@ bootstrap_self_update() {
         BOOTSTRAP_SSL_EMAIL="${SSL_EMAIL}" \
         BOOTSTRAP_USE_CLOUDFLARE_TUNNEL="${USE_CLOUDFLARE_TUNNEL}" \
         BOOTSTRAP_CLOUDFLARE_ORIGIN_HOST="${CLOUDFLARE_ORIGIN_HOST}" \
+        BOOTSTRAP_ADMIN_EMAIL="${ADMIN_EMAIL}" \
+        BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
         BOOTSTRAP_NONINTERACTIVE="${NONINTERACTIVE}" \
         bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}"
     exit $?
@@ -1076,6 +1098,51 @@ FLUSH PRIVILEGES;"
 initialize_database_schema() {
     step "Initializing database schema"
     run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/flask" --app aeronautics_members.app:create_app db-init
+}
+
+count_admin_accounts() {
+    run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/python" -c "from sqlalchemy import func; from aeronautics_members.app import create_app; from aeronautics_members.db_models import db, User; app=create_app(); ctx=app.app_context(); ctx.push(); print(db.session.scalar(db.select(func.count()).select_from(User).where(User.role == 'admin')) or 0); ctx.pop()"
+}
+
+ensure_admin_account() {
+    local existing_admin_count="0"
+    local create_admin_now="0"
+
+    existing_admin_count="$(count_admin_accounts 2>/dev/null || printf '0')"
+    if [[ ! "${existing_admin_count}" =~ ^[0-9]+$ ]]; then
+        existing_admin_count="0"
+    fi
+
+    if [[ -n "${ADMIN_EMAIL:-}" ]]; then
+        create_admin_now="1"
+    elif [[ "${existing_admin_count}" -eq 0 ]]; then
+        if [[ "${NONINTERACTIVE}" == "1" ]]; then
+            warn "No admin account exists yet. After install, create one manually with: flask --app aeronautics_members.app:create_app create-admin <email>"
+            return
+        fi
+        prompt_yes_no create_admin_now "Create the initial admin account now?" "1"
+    else
+        info "Found ${existing_admin_count} existing admin account(s)."
+        return
+    fi
+
+    if [[ "${create_admin_now}" != "1" ]]; then
+        if [[ "${existing_admin_count}" -eq 0 ]]; then
+            warn "No admin account was created during install. Create one manually before using the admin UI."
+        fi
+        return
+    fi
+
+    prompt_value ADMIN_EMAIL "Admin email address" "${ADMIN_EMAIL:-}" 0 1
+
+    step "Creating admin account"
+    if [[ -n "${ADMIN_PASSWORD:-}" ]]; then
+        run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/flask" --app aeronautics_members.app:create_app create-admin "${ADMIN_EMAIL}" --password "${ADMIN_PASSWORD}"
+        ADMIN_PASSWORD=""
+    else
+        run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/flask" --app aeronautics_members.app:create_app create-admin "${ADMIN_EMAIL}"
+    fi
+    success "Admin account is ready for ${ADMIN_EMAIL}"
 }
 
 render_service_file() {
@@ -1544,6 +1611,7 @@ install_or_update() {
     ensure_virtualenv
     ensure_database
     initialize_database_schema
+    ensure_admin_account
     render_service_file
     obtain_ssl_certificate
     render_nginx_config

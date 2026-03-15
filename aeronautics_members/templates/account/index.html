@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ _('My Account') }}{% endblock %}
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+                    <div>
+                        <h2 class="mb-1">{{ _('My Account') }}</h2>
+                        <p class="text-muted mb-0">{{ current_user.email }}</p>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% if not current_user.email_is_verified %}
+                            <form method="POST" action="{{ url_for('resend_verification_email') }}" class="mb-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-secondary">{{ _('Resend Verification Email') }}</button>
+                            </form>
+                        {% endif %}
+                        <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
+                        {% if can_manage_billing %}
+                            <form method="POST" action="{{ url_for('manage_member_billing') }}" class="mb-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-primary">{{ _('Manage Billing') }}</button>
+                            </form>
+                        {% elif can_resume_payment %}
+                            <form method="POST" action="{{ url_for('resume_member_payment') }}" class="mb-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-primary">{{ _('Resume Payment') }}</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if not current_user.email_is_verified %}
+                    <div class="alert alert-warning mt-4 mb-0">{{ _('Your email address is not verified yet. You can continue using the member portal, but verification will be required for future SSO and forum integrations.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-header"><h4 class="mb-0">{{ _('Membership Overview') }}</h4></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">{{ _('Status') }}</dt>
+                    <dd class="col-sm-7">{{ member.payment_status|replace('_', ' ')|title }}</dd>
+                    <dt class="col-sm-5">{{ _('Active') }}</dt>
+                    <dd class="col-sm-7">{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
+                    <dt class="col-sm-5">{{ _('Coverage Starts') }}</dt>
+                    <dd class="col-sm-7">{{ member.membership_starts_on.strftime('%Y-%m-%d') if member.membership_starts_on else _('Not set') }}</dd>
+                    <dt class="col-sm-5">{{ _('Coverage Ends') }}</dt>
+                    <dd class="col-sm-7">{{ member.membership_ends_on.strftime('%Y-%m-%d') if member.membership_ends_on else _('Not set') }}</dd>
+                    <dt class="col-sm-5">{{ _('Renewal Due') }}</dt>
+                    <dd class="col-sm-7">{{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else _('Not set') }}</dd>
+                    <dt class="col-sm-5">{{ _('Renewal Scheduled') }}</dt>
+                    <dd class="col-sm-7">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
+                    <dt class="col-sm-5">{{ _('Forum Username') }}</dt>
+                    <dd class="col-sm-7">{{ current_user.forum_username or _('Not set') }}</dd>
+                </dl>
+                {% if can_resume_payment %}
+                    <div class="alert alert-info mt-4 mb-0">{{ _('Your account is ready, but the membership payment is not finished yet. Use the resume button above to continue.') }}</div>
+                {% elif not can_manage_billing %}
+                    <div class="alert alert-secondary mt-4 mb-0">{{ _('Stripe billing access will become available after a successful payment setup.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-8">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header"><h4 class="mb-0">{{ _('Contact Details') }}</h4></div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('save_member_profile') }}">
+                    {{ profile_form.hidden_tag() }}
+                    <div class="row g-3">
+                        <div class="col-md-8">{{ profile_form.street.label(class="form-label") }}{{ profile_form.street(class="form-control") }}</div>
+                        <div class="col-md-4">{{ profile_form.house_number.label(class="form-label") }}{{ profile_form.house_number(class="form-control") }}</div>
+                        <div class="col-md-4">{{ profile_form.postal_code.label(class="form-label") }}{{ profile_form.postal_code(class="form-control") }}</div>
+                        <div class="col-md-4">{{ profile_form.city.label(class="form-label") }}{{ profile_form.city(class="form-control") }}</div>
+                        <div class="col-md-4">{{ profile_form.country.label(class="form-label") }}{{ profile_form.country(class="form-control") }}</div>
+                        <div class="col-md-6">{{ profile_form.phone_private.label(class="form-label") }}{{ profile_form.phone_private(class="form-control") }}</div>
+                        <div class="col-md-6">{{ profile_form.email_private.label(class="form-label") }}{{ profile_form.email_private(class="form-control", autocomplete="email") }}</div>
+                        <div class="col-md-6">{{ profile_form.phone_work.label(class="form-label") }}{{ profile_form.phone_work(class="form-control") }}</div>
+                        <div class="col-md-6">{{ profile_form.email_work.label(class="form-label") }}{{ profile_form.email_work(class="form-control", autocomplete="email") }}</div>
+                    </div>
+                    <div class="mt-4">
+                        {{ profile_form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-header"><h4 class="mb-0">{{ _('Identity Details') }}</h4></div>
+            <div class="card-body">
+                <div class="alert alert-secondary">{{ _('First name, last name, salutation, title, and year group require admin approval before they change.') }}</div>
+                {% if pending_request %}
+                    <div class="border p-3 mb-4">
+                        <h5>{{ _('Pending Change Request') }}</h5>
+                        <p class="mb-2"><strong>{{ _('Requested Name:') }}</strong> {{ pending_request.requested_title or '' }} {{ pending_request.requested_first_name }} {{ pending_request.requested_last_name }}</p>
+                        <p class="mb-2"><strong>{{ _('Requested Salutation:') }}</strong> {{ pending_request.requested_salutation }}</p>
+                        <p class="mb-2"><strong>{{ _('Requested Year Group:') }}</strong> {{ pending_request.requested_year_group }}</p>
+                        {% if pending_request.member_note %}
+                            <p class="mb-2"><strong>{{ _('Your Note:') }}</strong> {{ pending_request.member_note }}</p>
+                        {% endif %}
+                        {% if suggested_username_from_request and current_user.forum_username and suggested_username_from_request != current_user.forum_username %}
+                            <p class="mb-3"><strong>{{ _('If approved, the forum username could become:') }}</strong> {{ suggested_username_from_request }}</p>
+                        {% endif %}
+                        <form method="POST" action="{{ url_for('cancel_identity_change_request', request_id=pending_request.id) }}" class="mb-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-secondary">{{ _('Cancel Request') }}</button>
+                        </form>
+                    </div>
+                {% else %}
+                    <form method="POST" action="{{ url_for('submit_identity_change_request') }}">
+                        {{ identity_form.hidden_tag() }}
+                        <div class="row g-3">
+                            <div class="col-md-4">{{ identity_form.salutation.label(class="form-label") }}{{ identity_form.salutation(class="form-select") }}</div>
+                            <div class="col-md-8">{{ identity_form.title.label(class="form-label") }}{{ identity_form.title(class="form-control") }}</div>
+                            <div class="col-md-6">{{ identity_form.first_name.label(class="form-label") }}{{ identity_form.first_name(class="form-control") }}</div>
+                            <div class="col-md-6">{{ identity_form.last_name.label(class="form-label") }}{{ identity_form.last_name(class="form-control") }}</div>
+                            <div class="col-md-6">{{ identity_form.year_group.label(class="form-label") }}{{ identity_form.year_group(class="form-control", oninput="this.value = this.value.toUpperCase()") }}</div>
+                            <div class="col-12">{{ identity_form.member_note.label(class="form-label") }}{{ identity_form.member_note(class="form-control", rows="4", placeholder=_('Optional note for the admin, for example if you need to correct a typo.')) }}</div>
+                        </div>
+                        <div class="mt-4">{{ identity_form.submit(class="btn btn-primary") }}</div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

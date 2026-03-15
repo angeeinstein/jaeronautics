@@ -2,11 +2,20 @@
 
 {% block content %}
 <div class="bg-white p-6 sm:p-10 rounded-xl shadow-2xl">
-    <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 border-b pb-3">
-        {{ _('Required Information') }}
-    </h2>
+    <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-4 border-bottom pb-3">
+        <div>
+            <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">{{ _('Required Information') }}</h2>
+            <p class="text-muted mb-0">{{ _('Your membership signup also creates your Joanneum Aeronautics account for future self-service and forum access.') }}</p>
+        </div>
+        <div class="text-lg-end">
+            <a href="{{ url_for('login') }}" class="btn btn-secondary btn-sm mb-2">{{ _('Already have an account? Log in') }}</a>
+            <div>
+                <a href="{{ url_for('claim_account') }}" class="text-muted small">{{ _('Already a member without login access? Claim your account.') }}</a>
+            </div>
+        </div>
+    </div>
     <form method="POST" action="{{ url_for('process_membership') }}" class="space-y-6">
-        {{ form.hidden_tag() }} <!-- Adds CSRF protection -->
+        {{ form.hidden_tag() }}
 
         {% if form.errors %}
             <div class="alert alert-danger" role="alert">
@@ -20,97 +29,94 @@
             </div>
         {% endif %}
 
-        <!-- Row 1: Salutation, Title -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
                 <label for="salutation" class="block text-sm font-medium text-gray-700">{{ _(form.salutation.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.salutation(class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.salutation(class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white shadow-sm sm:text-sm") }}
             </div>
             <div class="md:col-span-2">
                 <label for="title" class="block text-sm font-medium text-gray-700">{{ _(form.title.label.text) }}</label>
-                {{ form.title(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.title(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
         </div>
 
-        <!-- Row 2: First Name, Last Name -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label for="first_name" class="block text-sm font-medium text-gray-700">{{ _(form.first_name.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.first_name(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.first_name(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
             <div>
                 <label for="last_name" class="block text-sm font-medium text-gray-700">{{ _(form.last_name.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.last_name(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.last_name(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
         </div>
 
-        <!-- Row 3: Street and House Number -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="md:col-span-2">
                 <label for="street" class="block text-sm font-medium text-gray-700">{{ _(form.street.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.street(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.street(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
             <div>
                 <label for="house_number" class="block text-sm font-medium text-gray-700">{{ _(form.house_number.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.house_number(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.house_number(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
         </div>
 
-        <!-- Row 4: Postal Code, City -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label for="postal_code" class="block text-sm font-medium text-gray-700">{{ _(form.postal_code.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.postal_code(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.postal_code(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
             <div>
                 <label for="city" class="block text-sm font-medium text-gray-700">{{ _(form.city.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.city(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.city(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
         </div>
 
-        <!-- Row 5: Country, Private Phone -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label for="country" class="block text-sm font-medium text-gray-700">{{ _(form.country.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.country(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm", placeholder=_('e.g., Austria or Germany')) }}
+                {{ form.country(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", placeholder=_('e.g., Austria or Germany')) }}
             </div>
             <div>
                 <label for="phone_private" class="block text-sm font-medium text-gray-700">{{ _(form.phone_private.label.text) }}<span class="text-red-500">*</span></label>
-                {{ form.phone_private(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.phone_private(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
         </div>
 
-        <!-- Row 6: Private Email -->
         <div class="grid grid-cols-1">
             <label for="email_private" class="block text-sm font-medium text-gray-700">{{ _(form.email_private.label.text) }}<span class="text-red-500">*</span></label>
-            {{ form.email_private(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+            {{ form.email_private(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", autocomplete="email") }}
+            <small class="text-muted d-block mt-2">{{ _('This email address becomes your login for the member portal.') }}</small>
         </div>
-        
-        <!-- Row 7: Work Phone, Work Email (Moved Up) -->
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label for="phone_work" class="block text-sm font-medium text-gray-700">{{ _(form.phone_work.label.text) }}</label>
-                {{ form.phone_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.phone_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
             <div>
                 <label for="email_work" class="block text-sm font-medium text-gray-700">{{ _(form.email_work.label.text) }}</label>
-                {{ form.email_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm") }}
+                {{ form.email_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", autocomplete="email") }}
             </div>
         </div>
 
-        <!-- Row 8: Year Group (Moved Up) -->
         <div class="grid grid-cols-1">
             <label for="year_group" class="block text-sm font-medium text-gray-700">{{ _(form.year_group.label.text) }}<span class="text-red-500">*</span></label>
-            {{ form.year_group(
-                class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm", 
-                placeholder="e.g. LAV25", 
-                oninput="this.value = this.value.toUpperCase()",
-                pattern="[A-Z]+[0-9]{2}",
-                title=_("Invalid format. Please use uppercase letters followed by two numbers, like LAV25.")
-            ) }}
+            {{ form.year_group(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", placeholder="e.g. LAV25", oninput="this.value = this.value.toUpperCase()", pattern="[A-Z]+[0-9]{2}", title=_("Invalid format. Please use uppercase letters followed by two numbers, like LAV25.")) }}
         </div>
 
-        <!-- Payment Method Selection (Conditional) -->
+        <div class="row g-4">
+            <div class="col-md-6">
+                <label for="password" class="form-label">{{ _(form.password.label.text) }}<span class="text-danger">*</span></label>
+                {{ form.password(class="form-control", autocomplete="new-password", placeholder=_("Create a password for your account")) }}
+            </div>
+            <div class="col-md-6">
+                <label for="confirm_password" class="form-label">{{ _(form.confirm_password.label.text) }}<span class="text-danger">*</span></label>
+                {{ form.confirm_password(class="form-control", autocomplete="new-password", placeholder=_("Confirm your password")) }}
+            </div>
+        </div>
+
         {% if settings.get('invoice_payments_enabled') == 'True' %}
         <div class="pt-4">
             <label class="block text-sm font-medium text-gray-700">{{ _(form.payment_method.label.text) }}<span class="text-red-500">*</span></label>
@@ -125,7 +131,6 @@
         </div>
         {% endif %}
 
-        <!-- Terms and Conditions -->
         <div class="mt-4 d-flex justify-content-center">
             <div class="form-check">
                 {{ form.terms_accepted(class="form-check-input") }}
@@ -135,7 +140,10 @@
             </div>
         </div>
 
-        <!-- Submit Button -->
+        <div class="alert alert-info mt-4 mb-0">
+            {{ _('If payment setup cannot be completed immediately, your account remains available so you can log in later and resume the membership process.') }}
+        </div>
+
         <div class="mt-6">
             {{ form.submit(class="btn btn-primary w-100 btn-lg") }}
         </div>
