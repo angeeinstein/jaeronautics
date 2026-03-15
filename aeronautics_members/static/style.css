@@ -127,7 +127,7 @@ img,video{max-width:100%;height:auto}
 }
 
 .navbar-brand img {
-    max-height: 40px;
+    max-height: 52px;
     width: auto;
 }
 
@@ -321,7 +321,7 @@ body.bg-gray-100,
 .navbar.bg-light,
 .app-navbar {
     background-color: var(--ja-surface) !important;
-    border-bottom: 1px solid var(--ja-border);
+    border-bottom: 3px solid var(--ja-accent);
 }
 
 .navbar-brand,
@@ -331,6 +331,11 @@ body.bg-gray-100,
 .navbar .nav-link.btn-link,
 .navbar .navbar-toggler {
     color: var(--ja-text) !important;
+}
+
+.navbar-brand {
+    padding-top: 0.15rem !important;
+    padding-bottom: 0.15rem !important;
 }
 
 .navbar .nav-link:hover,
@@ -371,6 +376,39 @@ body.bg-gray-100,
 .dropdown-item:focus {
     background-color: rgba(0, 223, 255, 0.12) !important;
     color: var(--ja-accent) !important;
+}
+
+
+.modal-content,
+.modal-header,
+.modal-footer {
+    background-color: var(--ja-surface) !important;
+    border-color: var(--ja-border) !important;
+    color: var(--ja-text) !important;
+}
+
+.modal-header,
+.modal-footer {
+    background-color: var(--ja-surface-alt) !important;
+}
+
+.modal-body {
+    background-color: var(--ja-surface) !important;
+    color: var(--ja-text) !important;
+}
+
+.modal-title {
+    color: var(--ja-text) !important;
+}
+
+.btn-close {
+    filter: invert(1) grayscale(100%);
+    opacity: 0.9;
+}
+
+.btn-close:hover,
+.btn-close:focus {
+    opacity: 1;
 }
 
 .card,
@@ -624,6 +662,7 @@ button:disabled {
 
 .alert {
     border: 1px solid var(--ja-border) !important;
+    padding: 1rem 1.25rem !important;
 }
 
 .alert-success,

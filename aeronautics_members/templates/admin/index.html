@@ -131,10 +131,14 @@
                                         <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
                                         <td class="text-end">
                                             <a href="{{ url_for('admin', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
-                                            <form method="POST" action="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}" class="d-inline-block ms-2">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('{{ _('Delete this mail account?') }}');">{{ _('Delete') }}</button>
-                                            </form>
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-danger ms-2"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#deleteMailAccountModal"
+                                                data-delete-url="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}"
+                                                data-account-key="{{ mail_account.account_key }}"
+                                            >{{ _('Delete') }}</button>
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -188,10 +192,57 @@
             </form>
             <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
         </div>
+        <div class="modal fade" id="deleteMailAccountModal" tabindex="-1" aria-labelledby="deleteMailAccountModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="deleteMailAccountModalLabel">{{ _('Delete Mail Account') }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-0">{{ _('Do you really want to delete this mail account?') }} <strong id="delete-mail-account-name"></strong></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
+                        <form method="POST" action="#" id="delete-mail-account-form" class="mb-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger">{{ _('Delete') }}</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
     {% else %}
         <p>{{ _('Please log in to access the admin area.') }}</p>
         <a href="{{ url_for('login') }}" class="btn btn-primary">{{ _('Login') }}</a>
         <a href="{{ url_for('register') }}" class="btn btn-secondary">{{ _('Register') }}</a>
     {% endif %}
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var deleteModal = document.getElementById('deleteMailAccountModal');
+    if (!deleteModal) {
+        return;
+    }
+
+    deleteModal.addEventListener('show.bs.modal', function (event) {
+        var trigger = event.relatedTarget;
+        if (!trigger) {
+            return;
+        }
+
+        var deleteUrl = trigger.getAttribute('data-delete-url') || '#';
+        var accountKey = trigger.getAttribute('data-account-key') || '';
+        var deleteForm = deleteModal.querySelector('#delete-mail-account-form');
+        var accountName = deleteModal.querySelector('#delete-mail-account-name');
+
+        if (deleteForm) {
+            deleteForm.action = deleteUrl;
+        }
+        if (accountName) {
+            accountName.textContent = accountKey;
+        }
+    });
+});
+</script>
 {% endblock %}
