@@ -533,10 +533,18 @@ small.text-muted {
 
 .form-control,
 .form-select {
-    background-color: var(--ja-bg) !important;
-    border: 1px solid var(--ja-border) !important;
+    background-color: #1b1b1c !important;
+    border: 1px solid #3a3d40 !important;
     color: var(--ja-text) !important;
     box-shadow: none !important;
+    caret-color: var(--ja-text) !important;
+    min-height: 3rem;
+    padding: 0.7rem 0.9rem !important;
+    line-height: 1.35;
+}
+
+textarea.form-control {
+    min-height: 8rem;
 }
 
 .form-control::placeholder,
@@ -547,10 +555,10 @@ textarea::placeholder {
 
 .form-control:focus,
 .form-select:focus {
-    background-color: var(--ja-bg) !important;
+    background-color: #1b1b1c !important;
     border-color: var(--ja-accent) !important;
     color: var(--ja-text) !important;
-    box-shadow: 0 0 0 0.2rem rgba(0, 223, 255, 0.18) !important;
+    box-shadow: 0 0 0 0.14rem rgba(0, 223, 255, 0.18) !important;
 }
 
 .form-select {
@@ -560,6 +568,46 @@ textarea::placeholder {
 .form-select option {
     background-color: var(--ja-surface) !important;
     color: var(--ja-text) !important;
+}
+
+
+.form-control:-webkit-autofill,
+.form-control:-webkit-autofill:hover,
+.form-control:-webkit-autofill:focus,
+.form-select:-webkit-autofill,
+.form-select:-webkit-autofill:hover,
+.form-select:-webkit-autofill:focus,
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--ja-text) !important;
+    caret-color: var(--ja-text) !important;
+    box-shadow: 0 0 0 1000px #1b1b1c inset !important;
+    border: 1px solid #3a3d40 !important;
+    transition: background-color 9999s ease-out 0s;
+}
+
+input[type="file"] {
+    background-color: #1b1b1c !important;
+    border: 1px solid #3a3d40 !important;
+    color: var(--ja-text) !important;
+    min-height: 3rem;
+}
+
+input[type="file"]::file-selector-button {
+    background-color: #222426;
+    border: 1px solid #3a3d40;
+    color: var(--ja-text);
+    padding: 0.7rem 1rem;
+    margin-right: 1rem;
+    border-radius: 0;
+}
+
+input[type="file"]::file-selector-button:hover {
+    background-color: #2a2d30;
 }
 
 .form-check-input {
