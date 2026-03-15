@@ -22,7 +22,7 @@ from flask import (
     url_for,
 )
 from flask.cli import with_appcontext
-from flask_babel import Babel, _, get_locale
+from flask_babel import Babel, _, format_currency, format_date, get_locale
 from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
@@ -263,8 +263,14 @@ def build_membership_cycle(join_date, annual_amount_cents):
 def get_stripe_membership_price():
     price = stripe.Price.retrieve(STRIPE_PRICE_ID, expand=["product"])
     recurring = price.get("recurring") or {}
-    if recurring.get("interval") != "year" or recurring.get("interval_count", 1) != 1:
-        raise ValueError("STRIPE_PRICE_ID must point to a yearly recurring Stripe price.")
+    interval = recurring.get("interval")
+    interval_count = recurring.get("interval_count", 1)
+    is_yearly = (interval == "year" and interval_count == 1) or (interval == "month" and interval_count == 12)
+    if not is_yearly:
+        raise ValueError(
+            f"STRIPE_PRICE_ID must point to an annual recurring Stripe price. "
+            f"Got interval={interval!r}, interval_count={interval_count!r}."
+        )
 
     unit_amount = price.get("unit_amount")
     if unit_amount is None:
@@ -274,7 +280,51 @@ def get_stripe_membership_price():
         "id": price["id"],
         "currency": price["currency"],
         "unit_amount": int(unit_amount),
+        "interval": interval,
+        "interval_count": int(interval_count),
     }
+
+
+def format_membership_date_display(value):
+    locale = str(get_locale()) if get_locale() else None
+    try:
+        return format_date(value, format="long", locale=locale)
+    except Exception:
+        return value.isoformat()
+
+
+def format_checkout_amount(amount_cents, currency):
+    locale = str(get_locale()) if get_locale() else None
+    amount = Decimal(amount_cents) / Decimal("100")
+    try:
+        return format_currency(amount, currency.upper(), locale=locale)
+    except Exception:
+        return f"{amount:.2f} {currency.upper()}"
+
+
+def build_checkout_submit_message(cycle, price_details):
+    coverage_end = format_membership_date_display(cycle["coverage_end"])
+    renewal_due_on = format_membership_date_display(cycle["renewal_due_on"])
+    annual_fee = format_checkout_amount(price_details["unit_amount"], price_details["currency"])
+
+    if cycle["free_period"]:
+        return _(
+            "No payment is due today. Your membership is active through %(coverage_end)s. "
+            "The annual fee of %(annual_fee)s will be charged on %(renewal_due_on)s unless you cancel beforehand.",
+            coverage_end=coverage_end,
+            annual_fee=annual_fee,
+            renewal_due_on=renewal_due_on,
+        )
+
+    prorated_fee = format_checkout_amount(cycle["prorated_amount_cents"], price_details["currency"])
+    return _(
+        "Today you pay %(prorated_fee)s for membership through %(coverage_end)s. "
+        "The annual fee of %(annual_fee)s will be charged on %(renewal_due_on)s unless you cancel beforehand.",
+        prorated_fee=prorated_fee,
+        coverage_end=coverage_end,
+        annual_fee=annual_fee,
+        renewal_due_on=renewal_due_on,
+    )
 
 
 def build_prorated_line_item(cycle, price_details):
@@ -285,7 +335,10 @@ def build_prorated_line_item(cycle, price_details):
         "price_data": {
             "currency": price_details["currency"],
             "product_data": {
-                "name": f"Membership fee {cycle['current_year']} (prorated)",
+                "name": _(
+                    "Membership through %(coverage_end)s (prorated)",
+                    coverage_end=format_membership_date_display(cycle["coverage_end"]),
+                ),
             },
             "unit_amount": cycle["prorated_amount_cents"],
         },
@@ -647,6 +700,11 @@ def create_app():
                         subscription_data={
                             "trial_end": cycle["trial_end_unix"],
                             "metadata": membership_metadata,
+                        },
+                        custom_text={
+                            "submit": {
+                                "message": build_checkout_submit_message(cycle, price_details),
+                            }
                         },
                         payment_method_collection="always",
                         customer_email=form_data["email_private"],
