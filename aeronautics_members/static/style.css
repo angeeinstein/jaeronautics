@@ -283,8 +283,9 @@ a:hover {
 /* Joanneum Aeronautics Dark Theme */
 :root {
     --ja-bg: #161718;
-    --ja-surface: #000000;
+    --ja-surface: #1f2123;
     --ja-surface-alt: #26292b;
+    --ja-navbar-bg: #000000;
     --ja-border: #34383b;
     --ja-text: #ffffff;
     --ja-muted: #aab4bb;
@@ -325,7 +326,7 @@ body.bg-gray-100,
 .navbar,
 .navbar.bg-light,
 .app-navbar {
-    background-color: var(--ja-surface) !important;
+    background-color: var(--ja-navbar-bg) !important;
     border-bottom: 3px solid var(--ja-accent);
     min-height: 70px;
     padding-top: 0.25rem;
@@ -571,6 +572,13 @@ textarea:focus {
 .form-select,
 select {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+    background-position: right 0.85rem center !important;
+    background-repeat: no-repeat !important;
+    background-size: 1rem 0.75rem !important;
+    padding-right: 2.75rem !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
 }
 
 .form-select option,
