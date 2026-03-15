@@ -478,13 +478,12 @@ prompt_yes_no() {
 
 validate_json_object() {
     local json_input="${1:-{}}"
-    JSON_INPUT="${json_input}" python3 - <<'PY'
+    printf '%s' "${json_input}" | python3 - <<'PY'
 import ast
 import json
-import os
 import sys
 
-raw = os.environ.get("JSON_INPUT", "{}")
+raw = sys.stdin.read() or "{}"
 
 
 def parse_object(value):
@@ -522,13 +521,12 @@ PY
 
 normalize_json_object() {
     local json_input="${1:-{}}"
-    JSON_INPUT="${json_input}" python3 - <<'PY'
+    printf '%s' "${json_input}" | python3 - <<'PY'
 import ast
 import json
-import os
 import sys
 
-raw = os.environ.get("JSON_INPUT", "{}")
+raw = sys.stdin.read() or "{}"
 
 
 def parse_object(value):
@@ -565,13 +563,12 @@ PY
 
 mail_accounts_count() {
     local json_input="${1:-{}}"
-    JSON_INPUT="${json_input}" python3 - <<'PY'
+    printf '%s' "${json_input}" | python3 - <<'PY'
 import ast
 import json
-import os
 import sys
 
-raw = os.environ.get("JSON_INPUT", "{}")
+raw = sys.stdin.read() or "{}"
 
 
 def parse_object(value):
