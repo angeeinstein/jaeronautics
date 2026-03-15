@@ -478,12 +478,13 @@ prompt_yes_no() {
 
 validate_json_object() {
     local json_input="${1:-{}}"
-    python3 - "${json_input}" <<'PY'
+    JSON_INPUT="${json_input}" python3 - <<'PY'
 import ast
 import json
+import os
 import sys
 
-raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
+raw = os.environ.get("JSON_INPUT", "{}")
 
 
 def parse_object(value):
@@ -521,12 +522,13 @@ PY
 
 normalize_json_object() {
     local json_input="${1:-{}}"
-    python3 - "${json_input}" <<'PY'
+    JSON_INPUT="${json_input}" python3 - <<'PY'
 import ast
 import json
+import os
 import sys
 
-raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
+raw = os.environ.get("JSON_INPUT", "{}")
 
 
 def parse_object(value):
@@ -563,12 +565,13 @@ PY
 
 mail_accounts_count() {
     local json_input="${1:-{}}"
-    python3 - "${json_input}" <<'PY'
+    JSON_INPUT="${json_input}" python3 - <<'PY'
 import ast
 import json
+import os
 import sys
 
-raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
+raw = os.environ.get("JSON_INPUT", "{}")
 
 
 def parse_object(value):
@@ -633,11 +636,18 @@ collect_mail_accounts() {
             prompt_yes_no account_starttls "Use STARTTLS for ${account_name}?" "0"
         fi
 
-        accounts_json="$(python3 - "${accounts_json}" "${account_name}" "${account_host}" "${account_port}" "${account_user}" "${account_password}" "${account_starttls}" <<'PY'
+        accounts_json="$(EXISTING_JSON="${accounts_json}" ACCOUNT_NAME="${account_name}" ACCOUNT_HOST="${account_host}" ACCOUNT_PORT="${account_port}" ACCOUNT_USER="${account_user}" ACCOUNT_PASSWORD="${account_password}" ACCOUNT_STARTTLS="${account_starttls}" python3 - <<'PY'
 import json
+import os
 import sys
 
-existing_json, name, host, port, user, password, starttls = sys.argv[1:8]
+existing_json = os.environ.get("EXISTING_JSON", "{}")
+name = os.environ["ACCOUNT_NAME"]
+host = os.environ["ACCOUNT_HOST"]
+port = os.environ["ACCOUNT_PORT"]
+user = os.environ["ACCOUNT_USER"]
+password = os.environ["ACCOUNT_PASSWORD"]
+starttls = os.environ["ACCOUNT_STARTTLS"]
 
 accounts = json.loads(existing_json or "{}")
 accounts[name] = {
