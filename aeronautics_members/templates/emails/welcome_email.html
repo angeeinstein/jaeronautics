@@ -5,20 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ subject }}</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
-        .wrapper { width: 100%; table-layout: fixed; }
-        .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .header { 
-            background-color: #ffffff; 
-            padding: 20px; 
-            text-align: center; 
-            border-bottom: 4px solid #087990; /* Cyan border for branding */
-            border-radius: 8px 8px 0 0; 
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.65; color: #ffffff; background-color: #161718; margin: 0; padding: 0; }
+        a { color: #00dfff; text-decoration: none; }
+        .wrapper { width: 100%; table-layout: fixed; background-color: #161718; }
+        .container { max-width: 640px; margin: 24px auto; background-color: #1f2123; border: 1px solid #34383b; }
+        .header {
+            background-color: #000000;
+            padding: 24px 28px;
+            text-align: center;
+            border-bottom: 4px solid #00dfff;
         }
-        .header img { max-width: 150px; height: auto; }
-        .content { padding: 30px; }
-        .content p { margin: 0 0 15px; }
-        .footer { padding: 20px; font-size: 0.8em; text-align: center; color: #777; }
+        .header img { max-width: 220px; height: auto; }
+        .content { padding: 32px 34px; }
+        .content p { margin: 0 0 16px; color: #ffffff; }
+        .section { border-top: 1px solid #34383b; margin: 28px 0; padding-top: 24px; }
+        .section h4 { margin: 0 0 14px; font-size: 20px; line-height: 1.3; color: #ffffff; }
+        .username-box {
+            margin: 18px 0;
+            padding: 14px 16px;
+            border: 1px solid #00dfff;
+            background-color: #161718;
+            color: #00dfff;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-align: center;
+        }
+        .footer {
+            padding: 22px 28px 28px;
+            font-size: 12px;
+            text-align: center;
+            color: #aab4bb;
+            border-top: 1px solid #34383b;
+        }
     </style>
 </head>
 <body>
@@ -31,14 +50,14 @@
                 <p>{{ _('Hello') }} {{ first_name }},</p>
                 <p>{{ _('We are thrilled to welcome you as a new member of Joanneum Aeronautics. Your membership is now active!') }}</p>
                 <p>{{ _('Your payment has been successfully processed, and you are now a full member of our community.') }}</p>
-                
-                <div style="border-top: 1px solid #eee; margin: 20px 0; padding-top: 20px;">
+
+                <div class="section">
                     <h4>{{ _('Access Our File Sharing Platform') }}</h4>
                     <p>{{ _('As a member, you get access to our file sharing platform, LAV-Board.') }}</p>
                     <p>{{ _('You can create an account at:') }} <a href="https://www.lavboard.at" target="_blank">www.lavboard.at</a></p>
                     <p><strong>{{ _('Please use your FH email address when registering on the platform.') }}</strong></p>
                     <p>{{ _('We suggest the following username for you to maintain consistency across our members:') }}</p>
-                    <p style="font-weight: bold; font-size: 1.1em; color: #087990; text-align: center; background-color: #f0f8ff; padding: 10px; border-radius: 5px;">{{ suggested_username }}</p>
+                    <p class="username-box">{{ suggested_username }}</p>
                 </div>
 
                 <p>{{ _('If you have any questions, feel free to contact us.') }}</p>
