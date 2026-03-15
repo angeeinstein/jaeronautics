@@ -20,6 +20,14 @@
         .content p { margin: 0 0 16px; color: #ffffff; }
         .section { border-top: 1px solid #34383b; margin: 28px 0; padding-top: 24px; }
         .section h4 { margin: 0 0 14px; font-size: 20px; line-height: 1.3; color: #ffffff; }
+        .info-box {
+            margin: 18px 0;
+            padding: 14px 16px;
+            border: 1px solid #34383b;
+            background-color: #161718;
+            color: #aab4bb;
+        }
+        .info-box strong { color: #00dfff; }
         .username-box {
             margin: 18px 0;
             padding: 14px 16px;
@@ -49,7 +57,12 @@
             <div class="content">
                 <p>{{ _('Hello') }} {{ first_name }},</p>
                 <p>{{ _('We are thrilled to welcome you as a new member of Joanneum Aeronautics. Your membership is now active!') }}</p>
-                <p>{{ _('Your payment has been successfully processed, and you are now a full member of our community.') }}</p>
+                {% if membership_ends_on and renewal_due_on %}
+                    <div class="info-box">
+                        <p><strong>{{ _('Current membership access until:') }}</strong> {{ membership_ends_on.strftime('%Y-%m-%d') }}</p>
+                        <p><strong>{{ _('Next renewal date:') }}</strong> {{ renewal_due_on.strftime('%Y-%m-%d') }}</p>
+                    </div>
+                {% endif %}
 
                 <div class="section">
                     <h4>{{ _('Access Our File Sharing Platform') }}</h4>

@@ -1,10 +1,13 @@
+import json
 import os
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from pathlib import Path
 from subprocess import run
 from urllib.parse import quote_plus
+from zoneinfo import ZoneInfo
 
 import click
 import stripe
@@ -24,6 +27,7 @@ from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf.csrf import CSRFError, CSRFProtect
+from sqlalchemy import inspect, text as sql_text
 from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -76,6 +80,12 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
 STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+MEMBERSHIP_TIMEZONE_NAME = os.getenv("MEMBERSHIP_TIMEZONE", "Europe/Vienna")
+try:
+    MEMBERSHIP_TIMEZONE = ZoneInfo(MEMBERSHIP_TIMEZONE_NAME)
+except Exception:
+    MEMBERSHIP_TIMEZONE = timezone.utc
+    MEMBERSHIP_TIMEZONE_NAME = "UTC"
 RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "redis://127.0.0.1:6379/0")
 RATELIMIT_LOGIN = os.getenv("RATELIMIT_LOGIN", "10 per 15 minute")
 RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "5 per hour")
@@ -161,6 +171,276 @@ def static_asset_version(app, filename):
 
 
 
+
+MEMBER_PROFILE_FIELDS = (
+    "salutation",
+    "title",
+    "first_name",
+    "last_name",
+    "street",
+    "house_number",
+    "postal_code",
+    "city",
+    "country",
+    "phone_private",
+    "email_private",
+    "phone_work",
+    "email_work",
+    "year_group",
+)
+
+
+ACTIVE_MEMBER_STATUSES = {"paid", "free_period", "canceled", "cancel_scheduled"}
+
+
+def get_membership_now():
+    return datetime.now(timezone.utc).astimezone(MEMBERSHIP_TIMEZONE)
+
+
+def get_membership_today():
+    return get_membership_now().date()
+
+
+def parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def to_membership_date(unix_timestamp):
+    if not unix_timestamp:
+        return get_membership_today()
+    return datetime.fromtimestamp(unix_timestamp, timezone.utc).astimezone(MEMBERSHIP_TIMEZONE).date()
+
+
+def first_day_of_year(year):
+    return date(year, 1, 1)
+
+
+def last_day_of_year(year):
+    return date(year, 12, 31)
+
+
+def start_of_day_unix(day_value):
+    local_start = datetime.combine(day_value, datetime.min.time(), tzinfo=MEMBERSHIP_TIMEZONE)
+    return int(local_start.astimezone(timezone.utc).timestamp())
+
+
+def build_membership_cycle(join_date, annual_amount_cents):
+    current_year = join_date.year
+    next_year_start = first_day_of_year(current_year + 1)
+    current_year_end = last_day_of_year(current_year)
+    total_days = (first_day_of_year(current_year + 1) - first_day_of_year(current_year)).days
+    remaining_days = (current_year_end - join_date).days + 1
+    free_period = join_date >= date(current_year, 10, 1)
+    prorated_amount_cents = 0
+    if not free_period:
+        prorated_amount_cents = int(
+            (Decimal(annual_amount_cents) * Decimal(remaining_days) / Decimal(total_days)).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
+
+    return {
+        "join_date": join_date,
+        "coverage_start": join_date,
+        "coverage_end": current_year_end,
+        "renewal_due_on": next_year_start,
+        "trial_end_unix": start_of_day_unix(next_year_start),
+        "trial_end_iso": next_year_start.isoformat(),
+        "free_period": free_period,
+        "prorated_amount_cents": prorated_amount_cents,
+        "remaining_days": remaining_days,
+        "total_days": total_days,
+        "current_year": current_year,
+        "thank_you_phase": "free_period" if free_period else "prorated",
+    }
+
+
+def get_stripe_membership_price():
+    price = stripe.Price.retrieve(STRIPE_PRICE_ID, expand=["product"])
+    recurring = price.get("recurring") or {}
+    if recurring.get("interval") != "year" or recurring.get("interval_count", 1) != 1:
+        raise ValueError("STRIPE_PRICE_ID must point to a yearly recurring Stripe price.")
+
+    unit_amount = price.get("unit_amount")
+    if unit_amount is None:
+        raise ValueError("The Stripe membership price must have a fixed unit_amount.")
+
+    return {
+        "id": price["id"],
+        "currency": price["currency"],
+        "unit_amount": int(unit_amount),
+    }
+
+
+def build_prorated_line_item(cycle, price_details):
+    if cycle["prorated_amount_cents"] <= 0:
+        return None
+
+    return {
+        "price_data": {
+            "currency": price_details["currency"],
+            "product_data": {
+                "name": f"Membership fee {cycle['current_year']} (prorated)",
+            },
+            "unit_amount": cycle["prorated_amount_cents"],
+        },
+        "quantity": 1,
+    }
+
+
+def apply_member_profile(member, form_data):
+    for field_name in MEMBER_PROFILE_FIELDS:
+        value = form_data.get(field_name)
+        if value == "" and field_name in {"title", "phone_work", "email_work"}:
+            value = None
+        setattr(member, field_name, value)
+    member.terms_accepted = True
+
+
+def member_has_active_access(member, on_date=None):
+    if member is None:
+        return False
+    today = on_date or get_membership_today()
+    if not member.membership_ends_on or member.membership_ends_on < today:
+        return False
+    return member.payment_status in ACTIVE_MEMBER_STATUSES or member.is_active
+
+
+def sync_member_active_state(member, on_date=None):
+    if member is None:
+        return False
+
+    today = on_date or get_membership_today()
+    changed = False
+
+    if member.membership_ends_on and member.membership_ends_on < today and member.is_active:
+        member.is_active = False
+        changed = True
+        if member.payment_status in ACTIVE_MEMBER_STATUSES:
+            member.payment_status = "expired"
+    elif member.membership_ends_on and member.membership_ends_on >= today and member.payment_status in ACTIVE_MEMBER_STATUSES and not member.is_active:
+        member.is_active = True
+        changed = True
+
+    return changed
+
+
+def set_member_membership_window(member, starts_on, ends_on, renewal_due_on, payment_status, is_active, cancel_at_period_end=False):
+    member.membership_starts_on = starts_on
+    member.membership_ends_on = ends_on
+    member.renewal_due_on = renewal_due_on
+    member.payment_status = payment_status
+    member.is_active = is_active
+    member.cancel_at_period_end = cancel_at_period_end
+
+
+def get_member_by_stripe_reference(customer_id=None, subscription_id=None):
+    if subscription_id:
+        member = Member.query.filter_by(stripe_subscription_id=subscription_id).first()
+        if member is not None:
+            return member
+    if customer_id:
+        return Member.query.filter_by(stripe_customer_id=customer_id).first()
+    return None
+
+
+def update_member_paid_coverage(member, paid_on):
+    coverage_year = paid_on.year
+    if member.membership_ends_on and member.membership_ends_on >= paid_on:
+        coverage_year = member.membership_ends_on.year
+
+    starts_on = member.membership_starts_on
+    if starts_on is None or starts_on.year != coverage_year:
+        starts_on = first_day_of_year(coverage_year) if paid_on == first_day_of_year(coverage_year) else paid_on
+
+    set_member_membership_window(
+        member,
+        starts_on=starts_on,
+        ends_on=last_day_of_year(coverage_year),
+        renewal_due_on=first_day_of_year(coverage_year + 1),
+        payment_status="paid",
+        is_active=True,
+        cancel_at_period_end=member.cancel_at_period_end,
+    )
+
+
+def send_member_welcome_email(app, member, force_send=False):
+    settings = {s.key: s.value for s in Setting.query.all()}
+    if not force_send and settings.get("automatic_emails_enabled") != "True":
+        return False
+
+    sender_account = settings.get("welcome_email_sender")
+    template_name = settings.get("automatic_email_template")
+    if not sender_account or not template_name:
+        if force_send:
+            raise ValueError("Email sender or template is not configured in the admin settings.")
+        return False
+
+    suggested_username = generate_suggested_username(member)
+    logo_path = os.path.join(app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
+    attachments = [{"path": logo_path, "cid": "logo"}]
+
+    return send_mail(
+        from_account=sender_account,
+        to_email=member.email_private,
+        subject=_("Welcome to Joanneum Aeronautics!"),
+        template_name=template_name,
+        attachments=attachments,
+        first_name=member.first_name,
+        suggested_username=suggested_username,
+        membership_starts_on=member.membership_starts_on,
+        membership_ends_on=member.membership_ends_on,
+        renewal_due_on=member.renewal_due_on,
+        now=datetime.now(timezone.utc),
+    )
+
+
+def ensure_member_schema():
+    inspector = inspect(db.engine)
+    if "member" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("member")}
+    alter_statements = []
+
+    if "stripe_subscription_id" not in columns:
+        alter_statements.append("ALTER TABLE member ADD COLUMN stripe_subscription_id VARCHAR(255) NULL")
+    if "membership_starts_on" not in columns:
+        alter_statements.append("ALTER TABLE member ADD COLUMN membership_starts_on DATE NULL")
+    if "membership_ends_on" not in columns:
+        alter_statements.append("ALTER TABLE member ADD COLUMN membership_ends_on DATE NULL")
+    if "renewal_due_on" not in columns:
+        alter_statements.append("ALTER TABLE member ADD COLUMN renewal_due_on DATE NULL")
+    if "cancel_at_period_end" not in columns:
+        alter_statements.append("ALTER TABLE member ADD COLUMN cancel_at_period_end BOOLEAN NOT NULL DEFAULT 0")
+
+    with db.engine.begin() as connection:
+        for statement in alter_statements:
+            connection.execute(sql_text(statement))
+
+        inspector = inspect(connection)
+        unique_constraints = inspector.get_unique_constraints("member")
+        indexes = inspector.get_indexes("member")
+        has_subscription_unique = any(
+            constraint.get("column_names") == ["stripe_subscription_id"]
+            for constraint in unique_constraints
+        ) or any(
+            index.get("unique") and index.get("column_names") == ["stripe_subscription_id"]
+            for index in indexes
+        )
+        if not has_subscription_unique:
+            connection.execute(
+                sql_text(
+                    "CREATE UNIQUE INDEX uq_member_stripe_subscription_id ON member (stripe_subscription_id)"
+                )
+            )
+
+
 def create_app():
     app = Flask(__name__)
 
@@ -244,10 +524,11 @@ def create_app():
     @app.cli.command("db-init")
     @with_appcontext
     def db_init():
-        """Creates database tables if they do not exist."""
+        """Creates database tables if they do not exist and adds newer membership columns when needed."""
         click.echo("Creating database tables...")
         try:
             db.create_all()
+            ensure_member_schema()
             click.echo("Database tables created successfully.")
         except Exception as e:
             click.echo(f"Error creating tables: {e}", err=True)
@@ -329,7 +610,10 @@ def create_app():
             payment_method = form_data.pop("payment_method", "checkout")
             existing_member = Member.query.filter_by(email_private=form_data["email_private"]).first()
 
-            if existing_member and existing_member.is_active:
+            if existing_member and sync_member_active_state(existing_member):
+                db.session.commit()
+
+            if existing_member and member_has_active_access(existing_member):
                 flash(_("An active membership already exists for this email address."), "warning")
                 return redirect(url_for("index"))
 
@@ -337,18 +621,41 @@ def create_app():
                 payment_method = "checkout"
 
             try:
-                if payment_method == "checkout":
-                    import json
+                price_details = get_stripe_membership_price()
+                join_date = get_membership_today()
+                cycle = build_membership_cycle(join_date, price_details["unit_amount"])
+                activation_mode = "free_period" if cycle["free_period"] else "paid_now"
+                membership_metadata = {
+                    "membership_starts_on": cycle["coverage_start"].isoformat(),
+                    "membership_ends_on": cycle["coverage_end"].isoformat(),
+                    "renewal_due_on": cycle["renewal_due_on"].isoformat(),
+                    "activation_mode": activation_mode,
+                    "member_email": form_data["email_private"],
+                }
 
-                    member_data_json = json.dumps(form_data)
+                if payment_method == "checkout":
+                    line_items = [{"price": STRIPE_PRICE_ID, "quantity": 1}]
+                    prorated_line_item = build_prorated_line_item(cycle, price_details)
+                    if prorated_line_item is not None:
+                        line_items.insert(0, prorated_line_item)
 
                     session = stripe.checkout.Session.create(
                         payment_method_types=["card", "sepa_debit"],
-                        line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+                        line_items=line_items,
                         mode="subscription",
-                        metadata={"member_data": member_data_json},
+                        metadata={**membership_metadata, "member_data": json.dumps(form_data)},
+                        subscription_data={
+                            "trial_end": cycle["trial_end_unix"],
+                            "metadata": membership_metadata,
+                        },
+                        payment_method_collection="always",
                         customer_email=form_data["email_private"],
-                        success_url=url_for("thank_you", _external=True, method="checkout"),
+                        success_url=url_for(
+                            "thank_you",
+                            _external=True,
+                            method="checkout",
+                            phase=cycle["thank_you_phase"],
+                        ),
                         cancel_url=url_for("cancel", _external=True),
                     )
                     return redirect(session.url, code=303)
@@ -359,24 +666,61 @@ def create_app():
                         name=f"{form_data['first_name']} {form_data['last_name']}",
                     )
 
-                    stripe.Subscription.create(
-                        customer=customer.id,
-                        items=[{"price": STRIPE_PRICE_ID}],
-                        collection_method="send_invoice",
-                        days_until_due=30,
-                    )
+                    subscription_params = {
+                        "customer": customer.id,
+                        "items": [{"price": STRIPE_PRICE_ID}],
+                        "collection_method": "send_invoice",
+                        "days_until_due": 30,
+                        "trial_end": cycle["trial_end_unix"],
+                        "metadata": membership_metadata,
+                    }
+                    prorated_line_item = build_prorated_line_item(cycle, price_details)
+                    if prorated_line_item is not None:
+                        subscription_params["add_invoice_items"] = [prorated_line_item]
 
-                    if existing_member:
-                        existing_member.stripe_customer_id = customer.id
-                        existing_member.payment_status = "unpaid"
-                        db.session.commit()
+                    subscription = stripe.Subscription.create(**subscription_params)
+
+                    member = existing_member or Member(created_at=datetime.now(timezone.utc))
+                    apply_member_profile(member, form_data)
+                    member.stripe_customer_id = customer.id
+                    member.stripe_subscription_id = subscription.id
+
+                    if cycle["free_period"]:
+                        set_member_membership_window(
+                            member,
+                            starts_on=cycle["coverage_start"],
+                            ends_on=cycle["coverage_end"],
+                            renewal_due_on=cycle["renewal_due_on"],
+                            payment_status="free_period",
+                            is_active=True,
+                            cancel_at_period_end=False,
+                        )
                     else:
-                        form_data["stripe_customer_id"] = customer.id
-                        new_member = Member(**form_data)
-                        db.session.add(new_member)
-                        db.session.commit()
+                        set_member_membership_window(
+                            member,
+                            starts_on=cycle["coverage_start"],
+                            ends_on=cycle["coverage_end"],
+                            renewal_due_on=cycle["renewal_due_on"],
+                            payment_status="unpaid",
+                            is_active=False,
+                            cancel_at_period_end=False,
+                        )
 
-                    return redirect(url_for("thank_you", method="invoice"))
+                    if existing_member is None:
+                        db.session.add(member)
+
+                    db.session.commit()
+
+                    if cycle["free_period"]:
+                        send_member_welcome_email(app, member)
+
+                    return redirect(
+                        url_for(
+                            "thank_you",
+                            method="invoice",
+                            phase=cycle["thank_you_phase"],
+                        )
+                    )
 
             except stripe.StripeError as e:
                 app.logger.error(f"Stripe Error: {str(e)}")
@@ -394,7 +738,8 @@ def create_app():
     @app.route("/thank-you")
     def thank_you():
         method = request.args.get("method", "checkout")
-        return render_template("thank_you.html", method=method)
+        phase = request.args.get("phase", "prorated")
+        return render_template("thank_you.html", method=method, phase=phase)
 
     @app.route("/cancel")
     def cancel():
@@ -727,194 +1072,189 @@ def create_app():
             app.logger.error(f"Webhook Error: Invalid signature: {e}")
             return "Invalid signature", 400
 
-        if event["type"] == "checkout.session.completed":
+        event_type = event["type"]
+
+        if event_type == "checkout.session.completed":
             session = event["data"]["object"]
-            member_data_json = session.get("metadata", {}).get("member_data")
+            metadata = session.get("metadata", {})
+            member_data_json = metadata.get("member_data")
             if not member_data_json:
                 app.logger.error("Webhook received without member_data metadata.")
                 return "Missing metadata", 400
 
             try:
-                import json
-
                 member_data = json.loads(member_data_json)
                 email = member_data.get("email_private")
                 customer_id = session.get("customer")
-
+                subscription_id = session.get("subscription")
                 if not email or not customer_id:
                     app.logger.error("Webhook missing email or customer ID in session.")
                     return "Missing data", 400
 
-                existing_member = Member.query.filter_by(email_private=email).first()
+                member = Member.query.filter_by(email_private=email).first()
+                previously_active = member_has_active_access(member)
+                if member is None:
+                    member = Member(created_at=datetime.now(timezone.utc))
+                    db.session.add(member)
 
-                if existing_member:
-                    if not existing_member.is_active:
-                        existing_member.stripe_customer_id = customer_id
-                        existing_member.payment_status = "unpaid"
-                        db.session.commit()
-                        app.logger.info(
-                            f"Re-subscription initiated for {email}. Awaiting payment confirmation."
-                        )
-                    else:
-                        app.logger.warning(
-                            f"Duplicate subscription attempt for active member: {email}. No action taken."
-                        )
-                    return "Handling existing member", 200
+                apply_member_profile(member, member_data)
+                member.stripe_customer_id = customer_id
+                if subscription_id and isinstance(subscription_id, str) and subscription_id.startswith("sub_"):
+                    member.stripe_subscription_id = subscription_id
 
-                db_fields = {
-                    "salutation",
-                    "first_name",
-                    "last_name",
-                    "street",
-                    "house_number",
-                    "postal_code",
-                    "city",
-                    "country",
-                    "phone_private",
-                    "email_private",
-                    "year_group",
-                    "title",
-                    "phone_work",
-                    "email_work",
-                }
+                starts_on = parse_iso_date(metadata.get("membership_starts_on")) or get_membership_today()
+                ends_on = parse_iso_date(metadata.get("membership_ends_on")) or last_day_of_year(starts_on.year)
+                renewal_due_on = parse_iso_date(metadata.get("renewal_due_on")) or first_day_of_year(ends_on.year + 1)
+                activation_mode = metadata.get("activation_mode", "paid_now")
+                session_payment_status = session.get("payment_status")
 
-                data_to_save = {}
-                for field in db_fields:
-                    value = member_data.get(field)
-                    if value == "" and field in ["title", "phone_work", "email_work"]:
-                        data_to_save[field] = None
-                    else:
-                        data_to_save[field] = value
-
-                data_to_save["terms_accepted"] = True
-                data_to_save["created_at"] = datetime.now(timezone.utc)
-
-                customer_id = session.get("customer")
-                if customer_id and isinstance(customer_id, str) and customer_id.startswith("cus_"):
-                    data_to_save["stripe_customer_id"] = customer_id
-                else:
-                    app.logger.warning(
-                        f"Webhook for session {session.get('id')} received with a missing or invalid Stripe Customer ID: {customer_id}"
+                if activation_mode == "free_period":
+                    set_member_membership_window(
+                        member,
+                        starts_on=starts_on,
+                        ends_on=ends_on,
+                        renewal_due_on=renewal_due_on,
+                        payment_status="free_period",
+                        is_active=True,
+                        cancel_at_period_end=False,
                     )
-                    data_to_save["stripe_customer_id"] = None
+                elif session_payment_status == "paid":
+                    set_member_membership_window(
+                        member,
+                        starts_on=starts_on,
+                        ends_on=ends_on,
+                        renewal_due_on=renewal_due_on,
+                        payment_status="paid",
+                        is_active=True,
+                        cancel_at_period_end=False,
+                    )
+                else:
+                    set_member_membership_window(
+                        member,
+                        starts_on=starts_on,
+                        ends_on=ends_on,
+                        renewal_due_on=renewal_due_on,
+                        payment_status="processing",
+                        is_active=False,
+                        cancel_at_period_end=False,
+                    )
 
-                new_member = Member(**data_to_save)
-                db.session.add(new_member)
                 db.session.commit()
 
-                app.logger.info(
-                    f"SUCCESS: Member created with unpaid status for email: {new_member.email_private}. Session ID: {session['id']}"
-                )
+                if member_has_active_access(member) and not previously_active:
+                    send_member_welcome_email(app, member)
 
+                app.logger.info(
+                    f"SUCCESS: Membership checkout completed for {member.email_private}. Session ID: {session.get('id')}"
+                )
             except Exception as e:
-                app.logger.error(f"FATAL DB ERROR on Webhook for session {session['id']}: {e}")
+                app.logger.error(f"FATAL DB ERROR on Webhook for session {session.get('id')}: {e}")
                 db.session.rollback()
                 return "Database save failed", 500
 
-        elif event["type"] == "payment_intent.processing":
+        elif event_type == "payment_intent.processing":
             payment_intent = event["data"]["object"]
             customer_id = payment_intent.get("customer")
-            if customer_id:
-                member = Member.query.filter_by(stripe_customer_id=customer_id).first()
-                if member:
-                    member.payment_status = "processing"
-                    db.session.commit()
-                    app.logger.info(f"Payment is processing for Stripe Customer ID: {customer_id}")
+            member = get_member_by_stripe_reference(customer_id=customer_id)
+            if member and not member_has_active_access(member):
+                member.payment_status = "processing"
+                db.session.commit()
+                app.logger.info(f"Payment is processing for Stripe Customer ID: {customer_id}")
 
-        elif event["type"] in ["payment_intent.succeeded", "invoice.paid", "invoice.payment_succeeded"]:
+        elif event_type in ["payment_intent.succeeded", "invoice.paid", "invoice.payment_succeeded"]:
             data_object = event["data"]["object"]
             customer_id = data_object.get("customer")
-            if customer_id:
-                member = Member.query.filter_by(stripe_customer_id=customer_id).first()
-                if member:
-                    if not member.is_active:
-                        member.payment_status = "paid"
-                        member.is_active = True
-                        db.session.commit()
-                        app.logger.info(
-                            f"SUCCESS: Payment confirmed and member activated for Stripe Customer ID: {customer_id}"
-                        )
+            subscription_id = data_object.get("subscription")
+            member = get_member_by_stripe_reference(customer_id=customer_id, subscription_id=subscription_id)
+            if member:
+                previous_status = member.payment_status
+                if subscription_id and isinstance(subscription_id, str) and subscription_id.startswith("sub_"):
+                    member.stripe_subscription_id = subscription_id
 
-                        settings = {s.key: s.value for s in Setting.query.all()}
-                        if settings.get("automatic_emails_enabled") == "True":
-                            sender_account = settings.get("welcome_email_sender", "office")
-                            template_name = settings.get("automatic_email_template", "welcome_email.html")
-
-                            suggested_username = generate_suggested_username(member)
-
-                            logo_path = os.path.join(
-                                app.root_path,
-                                "static",
-                                "Logo_Aeronautics_signature-logo.png",
-                            )
-                            attachments = [{"path": logo_path, "cid": "logo"}]
-
-                            send_mail(
-                                from_account=sender_account,
-                                to_email=member.email_private,
-                                subject=_("Welcome to Joanneum Aeronautics!"),
-                                template_name=template_name,
-                                attachments=attachments,
-                                first_name=member.first_name,
-                                suggested_username=suggested_username,
-                                now=datetime.now(timezone.utc),
-                            )
-                    else:
-                        app.logger.info(
-                            f"Webhook received for already active member: {customer_id}. No action taken."
-                        )
+                paid_timestamp = None
+                if event_type.startswith("invoice"):
+                    paid_timestamp = (data_object.get("status_transitions") or {}).get("paid_at") or data_object.get("created")
                 else:
-                    app.logger.warning(
-                        f"Webhook for successful payment received, but no member found for Stripe Customer ID: {customer_id}"
-                    )
-            else:
-                app.logger.warning(
-                    "Webhook for successful payment received, but no Stripe Customer ID was provided."
+                    paid_timestamp = data_object.get("created")
+                paid_on = to_membership_date(paid_timestamp)
+
+                update_member_paid_coverage(member, paid_on)
+                db.session.commit()
+                app.logger.info(
+                    f"SUCCESS: Payment confirmed and member coverage updated for Stripe Customer ID: {customer_id}"
                 )
 
-        elif event["type"] in ["payment_intent.payment_failed", "invoice.payment_failed"]:
+                if member_has_active_access(member) and previous_status in {"unpaid", "processing"}:
+                    send_member_welcome_email(app, member)
+            else:
+                app.logger.warning(
+                    f"Webhook for successful payment received, but no member found for Stripe reference customer={customer_id} subscription={subscription_id}"
+                )
+
+        elif event_type == "customer.subscription.updated":
+            subscription = event["data"]["object"]
+            customer_id = subscription.get("customer")
+            subscription_id = subscription.get("id")
+            member = get_member_by_stripe_reference(customer_id=customer_id, subscription_id=subscription_id)
+            if member:
+                member.stripe_subscription_id = subscription_id
+                member.cancel_at_period_end = bool(subscription.get("cancel_at_period_end"))
+                if member.cancel_at_period_end and member_has_active_access(member):
+                    member.payment_status = "cancel_scheduled"
+                elif not member.cancel_at_period_end and member.payment_status == "cancel_scheduled":
+                    member.payment_status = "paid" if member.is_active else member.payment_status
+                db.session.commit()
+
+        elif event_type in ["payment_intent.payment_failed", "invoice.payment_failed"]:
             data_object = event["data"]["object"]
             customer_id = data_object.get("customer")
-            if customer_id:
-                member = Member.query.filter_by(stripe_customer_id=customer_id).first()
-                if member:
-                    member.payment_status = "failed"
+            subscription_id = data_object.get("subscription")
+            member = get_member_by_stripe_reference(customer_id=customer_id, subscription_id=subscription_id)
+            if member:
+                member.payment_status = "failed"
+                if not member_has_active_access(member):
                     member.is_active = False
-                    db.session.commit()
-                    app.logger.warning(f"Payment failed for Stripe Customer ID: {customer_id}")
+                db.session.commit()
+                app.logger.warning(f"Payment failed for Stripe Customer ID: {customer_id}")
             else:
                 app.logger.warning(
                     "Webhook for failed payment received, but no Stripe Customer ID was provided."
                 )
 
-        elif event["type"] == "customer.subscription.deleted":
+        elif event_type == "customer.subscription.deleted":
             subscription = event["data"]["object"]
             customer_id = subscription.get("customer")
-            if customer_id:
-                member = Member.query.filter_by(stripe_customer_id=customer_id).first()
-                if member:
-                    member.is_active = False
-                    cancellation_details = subscription.get("cancellation_details", {})
-                    reason = cancellation_details.get("reason")
+            subscription_id = subscription.get("id")
+            member = get_member_by_stripe_reference(customer_id=customer_id, subscription_id=subscription_id)
+            if member:
+                member.stripe_subscription_id = subscription_id or member.stripe_subscription_id
+                member.cancel_at_period_end = False
+                cancellation_details = subscription.get("cancellation_details", {})
+                reason = cancellation_details.get("reason")
+                event_date = to_membership_date(event.get("created"))
 
-                    if reason == "payment_failed":
-                        member.payment_status = "failed"
-                        db.session.commit()
-                        app.logger.warning(
-                            f"Subscription for Stripe Customer ID: {customer_id} was canceled due to failed payment. Member deactivated."
-                        )
-                    else:
-                        member.payment_status = "canceled"
-                        db.session.commit()
-                        app.logger.info(
-                            f"Subscription canceled for Stripe Customer ID: {customer_id}. Member deactivated."
-                        )
-                else:
+                if reason == "payment_failed":
+                    member.payment_status = "failed"
+                    member.is_active = False
                     app.logger.warning(
-                        f"Webhook for subscription cancellation received, but no member found for Stripe Customer ID: {customer_id}"
+                        f"Subscription for Stripe Customer ID: {customer_id} was canceled due to failed payment."
+                    )
+                else:
+                    member.payment_status = "canceled"
+                    member.is_active = member_has_active_access(member, event_date)
+                    app.logger.info(
+                        f"Subscription canceled for Stripe Customer ID: {customer_id}. Coverage remains valid until the covered year ends."
                     )
 
-        elif event["type"] == "charge.dispute.closed":
+                if sync_member_active_state(member, event_date):
+                    pass
+                db.session.commit()
+            else:
+                app.logger.warning(
+                    f"Webhook for subscription cancellation received, but no member found for Stripe reference customer={customer_id} subscription={subscription_id}"
+                )
+
+        elif event_type == "charge.dispute.closed":
             dispute = event["data"]["object"]
             if dispute["status"] == "lost":
                 charge_id = dispute.get("charge")
@@ -968,49 +1308,12 @@ def create_app():
         click.echo(f"Found member: {member.first_name} {member.last_name}. Preparing to send email...")
 
         try:
-            with application.test_request_context():
-                settings = {s.key: s.value for s in Setting.query.all()}
-                sender_account = settings.get("welcome_email_sender")
-                template_name = settings.get("automatic_email_template")
-
-                if not sender_account or not template_name:
-                    click.echo(
-                        click.style(
-                            "Error: Email sender or template is not configured in the admin settings.",
-                            fg="red",
-                        )
-                    )
-                    return
-
-                suggested_username = generate_suggested_username(member)
-                logo_path = os.path.join(
-                    application.root_path,
-                    "static",
-                    "Logo_Aeronautics_signature-logo.png",
-                )
-                attachments = [{"path": logo_path, "cid": "logo"}]
-
-                success = send_mail(
-                    from_account=sender_account,
-                    to_email=member.email_private,
-                    subject=_("Welcome to Joanneum Aeronautics!"),
-                    template_name=template_name,
-                    attachments=attachments,
-                    first_name=member.first_name,
-                    suggested_username=suggested_username,
-                    now=datetime.now(timezone.utc),
-                )
-
+            with app.test_request_context():
+                success = send_member_welcome_email(app, member, force_send=True)
                 if success:
                     click.echo(click.style(f"Successfully sent welcome email to {email}.", fg="green"))
                 else:
-                    click.echo(
-                        click.style(
-                            f"Failed to send welcome email to {email}. Check logs for details.",
-                            fg="red",
-                        )
-                    )
-
+                    click.echo(click.style(f"Failed to send welcome email to {email}. Check logs for details.", fg="red"))
         except Exception as e:
             click.echo(click.style(f"An unexpected error occurred: {e}", fg="red"))
 

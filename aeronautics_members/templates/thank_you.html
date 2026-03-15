@@ -8,12 +8,22 @@
                 <div class="card-body p-5">
                     {% if method == 'invoice' %}
                         <h2 class="card-title text-primary mb-4">{{ _('Thank You for Your Application!') }}</h2>
-                        <p class="lead">{{ _('Your membership application has been submitted. An invoice will be sent to your email address shortly.') }}</p>
-                        <p class="text-muted">{{ _('Your membership will be activated once the invoice is paid.') }}</p>
+                        {% if phase == 'free_period' %}
+                            <p class="lead">{{ _('Your membership is active immediately and remains free until December 31.') }}</p>
+                            <p class="text-muted">{{ _('The first full annual invoice will be due on January 1 unless the membership is cancelled beforehand.') }}</p>
+                        {% else %}
+                            <p class="lead">{{ _('Your membership application has been submitted. An invoice for the prorated current-year fee will be sent to your email address shortly.') }}</p>
+                            <p class="text-muted">{{ _('After the current year, the membership renews automatically each January 1 unless it is cancelled beforehand.') }}</p>
+                        {% endif %}
                     {% else %}
                         <h2 class="card-title text-success mb-4">{{ _('Thank You!') }}</h2>
-                        <p class="lead">{{ _('Your membership application has been successfully submitted. A confirmation has been sent to your email.') }}</p>
-                        <p class="text-muted">{{ _('You will be redirected shortly.') }}</p>
+                        {% if phase == 'free_period' %}
+                            <p class="lead">{{ _('Your membership is active immediately and stays free until December 31.') }}</p>
+                            <p class="text-muted">{{ _('Your payment method has been saved, and Stripe will charge the full annual fee on January 1 unless you cancel beforehand.') }}</p>
+                        {% else %}
+                            <p class="lead">{{ _('Your membership has been set up successfully.') }}</p>
+                            <p class="text-muted">{{ _('The prorated fee for the rest of this calendar year has been set up. The full annual subscription renews automatically each January 1 unless cancelled beforehand.') }}</p>
+                        {% endif %}
                     {% endif %}
                     <div class="mt-5">
                         <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg">{{ _('Return to Homepage') }}</a>

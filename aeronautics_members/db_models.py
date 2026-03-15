@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 
@@ -32,8 +32,13 @@ class Member(db.Model):
     terms_accepted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
+    stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
     payment_status = db.Column(db.String(50), nullable=False, default='unpaid')
     is_active = db.Column(db.Boolean, nullable=False, default=False)
+    membership_starts_on = db.Column(db.Date, nullable=True)
+    membership_ends_on = db.Column(db.Date, nullable=True)
+    renewal_due_on = db.Column(db.Date, nullable=True)
+    cancel_at_period_end = db.Column(db.Boolean, nullable=False, default=False)
 
     def __repr__(self):
         return f'<Member {self.first_name} {self.last_name}>'
@@ -42,6 +47,12 @@ class Member(db.Model):
     def full_address(self):
         """Generates a formatted address string."""
         return f"{self.street} {self.house_number}, {self.postal_code} {self.city}, {self.country}"
+
+    @property
+    def has_current_coverage(self):
+        if not self.membership_ends_on:
+            return self.is_active
+        return self.membership_ends_on >= date.today()
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
