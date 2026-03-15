@@ -127,8 +127,13 @@ img,video{max-width:100%;height:auto}
 }
 
 .navbar-brand img {
-    max-height: 52px;
-    width: auto;
+    display: block;
+    height: 52px;
+    width: 264px;
+    max-width: 100%;
+    object-fit: contain;
+    object-position: left center;
+    flex-shrink: 0;
 }
 
 :root {
