@@ -7,7 +7,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 
-from flask import render_template
+from flask import has_app_context, render_template
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -15,10 +15,28 @@ load_dotenv()
 
 
 def load_mail_accounts_config(required=False):
+    if has_app_context():
+        try:
+            try:
+                from .db_models import MailAccount, db
+            except ImportError:
+                from db_models import MailAccount, db
+
+            mail_accounts = {
+                account.account_key: account.to_config()
+                for account in db.session.execute(
+                    db.select(MailAccount).order_by(MailAccount.account_key.asc())
+                ).scalars()
+            }
+            if mail_accounts:
+                return mail_accounts
+        except Exception:
+            pass
+
     raw_value = os.getenv("MAIL_ACCOUNTS_JSON", "").strip()
     if not raw_value:
         if required:
-            raise ValueError("MAIL_ACCOUNTS_JSON environment variable not set.")
+            raise ValueError("No mail accounts are configured in the database or MAIL_ACCOUNTS_JSON.")
         return {}
 
     candidates = [raw_value]

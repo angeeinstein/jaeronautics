@@ -59,3 +59,26 @@ class User(UserMixin, db.Model):
 class Setting(db.Model):
     key = db.Column(db.String(50), primary_key=True)
     value = db.Column(db.String(100), nullable=False)
+
+class MailAccount(db.Model):
+    __tablename__ = "mail_accounts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    account_key = db.Column(db.String(80), unique=True, nullable=False)
+    host = db.Column(db.String(255), nullable=False)
+    port = db.Column(db.Integer, nullable=False)
+    username = db.Column(db.String(255), nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    starttls = db.Column(db.Boolean, nullable=False, default=False)
+
+    def to_config(self):
+        config = {
+            "host": self.host,
+            "port": self.port,
+            "user": self.username,
+            "pass": self.password,
+        }
+        if self.starttls:
+            config["starttls"] = True
+        return config
+

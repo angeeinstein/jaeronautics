@@ -21,7 +21,6 @@ During installation the script can ask for:
 - the domain for nginx
 - whether to use a local MariaDB instance
 - Stripe keys and price/webhook configuration
-- SMTP sender accounts for `MAIL_ACCOUNTS_JSON`
 - whether the site will sit behind a Cloudflare Tunnel
 - whether HTTPS should be enabled with Let's Encrypt
 - an optional end-to-end Cloudflare Tunnel health check after you finish the manual tunnel setup
@@ -44,6 +43,7 @@ jaeronautics/
 - Public membership signup flow
 - Stripe Checkout, SEPA, and invoice-based subscriptions
 - Admin login and settings area
+- Admin-managed SMTP sender accounts
 - Welcome email sending
 - English and German translations
 
@@ -77,7 +77,6 @@ The Linux installer is lifecycle-aware:
 - On a fresh host it installs packages, clones or updates the repo, provisions MariaDB/nginx/systemd, writes `.env`, and starts the app.
 - On an existing installation it offers `update`, `repair/reconfigure`, or `uninstall`.
 - It first syncs the repository copy of `install.sh` and then re-runs itself so the current session always uses the newest installer logic.
-- It can build `MAIL_ACCOUNTS_JSON` interactively for SMTP senders.
 - If you use a Cloudflare Tunnel, it auto-detects a reachable internal origin IP/host for the app server, lets you override it, generates guidance files under `cloudflare/`, and can wait for your manual tunnel setup and test the public `__health` URL before it exits.
 
 You can also run it directly from a cloned checkout:
@@ -91,5 +90,6 @@ sudo bash install.sh --mode uninstall
 ## Notes
 
 - Secrets are intentionally not committed. Keep them in `.env`.
+- SMTP sender accounts are managed in the admin UI after installation. `MAIL_ACCOUNTS_JSON` remains available only as a fallback.
 - If credentials from an earlier push ever reached GitHub, rotate them before continuing to use the project.
 - The app still falls back to the legacy `var/www/aeronautics-members/.env` location so the current local setup keeps working during the transition.

@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, SelectField, BooleanField, SubmitField, PasswordField, RadioField
-from wtforms.validators import DataRequired, Email, EqualTo, Length, Regexp, Optional, InputRequired
+from wtforms import HiddenField, IntegerField, PasswordField, RadioField, SelectField, StringField, SubmitField, BooleanField
+from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange, Regexp, Optional, InputRequired
 from flask_babel import _, lazy_gettext as _l
 
 # Comprehensive list of countries for the dropdown
@@ -187,3 +187,17 @@ class TestEmailForm(FlaskForm):
     recipient = StringField(_('Recipient Email'), validators=[DataRequired(), Email()])
     template = SelectField(_l('Template'), validators=[DataRequired()])
     submit = SubmitField(_('Send Test Email'))
+
+class MailAccountForm(FlaskForm):
+    mail_account_id = HiddenField()
+    account_key = StringField(
+        _l('Account Key'),
+        validators=[DataRequired(), Length(max=80), Regexp(r'^[a-zA-Z0-9_-]+$', message=_l('Use only letters, numbers, dashes, and underscores.'))],
+    )
+    host = StringField(_l('SMTP Host'), validators=[DataRequired(), Length(max=255)])
+    port = IntegerField(_l('SMTP Port'), validators=[DataRequired(), NumberRange(min=1, max=65535)])
+    username = StringField(_l('SMTP Username'), validators=[DataRequired(), Length(max=255)])
+    password = PasswordField(_l('SMTP Password'), validators=[Optional(), Length(max=255)])
+    starttls = BooleanField(_l('Use STARTTLS'))
+    submit = SubmitField(_l('Save Mail Account'))
+

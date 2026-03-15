@@ -890,8 +890,6 @@ ensure_virtualenv() {
 collect_configuration() {
     source_existing_env
     local reconfigure_all="0"
-    local configure_mail_accounts_now="0"
-    local existing_mail_accounts="0"
     local detected_origin_host=""
 
     if [[ "${MODE}" == "install" || "${MODE}" == "repair" ]]; then
@@ -908,13 +906,11 @@ collect_configuration() {
     DB_NAME="${DB_NAME:-$DEFAULT_DB_NAME}"
     DB_USER="${DB_USER:-$DEFAULT_DB_USER}"
     MAIL_ACCOUNTS_JSON="${MAIL_ACCOUNTS_JSON:-{}}"
-    if ! validate_json_object "${MAIL_ACCOUNTS_JSON}"; then
-        warn "Existing MAIL_ACCOUNTS_JSON is invalid. Resetting it to an empty object."
-        MAIL_ACCOUNTS_JSON="{}"
-    else
+    if validate_json_object "${MAIL_ACCOUNTS_JSON}"; then
         MAIL_ACCOUNTS_JSON="$(normalize_json_object "${MAIL_ACCOUNTS_JSON}")"
+    else
+        MAIL_ACCOUNTS_JSON="{}"
     fi
-    existing_mail_accounts="$(mail_accounts_count "${MAIL_ACCOUNTS_JSON}")"
     RATELIMIT_STORAGE_URI="${RATELIMIT_STORAGE_URI:-$DEFAULT_RATELIMIT_STORAGE_URI}"
 
     if [[ "${DB_HOST:-127.0.0.1}" == "127.0.0.1" || "${DB_HOST:-localhost}" == "localhost" ]]; then
@@ -1001,19 +997,6 @@ collect_configuration() {
     fi
     if [[ "${reconfigure_all}" == "1" || -z "${STRIPE_WEBHOOK_SECRET:-}" ]]; then
         prompt_value STRIPE_WEBHOOK_SECRET "Stripe webhook secret" "${STRIPE_WEBHOOK_SECRET:-}" 1 1
-    fi
-
-    if [[ "${reconfigure_all}" == "1" || "${existing_mail_accounts}" == "0" ]]; then
-        prompt_yes_no configure_mail_accounts_now "Configure SMTP sender accounts now?" "$( [[ "${existing_mail_accounts}" -gt 0 ]] && printf '0' || printf '1' )"
-        if [[ "${configure_mail_accounts_now}" == "1" ]]; then
-            collect_mail_accounts
-            MAIL_ACCOUNTS_JSON="$(normalize_json_object "${MAIL_ACCOUNTS_JSON}")"
-            existing_mail_accounts="$(mail_accounts_count "${MAIL_ACCOUNTS_JSON}")"
-        fi
-    fi
-
-    if [[ "${existing_mail_accounts}" == "0" && "${NONINTERACTIVE}" != "1" ]]; then
-        warn "MAIL_ACCOUNTS_JSON is empty. The site will run, but email sending will stay disabled until you add sender accounts."
     fi
 
     if [[ "${reconfigure_all}" == "1" || -z "${ENABLE_SSL}" ]]; then

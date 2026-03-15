@@ -28,20 +28,22 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 try:
-    from .db_models import db, Member, Setting, User
+    from .db_models import db, MailAccount, Member, Setting, User
     from .forms import (
         ChangePasswordForm,
         LoginForm,
+        MailAccountForm,
         MembershipForm,
         RegistrationForm,
         TestEmailForm,
     )
     from .mail_utils import load_mail_accounts_config, send_mail
 except ImportError:
-    from db_models import db, Member, Setting, User
+    from db_models import db, MailAccount, Member, Setting, User
     from forms import (
         ChangePasswordForm,
         LoginForm,
+        MailAccountForm,
         MembershipForm,
         RegistrationForm,
         TestEmailForm,
@@ -126,6 +128,24 @@ def generate_suggested_username(member):
     study_field_initial = member.year_group[0].upper() if member.year_group else ""
     year_short = member.year_group[-2:] if member.year_group and len(member.year_group) > 2 else ""
     return f"{last_name_cleaned}{first_name_initial}_{study_field_initial}{year_short}"
+
+
+
+def get_email_template_choices(app):
+    template_choices = []
+    email_template_dir = os.path.join(app.root_path, "templates", "emails")
+    if os.path.isdir(email_template_dir):
+        template_choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
+    return template_choices
+
+
+def get_db_mail_accounts():
+    try:
+        return db.session.execute(
+            db.select(MailAccount).order_by(MailAccount.account_key.asc())
+        ).scalars().all()
+    except Exception:
+        return []
 
 
 
@@ -377,18 +397,32 @@ def create_app():
     @admin_required
     def admin():
         test_email_form = TestEmailForm()
+        mail_account_form = MailAccountForm(prefix="mail")
+        editing_mail_account = None
 
         sender_choices = []
-        template_choices = []
+        template_choices = get_email_template_choices(app)
+        mail_account_records = get_db_mail_accounts()
         try:
             mail_accounts = load_mail_accounts_config()
             sender_choices = [(acc, acc) for acc in mail_accounts.keys()]
-
-            email_template_dir = os.path.join(app.root_path, "templates", "emails")
-            if os.path.isdir(email_template_dir):
-                template_choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
         except Exception as e:
-            app.logger.error(f"Could not load email accounts or templates for admin page: {e}")
+            mail_accounts = {}
+            app.logger.error(f"Could not load email accounts for admin page: {e}")
+
+        edit_mail_account_id = request.args.get("edit_mail_account", type=int)
+        if edit_mail_account_id:
+            editing_mail_account = db.session.get(MailAccount, edit_mail_account_id)
+            if editing_mail_account is not None:
+                mail_account_form.mail_account_id.data = str(editing_mail_account.id)
+                mail_account_form.account_key.data = editing_mail_account.account_key
+                mail_account_form.host.data = editing_mail_account.host
+                mail_account_form.port.data = editing_mail_account.port
+                mail_account_form.username.data = editing_mail_account.username
+                mail_account_form.starttls.data = editing_mail_account.starttls
+            else:
+                flash(_("The selected mail account could not be found."), "warning")
+                return redirect(url_for("admin"))
 
         test_email_form.sender.choices = sender_choices
         test_email_form.template.choices = template_choices
@@ -430,6 +464,10 @@ def create_app():
                 else:
                     setting = Setting(key="welcome_email_sender", value=welcome_sender)
                     db.session.add(setting)
+            else:
+                setting = Setting.query.get("welcome_email_sender")
+                if setting:
+                    db.session.delete(setting)
 
             if auto_email_template:
                 setting = Setting.query.get("automatic_email_template")
@@ -438,6 +476,10 @@ def create_app():
                 else:
                     setting = Setting(key="automatic_email_template", value=auto_email_template)
                     db.session.add(setting)
+            else:
+                setting = Setting.query.get("automatic_email_template")
+                if setting:
+                    db.session.delete(setting)
 
             db.session.commit()
             flash(_("Settings updated successfully!"), "success")
@@ -446,9 +488,91 @@ def create_app():
         return render_template(
             "admin/index.html",
             test_email_form=test_email_form,
+            mail_account_form=mail_account_form,
+            mail_account_records=mail_account_records,
+            editing_mail_account=editing_mail_account,
             sender_choices=sender_choices,
             template_choices=template_choices,
         )
+
+    @app.route("/admin/mail-accounts", methods=["POST"])
+    @login_required
+    @admin_required
+    def save_mail_account():
+        form = MailAccountForm(prefix="mail")
+        account_id = int(form.mail_account_id.data) if form.mail_account_id.data else None
+
+        if not form.validate_on_submit():
+            flash(_("Please correct the mail account form and try again."), "danger")
+            for field_name, errors in form.errors.items():
+                if field_name == "csrf_token":
+                    for error in errors:
+                        flash(error, "danger")
+                    continue
+                label = getattr(form, field_name).label.text if hasattr(form, field_name) else field_name
+                for error in errors:
+                    flash(f"{label}: {error}", "danger")
+            redirect_kwargs = {"edit_mail_account": account_id} if account_id else {}
+            return redirect(url_for("admin", **redirect_kwargs))
+
+        account_key = form.account_key.data.strip()
+        existing_account = db.session.execute(
+            db.select(MailAccount).filter_by(account_key=account_key)
+        ).scalar_one_or_none()
+
+        if existing_account is not None and existing_account.id != account_id:
+            flash(_("A mail account with this key already exists."), "danger")
+            target_id = account_id or existing_account.id
+            return redirect(url_for("admin", edit_mail_account=target_id))
+
+        if account_id:
+            mail_account = db.session.get(MailAccount, account_id)
+            if mail_account is None:
+                flash(_("The selected mail account could not be found."), "warning")
+                return redirect(url_for("admin"))
+        else:
+            if not form.password.data:
+                flash(_("A password is required for new mail accounts."), "danger")
+                return redirect(url_for("admin"))
+            mail_account = MailAccount()
+            db.session.add(mail_account)
+
+        mail_account.account_key = account_key
+        mail_account.host = form.host.data.strip()
+        mail_account.port = int(form.port.data)
+        mail_account.username = form.username.data.strip()
+        if form.password.data:
+            mail_account.password = form.password.data
+        mail_account.starttls = bool(form.starttls.data)
+
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash(_("A mail account with this key already exists."), "danger")
+            redirect_kwargs = {"edit_mail_account": account_id} if account_id else {}
+            return redirect(url_for("admin", **redirect_kwargs))
+
+        flash(_("Mail account saved successfully."), "success")
+        return redirect(url_for("admin"))
+
+    @app.route("/admin/mail-accounts/<int:mail_account_id>/delete", methods=["POST"])
+    @login_required
+    @admin_required
+    def delete_mail_account(mail_account_id):
+        mail_account = db.session.get(MailAccount, mail_account_id)
+        if mail_account is None:
+            flash(_("The selected mail account could not be found."), "warning")
+            return redirect(url_for("admin"))
+
+        welcome_sender_setting = Setting.query.get("welcome_email_sender")
+        if welcome_sender_setting and welcome_sender_setting.value == mail_account.account_key:
+            db.session.delete(welcome_sender_setting)
+
+        db.session.delete(mail_account)
+        db.session.commit()
+        flash(_("Mail account deleted successfully."), "success")
+        return redirect(url_for("admin"))
 
     @app.route("/send-test-email", methods=["POST"])
     @login_required
