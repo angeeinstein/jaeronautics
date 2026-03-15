@@ -368,21 +368,21 @@ body.bg-gray-100,
 }
 
 .navbar-toggler {
-    background-color: #2f3336 !important;
-    border: 1px solid #4a4f53 !important;
+    background-color: transparent !important;
+    border: 1px solid transparent !important;
     border-radius: 0 !important;
     padding: 0.35rem 0.55rem !important;
-    opacity: 0.85;
+    opacity: 0.92;
 }
 
 .navbar-toggler:focus {
-    background-color: #3a3f43 !important;
+    background-color: transparent !important;
     box-shadow: 0 0 0 0.12rem rgba(255, 255, 255, 0.12) !important;
     opacity: 1;
 }
 
 .navbar-dark .navbar-toggler-icon {
-    filter: invert(1) brightness(0.85);
+    filter: invert(1) brightness(1.08);
 }
 
 .dropdown-menu {
@@ -736,8 +736,8 @@ button:disabled {
 .navbar-toggler:hover,
 .navbar-toggler:focus,
 .navbar-toggler:active {
-    background-color: #2f3336 !important;
-    border-color: #4a4f53 !important;
+    background-color: transparent !important;
+    border-color: transparent !important;
     color: var(--ja-text) !important;
 }
 
