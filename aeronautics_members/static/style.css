@@ -368,17 +368,21 @@ body.bg-gray-100,
 }
 
 .navbar-toggler {
-    border: 1px solid var(--ja-border) !important;
+    background-color: #2f3336 !important;
+    border: 1px solid #4a4f53 !important;
     border-radius: 0 !important;
     padding: 0.35rem 0.55rem !important;
+    opacity: 0.85;
 }
 
 .navbar-toggler:focus {
-    box-shadow: 0 0 0 0.2rem rgba(0, 223, 255, 0.25) !important;
+    background-color: #3a3f43 !important;
+    box-shadow: 0 0 0 0.12rem rgba(255, 255, 255, 0.12) !important;
+    opacity: 1;
 }
 
 .navbar-dark .navbar-toggler-icon {
-    filter: invert(1);
+    filter: invert(1) brightness(0.85);
 }
 
 .dropdown-menu {

@@ -8,6 +8,18 @@
     <form method="POST" action="{{ url_for('process_membership') }}" class="space-y-6">
         {{ form.hidden_tag() }} <!-- Adds CSRF protection -->
 
+        {% if form.errors %}
+            <div class="alert alert-danger" role="alert">
+                <ul class="mb-0 ps-3">
+                    {% for field_name, errors in form.errors.items() %}
+                        {% for error in errors %}
+                            <li>{{ field_name|replace('_', ' ')|title }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
         <!-- Row 1: Salutation, Title -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
