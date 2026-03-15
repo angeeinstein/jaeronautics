@@ -723,10 +723,31 @@ def create_app():
                     )
 
             except stripe.StripeError as e:
-                app.logger.error(f"Stripe Error: {str(e)}")
+                error_body = getattr(e, "json_body", {}) or {}
+                error_details = error_body.get("error", {}) if isinstance(error_body, dict) else {}
+                app.logger.error(
+                    "Stripe Error during membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s join_date=%s phase=%s prorated_amount_cents=%s renewal_due_on=%s",
+                    type(e).__name__,
+                    str(e),
+                    error_details.get("message"),
+                    error_details.get("code"),
+                    error_details.get("param"),
+                    getattr(e, "request_id", None),
+                    getattr(e, "http_status", None),
+                    payment_method,
+                    form_data.get("email_private"),
+                    cycle.get("join_date") if 'cycle' in locals() else None,
+                    cycle.get("thank_you_phase") if 'cycle' in locals() else None,
+                    cycle.get("prorated_amount_cents") if 'cycle' in locals() else None,
+                    cycle.get("renewal_due_on") if 'cycle' in locals() else None,
+                )
                 flash(_("Error processing payment. Please try again."), "danger")
             except Exception as e:
-                app.logger.error(f"An unexpected error occurred: {str(e)}")
+                app.logger.exception(
+                    "Unexpected error during membership signup for email=%s payment_method=%s",
+                    form_data.get("email_private"),
+                    payment_method,
+                )
                 flash(_("An unexpected error occurred. Please try again."), "danger")
 
             return redirect(url_for("index"))
