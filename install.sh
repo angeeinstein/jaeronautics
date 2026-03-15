@@ -609,6 +609,7 @@ PY
 }
 
 collect_mail_accounts() {
+    local tmp_file
     local add_more="1"
     local account_name=""
     local account_host=""
@@ -616,8 +617,9 @@ collect_mail_accounts() {
     local account_user=""
     local account_password=""
     local account_starttls=""
-    local accounts_json="{}"
     local added_accounts="0"
+
+    tmp_file="$(mktemp)"
 
     tty_print "\n${COLOR_BOLD}SMTP account setup${COLOR_RESET}\n"
     tty_print "Add one or more sender accounts. Common names are 'office', 'it', or 'noreply'.\n\n"
@@ -636,42 +638,59 @@ collect_mail_accounts() {
             prompt_yes_no account_starttls "Use STARTTLS for ${account_name}?" "0"
         fi
 
-        accounts_json="$(EXISTING_JSON="${accounts_json}" ACCOUNT_NAME="${account_name}" ACCOUNT_HOST="${account_host}" ACCOUNT_PORT="${account_port}" ACCOUNT_USER="${account_user}" ACCOUNT_PASSWORD="${account_password}" ACCOUNT_STARTTLS="${account_starttls}" python3 - <<'PY'
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$(printf '%s' "${account_name}" | base64 | tr -d '\n')" \
+            "$(printf '%s' "${account_host}" | base64 | tr -d '\n')" \
+            "$(printf '%s' "${account_port}" | base64 | tr -d '\n')" \
+            "$(printf '%s' "${account_user}" | base64 | tr -d '\n')" \
+            "$(printf '%s' "${account_password}" | base64 | tr -d '\n')" \
+            "$(printf '%s' "${account_starttls}" | base64 | tr -d '\n')" >> "${tmp_file}"
+
+        added_accounts=$((added_accounts + 1))
+        prompt_yes_no add_more "Add another SMTP account?" "0"
+    done
+
+    MAIL_ACCOUNTS_JSON="$(python3 - "${tmp_file}" <<'PY'
+import base64
 import json
-import os
+import pathlib
 import sys
 
-existing_json = os.environ.get("EXISTING_JSON", "{}")
-name = os.environ["ACCOUNT_NAME"]
-host = os.environ["ACCOUNT_HOST"]
-port = os.environ["ACCOUNT_PORT"]
-user = os.environ["ACCOUNT_USER"]
-password = os.environ["ACCOUNT_PASSWORD"]
-starttls = os.environ["ACCOUNT_STARTTLS"]
+path = pathlib.Path(sys.argv[1])
+accounts = {}
+for line in path.read_text(encoding="utf-8").splitlines():
+    if not line.strip():
+        continue
 
-accounts = json.loads(existing_json or "{}")
-accounts[name] = {
-    "host": host,
-    "port": int(port),
-    "user": user,
-    "pass": password,
-}
-if starttls == "1":
-    accounts[name]["starttls"] = True
+    encoded = line.split("	")
+    if len(encoded) != 6:
+        raise ValueError(f"Unexpected SMTP account line format: {line!r}")
+
+    name, host, port, user, password, starttls = [
+        base64.b64decode(value.encode("ascii")).decode("utf-8") for value in encoded
+    ]
+
+    accounts[name] = {
+        "host": host,
+        "port": int(port),
+        "user": user,
+        "pass": password,
+    }
+    if starttls == "1":
+        accounts[name]["starttls"] = True
 
 print(json.dumps(accounts, separators=(",", ":")))
 PY
 )"
-        added_accounts=$((added_accounts + 1))
 
-        prompt_yes_no add_more "Add another SMTP account?" "0"
-    done
-
-    MAIL_ACCOUNTS_JSON="$(normalize_json_object "${accounts_json}")"
+    rm -f "${tmp_file}"
+    MAIL_ACCOUNTS_JSON="$(normalize_json_object "${MAIL_ACCOUNTS_JSON}")"
 
     if [[ "${added_accounts}" -gt 0 ]] && [[ "$(mail_accounts_count "${MAIL_ACCOUNTS_JSON}")" == "0" ]]; then
         die "Failed to save SMTP sender accounts. MAIL_ACCOUNTS_JSON stayed empty after collection."
     fi
+
+    info "Saved $(mail_accounts_count "${MAIL_ACCOUNTS_JSON}") SMTP sender account(s)."
 }
 
 choose_existing_install_action() {
