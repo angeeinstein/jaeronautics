@@ -149,6 +149,18 @@ def get_db_mail_accounts():
 
 
 
+def static_asset_version(app, filename):
+    if not filename:
+        return None
+
+    asset_path = Path(app.static_folder) / filename
+    try:
+        return str(int(asset_path.stat().st_mtime))
+    except OSError:
+        return None
+
+
+
 def create_app():
     app = Flask(__name__)
 
@@ -214,6 +226,17 @@ def create_app():
             get_locale=get_locale,
             cleaned_args=cleaned_args,
         )
+
+    @app.url_defaults
+    def add_static_file_version(endpoint, values):
+        if endpoint != "static":
+            return
+        if "v" in values:
+            return
+
+        version = static_asset_version(app, values.get("filename"))
+        if version:
+            values["v"] = version
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
     stripe.api_key = STRIPE_SECRET_KEY

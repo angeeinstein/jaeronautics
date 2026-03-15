@@ -246,8 +246,8 @@ img,video{max-width:100%;height:auto}
 .navbar .nav-link.btn-link {
     display: inline-flex;
     align-items: center;
-    min-height: 2.5rem;
-    padding: 0.5rem 0.25rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.45rem;
 }
 
 .navbar .dropdown-toggle::after {
@@ -283,7 +283,7 @@ a:hover {
 /* Joanneum Aeronautics Dark Theme */
 :root {
     --ja-bg: #161718;
-    --ja-surface: #1f2123;
+    --ja-surface: #000000;
     --ja-surface-alt: #26292b;
     --ja-border: #34383b;
     --ja-text: #ffffff;
@@ -327,6 +327,9 @@ body.bg-gray-100,
 .app-navbar {
     background-color: var(--ja-surface) !important;
     border-bottom: 3px solid var(--ja-accent);
+    min-height: 70px;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
 }
 
 .navbar-brand,
@@ -339,8 +342,19 @@ body.bg-gray-100,
 }
 
 .navbar-brand {
-    padding-top: 0.15rem !important;
-    padding-bottom: 0.15rem !important;
+    display: inline-flex;
+    align-items: center;
+    padding-top: 0.1rem !important;
+    padding-bottom: 0.1rem !important;
+    margin-right: 1.5rem;
+}
+
+.navbar .nav-link,
+.navbar .nav-link.btn-link,
+.navbar .dropdown-toggle {
+    font-size: 1.05rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
 }
 
 .navbar .nav-link:hover,
