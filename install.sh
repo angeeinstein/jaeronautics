@@ -1447,6 +1447,14 @@ verify_cloudflare_tunnel() {
 
     print_cloudflare_tunnel_help
 
+    info "Checking the public Cloudflare Tunnel URL automatically: ${public_health_url}"
+    if check_health_endpoint "${public_health_url}"; then
+        success "The public Cloudflare Tunnel URL is already reaching the server successfully."
+        return
+    fi
+
+    warn "The public Cloudflare Tunnel URL is not healthy yet. DNS propagation, tunnel startup, or origin settings may still be in progress."
+
     if [[ "${NONINTERACTIVE}" == "1" ]]; then
         info "Skipping interactive Cloudflare Tunnel verification in non-interactive mode."
         return
