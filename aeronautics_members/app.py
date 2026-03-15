@@ -20,8 +20,11 @@ from flask import (
 )
 from flask.cli import with_appcontext
 from flask_babel import Babel, _, get_locale
+from flask_limiter import Limiter
+from flask_limiter.errors import RateLimitExceeded
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
-from flask_wtf.csrf import CSRFError
+from flask_wtf.csrf import CSRFError, CSRFProtect
+from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 try:
@@ -33,7 +36,7 @@ try:
         RegistrationForm,
         TestEmailForm,
     )
-    from .mail_utils import send_mail
+    from .mail_utils import load_mail_accounts_config, send_mail
 except ImportError:
     from db_models import db, Member, Setting, User
     from forms import (
@@ -43,7 +46,7 @@ except ImportError:
         RegistrationForm,
         TestEmailForm,
     )
-    from mail_utils import send_mail
+    from mail_utils import load_mail_accounts_config, send_mail
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parent
@@ -71,9 +74,31 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
 STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "redis://127.0.0.1:6379/0")
+RATELIMIT_LOGIN = os.getenv("RATELIMIT_LOGIN", "10 per 15 minute")
+RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "5 per hour")
+RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "10 per hour")
+RATELIMIT_PASSWORD_CHANGE = os.getenv("RATELIMIT_PASSWORD_CHANGE", "5 per 15 minute")
+RATELIMIT_ADMIN_EMAIL = os.getenv("RATELIMIT_ADMIN_EMAIL", "5 per 10 minute")
 
 babel = Babel()
 login_manager = LoginManager()
+csrf = CSRFProtect()
+
+
+def get_rate_limit_identity():
+    cf_connecting_ip = request.headers.get("CF-Connecting-IP", "").split(",", 1)[0].strip()
+    if cf_connecting_ip:
+        return cf_connecting_ip
+
+    return request.remote_addr or "unknown"
+
+
+limiter = Limiter(
+    key_func=get_rate_limit_identity,
+    storage_uri=RATELIMIT_STORAGE_URI,
+    default_limits=[],
+)
 
 
 @login_manager.user_loader
@@ -152,6 +177,8 @@ def create_app():
     login_manager.init_app(app)
     login_manager.login_view = "login"
     babel.init_app(app, locale_selector=select_locale)
+    csrf.init_app(app)
+    limiter.init_app(app)
 
     @app.context_processor
     def inject_babel_globals():
@@ -246,6 +273,7 @@ def create_app():
         )
 
     @app.route("/process-membership", methods=["POST"])
+    @limiter.limit(RATELIMIT_MEMBERSHIP)
     def process_membership():
         form = MembershipForm()
         settings = {s.key: s.value for s in Setting.query.all()}
@@ -256,6 +284,11 @@ def create_app():
             form_data.pop("submit", None)
 
             payment_method = form_data.pop("payment_method", "checkout")
+            existing_member = Member.query.filter_by(email_private=form_data["email_private"]).first()
+
+            if existing_member and existing_member.is_active:
+                flash(_("An active membership already exists for this email address."), "warning")
+                return redirect(url_for("index"))
 
             if settings.get("invoice_payments_enabled") != "True":
                 payment_method = "checkout"
@@ -278,11 +311,6 @@ def create_app():
                     return redirect(session.url, code=303)
 
                 if payment_method == "invoice":
-                    existing_member = Member.query.filter_by(email_private=form_data["email_private"]).first()
-                    if existing_member and existing_member.is_active:
-                        flash(_("An active membership already exists for this email address."), "warning")
-                        return redirect(url_for("index"))
-
                     customer = stripe.Customer.create(
                         email=form_data["email_private"],
                         name=f"{form_data['first_name']} {form_data['last_name']}",
@@ -353,10 +381,7 @@ def create_app():
         sender_choices = []
         template_choices = []
         try:
-            import json
-
-            mail_accounts_json = os.getenv("MAIL_ACCOUNTS_JSON", "{}")
-            mail_accounts = json.loads(mail_accounts_json)
+            mail_accounts = load_mail_accounts_config()
             sender_choices = [(acc, acc) for acc in mail_accounts.keys()]
 
             email_template_dir = os.path.join(app.root_path, "templates", "emails")
@@ -369,6 +394,19 @@ def create_app():
         test_email_form.template.choices = template_choices
 
         if request.method == "POST" and "save_settings" in request.form:
+            valid_senders = {choice for choice, _label in sender_choices}
+            valid_templates = {choice for choice, _label in template_choices}
+            welcome_sender = request.form.get("welcome_email_sender")
+            auto_email_template = request.form.get("automatic_email_template")
+
+            if welcome_sender and welcome_sender not in valid_senders:
+                flash(_("Invalid sender account selected."), "danger")
+                return redirect(url_for("admin"))
+
+            if auto_email_template and auto_email_template not in valid_templates:
+                flash(_("Invalid email template selected."), "danger")
+                return redirect(url_for("admin"))
+
             invoice_enabled = "invoice_payments_enabled" in request.form
             setting = Setting.query.get("invoice_payments_enabled")
             if setting:
@@ -385,7 +423,6 @@ def create_app():
                 setting = Setting(key="automatic_emails_enabled", value=str(emails_enabled))
                 db.session.add(setting)
 
-            welcome_sender = request.form.get("welcome_email_sender")
             if welcome_sender:
                 setting = Setting.query.get("welcome_email_sender")
                 if setting:
@@ -394,7 +431,6 @@ def create_app():
                     setting = Setting(key="welcome_email_sender", value=welcome_sender)
                     db.session.add(setting)
 
-            auto_email_template = request.form.get("automatic_email_template")
             if auto_email_template:
                 setting = Setting.query.get("automatic_email_template")
                 if setting:
@@ -417,14 +453,12 @@ def create_app():
     @app.route("/send-test-email", methods=["POST"])
     @login_required
     @admin_required
+    @limiter.limit(RATELIMIT_ADMIN_EMAIL)
     def send_test_email():
         form = TestEmailForm()
 
         try:
-            import json
-
-            mail_accounts_json = os.getenv("MAIL_ACCOUNTS_JSON", "{}")
-            mail_accounts = json.loads(mail_accounts_json)
+            mail_accounts = load_mail_accounts_config()
             form.sender.choices = [(acc, acc) for acc in mail_accounts.keys()]
 
             email_template_dir = os.path.join(app.root_path, "templates", "emails")
@@ -464,6 +498,7 @@ def create_app():
         return redirect(url_for("admin"))
 
     @app.route("/login", methods=["POST", "GET"])
+    @limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
     def login():
         if current_user.is_authenticated:
             if current_user.role == "admin":
@@ -482,6 +517,7 @@ def create_app():
         return render_template("admin/login.html", form=form)
 
     @app.route("/register", methods=["GET", "POST"])
+    @limiter.limit(RATELIMIT_REGISTER, methods=["POST"])
     def register():
         if current_user.is_authenticated:
             if current_user.role == "admin":
@@ -489,15 +525,25 @@ def create_app():
             return redirect(url_for("index"))
         form = RegistrationForm()
         if form.validate_on_submit():
+            existing_user = db.session.execute(db.select(User).filter_by(email=form.email.data)).scalar_one_or_none()
+            if existing_user is not None:
+                flash(_("An account with this email address already exists. Please log in instead."), "warning")
+                return redirect(url_for("login"))
+
             user = User(email=form.email.data)
             user.set_password(form.password.data)
             db.session.add(user)
-            db.session.commit()
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                flash(_("An account with this email address already exists. Please log in instead."), "warning")
+                return redirect(url_for("login"))
             flash(_("Congratulations, you are now a registered user!"), "success")
             return redirect(url_for("login"))
         return render_template("admin/register.html", form=form)
 
-    @app.route("/logout")
+    @app.route("/logout", methods=["POST"])
     @login_required
     def logout():
         logout_user()
@@ -505,6 +551,7 @@ def create_app():
 
     @app.route("/change-password", methods=["GET", "POST"])
     @login_required
+    @limiter.limit(RATELIMIT_PASSWORD_CHANGE, methods=["POST"])
     def change_password():
         form = ChangePasswordForm()
         if form.validate_on_submit():
@@ -519,6 +566,7 @@ def create_app():
         return render_template("admin/change_password.html", form=form)
 
     @app.route("/stripe-webhook", methods=["POST"])
+    @csrf.exempt
     def stripe_webhook():
         payload = request.data
         sig_header = request.headers.get("stripe-signature")
@@ -744,6 +792,11 @@ def create_app():
     def handle_csrf_error(e):
         flash(_("Your session has expired or the form is invalid. Please try submitting again."), "warning")
         return redirect(url_for("index"))
+
+    @app.errorhandler(RateLimitExceeded)
+    def handle_rate_limit_error(e):
+        flash(_("Too many requests from your IP address. Please wait a moment and try again."), "warning")
+        return redirect(request.referrer or url_for("index")), 429
 
     @app.errorhandler(404)
     def page_not_found(e):

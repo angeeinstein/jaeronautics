@@ -12,6 +12,7 @@ DEFAULT_APP_PORT="8000"
 DEFAULT_DB_NAME="jaeronautics"
 DEFAULT_DB_USER="jaeronautics"
 DEFAULT_LANGUAGES="en,de"
+DEFAULT_RATELIMIT_STORAGE_URI="redis://127.0.0.1:6379/0"
 STATE_DIR="/etc/jaeronautics"
 STATE_FILE="${STATE_DIR}/install.conf"
 BOOTSTRAP_DIR="/tmp/${APP_NAME}-installer-bootstrap"
@@ -37,6 +38,7 @@ NONINTERACTIVE="${BOOTSTRAP_NONINTERACTIVE:-0}"
 
 PACKAGE_MANAGER=""
 DB_SERVICE_NAME=""
+REDIS_SERVICE_NAME=""
 NGINX_CONF_PATH=""
 NGINX_ENABLED_PATH=""
 ENV_FILE=""
@@ -344,10 +346,10 @@ bootstrap_packages() {
 base_packages() {
     case "${PACKAGE_MANAGER}" in
         apt)
-            printf '%s\n' ca-certificates curl git nginx mariadb-client mariadb-server openssl python3 python3-pip python3-venv
+            printf '%s\n' ca-certificates curl git nginx mariadb-client mariadb-server openssl python3 python3-pip python3-venv redis-server
             ;;
         dnf|yum)
-            printf '%s\n' ca-certificates curl git nginx mariadb-server openssl python3 python3-pip
+            printf '%s\n' ca-certificates curl git nginx mariadb-server openssl python3 python3-pip redis
             ;;
     esac
 }
@@ -477,34 +479,127 @@ prompt_yes_no() {
 validate_json_object() {
     local json_input="${1:-{}}"
     python3 - "${json_input}" <<'PY'
+import ast
 import json
 import sys
 
 raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
-try:
-    data = json.loads(raw or "{}")
-except Exception:
-    sys.exit(1)
 
-if not isinstance(data, dict):
+
+def parse_object(value):
+    text = (value or "{}").strip()
+    candidates = [text]
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        candidates.append(text[1:-1])
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate or "{}")
+            if isinstance(data, str):
+                data = json.loads(data)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    try:
+        data = ast.literal_eval(text)
+        if isinstance(data, str):
+            data = json.loads(data)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+
+    return None
+
+
+if parse_object(raw) is None:
     sys.exit(1)
+PY
+}
+
+normalize_json_object() {
+    local json_input="${1:-{}}"
+    python3 - "${json_input}" <<'PY'
+import ast
+import json
+import sys
+
+raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
+
+
+def parse_object(value):
+    text = (value or "{}").strip()
+    candidates = [text]
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        candidates.append(text[1:-1])
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate or "{}")
+            if isinstance(data, str):
+                data = json.loads(data)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    try:
+        data = ast.literal_eval(text)
+        if isinstance(data, str):
+            data = json.loads(data)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+
+    return {}
+
+
+print(json.dumps(parse_object(raw), separators=(",", ":")))
 PY
 }
 
 mail_accounts_count() {
     local json_input="${1:-{}}"
     python3 - "${json_input}" <<'PY'
+import ast
 import json
 import sys
 
 raw = sys.argv[1] if len(sys.argv) > 1 else "{}"
-try:
-    data = json.loads(raw or "{}")
-except Exception:
-    data = {}
 
-if not isinstance(data, dict):
-    data = {}
+
+def parse_object(value):
+    text = (value or "{}").strip()
+    candidates = [text]
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        candidates.append(text[1:-1])
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate or "{}")
+            if isinstance(data, str):
+                data = json.loads(data)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    try:
+        data = ast.literal_eval(text)
+        if isinstance(data, str):
+            data = json.loads(data)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+
+    return {}
+
+
+data = parse_object(raw)
 
 print(len(data))
 PY
@@ -706,6 +801,17 @@ detect_db_service_name() {
     DB_SERVICE_NAME="mariadb"
 }
 
+detect_redis_service_name() {
+    local candidate
+    for candidate in redis-server redis; do
+        if systemctl list-unit-files "${candidate}.service" >/dev/null 2>&1; then
+            REDIS_SERVICE_NAME="${candidate}"
+            return
+        fi
+    done
+    REDIS_SERVICE_NAME="redis-server"
+}
+
 ensure_systemd_service() {
     local service_name="$1"
     systemctl enable --now "${service_name}"
@@ -789,8 +895,11 @@ collect_configuration() {
     if ! validate_json_object "${MAIL_ACCOUNTS_JSON}"; then
         warn "Existing MAIL_ACCOUNTS_JSON is invalid. Resetting it to an empty object."
         MAIL_ACCOUNTS_JSON="{}"
+    else
+        MAIL_ACCOUNTS_JSON="$(normalize_json_object "${MAIL_ACCOUNTS_JSON}")"
     fi
     existing_mail_accounts="$(mail_accounts_count "${MAIL_ACCOUNTS_JSON}")"
+    RATELIMIT_STORAGE_URI="${RATELIMIT_STORAGE_URI:-$DEFAULT_RATELIMIT_STORAGE_URI}"
 
     if [[ "${DB_HOST:-127.0.0.1}" == "127.0.0.1" || "${DB_HOST:-localhost}" == "localhost" ]]; then
         USE_LOCAL_DB="1"
@@ -882,6 +991,7 @@ collect_configuration() {
         prompt_yes_no configure_mail_accounts_now "Configure SMTP sender accounts now?" "$( [[ "${existing_mail_accounts}" -gt 0 ]] && printf '0' || printf '1' )"
         if [[ "${configure_mail_accounts_now}" == "1" ]]; then
             collect_mail_accounts
+            MAIL_ACCOUNTS_JSON="$(normalize_json_object "${MAIL_ACCOUNTS_JSON}")"
             existing_mail_accounts="$(mail_accounts_count "${MAIL_ACCOUNTS_JSON}")"
         fi
     fi
@@ -919,6 +1029,7 @@ STRIPE_SECRET_KEY=$(dotenv_quote "${STRIPE_SECRET_KEY}")
 STRIPE_PUBLISHABLE_KEY=$(dotenv_quote "${STRIPE_PUBLISHABLE_KEY}")
 STRIPE_PRICE_ID=$(dotenv_quote "${STRIPE_PRICE_ID}")
 STRIPE_WEBHOOK_SECRET=$(dotenv_quote "${STRIPE_WEBHOOK_SECRET}")
+RATELIMIT_STORAGE_URI=$(dotenv_quote "${RATELIMIT_STORAGE_URI}")
 MAIL_ACCOUNTS_JSON=$(dotenv_quote "${MAIL_ACCOUNTS_JSON}")
 EOF
 
@@ -976,6 +1087,16 @@ render_service_file() {
     if [[ "${USE_LOCAL_DB}" == "1" ]]; then
         unit_after="After=network.target ${DB_SERVICE_NAME}.service"
         unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    if [[ -n "${REDIS_SERVICE_NAME}" ]]; then
+        unit_after="${unit_after} ${REDIS_SERVICE_NAME}.service"
+        if [[ -n "${unit_requires}" ]]; then
+            unit_requires="${unit_requires}
+Requires=${REDIS_SERVICE_NAME}.service"
+        else
+            unit_requires="Requires=${REDIS_SERVICE_NAME}.service"
+        fi
     fi
 
     cat > "${SERVICE_FILE}" <<EOF
@@ -1274,6 +1395,9 @@ verify_installation() {
     if [[ "${USE_LOCAL_DB}" == "1" ]]; then
         systemctl is-active --quiet "${DB_SERVICE_NAME}"
     fi
+    if [[ -n "${REDIS_SERVICE_NAME}" ]]; then
+        systemctl is-active --quiet "${REDIS_SERVICE_NAME}"
+    fi
     systemctl is-active --quiet nginx
     systemctl is-active --quiet "${SERVICE_NAME}"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
@@ -1393,7 +1517,9 @@ install_or_update() {
     mapfile -t base_pkg_list < <(base_packages)
     install_packages "${base_pkg_list[@]}"
 
+    detect_redis_service_name
     ensure_systemd_service nginx
+    ensure_systemd_service "${REDIS_SERVICE_NAME}"
     ensure_app_user
     configure_selinux
 

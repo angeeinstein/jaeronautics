@@ -1,5 +1,6 @@
 import os
 import json
+import ast
 import smtplib
 import ssl
 from email.mime.text import MIMEText
@@ -11,6 +12,40 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+
+def load_mail_accounts_config(required=False):
+    raw_value = os.getenv("MAIL_ACCOUNTS_JSON", "").strip()
+    if not raw_value:
+        if required:
+            raise ValueError("MAIL_ACCOUNTS_JSON environment variable not set.")
+        return {}
+
+    candidates = [raw_value]
+    if len(raw_value) >= 2 and raw_value[0] == raw_value[-1] and raw_value[0] in ("'", '"'):
+        candidates.append(raw_value[1:-1])
+
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate or "{}")
+            if isinstance(data, str):
+                data = json.loads(data)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+
+    try:
+        data = ast.literal_eval(raw_value)
+        if isinstance(data, str):
+            data = json.loads(data)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+
+    raise ValueError("MAIL_ACCOUNTS_JSON is not a valid JSON object.")
+
 
 def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, **template_vars):
     """
@@ -26,11 +61,7 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
     """
     try:
         # 1. Load SMTP account configurations from .env
-        mail_accounts_json = os.getenv("MAIL_ACCOUNTS_JSON")
-        if not mail_accounts_json:
-            raise ValueError("MAIL_ACCOUNTS_JSON environment variable not set.")
-        
-        mail_accounts = json.loads(mail_accounts_json)
+        mail_accounts = load_mail_accounts_config(required=True)
         config = mail_accounts.get(from_account)
 
         if not config:
