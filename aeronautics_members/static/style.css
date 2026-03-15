@@ -661,7 +661,7 @@ input[type="file"]::file-selector-button:hover {
 .btn-outline-danger,
 .btn-aeronautics,
 button[type=submit],
-button[type=button],
+button[type=button]:not(.navbar-toggler),
 button[type=reset] {
     background-color: var(--ja-accent) !important;
     border: 1px solid var(--ja-accent) !important;
@@ -688,8 +688,8 @@ button[type=reset] {
 .btn-aeronautics:focus,
 button[type=submit]:hover,
 button[type=submit]:focus,
-button[type=button]:hover,
-button[type=button]:focus,
+button[type=button]:not(.navbar-toggler):hover,
+button[type=button]:not(.navbar-toggler):focus,
 button[type=reset]:hover,
 button[type=reset]:focus {
     background-color: var(--ja-accent-hover) !important;
@@ -730,6 +730,15 @@ button:disabled {
 .navbar .btn-link:hover,
 .navbar .btn-link:focus {
     color: var(--ja-accent) !important;
+}
+
+.navbar-toggler,
+.navbar-toggler:hover,
+.navbar-toggler:focus,
+.navbar-toggler:active {
+    background-color: #2f3336 !important;
+    border-color: #4a4f53 !important;
+    color: var(--ja-text) !important;
 }
 
 .table {
