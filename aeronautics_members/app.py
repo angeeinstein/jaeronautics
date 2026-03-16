@@ -165,7 +165,6 @@ ACTIVE_MEMBER_STATUSES = {"paid", "free_period", "canceled", "cancel_scheduled"}
 RESUMABLE_MEMBER_STATUSES = {"pending_checkout", "processing", "failed", "unpaid"}
 TOKEN_MAX_AGE_VERIFY_EMAIL = 60 * 60 * 24 * 7
 TOKEN_MAX_AGE_PASSWORD_RESET = 60 * 60 * 24
-TOKEN_MAX_AGE_ACCOUNT_CLAIM = 60 * 60 * 24 * 7
 PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
 
 
@@ -682,25 +681,6 @@ def send_password_reset_email(app, user):
         body_lines=[
             _("A password reset was requested for your Joanneum Aeronautics account."),
             _("If this was you, use the link below to set a new password. If not, you can ignore this email."),
-        ],
-    )
-
-
-
-def send_account_claim_email(app, member):
-    token = generate_token("claim-account", member_id=member.id, email=member.email_private)
-    claim_url = url_for("claim_account_token", token=token, _external=True)
-    return send_account_action_email(
-        app,
-        to_email=member.email_private,
-        subject=_("Claim your Joanneum Aeronautics account"),
-        preview_text=_("Create your password to access your membership account."),
-        action_url=claim_url,
-        action_label=_("Claim Account"),
-        heading=_("Finish setting up your account"),
-        body_lines=[
-            _("We found an existing membership profile for this email address."),
-            _("Use the link below to create your password and connect it to your member account."),
         ],
     )
 
@@ -1493,8 +1473,8 @@ def create_app():
                 if existing_member.user_id:
                     flash(_("An account with this email address already exists. Please log in to manage or resume your membership."), "warning")
                     return redirect(url_for("login"))
-                flash(_("A membership profile with this email address already exists. Please claim your account first."), "warning")
-                return redirect(url_for("claim_account"))
+                flash(_("A membership profile with this email address already exists without a linked login. Please contact the club so we can resolve it."), "warning")
+                return redirect(url_for("index"))
 
             if existing_user is not None:
                 flash(_("An account with this email address already exists. Please log in instead."), "warning")
@@ -1809,78 +1789,6 @@ def create_app():
             title=_("Choose a New Password"),
             heading=_("Choose a new password"),
             description=_("Set a new password for your Joanneum Aeronautics account."),
-        )
-
-    @app.route("/claim-account", methods=["GET", "POST"])
-    @limiter.limit(RATELIMIT_REGISTER, methods=["POST"])
-    def claim_account():
-        if current_user.is_authenticated:
-            return redirect(url_for(get_member_portal_target(current_user)))
-
-        form = EmailRequestForm()
-        if form.validate_on_submit():
-            email_address = form.email.data.strip().lower()
-            member = db.session.execute(
-                db.select(Member).filter_by(email_private=email_address, user_id=None)
-            ).scalar_one_or_none()
-            if member is not None:
-                try:
-                    send_account_claim_email(app, member)
-                except Exception as exc:
-                    app.logger.warning("Could not send account claim email for member_id=%s: %s", member.id, exc)
-            flash(_("If an unclaimed membership profile exists for that email address and email sending is configured, a claim link is available."), "info")
-            return redirect(url_for("login"))
-        return render_template(
-            "account/email_request.html",
-            form=form,
-            title=_("Claim Account"),
-            heading=_("Claim your member account"),
-            description=_("If you already have a membership profile but no login account yet, enter your email and we will send you a setup link."),
-        )
-
-    @app.route("/claim-account/<token>", methods=["GET", "POST"])
-    def claim_account_token(token):
-        token_data = None
-        try:
-            token_data = read_token(token, "claim-account", TOKEN_MAX_AGE_ACCOUNT_CLAIM)
-            member = db.session.get(Member, int(token_data.get("member_id")))
-        except (BadSignature, SignatureExpired, ValueError, TypeError):
-            member = None
-
-        if member is None or member.email_private != token_data.get("email"):
-            flash(_("This account claim link is invalid or has expired."), "danger")
-            return redirect(url_for("claim_account"))
-
-        if member.user is not None:
-            flash(_("This membership profile already has an account. Please log in instead."), "info")
-            return redirect(url_for("login"))
-
-        form = SetPasswordForm()
-        if form.validate_on_submit():
-            existing_user = db.session.execute(db.select(User).filter_by(email=member.email_private)).scalar_one_or_none()
-            if existing_user is not None:
-                flash(_("An account with this email address already exists. Please use password reset instead."), "warning")
-                return redirect(url_for("forgot_password"))
-
-            user = User(
-                email=member.email_private,
-                role="member",
-                forum_username=generate_unique_forum_username(member.first_name, member.last_name, member.year_group),
-                email_verified_at=get_now_utc(),
-            )
-            user.set_password(form.password.data)
-            member.user = user
-            db.session.add(user)
-            db.session.commit()
-            login_user(user)
-            flash(_("Your account is ready. Welcome back!"), "success")
-            return redirect(url_for("account"))
-        return render_template(
-            "account/set_password.html",
-            form=form,
-            title=_("Finish Account Setup"),
-            heading=_("Create your password"),
-            description=_("Choose a password to connect this membership profile to your account."),
         )
 
     @app.route("/verify-email/<token>")

@@ -53,8 +53,14 @@
                     <dd class="col-sm-7">{{ member.membership_starts_on.strftime('%Y-%m-%d') if member.membership_starts_on else _('Not set') }}</dd>
                     <dt class="col-sm-5">{{ _('Coverage Ends') }}</dt>
                     <dd class="col-sm-7">{{ member.membership_ends_on.strftime('%Y-%m-%d') if member.membership_ends_on else _('Not set') }}</dd>
-                    <dt class="col-sm-5">{{ _('Renewal Due') }}</dt>
-                    <dd class="col-sm-7">{{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else _('Not set') }}</dd>
+                    <dt class="col-sm-5">{{ _('Next Renewal') }}</dt>
+                    <dd class="col-sm-7">
+                        {% if member.cancel_at_period_end %}
+                            {{ _('Not scheduled') }}
+                        {% else %}
+                            {{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else _('Not set') }}
+                        {% endif %}
+                    </dd>
                     <dt class="col-sm-5">{{ _('Auto-Renewal') }}</dt>
                     <dd class="col-sm-7">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled for the end of the covered year.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
                     <dt class="col-sm-5">{{ _('Forum Username') }}</dt>

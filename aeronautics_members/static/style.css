@@ -782,6 +782,16 @@ button:disabled {
     color: var(--ja-text) !important;
 }
 
+.alert-secondary {
+    background-color: rgba(170, 180, 187, 0.10) !important;
+    border-color: rgba(170, 180, 187, 0.28) !important;
+    color: var(--ja-text) !important;
+}
+
+.alert-secondary * {
+    color: inherit !important;
+}
+
 .alert-warning {
     background-color: rgba(242, 184, 75, 0.14) !important;
     border-color: rgba(242, 184, 75, 0.45) !important;
