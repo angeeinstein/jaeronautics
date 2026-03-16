@@ -2233,11 +2233,13 @@ def create_app():
                 if member_has_active_access(member) and previous_status in {"unpaid", "processing", "pending_checkout", "failed"}:
                     send_member_welcome_email(app, member)
             else:
-                app.logger.warning(
-                    "Webhook for successful payment received, but no member found for Stripe reference customer=%s subscription=%s",
+                app.logger.error(
+                    "Webhook for successful payment received, but no member found for Stripe reference customer=%s subscription=%s email=%s",
                     customer_id,
                     subscription_id,
+                    customer_email,
                 )
+                return "Member not found", 400
 
         elif event_type == "customer.subscription.updated":
             subscription = event["data"]["object"]
