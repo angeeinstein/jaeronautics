@@ -892,13 +892,74 @@ def create_invoice_membership_for_member(member):
 
 
 
+def get_latest_stripe_subscription_for_member(member):
+    if member is None or not member.stripe_customer_id:
+        return None
+
+    if member.stripe_subscription_id:
+        return stripe.Subscription.retrieve(member.stripe_subscription_id)
+
+    subscription_list = stripe.Subscription.list(customer=member.stripe_customer_id, status="all", limit=1)
+    subscriptions = subscription_list.get("data", []) if hasattr(subscription_list, "get") else []
+    return subscriptions[0] if subscriptions else None
+
+
+
+def sync_member_subscription_state_from_stripe(member):
+    if member is None or not member.stripe_customer_id:
+        return False
+
+    subscription = get_latest_stripe_subscription_for_member(member)
+    if not subscription:
+        return False
+
+    changed = backfill_member_stripe_references(
+        member,
+        customer_id=subscription.get("customer") or member.stripe_customer_id,
+        subscription_id=subscription.get("id"),
+    )
+
+    cancel_at_period_end = bool(subscription.get("cancel_at_period_end"))
+    if member.cancel_at_period_end != cancel_at_period_end:
+        member.cancel_at_period_end = cancel_at_period_end
+        changed = True
+
+    subscription_status = subscription.get("status")
+    if subscription_status == "canceled":
+        desired_status = "canceled"
+        desired_active = member_has_active_access(member)
+    elif cancel_at_period_end and member_has_active_access(member):
+        desired_status = "cancel_scheduled"
+        desired_active = True
+    elif not cancel_at_period_end and member.payment_status == "cancel_scheduled":
+        desired_status = "paid" if member.is_active else member.payment_status
+        desired_active = member.is_active
+    else:
+        desired_status = None
+        desired_active = member.is_active
+
+    if desired_status and member.payment_status != desired_status:
+        member.payment_status = desired_status
+        changed = True
+
+    if member.is_active != desired_active:
+        member.is_active = desired_active
+        changed = True
+
+    if sync_member_active_state(member):
+        changed = True
+
+    return changed
+
+
+
 def get_portal_session(member):
     if not member or not member.stripe_customer_id:
         raise ValueError(_("No Stripe billing profile is available for this membership yet."))
 
     return stripe.billing_portal.Session.create(
         customer=member.stripe_customer_id,
-        return_url=url_for("account", _external=True),
+        return_url=url_for("account", _external=True, refresh_billing=1),
     )
 
 
@@ -1273,6 +1334,13 @@ def create_app():
                 return redirect(url_for("admin"))
             flash(_("No membership profile is linked to this account yet."), "warning")
             return redirect(url_for("index"))
+
+        if request.args.get("refresh_billing") == "1" and member.stripe_customer_id:
+            try:
+                if sync_member_subscription_state_from_stripe(member):
+                    db.session.commit()
+            except stripe.StripeError as exc:
+                app.logger.warning("Could not refresh Stripe billing state for member_id=%s: %s", member.id, exc)
 
         if sync_member_active_state(member):
             db.session.commit()

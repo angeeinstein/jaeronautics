@@ -55,12 +55,14 @@
                     <dd class="col-sm-7">{{ member.membership_ends_on.strftime('%Y-%m-%d') if member.membership_ends_on else _('Not set') }}</dd>
                     <dt class="col-sm-5">{{ _('Renewal Due') }}</dt>
                     <dd class="col-sm-7">{{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else _('Not set') }}</dd>
-                    <dt class="col-sm-5">{{ _('Renewal Scheduled') }}</dt>
-                    <dd class="col-sm-7">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
+                    <dt class="col-sm-5">{{ _('Auto-Renewal') }}</dt>
+                    <dd class="col-sm-7">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled for the end of the covered year.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
                     <dt class="col-sm-5">{{ _('Forum Username') }}</dt>
                     <dd class="col-sm-7">{{ current_user.forum_username or _('Not set') }}</dd>
                 </dl>
-                {% if can_resume_payment %}
+                {% if member.cancel_at_period_end %}
+                    <div class="alert alert-warning mt-4 mb-0">{{ _('Your membership stays active until the end of the covered year, but the automatic renewal has been canceled.') }}</div>
+                {% elif can_resume_payment %}
                     <div class="alert alert-info mt-4 mb-0">{{ _('Your account is ready, but the membership payment is not finished yet. Use the resume button above to continue.') }}</div>
                 {% elif not can_manage_billing %}
                     <div class="alert alert-secondary mt-4 mb-0">{{ _('Stripe billing access will become available after a successful payment setup.') }}</div>
