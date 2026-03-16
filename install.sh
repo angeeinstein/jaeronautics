@@ -15,8 +15,9 @@ DEFAULT_LANGUAGES="en,de"
 DEFAULT_RATELIMIT_STORAGE_URI="redis://127.0.0.1:6379/0"
 STATE_DIR="/etc/jaeronautics"
 STATE_FILE="${STATE_DIR}/install.conf"
+BACKUP_DIR="/var/backups/${APP_NAME}"
 BOOTSTRAP_DIR="/tmp/${APP_NAME}-installer-bootstrap"
-INSTALLER_BACKUP_KEEP="${INSTALLER_BACKUP_KEEP:-3}"
+RUNTIME_BACKUP_KEEP="${RUNTIME_BACKUP_KEEP:-3}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
@@ -757,43 +758,96 @@ choose_existing_install_action() {
     done
 }
 
-prune_old_installer_backups() {
-    local target_dir="$1"
-    local keep_count="${INSTALLER_BACKUP_KEEP:-3}"
+prune_old_runtime_backups() {
     local backup_file
 
-    if [[ ! -d "${target_dir}" ]]; then
+    if [[ ! -d "${BACKUP_DIR}" ]]; then
         return
     fi
 
     while IFS= read -r backup_file; do
         rm -f "${backup_file}" 2>/dev/null || true
-    done < <(find "${target_dir}" -maxdepth 1 -type f \( -name '.installer-local-changes-*' -o -name '.installer-untracked-files-*' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk -v keep="${keep_count}" 'NR > keep { sub(/^[^ ]+ /, ""); print }')
+    done < <(find "${BACKUP_DIR}" -maxdepth 1 -type f -name "${APP_NAME}-*" -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk -v keep="${RUNTIME_BACKUP_KEEP:-3}" 'NR > keep { sub(/^[^ ]+ /, ""); print }')
 }
 
-backup_local_repo_changes() {
+cleanup_legacy_repo_backups() {
+    local target_dir="$1"
+
+    if [[ ! -d "${target_dir}" ]]; then
+        return
+    fi
+
+    find "${target_dir}" -maxdepth 1 -type f \( -name '.installer-local-changes-*' -o -name '.installer-untracked-files-*' \) -delete 2>/dev/null || true
+}
+
+db_dump_client() {
+    if command_exists mariadb-dump; then
+        printf '%s\n' mariadb-dump
+    elif command_exists mysqldump; then
+        printf '%s\n' mysqldump
+    else
+        return 1
+    fi
+}
+
+backup_runtime_state() {
+    local backup_stamp
+    local dump_client
+    local dump_file
+
+    mkdir -p "${BACKUP_DIR}"
+    chmod 700 "${BACKUP_DIR}" 2>/dev/null || true
+    prune_old_runtime_backups
+    cleanup_legacy_repo_backups "${INSTALL_DIR}"
+
+    backup_stamp="$(date +%Y%m%d%H%M%S)"
+
+    if [[ -f "${ENV_FILE}" ]]; then
+        cp -a "${ENV_FILE}" "${BACKUP_DIR}/${APP_NAME}-env-${backup_stamp}.env"
+        info "Backed up environment file to ${BACKUP_DIR}/${APP_NAME}-env-${backup_stamp}.env"
+    fi
+
+    if [[ -f "${STATE_FILE}" ]]; then
+        cp -a "${STATE_FILE}" "${BACKUP_DIR}/${APP_NAME}-state-${backup_stamp}.conf"
+        info "Backed up installer state to ${BACKUP_DIR}/${APP_NAME}-state-${backup_stamp}.conf"
+    fi
+
+    if [[ -f "${SERVICE_FILE}" ]]; then
+        cp -a "${SERVICE_FILE}" "${BACKUP_DIR}/${APP_NAME}-service-${backup_stamp}.service"
+    fi
+
+    if [[ -f "${NGINX_CONF_PATH}" ]]; then
+        cp -a "${NGINX_CONF_PATH}" "${BACKUP_DIR}/${APP_NAME}-nginx-${backup_stamp}.conf"
+    fi
+
+    if [[ "${USE_LOCAL_DB:-1}" == "1" && ( "${DB_HOST:-127.0.0.1}" == "127.0.0.1" || "${DB_HOST:-localhost}" == "localhost" ) && -n "${DB_NAME:-}" ]]; then
+        if dump_client="$(db_dump_client 2>/dev/null)"; then
+            dump_file="${BACKUP_DIR}/${APP_NAME}-db-${backup_stamp}.sql.gz"
+            if "${dump_client}" --protocol=socket -u root --single-transaction --quick --skip-lock-tables "${DB_NAME}" | gzip -c > "${dump_file}"; then
+                info "Backed up MariaDB database to ${dump_file}"
+            else
+                rm -f "${dump_file}" 2>/dev/null || true
+                warn "Database backup failed for ${DB_NAME}. Continuing without a DB dump."
+            fi
+        else
+            warn "Could not find mysqldump/mariadb-dump. Continuing without a DB dump backup."
+        fi
+    fi
+
+    prune_old_runtime_backups
+}
+
+warn_local_repo_changes() {
     local target_dir="$1"
 
     if [[ ! -d "${target_dir}/.git" ]]; then
         return
     fi
 
-    prune_old_installer_backups "${target_dir}"
+    cleanup_legacy_repo_backups "${target_dir}"
 
     if [[ -n "$(git_in_dir "${target_dir}" status --porcelain)" ]]; then
-        local backup_stamp="$(date +%Y%m%d%H%M%S)"
-        local patch_file="${target_dir}/.installer-local-changes-${backup_stamp}.patch"
-        git_in_dir "${target_dir}" diff HEAD > "${patch_file}" || true
-        warn "Local git changes were detected and backed up to ${patch_file}."
-
-        mapfile -t untracked_files < <(git_in_dir "${target_dir}" ls-files --others --exclude-standard)
-        if (( ${#untracked_files[@]} > 0 )); then
-            local archive_file="${target_dir}/.installer-untracked-files-${backup_stamp}.tar.gz"
-            tar -C "${target_dir}" -czf "${archive_file}" "${untracked_files[@]}" || true
-            warn "Untracked files were backed up to ${archive_file}."
-        fi
-
-        prune_old_installer_backups "${target_dir}"
+        warn "Local git changes were detected in ${target_dir}. Repo changes are no longer auto-backed up by the installer and will be discarded by update. Runtime configuration and the local database are backed up separately."
     fi
 }
 
@@ -805,7 +859,7 @@ sync_repo_to_dir() {
     mkdir -p "$(dirname "${target_dir}")"
 
     if [[ -d "${target_dir}/.git" ]]; then
-        backup_local_repo_changes "${target_dir}"
+        warn_local_repo_changes "${target_dir}"
         info "Updating repository in ${target_dir}"
         git_in_dir "${target_dir}" remote set-url origin "${repo_url}" || true
         retry 3 git_in_dir "${target_dir}" fetch --prune origin
@@ -1663,6 +1717,11 @@ install_or_update() {
     detect_package_manager
     mapfile -t base_pkg_list < <(base_packages)
     install_packages "${base_pkg_list[@]}"
+
+    source_existing_env
+    if [[ "${INSTALLATION_EXISTS}" == "1" ]]; then
+        backup_runtime_state
+    fi
 
     detect_redis_service_name
     ensure_systemd_service nginx

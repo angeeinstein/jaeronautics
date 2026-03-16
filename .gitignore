@@ -26,6 +26,8 @@ env/
 *.mo
 *.pot
 *.log
+.installer-local-changes-*
+.installer-untracked-files-*
 
 # IDE/Editor specific files
 .vscode/
