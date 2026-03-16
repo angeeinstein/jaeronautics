@@ -109,3 +109,10 @@ sudo bash install.sh --mode uninstall
 cd /var/www/jaeronautics
 runuser -u jaeronautics -- env PYTHONPATH=/var/www/jaeronautics /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app create-admin you@example.com
 ```
+
+## Stripe Webhook Endpoint
+
+- Configure Stripe to send webhooks to `https://YOUR-DOMAIN/stripe-webhook`
+- If you use origin-only HTTP without public HTTPS, the public Stripe endpoint still needs to be the externally reachable HTTPS URL
+- A correct webhook request to this app should return `200 Success`; `405 Method Not Allowed` usually means Stripe is posting to the wrong URL
+- After fixing the endpoint in Stripe, use the dashboard `Resend` action for the failed events

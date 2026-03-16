@@ -487,6 +487,76 @@ def get_member_by_stripe_reference(customer_id=None, subscription_id=None, membe
 
 
 
+def get_member_by_email(email):
+    if not email:
+        return None
+    normalized_email = str(email).strip()
+    if not normalized_email:
+        return None
+    return Member.query.filter_by(email_private=normalized_email).first()
+
+
+
+def get_member_by_stripe_or_email(
+    customer_id=None,
+    subscription_id=None,
+    member_id=None,
+    user_id=None,
+    email=None,
+    fetch_customer_email=False,
+):
+    member = get_member_by_stripe_reference(
+        customer_id=customer_id,
+        subscription_id=subscription_id,
+        member_id=member_id,
+        user_id=user_id,
+    )
+    if member is not None:
+        return member
+
+    member = get_member_by_email(email)
+    if member is not None:
+        return member
+
+    if customer_id and fetch_customer_email:
+        try:
+            customer = stripe.Customer.retrieve(customer_id)
+        except Exception as exc:
+            current_app.logger.warning(
+                "Could not retrieve Stripe customer %s while resolving a pending member: %s",
+                customer_id,
+                exc,
+            )
+            return None
+
+        member = get_member_by_email(customer.get("email"))
+        if member is not None:
+            return member
+
+    return None
+
+
+
+def backfill_member_stripe_references(member, customer_id=None, subscription_id=None):
+    changed = False
+
+    if customer_id and isinstance(customer_id, str) and customer_id.startswith("cus_") and member.stripe_customer_id != customer_id:
+        member.stripe_customer_id = customer_id
+        changed = True
+
+    if (
+        subscription_id
+        and isinstance(subscription_id, str)
+        and subscription_id.startswith("sub_")
+        and member.stripe_subscription_id != subscription_id
+    ):
+        member.stripe_subscription_id = subscription_id
+        changed = True
+
+    return changed
+
+
+
 def update_member_paid_coverage(member, paid_on):
     coverage_year = paid_on.year
     if member.membership_ends_on and member.membership_ends_on >= paid_on:
@@ -2034,14 +2104,13 @@ def create_app():
                 member_data = json.loads(member_data_json)
                 customer_id = session.get("customer")
                 subscription_id = session.get("subscription")
-                member = get_member_by_stripe_reference(
+                member = get_member_by_stripe_or_email(
                     customer_id=customer_id,
                     subscription_id=subscription_id,
                     member_id=metadata.get("member_id"),
                     user_id=metadata.get("user_id"),
+                    email=member_data.get("email_private"),
                 )
-                if member is None:
-                    member = Member.query.filter_by(email_private=member_data.get("email_private")).first()
                 previously_active = member_has_active_access(member)
                 if member is None:
                     member = Member(created_at=get_now_utc(), payment_status="pending_checkout", is_active=False)
@@ -2049,9 +2118,7 @@ def create_app():
 
                 apply_member_profile(member, {**member_data, "terms_accepted": True})
                 member.pending_checkout_started_at = member.pending_checkout_started_at or get_now_utc()
-                member.stripe_customer_id = customer_id
-                if subscription_id and isinstance(subscription_id, str) and subscription_id.startswith("sub_"):
-                    member.stripe_subscription_id = subscription_id
+                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
 
                 if member.user is not None:
                     member.user.email = member.email_private
@@ -2122,8 +2189,13 @@ def create_app():
         elif event_type == "payment_intent.processing":
             payment_intent = event["data"]["object"]
             customer_id = payment_intent.get("customer")
-            member = get_member_by_stripe_reference(customer_id=customer_id)
+            member = get_member_by_stripe_or_email(
+                customer_id=customer_id,
+                email=payment_intent.get("receipt_email"),
+                fetch_customer_email=True,
+            )
             if member and not member_has_active_access(member):
+                backfill_member_stripe_references(member, customer_id=customer_id)
                 member.payment_status = "processing"
                 db.session.commit()
                 app.logger.info("Payment is processing for Stripe Customer ID: %s", customer_id)
@@ -2132,11 +2204,16 @@ def create_app():
             data_object = event["data"]["object"]
             customer_id = data_object.get("customer")
             subscription_id = data_object.get("subscription")
-            member = get_member_by_stripe_reference(customer_id=customer_id, subscription_id=subscription_id)
+            customer_email = data_object.get("customer_email") or data_object.get("receipt_email")
+            member = get_member_by_stripe_or_email(
+                customer_id=customer_id,
+                subscription_id=subscription_id,
+                email=customer_email,
+                fetch_customer_email=True,
+            )
             if member:
                 previous_status = member.payment_status
-                if subscription_id and isinstance(subscription_id, str) and subscription_id.startswith("sub_"):
-                    member.stripe_subscription_id = subscription_id
+                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
 
                 paid_timestamp = None
                 if event_type.startswith("invoice"):
@@ -2166,9 +2243,13 @@ def create_app():
             subscription = event["data"]["object"]
             customer_id = subscription.get("customer")
             subscription_id = subscription.get("id")
-            member = get_member_by_stripe_reference(customer_id=customer_id, subscription_id=subscription_id)
+            member = get_member_by_stripe_or_email(
+                customer_id=customer_id,
+                subscription_id=subscription_id,
+                fetch_customer_email=True,
+            )
             if member:
-                member.stripe_subscription_id = subscription_id
+                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
                 member.cancel_at_period_end = bool(subscription.get("cancel_at_period_end"))
                 if member.cancel_at_period_end and member_has_active_access(member):
                     member.payment_status = "cancel_scheduled"
@@ -2180,8 +2261,15 @@ def create_app():
             data_object = event["data"]["object"]
             customer_id = data_object.get("customer")
             subscription_id = data_object.get("subscription")
-            member = get_member_by_stripe_reference(customer_id=customer_id, subscription_id=subscription_id)
+            customer_email = data_object.get("customer_email") or data_object.get("receipt_email")
+            member = get_member_by_stripe_or_email(
+                customer_id=customer_id,
+                subscription_id=subscription_id,
+                email=customer_email,
+                fetch_customer_email=True,
+            )
             if member:
+                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
                 member.payment_status = "failed"
                 if not member_has_active_access(member):
                     member.is_active = False
@@ -2196,9 +2284,13 @@ def create_app():
             subscription = event["data"]["object"]
             customer_id = subscription.get("customer")
             subscription_id = subscription.get("id")
-            member = get_member_by_stripe_reference(customer_id=customer_id, subscription_id=subscription_id)
+            member = get_member_by_stripe_or_email(
+                customer_id=customer_id,
+                subscription_id=subscription_id,
+                fetch_customer_email=True,
+            )
             if member:
-                member.stripe_subscription_id = subscription_id or member.stripe_subscription_id
+                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
                 member.cancel_at_period_end = False
                 cancellation_details = subscription.get("cancellation_details", {})
                 reason = cancellation_details.get("reason")

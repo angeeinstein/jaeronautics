@@ -1359,6 +1359,31 @@ EOF
     chown -R "${APP_USER}:${APP_GROUP}" "${cloudflare_dir}"
 }
 
+print_stripe_webhook_help() {
+    local webhook_scheme="https"
+    local webhook_url=""
+
+    if [[ -z "${DOMAIN:-}" || "${DOMAIN}" == "_" ]]; then
+        webhook_url="http://SERVER_IP_OR_HOST/stripe-webhook"
+    else
+        if [[ "${ENABLE_SSL}" != "1" && "${USE_CLOUDFLARE_TUNNEL}" != "1" ]]; then
+            webhook_scheme="http"
+        fi
+        webhook_url="${webhook_scheme}://${DOMAIN}/stripe-webhook"
+    fi
+
+    printf '
+%b%s%b
+' "${COLOR_BOLD}" "Stripe Webhook" "${COLOR_RESET}"
+    printf '  Endpoint URL: %s
+' "${webhook_url}"
+    printf '  Expected response: 200 Success
+'
+    printf '  Note: A 405 Method Not Allowed from Stripe usually means the webhook URL is wrong.
+
+'
+}
+
 print_cloudflare_tunnel_help() {
     if [[ "${USE_CLOUDFLARE_TUNNEL}" != "1" ]]; then
         return
@@ -1718,6 +1743,7 @@ main() {
             print_summary
             install_or_update
             cleanup_bootstrap_dir
+            print_stripe_webhook_help
             print_cloudflare_tunnel_help
             success "Installation finished successfully."
             ;;
