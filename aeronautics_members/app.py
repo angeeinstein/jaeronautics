@@ -1417,14 +1417,15 @@ def create_app():
             flash(_("No membership profile is linked to this account yet."), "warning")
             return redirect(url_for("index"))
 
-        if request.args.get("refresh_billing") == "1" and member.stripe_customer_id:
+        if member.stripe_customer_id:
             try:
-                if sync_member_subscription_state_from_stripe(member):
+                stripe_state_changed = sync_member_subscription_state_from_stripe(member)
+                local_state_changed = sync_member_active_state(member)
+                if stripe_state_changed or local_state_changed:
                     db.session.commit()
             except stripe.StripeError as exc:
                 app.logger.warning("Could not refresh Stripe billing state for member_id=%s: %s", member.id, exc)
-
-        if sync_member_active_state(member):
+        elif sync_member_active_state(member):
             db.session.commit()
 
         pending_request = member.open_identity_change_request
