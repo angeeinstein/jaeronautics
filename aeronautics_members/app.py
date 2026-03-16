@@ -1280,6 +1280,41 @@ def create_app():
         else:
             click.echo(click.style(f"Promoted existing user to admin: {email}", fg="green"))
 
+    @app.cli.command("sync-member-billing")
+    @click.argument("email")
+    @with_appcontext
+    def sync_member_billing(email):
+        """Refreshes one member's billing state from Stripe and prints the result."""
+        normalized_email = (email or "").strip().lower()
+        member = db.session.execute(db.select(Member).filter_by(email_private=normalized_email)).scalar_one_or_none()
+        if member is None:
+            click.echo(click.style(f"No member found for {normalized_email}", fg="red"), err=True)
+            sys.exit(1)
+
+        changed = False
+        if member.stripe_customer_id:
+            changed = sync_member_subscription_state_from_stripe(member)
+        else:
+            click.echo(click.style("Member has no Stripe customer ID yet; nothing to sync from Stripe.", fg="yellow"))
+
+        if sync_member_active_state(member):
+            changed = True
+
+        if changed:
+            db.session.commit()
+        else:
+            db.session.rollback()
+
+        click.echo(click.style(f"Member: {member.email_private}", fg="green"))
+        click.echo(f"  payment_status: {member.payment_status}")
+        click.echo(f"  is_active: {member.is_active}")
+        click.echo(f"  cancel_at_period_end: {member.cancel_at_period_end}")
+        click.echo(f"  stripe_customer_id: {member.stripe_customer_id or '-'}")
+        click.echo(f"  stripe_subscription_id: {member.stripe_subscription_id or '-'}")
+        click.echo(f"  membership_ends_on: {member.membership_ends_on or '-'}")
+        click.echo(f"  renewal_due_on: {member.renewal_due_on or '-'}")
+        click.echo(f"  changed: {changed}")
+
     @app.cli.command("cleanup-pending-signups")
     @click.option("--days", default=PENDING_SIGNUP_RETENTION_DAYS, show_default=True, type=int)
     @with_appcontext
