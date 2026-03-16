@@ -9,9 +9,6 @@
         </div>
         <div class="text-lg-end">
             <a href="{{ url_for('login') }}" class="btn btn-secondary btn-sm mb-2">{{ _('Already have an account? Log in') }}</a>
-            <div>
-                <a href="{{ url_for('claim_account') }}" class="text-muted small">{{ _('Already a member without login access? Claim your account.') }}</a>
-            </div>
         </div>
     </div>
     <form method="POST" action="{{ url_for('process_membership') }}" class="space-y-6">
