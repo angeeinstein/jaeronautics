@@ -975,9 +975,10 @@ def get_portal_session(member):
     if not member or not member.stripe_customer_id:
         raise ValueError(_("No Stripe billing profile is available for this membership yet."))
 
+    refresh_token = int(datetime.now(timezone.utc).timestamp())
     return stripe.billing_portal.Session.create(
         customer=member.stripe_customer_id,
-        return_url=url_for("account", _external=True, refresh_billing=1),
+        return_url=url_for("account", _external=True, refresh_billing=1, rt=refresh_token),
     )
 
 
@@ -1218,6 +1219,7 @@ def create_app():
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         response.headers["Surrogate-Control"] = "no-store"
+        response.vary.add("Cookie")
         return response
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
