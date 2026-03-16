@@ -266,6 +266,24 @@ def to_membership_date(unix_timestamp):
 
 
 
+def subscription_has_scheduled_cancellation(subscription):
+    if not subscription:
+        return False
+
+    if bool(subscription.get("cancel_at_period_end")):
+        return True
+
+    cancel_at = subscription.get("cancel_at")
+    if cancel_at is None:
+        return False
+
+    try:
+        return int(cancel_at) > int(datetime.now(timezone.utc).timestamp())
+    except (TypeError, ValueError):
+        return False
+
+
+
 def first_day_of_year(year):
     return date(year, 1, 1)
 
@@ -2320,12 +2338,30 @@ def create_app():
             )
             if member:
                 backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
-                member.cancel_at_period_end = bool(subscription.get("cancel_at_period_end"))
+                member.cancel_at_period_end = subscription_has_scheduled_cancellation(subscription)
                 if member.cancel_at_period_end and member_has_active_access(member):
                     member.payment_status = "cancel_scheduled"
                 elif not member.cancel_at_period_end and member.payment_status == "cancel_scheduled":
                     member.payment_status = "paid" if member.is_active else member.payment_status
                 db.session.commit()
+                app.logger.info(
+                    "Subscription updated for member_id=%s customer=%s subscription=%s status=%s cancel_at_period_end=%s cancel_at=%s",
+                    member.id,
+                    customer_id,
+                    subscription_id,
+                    subscription.get("status"),
+                    subscription.get("cancel_at_period_end"),
+                    subscription.get("cancel_at"),
+                )
+            else:
+                app.logger.warning(
+                    "Subscription update webhook received, but no member was found for customer=%s subscription=%s status=%s cancel_at_period_end=%s cancel_at=%s",
+                    customer_id,
+                    subscription_id,
+                    subscription.get("status"),
+                    subscription.get("cancel_at_period_end"),
+                    subscription.get("cancel_at"),
+                )
 
         elif event_type in ["payment_intent.payment_failed", "invoice.payment_failed"]:
             data_object = event["data"]["object"]
