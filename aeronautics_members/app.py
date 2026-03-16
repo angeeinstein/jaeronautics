@@ -937,7 +937,7 @@ def sync_member_subscription_state_from_stripe(member):
         subscription_id=subscription.get("id"),
     )
 
-    cancel_at_period_end = bool(subscription.get("cancel_at_period_end"))
+    cancel_at_period_end = subscription_has_scheduled_cancellation(subscription)
     if member.cancel_at_period_end != cancel_at_period_end:
         member.cancel_at_period_end = cancel_at_period_end
         changed = True
