@@ -32,6 +32,7 @@ from sqlalchemy import inspect, text as sql_text
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.routing import BuildError
 
 try:
     from .db_models import db, MailAccount, Member, MemberProfileChangeRequest, Setting, User
@@ -1119,10 +1120,16 @@ def create_app():
     @app.context_processor
     def inject_language_switcher():
         def switch_lang_url(lang):
-            args = request.args.copy()
-            args["lang"] = lang
             endpoint = request.endpoint or "index"
-            return url_for(endpoint, **args)
+            values = dict(request.view_args or {})
+            values.update(request.args.to_dict(flat=True))
+            values["lang"] = lang
+            try:
+                return url_for(endpoint, **values)
+            except BuildError:
+                fallback_values = request.args.to_dict(flat=True)
+                fallback_values["lang"] = lang
+                return url_for("index", **fallback_values)
 
         return dict(switch_lang_url=switch_lang_url)
 
