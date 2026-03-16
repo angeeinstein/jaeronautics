@@ -472,6 +472,42 @@ body.bg-gray-100,
     color: inherit;
 }
 
+.accordion-item {
+    background-color: var(--ja-surface) !important;
+    border: 1px solid var(--ja-border) !important;
+}
+
+.accordion-button {
+    background-color: rgba(0, 223, 255, 0.12) !important;
+    color: var(--ja-text) !important;
+    box-shadow: none !important;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: rgba(0, 223, 255, 0.18) !important;
+    color: var(--ja-text) !important;
+    box-shadow: none !important;
+}
+
+.accordion-button::after {
+    filter: brightness(0) invert(1);
+}
+
+.accordion-body {
+    background-color: var(--ja-surface) !important;
+    color: var(--ja-text) !important;
+    border-top: 1px solid var(--ja-border) !important;
+}
+
+.accordion-body .border {
+    background-color: var(--ja-surface-alt) !important;
+}
+
+.accordion-body .text-muted,
+.accordion-button .text-muted {
+    color: var(--ja-muted) !important;
+}
+
 .card-header.bg-primary,
 .bg-primary {
     background-color: var(--ja-accent) !important;
