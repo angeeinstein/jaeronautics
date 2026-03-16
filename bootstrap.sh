@@ -2,10 +2,28 @@
 set -Eeuo pipefail
 
 INSTALL_URL="https://raw.githubusercontent.com/angeeinstein/jaeronautics/main/install.sh"
-TMP_SCRIPT="$(mktemp /tmp/jaeronautics-install.XXXXXX.sh)"
+TMP_SCRIPT=""
+
+create_tmp_script() {
+    local candidate_dir=""
+
+    for candidate_dir in /tmp /var/tmp /dev/shm; do
+        if [[ -d "${candidate_dir}" && -w "${candidate_dir}" ]]; then
+            if TMP_SCRIPT="$(mktemp "${candidate_dir}/jaeronautics-install.XXXXXX.sh" 2>/dev/null)"; then
+                return 0
+            fi
+        fi
+    done
+
+    echo "[ERR] Could not create a temporary installer file. The filesystem may be full." >&2
+    echo "[ERR] Free some space and retry. Useful checks: df -h, du -xh /var/www/jaeronautics | sort -h | tail" >&2
+    exit 1
+}
 
 cleanup() {
-    rm -f "${TMP_SCRIPT}"
+    if [[ -n "${TMP_SCRIPT}" ]]; then
+        rm -f "${TMP_SCRIPT}"
+    fi
 }
 trap cleanup EXIT
 
@@ -42,5 +60,6 @@ run_installer() {
     exec sudo -E bash "${TMP_SCRIPT}" "$@"
 }
 
+create_tmp_script
 download_installer
 run_installer "$@"

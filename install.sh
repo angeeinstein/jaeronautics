@@ -16,6 +16,7 @@ DEFAULT_RATELIMIT_STORAGE_URI="redis://127.0.0.1:6379/0"
 STATE_DIR="/etc/jaeronautics"
 STATE_FILE="${STATE_DIR}/install.conf"
 BOOTSTRAP_DIR="/tmp/${APP_NAME}-installer-bootstrap"
+INSTALLER_BACKUP_KEEP="${INSTALLER_BACKUP_KEEP:-3}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
@@ -345,6 +346,31 @@ install_packages() {
             retry 3 yum install -y "$@"
             ;;
     esac
+}
+
+cleanup_package_caches() {
+    local app_home=""
+
+    case "${PACKAGE_MANAGER:-}" in
+        apt)
+            apt-get clean || true
+            rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+            ;;
+        dnf)
+            dnf clean all || true
+            ;;
+        yum)
+            yum clean all || true
+            ;;
+    esac
+
+    rm -rf /root/.cache/pip 2>/dev/null || true
+    if [[ -n "${APP_USER:-}" ]] && id -u "${APP_USER}" >/dev/null 2>&1; then
+        app_home="$(getent passwd "${APP_USER}" | cut -d: -f6)"
+        if [[ -n "${app_home}" ]]; then
+            rm -rf "${app_home}/.cache/pip" 2>/dev/null || true
+        fi
+    fi
 }
 
 bootstrap_packages() {
@@ -731,12 +757,28 @@ choose_existing_install_action() {
     done
 }
 
+prune_old_installer_backups() {
+    local target_dir="$1"
+    local keep_count="${INSTALLER_BACKUP_KEEP:-3}"
+    local backup_file
+
+    if [[ ! -d "${target_dir}" ]]; then
+        return
+    fi
+
+    while IFS= read -r backup_file; do
+        rm -f "${backup_file}" 2>/dev/null || true
+    done < <(find "${target_dir}" -maxdepth 1 -type f \( -name '.installer-local-changes-*' -o -name '.installer-untracked-files-*' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk -v keep="${keep_count}" 'NR > keep { sub(/^[^ ]+ /, ""); print }')
+}
+
 backup_local_repo_changes() {
     local target_dir="$1"
 
     if [[ ! -d "${target_dir}/.git" ]]; then
         return
     fi
+
+    prune_old_installer_backups "${target_dir}"
 
     if [[ -n "$(git_in_dir "${target_dir}" status --porcelain)" ]]; then
         local backup_stamp="$(date +%Y%m%d%H%M%S)"
@@ -746,10 +788,12 @@ backup_local_repo_changes() {
 
         mapfile -t untracked_files < <(git_in_dir "${target_dir}" ls-files --others --exclude-standard)
         if (( ${#untracked_files[@]} > 0 )); then
-            local archive_file="${target_dir}/.installer-untracked-files-${backup_stamp}.tar"
-            tar -C "${target_dir}" -cf "${archive_file}" "${untracked_files[@]}" || true
+            local archive_file="${target_dir}/.installer-untracked-files-${backup_stamp}.tar.gz"
+            tar -C "${target_dir}" -czf "${archive_file}" "${untracked_files[@]}" || true
             warn "Untracked files were backed up to ${archive_file}."
         fi
+
+        prune_old_installer_backups "${target_dir}"
     fi
 }
 
@@ -800,6 +844,10 @@ bootstrap_self_update() {
     fi
     if [[ -f "${STATE_FILE}" || ( -n "${existing_remote}" && "$(normalize_repo_url "${existing_remote}")" == "$(normalize_repo_url "${REPO_URL}")" ) ]]; then
         bootstrap_target="${INSTALL_DIR}"
+    fi
+
+    if [[ "${bootstrap_target}" == "${BOOTSTRAP_DIR}" ]]; then
+        rm -rf "${BOOTSTRAP_DIR}" 2>/dev/null || true
     fi
 
     sync_repo_to_dir "${bootstrap_target}" "${REPO_URL}" "${BRANCH}"
@@ -905,8 +953,8 @@ ensure_virtualenv() {
     chown -R "${APP_USER}:${APP_GROUP}" "${INSTALL_DIR}/.venv"
 
     step "Installing Python dependencies"
-    run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --upgrade pip wheel
-    run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --upgrade -r "${INSTALL_DIR}/requirements.txt"
+    run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel
+    run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade -r "${INSTALL_DIR}/requirements.txt"
 }
 
 collect_configuration() {
@@ -1646,6 +1694,7 @@ install_or_update() {
     write_state_file
     verify_installation
     verify_cloudflare_tunnel
+    cleanup_package_caches
 }
 
 uninstall_everything() {

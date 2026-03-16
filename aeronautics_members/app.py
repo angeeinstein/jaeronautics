@@ -1292,8 +1292,14 @@ def create_app():
             sys.exit(1)
 
         changed = False
+        stripe_subscription = None
         if member.stripe_customer_id:
-            changed = sync_member_subscription_state_from_stripe(member)
+            try:
+                stripe_subscription = get_latest_stripe_subscription_for_member(member)
+                changed = sync_member_subscription_state_from_stripe(member)
+            except stripe.StripeError as exc:
+                click.echo(click.style(f"Stripe sync failed: {exc}", fg="red"), err=True)
+                sys.exit(1)
         else:
             click.echo(click.style("Member has no Stripe customer ID yet; nothing to sync from Stripe.", fg="yellow"))
 
@@ -1313,6 +1319,16 @@ def create_app():
         click.echo(f"  stripe_subscription_id: {member.stripe_subscription_id or '-'}")
         click.echo(f"  membership_ends_on: {member.membership_ends_on or '-'}")
         click.echo(f"  renewal_due_on: {member.renewal_due_on or '-'}")
+        if stripe_subscription is not None:
+            cancellation_details = stripe_subscription.get("cancellation_details") or {}
+            click.echo(f"  stripe_status: {stripe_subscription.get('status') or '-'}")
+            click.echo(f"  stripe_cancel_at_period_end: {stripe_subscription.get('cancel_at_period_end')}")
+            click.echo(f"  stripe_cancel_at: {stripe_subscription.get('cancel_at') or '-'}")
+            click.echo(f"  stripe_canceled_at: {stripe_subscription.get('canceled_at') or '-'}")
+            click.echo(f"  stripe_trial_end: {stripe_subscription.get('trial_end') or '-'}")
+            click.echo(f"  stripe_current_period_end: {stripe_subscription.get('current_period_end') or '-'}")
+            click.echo(f"  stripe_cancellation_reason: {cancellation_details.get('reason') or '-'}")
+            click.echo(f"  derived_cancel_scheduled: {subscription_has_scheduled_cancellation(stripe_subscription)}")
         click.echo(f"  changed: {changed}")
 
     @app.cli.command("cleanup-pending-signups")
