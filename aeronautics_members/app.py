@@ -1611,6 +1611,11 @@ def create_app():
     @app.route("/account", methods=["GET"])
     @login_required
     def account():
+        if not request.args.get("rt"):
+            redirect_args = {"rt": str(int(datetime.now(timezone.utc).timestamp() * 1000))}
+            if request.args.get("refresh_billing") == "1":
+                redirect_args["refresh_billing"] = "1"
+            return redirect(url_for("account", **redirect_args))
         return render_account_dashboard()
 
     @app.route("/account/profile", methods=["POST"])
