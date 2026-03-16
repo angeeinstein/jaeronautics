@@ -1209,6 +1209,17 @@ def create_app():
         if version:
             values["v"] = version
 
+    @app.after_request
+    def disable_dynamic_page_caching(response):
+        if request.endpoint == "static":
+            return response
+
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["Surrogate-Control"] = "no-store"
+        return response
+
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
     stripe.api_key = STRIPE_SECRET_KEY
 
