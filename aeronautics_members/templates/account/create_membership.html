@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Create Membership Profile') }}{% endblock %}
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-xl-10">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="mb-0">{{ _('Create Membership Profile') }}</h2>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">{{ _('This account does not have a linked membership profile yet. Complete the form below to start your membership with this login.') }}</p>
+                    {% if form.errors %}
+                        <div class="alert alert-danger">
+                            {{ _('Please correct the highlighted errors and try again.') }}
+                        </div>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('create_membership_profile') }}" novalidate>
+                        {{ form.hidden_tag() }}
+                        <div class="row g-4">
+                            <div class="col-md-6">{{ form.salutation.label(class='form-label') }}{{ form.salutation(class='form-select') }}</div>
+                            <div class="col-md-6">{{ form.title.label(class='form-label') }}{{ form.title(class='form-control') }}</div>
+                            <div class="col-md-6">{{ form.first_name.label(class='form-label') }}{{ form.first_name(class='form-control') }}</div>
+                            <div class="col-md-6">{{ form.last_name.label(class='form-label') }}{{ form.last_name(class='form-control') }}</div>
+                            <div class="col-md-8">{{ form.street.label(class='form-label') }}{{ form.street(class='form-control') }}</div>
+                            <div class="col-md-4">{{ form.house_number.label(class='form-label') }}{{ form.house_number(class='form-control') }}</div>
+                            <div class="col-md-4">{{ form.postal_code.label(class='form-label') }}{{ form.postal_code(class='form-control') }}</div>
+                            <div class="col-md-4">{{ form.city.label(class='form-label') }}{{ form.city(class='form-control') }}</div>
+                            <div class="col-md-4">{{ form.country.label(class='form-label') }}{{ form.country(class='form-select') }}</div>
+                            <div class="col-md-6">{{ form.phone_private.label(class='form-label') }}{{ form.phone_private(class='form-control') }}</div>
+                            <div class="col-md-6">
+                                {{ form.email_private.label(class='form-label') }}
+                                {{ form.email_private(class='form-control', readonly=true) }}
+                                <small class="text-muted">{{ _('This membership will use your current account email address.') }}</small>
+                            </div>
+                            <div class="col-md-6">{{ form.phone_work.label(class='form-label') }}{{ form.phone_work(class='form-control') }}</div>
+                            <div class="col-md-6">{{ form.email_work.label(class='form-label') }}{{ form.email_work(class='form-control') }}</div>
+                            <div class="col-md-6">{{ form.year_group.label(class='form-label') }}{{ form.year_group(class='form-control') }}</div>
+                            <div class="col-12">
+                                <label class="form-label d-block">{{ form.payment_method.label.text }}</label>
+                                {% for subfield in form.payment_method %}
+                                    <div class="form-check form-check-inline">
+                                        {{ subfield(class='form-check-input') }}
+                                        <label class="form-check-label" for="{{ subfield.id }}">{{ subfield.label.text }}</label>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    {{ form.terms_accepted(class='form-check-input') }}
+                                    <label class="form-check-label" for="{{ form.terms_accepted.id }}">{{ form.terms_accepted.label.text }}</label>
+                                </div>
+                            </div>
+                            <div class="col-12 d-flex gap-2">
+                                <a href="{{ url_for('admin_dashboard' if current_user.has_role('admin') else 'index') }}" class="btn btn-secondary">{{ _('Back') }}</a>
+                                {{ form.submit(class='btn btn-primary') }}
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

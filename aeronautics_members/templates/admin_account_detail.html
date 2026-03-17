@@ -1,0 +1,127 @@
+{% extends "admin_layout.html" %}
+{% set page_title = _('Account Details') %}
+{% set page_description = user_record.email %}
+{% block admin_content %}
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Account') }}</h4>
+                <a href="{{ url_for('admin_accounts') }}" class="btn btn-sm btn-secondary">{{ _('Back to Accounts') }}</a>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">{{ _('Email') }}</dt>
+                    <dd class="col-sm-7">{{ user_record.email }}</dd>
+                    <dt class="col-sm-5">{{ _('Forum Username') }}</dt>
+                    <dd class="col-sm-7">{{ user_record.forum_username or '-' }}</dd>
+                    <dt class="col-sm-5">{{ _('Roles') }}</dt>
+                    <dd class="col-sm-7">
+                        {% if user_record.roles %}
+                            {% for role in user_record.roles %}
+                                <span class="badge text-bg-secondary me-1">{{ role.label }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <span class="text-muted">{{ _('None') }}</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-5">{{ _('Email Verified') }}</dt>
+                    <dd class="col-sm-7">{% if user_record.email_is_verified %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
+                </dl>
+                <div class="d-flex flex-wrap gap-2 mt-4">
+                    {% if can_grant_admin %}
+                        <form method="POST" action="{{ url_for('grant_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-primary">{{ _('Grant Admin Access') }}</button>
+                        </form>
+                    {% endif %}
+                    {% if can_revoke_admin %}
+                        <form method="POST" action="{{ url_for('revoke_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke admin access?') }}');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger">{{ _('Revoke Admin Access') }}</button>
+                        </form>
+                    {% endif %}
+                    {% if current_user.id == user_record.id and not member %}
+                        <a href="{{ url_for('create_membership_profile') }}" class="btn btn-secondary">{{ _('Create Membership Profile') }}</a>
+                    {% endif %}
+                </div>
+                {% if user_record.has_role('admin') and current_user.id == user_record.id %}
+                    <div class="alert alert-secondary mt-4 mb-0">{{ _('You cannot revoke your own admin access from the UI.') }}</div>
+                {% elif user_record.has_role('admin') and admin_count <= 1 %}
+                    <div class="alert alert-secondary mt-4 mb-0">{{ _('This is the last remaining admin account.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card h-100">
+            <div class="card-header"><h4 class="mb-0">{{ _('Membership') }}</h4></div>
+            <div class="card-body">
+                {% if member %}
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">{{ _('Name') }}</dt>
+                        <dd class="col-sm-8">{{ member.title or '' }} {{ member.first_name }} {{ member.last_name }}</dd>
+                        <dt class="col-sm-4">{{ _('Private Email') }}</dt>
+                        <dd class="col-sm-8">{{ member.email_private }}</dd>
+                        <dt class="col-sm-4">{{ _('Year Group') }}</dt>
+                        <dd class="col-sm-8">{{ member.year_group }}</dd>
+                        <dt class="col-sm-4">{{ _('Payment Status') }}</dt>
+                        <dd class="col-sm-8">{{ member.payment_status|replace('_', ' ')|title }}</dd>
+                        <dt class="col-sm-4">{{ _('Active') }}</dt>
+                        <dd class="col-sm-8">{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
+                        <dt class="col-sm-4">{{ _('Coverage Ends') }}</dt>
+                        <dd class="col-sm-8">{{ member.membership_ends_on.strftime('%Y-%m-%d') if member.membership_ends_on else '-' }}</dd>
+                        <dt class="col-sm-4">{{ _('Next Renewal') }}</dt>
+                        <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('Not scheduled') }}{% else %}{{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else '-' }}{% endif %}</dd>
+                        <dt class="col-sm-4">{{ _('Auto-Renewal') }}</dt>
+                        <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled for the end of the covered year.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
+                    </dl>
+                {% else %}
+                    <div class="alert alert-info mb-0">{{ _('This account does not have a linked membership profile.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header"><h4 class="mb-0">{{ _('Recent Audit Log') }}</h4></div>
+    <div class="card-body">
+        {% if recent_logs %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('When') }}</th>
+                            <th>{{ _('Category') }}</th>
+                            <th>{{ _('Event') }}</th>
+                            <th>{{ _('Actor') }}</th>
+                            <th>{{ _('Details') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in recent_logs %}
+                            <tr>
+                                <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ entry.category|replace('_', ' ')|title }}</td>
+                                <td>{{ entry.event_type|replace('_', ' ')|title }}</td>
+                                <td>{{ entry.actor_user.email if entry.actor_user else '-' }}</td>
+                                <td>
+                                    <details>
+                                        <summary>{{ _('Show') }}</summary>
+                                        {% if entry.before_state %}<pre class="mt-2 mb-2">{{ entry.before_state | tojson(indent=2) }}</pre>{% endif %}
+                                        {% if entry.after_state %}<pre class="mt-2 mb-2">{{ entry.after_state | tojson(indent=2) }}</pre>{% endif %}
+                                        {% if entry.event_metadata %}<pre class="mt-2 mb-0">{{ entry.event_metadata | tojson(indent=2) }}</pre>{% endif %}
+                                    </details>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info mb-0">{{ _('No recent log entries for this account.') }}</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

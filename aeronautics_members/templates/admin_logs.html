@@ -1,0 +1,89 @@
+{% extends "admin_layout.html" %}
+{% set page_title = _('Audit Logs') %}
+{% set page_description = _('Browse recorded admin, member, and profile activity.') %}
+{% block admin_content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('admin_logs') }}" class="row g-3 align-items-end">
+            <div class="col-lg-5">
+                <label class="form-label" for="log-q">{{ _('Search') }}</label>
+                <input type="text" class="form-control" id="log-q" name="q" value="{{ search_term }}" placeholder="{{ _('Actor, target email, category, or event') }}">
+            </div>
+            <div class="col-md-4 col-lg-3">
+                <label class="form-label" for="log-category">{{ _('Category') }}</label>
+                <select class="form-select" id="log-category" name="category">
+                    <option value="all" {% if category == 'all' %}selected{% endif %}>{{ _('All') }}</option>
+                    {% for option in categories %}
+                        <option value="{{ option }}" {% if category == option %}selected{% endif %}>{{ option|replace('_', ' ')|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">{{ _('Apply Filters') }}</button>
+                <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">{{ _('Audit Log') }}</h4>
+        <span class="text-muted small">{{ pagination.total }} {{ _('entry/entries') }}</span>
+    </div>
+    <div class="card-body">
+        {% if pagination.items %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>{{ _('When') }}</th>
+                            <th>{{ _('Category') }}</th>
+                            <th>{{ _('Event') }}</th>
+                            <th>{{ _('Actor') }}</th>
+                            <th>{{ _('Target') }}</th>
+                            <th>{{ _('Details') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in pagination.items %}
+                            <tr>
+                                <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ entry.category|replace('_', ' ')|title }}</td>
+                                <td>{{ entry.event_type|replace('_', ' ')|title }}</td>
+                                <td>{{ entry.actor_user.email if entry.actor_user else '-' }}</td>
+                                <td>{{ entry.target_user.email if entry.target_user else (entry.target_member.email_private if entry.target_member else '-') }}</td>
+                                <td>
+                                    <details>
+                                        <summary>{{ _('Show') }}</summary>
+                                        {% if entry.before_state %}<pre class="mt-2 mb-2">{{ entry.before_state | tojson(indent=2) }}</pre>{% endif %}
+                                        {% if entry.after_state %}<pre class="mt-2 mb-2">{{ entry.after_state | tojson(indent=2) }}</pre>{% endif %}
+                                        {% if entry.event_metadata %}<pre class="mt-2 mb-0">{{ entry.event_metadata | tojson(indent=2) }}</pre>{% endif %}
+                                    </details>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if pagination.pages > 1 %}
+                <nav class="mt-4" aria-label="{{ _('Audit Log Pagination') }}">
+                    <ul class="pagination mb-0">
+                        {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('admin_logs', q=search_term, category=category, page=page_num) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </nav>
+            {% endif %}
+        {% else %}
+            <div class="alert alert-info mb-0">{{ _('No log entries matched the selected filters.') }}</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

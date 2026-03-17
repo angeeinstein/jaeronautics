@@ -1203,7 +1203,7 @@ initialize_database_schema() {
 }
 
 count_admin_accounts() {
-    run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/python" -c "from sqlalchemy import func; from aeronautics_members.app import create_app; from aeronautics_members.db_models import db, User; app=create_app(); ctx=app.app_context(); ctx.push(); print(db.session.scalar(db.select(func.count()).select_from(User).where(User.role == 'admin')) or 0); ctx.pop()"
+    run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/python" -c "from sqlalchemy import func; from aeronautics_members.app import create_app; from aeronautics_members.db_models import Role, User, db; app=create_app(); ctx=app.app_context(); ctx.push(); print(db.session.scalar(db.select(func.count()).select_from(User).where(User.roles.any(Role.slug == 'admin'))) or 0); ctx.pop()"
 }
 
 ensure_admin_account() {

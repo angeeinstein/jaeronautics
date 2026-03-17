@@ -1,0 +1,169 @@
+{% extends "admin_layout.html" %}
+{% set page_title = _('Approvals') %}
+{% set page_description = _('Review pending identity changes and browse the request history.') %}
+{% block admin_content %}
+<div class="card mb-4">
+    <div class="card-header"><h4 class="mb-0">{{ _('Pending Identity Change Requests') }}</h4></div>
+    <div class="card-body">
+        {% if pending_identity_requests %}
+            <div class="accordion" id="identityRequestAccordion">
+                {% for request_record in pending_identity_requests %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="identity-request-heading-{{ request_record.id }}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#identity-request-body-{{ request_record.id }}" aria-expanded="false" aria-controls="identity-request-body-{{ request_record.id }}">
+                                <span>
+                                    {{ request_record.member.email_private }}
+                                    <span class="text-muted">- {{ request_record.member.first_name }} {{ request_record.member.last_name }} -> {{ request_record.requested_full_name }}</span>
+                                </span>
+                            </button>
+                        </h2>
+                        <div id="identity-request-body-{{ request_record.id }}" class="accordion-collapse collapse" aria-labelledby="identity-request-heading-{{ request_record.id }}" data-bs-parent="#identityRequestAccordion">
+                            <div class="accordion-body">
+                                <div class="row g-4">
+                                    <div class="col-lg-6">
+                                        <div class="border p-3 h-100">
+                                            <h5>{{ _('Current Data') }}</h5>
+                                            <p class="mb-2"><strong>{{ _('Name:') }}</strong> {{ request_record.member.title or '' }} {{ request_record.member.first_name }} {{ request_record.member.last_name }}</p>
+                                            <p class="mb-2"><strong>{{ _('Salutation:') }}</strong> {{ request_record.member.salutation }}</p>
+                                            <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.member.year_group }}</p>
+                                            <p class="mb-0"><strong>{{ _('Forum Username:') }}</strong> {{ request_record.current_forum_username or _('Not set') }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <div class="border p-3 h-100">
+                                            <h5>{{ _('Requested Data') }}</h5>
+                                            <p class="mb-2"><strong>{{ _('Name:') }}</strong> {{ request_record.requested_title or '' }} {{ request_record.requested_first_name }} {{ request_record.requested_last_name }}</p>
+                                            <p class="mb-2"><strong>{{ _('Salutation:') }}</strong> {{ request_record.requested_salutation }}</p>
+                                            <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.requested_year_group }}</p>
+                                            <p class="mb-2"><strong>{{ _('Suggested Forum Username:') }}</strong> {{ request_record.suggested_forum_username }}</p>
+                                            {% if request_record.member_note %}
+                                                <p class="mb-0"><strong>{{ _('Member Note:') }}</strong> {{ request_record.member_note }}</p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row g-4 mt-1">
+                                    <div class="col-lg-6">
+                                        <form method="POST" action="{{ url_for('approve_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <h5>{{ _('Approve Request') }}</h5>
+                                            {% if request_record.username_would_change %}
+                                                <div class="form-check mb-3">
+                                                    <input class="form-check-input" type="checkbox" name="override_forum_username" id="override_forum_username_{{ request_record.id }}" value="1">
+                                                    <label class="form-check-label" for="override_forum_username_{{ request_record.id }}">{{ _('Also update the stored forum username') }}</label>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="forum_username_override_{{ request_record.id }}" class="form-label">{{ _('Forum Username Override') }}</label>
+                                                    <input type="text" class="form-control" name="forum_username_override" id="forum_username_override_{{ request_record.id }}" value="{{ request_record.suggested_forum_username }}">
+                                                    <small class="text-muted">{{ _('Leave the suggested value or enter a custom username. A numeric suffix will be added automatically if needed.') }}</small>
+                                                </div>
+                                            {% endif %}
+                                            <div class="mb-3">
+                                                <label for="approve_admin_note_{{ request_record.id }}" class="form-label">{{ _('Admin Note') }}</label>
+                                                <textarea class="form-control" name="admin_note" id="approve_admin_note_{{ request_record.id }}" rows="3" placeholder="{{ _('Optional note for the member or audit trail') }}"></textarea>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary">{{ _('Approve Request') }}</button>
+                                        </form>
+                                    </div>
+                                    <div class="col-lg-6">
+                                        <form method="POST" action="{{ url_for('reject_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <h5>{{ _('Reject Request') }}</h5>
+                                            <div class="mb-3">
+                                                <label for="reject_admin_note_{{ request_record.id }}" class="form-label">{{ _('Admin Note') }}</label>
+                                                <textarea class="form-control" name="admin_note" id="reject_admin_note_{{ request_record.id }}" rows="3" placeholder="{{ _('Optional explanation for the rejection') }}"></textarea>
+                                            </div>
+                                            <button type="submit" class="btn btn-danger">{{ _('Reject Request') }}</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info mb-0">{{ _('There are no pending identity change requests right now.') }}</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><h4 class="mb-0">{{ _('Request History') }}</h4></div>
+    <div class="card-body">
+        {% if history_pagination.items %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>{{ _('When') }}</th>
+                            <th>{{ _('Member') }}</th>
+                            <th>{{ _('Requested Name') }}</th>
+                            <th>{{ _('Status') }}</th>
+                            <th>{{ _('Reviewed By') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for request_record in history_pagination.items %}
+                            <tr>
+                                <td>{{ (request_record.reviewed_at or request_record.created_at).strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ request_record.member.email_private }}</td>
+                                <td>{{ request_record.requested_full_name }}</td>
+                                <td>{{ request_record.status|replace('_', ' ')|title }}</td>
+                                <td>{{ request_record.reviewed_by.email if request_record.reviewed_by else '-' }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if history_pagination.pages > 1 %}
+                <nav class="mt-4" aria-label="{{ _('Approval History Pagination') }}">
+                    <ul class="pagination mb-0">
+                        {% for page_num in history_pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == history_pagination.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('admin_approvals', page=page_num) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </nav>
+            {% endif %}
+        {% else %}
+            <div class="alert alert-info mb-0">{{ _('There is no approval history yet.') }}</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h4 class="mb-0">{{ _('Recent Related Log Entries') }}</h4></div>
+    <div class="card-body">
+        {% if recent_logs %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('When') }}</th>
+                            <th>{{ _('Event') }}</th>
+                            <th>{{ _('Target') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in recent_logs %}
+                            <tr>
+                                <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ entry.event_type|replace('_', ' ')|title }}</td>
+                                <td>{{ entry.target_user.email if entry.target_user else (entry.target_member.email_private if entry.target_member else '-') }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info mb-0">{{ _('No related log entries yet.') }}</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

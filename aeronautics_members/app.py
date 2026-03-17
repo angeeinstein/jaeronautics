@@ -28,16 +28,18 @@ from flask_limiter import Limiter
 from flask_limiter.errors import RateLimitExceeded
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf.csrf import CSRFError, CSRFProtect
-from sqlalchemy import inspect, text as sql_text
+from sqlalchemy import func, inspect, or_, text as sql_text
+from sqlalchemy.orm import aliased, selectinload
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.routing import BuildError
 
 try:
-    from .db_models import db, MailAccount, Member, MemberProfileChangeRequest, Setting, User
+    from .db_models import AuditLog, Role, UserRole, db, MailAccount, Member, MemberProfileChangeRequest, Setting, User
     from .forms import (
         ChangePasswordForm,
+        CreateMembershipProfileForm,
         EmailRequestForm,
         IdentityChangeRequestForm,
         LoginForm,
@@ -50,9 +52,10 @@ try:
     )
     from .mail_utils import load_mail_accounts_config, send_mail
 except ImportError:
-    from db_models import db, MailAccount, Member, MemberProfileChangeRequest, Setting, User
+    from db_models import AuditLog, Role, UserRole, db, MailAccount, Member, MemberProfileChangeRequest, Setting, User
     from forms import (
         ChangePasswordForm,
+        CreateMembershipProfileForm,
         EmailRequestForm,
         IdentityChangeRequestForm,
         LoginForm,
@@ -133,7 +136,7 @@ def load_user(user_id):
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.role != "admin":
+        if not current_user.is_authenticated or not current_user.has_role("admin"):
             flash(_("You do not have permission to access this page."), "danger")
             return redirect(url_for("index"))
         return f(*args, **kwargs)
@@ -167,6 +170,10 @@ RESUMABLE_MEMBER_STATUSES = {"pending_checkout", "processing", "failed", "unpaid
 TOKEN_MAX_AGE_VERIFY_EMAIL = 60 * 60 * 24 * 7
 TOKEN_MAX_AGE_PASSWORD_RESET = 60 * 60 * 24
 PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
+ADMIN_DIRECTORY_PAGE_SIZE = 50
+AUDIT_LOG_PAGE_SIZE = 50
+APPROVAL_HISTORY_PAGE_SIZE = 25
+
 
 
 def build_forum_username_base(first_name, last_name, year_group):
@@ -758,6 +765,116 @@ def has_identity_changes(member, form_data):
 
 
 
+def get_role(slug, label=None, description=None):
+    role = db.session.execute(db.select(Role).filter_by(slug=slug)).scalar_one_or_none()
+    if role is None:
+        role = Role(slug=slug, label=label or slug.replace("_", " ").title(), description=description)
+        db.session.add(role)
+        db.session.flush()
+    elif label and role.label != label:
+        role.label = label
+    if description is not None and role.description != description:
+        role.description = description
+    return role
+
+
+
+def seed_default_roles():
+    get_role("admin", label="Admin", description="Can access the admin workspace.")
+
+
+
+def count_users_with_role(role_slug):
+    return db.session.scalar(
+        db.select(func.count()).select_from(User).where(User.roles.any(Role.slug == role_slug))
+    ) or 0
+
+
+
+def serialize_audit_value(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: serialize_audit_value(inner_value) for key, inner_value in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [serialize_audit_value(inner_value) for inner_value in value]
+    return value
+
+
+
+def snapshot_user_for_audit(user):
+    if user is None:
+        return None
+    return serialize_audit_value(
+        {
+            "id": user.id,
+            "email": user.email,
+            "forum_username": user.forum_username,
+            "roles": sorted(role.slug for role in user.roles),
+            "email_verified_at": user.email_verified_at,
+        }
+    )
+
+
+
+def snapshot_member_for_audit(member, fields=None):
+    if member is None:
+        return None
+    snapshot_fields = fields or MEMBER_PROFILE_FIELDS
+    payload = {field_name: getattr(member, field_name) for field_name in snapshot_fields}
+    payload.update(
+        {
+            "id": member.id,
+            "payment_status": member.payment_status,
+            "is_active": member.is_active,
+            "membership_starts_on": member.membership_starts_on,
+            "membership_ends_on": member.membership_ends_on,
+            "renewal_due_on": member.renewal_due_on,
+            "cancel_at_period_end": member.cancel_at_period_end,
+            "stripe_customer_id": member.stripe_customer_id,
+            "stripe_subscription_id": member.stripe_subscription_id,
+        }
+    )
+    return serialize_audit_value(payload)
+
+
+
+def snapshot_mail_account_for_audit(mail_account):
+    if mail_account is None:
+        return None
+    return serialize_audit_value(
+        {
+            "id": mail_account.id,
+            "account_key": mail_account.account_key,
+            "host": mail_account.host,
+            "port": mail_account.port,
+            "username": mail_account.username,
+            "starttls": mail_account.starttls,
+        }
+    )
+
+
+
+def log_audit_event(category, event_type, actor_user=None, target_user=None, target_member=None, before=None, after=None, metadata=None):
+    db.session.add(
+        AuditLog(
+            actor_user=actor_user,
+            target_user=target_user,
+            target_member=target_member,
+            category=category,
+            event_type=event_type,
+            before_state=serialize_audit_value(before) if before is not None else None,
+            after_state=serialize_audit_value(after) if after is not None else None,
+            event_metadata=serialize_audit_value(metadata) if metadata is not None else None,
+        )
+    )
+
+
+
 def get_current_member_for_user(user):
     if user is None:
         return None
@@ -777,8 +894,8 @@ def can_resume_payment(member):
 
 
 def get_member_portal_target(user):
-    if user.role == "admin":
-        return "admin"
+    if user.has_role("admin"):
+        return "admin_dashboard"
     return "account"
 
 
@@ -1012,8 +1129,6 @@ def ensure_user_schema():
         for statement in alter_statements:
             connection.execute(sql_text(statement))
 
-        connection.execute(sql_text("UPDATE users SET role = 'member' WHERE role IS NULL OR role = 'user'"))
-
         inspector = inspect(connection)
         unique_constraints = inspector.get_unique_constraints("users")
         indexes = inspector.get_indexes("users")
@@ -1085,6 +1200,34 @@ def ensure_member_schema():
 
 
 
+def backfill_legacy_admin_roles():
+    inspector = inspect(db.engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    if "role" not in columns:
+        return
+
+    admin_role = get_role("admin", label="Admin", description="Can access the admin workspace.")
+    admin_user_ids = [
+        row[0]
+        for row in db.session.execute(sql_text("SELECT id FROM users WHERE role = 'admin'"))
+    ]
+    if not admin_user_ids:
+        return
+
+    users = db.session.execute(db.select(User).where(User.id.in_(admin_user_ids))).scalars().all()
+    changed = False
+    for user in users:
+        if not user.has_role("admin"):
+            user.grant_role(admin_role)
+            changed = True
+    if changed:
+        db.session.commit()
+
+
+
 def backfill_member_user_links():
     changed = False
     members = db.session.execute(db.select(Member).order_by(Member.id.asc())).scalars().all()
@@ -1093,8 +1236,6 @@ def backfill_member_user_links():
             matched_user = db.session.execute(db.select(User).filter_by(email=member.email_private)).scalar_one_or_none()
             if matched_user is not None:
                 member.user = matched_user
-                if matched_user.role != "admin":
-                    matched_user.role = "member"
                 changed = True
 
         if member.user is not None and not member.user.forum_username:
@@ -1219,9 +1360,12 @@ def create_app():
         click.echo("Creating database tables...")
         try:
             db.create_all()
+            seed_default_roles()
             ensure_user_schema()
             ensure_member_schema()
+            backfill_legacy_admin_roles()
             backfill_member_user_links()
+            db.session.commit()
             click.echo("Database tables created successfully.")
         except Exception as e:
             click.echo(f"Error creating tables: {e}", err=True)
@@ -1263,22 +1407,36 @@ def create_app():
     @with_appcontext
     def create_admin(email, password):
         """Creates or promotes an admin user."""
-        user = db.session.execute(db.select(User).filter_by(email=email)).scalar_one_or_none()
+        normalized_email = (email or "").strip().lower()
+        seed_default_roles()
+        admin_role = get_role("admin", label="Admin", description="Can access the admin workspace.")
+        user = db.session.execute(db.select(User).filter_by(email=normalized_email)).scalar_one_or_none()
         created = user is None
 
         if created:
-            user = User(email=email, role="admin")
+            user = User(email=normalized_email)
             db.session.add(user)
-        else:
-            user.role = "admin"
 
+        before_user = snapshot_user_for_audit(user)
+        user.grant_role(admin_role)
         user.set_password(password)
+        db.session.flush()
+        log_audit_event(
+            category="access",
+            event_type="admin_role_granted",
+            actor_user=None,
+            target_user=user,
+            target_member=user.member,
+            before=before_user,
+            after=snapshot_user_for_audit(user),
+            metadata={"granted_role": "admin", "source": "create_admin_cli", "created_user": created},
+        )
         db.session.commit()
 
         if created:
-            click.echo(click.style(f"Created admin user: {email}", fg="green"))
+            click.echo(click.style(f"Created admin user: {normalized_email}", fg="green"))
         else:
-            click.echo(click.style(f"Promoted existing user to admin: {email}", fg="green"))
+            click.echo(click.style(f"Granted admin access to: {normalized_email}", fg="green"))
 
     @app.cli.command("sync-member-billing")
     @click.argument("email")
@@ -1351,7 +1509,7 @@ def create_app():
         for member in stale_members:
             user = member.user
             db.session.delete(member)
-            if user is not None and user.role == "member":
+            if user is not None and not user.roles:
                 db.session.delete(user)
             deleted_count += 1
 
@@ -1399,10 +1557,7 @@ def create_app():
     def render_account_dashboard(profile_form=None, identity_form=None):
         member = get_current_member_for_user(current_user)
         if member is None:
-            if current_user.role == "admin":
-                return redirect(url_for("admin"))
-            flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
+            return redirect(url_for("create_membership_profile"))
 
         if member.stripe_customer_id:
             try:
@@ -1500,7 +1655,6 @@ def create_app():
 
             user = User(
                 email=email_address,
-                role="member",
                 forum_username=generate_unique_forum_username(
                     member.first_name,
                     member.last_name,
@@ -1512,6 +1666,17 @@ def create_app():
 
             db.session.add(user)
             db.session.add(member)
+            db.session.flush()
+            log_audit_event(
+                category="membership",
+                event_type="public_membership_signup_started",
+                actor_user=user,
+                target_user=user,
+                target_member=member,
+                before=None,
+                after={"user": snapshot_user_for_audit(user), "member": snapshot_member_for_audit(member)},
+                metadata={"payment_method": payment_method},
+            )
             db.session.commit()
             login_user(user)
 
@@ -1606,6 +1771,122 @@ def create_app():
             return redirect(url_for("account", **redirect_args))
         return render_account_dashboard()
 
+    @app.route("/account/create-membership", methods=["GET", "POST"])
+    @login_required
+    def create_membership_profile():
+        if current_user.member is not None:
+            return redirect(url_for("account"))
+
+        form = CreateMembershipProfileForm()
+        if request.method == "GET":
+            form.email_private.data = current_user.email
+
+        if form.validate_on_submit():
+            settings = {s.key: s.value for s in Setting.query.all()}
+            form_data = form.data
+            form_data.pop("csrf_token", None)
+            form_data.pop("submit", None)
+
+            payment_method = form_data.pop("payment_method", "checkout")
+            if settings.get("invoice_payments_enabled") != "True":
+                payment_method = "checkout"
+
+            member_email = (current_user.email or "").strip().lower()
+            existing_member = db.session.execute(db.select(Member).filter_by(email_private=member_email)).scalar_one_or_none()
+            if existing_member is not None:
+                if existing_member.user_id == current_user.id:
+                    return redirect(url_for("account"))
+                flash(_("A membership profile with this email address already exists. Please contact the club so we can resolve it."), "warning")
+                return redirect(url_for("admin_dashboard" if current_user.has_role("admin") else "index"))
+
+            member = Member(
+                created_at=get_now_utc(),
+                payment_status="pending_checkout",
+                is_active=False,
+                pending_checkout_started_at=get_now_utc(),
+            )
+            apply_member_profile(member, {**form_data, "email_private": member_email, "terms_accepted": True})
+            member.user = current_user
+            current_user.email = member_email
+            if not current_user.forum_username:
+                current_user.forum_username = generate_unique_forum_username(
+                    member.first_name,
+                    member.last_name,
+                    member.year_group,
+                    exclude_user_id=current_user.id,
+                )
+
+            before_user = snapshot_user_for_audit(current_user)
+            db.session.add(member)
+            db.session.flush()
+            log_audit_event(
+                category="membership",
+                event_type="linked_membership_created",
+                actor_user=current_user,
+                target_user=current_user,
+                target_member=member,
+                before={"user": before_user, "member": None},
+                after={"user": snapshot_user_for_audit(current_user), "member": snapshot_member_for_audit(member)},
+                metadata={"payment_method": payment_method},
+            )
+            db.session.commit()
+
+            try:
+                if not current_user.email_is_verified:
+                    send_email_verification_email(app, current_user)
+            except Exception as email_exc:
+                app.logger.warning("Could not send verification email for linked membership user_id=%s: %s", current_user.id, email_exc)
+
+            try:
+                if payment_method == "checkout":
+                    session, _cycle = create_checkout_session_for_member(member)
+                    db.session.commit()
+                    return redirect(session.url, code=303)
+
+                if payment_method == "invoice":
+                    _subscription, cycle = create_invoice_membership_for_member(member)
+                    db.session.commit()
+                    if cycle["free_period"]:
+                        send_member_welcome_email(app, member)
+                    return redirect(
+                        url_for(
+                            "thank_you",
+                            method="invoice",
+                            phase=cycle["thank_you_phase"],
+                        )
+                    )
+            except stripe.StripeError as exc:
+                error_body = getattr(exc, "json_body", {}) or {}
+                error_details = error_body.get("error", {}) if isinstance(error_body, dict) else {}
+                app.logger.error(
+                    "Stripe Error during linked membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s member_id=%s user_id=%s",
+                    type(exc).__name__,
+                    str(exc),
+                    error_details.get("message"),
+                    error_details.get("code"),
+                    error_details.get("param"),
+                    getattr(exc, "request_id", None),
+                    getattr(exc, "http_status", None),
+                    payment_method,
+                    member_email,
+                    member.id,
+                    current_user.id,
+                )
+                flash(_("Your membership profile was created, but payment could not be started. You can resume it from your account page."), "warning")
+            except Exception:
+                app.logger.exception(
+                    "Unexpected error during linked membership signup for user_id=%s email=%s payment_method=%s member_id=%s",
+                    current_user.id,
+                    member_email,
+                    payment_method,
+                    member.id,
+                )
+                flash(_("Your membership profile was created, but billing could not be started right now. You can resume it from your account page."), "warning")
+
+            return redirect(url_for("account"))
+
+        return render_template("account/create_membership.html", form=form)
+
     @app.route("/account/profile", methods=["POST"])
     @login_required
     def save_member_profile():
@@ -1617,6 +1898,8 @@ def create_app():
         profile_form = MemberProfileForm(prefix="profile")
         identity_form = IdentityChangeRequestForm(prefix="identity")
         if profile_form.validate_on_submit():
+            before_user = snapshot_user_for_audit(current_user)
+            before_member = snapshot_member_for_audit(member, fields=DIRECT_MEMBER_PROFILE_FIELDS)
             try:
                 email_changed = sync_member_primary_email(member, profile_form.email_private.data)
             except ValueError as exc:
@@ -1628,6 +1911,16 @@ def create_app():
                     continue
                 setattr(member, field_name, normalize_optional_member_value(field_name, getattr(profile_form, field_name).data))
 
+            log_audit_event(
+                category="profile",
+                event_type="contact_details_updated",
+                actor_user=current_user,
+                target_user=current_user,
+                target_member=member,
+                before={"user": before_user, "member": before_member},
+                after={"user": snapshot_user_for_audit(current_user), "member": snapshot_member_for_audit(member, fields=DIRECT_MEMBER_PROFILE_FIELDS)},
+                metadata={"email_changed": email_changed},
+            )
             db.session.commit()
             if email_changed:
                 try:
@@ -1663,7 +1956,24 @@ def create_app():
                 return redirect(url_for("account"))
 
             try:
-                create_identity_change_request(member, current_user, form_data)
+                request_record = create_identity_change_request(member, current_user, form_data)
+                db.session.flush()
+                log_audit_event(
+                    category="profile_change_request",
+                    event_type="identity_request_submitted",
+                    actor_user=current_user,
+                    target_user=current_user,
+                    target_member=member,
+                    before=snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS),
+                    after={
+                        "requested_salutation": request_record.requested_salutation,
+                        "requested_title": request_record.requested_title,
+                        "requested_first_name": request_record.requested_first_name,
+                        "requested_last_name": request_record.requested_last_name,
+                        "requested_year_group": request_record.requested_year_group,
+                    },
+                    metadata={"request_id": request_record.id, "member_note": request_record.member_note},
+                )
                 db.session.commit()
                 flash(_("Your identity change request has been submitted for admin review."), "success")
                 return redirect(url_for("account"))
@@ -1686,6 +1996,16 @@ def create_app():
         request_record.status = "canceled"
         request_record.reviewed_by = current_user
         request_record.reviewed_at = get_now_utc()
+        log_audit_event(
+            category="profile_change_request",
+            event_type="identity_request_canceled",
+            actor_user=current_user,
+            target_user=current_user,
+            target_member=member,
+            before={"request_id": request_record.id, "status": "pending"},
+            after={"request_id": request_record.id, "status": request_record.status},
+            metadata={"member_note": request_record.member_note},
+        )
         db.session.commit()
         flash(_("Your pending identity change request was canceled."), "success")
         return redirect(url_for("account"))
@@ -1818,31 +2138,81 @@ def create_app():
             return redirect(url_for(get_member_portal_target(current_user)))
         return redirect(url_for("login"))
 
-    @app.route("/admin", methods=["GET", "POST"])
-    @login_required
-    @admin_required
-    def admin():
+    def get_admin_dashboard_metrics():
+        return {
+            "total_accounts": db.session.scalar(db.select(func.count()).select_from(User)) or 0,
+            "linked_members": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.user_id.is_not(None))) or 0,
+            "active_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.is_active.is_(True))) or 0,
+            "pending_checkouts": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.payment_status == "pending_checkout")) or 0,
+            "pending_identity_requests": db.session.scalar(db.select(func.count()).select_from(MemberProfileChangeRequest).where(MemberProfileChangeRequest.status == "pending")) or 0,
+            "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.cancel_at_period_end.is_(True))) or 0,
+        }
+
+    def get_recent_audit_logs(limit=10, category=None):
+        query = db.select(AuditLog).options(
+            selectinload(AuditLog.actor_user),
+            selectinload(AuditLog.target_user),
+            selectinload(AuditLog.target_member),
+        )
+        if category:
+            query = query.where(AuditLog.category == category)
+        return db.session.execute(query.order_by(AuditLog.created_at.desc()).limit(limit)).scalars().all()
+
+    def build_account_directory_query(search_term, role_filter, membership_filter, active_filter):
+        query = (
+            db.select(User)
+            .options(selectinload(User.member), selectinload(User.roles))
+            .outerjoin(Member, Member.user_id == User.id)
+        )
+
+        if search_term:
+            pattern = f"%{search_term}%"
+            query = query.where(
+                or_(
+                    User.email.ilike(pattern),
+                    User.forum_username.ilike(pattern),
+                    Member.email_private.ilike(pattern),
+                    Member.first_name.ilike(pattern),
+                    Member.last_name.ilike(pattern),
+                )
+            )
+
+        if role_filter == "admin":
+            query = query.where(User.roles.any(Role.slug == "admin"))
+        elif role_filter == "member":
+            query = query.where(User.member.has(), ~User.roles.any(Role.slug == "admin"))
+        elif role_filter == "admin_member":
+            query = query.where(User.roles.any(Role.slug == "admin"), User.member.has())
+        elif role_filter == "no_membership":
+            query = query.where(~User.member.has())
+
+        if membership_filter == "none":
+            query = query.where(~User.member.has())
+        elif membership_filter == "inactive":
+            query = query.where(User.member.has(Member.is_active.is_(False)))
+        elif membership_filter != "all":
+            query = query.where(User.member.has(Member.payment_status == membership_filter))
+
+        if active_filter == "active":
+            query = query.where(User.member.has(Member.is_active.is_(True)))
+        elif active_filter == "inactive":
+            query = query.where(User.member.has(Member.is_active.is_(False)))
+
+        return query.order_by(User.email.asc()).distinct()
+
+    def build_settings_page_context(edit_mail_account_id=None):
         test_email_form = TestEmailForm()
         mail_account_form = MailAccountForm(prefix="mail")
         editing_mail_account = None
-
         sender_choices = []
         template_choices = get_email_template_choices(app)
         mail_account_records = get_db_mail_accounts()
-        pending_identity_requests = db.session.execute(
-            db.select(MemberProfileChangeRequest)
-            .filter_by(status="pending")
-            .order_by(MemberProfileChangeRequest.created_at.asc())
-        ).scalars().all()
-        decorate_pending_identity_requests(pending_identity_requests)
         try:
             mail_accounts = load_mail_accounts_config()
-            sender_choices = [(acc, acc) for acc in mail_accounts.keys()]
-        except Exception as e:
-            mail_accounts = {}
-            app.logger.error(f"Could not load email accounts for admin page: {e}")
+            sender_choices = [(account_key, account_key) for account_key in mail_accounts.keys()]
+        except Exception as exc:
+            app.logger.error(f"Could not load email accounts for admin settings: {exc}")
 
-        edit_mail_account_id = request.args.get("edit_mail_account", type=int)
         if edit_mail_account_id:
             editing_mail_account = db.session.get(MailAccount, edit_mail_account_id)
             if editing_mail_account is not None:
@@ -1852,26 +2222,258 @@ def create_app():
                 mail_account_form.port.data = editing_mail_account.port
                 mail_account_form.username.data = editing_mail_account.username
                 mail_account_form.starttls.data = editing_mail_account.starttls
-            else:
-                flash(_("The selected mail account could not be found."), "warning")
-                return redirect(url_for("admin"))
 
         test_email_form.sender.choices = sender_choices
         test_email_form.template.choices = template_choices
+        return {
+            "test_email_form": test_email_form,
+            "mail_account_form": mail_account_form,
+            "mail_account_records": mail_account_records,
+            "editing_mail_account": editing_mail_account,
+            "sender_choices": sender_choices,
+            "template_choices": template_choices,
+        }
+
+    @app.route("/admin", methods=["GET"])
+    @login_required
+    @admin_required
+    def admin_dashboard():
+        metrics = get_admin_dashboard_metrics()
+        pending_request_preview = db.session.execute(
+            db.select(MemberProfileChangeRequest)
+            .options(selectinload(MemberProfileChangeRequest.member))
+            .where(MemberProfileChangeRequest.status == "pending")
+            .order_by(MemberProfileChangeRequest.created_at.asc())
+            .limit(5)
+        ).scalars().all()
+        recent_logs = get_recent_audit_logs(limit=10)
+        return render_template(
+            "admin_dashboard.html",
+            active_admin_section="dashboard",
+            metrics=metrics,
+            pending_request_preview=pending_request_preview,
+            recent_logs=recent_logs,
+        )
+
+    app.add_url_rule("/admin", endpoint="admin", view_func=admin_dashboard, methods=["GET"])
+
+    @app.route("/admin/accounts", methods=["GET"])
+    @login_required
+    @admin_required
+    def admin_accounts():
+        search_term = (request.args.get("q") or "").strip()
+        role_filter = request.args.get("role", "all")
+        membership_filter = request.args.get("membership_status", "all")
+        active_filter = request.args.get("active", "all")
+        page = request.args.get("page", 1, type=int)
+
+        pagination = db.paginate(
+            build_account_directory_query(search_term, role_filter, membership_filter, active_filter),
+            page=page,
+            per_page=ADMIN_DIRECTORY_PAGE_SIZE,
+            error_out=False,
+        )
+        return render_template(
+            "admin_accounts.html",
+            active_admin_section="accounts",
+            pagination=pagination,
+            search_term=search_term,
+            role_filter=role_filter,
+            membership_filter=membership_filter,
+            active_filter=active_filter,
+        )
+
+    @app.route("/admin/accounts/<int:user_id>", methods=["GET"])
+    @login_required
+    @admin_required
+    def admin_account_detail(user_id):
+        user = db.session.execute(
+            db.select(User)
+            .options(selectinload(User.member), selectinload(User.roles))
+            .filter_by(id=user_id)
+        ).scalar_one_or_none()
+        if user is None:
+            flash(_("The selected account could not be found."), "warning")
+            return redirect(url_for("admin_accounts"))
+
+        conditions = [AuditLog.target_user_id == user.id, AuditLog.actor_user_id == user.id]
+        if user.member is not None:
+            conditions.append(AuditLog.target_member_id == user.member.id)
+
+        recent_logs = db.session.execute(
+            db.select(AuditLog)
+            .options(
+                selectinload(AuditLog.actor_user),
+                selectinload(AuditLog.target_user),
+                selectinload(AuditLog.target_member),
+            )
+            .where(or_(*conditions))
+            .order_by(AuditLog.created_at.desc())
+            .limit(15)
+        ).scalars().all()
+
+        return render_template(
+            "admin_account_detail.html",
+            active_admin_section="accounts",
+            user_record=user,
+            member=user.member,
+            recent_logs=recent_logs,
+            can_grant_admin=not user.has_role("admin"),
+            can_revoke_admin=user.has_role("admin") and current_user.id != user.id and count_users_with_role("admin") > 1,
+            admin_count=count_users_with_role("admin"),
+        )
+
+    @app.route("/admin/accounts/<int:user_id>/grant-admin", methods=["POST"])
+    @login_required
+    @admin_required
+    def grant_admin_access(user_id):
+        user = db.session.get(User, user_id)
+        if user is None:
+            flash(_("The selected account could not be found."), "warning")
+            return redirect(url_for("admin_accounts"))
+
+        if not user.has_role("admin"):
+            admin_role = get_role("admin", label="Admin", description="Can access the admin workspace.")
+            before_user = snapshot_user_for_audit(user)
+            user.grant_role(admin_role)
+            log_audit_event(
+                category="access",
+                event_type="admin_role_granted",
+                actor_user=current_user,
+                target_user=user,
+                target_member=user.member,
+                before=before_user,
+                after=snapshot_user_for_audit(user),
+                metadata={"granted_role": "admin"},
+            )
+            db.session.commit()
+            flash(_("Admin access granted."), "success")
+        else:
+            flash(_("This account already has admin access."), "info")
+
+        return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
+
+    @app.route("/admin/accounts/<int:user_id>/revoke-admin", methods=["POST"])
+    @login_required
+    @admin_required
+    def revoke_admin_access(user_id):
+        user = db.session.get(User, user_id)
+        if user is None:
+            flash(_("The selected account could not be found."), "warning")
+            return redirect(url_for("admin_accounts"))
+
+        if not user.has_role("admin"):
+            flash(_("This account does not currently have admin access."), "info")
+            return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
+
+        if current_user.id == user.id:
+            flash(_("You cannot remove your own admin access from the UI."), "danger")
+            return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
+
+        if count_users_with_role("admin") <= 1:
+            flash(_("You cannot remove the last remaining admin account."), "danger")
+            return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
+
+        before_user = snapshot_user_for_audit(user)
+        user.revoke_role("admin")
+        log_audit_event(
+            category="access",
+            event_type="admin_role_revoked",
+            actor_user=current_user,
+            target_user=user,
+            target_member=user.member,
+            before=before_user,
+            after=snapshot_user_for_audit(user),
+            metadata={"revoked_role": "admin"},
+        )
+        db.session.commit()
+        flash(_("Admin access revoked."), "success")
+        return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
+
+    @app.route("/admin/approvals", methods=["GET"])
+    @login_required
+    @admin_required
+    def admin_approvals():
+        pending_identity_requests = db.session.execute(
+            db.select(MemberProfileChangeRequest)
+            .options(
+                selectinload(MemberProfileChangeRequest.member).selectinload(Member.user),
+                selectinload(MemberProfileChangeRequest.requested_by),
+                selectinload(MemberProfileChangeRequest.reviewed_by),
+            )
+            .where(MemberProfileChangeRequest.status == "pending")
+            .order_by(MemberProfileChangeRequest.created_at.asc())
+        ).scalars().all()
+        decorate_pending_identity_requests(pending_identity_requests)
+
+        history_page = request.args.get("page", 1, type=int)
+        history_pagination = db.paginate(
+            db.select(MemberProfileChangeRequest)
+            .options(
+                selectinload(MemberProfileChangeRequest.member).selectinload(Member.user),
+                selectinload(MemberProfileChangeRequest.requested_by),
+                selectinload(MemberProfileChangeRequest.reviewed_by),
+            )
+            .where(MemberProfileChangeRequest.status != "pending")
+            .order_by(MemberProfileChangeRequest.reviewed_at.desc(), MemberProfileChangeRequest.created_at.desc()),
+            page=history_page,
+            per_page=APPROVAL_HISTORY_PAGE_SIZE,
+            error_out=False,
+        )
+        recent_logs = db.session.execute(
+            db.select(AuditLog)
+            .options(
+                selectinload(AuditLog.actor_user),
+                selectinload(AuditLog.target_user),
+                selectinload(AuditLog.target_member),
+            )
+            .where(AuditLog.category.in_(["profile", "profile_change_request"]))
+            .order_by(AuditLog.created_at.desc())
+            .limit(20)
+        ).scalars().all()
+        return render_template(
+            "admin_approvals.html",
+            active_admin_section="approvals",
+            pending_identity_requests=pending_identity_requests,
+            history_pagination=history_pagination,
+            recent_logs=recent_logs,
+        )
+
+    @app.route("/admin/settings", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def admin_settings():
+        edit_mail_account_id = request.args.get("edit_mail_account", type=int)
+        context = build_settings_page_context(edit_mail_account_id=edit_mail_account_id)
+
+        if edit_mail_account_id and context["editing_mail_account"] is None:
+            flash(_("The selected mail account could not be found."), "warning")
+            return redirect(url_for("admin_settings"))
 
         if request.method == "POST" and "save_settings" in request.form:
-            valid_senders = {choice for choice, _label in sender_choices}
-            valid_templates = {choice for choice, _label in template_choices}
+            valid_senders = {choice for choice, _label in context["sender_choices"]}
+            valid_templates = {choice for choice, _label in context["template_choices"]}
             welcome_sender = request.form.get("welcome_email_sender")
             auto_email_template = request.form.get("automatic_email_template")
 
             if welcome_sender and welcome_sender not in valid_senders:
                 flash(_("Invalid sender account selected."), "danger")
-                return redirect(url_for("admin"))
+                return redirect(url_for("admin_settings"))
 
             if auto_email_template and auto_email_template not in valid_templates:
                 flash(_("Invalid email template selected."), "danger")
-                return redirect(url_for("admin"))
+                return redirect(url_for("admin_settings"))
+
+            tracked_setting_keys = [
+                "invoice_payments_enabled",
+                "automatic_emails_enabled",
+                "welcome_email_sender",
+                "automatic_email_template",
+            ]
+            before_settings = {
+                key: db.session.get(Setting, key).value if db.session.get(Setting, key) is not None else None
+                for key in tracked_setting_keys
+            }
 
             invoice_enabled = "invoice_payments_enabled" in request.form
             setting = Setting.query.get("invoice_payments_enabled")
@@ -1913,19 +2515,89 @@ def create_app():
                 if setting:
                     db.session.delete(setting)
 
+            after_settings = {
+                "invoice_payments_enabled": str(invoice_enabled),
+                "automatic_emails_enabled": str(emails_enabled),
+                "welcome_email_sender": welcome_sender or None,
+                "automatic_email_template": auto_email_template or None,
+            }
+            changed_keys = sorted(
+                key for key in after_settings.keys()
+                if before_settings.get(key) != after_settings.get(key)
+            )
+            log_audit_event(
+                category="settings",
+                event_type="settings_updated",
+                actor_user=current_user,
+                target_user=current_user,
+                before=before_settings,
+                after=after_settings,
+                metadata={"changed_keys": changed_keys},
+            )
             db.session.commit()
             flash(_("Settings updated successfully!"), "success")
-            return redirect(url_for("admin"))
+            return redirect(url_for("admin_settings"))
 
         return render_template(
-            "admin/index.html",
-            test_email_form=test_email_form,
-            mail_account_form=mail_account_form,
-            mail_account_records=mail_account_records,
-            editing_mail_account=editing_mail_account,
-            sender_choices=sender_choices,
-            template_choices=template_choices,
-            pending_identity_requests=pending_identity_requests,
+            "admin_settings.html",
+            active_admin_section="settings",
+            **context,
+        )
+
+    @app.route("/admin/logs", methods=["GET"])
+    @login_required
+    @admin_required
+    def admin_logs():
+        actor_user = aliased(User)
+        target_user = aliased(User)
+        target_member = aliased(Member)
+        search_term = (request.args.get("q") or "").strip()
+        category = request.args.get("category", "all")
+        page = request.args.get("page", 1, type=int)
+
+        query = (
+            db.select(AuditLog)
+            .options(
+                selectinload(AuditLog.actor_user),
+                selectinload(AuditLog.target_user),
+                selectinload(AuditLog.target_member),
+            )
+            .outerjoin(actor_user, AuditLog.actor_user_id == actor_user.id)
+            .outerjoin(target_user, AuditLog.target_user_id == target_user.id)
+            .outerjoin(target_member, AuditLog.target_member_id == target_member.id)
+        )
+
+        if search_term:
+            pattern = f"%{search_term}%"
+            query = query.where(
+                or_(
+                    actor_user.email.ilike(pattern),
+                    target_user.email.ilike(pattern),
+                    target_member.email_private.ilike(pattern),
+                    AuditLog.category.ilike(pattern),
+                    AuditLog.event_type.ilike(pattern),
+                )
+            )
+
+        if category != "all":
+            query = query.where(AuditLog.category == category)
+
+        pagination = db.paginate(
+            query.order_by(AuditLog.created_at.desc()),
+            page=page,
+            per_page=AUDIT_LOG_PAGE_SIZE,
+            error_out=False,
+        )
+        categories = db.session.execute(
+            db.select(AuditLog.category).distinct().order_by(AuditLog.category.asc())
+        ).scalars().all()
+        return render_template(
+            "admin_logs.html",
+            active_admin_section="logs",
+            pagination=pagination,
+            categories=categories,
+            category=category,
+            search_term=search_term,
         )
 
     @app.route("/admin/profile-requests/<int:request_id>/approve", methods=["POST"])
@@ -1935,9 +2607,13 @@ def create_app():
         request_record = db.session.get(MemberProfileChangeRequest, request_id)
         if request_record is None or request_record.status != "pending":
             flash(_("The selected change request could not be found."), "warning")
-            return redirect(url_for("admin"))
+            return redirect(url_for("admin_approvals"))
 
         member = request_record.member
+        before_member = snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)
+        before_user = snapshot_user_for_audit(member.user)
+        previous_forum_username = member.user.forum_username if member.user is not None else None
+
         member.salutation = request_record.requested_salutation
         member.title = request_record.requested_title
         member.first_name = request_record.requested_first_name
@@ -1960,9 +2636,25 @@ def create_app():
         request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
         request_record.reviewed_by = current_user
         request_record.reviewed_at = get_now_utc()
+        log_audit_event(
+            category="profile_change_request",
+            event_type="identity_request_approved",
+            actor_user=current_user,
+            target_user=member.user,
+            target_member=member,
+            before={"request_status": "pending", "user": before_user, "member": before_member},
+            after={"request_status": request_record.status, "user": snapshot_user_for_audit(member.user), "member": snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)},
+            metadata={
+                "request_id": request_record.id,
+                "member_note": request_record.member_note,
+                "admin_note": request_record.admin_note,
+                "previous_forum_username": previous_forum_username,
+                "new_forum_username": member.user.forum_username if member.user is not None else None,
+            },
+        )
         db.session.commit()
         flash(_("Identity change request approved."), "success")
-        return redirect(url_for("admin"))
+        return redirect(url_for("admin_approvals"))
 
     @app.route("/admin/profile-requests/<int:request_id>/reject", methods=["POST"])
     @login_required
@@ -1971,17 +2663,27 @@ def create_app():
         request_record = db.session.get(MemberProfileChangeRequest, request_id)
         if request_record is None or request_record.status != "pending":
             flash(_("The selected change request could not be found."), "warning")
-            return redirect(url_for("admin"))
+            return redirect(url_for("admin_approvals"))
 
         request_record.status = "rejected"
         request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
         request_record.reviewed_by = current_user
         request_record.reviewed_at = get_now_utc()
+        log_audit_event(
+            category="profile_change_request",
+            event_type="identity_request_rejected",
+            actor_user=current_user,
+            target_user=request_record.member.user,
+            target_member=request_record.member,
+            before={"request_id": request_record.id, "status": "pending"},
+            after={"request_id": request_record.id, "status": request_record.status},
+            metadata={"member_note": request_record.member_note, "admin_note": request_record.admin_note},
+        )
         db.session.commit()
         flash(_("Identity change request rejected."), "success")
-        return redirect(url_for("admin"))
+        return redirect(url_for("admin_approvals"))
 
-    @app.route("/admin/mail-accounts", methods=["POST"])
+    @app.route("/admin/settings/mail-accounts", methods=["POST"])
     @login_required
     @admin_required
     def save_mail_account():
@@ -1999,7 +2701,7 @@ def create_app():
                 for error in errors:
                     flash(f"{label}: {error}", "danger")
             redirect_kwargs = {"edit_mail_account": account_id} if account_id else {}
-            return redirect(url_for("admin", **redirect_kwargs))
+            return redirect(url_for("admin_settings", **redirect_kwargs))
 
         account_key = form.account_key.data.strip()
         existing_account = db.session.execute(
@@ -2009,20 +2711,22 @@ def create_app():
         if existing_account is not None and existing_account.id != account_id:
             flash(_("A mail account with this key already exists."), "danger")
             target_id = account_id or existing_account.id
-            return redirect(url_for("admin", edit_mail_account=target_id))
+            return redirect(url_for("admin_settings", edit_mail_account=target_id))
 
         if account_id:
             mail_account = db.session.get(MailAccount, account_id)
             if mail_account is None:
                 flash(_("The selected mail account could not be found."), "warning")
-                return redirect(url_for("admin"))
+                return redirect(url_for("admin_settings"))
         else:
             if not form.password.data:
                 flash(_("A password is required for new mail accounts."), "danger")
-                return redirect(url_for("admin"))
+                return redirect(url_for("admin_settings"))
             mail_account = MailAccount()
             db.session.add(mail_account)
 
+        before_mail_account = snapshot_mail_account_for_audit(mail_account)
+        is_new_mail_account = mail_account.id is None
         mail_account.account_key = account_key
         mail_account.host = form.host.data.strip()
         mail_account.port = int(form.port.data)
@@ -2032,35 +2736,57 @@ def create_app():
         mail_account.starttls = bool(form.starttls.data)
 
         try:
+            db.session.flush()
+            log_audit_event(
+                category="settings",
+                event_type="mail_account_created" if is_new_mail_account else "mail_account_updated",
+                actor_user=current_user,
+                target_user=current_user,
+                before=before_mail_account,
+                after=snapshot_mail_account_for_audit(mail_account),
+                metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key},
+            )
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
             flash(_("A mail account with this key already exists."), "danger")
             redirect_kwargs = {"edit_mail_account": account_id} if account_id else {}
-            return redirect(url_for("admin", **redirect_kwargs))
+            return redirect(url_for("admin_settings", **redirect_kwargs))
 
         flash(_("Mail account saved successfully."), "success")
-        return redirect(url_for("admin"))
+        return redirect(url_for("admin_settings"))
 
-    @app.route("/admin/mail-accounts/<int:mail_account_id>/delete", methods=["POST"])
+    @app.route("/admin/settings/mail-accounts/<int:mail_account_id>/delete", methods=["POST"])
     @login_required
     @admin_required
     def delete_mail_account(mail_account_id):
         mail_account = db.session.get(MailAccount, mail_account_id)
         if mail_account is None:
             flash(_("The selected mail account could not be found."), "warning")
-            return redirect(url_for("admin"))
+            return redirect(url_for("admin_settings"))
 
+        before_mail_account = snapshot_mail_account_for_audit(mail_account)
         welcome_sender_setting = Setting.query.get("welcome_email_sender")
+        removed_welcome_sender = False
         if welcome_sender_setting and welcome_sender_setting.value == mail_account.account_key:
             db.session.delete(welcome_sender_setting)
+            removed_welcome_sender = True
 
+        log_audit_event(
+            category="settings",
+            event_type="mail_account_deleted",
+            actor_user=current_user,
+            target_user=current_user,
+            before=before_mail_account,
+            after=None,
+            metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key, "removed_welcome_sender": removed_welcome_sender},
+        )
         db.session.delete(mail_account)
         db.session.commit()
         flash(_("Mail account deleted successfully."), "success")
-        return redirect(url_for("admin"))
+        return redirect(url_for("admin_settings"))
 
-    @app.route("/send-test-email", methods=["POST"])
+    @app.route("/admin/settings/send-test-email", methods=["POST"])
     @login_required
     @admin_required
     @limiter.limit(RATELIMIT_ADMIN_EMAIL)
@@ -2074,8 +2800,8 @@ def create_app():
             email_template_dir = os.path.join(app.root_path, "templates", "emails")
             if os.path.isdir(email_template_dir):
                 form.template.choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
-        except Exception as e:
-            app.logger.error(f"Could not load email accounts or templates for test form validation: {e}")
+        except Exception as exc:
+            app.logger.error(f"Could not load email accounts or templates for test form validation: {exc}")
             form.sender.choices = []
             form.template.choices = []
 
@@ -2105,7 +2831,7 @@ def create_app():
         else:
             flash(_("Invalid form submission. Please check the fields and try again."), "warning")
 
-        return redirect(url_for("admin"))
+        return redirect(url_for("admin_settings"))
 
     @app.route("/login", methods=["POST", "GET"])
     @limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
@@ -2144,7 +2870,7 @@ def create_app():
                 flash(_("Your password has been updated!"), "success")
                 return redirect(url_for(get_member_portal_target(current_user)))
             flash(_("Invalid current password"), "danger")
-        return render_template("admin/change_password.html", form=form)
+        return render_template("change_password.html", form=form)
 
     @app.route("/stripe-webhook", methods=["POST"])
     @csrf.exempt
@@ -2193,8 +2919,6 @@ def create_app():
 
                 if member.user is not None:
                     member.user.email = member.email_private
-                    if member.user.role != "admin":
-                        member.user.role = "member"
                     if not member.user.forum_username:
                         member.user.forum_username = generate_unique_forum_username(
                             member.first_name,

@@ -1,4 +1,4 @@
-﻿from flask_babel import _, lazy_gettext as _l
+from flask_babel import _, lazy_gettext as _l
 from flask_wtf import FlaskForm
 from wtforms import (
     BooleanField,
@@ -22,7 +22,6 @@ from wtforms.validators import (
     Regexp,
 )
 
-# Comprehensive list of countries for the dropdown
 COUNTRIES = [
     ("", _l("-- Select a Country --")),
     ("Afghanistan", "Afghanistan"), ("Albania", "Albania"), ("Algeria", "Algeria"),
@@ -96,118 +95,146 @@ COUNTRIES = [
     ("Yemen", "Yemen"), ("Zambia", "Zambia"), ("Zimbabwe", "Zimbabwe"),
 ]
 
-SALUTATION_CHOICES = [('', _l('-- Select --')), ('Mr', _l('Mr')), ('Ms', _l('Ms')), ('Diverse', _l('Diverse'))]
+SALUTATION_CHOICES = [("", _l("-- Select --")), ("Mr", _l("Mr")), ("Ms", _l("Ms")), ("Diverse", _l("Diverse"))]
 YEAR_GROUP_VALIDATOR = Regexp(
-    r'^[A-Z]+[0-9]{2}$',
-    message=_l('Invalid format. Please use uppercase letters followed by two numbers, like LAV25.'),
+    r"^[A-Z]+[0-9]{2}$",
+    message=_l("Invalid format. Please use uppercase letters followed by two numbers, like LAV25."),
 )
-PHONE_VALIDATOR = Regexp(r'^\+?[0-9\s\-\(\)]*$', message=_l('Invalid phone number format'))
+PHONE_VALIDATOR = Regexp(r"^\+?[0-9\s\-\(\)]*$", message=_l("Invalid phone number format"))
 
 
 class MembershipForm(FlaskForm):
-    salutation = SelectField(_l('Salutation'), choices=SALUTATION_CHOICES, validators=[DataRequired()])
-    title = StringField(_l('Title'), validators=[Optional()])
-    first_name = StringField(_l('First Name'), validators=[DataRequired()])
-    last_name = StringField(_l('Last Name'), validators=[DataRequired()])
-    street = StringField(_l('Street'), validators=[DataRequired(), Length(max=255)])
-    house_number = StringField(_l('House Number'), validators=[DataRequired()])
-    postal_code = StringField(_l('Postal Code'), validators=[DataRequired()])
-    city = StringField(_l('City'), validators=[DataRequired()])
-    country = SelectField(_l('Country'), choices=COUNTRIES, validators=[DataRequired()])
-    phone_private = StringField(_l('Private Phone'), validators=[DataRequired(), PHONE_VALIDATOR])
-    email_private = StringField(_l('Private Email'), validators=[DataRequired(), Email()])
-    phone_work = StringField(_l('Work Phone'), validators=[Optional(), PHONE_VALIDATOR])
-    email_work = StringField(_l('Work Email'), validators=[Optional(), Email()])
-    year_group = StringField(_l('Year Group'), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
-    password = PasswordField(_l('Password'), validators=[DataRequired(), Length(min=8, max=128)])
-    confirm_password = PasswordField(_l('Confirm Password'), validators=[DataRequired(), EqualTo('password')])
+    salutation = SelectField(_l("Salutation"), choices=SALUTATION_CHOICES, validators=[DataRequired()])
+    title = StringField(_l("Title"), validators=[Optional()])
+    first_name = StringField(_l("First Name"), validators=[DataRequired()])
+    last_name = StringField(_l("Last Name"), validators=[DataRequired()])
+    street = StringField(_l("Street"), validators=[DataRequired(), Length(max=255)])
+    house_number = StringField(_l("House Number"), validators=[DataRequired()])
+    postal_code = StringField(_l("Postal Code"), validators=[DataRequired()])
+    city = StringField(_l("City"), validators=[DataRequired()])
+    country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
+    phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
+    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
+    email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
+    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    password = PasswordField(_l("Password"), validators=[DataRequired(), Length(min=8, max=128)])
+    confirm_password = PasswordField(_l("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
     payment_method = RadioField(
-        _l('Payment Method'),
-        choices=[('checkout', _l('Card or SEPA Direct Debit')), ('invoice', _l('Invoice'))],
+        _l("Payment Method"),
+        choices=[("checkout", _l("Card or SEPA Direct Debit")), ("invoice", _l("Invoice"))],
         validators=[Optional()],
-        default='checkout',
+        default="checkout",
     )
     terms_accepted = BooleanField(
-        _('I consent to the processing of my data as described in the privacy policy.'),
-        validators=[InputRequired(message=_l('You must accept the privacy policy to continue.'))],
+        _("I consent to the processing of my data as described in the privacy policy."),
+        validators=[InputRequired(message=_l("You must accept the privacy policy to continue."))],
     )
-    submit = SubmitField(_('Proceed to Payment'))
+    submit = SubmitField(_("Proceed to Payment"))
+
+
+class CreateMembershipProfileForm(FlaskForm):
+    salutation = SelectField(_l("Salutation"), choices=SALUTATION_CHOICES, validators=[DataRequired()])
+    title = StringField(_l("Title"), validators=[Optional()])
+    first_name = StringField(_l("First Name"), validators=[DataRequired()])
+    last_name = StringField(_l("Last Name"), validators=[DataRequired()])
+    street = StringField(_l("Street"), validators=[DataRequired(), Length(max=255)])
+    house_number = StringField(_l("House Number"), validators=[DataRequired()])
+    postal_code = StringField(_l("Postal Code"), validators=[DataRequired()])
+    city = StringField(_l("City"), validators=[DataRequired()])
+    country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
+    phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
+    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
+    email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
+    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    payment_method = RadioField(
+        _l("Payment Method"),
+        choices=[("checkout", _l("Card or SEPA Direct Debit")), ("invoice", _l("Invoice"))],
+        validators=[Optional()],
+        default="checkout",
+    )
+    terms_accepted = BooleanField(
+        _("I consent to the processing of my data as described in the privacy policy."),
+        validators=[InputRequired(message=_l("You must accept the privacy policy to continue."))],
+    )
+    submit = SubmitField(_("Create Membership and Proceed to Payment"))
 
 
 class RegistrationForm(FlaskForm):
-    email = StringField(_('Email'), validators=[DataRequired(), Email()])
-    password = PasswordField(_('Password'), validators=[DataRequired(), Length(min=8)])
-    confirm_password = PasswordField(_('Confirm Password'), validators=[DataRequired(), EqualTo('password')])
-    submit = SubmitField(_('Register'))
+    email = StringField(_("Email"), validators=[DataRequired(), Email()])
+    password = PasswordField(_("Password"), validators=[DataRequired(), Length(min=8)])
+    confirm_password = PasswordField(_("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
+    submit = SubmitField(_("Register"))
 
 
 class LoginForm(FlaskForm):
-    email = StringField(_('Email'), validators=[DataRequired(), Email()])
-    password = PasswordField(_('Password'), validators=[DataRequired()])
-    submit = SubmitField(_('Login'))
+    email = StringField(_("Email"), validators=[DataRequired(), Email()])
+    password = PasswordField(_("Password"), validators=[DataRequired()])
+    submit = SubmitField(_("Login"))
 
 
 class ChangePasswordForm(FlaskForm):
-    current_password = PasswordField(_('Current Password'), validators=[DataRequired()])
-    new_password = PasswordField(_('New Password'), validators=[DataRequired(), Length(min=8)])
-    confirm_new_password = PasswordField(_('Confirm New Password'), validators=[DataRequired(), EqualTo('new_password')])
-    submit = SubmitField(_('Change Password'))
+    current_password = PasswordField(_("Current Password"), validators=[DataRequired()])
+    new_password = PasswordField(_("New Password"), validators=[DataRequired(), Length(min=8)])
+    confirm_new_password = PasswordField(_("Confirm New Password"), validators=[DataRequired(), EqualTo("new_password")])
+    submit = SubmitField(_("Change Password"))
 
 
 class EmailRequestForm(FlaskForm):
-    email = StringField(_('Email'), validators=[DataRequired(), Email()])
-    submit = SubmitField(_('Send Link'))
+    email = StringField(_("Email"), validators=[DataRequired(), Email()])
+    submit = SubmitField(_("Send Link"))
 
 
 class SetPasswordForm(FlaskForm):
-    password = PasswordField(_('Password'), validators=[DataRequired(), Length(min=8, max=128)])
-    confirm_password = PasswordField(_('Confirm Password'), validators=[DataRequired(), EqualTo('password')])
-    submit = SubmitField(_('Save Password'))
+    password = PasswordField(_("Password"), validators=[DataRequired(), Length(min=8, max=128)])
+    confirm_password = PasswordField(_("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
+    submit = SubmitField(_("Save Password"))
 
 
 class MemberProfileForm(FlaskForm):
-    street = StringField(_l('Street'), validators=[DataRequired(), Length(max=255)])
-    house_number = StringField(_l('House Number'), validators=[DataRequired()])
-    postal_code = StringField(_l('Postal Code'), validators=[DataRequired()])
-    city = StringField(_l('City'), validators=[DataRequired()])
-    country = SelectField(_l('Country'), choices=COUNTRIES, validators=[DataRequired()])
-    phone_private = StringField(_l('Private Phone'), validators=[DataRequired(), PHONE_VALIDATOR])
-    email_private = StringField(_l('Private Email'), validators=[DataRequired(), Email()])
-    phone_work = StringField(_l('Work Phone'), validators=[Optional(), PHONE_VALIDATOR])
-    email_work = StringField(_l('Work Email'), validators=[Optional(), Email()])
-    submit = SubmitField(_('Save Profile Changes'))
+    street = StringField(_l("Street"), validators=[DataRequired(), Length(max=255)])
+    house_number = StringField(_l("House Number"), validators=[DataRequired()])
+    postal_code = StringField(_l("Postal Code"), validators=[DataRequired()])
+    city = StringField(_l("City"), validators=[DataRequired()])
+    country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
+    phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
+    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
+    email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
+    submit = SubmitField(_("Save Profile Changes"))
 
 
 class IdentityChangeRequestForm(FlaskForm):
-    salutation = SelectField(_l('Salutation'), choices=SALUTATION_CHOICES, validators=[DataRequired()])
-    title = StringField(_l('Title'), validators=[Optional()])
-    first_name = StringField(_l('First Name'), validators=[DataRequired()])
-    last_name = StringField(_l('Last Name'), validators=[DataRequired()])
-    year_group = StringField(_l('Year Group'), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
-    member_note = TextAreaField(_l('Why should this be changed?'), validators=[Optional(), Length(max=1000)])
-    submit = SubmitField(_('Submit Change Request'))
+    salutation = SelectField(_l("Salutation"), choices=SALUTATION_CHOICES, validators=[DataRequired()])
+    title = StringField(_l("Title"), validators=[Optional()])
+    first_name = StringField(_l("First Name"), validators=[DataRequired()])
+    last_name = StringField(_l("Last Name"), validators=[DataRequired()])
+    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    member_note = TextAreaField(_l("Why should this be changed?"), validators=[Optional(), Length(max=1000)])
+    submit = SubmitField(_("Submit Change Request"))
 
 
 class TestEmailForm(FlaskForm):
-    sender = SelectField(_l('Sender'), validators=[DataRequired()])
-    recipient = StringField(_('Recipient Email'), validators=[DataRequired(), Email()])
-    template = SelectField(_l('Template'), validators=[DataRequired()])
-    submit = SubmitField(_('Send Test Email'))
+    sender = SelectField(_l("Sender"), validators=[DataRequired()])
+    recipient = StringField(_("Recipient Email"), validators=[DataRequired(), Email()])
+    template = SelectField(_l("Template"), validators=[DataRequired()])
+    submit = SubmitField(_("Send Test Email"))
 
 
 class MailAccountForm(FlaskForm):
     mail_account_id = HiddenField()
     account_key = StringField(
-        _l('Account Key'),
+        _l("Account Key"),
         validators=[
             DataRequired(),
             Length(max=80),
-            Regexp(r'^[a-zA-Z0-9_-]+$', message=_l('Use only letters, numbers, dashes, and underscores.')),
+            Regexp(r"^[a-zA-Z0-9_-]+$", message=_l("Use only letters, numbers, dashes, and underscores.")),
         ],
     )
-    host = StringField(_l('SMTP Host'), validators=[DataRequired(), Length(max=255)])
-    port = IntegerField(_l('SMTP Port'), validators=[DataRequired(), NumberRange(min=1, max=65535)])
-    username = StringField(_l('SMTP Username'), validators=[DataRequired(), Length(max=255)])
-    password = PasswordField(_l('SMTP Password'), validators=[Optional(), Length(max=255)])
-    starttls = BooleanField(_l('Use STARTTLS'))
-    submit = SubmitField(_l('Save Mail Account'))
+    host = StringField(_l("SMTP Host"), validators=[DataRequired(), Length(max=255)])
+    port = IntegerField(_l("SMTP Port"), validators=[DataRequired(), NumberRange(min=1, max=65535)])
+    username = StringField(_l("SMTP Username"), validators=[DataRequired(), Length(max=255)])
+    password = PasswordField(_l("SMTP Password"), validators=[Optional(), Length(max=255)])
+    starttls = BooleanField(_l("Use STARTTLS"))
+    submit = SubmitField(_l("Save Mail Account"))

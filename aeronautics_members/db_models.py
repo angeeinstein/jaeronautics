@@ -1,33 +1,72 @@
-﻿from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone
 
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import UniqueConstraint
 from werkzeug.security import check_password_hash, generate_password_hash
 
-# Initialize SQLAlchemy instance. This will be imported by the main app.
+
 db = SQLAlchemy()
 
 
+def utcnow():
+    return datetime.now(timezone.utc)
+
+
+class UserRole(db.Model):
+    __tablename__ = "user_roles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_user_roles_user_role"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey("roles.id"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class Role(db.Model):
+    __tablename__ = "roles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(80), unique=True, nullable=False)
+    label = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    users = db.relationship("User", secondary="user_roles", back_populates="roles")
+
+
 class User(UserMixin, db.Model):
-    __tablename__ = 'users'
+    __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=True)
-    role = db.Column(db.String(80), nullable=False, default='member')
     forum_username = db.Column(db.String(255), unique=True, nullable=True)
     email_verified_at = db.Column(db.DateTime, nullable=True)
 
-    member = db.relationship('Member', back_populates='user', uselist=False)
+    member = db.relationship("Member", back_populates="user", uselist=False)
+    roles = db.relationship("Role", secondary="user_roles", back_populates="users")
     requested_profile_changes = db.relationship(
-        'MemberProfileChangeRequest',
-        back_populates='requested_by',
-        foreign_keys='MemberProfileChangeRequest.requested_by_user_id',
+        "MemberProfileChangeRequest",
+        back_populates="requested_by",
+        foreign_keys="MemberProfileChangeRequest.requested_by_user_id",
     )
     reviewed_profile_changes = db.relationship(
-        'MemberProfileChangeRequest',
-        back_populates='reviewed_by',
-        foreign_keys='MemberProfileChangeRequest.reviewed_by_user_id',
+        "MemberProfileChangeRequest",
+        back_populates="reviewed_by",
+        foreign_keys="MemberProfileChangeRequest.reviewed_by_user_id",
+    )
+    audit_logs_as_actor = db.relationship(
+        "AuditLog",
+        back_populates="actor_user",
+        foreign_keys="AuditLog.actor_user_id",
+    )
+    audit_logs_as_target = db.relationship(
+        "AuditLog",
+        back_populates="target_user",
+        foreign_keys="AuditLog.target_user_id",
     )
 
     def set_password(self, password):
@@ -42,17 +81,34 @@ class User(UserMixin, db.Model):
     def email_is_verified(self):
         return self.email_verified_at is not None
 
+    @property
+    def is_admin(self):
+        return self.has_role("admin")
+
+    def has_role(self, slug):
+        return any(role.slug == slug for role in self.roles)
+
+    def grant_role(self, role):
+        if not any(existing_role.id == role.id for existing_role in self.roles):
+            self.roles.append(role)
+
+    def revoke_role(self, slug):
+        role = next((existing_role for existing_role in self.roles if existing_role.slug == slug), None)
+        if role is not None:
+            self.roles.remove(role)
+
+    @property
+    def role(self):
+        if self.has_role("admin"):
+            return "admin"
+        return "user"
+
 
 class Member(db.Model):
-    """
-    Database model for a Joanneum Aeronautics member profile.
-    Membership and billing state live here; login/identity live on User.
-    """
-
-    __tablename__ = 'member'
+    __tablename__ = "member"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=True)
 
     salutation = db.Column(db.String(20), nullable=False)
     title = db.Column(db.String(50), nullable=True)
@@ -69,27 +125,28 @@ class Member(db.Model):
     email_work = db.Column(db.String(255), nullable=True)
     year_group = db.Column(db.String(50), nullable=False)
     terms_accepted = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     pending_checkout_started_at = db.Column(db.DateTime, nullable=True)
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
-    payment_status = db.Column(db.String(50), nullable=False, default='unpaid')
+    payment_status = db.Column(db.String(50), nullable=False, default="unpaid")
     is_active = db.Column(db.Boolean, nullable=False, default=False)
     membership_starts_on = db.Column(db.Date, nullable=True)
     membership_ends_on = db.Column(db.Date, nullable=True)
     renewal_due_on = db.Column(db.Date, nullable=True)
     cancel_at_period_end = db.Column(db.Boolean, nullable=False, default=False)
 
-    user = db.relationship('User', back_populates='member', uselist=False)
+    user = db.relationship("User", back_populates="member", uselist=False)
     profile_change_requests = db.relationship(
-        'MemberProfileChangeRequest',
-        back_populates='member',
-        order_by='desc(MemberProfileChangeRequest.created_at)',
-        cascade='all, delete-orphan',
+        "MemberProfileChangeRequest",
+        back_populates="member",
+        order_by="desc(MemberProfileChangeRequest.created_at)",
+        cascade="all, delete-orphan",
     )
+    audit_logs = db.relationship("AuditLog", back_populates="target_member")
 
     def __repr__(self):
-        return f'<Member {self.first_name} {self.last_name}>'
+        return f"<Member {self.first_name} {self.last_name}>"
 
     @property
     def full_address(self):
@@ -104,22 +161,18 @@ class Member(db.Model):
     @property
     def open_identity_change_request(self):
         return next(
-            (
-                request
-                for request in self.profile_change_requests
-                if request.status == 'pending'
-            ),
+            (request for request in self.profile_change_requests if request.status == "pending"),
             None,
         )
 
 
 class MemberProfileChangeRequest(db.Model):
-    __tablename__ = 'member_profile_change_requests'
+    __tablename__ = "member_profile_change_requests"
 
     id = db.Column(db.Integer, primary_key=True)
-    member_id = db.Column(db.Integer, db.ForeignKey('member.id'), nullable=False)
-    requested_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    reviewed_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=False)
+    requested_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    reviewed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
     requested_salutation = db.Column(db.String(20), nullable=False)
     requested_title = db.Column(db.String(50), nullable=True)
@@ -127,20 +180,47 @@ class MemberProfileChangeRequest(db.Model):
     requested_last_name = db.Column(db.String(100), nullable=False)
     requested_year_group = db.Column(db.String(50), nullable=False)
 
-    status = db.Column(db.String(20), nullable=False, default='pending')
+    status = db.Column(db.String(20), nullable=False, default="pending")
     member_note = db.Column(db.Text, nullable=True)
     admin_note = db.Column(db.Text, nullable=True)
     reviewed_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
-    member = db.relationship('Member', back_populates='profile_change_requests')
-    requested_by = db.relationship('User', foreign_keys=[requested_by_user_id], back_populates='requested_profile_changes')
-    reviewed_by = db.relationship('User', foreign_keys=[reviewed_by_user_id], back_populates='reviewed_profile_changes')
+    member = db.relationship("Member", back_populates="profile_change_requests")
+    requested_by = db.relationship(
+        "User",
+        foreign_keys=[requested_by_user_id],
+        back_populates="requested_profile_changes",
+    )
+    reviewed_by = db.relationship(
+        "User",
+        foreign_keys=[reviewed_by_user_id],
+        back_populates="reviewed_profile_changes",
+    )
 
     @property
     def requested_full_name(self):
-        title = f"{self.requested_title} " if self.requested_title else ''
+        title = f"{self.requested_title} " if self.requested_title else ""
         return f"{title}{self.requested_first_name} {self.requested_last_name}".strip()
+
+
+class AuditLog(db.Model):
+    __tablename__ = "audit_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    actor_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    target_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    target_member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=True)
+    category = db.Column(db.String(80), nullable=False)
+    event_type = db.Column(db.String(120), nullable=False)
+    before_state = db.Column(db.JSON, nullable=True)
+    after_state = db.Column(db.JSON, nullable=True)
+    event_metadata = db.Column("metadata", db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    actor_user = db.relationship("User", foreign_keys=[actor_user_id], back_populates="audit_logs_as_actor")
+    target_user = db.relationship("User", foreign_keys=[target_user_id], back_populates="audit_logs_as_target")
+    target_member = db.relationship("Member", foreign_keys=[target_member_id], back_populates="audit_logs")
 
 
 class Setting(db.Model):
@@ -149,7 +229,7 @@ class Setting(db.Model):
 
 
 class MailAccount(db.Model):
-    __tablename__ = 'mail_accounts'
+    __tablename__ = "mail_accounts"
 
     id = db.Column(db.Integer, primary_key=True)
     account_key = db.Column(db.String(80), unique=True, nullable=False)
@@ -161,11 +241,11 @@ class MailAccount(db.Model):
 
     def to_config(self):
         config = {
-            'host': self.host,
-            'port': self.port,
-            'user': self.username,
-            'pass': self.password,
+            "host": self.host,
+            "port": self.port,
+            "user": self.username,
+            "pass": self.password,
         }
         if self.starttls:
-            config['starttls'] = True
+            config["starttls"] = True
         return config

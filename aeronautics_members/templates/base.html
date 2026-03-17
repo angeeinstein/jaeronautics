@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ get_locale()|string|replace('_', '-') }}">
+<html lang="{{ get_locale() | string | replace('_', '-') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -25,9 +25,9 @@
                                 <a class="nav-link" href="{{ url_for('account') }}">{{ _('My Account') }}</a>
                             </li>
                         {% endif %}
-                        {% if current_user.role == 'admin' %}
+                        {% if current_user.has_role('admin') %}
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('admin') }}">{{ _('Admin') }}</a>
+                                <a class="nav-link" href="{{ url_for('admin_dashboard') }}">{{ _('Admin') }}</a>
                             </li>
                         {% endif %}
                         <li class="nav-item">

@@ -1,0 +1,75 @@
+{% extends "admin_layout.html" %}
+{% set page_title = _('Admin Dashboard') %}
+{% set page_description = _('Overview of accounts, memberships, approvals, and recent activity.') %}
+{% block admin_content %}
+<div class="row g-4">
+    <div class="col-md-6 col-xl-4">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Total Accounts') }}</div><div class="display-6 mt-2">{{ metrics.total_accounts }}</div></div></div>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Linked Members') }}</div><div class="display-6 mt-2">{{ metrics.linked_members }}</div></div></div>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Active Memberships') }}</div><div class="display-6 mt-2">{{ metrics.active_memberships }}</div></div></div>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Checkouts') }}</div><div class="display-6 mt-2">{{ metrics.pending_checkouts }}</div></div></div>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Identity Requests') }}</div><div class="display-6 mt-2">{{ metrics.pending_identity_requests }}</div></div></div>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Cancel Scheduled') }}</div><div class="display-6 mt-2">{{ metrics.cancel_scheduled_memberships }}</div></div></div>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Pending Approvals') }}</h4>
+                <a href="{{ url_for('admin_approvals') }}" class="btn btn-sm btn-secondary">{{ _('Open') }}</a>
+            </div>
+            <div class="card-body">
+                {% if pending_request_preview %}
+                    <div class="list-group list-group-flush">
+                        {% for request_record in pending_request_preview %}
+                            <a href="{{ url_for('admin_approvals') }}" class="list-group-item list-group-item-action bg-transparent text-reset px-0">
+                                <div class="fw-semibold">{{ request_record.member.email_private }}</div>
+                                <div class="text-muted small">{{ request_record.member.first_name }} {{ request_record.member.last_name }} -> {{ request_record.requested_full_name }}</div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info mb-0">{{ _('There are no pending identity change requests right now.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Recent Activity') }}</h4>
+                <a href="{{ url_for('admin_logs') }}" class="btn btn-sm btn-secondary">{{ _('Open Logs') }}</a>
+            </div>
+            <div class="card-body">
+                {% if recent_logs %}
+                    <div class="list-group list-group-flush">
+                        {% for entry in recent_logs %}
+                            <a href="{{ url_for('admin_logs') }}" class="list-group-item list-group-item-action bg-transparent text-reset px-0">
+                                <div class="fw-semibold">{{ entry.category|replace('_', ' ')|title }} / {{ entry.event_type|replace('_', ' ')|title }}</div>
+                                <div class="text-muted small">
+                                    {{ entry.target_user.email if entry.target_user else (entry.target_member.email_private if entry.target_member else '-') }}
+                                    - {{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info mb-0">{{ _('No audit log entries yet.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
