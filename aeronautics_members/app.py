@@ -1021,12 +1021,32 @@ def get_latest_stripe_subscription_for_member(member):
 
 
 
-def sync_member_subscription_state_from_stripe(member):
-    if member is None or not member.stripe_customer_id:
+def backfill_member_coverage_from_subscription(member, subscription):
+    if member is None or not subscription:
         return False
 
-    subscription = get_latest_stripe_subscription_for_member(member)
-    if not subscription:
+    metadata = subscription.get("metadata", {}) or {}
+    starts_on = parse_iso_date(metadata.get("membership_starts_on"))
+    ends_on = parse_iso_date(metadata.get("membership_ends_on"))
+    renewal_due_on = parse_iso_date(metadata.get("renewal_due_on"))
+    changed = False
+
+    if starts_on and member.membership_starts_on != starts_on:
+        member.membership_starts_on = starts_on
+        changed = True
+    if ends_on and member.membership_ends_on != ends_on:
+        member.membership_ends_on = ends_on
+        changed = True
+    if renewal_due_on and member.renewal_due_on != renewal_due_on:
+        member.renewal_due_on = renewal_due_on
+        changed = True
+
+    return changed
+
+
+
+def sync_member_subscription_state_from_subscription(member, subscription):
+    if member is None or not subscription:
         return False
 
     changed = backfill_member_stripe_references(
@@ -1035,21 +1055,27 @@ def sync_member_subscription_state_from_stripe(member):
         subscription_id=subscription.get("id"),
     )
 
+    if backfill_member_coverage_from_subscription(member, subscription):
+        changed = True
+
     cancel_at_period_end = subscription_has_scheduled_cancellation(subscription)
     if member.cancel_at_period_end != cancel_at_period_end:
         member.cancel_at_period_end = cancel_at_period_end
         changed = True
 
     subscription_status = subscription.get("status")
+    activation_mode = ((subscription.get("metadata", {}) or {}).get("activation_mode") or "").strip()
+    coverage_is_current = bool(member.membership_ends_on and member.membership_ends_on >= get_membership_today())
+
     if subscription_status == "canceled":
         desired_status = "canceled"
-        desired_active = member_has_active_access(member)
-    elif cancel_at_period_end and member_has_active_access(member):
-        desired_status = "cancel_scheduled"
+        desired_active = coverage_is_current
+    elif cancel_at_period_end:
+        desired_status = "cancel_scheduled" if coverage_is_current else member.payment_status
+        desired_active = coverage_is_current
+    elif subscription_status in {"active", "trialing"} and coverage_is_current:
+        desired_status = "free_period" if activation_mode == "free_period" else "paid"
         desired_active = True
-    elif not cancel_at_period_end and member.payment_status == "cancel_scheduled":
-        desired_status = "paid" if member.is_active else member.payment_status
-        desired_active = member.is_active
     else:
         desired_status = None
         desired_active = member.is_active
@@ -1066,6 +1092,18 @@ def sync_member_subscription_state_from_stripe(member):
         changed = True
 
     return changed
+
+
+
+def sync_member_subscription_state_from_stripe(member):
+    if member is None or not member.stripe_customer_id:
+        return False
+
+    subscription = get_latest_stripe_subscription_for_member(member)
+    if not subscription:
+        return False
+
+    return sync_member_subscription_state_from_subscription(member, subscription)
 
 
 
@@ -3046,13 +3084,9 @@ def create_app():
                 fetch_customer_email=True,
             )
             if member:
-                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
-                member.cancel_at_period_end = subscription_has_scheduled_cancellation(subscription)
-                if member.cancel_at_period_end and member_has_active_access(member):
-                    member.payment_status = "cancel_scheduled"
-                elif not member.cancel_at_period_end and member.payment_status == "cancel_scheduled":
-                    member.payment_status = "paid" if member.is_active else member.payment_status
-                db.session.commit()
+                state_changed = sync_member_subscription_state_from_subscription(member, subscription)
+                if state_changed:
+                    db.session.commit()
                 app.logger.info(
                     "Subscription updated for member_id=%s customer=%s subscription=%s status=%s cancel_at_period_end=%s cancel_at=%s",
                     member.id,
@@ -3106,6 +3140,7 @@ def create_app():
             )
             if member:
                 backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
+                backfill_member_coverage_from_subscription(member, subscription)
                 member.cancel_at_period_end = False
                 cancellation_details = subscription.get("cancellation_details", {})
                 reason = cancellation_details.get("reason")
