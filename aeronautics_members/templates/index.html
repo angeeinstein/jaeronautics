@@ -5,10 +5,12 @@
     <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-4 border-bottom pb-3">
         <div>
             <h2 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">{{ _('Required Information') }}</h2>
-            <p class="text-muted mb-0">{{ _('Your membership signup also creates your Joanneum Aeronautics account for future self-service and forum access.') }}</p>
         </div>
-        <div class="text-lg-end">
-            <a href="{{ url_for('login') }}" class="btn btn-secondary btn-sm mb-2">{{ _('Already have an account? Log in') }}</a>
+        <div class="text-lg-end align-self-start">
+            <p class="mb-0 small text-muted">
+                {{ _('Already have an account?') }}
+                <a href="{{ url_for('login') }}" class="fw-semibold text-decoration-none">{{ _('Log in') }}</a>
+            </p>
         </div>
     </div>
     <form method="POST" action="{{ url_for('process_membership') }}" class="space-y-6">
@@ -137,9 +139,9 @@
             </div>
         </div>
 
-        <div class="alert alert-info mt-4 mb-0">
-            {{ _('If payment setup cannot be completed immediately, your account remains available so you can log in later and resume the membership process.') }}
-        </div>
+        <p class="text-muted small mt-4 mb-0 text-center">
+            {{ _('If needed, you can complete payment later from your account.') }}
+        </p>
 
         <div class="mt-6">
             {{ form.submit(class="btn btn-primary w-100 btn-lg") }}

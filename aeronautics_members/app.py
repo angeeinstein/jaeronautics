@@ -50,7 +50,7 @@ try:
         SetPasswordForm,
         TestEmailForm,
     )
-    from .mail_utils import load_mail_accounts_config, send_mail
+    from .mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
 except ImportError:
     from db_models import AuditLog, Role, UserRole, db, MailAccount, Member, MemberProfileChangeRequest, Setting, User
     from forms import (
@@ -66,7 +66,7 @@ except ImportError:
         SetPasswordForm,
         TestEmailForm,
     )
-    from mail_utils import load_mail_accounts_config, send_mail
+    from mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parent
@@ -668,8 +668,8 @@ def send_email_verification_email(app, user):
         action_label=_("Verify Email"),
         heading=_("Confirm your email address"),
         body_lines=[
-            _("Please confirm your email address so future account services like forum SSO can be enabled safely."),
-            _("You can already use the membership portal, but verification will be required for additional integrations later on."),
+            _("Please confirm your email address for your Joanneum Aeronautics account."),
+            _("This helps us keep your account secure and reach you when needed."),
         ],
     )
 
@@ -3108,6 +3108,34 @@ def create_app():
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         return response
+
+    @app.route("/admin/settings/mail-accounts/<int:mail_account_id>/test-connection", methods=["POST"])
+    @login_required
+    @admin_required
+    @limiter.limit(RATELIMIT_ADMIN_EMAIL)
+    def test_mail_account_connection(mail_account_id):
+        mail_account = db.session.get(MailAccount, mail_account_id)
+        if mail_account is None:
+            flash(_("The selected mail account could not be found."), "warning")
+            return redirect(url_for("admin_settings"))
+
+        success, message = probe_mail_account_connection(mail_account.to_config())
+        log_audit_event(
+            category="settings",
+            event_type="mail_account_connection_tested",
+            actor_user=current_user,
+            target_user=current_user,
+            before=snapshot_mail_account_for_audit(mail_account),
+            after=None,
+            metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key, "success": success, "message": message},
+        )
+        db.session.commit()
+
+        if success:
+            flash(_("Connection test succeeded for %(account_key)s.", account_key=mail_account.account_key), "success")
+        else:
+            flash(_("Connection test failed for %(account_key)s: %(message)s", account_key=mail_account.account_key, message=message), "danger")
+        return redirect(url_for("admin_settings", edit_mail_account=mail_account.id))
 
     @app.route("/admin/settings/send-test-email", methods=["POST"])
     @login_required

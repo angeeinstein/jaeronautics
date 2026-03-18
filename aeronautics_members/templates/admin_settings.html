@@ -156,8 +156,14 @@
                                 <td>{{ mail_account.username }}</td>
                                 <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
                                 <td class="text-end">
-                                    <a href="{{ url_for('admin_settings', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
-                                    <button type="button" class="btn btn-sm btn-danger ms-2" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
+                                    <div class="d-inline-flex flex-wrap justify-content-end gap-2">
+                                        <a href="{{ url_for('admin_settings', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
+                                        <form method="POST" action="{{ url_for('test_mail_account_connection', mail_account_id=mail_account.id) }}" class="mb-0">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-secondary">{{ _('Test') }}</button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
+                                    </div>
                                 </td>
                             </tr>
                         {% endfor %}

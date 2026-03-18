@@ -65,6 +65,34 @@ def load_mail_accounts_config(required=False):
     raise ValueError("MAIL_ACCOUNTS_JSON is not a valid JSON object.")
 
 
+def probe_mail_account_connection(config):
+    try:
+        context = ssl.create_default_context()
+        host = config["host"]
+        port = int(config["port"])
+        username = config["user"]
+        password = config["pass"]
+
+        if config.get("starttls", False):
+            with smtplib.SMTP(host, port, timeout=15) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.ehlo()
+                server.login(username, password)
+        else:
+            with smtplib.SMTP_SSL(host, port, context=context, timeout=15) as server:
+                server.login(username, password)
+
+        return True, "SMTP connection and authentication succeeded."
+    except smtplib.SMTPAuthenticationError:
+        return False, "SMTP authentication failed."
+    except smtplib.SMTPConnectError as exc:
+        return False, f"Could not connect to the SMTP server: {exc}"
+    except (smtplib.SMTPException, OSError, ssl.SSLError) as exc:
+        return False, f"SMTP connection test failed: {exc}"
+
+
+
 def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, **template_vars):
     """
     Sends an email using pre-configured SMTP accounts from .env.
