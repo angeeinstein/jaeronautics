@@ -859,6 +859,145 @@ def snapshot_mail_account_for_audit(mail_account):
 
 
 
+def normalize_mail_account_key(raw_key):
+    if raw_key is None:
+        return ""
+    normalized = "".join(
+        character if (character.isalnum() or character in {"-", "_"}) else "_"
+        for character in str(raw_key).strip()
+    )
+    while "__" in normalized:
+        normalized = normalized.replace("__", "_")
+    return normalized.strip("_")
+
+
+
+def parse_imported_starttls(value, security_hint=None):
+    if value is not None:
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on", "starttls"}
+        return bool(value)
+
+    security_value = (security_hint or "").strip().lower()
+    if security_value in {"starttls", "tls-starttls", "smtp-starttls", "explicit_tls"}:
+        return True
+    if security_value in {"ssl", "ssl/tls", "tls", "implicit_tls"}:
+        return False
+    return False
+
+
+
+def normalize_imported_mail_account_record(raw_record, fallback_key=None):
+    if not isinstance(raw_record, dict):
+        raise ValueError("Each imported mail account entry must be a JSON object.")
+
+    account_key = normalize_mail_account_key(
+        raw_record.get("account_key")
+        or raw_record.get("key")
+        or raw_record.get("name")
+        or fallback_key
+    )
+    host = (raw_record.get("host") or raw_record.get("smtp_host") or raw_record.get("server") or "").strip()
+    username = (
+        raw_record.get("username")
+        or raw_record.get("user")
+        or raw_record.get("email")
+        or raw_record.get("login")
+        or ""
+    ).strip()
+    password = (
+        raw_record.get("password")
+        or raw_record.get("pass")
+        or raw_record.get("secret")
+        or raw_record.get("smtp_password")
+        or ""
+    )
+    port_value = raw_record.get("port") or raw_record.get("smtp_port")
+    security_hint = raw_record.get("security") or raw_record.get("encryption") or raw_record.get("transport_security")
+    starttls = parse_imported_starttls(raw_record.get("starttls"), security_hint=security_hint)
+
+    if not account_key:
+        raise ValueError("Every imported mail account needs a valid account key.")
+    if not host:
+        raise ValueError(f"Mail account '{account_key}' is missing the SMTP host.")
+    if not username:
+        raise ValueError(f"Mail account '{account_key}' is missing the SMTP username.")
+    if not password:
+        raise ValueError(f"Mail account '{account_key}' is missing the SMTP password.")
+    if port_value in (None, ""):
+        raise ValueError(f"Mail account '{account_key}' is missing the SMTP port.")
+
+    try:
+        port = int(port_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Mail account '{account_key}' has an invalid SMTP port.") from exc
+
+    if port < 1 or port > 65535:
+        raise ValueError(f"Mail account '{account_key}' has an invalid SMTP port.")
+
+    return {
+        "account_key": account_key,
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "starttls": starttls,
+    }
+
+
+
+def normalize_imported_mail_accounts_payload(payload):
+    raw_records = []
+
+    if isinstance(payload, dict) and isinstance(payload.get("mail_accounts"), list):
+        raw_records = [(None, entry) for entry in payload.get("mail_accounts", [])]
+    elif isinstance(payload, list):
+        raw_records = [(None, entry) for entry in payload]
+    elif isinstance(payload, dict):
+        raw_records = [
+            (key, value)
+            for key, value in payload.items()
+            if isinstance(value, dict)
+        ]
+    else:
+        raise ValueError("The uploaded JSON must be a Jaeronautics export, a legacy mail-account mapping, or a list of mail account objects.")
+
+    if not raw_records:
+        raise ValueError("The uploaded file does not contain any mail accounts.")
+
+    normalized_records = []
+    seen_keys = set()
+    for fallback_key, raw_record in raw_records:
+        normalized = normalize_imported_mail_account_record(raw_record, fallback_key=fallback_key)
+        if normalized["account_key"] in seen_keys:
+            raise ValueError(f"The uploaded file contains the account key '{normalized['account_key']}' more than once.")
+        seen_keys.add(normalized["account_key"])
+        normalized_records.append(normalized)
+
+    return normalized_records
+
+
+
+def build_mail_accounts_export_payload():
+    return {
+        "format": "jaeronautics_mail_accounts",
+        "version": 1,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "mail_accounts": [
+            {
+                "account_key": mail_account.account_key,
+                "host": mail_account.host,
+                "port": mail_account.port,
+                "username": mail_account.username,
+                "password": mail_account.password,
+                "starttls": mail_account.starttls,
+            }
+            for mail_account in get_db_mail_accounts()
+        ],
+    }
+
+
+
 def log_audit_event(category, event_type, actor_user=None, target_user=None, target_member=None, before=None, after=None, metadata=None):
     db.session.add(
         AuditLog(
@@ -2823,6 +2962,152 @@ def create_app():
         db.session.commit()
         flash(_("Mail account deleted successfully."), "success")
         return redirect(url_for("admin_settings"))
+
+    @app.route("/admin/settings/mail-accounts/import", methods=["POST"])
+    @login_required
+    @admin_required
+    def import_mail_accounts():
+        upload = request.files.get("mail_accounts_file")
+        overwrite_existing = request.form.get("overwrite_existing") == "1"
+
+        if upload is None or not upload.filename:
+            flash(_("Please choose a JSON file to import."), "warning")
+            return redirect(url_for("admin_settings"))
+
+        try:
+            raw_payload = upload.stream.read()
+            payload = json.loads(raw_payload.decode("utf-8-sig"))
+            imported_accounts = normalize_imported_mail_accounts_payload(payload)
+        except UnicodeDecodeError:
+            flash(_("The uploaded file is not valid UTF-8 JSON."), "danger")
+            return redirect(url_for("admin_settings"))
+        except json.JSONDecodeError:
+            flash(_("The uploaded file is not valid JSON."), "danger")
+            return redirect(url_for("admin_settings"))
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("admin_settings"))
+
+        created_count = 0
+        updated_count = 0
+        skipped_keys = []
+
+        try:
+            for imported_account in imported_accounts:
+                mail_account = db.session.execute(
+                    db.select(MailAccount).filter_by(account_key=imported_account["account_key"])
+                ).scalar_one_or_none()
+
+                if mail_account is not None and not overwrite_existing:
+                    skipped_keys.append(imported_account["account_key"])
+                    continue
+
+                before_mail_account = snapshot_mail_account_for_audit(mail_account)
+                is_new_mail_account = mail_account is None
+                if mail_account is None:
+                    mail_account = MailAccount()
+                    db.session.add(mail_account)
+
+                mail_account.account_key = imported_account["account_key"]
+                mail_account.host = imported_account["host"]
+                mail_account.port = imported_account["port"]
+                mail_account.username = imported_account["username"]
+                mail_account.password = imported_account["password"]
+                mail_account.starttls = imported_account["starttls"]
+                db.session.flush()
+
+                log_audit_event(
+                    category="settings",
+                    event_type="mail_account_created" if is_new_mail_account else "mail_account_updated",
+                    actor_user=current_user,
+                    target_user=current_user,
+                    before=before_mail_account,
+                    after=snapshot_mail_account_for_audit(mail_account),
+                    metadata={
+                        "mail_account_id": mail_account.id,
+                        "account_key": mail_account.account_key,
+                        "source": "json_import",
+                        "overwrite_existing": overwrite_existing,
+                    },
+                )
+
+                if is_new_mail_account:
+                    created_count += 1
+                else:
+                    updated_count += 1
+
+            log_audit_event(
+                category="settings",
+                event_type="mail_accounts_imported",
+                actor_user=current_user,
+                target_user=current_user,
+                before=None,
+                after={"created": created_count, "updated": updated_count, "skipped": len(skipped_keys)},
+                metadata={
+                    "overwrite_existing": overwrite_existing,
+                    "imported_keys": [account["account_key"] for account in imported_accounts],
+                    "skipped_keys": skipped_keys,
+                },
+            )
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash(_("Import failed because one of the account keys already exists."), "danger")
+            return redirect(url_for("admin_settings"))
+
+        if created_count or updated_count:
+            flash(
+                _(
+                    "Mail account import finished. Created: %(created)s, updated: %(updated)s, skipped: %(skipped)s.",
+                    created=created_count,
+                    updated=updated_count,
+                    skipped=len(skipped_keys),
+                ),
+                "success",
+            )
+        else:
+            flash(_("No mail accounts were imported."), "info")
+
+        if skipped_keys:
+            flash(
+                _(
+                    "Skipped existing account keys: %(keys)s",
+                    keys=", ".join(skipped_keys),
+                ),
+                "warning",
+            )
+
+        return redirect(url_for("admin_settings"))
+
+    @app.route("/admin/settings/mail-accounts/export", methods=["POST"])
+    @login_required
+    @admin_required
+    def export_mail_accounts():
+        confirm_password = request.form.get("export_password", "")
+        if not current_user.check_password(confirm_password):
+            flash(_("Please confirm your current password to export sender accounts."), "danger")
+            return redirect(url_for("admin_settings"))
+
+        payload = build_mail_accounts_export_payload()
+        log_audit_event(
+            category="settings",
+            event_type="mail_accounts_exported",
+            actor_user=current_user,
+            target_user=current_user,
+            metadata={"count": len(payload["mail_accounts"]), "format": payload["format"], "version": payload["version"]},
+        )
+        db.session.commit()
+
+        export_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        response = current_app.response_class(
+            json.dumps(payload, indent=2),
+            mimetype="application/json",
+        )
+        response.headers["Content-Disposition"] = f'attachment; filename="jaeronautics-mail-accounts-{export_timestamp}.json"'
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     @app.route("/admin/settings/send-test-email", methods=["POST"])
     @login_required

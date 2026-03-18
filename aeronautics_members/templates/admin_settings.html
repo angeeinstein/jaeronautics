@@ -46,6 +46,77 @@
         {% endif %}
     </div>
     <div class="card-body">
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-column gap-3 mb-3">
+                    <div>
+                        <h5 class="mb-1">{{ _('Import or Export Sender Accounts') }}</h5>
+                        <p class="text-muted mb-0">{{ _('SMTP providers usually do not offer a standard export file format. Use the Jaeronautics JSON export, the legacy MAIL_ACCOUNTS_JSON mapping, or a JSON list with common SMTP keys.') }}</p>
+                    </div>
+                    <form method="POST" action="{{ url_for('export_mail_accounts') }}" class="row g-3 align-items-end">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="col-lg-6">
+                            <label for="export-password" class="form-label">{{ _('Confirm Current Password for Export') }}</label>
+                            <input type="password" class="form-control" id="export-password" name="export_password" autocomplete="current-password" required>
+                        </div>
+                        <div class="col-lg-6 d-flex justify-content-lg-end">
+                            <button type="submit" class="btn btn-secondary">{{ _('Export JSON') }}</button>
+                        </div>
+                        <div class="col-12">
+                            <small class="text-muted">{{ _('The export includes SMTP passwords in plaintext, so only export when necessary and store the file securely.') }}</small>
+                        </div>
+                    </form>
+                </div>
+                <form method="POST" action="{{ url_for('import_mail_accounts') }}" enctype="multipart/form-data" class="row g-3 align-items-end">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="col-lg-6">
+                        <label for="mail-accounts-file" class="form-label">{{ _('Import JSON File') }}</label>
+                        <input type="file" class="form-control" id="mail-accounts-file" name="mail_accounts_file" accept=".json,application/json" required>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="form-check mt-4 pt-2">
+                            <input class="form-check-input" type="checkbox" value="1" id="overwrite-existing-mail-accounts" name="overwrite_existing">
+                            <label class="form-check-label" for="overwrite-existing-mail-accounts">{{ _('Overwrite matching keys') }}</label>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 d-flex justify-content-lg-end">
+                        <button type="submit" class="btn btn-primary">{{ _('Import JSON') }}</button>
+                    </div>
+                    <div class="col-12">
+                        <small class="text-muted">{{ _('Exported files include SMTP passwords in plaintext, so store them carefully.') }}</small>
+                    </div>
+                    <div class="col-12">
+                        <details>
+                            <summary>{{ _('Supported JSON formats') }}</summary>
+                            <pre class="mt-3 mb-0">{
+  "format": "jaeronautics_mail_accounts",
+  "version": 1,
+  "mail_accounts": [
+    {
+      "account_key": "office",
+      "host": "smtp.example.com",
+      "port": 587,
+      "username": "office@example.com",
+      "password": "secret",
+      "starttls": true
+    }
+  ]
+}
+
+{
+  "office": {
+    "host": "smtp.example.com",
+    "port": 587,
+    "user": "office@example.com",
+    "pass": "secret",
+    "starttls": true
+  }
+}</pre>
+                        </details>
+                    </div>
+                </form>
+            </div>
+        </div>
         <form method="POST" action="{{ url_for('save_mail_account') }}">
             {{ mail_account_form.hidden_tag() }}
             {{ mail_account_form.mail_account_id }}
