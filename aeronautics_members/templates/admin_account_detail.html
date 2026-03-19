@@ -84,6 +84,39 @@
     </div>
 </div>
 
+<div class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><h4 class="mb-0">{{ _('Forum') }}</h4></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">{{ _('Forum State') }}</dt>
+                    <dd class="col-sm-7">{{ forum_account.state|replace('_', ' ')|title if forum_account else _('Not prepared') }}</dd>
+                    <dt class="col-sm-5">{{ _('Portal Status') }}</dt>
+                    <dd class="col-sm-7">{{ forum_context.status_key|replace('_', ' ')|title }}</dd>
+                    <dt class="col-sm-5">{{ _('Latest Avatar') }}</dt>
+                    <dd class="col-sm-7">{{ latest_forum_submission.status|replace('_', ' ')|title if latest_forum_submission else '-' }}</dd>
+                    <dt class="col-sm-5">{{ _('Last Synced') }}</dt>
+                    <dd class="col-sm-7">{{ forum_account.last_synced_at.strftime('%Y-%m-%d %H:%M') if forum_account and forum_account.last_synced_at else '-' }}</dd>
+                </dl>
+                {% if forum_context.forum_error %}
+                    <div class="alert alert-warning mt-4 mb-3">{{ forum_context.forum_error }}</div>
+                {% endif %}
+                {% if latest_forum_submission and latest_forum_submission.review_note %}
+                    <div class="alert alert-secondary mb-3">{{ latest_forum_submission.review_note }}</div>
+                {% endif %}
+                {% if member %}
+                    <form method="POST" action="{{ url_for('admin_resync_forum_account', user_id=user_record.id) }}" class="mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="next" value="{{ url_for('admin_account_detail', user_id=user_record.id) }}">
+                        <button type="submit" class="btn btn-primary">{{ _('Resync Forum') }}</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card mt-4">
     <div class="card-header"><h4 class="mb-0">{{ _('Recent Audit Log') }}</h4></div>
     <div class="card-body">

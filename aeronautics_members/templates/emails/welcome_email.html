@@ -9,43 +9,18 @@
         a { color: #00dfff; text-decoration: none; }
         .wrapper { width: 100%; table-layout: fixed; background-color: #161718; }
         .container { max-width: 640px; margin: 24px auto; background-color: #1f2123; border: 1px solid #34383b; }
-        .header {
-            background-color: #000000;
-            padding: 24px 28px;
-            text-align: center;
-            border-bottom: 4px solid #00dfff;
-        }
+        .header { background-color: #000000; padding: 24px 28px; text-align: center; border-bottom: 4px solid #00dfff; }
         .header img { max-width: 220px; height: auto; }
         .content { padding: 32px 34px; }
         .content p { margin: 0 0 16px; color: #ffffff; }
         .section { border-top: 1px solid #34383b; margin: 28px 0; padding-top: 24px; }
         .section h4 { margin: 0 0 14px; font-size: 20px; line-height: 1.3; color: #ffffff; }
-        .info-box {
-            margin: 18px 0;
-            padding: 14px 16px;
-            border: 1px solid #34383b;
-            background-color: #161718;
-            color: #aab4bb;
-        }
+        .info-box { margin: 18px 0; padding: 14px 16px; border: 1px solid #34383b; background-color: #161718; color: #aab4bb; }
         .info-box strong { color: #00dfff; }
-        .username-box {
-            margin: 18px 0;
-            padding: 14px 16px;
-            border: 1px solid #00dfff;
-            background-color: #161718;
-            color: #00dfff;
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-align: center;
-        }
-        .footer {
-            padding: 22px 28px 28px;
-            font-size: 12px;
-            text-align: center;
-            color: #aab4bb;
-            border-top: 1px solid #34383b;
-        }
+        .username-box { margin: 18px 0; padding: 14px 16px; border: 1px solid #00dfff; background-color: #161718; color: #00dfff; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; text-align: center; }
+        .button-row { margin: 28px 0; text-align: center; }
+        .button-row a { display: inline-block; padding: 13px 24px; background-color: #00dfff; color: #091013; font-weight: 700; border-radius: 4px; }
+        .footer { padding: 22px 28px 28px; font-size: 12px; text-align: center; color: #aab4bb; border-top: 1px solid #34383b; }
     </style>
 </head>
 <body>
@@ -61,6 +36,18 @@
                     <div class="info-box">
                         <p><strong>{{ _('Current membership access until:') }}</strong> {{ membership_ends_on.strftime('%Y-%m-%d') }}</p>
                         <p><strong>{{ _('Next renewal date:') }}</strong> {{ renewal_due_on.strftime('%Y-%m-%d') }}</p>
+                    </div>
+                {% endif %}
+
+                {% if forum_integration_enabled and forum_entry_url %}
+                    <div class="section">
+                        <h4>{{ _('Forum Access') }}</h4>
+                        <p>{{ _('Your forum account uses the following username:') }}</p>
+                        <p class="username-box">{{ suggested_username }}</p>
+                        <p>{{ _('Before member content becomes visible in the forum, please upload a profile picture for approval.') }}</p>
+                        <div class="button-row">
+                            <a href="{{ forum_entry_url }}" target="_blank" rel="noopener">{{ _('Open Forum') }}</a>
+                        </div>
                     </div>
                 {% endif %}
 

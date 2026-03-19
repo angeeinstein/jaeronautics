@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Forum Access') }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-8 col-lg-10">
+        <div class="card shadow-sm border-0">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="mb-0">{{ _('Forum Access') }}</h3>
+                <a href="{{ url_for('account') }}" class="btn btn-sm btn-secondary">{{ _('Back to Account') }}</a>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">{{ _('Use this page to complete the steps required before member content becomes visible in the forum.') }}</p>
+                <dl class="row">
+                    <dt class="col-sm-4">{{ _('Forum Username') }}</dt>
+                    <dd class="col-sm-8">{{ current_user.forum_username or _('Not set') }}</dd>
+                    <dt class="col-sm-4">{{ _('Status') }}</dt>
+                    <dd class="col-sm-8">{{ forum_context.status_message }}</dd>
+                </dl>
+
+                {% if forum_context.forum_error %}
+                    <div class="alert alert-warning">{{ forum_context.forum_error }}</div>
+                {% endif %}
+
+                {% if forum_context.status_key == 'inactive_membership' %}
+                    <div class="alert alert-secondary mb-0">{{ _('Your forum access will become available again once your membership is active.') }}</div>
+                {% elif forum_context.status_key == 'disabled' %}
+                    <div class="alert alert-secondary mb-0">{{ _('The forum integration is not configured yet.') }}</div>
+                {% elif forum_context.status_key == 'active' %}
+                    <div class="alert alert-success">{{ _('Your forum access is ready. If you are not redirected automatically, use the button below.') }}</div>
+                    <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
+                {% else %}
+                    {% if forum_context.latest_submission and forum_context.latest_submission.review_note %}
+                        <div class="alert alert-secondary">{{ forum_context.latest_submission.review_note }}</div>
+                    {% endif %}
+                    {% if forum_context.pending_submission and forum_context.pending_submission.public_token %}
+                        <div class="mb-4">
+                            <img src="{{ url_for('forum_avatar_public_file', token=forum_context.pending_submission.public_token) }}" alt="{{ _('Pending profile picture preview') }}" class="img-fluid rounded border">
+                        </div>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('upload_forum_avatar') }}" enctype="multipart/form-data" class="mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="forum-avatar-page" class="form-label">{{ _('Profile Picture') }}</label>
+                            <input type="file" class="form-control" id="forum-avatar-page" name="avatar" accept="image/jpeg,image/png,image/webp" required>
+                            <small class="text-muted">{{ _('Allowed types: %(types)s. Maximum size: %(bytes)s bytes.', types=forum_context.service.settings['forum_avatar_allowed_types']|join(', '), bytes=forum_context.service.settings['forum_avatar_max_bytes']) }}</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">{{ _('Upload Profile Picture') }}</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

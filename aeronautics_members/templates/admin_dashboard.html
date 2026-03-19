@@ -1,30 +1,22 @@
 {% extends "admin_layout.html" %}
 {% set page_title = _('Admin Dashboard') %}
-{% set page_description = _('Overview of accounts, memberships, approvals, and recent activity.') %}
+{% set page_description = _('Overview of accounts, memberships, forum onboarding, approvals, and recent activity.') %}
 {% block admin_content %}
 <div class="row g-4">
-    <div class="col-md-6 col-xl-4">
-        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Total Accounts') }}</div><div class="display-6 mt-2">{{ metrics.total_accounts }}</div></div></div>
-    </div>
-    <div class="col-md-6 col-xl-4">
-        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Linked Members') }}</div><div class="display-6 mt-2">{{ metrics.linked_members }}</div></div></div>
-    </div>
-    <div class="col-md-6 col-xl-4">
-        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Active Memberships') }}</div><div class="display-6 mt-2">{{ metrics.active_memberships }}</div></div></div>
-    </div>
-    <div class="col-md-6 col-xl-4">
-        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Checkouts') }}</div><div class="display-6 mt-2">{{ metrics.pending_checkouts }}</div></div></div>
-    </div>
-    <div class="col-md-6 col-xl-4">
-        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Identity Requests') }}</div><div class="display-6 mt-2">{{ metrics.pending_identity_requests }}</div></div></div>
-    </div>
-    <div class="col-md-6 col-xl-4">
-        <div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Cancel Scheduled') }}</div><div class="display-6 mt-2">{{ metrics.cancel_scheduled_memberships }}</div></div></div>
-    </div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Total Accounts') }}</div><div class="display-6 mt-2">{{ metrics.total_accounts }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Linked Members') }}</div><div class="display-6 mt-2">{{ metrics.linked_members }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Active Memberships') }}</div><div class="display-6 mt-2">{{ metrics.active_memberships }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Checkouts') }}</div><div class="display-6 mt-2">{{ metrics.pending_checkouts }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Identity Requests') }}</div><div class="display-6 mt-2">{{ metrics.pending_identity_requests }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Cancel Scheduled') }}</div><div class="display-6 mt-2">{{ metrics.cancel_scheduled_memberships }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Forum Onboarding') }}</div><div class="display-6 mt-2">{{ metrics.forum_onboarding_accounts }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Forum Active') }}</div><div class="display-6 mt-2">{{ metrics.forum_active_accounts }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Avatars') }}</div><div class="display-6 mt-2">{{ metrics.pending_forum_avatars }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Forum Sync Errors') }}</div><div class="display-6 mt-2">{{ metrics.forum_sync_errors }}</div></div></div></div>
 </div>
 
 <div class="row g-4 mt-1">
-    <div class="col-lg-6">
+    <div class="col-lg-4">
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ _('Pending Approvals') }}</h4>
@@ -46,7 +38,26 @@
             </div>
         </div>
     </div>
-    <div class="col-lg-6">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Forum Queue') }}</h4>
+                <a href="{{ url_for('admin_forum') }}" class="btn btn-sm btn-secondary">{{ _('Open Forum Admin') }}</a>
+            </div>
+            <div class="card-body">
+                <p class="mb-3">{{ _('Review pending avatar uploads, fix sync issues, and monitor onboarding progress.') }}</p>
+                <dl class="row mb-0">
+                    <dt class="col-sm-7">{{ _('Pending Avatars') }}</dt>
+                    <dd class="col-sm-5">{{ metrics.pending_forum_avatars }}</dd>
+                    <dt class="col-sm-7">{{ _('Onboarding Accounts') }}</dt>
+                    <dd class="col-sm-5">{{ metrics.forum_onboarding_accounts }}</dd>
+                    <dt class="col-sm-7">{{ _('Sync Errors') }}</dt>
+                    <dd class="col-sm-5">{{ metrics.forum_sync_errors }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ _('Recent Activity') }}</h4>

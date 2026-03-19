@@ -1,0 +1,116 @@
+{% extends "admin_layout.html" %}
+{% set page_title = _('Forum Administration') %}
+{% set page_description = _('Review avatar uploads, monitor forum sync state, and repair forum access.') %}
+{% block admin_content %}
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Avatars') }}</div><div class="display-6 mt-2">{{ metrics.pending_forum_avatars }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Onboarding Accounts') }}</div><div class="display-6 mt-2">{{ metrics.forum_onboarding_accounts }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Active Forum Accounts') }}</div><div class="display-6 mt-2">{{ metrics.forum_active_accounts }}</div></div></div></div>
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Sync Errors') }}</div><div class="display-6 mt-2">{{ metrics.forum_sync_errors }}</div></div></div></div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><h4 class="mb-0">{{ _('Pending Avatar Reviews') }}</h4></div>
+    <div class="card-body">
+        {% if pending_avatar_pagination.items %}
+            <div class="d-flex flex-column gap-4">
+                {% for submission in pending_avatar_pagination.items %}
+                    <div class="border rounded p-3">
+                        <div class="row g-4 align-items-start">
+                            <div class="col-lg-4">
+                                {% if submission.public_token %}
+                                    <img src="{{ url_for('forum_avatar_public_file', token=submission.public_token) }}" alt="{{ _('Avatar preview') }}" class="img-fluid rounded border mb-3">
+                                {% endif %}
+                                <div class="small text-muted">{{ _('Uploaded') }}: {{ submission.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                                <div class="small text-muted">{{ _('Member') }}: {{ submission.member.email_private }}</div>
+                                <div class="small text-muted">{{ _('Forum Username') }}: {{ submission.user.forum_username or '-' }}</div>
+                            </div>
+                            <div class="col-lg-4">
+                                <h5 class="mb-3">{{ _('Approve') }}</h5>
+                                <form method="POST" action="{{ url_for('approve_forum_avatar_submission', submission_id=submission.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="mb-3">
+                                        <label class="form-label" for="approve-note-{{ submission.id }}">{{ _('Note for the member (optional)') }}</label>
+                                        <textarea class="form-control" id="approve-note-{{ submission.id }}" name="review_note" rows="4" placeholder="{{ _('Optional explanation or confirmation for the member') }}"></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">{{ _('Approve and Sync to Forum') }}</button>
+                                </form>
+                            </div>
+                            <div class="col-lg-4">
+                                <h5 class="mb-3">{{ _('Reject') }}</h5>
+                                <form method="POST" action="{{ url_for('reject_forum_avatar_submission', submission_id=submission.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="mb-3">
+                                        <label class="form-label" for="reject-note-{{ submission.id }}">{{ _('Reason (optional)') }}</label>
+                                        <textarea class="form-control" id="reject-note-{{ submission.id }}" name="review_note" rows="4" placeholder="{{ _('Optional explanation for the rejection') }}"></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-danger">{{ _('Reject Submission') }}</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            {% if pending_avatar_pagination.pages > 1 %}
+                <nav class="mt-4" aria-label="{{ _('Pending avatar pagination') }}">
+                    <ul class="pagination mb-0">
+                        {% for page_number in pending_avatar_pagination.iter_pages() %}
+                            {% if page_number %}
+                                <li class="page-item {% if page_number == pending_avatar_pagination.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('admin_forum', page=page_number) }}">{{ page_number }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">…</span></li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </nav>
+            {% endif %}
+        {% else %}
+            <div class="alert alert-info mb-0">{{ _('There are no pending avatar submissions right now.') }}</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h4 class="mb-0">{{ _('Forum Sync Issues') }}</h4></div>
+    <div class="card-body">
+        {% if sync_error_accounts %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Email') }}</th>
+                            <th>{{ _('Forum State') }}</th>
+                            <th>{{ _('Last Error') }}</th>
+                            <th>{{ _('Last Synced') }}</th>
+                            <th class="text-end">{{ _('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for forum_account in sync_error_accounts %}
+                            <tr>
+                                <td>{{ forum_account.user.email if forum_account.user else '-' }}</td>
+                                <td>{{ forum_account.state|replace('_', ' ')|title }}</td>
+                                <td>{{ forum_account.last_error or '-' }}</td>
+                                <td>{{ forum_account.last_synced_at.strftime('%Y-%m-%d %H:%M') if forum_account.last_synced_at else '-' }}</td>
+                                <td class="text-end">
+                                    {% if forum_account.user %}
+                                        <form method="POST" action="{{ url_for('admin_resync_forum_account', user_id=forum_account.user.id) }}" class="mb-0 d-inline-block">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="next" value="{{ url_for('admin_forum') }}">
+                                            <button type="submit" class="btn btn-sm btn-primary">{{ _('Resync') }}</button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info mb-0">{{ _('No forum sync issues are currently recorded.') }}</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

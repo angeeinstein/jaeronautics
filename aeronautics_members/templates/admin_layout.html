@@ -8,7 +8,7 @@
             {% if page_description %}
                 <p class="text-muted mb-0">{{ page_description }}</p>
             {% else %}
-                <p class="text-muted mb-0">{{ _('Manage accounts, memberships, approvals, logs, and settings.') }}</p>
+                <p class="text-muted mb-0">{{ _('Manage accounts, memberships, forum access, approvals, logs, and settings.') }}</p>
             {% endif %}
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -30,6 +30,7 @@
             <div class="d-flex flex-wrap gap-2">
                 <a href="{{ url_for('admin_dashboard') }}" class="btn {% if active_admin_section == 'dashboard' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Dashboard') }}</a>
                 <a href="{{ url_for('admin_accounts') }}" class="btn {% if active_admin_section == 'accounts' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Accounts') }}</a>
+                <a href="{{ url_for('admin_forum') }}" class="btn {% if active_admin_section == 'forum' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Forum') }}</a>
                 <a href="{{ url_for('admin_approvals') }}" class="btn {% if active_admin_section == 'approvals' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Approvals') }}</a>
                 <a href="{{ url_for('admin_logs') }}" class="btn {% if active_admin_section == 'logs' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Logs') }}</a>
                 <a href="{{ url_for('admin_settings') }}" class="btn {% if active_admin_section == 'settings' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Settings') }}</a>

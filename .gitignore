@@ -33,3 +33,6 @@ env/
 .vscode/
 .idea/
 *.code-workspace
+
+storage/
+

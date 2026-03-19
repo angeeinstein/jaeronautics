@@ -1,12 +1,13 @@
 {% extends "admin_layout.html" %}
 {% set page_title = _('Settings') %}
-{% set page_description = _('Billing, email automation, sender accounts, and test tools.') %}
+{% set page_description = _('Billing, email automation, sender accounts, forum integration, and test tools.') %}
 {% block admin_content %}
-<div class="card mb-4">
-    <div class="card-header"><h4 class="mb-0">{{ _('General Settings') }}</h4></div>
-    <div class="card-body">
-        <form method="POST" action="{{ url_for('admin_settings') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<form method="POST" action="{{ url_for('admin_settings') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="card mb-4">
+        <div class="card-header"><h4 class="mb-0">{{ _('General Settings') }}</h4></div>
+        <div class="card-body">
             <div class="form-check mb-2">
                 <input class="form-check-input" type="checkbox" name="invoice_payments_enabled" id="invoice_payments_enabled" {% if settings.get('invoice_payments_enabled') == 'True' %}checked{% endif %}>
                 <label class="form-check-label" for="invoice_payments_enabled">{{ _('Enable Invoice Payments') }}</label>
@@ -24,7 +25,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="mb-3">
+            <div class="mb-0">
                 <label for="automatic_email_template" class="form-label">{{ _('Automatic Email Template:') }}</label>
                 <select class="form-select" name="automatic_email_template" id="automatic_email_template">
                     <option value="">{{ _('No automatic email template') }}</option>
@@ -33,7 +34,106 @@
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" name="save_settings" class="btn btn-primary mt-3">{{ _('Save Settings') }}</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header"><h4 class="mb-0">{{ _('Forum Integration') }}</h4></div>
+        <div class="card-body">
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="forum_integration_enabled" id="forum_integration_enabled" {% if forum_settings.forum_integration_enabled %}checked{% endif %}>
+                <label class="form-check-label" for="forum_integration_enabled">{{ _('Enable Forum Integration') }}</label>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="forum_provider">{{ _('Forum Provider') }}</label>
+                    <select class="form-select" id="forum_provider" name="forum_provider">
+                        {% for choice, label in forum_provider_choices %}
+                            <option value="{{ choice }}" {% if forum_settings.forum_provider == choice %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="forum_auth_strategy">{{ _('Authentication Strategy') }}</label>
+                    <select class="form-select" id="forum_auth_strategy" name="forum_auth_strategy">
+                        {% for choice, label in forum_auth_strategy_choices %}
+                            <option value="{{ choice }}" {% if forum_settings.forum_auth_strategy == choice %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label" for="forum_base_url">{{ _('Forum Base URL') }}</label>
+                    <input class="form-control" type="url" id="forum_base_url" name="forum_base_url" value="{{ forum_settings.forum_base_url }}" placeholder="https://forum.example.com">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="discourse_api_username">{{ _('Discourse API Username') }}</label>
+                    <input class="form-control" type="text" id="discourse_api_username" name="discourse_api_username" value="{{ forum_settings.discourse_api_username }}" placeholder="system">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="discourse_api_key">{{ _('Discourse API Key') }}</label>
+                    <input class="form-control" type="password" id="discourse_api_key" name="discourse_api_key" placeholder="{{ _('Leave blank to keep the current API key') }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="discourse_connect_secret">{{ _('DiscourseConnect Secret') }}</label>
+                    <input class="form-control" type="password" id="discourse_connect_secret" name="discourse_connect_secret" placeholder="{{ _('Leave blank to keep the current secret') }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="forum_onboarding_group">{{ _('Onboarding Group') }}</label>
+                    <input class="form-control" type="text" id="forum_onboarding_group" name="forum_onboarding_group" value="{{ forum_settings.forum_onboarding_group }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="forum_member_group">{{ _('Member Group') }}</label>
+                    <input class="form-control" type="text" id="forum_member_group" name="forum_member_group" value="{{ forum_settings.forum_member_group }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="forum_inactive_group">{{ _('Inactive Group (optional)') }}</label>
+                    <input class="form-control" type="text" id="forum_inactive_group" name="forum_inactive_group" value="{{ forum_settings.forum_inactive_group }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="forum_onboarding_path">{{ _('Forum Destination Path') }}</label>
+                    <input class="form-control" type="text" id="forum_onboarding_path" name="forum_onboarding_path" value="{{ forum_settings.forum_onboarding_path }}" placeholder="/">
+                    <small class="text-muted">{{ _('Members with an approved avatar will be sent here after sign-in.') }}</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="forum_avatar_max_bytes">{{ _('Avatar Max Bytes') }}</label>
+                    <input class="form-control" type="number" id="forum_avatar_max_bytes" name="forum_avatar_max_bytes" value="{{ forum_settings.forum_avatar_max_bytes }}" min="1" step="1">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="forum_avatar_allowed_types">{{ _('Allowed Avatar Types') }}</label>
+                    <input class="form-control" type="text" id="forum_avatar_allowed_types" name="forum_avatar_allowed_types" value="{{ forum_settings.forum_avatar_allowed_types|join(', ') }}" placeholder="jpg,jpeg,png,webp">
+                </div>
+            </div>
+
+            <div class="alert alert-secondary mt-4 mb-3">
+                <div><strong>{{ _('Member Forum Entry URL:') }}</strong> <code>{{ url_for('forum_entry', _external=True) }}</code></div>
+                <div class="mt-2"><strong>{{ _('DiscourseConnect Callback URL:') }}</strong> <code>{{ url_for('forum_discourse_connect', _external=True) }}</code></div>
+            </div>
+
+            {% if forum_settings.forum_integration_enabled and forum_service.config_errors %}
+                <div class="alert alert-warning mb-0">
+                    {{ _('Forum integration is enabled but still missing required settings:') }}
+                    <strong>{{ forum_service.config_errors|join(', ') }}</strong>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        <button type="submit" name="save_settings" class="btn btn-primary">{{ _('Save Settings') }}</button>
+    </div>
+</form>
+
+<div class="card mb-4">
+    <div class="card-header"><h4 class="mb-0">{{ _('Forum Connection Test') }}</h4></div>
+    <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+        <div>
+            <p class="mb-1">{{ _('Verify that the Discourse API and authentication settings are reachable.') }}</p>
+            <small class="text-muted">{{ _('This does not grant access to a member. It only checks the forum integration settings.') }}</small>
+        </div>
+        <form method="POST" action="{{ url_for('test_forum_connection') }}" class="mb-0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary">{{ _('Test Forum Connection') }}</button>
         </form>
     </div>
 </div>
@@ -84,35 +184,6 @@
                     </div>
                     <div class="col-12">
                         <small class="text-muted">{{ _('Exported files include SMTP passwords in plaintext, so store them carefully.') }}</small>
-                    </div>
-                    <div class="col-12">
-                        <details>
-                            <summary>{{ _('Supported JSON formats') }}</summary>
-                            <pre class="mt-3 mb-0">{
-  "format": "jaeronautics_mail_accounts",
-  "version": 1,
-  "mail_accounts": [
-    {
-      "account_key": "office",
-      "host": "smtp.example.com",
-      "port": 587,
-      "username": "office@example.com",
-      "password": "secret",
-      "starttls": true
-    }
-  ]
-}
-
-{
-  "office": {
-    "host": "smtp.example.com",
-    "port": 587,
-    "user": "office@example.com",
-    "pass": "secret",
-    "starttls": true
-  }
-}</pre>
-                        </details>
                     </div>
                 </form>
             </div>

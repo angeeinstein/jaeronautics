@@ -18,6 +18,9 @@
                             </form>
                         {% endif %}
                         <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
+                        {% if forum_context.can_enter_forum %}
+                            <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
+                        {% endif %}
                         {% if can_manage_billing %}
                             <form method="POST" action="{{ url_for('manage_member_billing') }}" class="mb-0">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -41,7 +44,7 @@
 
 <div class="row g-4">
     <div class="col-xl-4">
-        <div class="card h-100 shadow-sm border-0">
+        <div class="card shadow-sm border-0 mb-4">
             <div class="card-header"><h4 class="mb-0">{{ _('Membership Overview') }}</h4></div>
             <div class="card-body">
                 <dl class="row mb-0">
@@ -72,6 +75,53 @@
                     <div class="alert alert-info mt-4 mb-0">{{ _('Your account is ready, but the membership payment is not finished yet. Use the resume button above to continue.') }}</div>
                 {% elif not can_manage_billing %}
                     <div class="alert alert-secondary mt-4 mb-0">{{ _('Stripe billing access will become available after a successful payment setup.') }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-header"><h4 class="mb-0">{{ _('Forum Access') }}</h4></div>
+            <div class="card-body">
+                <p class="mb-2"><strong>{{ _('Status') }}:</strong> {{ forum_context.status_message }}</p>
+                <p class="mb-3"><strong>{{ _('Forum Username') }}:</strong> {{ current_user.forum_username or _('Not set') }}</p>
+
+                {% if forum_context.forum_error %}
+                    <div class="alert alert-warning">{{ forum_context.forum_error }}</div>
+                {% endif %}
+
+                {% if forum_context.status_key == 'active' %}
+                    <div class="alert alert-success">{{ _('Your forum access is active and ready to open.') }}</div>
+                    <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
+                {% elif forum_context.status_key in ['needs_avatar', 'pending_avatar', 'rejected_avatar'] %}
+                    {% if forum_context.status_key == 'pending_avatar' %}
+                        <div class="alert alert-info">{{ _('Your profile picture is waiting for admin approval.') }}</div>
+                    {% elif forum_context.status_key == 'rejected_avatar' %}
+                        <div class="alert alert-warning">{{ _('Your last profile picture was rejected. Please upload a new one.') }}</div>
+                    {% else %}
+                        <div class="alert alert-secondary">{{ _('Please upload a profile picture before your forum access can be completed.') }}</div>
+                    {% endif %}
+
+                    {% if forum_context.latest_submission and forum_context.latest_submission.review_note %}
+                        <div class="alert alert-secondary">{{ forum_context.latest_submission.review_note }}</div>
+                    {% endif %}
+
+                    {% if forum_context.pending_submission and forum_context.pending_submission.public_token %}
+                        <div class="mb-3">
+                            <img src="{{ url_for('forum_avatar_public_file', token=forum_context.pending_submission.public_token) }}" alt="{{ _('Pending profile picture preview') }}" class="img-fluid rounded border">
+                        </div>
+                    {% endif %}
+
+                    <form method="POST" action="{{ url_for('upload_forum_avatar') }}" enctype="multipart/form-data" class="mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="forum-avatar" class="form-label">{{ _('Profile Picture') }}</label>
+                            <input type="file" class="form-control" id="forum-avatar" name="avatar" accept="image/jpeg,image/png,image/webp" required>
+                            <small class="text-muted">{{ _('Allowed types: %(types)s. Maximum size: %(bytes)s bytes.', types=forum_context.service.settings['forum_avatar_allowed_types']|join(', '), bytes=forum_context.service.settings['forum_avatar_max_bytes']) }}</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary">{{ _('Upload Profile Picture') }}</button>
+                    </form>
+                {% else %}
+                    <div class="alert alert-secondary mb-0">{{ forum_context.status_message }}</div>
                 {% endif %}
             </div>
         </div>

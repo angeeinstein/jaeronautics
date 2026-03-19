@@ -9,6 +9,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 db = SQLAlchemy()
 
 
+
 def utcnow():
     return datetime.now(timezone.utc)
 
@@ -47,6 +48,7 @@ class User(UserMixin, db.Model):
     email_verified_at = db.Column(db.DateTime, nullable=True)
 
     member = db.relationship("Member", back_populates="user", uselist=False)
+    forum_account = db.relationship("ForumAccount", back_populates="user", uselist=False)
     roles = db.relationship("Role", secondary="user_roles", back_populates="users")
     requested_profile_changes = db.relationship(
         "MemberProfileChangeRequest",
@@ -67,6 +69,18 @@ class User(UserMixin, db.Model):
         "AuditLog",
         back_populates="target_user",
         foreign_keys="AuditLog.target_user_id",
+    )
+    forum_avatar_submissions = db.relationship(
+        "ForumAvatarSubmission",
+        back_populates="user",
+        foreign_keys="ForumAvatarSubmission.user_id",
+        order_by="desc(ForumAvatarSubmission.uploaded_at)",
+        cascade="all, delete-orphan",
+    )
+    reviewed_forum_avatar_submissions = db.relationship(
+        "ForumAvatarSubmission",
+        back_populates="reviewed_by",
+        foreign_keys="ForumAvatarSubmission.reviewed_by_user_id",
     )
 
     def set_password(self, password):
@@ -137,6 +151,7 @@ class Member(db.Model):
     cancel_at_period_end = db.Column(db.Boolean, nullable=False, default=False)
 
     user = db.relationship("User", back_populates="member", uselist=False)
+    forum_account = db.relationship("ForumAccount", back_populates="member", uselist=False)
     profile_change_requests = db.relationship(
         "MemberProfileChangeRequest",
         back_populates="member",
@@ -144,6 +159,12 @@ class Member(db.Model):
         cascade="all, delete-orphan",
     )
     audit_logs = db.relationship("AuditLog", back_populates="target_member")
+    forum_avatar_submissions = db.relationship(
+        "ForumAvatarSubmission",
+        back_populates="member",
+        order_by="desc(ForumAvatarSubmission.uploaded_at)",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self):
         return f"<Member {self.first_name} {self.last_name}>"
@@ -164,6 +185,56 @@ class Member(db.Model):
             (request for request in self.profile_change_requests if request.status == "pending"),
             None,
         )
+
+
+class ForumAccount(db.Model):
+    __tablename__ = "forum_accounts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), unique=True, nullable=True)
+    provider = db.Column(db.String(80), nullable=False, default="discourse")
+    external_id = db.Column(db.String(255), nullable=False)
+    remote_user_id = db.Column(db.Integer, nullable=True)
+    state = db.Column(db.String(40), nullable=False, default="inactive")
+    last_synced_email = db.Column(db.String(255), nullable=True)
+    last_synced_username = db.Column(db.String(255), nullable=True)
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    user = db.relationship("User", back_populates="forum_account")
+    member = db.relationship("Member", back_populates="forum_account")
+
+
+class ForumAvatarSubmission(db.Model):
+    __tablename__ = "forum_avatar_submissions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=False)
+    reviewed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    status = db.Column(db.String(40), nullable=False, default="pending")
+    original_filename = db.Column(db.String(255), nullable=True)
+    content_type = db.Column(db.String(120), nullable=True)
+    file_size = db.Column(db.Integer, nullable=True)
+    file_hash = db.Column(db.String(128), nullable=True)
+    storage_path = db.Column(db.String(500), nullable=True)
+    public_token = db.Column(db.String(255), unique=True, nullable=True)
+    review_note = db.Column(db.Text, nullable=True)
+    sync_error = db.Column(db.Text, nullable=True)
+    forum_synced_at = db.Column(db.DateTime, nullable=True)
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", back_populates="forum_avatar_submissions", foreign_keys=[user_id])
+    member = db.relationship("Member", back_populates="forum_avatar_submissions", foreign_keys=[member_id])
+    reviewed_by = db.relationship(
+        "User",
+        back_populates="reviewed_forum_avatar_submissions",
+        foreign_keys=[reviewed_by_user_id],
+    )
 
 
 class MemberProfileChangeRequest(db.Model):
