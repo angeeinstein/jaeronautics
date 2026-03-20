@@ -3136,7 +3136,12 @@ def create_app():
     @admin_required
     def test_forum_connection():
         service = get_forum_service()
-        success, message = service.test_connection()
+        try:
+            success, message = service.test_connection()
+        except ForumProviderError as exc:
+            success = False
+            message = str(exc)
+
         log_audit_event(
             category="forum",
             event_type="forum_connection_tested",

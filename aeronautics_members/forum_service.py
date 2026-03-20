@@ -118,6 +118,7 @@ class DiscourseConnectProvider(ForumProvider):
             "Api-Key": self.settings["discourse_api_key"],
             "Api-Username": self.settings["discourse_api_username"],
             "Accept": "application/json",
+            "User-Agent": "JoanneumAeronauticsForumSync/1.0 (+https://testmembers.joanneum-aeronautics.at)",
         }
 
     def _request(self, method, path, data=None, json_body=None):
