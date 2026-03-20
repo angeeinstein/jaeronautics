@@ -4068,7 +4068,12 @@ def create_app():
             destination = destination if is_safe_next_url(destination) else None
             return redirect(destination or url_for(get_member_portal_target(current_user)))
         form = LoginForm()
-        forum_login_hint = bool(safe_next_url and urlsplit(safe_next_url).path.startswith("/forum"))
+        next_parts = urlsplit(safe_next_url) if safe_next_url else None
+        forum_login_hint = bool(
+            next_parts
+            and next_parts.path.startswith("/forum")
+            and "token=" not in (next_parts.query or "")
+        )
         if form.validate_on_submit():
             user = db.session.execute(db.select(User).filter_by(email=form.email.data.strip().lower())).scalar_one_or_none()
             if user and user.check_password(form.password.data):
