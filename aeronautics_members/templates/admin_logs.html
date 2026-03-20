@@ -56,9 +56,9 @@
                                 <td>
                                     <details>
                                         <summary>{{ _('Show') }}</summary>
-                                        {% if entry.before_state %}<pre class="mt-2 mb-2">{{ entry.before_state | tojson(indent=2) }}</pre>{% endif %}
-                                        {% if entry.after_state %}<pre class="mt-2 mb-2">{{ entry.after_state | tojson(indent=2) }}</pre>{% endif %}
-                                        {% if entry.event_metadata %}<pre class="mt-2 mb-0">{{ entry.event_metadata | tojson(indent=2) }}</pre>{% endif %}
+                                        {% if entry.before_state %}<pre class="mt-2 mb-2">{{ entry.before_state | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
+                                        {% if entry.after_state %}<pre class="mt-2 mb-2">{{ entry.after_state | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
+                                        {% if entry.event_metadata %}<pre class="mt-2 mb-0">{{ entry.event_metadata | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
                                     </details>
                                 </td>
                             </tr>

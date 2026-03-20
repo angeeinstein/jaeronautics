@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 import sys
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -78,9 +79,11 @@ try:
         ForumProviderError,
         ForumService,
         delete_submission_file,
+        format_bytes_human,
         normalize_forum_settings,
     )
     from .mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
+    from .security_utils import build_public_url, is_trusted_host, normalize_public_base_url
 except ImportError:
     from db_models import (
         AuditLog,
@@ -121,9 +124,11 @@ except ImportError:
         ForumProviderError,
         ForumService,
         delete_submission_file,
+        format_bytes_human,
         normalize_forum_settings,
     )
     from mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
+    from security_utils import build_public_url, is_trusted_host, normalize_public_base_url
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parent
@@ -151,6 +156,8 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
 STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+PUBLIC_BASE_URL = normalize_public_base_url(os.getenv("PUBLIC_BASE_URL"))
+ADDITIONAL_ALLOWED_HOSTS = os.getenv("ADDITIONAL_ALLOWED_HOSTS", "")
 STRIPE_SETTING_KEYS = ("stripe_publishable_key", "stripe_secret_key", "stripe_price_id", "stripe_webhook_secret")
 DEFAULT_STRIPE_SETTINGS = {
     "stripe_publishable_key": STRIPE_PUBLISHABLE_KEY or "",
@@ -170,6 +177,10 @@ RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "5 per hour")
 RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "10 per hour")
 RATELIMIT_PASSWORD_CHANGE = os.getenv("RATELIMIT_PASSWORD_CHANGE", "5 per 15 minute")
 RATELIMIT_ADMIN_EMAIL = os.getenv("RATELIMIT_ADMIN_EMAIL", "5 per 10 minute")
+MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
+
+SENSITIVE_SETTING_KEYS = {"stripe_secret_key", "stripe_webhook_secret", "discourse_api_key", "discourse_connect_secret"}
+SENSITIVE_AUDIT_FIELD_NAMES = SENSITIVE_SETTING_KEYS | {"password", "pass", "secret", "smtp_password", "export_password"}
 
 babel = Babel()
 login_manager = LoginManager()
@@ -177,10 +188,6 @@ csrf = CSRFProtect()
 
 
 def get_rate_limit_identity():
-    cf_connecting_ip = request.headers.get("CF-Connecting-IP", "").split(",", 1)[0].strip()
-    if cf_connecting_ip:
-        return cf_connecting_ip
-
     return request.remote_addr or "unknown"
 
 
@@ -614,7 +621,7 @@ def get_member_by_stripe_or_email(
 
     if customer_id and fetch_customer_email:
         try:
-            stripe.api_key = STRIPE_SECRET_KEY
+            apply_runtime_stripe_config()
             customer = stripe.Customer.retrieve(customer_id)
         except Exception as exc:
             current_app.logger.warning(
@@ -726,9 +733,21 @@ def read_token(token, purpose, max_age):
 
 
 
+def rotate_password_reset_nonce(user):
+    user.password_reset_nonce = secrets.token_urlsafe(24)
+    return user.password_reset_nonce
+
+
+
+def build_password_reset_token(user):
+    nonce = user.password_reset_nonce or rotate_password_reset_nonce(user)
+    return generate_token("reset-password", user_id=user.id, nonce=nonce)
+
+
+
 def send_email_verification_email(app, user):
     token = generate_token("verify-email", user_id=user.id)
-    verify_url = url_for("verify_email", token=token, _external=True)
+    verify_url = build_public_url("verify_email", token=token)
     return send_account_action_email(
         app,
         to_email=user.email,
@@ -746,8 +765,8 @@ def send_email_verification_email(app, user):
 
 
 def send_password_reset_email(app, user):
-    token = generate_token("reset-password", user_id=user.id)
-    reset_url = url_for("reset_password", token=token, _external=True)
+    token = build_password_reset_token(user)
+    reset_url = build_public_url("reset_password", token=token)
     return send_account_action_email(
         app,
         to_email=user.email,
@@ -873,7 +892,7 @@ def build_forum_entry_url(user, include_token=False):
     route_values = {}
     if include_token and user is not None:
         route_values["token"] = generate_token("forum-entry", user_id=user.id)
-    return url_for("forum_entry", _external=True, **route_values)
+    return build_public_url("forum_entry", **route_values)
 
 
 
@@ -949,6 +968,8 @@ def build_forum_context(member):
         status_message = _("Upload a profile picture to continue with forum onboarding.")
         can_upload_avatar = True
 
+    avatar_max_bytes = service.settings["forum_avatar_max_bytes"]
+    avatar_upload_request_limit = service.get_upload_request_limit()
     return {
         "service": service,
         "forum_account": forum_account,
@@ -961,6 +982,10 @@ def build_forum_context(member):
         "can_enter_forum": can_enter_forum,
         "entry_url": url_for("forum_entry"),
         "forum_error": forum_account.last_error if forum_account is not None else None,
+        "avatar_max_bytes": avatar_max_bytes,
+        "avatar_max_bytes_display": format_bytes_human(avatar_max_bytes),
+        "avatar_upload_request_limit": avatar_upload_request_limit,
+        "avatar_upload_request_limit_display": format_bytes_human(avatar_upload_request_limit),
     }
 
 
@@ -1075,6 +1100,52 @@ def serialize_audit_value(value):
     if isinstance(value, (list, tuple, set)):
         return [serialize_audit_value(inner_value) for inner_value in value]
     return value
+
+
+
+def is_sensitive_audit_field_name(field_name):
+    normalized_name = str(field_name or "").strip().lower()
+    if not normalized_name:
+        return False
+    if normalized_name in SENSITIVE_AUDIT_FIELD_NAMES:
+        return True
+    return any(token in normalized_name for token in ("secret", "password", "api_key", "webhook_secret"))
+
+
+
+def redact_sensitive_audit_value(value, placeholder="<configured>"):
+    serialized = serialize_audit_value(value)
+    if isinstance(serialized, dict):
+        redacted = {}
+        for key, inner_value in serialized.items():
+            if is_sensitive_audit_field_name(key):
+                has_secret_value = inner_value is not None and inner_value != "" and inner_value != [] and inner_value != {}
+                redacted[key] = placeholder if has_secret_value else None
+            else:
+                redacted[key] = redact_sensitive_audit_value(inner_value, placeholder=placeholder)
+        return redacted
+    if isinstance(serialized, list):
+        return [redact_sensitive_audit_value(item, placeholder=placeholder) for item in serialized]
+    return serialized
+
+
+
+def redact_settings_states_for_audit(before_settings, after_settings):
+    redacted_before = dict(before_settings or {})
+    redacted_after = dict(after_settings or {})
+    for key in SENSITIVE_SETTING_KEYS:
+        before_value = redacted_before.get(key)
+        after_value = redacted_after.get(key)
+        before_present = before_value not in {None, ""}
+        after_present = after_value not in {None, ""}
+        redacted_before[key] = "<configured>" if before_present else None
+        if not after_present:
+            redacted_after[key] = "<cleared>" if before_present else None
+        elif before_present and before_value != after_value:
+            redacted_after[key] = "<changed>"
+        else:
+            redacted_after[key] = "<configured>"
+    return redacted_before, redacted_after
 
 
 
@@ -1278,9 +1349,9 @@ def log_audit_event(category, event_type, actor_user=None, target_user=None, tar
             target_member=target_member,
             category=category,
             event_type=event_type,
-            before_state=serialize_audit_value(before) if before is not None else None,
-            after_state=serialize_audit_value(after) if after is not None else None,
-            event_metadata=serialize_audit_value(metadata) if metadata is not None else None,
+            before_state=redact_sensitive_audit_value(before) if before is not None else None,
+            after_state=redact_sensitive_audit_value(after) if after is not None else None,
+            event_metadata=redact_sensitive_audit_value(metadata) if metadata is not None else None,
         )
     )
 
@@ -1354,13 +1425,12 @@ def create_checkout_session_for_member(member):
         },
         payment_method_collection="always",
         customer_email=member.email_private,
-        success_url=url_for(
+        success_url=build_public_url(
             "thank_you",
-            _external=True,
             method="checkout",
             phase=cycle["thank_you_phase"],
         ),
-        cancel_url=url_for("cancel", _external=True),
+        cancel_url=build_public_url("cancel"),
     )
     member.pending_checkout_started_at = get_now_utc()
     return session, cycle
@@ -1562,7 +1632,7 @@ def get_portal_session(member):
     apply_runtime_stripe_config()
     return stripe.billing_portal.Session.create(
         customer=member.stripe_customer_id,
-        return_url=url_for("account", _external=True, refresh_billing=1, rt=refresh_token),
+        return_url=build_public_url("account", refresh_billing=1, rt=refresh_token),
     )
 
 
@@ -1617,6 +1687,8 @@ def ensure_user_schema():
         alter_statements.append("ALTER TABLE users ADD COLUMN forum_username VARCHAR(255) NULL")
     if "email_verified_at" not in columns:
         alter_statements.append("ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL")
+    if "password_reset_nonce" not in columns:
+        alter_statements.append("ALTER TABLE users ADD COLUMN password_reset_nonce VARCHAR(255) NULL")
 
     with db.engine.begin() as connection:
         for statement in alter_statements:
@@ -1767,11 +1839,6 @@ def create_app():
 
         return dict(switch_lang_url=switch_lang_url)
 
-    @app.context_processor
-    def inject_settings():
-        settings = {s.key: s.value for s in Setting.query.all()}
-        return dict(settings=settings)
-
     app.config["SECRET_KEY"] = SECRET_KEY
     app.config["SQLALCHEMY_DATABASE_URI"] = (
         f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
@@ -1780,6 +1847,9 @@ def create_app():
     app.config["STRIPE_PUBLISHABLE_KEY"] = STRIPE_PUBLISHABLE_KEY
     app.config["STRIPE_SECRET_KEY"] = STRIPE_SECRET_KEY
     app.config["STRIPE_PRICE_ID"] = STRIPE_PRICE_ID
+    app.config["PUBLIC_BASE_URL"] = PUBLIC_BASE_URL
+    app.config["ADDITIONAL_ALLOWED_HOSTS"] = ADDITIONAL_ALLOWED_HOSTS
+    app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
     app.config.update(
         SESSION_COOKIE_SECURE=True,
@@ -1820,6 +1890,10 @@ def create_app():
             cleaned_args=cleaned_args,
         )
 
+    @app.template_filter("redact_audit_payload")
+    def redact_audit_payload_filter(value):
+        return redact_sensitive_audit_value(value)
+
     @app.url_defaults
     def add_static_file_version(endpoint, values):
         if endpoint != "static":
@@ -1830,6 +1904,14 @@ def create_app():
         version = static_asset_version(app, values.get("filename"))
         if version:
             values["v"] = version
+
+    @app.before_request
+    def validate_request_host():
+        host = (request.host or "").split(":", 1)[0]
+        if host.startswith("[") and host.endswith("]"):
+            host = host[1:-1]
+        if not is_trusted_host(host):
+            abort(400)
 
     @app.after_request
     def disable_dynamic_page_caching(response):
@@ -2212,9 +2294,11 @@ def create_app():
     @app.route("/", methods=["GET"])
     def index():
         form = MembershipForm()
+        public_settings = get_settings_map(["invoice_payments_enabled"])
         return render_template(
             "index.html",
             form=form,
+            invoice_payments_enabled=public_settings.get("invoice_payments_enabled") == "True",
             stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
         )
 
@@ -2222,7 +2306,7 @@ def create_app():
     @limiter.limit(RATELIMIT_MEMBERSHIP)
     def process_membership():
         form = MembershipForm()
-        settings = {s.key: s.value for s in Setting.query.all()}
+        settings = get_settings_map(["invoice_payments_enabled"])
 
         if form.validate_on_submit():
             form_data = form.data
@@ -2349,7 +2433,12 @@ def create_app():
 
         app.logger.warning(f"Form validation failed. Errors: {form.errors}")
         flash(_("Please correct the errors below and try again."), "danger")
-        return render_template("index.html", form=form)
+        return render_template(
+            "index.html",
+            form=form,
+            invoice_payments_enabled=get_settings_map(["invoice_payments_enabled"]).get("invoice_payments_enabled") == "True",
+            stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
+        )
 
     @app.route("/thank-you")
     def thank_you():
@@ -2695,6 +2784,8 @@ def create_app():
     @app.route("/forum", methods=["GET"])
     def forum_entry():
         token = (request.args.get("token") or "").strip()
+        token_user = None
+        token_verified_email = False
         if token:
             try:
                 token_data = read_token(token, "forum-entry", TOKEN_MAX_AGE_FORUM_ENTRY)
@@ -2703,17 +2794,31 @@ def create_app():
                 token_user = None
                 flash(_("This forum access link is invalid or has expired."), "warning")
 
-            if token_user is not None:
-                if not current_user.is_authenticated or current_user.id != token_user.id:
-                    login_user(token_user)
-                if not token_user.email_is_verified:
-                    token_user.email_verified_at = get_now_utc()
-                    db.session.commit()
+            if token_user is not None and not token_user.email_is_verified:
+                token_user.email_verified_at = get_now_utc()
+                db.session.commit()
+                token_verified_email = True
+
+            if token_user is not None and current_user.is_authenticated and current_user.id != token_user.id:
+                flash(
+                    _("This forum link belongs to a different account. Please log out and sign in with the account that received the email."),
+                    "warning",
+                )
+                return redirect(url_for(get_member_portal_target(current_user)))
+
+            if token_user is not None and not current_user.is_authenticated:
+                flash(
+                    _("Your email address has been verified. Please log in to continue to the forum.") if token_verified_email else _("Please log in to continue to the forum."),
+                    "success" if token_verified_email else "warning",
+                )
+                return redirect(url_for("login", next=url_for("forum_entry"), forum_login_source="welcome_email"))
+
+            if token_user is not None and token_verified_email:
+                flash(_("Your email address has been verified."), "success")
 
         if not current_user.is_authenticated:
             flash(_("Please log in to continue to the forum."), "warning")
-            next_url = request.full_path[:-1] if request.full_path.endswith("?") else request.full_path
-            return redirect(url_for("login", next=next_url))
+            return redirect(url_for("login", next=url_for("forum_entry")))
 
         member = get_current_member_for_user(current_user)
         if member is None:
@@ -2754,9 +2859,23 @@ def create_app():
             flash(_("Your membership must be active before you can upload a forum profile picture."), "warning")
             return redirect(url_for("account"))
 
+        upload_request_limit = forum_service.get_upload_request_limit()
+        if request.content_length and request.content_length > upload_request_limit:
+            flash(
+                _("The selected image is too large to upload. Please keep it below %(size)s.", size=format_bytes_human(upload_request_limit)),
+                "danger",
+            )
+            return redirect(url_for("forum_entry"))
+
         upload = request.files.get("avatar")
+        crop_options = {
+            "crop_mode": request.form.get("crop_mode"),
+            "crop_zoom": request.form.get("crop_zoom"),
+            "crop_center_x": request.form.get("crop_center_x"),
+            "crop_center_y": request.form.get("crop_center_y"),
+        }
         try:
-            submission = forum_service.create_avatar_submission(upload, current_user, member)
+            submission = forum_service.create_avatar_submission(upload, current_user, member, crop_options=crop_options)
             forum_result = forum_service.sync_member(member)
             log_audit_event(
                 category="forum",
@@ -2828,8 +2947,11 @@ def create_app():
             user = db.session.execute(db.select(User).filter_by(email=email_address)).scalar_one_or_none()
             if user is not None:
                 try:
+                    rotate_password_reset_nonce(user)
+                    db.session.commit()
                     send_password_reset_email(app, user)
                 except Exception as exc:
+                    db.session.rollback()
                     app.logger.warning("Could not send password reset email for user_id=%s: %s", user.id, exc)
             flash(_("If an account with that email address exists and email sending is configured, a password reset link is available."), "info")
             return redirect(url_for("login"))
@@ -2847,9 +2969,11 @@ def create_app():
             token_data = read_token(token, "reset-password", TOKEN_MAX_AGE_PASSWORD_RESET)
             user = db.session.get(User, int(token_data.get("user_id")))
         except (BadSignature, SignatureExpired, ValueError, TypeError):
+            token_data = None
             user = None
 
-        if user is None:
+        token_nonce = (token_data or {}).get("nonce") if token_data else None
+        if user is None or not token_nonce or token_nonce != user.password_reset_nonce:
             flash(_("This password reset link is invalid or has expired."), "danger")
             return redirect(url_for("forgot_password"))
 
@@ -2960,6 +3084,12 @@ def create_app():
         sender_choices = []
         template_choices = get_email_template_choices(app)
         mail_account_records = get_db_mail_accounts()
+        general_settings = get_settings_map([
+            "invoice_payments_enabled",
+            "automatic_emails_enabled",
+            "welcome_email_sender",
+            "automatic_email_template",
+        ])
         forum_settings = normalize_forum_settings(get_forum_settings_map())
         stripe_settings = get_stripe_settings_map()
         forum_service = ForumService(forum_settings)
@@ -2988,9 +3118,16 @@ def create_app():
             "editing_mail_account": editing_mail_account,
             "sender_choices": sender_choices,
             "template_choices": template_choices,
+            "general_settings": general_settings,
             "forum_settings": forum_settings,
             "stripe_settings": stripe_settings,
             "forum_service": forum_service,
+            "forum_endpoint_urls": {
+                "entry": build_public_url("forum_entry"),
+                "connect": build_public_url("forum_discourse_connect"),
+                "logout": build_public_url("forum_logout"),
+            },
+            "public_base_url": app.config.get("PUBLIC_BASE_URL") or "",
             "forum_provider_choices": [("discourse", _("Discourse"))],
             "forum_auth_strategy_choices": [
                 ("discourse_connect", _("DiscourseConnect")),
@@ -3563,13 +3700,14 @@ def create_app():
                 key for key in after_settings.keys()
                 if before_settings.get(key) != after_settings.get(key)
             )
+            logged_before_settings, logged_after_settings = redact_settings_states_for_audit(before_settings, after_settings)
             log_audit_event(
                 category="settings",
                 event_type="settings_updated",
                 actor_user=current_user,
                 target_user=current_user,
-                before=before_settings,
-                after=after_settings,
+                before=logged_before_settings,
+                after=logged_after_settings,
                 metadata={"changed_keys": changed_keys},
             )
             db.session.commit()
@@ -4056,15 +4194,23 @@ def create_app():
     def login():
         next_url = request.values.get("next") or session.get("login_next")
         safe_next_url = next_url if is_safe_next_url(next_url) else None
+        login_source = (request.values.get("forum_login_source") or session.get("login_source") or "").strip().lower()
         if request.method == "GET":
             session.pop("login_next", None)
+            session.pop("login_source", None)
             if safe_next_url:
                 session["login_next"] = safe_next_url
-        elif safe_next_url:
-            session["login_next"] = safe_next_url
+            if login_source:
+                session["login_source"] = login_source
+        else:
+            if safe_next_url:
+                session["login_next"] = safe_next_url
+            if login_source:
+                session["login_source"] = login_source
 
         if current_user.is_authenticated:
             destination = session.pop("login_next", None)
+            session.pop("login_source", None)
             destination = destination if is_safe_next_url(destination) else None
             return redirect(destination or url_for(get_member_portal_target(current_user)))
         form = LoginForm()
@@ -4072,17 +4218,24 @@ def create_app():
         forum_login_hint = bool(
             next_parts
             and next_parts.path.startswith("/forum")
-            and "token=" not in (next_parts.query or "")
+            and login_source != "welcome_email"
         )
         if form.validate_on_submit():
             user = db.session.execute(db.select(User).filter_by(email=form.email.data.strip().lower())).scalar_one_or_none()
             if user and user.check_password(form.password.data):
                 login_user(user)
                 destination = session.pop("login_next", None)
+                session.pop("login_source", None)
                 destination = destination if is_safe_next_url(destination) else None
                 return redirect(destination or url_for(get_member_portal_target(user)))
             flash(_("Invalid email or password"), "danger")
-        return render_template("account/login.html", form=form, next_url=session.get("login_next"), forum_login_hint=forum_login_hint)
+        return render_template(
+            "account/login.html",
+            form=form,
+            next_url=session.get("login_next"),
+            forum_login_hint=forum_login_hint,
+            forum_login_source=session.get("login_source"),
+        )
 
 
 
@@ -4098,6 +4251,7 @@ def create_app():
         forum_logout_attempted, forum_logout_error = log_out_forum_session_if_possible(user)
         logout_user()
         session.pop("login_next", None)
+        session.pop("login_source", None)
 
         next_url = request.form.get("next") or url_for("index")
         if not is_safe_next_url(next_url):
@@ -4120,6 +4274,7 @@ def create_app():
             forum_logout_attempted, forum_logout_error = log_out_forum_session_if_possible(user)
             logout_user()
             session.pop("login_next", None)
+            session.pop("login_source", None)
             if forum_logout_error:
                 flash(_("You have been logged out here, but the forum session could not be ended automatically."), "warning")
             elif forum_logout_attempted:
@@ -4451,6 +4606,13 @@ def create_app():
     def handle_rate_limit_error(e):
         flash(_("Too many requests from your IP address. Please wait a moment and try again."), "warning")
         return redirect(request.referrer or url_for("index")), 429
+
+    @app.errorhandler(413)
+    def request_entity_too_large(e):
+        flash(_("The submitted data is too large to process. Please reduce the file size and try again."), "danger")
+        if request.path == url_for("upload_forum_avatar"):
+            return redirect(url_for("forum_entry"))
+        return redirect(request.referrer or url_for("index"))
 
     @app.errorhandler(404)
     def page_not_found(e):

@@ -46,6 +46,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=True)
     forum_username = db.Column(db.String(255), unique=True, nullable=True)
     email_verified_at = db.Column(db.DateTime, nullable=True)
+    password_reset_nonce = db.Column(db.String(255), nullable=True)
 
     member = db.relationship("Member", back_populates="user", uselist=False)
     forum_account = db.relationship("ForumAccount", back_populates="user", uselist=False)
@@ -85,6 +86,7 @@ class User(UserMixin, db.Model):
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
+        self.password_reset_nonce = None
 
     def check_password(self, password):
         if not self.password_hash:

@@ -116,7 +116,7 @@
             </div>
         </div>
 
-        {% if settings.get('invoice_payments_enabled') == 'True' %}
+        {% if invoice_payments_enabled %}
         <div class="pt-4">
             <label class="block text-sm font-medium text-gray-700">{{ _(form.payment_method.label.text) }}<span class="text-red-500">*</span></label>
             <div class="mt-2 space-y-2">

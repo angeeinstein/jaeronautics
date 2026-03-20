@@ -1144,6 +1144,16 @@ collect_configuration() {
 
 write_env_file() {
     step "Writing application environment file"
+    local public_scheme="http"
+    local public_base_url=""
+
+    if [[ -n "${DOMAIN:-}" && "${DOMAIN}" != "_" ]]; then
+        if [[ "${ENABLE_SSL}" == "1" || "${USE_CLOUDFLARE_TUNNEL}" == "1" ]]; then
+            public_scheme="https"
+        fi
+        public_base_url="${public_scheme}://${DOMAIN}"
+    fi
+
     cat > "${ENV_FILE}" <<EOF
 SECRET_KEY=$(dotenv_quote "${SECRET_KEY}")
 LANGUAGES=$(dotenv_quote "${LANGUAGES}")
@@ -1156,6 +1166,7 @@ STRIPE_SECRET_KEY=$(dotenv_quote "${STRIPE_SECRET_KEY}")
 STRIPE_PUBLISHABLE_KEY=$(dotenv_quote "${STRIPE_PUBLISHABLE_KEY}")
 STRIPE_PRICE_ID=$(dotenv_quote "${STRIPE_PRICE_ID}")
 STRIPE_WEBHOOK_SECRET=$(dotenv_quote "${STRIPE_WEBHOOK_SECRET}")
+PUBLIC_BASE_URL=$(dotenv_quote "${public_base_url}")
 RATELIMIT_STORAGE_URI=$(dotenv_quote "${RATELIMIT_STORAGE_URI}")
 MAIL_ACCOUNTS_JSON=$(dotenv_quote "${MAIL_ACCOUNTS_JSON}")
 EOF
@@ -1374,6 +1385,12 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://cdn.jsdelivr.net/npm/; style-src 'self' https://cdn.jsdelivr.net/npm/; frame-src https://js.stripe.com; img-src 'self' data:;" always;
 
+    real_ip_header CF-Connecting-IP;
+    real_ip_recursive on;
+    set_real_ip_from 127.0.0.1;
+    set_real_ip_from ::1;
+    client_max_body_size 20m;
+
     location /static/ {
         alias ${static_dir}/;
         expires 30d;
@@ -1400,6 +1417,12 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://cdn.jsdelivr.net/npm/; style-src 'self' https://cdn.jsdelivr.net/npm/; frame-src https://js.stripe.com; img-src 'self' data:;" always;
+
+    real_ip_header CF-Connecting-IP;
+    real_ip_recursive on;
+    set_real_ip_from 127.0.0.1;
+    set_real_ip_from ::1;
+    client_max_body_size 20m;
 
     location /static/ {
         alias ${static_dir}/;

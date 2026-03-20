@@ -9,7 +9,11 @@
                 <div class="d-flex gap-2 flex-wrap">
                     <a href="{{ url_for('account') }}" class="btn btn-sm btn-secondary">{{ _('Back to Account') }}</a>
                     {% if current_user.is_authenticated %}
-                        <a href="{{ url_for('forum_logout') }}" class="btn btn-sm btn-outline-light">{{ _('Log Out Everywhere') }}</a>
+                        <form method="POST" action="{{ url_for('logout') }}" class="mb-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="next" value="{{ url_for('login', next=url_for('forum_entry')) }}">
+                            <button type="submit" class="btn btn-sm btn-outline-light">{{ _('Log Out Everywhere') }}</button>
+                        </form>
                     {% endif %}
                 </div>
             </div>
@@ -37,23 +41,15 @@
                     {% if forum_context.latest_submission and forum_context.latest_submission.review_note %}
                         <div class="alert alert-secondary">{{ forum_context.latest_submission.review_note }}</div>
                     {% endif %}
-                    {% if forum_context.pending_submission and forum_context.pending_submission.public_token %}
-                        <div class="mb-4">
-                            <img src="{{ url_for('forum_avatar_public_file', token=forum_context.pending_submission.public_token) }}" alt="{{ _('Pending profile picture preview') }}" class="img-fluid rounded border">
-                        </div>
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('upload_forum_avatar') }}" enctype="multipart/form-data" class="mb-0">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="mb-3">
-                            <label for="forum-avatar-page" class="form-label">{{ _('Profile Picture') }}</label>
-                            <input type="file" class="form-control" id="forum-avatar-page" name="avatar" accept="image/jpeg,image/png,image/webp" required>
-                            <small class="text-muted">{{ _('Allowed types: %(types)s. Maximum size: %(bytes)s bytes.', types=forum_context.service.settings['forum_avatar_allowed_types']|join(', '), bytes=forum_context.service.settings['forum_avatar_max_bytes']) }}</small>
-                        </div>
-                        <button type="submit" class="btn btn-primary">{{ _('Upload Profile Picture') }}</button>
-                    </form>
+                    {% set upload_id_prefix = 'forum-avatar-page' %}
+                    {% include 'account/_forum_avatar_upload.html' %}
                 {% endif %}
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script src="{{ url_for('static', filename='forum-avatar-upload.js') }}"></script>
 {% endblock %}

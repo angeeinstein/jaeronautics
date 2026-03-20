@@ -5,18 +5,30 @@ import json
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode
 from urllib.request import Request, urlopen
 
-from flask import current_app, url_for
+from flask import current_app
 from werkzeug.utils import secure_filename
 
 try:
+    from PIL import Image, ImageOps, UnidentifiedImageError
+except ImportError:  # pragma: no cover - optional until dependencies are installed
+    Image = None
+    ImageOps = None
+
+    class UnidentifiedImageError(Exception):
+        pass
+
+try:
     from .db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
+    from .security_utils import build_public_url
 except ImportError:
     from db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
+    from security_utils import build_public_url
 
 FORUM_STATE_INACTIVE = "inactive"
 FORUM_STATE_ONBOARDING = "onboarding"
@@ -50,6 +62,189 @@ _ALLOWED_IMAGE_TYPE_TO_EXTENSION = {
     "png": "png",
     "webp": "webp",
 }
+
+_AVATAR_REQUEST_LIMIT_MULTIPLIER = 3
+_AVATAR_REQUEST_LIMIT_MIN_BYTES = 10 * 1024 * 1024
+_AVATAR_MAX_DIMENSION = 2048
+_AVATAR_RESIZE_STEP = 0.85
+_AVATAR_QUALITY_STEPS = (92, 86, 80, 74, 68, 60, 52)
+
+
+def format_bytes_human(num_bytes):
+    value = float(max(int(num_bytes or 0), 0))
+    units = ["bytes", "KB", "MB", "GB"]
+    unit_index = 0
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024.0
+        unit_index += 1
+    if unit_index == 0:
+        return f"{int(value)} {units[unit_index]}"
+    return f"{value:.1f} {units[unit_index]}"
+
+
+def get_avatar_request_limit(max_output_bytes):
+    normalized_max = max(int(max_output_bytes or 0), 1)
+    return max(_AVATAR_REQUEST_LIMIT_MIN_BYTES, normalized_max * _AVATAR_REQUEST_LIMIT_MULTIPLIER)
+
+
+def _normalize_allowed_extensions(allowed_extensions):
+    normalized = []
+    for extension in allowed_extensions or []:
+        lowered = str(extension).strip().lower()
+        if lowered == "jpeg":
+            lowered = "jpg"
+        if lowered in {"jpg", "png", "webp"} and lowered not in normalized:
+            normalized.append(lowered)
+    return normalized or ["jpg", "png", "webp"]
+
+
+def _load_image_for_processing(raw_bytes):
+    if Image is None or ImageOps is None:
+        raise ForumProviderError("Avatar processing is unavailable because Pillow is not installed on the server yet.")
+    try:
+        with Image.open(BytesIO(raw_bytes)) as image:
+            processed = ImageOps.exif_transpose(image)
+            processed.load()
+            if processed.width * processed.height > 25_000_000:
+                raise ForumProviderError("The uploaded image is too large to process safely. Please choose a smaller image.")
+            return processed
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ForumProviderError("Please upload a valid JPG, PNG, or WebP image.") from exc
+
+
+def _clamp_float(value, default, minimum, maximum):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+def _apply_avatar_crop(image, crop_options):
+    crop_mode = (crop_options or {}).get("crop_mode") or ""
+    if crop_mode != "square":
+        return image
+
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        return image
+
+    zoom = _clamp_float((crop_options or {}).get("crop_zoom"), 1.0, 1.0, 4.0)
+    center_x_ratio = _clamp_float((crop_options or {}).get("crop_center_x"), 0.5, 0.0, 1.0)
+    center_y_ratio = _clamp_float((crop_options or {}).get("crop_center_y"), 0.5, 0.0, 1.0)
+
+    crop_side = max(1, int(min(width, height) / zoom))
+    center_x = int(round(center_x_ratio * width))
+    center_y = int(round(center_y_ratio * height))
+
+    left = center_x - crop_side // 2
+    top = center_y - crop_side // 2
+    left = max(0, min(left, width - crop_side))
+    top = max(0, min(top, height - crop_side))
+    right = left + crop_side
+    bottom = top + crop_side
+    return image.crop((left, top, right, bottom))
+
+
+def _image_has_alpha(image):
+    if image.mode in {"RGBA", "LA"}:
+        return True
+    return bool(image.info.get("transparency"))
+
+
+def _convert_image_for_extension(image, extension):
+    if extension == "jpg":
+        if _image_has_alpha(image):
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            alpha_source = image.convert("RGBA")
+            background.paste(alpha_source, mask=alpha_source.getchannel("A"))
+            return background
+        return image.convert("RGB")
+    if extension == "png":
+        return image.convert("RGBA") if _image_has_alpha(image) else image.convert("RGB")
+    if extension == "webp":
+        return image.convert("RGBA") if _image_has_alpha(image) else image.convert("RGB")
+    return image
+
+
+def _choose_output_extensions(image, allowed_extensions):
+    normalized_extensions = _normalize_allowed_extensions(allowed_extensions)
+    has_alpha = _image_has_alpha(image)
+    preferred = []
+    if has_alpha:
+        preferred.extend([ext for ext in ("webp", "png", "jpg") if ext in normalized_extensions])
+    else:
+        preferred.extend([ext for ext in ("jpg", "webp", "png") if ext in normalized_extensions])
+    return preferred or normalized_extensions
+
+
+def _save_image_bytes(image, extension, quality=None):
+    output = BytesIO()
+    save_kwargs = {}
+    save_format = "JPEG" if extension == "jpg" else extension.upper()
+    if extension == "jpg":
+        save_kwargs.update({"optimize": True, "quality": quality or 86, "progressive": True})
+    elif extension == "webp":
+        save_kwargs.update({"quality": quality or 80, "method": 6})
+    elif extension == "png":
+        save_kwargs.update({"optimize": True, "compress_level": 9})
+    image.save(output, format=save_format, **save_kwargs)
+    content_type = "image/jpeg" if extension == "jpg" else f"image/{extension}"
+    return output.getvalue(), content_type
+
+
+def _resize_image(image, scale_factor):
+    if scale_factor >= 0.999:
+        return image
+    width, height = image.size
+    resized_width = max(1, int(width * scale_factor))
+    resized_height = max(1, int(height * scale_factor))
+    return image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
+
+
+def normalize_avatar_image(raw_bytes, allowed_extensions, max_output_bytes, crop_options=None):
+    image = _load_image_for_processing(raw_bytes)
+    image = _apply_avatar_crop(image, crop_options)
+
+    width, height = image.size
+    largest_dimension = max(width, height)
+    if largest_dimension > _AVATAR_MAX_DIMENSION:
+        image = _resize_image(image, _AVATAR_MAX_DIMENSION / float(largest_dimension))
+
+    output_extensions = _choose_output_extensions(image, allowed_extensions)
+    current_image = image
+    for _resize_pass in range(8):
+        for extension in output_extensions:
+            prepared = _convert_image_for_extension(current_image, extension)
+            quality_steps = _AVATAR_QUALITY_STEPS if extension in {"jpg", "webp"} else (None,)
+            for quality in quality_steps:
+                candidate_bytes, content_type = _save_image_bytes(prepared, extension, quality=quality)
+                if len(candidate_bytes) <= max_output_bytes:
+                    return candidate_bytes, content_type, extension
+        current_image = _resize_image(current_image, _AVATAR_RESIZE_STEP)
+
+    raise ForumProviderError(
+        f"The uploaded image could not be optimized below the avatar limit of {format_bytes_human(max_output_bytes)}."
+    )
+
+
+def read_limited_upload_bytes(upload, max_input_bytes):
+    if upload is None or getattr(upload, "stream", None) is None:
+        return b""
+    upload.stream.seek(0)
+    chunks = []
+    total_size = 0
+    while True:
+        chunk = upload.stream.read(1024 * 1024)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > max_input_bytes:
+            raise ForumProviderError(
+                f"The selected image is too large to upload. Please keep it below {format_bytes_human(max_input_bytes)}."
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def detect_image_type(raw_bytes):
@@ -247,7 +442,7 @@ class DiscourseConnectProvider(ForumProvider):
         if not forum_account.remote_user_id:
             raise ForumProviderError("Could not determine the Discourse user id for the avatar upload.")
 
-        public_url = url_for("forum_avatar_public_file", token=submission.public_token, _external=True)
+        public_url = build_public_url("forum_avatar_public_file", token=submission.public_token)
         upload_response = self._request(
             "POST",
             "/uploads.json",
@@ -426,6 +621,9 @@ class ForumService:
             .order_by(ForumAvatarSubmission.uploaded_at.desc())
         ).scalars().first()
 
+    def get_upload_request_limit(self):
+        return get_avatar_request_limit(self.settings["forum_avatar_max_bytes"])
+
     def get_desired_state(self, member):
         if member is None or member.user is None or not member_has_active_membership(member):
             return FORUM_STATE_INACTIVE
@@ -481,33 +679,28 @@ class ForumService:
             forum_account.state = FORUM_STATE_SYNC_ERROR
             return ForumSyncResult(changed=True, desired_state=desired_state, forum_account=forum_account, error=str(exc))
 
-    def create_avatar_submission(self, upload, user, member):
+    def create_avatar_submission(self, upload, user, member, crop_options=None):
         if upload is None or not getattr(upload, "filename", ""):
             raise ForumProviderError("Please choose an image file to upload.")
 
-        raw_bytes = upload.stream.read()
+        allowed_extensions = _normalize_allowed_extensions(self.settings["forum_avatar_allowed_types"])
+        request_limit = self.get_upload_request_limit()
+        raw_bytes = read_limited_upload_bytes(upload, request_limit)
         if not raw_bytes:
             raise ForumProviderError("The uploaded image was empty.")
 
-        if len(raw_bytes) > self.settings["forum_avatar_max_bytes"]:
-            raise ForumProviderError(
-                f"The uploaded image is too large. Maximum size is {self.settings['forum_avatar_max_bytes']} bytes."
-            )
-
-        detected_type = detect_image_type(raw_bytes)
-        if detected_type not in _ALLOWED_IMAGE_TYPE_TO_EXTENSION:
-            raise ForumProviderError("Please upload a JPG, PNG, or WebP image.")
-
-        file_extension = _ALLOWED_IMAGE_TYPE_TO_EXTENSION[detected_type]
-        allowed_extensions = set(self.settings["forum_avatar_allowed_types"])
-        if file_extension not in allowed_extensions:
-            raise ForumProviderError("This image type is not allowed for forum avatars.")
+        normalized_bytes, content_type, file_extension = normalize_avatar_image(
+            raw_bytes,
+            allowed_extensions=allowed_extensions,
+            max_output_bytes=self.settings["forum_avatar_max_bytes"],
+            crop_options=crop_options,
+        )
 
         safe_name = secure_filename(upload.filename or "avatar")
         storage_dir = get_forum_storage_dir()
         storage_dir.mkdir(parents=True, exist_ok=True)
         storage_path = storage_dir / f"avatar-{user.id}-{secrets.token_hex(12)}.{file_extension}"
-        storage_path.write_bytes(raw_bytes)
+        storage_path.write_bytes(normalized_bytes)
 
         pending_submissions = db.session.execute(
             db.select(ForumAvatarSubmission)
@@ -525,9 +718,9 @@ class ForumService:
             member=member,
             status=FORUM_AVATAR_STATUS_PENDING,
             original_filename=safe_name or f"avatar.{file_extension}",
-            content_type=upload.mimetype or f"image/{detected_type}",
-            file_size=len(raw_bytes),
-            file_hash=hashlib.sha256(raw_bytes).hexdigest(),
+            content_type=content_type,
+            file_size=len(normalized_bytes),
+            file_hash=hashlib.sha256(normalized_bytes).hexdigest(),
             storage_path=str(storage_path),
             public_token=secrets.token_urlsafe(24),
         )

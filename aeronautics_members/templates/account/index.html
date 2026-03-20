@@ -105,21 +105,8 @@
                         <div class="alert alert-secondary">{{ forum_context.latest_submission.review_note }}</div>
                     {% endif %}
 
-                    {% if forum_context.pending_submission and forum_context.pending_submission.public_token %}
-                        <div class="mb-3">
-                            <img src="{{ url_for('forum_avatar_public_file', token=forum_context.pending_submission.public_token) }}" alt="{{ _('Pending profile picture preview') }}" class="img-fluid rounded border">
-                        </div>
-                    {% endif %}
-
-                    <form method="POST" action="{{ url_for('upload_forum_avatar') }}" enctype="multipart/form-data" class="mb-0">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="mb-3">
-                            <label for="forum-avatar" class="form-label">{{ _('Profile Picture') }}</label>
-                            <input type="file" class="form-control" id="forum-avatar" name="avatar" accept="image/jpeg,image/png,image/webp" required>
-                            <small class="text-muted">{{ _('Allowed types: %(types)s. Maximum size: %(bytes)s bytes.', types=forum_context.service.settings['forum_avatar_allowed_types']|join(', '), bytes=forum_context.service.settings['forum_avatar_max_bytes']) }}</small>
-                        </div>
-                        <button type="submit" class="btn btn-primary">{{ _('Upload Profile Picture') }}</button>
-                    </form>
+                    {% set upload_id_prefix = 'forum-avatar' %}
+                    {% include 'account/_forum_avatar_upload.html' %}
                 {% else %}
                     <div class="alert alert-secondary mb-0">{{ forum_context.status_message }}</div>
                 {% endif %}
@@ -189,4 +176,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script src="{{ url_for('static', filename='forum-avatar-upload.js') }}"></script>
 {% endblock %}

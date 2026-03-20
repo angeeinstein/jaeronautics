@@ -929,3 +929,30 @@ hr,
         top: auto;
     }
 }
+
+.forum-avatar-uploader {
+    margin-top: 1rem;
+}
+
+.forum-avatar-preview-frame {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--ja-border);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    min-height: 12rem;
+}
+
+.forum-avatar-preview-frame img,
+.forum-avatar-preview-frame canvas {
+    display: block;
+    max-height: 24rem;
+    width: 100%;
+    object-fit: contain;
+}
+
+.forum-avatar-crop-controls {
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--ja-border);
+    border-radius: 0.75rem;
+    background: rgba(255, 255, 255, 0.02);
+}

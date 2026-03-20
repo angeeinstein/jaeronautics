@@ -1,0 +1,63 @@
+{% set upload_prefix = upload_id_prefix or 'forum-avatar' %}
+{% set file_input_id = upload_prefix ~ '-file' %}
+{% set crop_toggle_id = upload_prefix ~ '-crop-toggle' %}
+{% set zoom_input_id = upload_prefix ~ '-zoom' %}
+{% set center_x_input_id = upload_prefix ~ '-center-x' %}
+{% set center_y_input_id = upload_prefix ~ '-center-y' %}
+
+{% if forum_context.pending_submission and forum_context.pending_submission.public_token %}
+    <div class="mb-3">
+        <img src="{{ url_for('forum_avatar_public_file', token=forum_context.pending_submission.public_token) }}" alt="{{ _('Pending profile picture preview') }}" class="img-fluid rounded border">
+    </div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('upload_forum_avatar') }}" enctype="multipart/form-data" class="mb-0 forum-avatar-upload-form" data-avatar-upload-root data-max-upload-bytes="{{ forum_context.avatar_upload_request_limit }}" data-output-max-bytes="{{ forum_context.avatar_max_bytes }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="crop_mode" value="" data-avatar-crop-mode>
+    <input type="hidden" name="crop_zoom" value="1" data-avatar-crop-zoom>
+    <input type="hidden" name="crop_center_x" value="0.5" data-avatar-crop-center-x>
+    <input type="hidden" name="crop_center_y" value="0.5" data-avatar-crop-center-y>
+
+    <div class="mb-3">
+        <label for="{{ file_input_id }}" class="form-label">{{ _('Profile Picture') }}</label>
+        <input type="file" class="form-control" id="{{ file_input_id }}" name="avatar" accept="image/jpeg,image/png,image/webp" required data-avatar-file-input>
+        <small class="text-muted d-block mt-2">
+            {{ _('Allowed types: %(types)s. Uploads up to %(upload_limit)s are accepted and optimized down to the avatar limit of %(avatar_limit)s.', types=forum_context.service.settings['forum_avatar_allowed_types']|join(', '), upload_limit=forum_context.avatar_upload_request_limit_display, avatar_limit=forum_context.avatar_max_bytes_display) }}
+        </small>
+    </div>
+
+    <div class="forum-avatar-uploader d-none" data-avatar-preview-panel>
+        <div class="row g-3 align-items-start">
+            <div class="col-lg-7">
+                <div class="forum-avatar-preview-frame">
+                    <img alt="{{ _('Selected profile picture preview') }}" class="img-fluid rounded border d-none" data-avatar-original-preview>
+                    <canvas class="w-100 rounded border d-none" data-avatar-crop-preview></canvas>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" value="1" id="{{ crop_toggle_id }}" data-avatar-crop-toggle>
+                    <label class="form-check-label" for="{{ crop_toggle_id }}">{{ _('Crop to a square before upload') }}</label>
+                </div>
+                <div class="forum-avatar-crop-controls d-none" data-avatar-crop-controls>
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ zoom_input_id }}">{{ _('Zoom') }}</label>
+                        <input class="form-range" type="range" id="{{ zoom_input_id }}" min="1" max="4" step="0.05" value="1" data-avatar-zoom-range>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ center_x_input_id }}">{{ _('Horizontal Position') }}</label>
+                        <input class="form-range" type="range" id="{{ center_x_input_id }}" min="0" max="1" step="0.01" value="0.5" data-avatar-center-x-range>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ center_y_input_id }}">{{ _('Vertical Position') }}</label>
+                        <input class="form-range" type="range" id="{{ center_y_input_id }}" min="0" max="1" step="0.01" value="0.5" data-avatar-center-y-range>
+                    </div>
+                </div>
+                <small class="text-muted d-block mb-3">{{ _('The server will still validate and optimize the final image before it is stored and reviewed.') }}</small>
+                <div class="alert alert-danger d-none mb-0" data-avatar-error role="alert"></div>
+            </div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary mt-3" data-avatar-submit>{{ submit_label or _('Upload Profile Picture') }}</button>
+</form>
