@@ -213,6 +213,8 @@
                         <div class="alert alert-secondary mb-0">
                             <div><strong>{{ _('Member Forum Entry URL:') }}</strong> <code>{{ url_for('forum_entry', _external=True) }}</code></div>
                             <div class="mt-2"><strong>{{ _('DiscourseConnect Callback URL:') }}</strong> <code>{{ url_for('forum_discourse_connect', _external=True) }}</code></div>
+                            <div class="mt-2"><strong>{{ _('Discourse Logout Redirect URL:') }}</strong> <code>{{ url_for('forum_logout', _external=True) }}</code></div>
+                            <div class="mt-2 small text-muted">{{ _("Set Discourse's logout redirect setting to this URL so a forum logout also clears the membership-site session.") }}</div>
                         </div>
 
                         {% if forum_settings.forum_integration_enabled and forum_service.config_errors %}

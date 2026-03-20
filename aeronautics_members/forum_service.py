@@ -106,6 +106,9 @@ class ForumProvider:
     def set_avatar(self, forum_account, user, submission):
         raise NotImplementedError
 
+    def log_out_user(self, forum_account, user):
+        raise NotImplementedError
+
 
 class DiscourseConnectProvider(ForumProvider):
     slug = "discourse"
@@ -270,6 +273,24 @@ class DiscourseConnectProvider(ForumProvider):
             data={"upload_id": str(upload_id), "type": "uploaded"},
         )
         return upload_id
+
+    def log_out_user(self, forum_account, user):
+        if not forum_account.remote_user_id:
+            try:
+                remote_user = self.get_remote_user_by_external_id(forum_account.external_id)
+            except ForumProviderError as exc:
+                if "failed (404)" in str(exc):
+                    return False
+                raise
+            forum_account.remote_user_id = remote_user.get("id")
+        if not forum_account.remote_user_id:
+            return False
+
+        self._request(
+            "POST",
+            f"/admin/users/{quote(str(forum_account.remote_user_id))}/log_out",
+        )
+        return True
 
 
 class DiscourseConnectAuthStrategy(ForumAuthStrategy):
@@ -580,6 +601,18 @@ class ForumService:
         if not self.is_ready():
             raise ForumProviderError("Forum integration is not configured yet.")
         return self.auth_strategy.handle_provider_request(request_args, user, member, self)
+
+    def log_out_user(self, user):
+        if user is None or user.forum_account is None or not self.is_ready():
+            return False, None
+        try:
+            result = self.provider.log_out_user(user.forum_account, user)
+            return bool(result), None
+        except ForumProviderError as exc:
+            if user.forum_account is not None:
+                user.forum_account.last_error = str(exc)
+                user.forum_account.last_synced_at = datetime.now(timezone.utc)
+            return False, str(exc)
 
 
 def normalize_forum_settings(settings_map):

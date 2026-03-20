@@ -811,6 +811,18 @@ def get_forum_service():
 
 
 
+def log_out_forum_session_if_possible(user):
+    if user is None or getattr(user, "forum_account", None) is None:
+        return False, None
+
+    service = get_forum_service()
+    did_log_out, error = service.log_out_user(user)
+    if error:
+        current_app.logger.warning("Forum logout sync failed for user_id=%s: %s", user.id, error)
+    return did_log_out, error
+
+
+
 def snapshot_forum_account_for_audit(forum_account):
     if forum_account is None:
         return None
@@ -4077,8 +4089,41 @@ def create_app():
     @app.route("/logout", methods=["POST"])
     @login_required
     def logout():
+        user = current_user._get_current_object()
+        forum_logout_attempted, forum_logout_error = log_out_forum_session_if_possible(user)
         logout_user()
-        return redirect(url_for("index"))
+        session.pop("login_next", None)
+
+        next_url = request.form.get("next") or url_for("index")
+        if not is_safe_next_url(next_url):
+            next_url = url_for("index")
+
+        if forum_logout_error:
+            flash(_("You have been logged out here, but the forum session could not be ended automatically."), "warning")
+        elif forum_logout_attempted:
+            flash(_("You have been logged out from both the website and the forum."), "info")
+        else:
+            flash(_("You have been logged out."), "info")
+        return redirect(next_url)
+
+    @app.route("/forum/logout", methods=["GET"])
+    def forum_logout():
+        forum_logout_error = None
+        forum_logout_attempted = False
+        if current_user.is_authenticated:
+            user = current_user._get_current_object()
+            forum_logout_attempted, forum_logout_error = log_out_forum_session_if_possible(user)
+            logout_user()
+            session.pop("login_next", None)
+            if forum_logout_error:
+                flash(_("You have been logged out here, but the forum session could not be ended automatically."), "warning")
+            elif forum_logout_attempted:
+                flash(_("You have been logged out from the forum and this website. Sign in again if you want to continue with a different account."), "info")
+            else:
+                flash(_("You have been logged out. Sign in again if you want to continue."), "info")
+        else:
+            flash(_("You have been logged out from the forum. Sign in again if you want to continue."), "info")
+        return redirect(url_for("login", next=url_for("forum_entry")))
 
     @app.route("/change-password", methods=["GET", "POST"])
     @login_required
