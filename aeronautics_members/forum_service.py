@@ -292,11 +292,14 @@ class OAuth2ProviderAuthStrategy(ForumAuthStrategy):
 class ForumProvider:
     slug = "base"
 
-    def sync_user(self, forum_account, user, member, desired_state):
+    def sync_user(self, forum_account, user, member, desired_state, avatar_url=None, avatar_force_update=False):
         raise NotImplementedError
 
     def test_connection(self):
         raise NotImplementedError
+
+    def build_avatar_url(self, submission):
+        return None
 
     def set_avatar(self, forum_account, user, submission):
         raise NotImplementedError
@@ -397,7 +400,7 @@ class DiscourseConnectProvider(ForumProvider):
             payload["remove_groups"] = ",".join(dict.fromkeys(remove_groups))
         return payload
 
-    def build_sso_payload(self, user, member, desired_state, nonce):
+    def build_sso_payload(self, user, member, desired_state, nonce, avatar_url=None, avatar_force_update=False):
         full_name = f"{member.first_name} {member.last_name}".strip() if member else (user.email or "")
         payload = {
             "nonce": nonce,
@@ -407,11 +410,22 @@ class DiscourseConnectProvider(ForumProvider):
             "name": full_name,
             "require_activation": "false",
         }
+        if avatar_url:
+            payload["avatar_url"] = avatar_url
+            if avatar_force_update:
+                payload["avatar_force_update"] = "true"
         payload.update(self._build_group_fields(desired_state))
         return payload
 
-    def sync_user(self, forum_account, user, member, desired_state):
-        payload = self.build_sso_payload(user, member, desired_state, nonce=f"sync-{user.id}-{int(datetime.now(timezone.utc).timestamp())}")
+    def sync_user(self, forum_account, user, member, desired_state, avatar_url=None, avatar_force_update=False):
+        payload = self.build_sso_payload(
+            user,
+            member,
+            desired_state,
+            nonce=f"sync-{user.id}-{int(datetime.now(timezone.utc).timestamp())}",
+            avatar_url=avatar_url,
+            avatar_force_update=avatar_force_update,
+        )
         encoded, signature = self._sign_sso_payload(payload)
         self._request(
             "POST",
@@ -435,39 +449,24 @@ class DiscourseConnectProvider(ForumProvider):
             return True, f"Connected to Discourse site '{site_name}'."
         return True, "Connected to Discourse successfully."
 
+    def build_avatar_url(self, submission):
+        if submission is None or not submission.public_token:
+            return None
+        cache_bust = submission.file_hash or int(datetime.now(timezone.utc).timestamp())
+        return build_public_url("forum_avatar_public_file", token=submission.public_token, v=cache_bust)
+
     def set_avatar(self, forum_account, user, submission):
-        if not forum_account.remote_user_id:
-            remote_user = self.get_remote_user_by_external_id(forum_account.external_id)
-            forum_account.remote_user_id = remote_user.get("id")
-        if not forum_account.remote_user_id:
-            raise ForumProviderError("Could not determine the Discourse user id for the avatar upload.")
-
-        public_url = build_public_url("forum_avatar_public_file", token=submission.public_token)
-        upload_response = self._request(
-            "POST",
-            "/uploads.json",
-            data={
-                "type": "avatar",
-                "user_id": str(forum_account.remote_user_id),
-                "synchronous": "true",
-                "url": public_url,
-            },
+        avatar_url = self.build_avatar_url(submission)
+        if not avatar_url:
+            raise ForumProviderError("The approved avatar is missing a public file URL.")
+        return self.sync_user(
+            forum_account,
+            user,
+            submission.member,
+            FORUM_STATE_ONBOARDING,
+            avatar_url=avatar_url,
+            avatar_force_update=True,
         )
-        upload_id = (
-            upload_response.get("id")
-            or upload_response.get("upload_id")
-            or (upload_response.get("upload") or {}).get("id")
-        )
-        if not upload_id:
-            raise ForumProviderError("Discourse did not return an upload id for the avatar upload.")
-
-        username = user.forum_username or f"member-{user.id}"
-        self._request(
-            "PUT",
-            f"/u/{quote(username)}/preferences/avatar/pick.json",
-            data={"upload_id": str(upload_id), "type": "uploaded"},
-        )
-        return upload_id
 
     def log_out_user(self, forum_account, user):
         if not forum_account.remote_user_id:
@@ -528,7 +527,15 @@ class DiscourseConnectAuthStrategy(ForumAuthStrategy):
             raise ForumProviderError("Incomplete DiscourseConnect payload.")
 
         desired_state = service.get_desired_state(member)
-        provider_payload = self.provider.build_sso_payload(user, member, desired_state, nonce=nonce)
+        approved_submission = service.get_current_approved_submission(member)
+        provider_payload = self.provider.build_sso_payload(
+            user,
+            member,
+            desired_state,
+            nonce=nonce,
+            avatar_url=self.provider.build_avatar_url(approved_submission),
+            avatar_force_update=False,
+        )
         encoded_response, response_sig = self.provider._sign_sso_payload(provider_payload)
         separator = "&" if "?" in return_sso_url else "?"
         return f"{return_sso_url}{separator}sso={quote_plus(encoded_response)}&sig={response_sig}"
@@ -656,8 +663,18 @@ class ForumService:
                 changed = True
             return ForumSyncResult(changed=changed or True, desired_state=desired_state, forum_account=forum_account, error=forum_account.last_error)
 
+        approved_submission = self.get_current_approved_submission(member)
+        avatar_url = self.provider.build_avatar_url(approved_submission) if approved_submission is not None else None
+
         try:
-            self.provider.sync_user(forum_account, member.user, member, desired_state)
+            self.provider.sync_user(
+                forum_account,
+                member.user,
+                member,
+                desired_state,
+                avatar_url=avatar_url,
+                avatar_force_update=False,
+            )
             if forum_account.state != desired_state:
                 forum_account.state = desired_state
                 changed = True
@@ -767,7 +784,6 @@ class ForumService:
         submission.review_note = review_note
         submission.sync_error = None
         submission.forum_synced_at = datetime.now(timezone.utc)
-        delete_submission_file(submission, clear_reference=True)
 
         return self.sync_member(submission.member)
 
