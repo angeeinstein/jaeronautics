@@ -76,6 +76,16 @@
                         <dt class="col-sm-4">{{ _('Auto-Renewal') }}</dt>
                         <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled for the end of the covered year.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
                     </dl>
+                    {% if member.stripe_customer_id or member.stripe_subscription_id %}
+                        <div class="d-flex flex-wrap gap-2 mt-4">
+                            <form method="POST" action="{{ url_for('admin_sync_billing_account', user_id=user_record.id) }}" class="mb-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="next" value="{{ url_for('admin_account_detail', user_id=user_record.id) }}">
+                                <button type="submit" class="btn btn-primary">{{ _('Sync Billing') }}</button>
+                            </form>
+                        </div>
+                        <small class="text-muted d-block mt-2">{{ _('Queries Stripe directly and repairs missed billing webhook updates for this member.') }}</small>
+                    {% endif %}
                 {% else %}
                     <div class="alert alert-info mb-0">{{ _('This account does not have a linked membership profile.') }}</div>
                 {% endif %}

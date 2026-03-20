@@ -116,3 +116,5 @@ runuser -u jaeronautics -- env PYTHONPATH=/var/www/jaeronautics /var/www/jaerona
 - If you use origin-only HTTP without public HTTPS, the public Stripe endpoint still needs to be the externally reachable HTTPS URL
 - A correct webhook request to this app should return `200 Success`; `405 Method Not Allowed` usually means Stripe is posting to the wrong URL
 - After fixing the endpoint in Stripe, use the dashboard `Resend` action for the failed events
+- Fresh installs now also enable a daily systemd timer that runs `reconcile-billing` as a safety net for missed Stripe webhook updates
+- You can manually repair one member at any time with `sync-member-billing <email>`

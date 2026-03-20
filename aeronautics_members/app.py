@@ -1412,12 +1412,15 @@ def create_invoice_membership_for_member(member):
 
 
 def get_latest_stripe_subscription_for_member(member):
-    if member is None or not member.stripe_customer_id:
+    if member is None:
         return None
 
     if member.stripe_subscription_id:
         apply_runtime_stripe_config()
         return stripe.Subscription.retrieve(member.stripe_subscription_id)
+
+    if not member.stripe_customer_id:
+        return None
 
     apply_runtime_stripe_config()
     subscription_list = stripe.Subscription.list(customer=member.stripe_customer_id, status="all", limit=1)
@@ -1501,7 +1504,7 @@ def sync_member_subscription_state_from_subscription(member, subscription):
 
 
 def sync_member_subscription_state_from_stripe(member):
-    if member is None or not member.stripe_customer_id:
+    if member is None or not (member.stripe_customer_id or member.stripe_subscription_id):
         return False
 
     subscription = get_latest_stripe_subscription_for_member(member)
@@ -1509,6 +1512,33 @@ def sync_member_subscription_state_from_stripe(member):
         return False
 
     return sync_member_subscription_state_from_subscription(member, subscription)
+
+
+
+def refresh_member_billing_state(member, force_stripe_sync=False, sync_forum=False, on_date=None):
+    if member is None:
+        return False, None, None
+
+    changed = False
+    stripe_subscription = None
+    has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
+
+    if has_stripe_reference and force_stripe_sync:
+        stripe_subscription = get_latest_stripe_subscription_for_member(member)
+        if stripe_subscription and sync_member_subscription_state_from_subscription(member, stripe_subscription):
+            changed = True
+
+    if sync_member_active_state(member, on_date=on_date):
+        changed = True
+
+    forum_result = None
+    forum_service = get_forum_service()
+    if sync_forum and member.user is not None and (forum_service.is_enabled() or member.user.forum_account is not None):
+        forum_result, _forum_service = sync_member_forum_state(member)
+        if forum_result and forum_result.changed:
+            changed = True
+
+    return changed, stripe_subscription, forum_result
 
 
 
@@ -1900,27 +1930,13 @@ def create_app():
             click.echo(click.style(f"No member found for {normalized_email}", fg="red"), err=True)
             sys.exit(1)
 
-        changed = False
-        stripe_subscription = None
-        if member.stripe_customer_id:
-            try:
-                stripe_subscription = get_latest_stripe_subscription_for_member(member)
-                changed = sync_member_subscription_state_from_stripe(member)
-            except stripe.StripeError as exc:
-                click.echo(click.style(f"Stripe sync failed: {exc}", fg="red"), err=True)
-                sys.exit(1)
-        else:
-            click.echo(click.style("Member has no Stripe customer ID yet; nothing to sync from Stripe.", fg="yellow"))
-
-        if sync_member_active_state(member):
-            changed = True
-
-        forum_result = None
-        forum_service = get_forum_service()
-        if member.user is not None and (forum_service.is_enabled() or member.user.forum_account is not None):
-            forum_result, _forum_service = sync_member_forum_state(member)
-            if forum_result and forum_result.changed:
-                changed = True
+        try:
+            changed, stripe_subscription, forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=True)
+        except stripe.StripeError as exc:
+            click.echo(click.style(f"Stripe sync failed: {exc}", fg="red"), err=True)
+            sys.exit(1)
+        if not (member.stripe_customer_id or member.stripe_subscription_id):
+            click.echo(click.style("Member has no Stripe customer or subscription reference yet; nothing to sync from Stripe.", fg="yellow"))
 
         if changed:
             db.session.commit()
@@ -1952,6 +1968,67 @@ def create_app():
             click.echo(f"  forum_desired_state: {forum_result.desired_state or '-'}")
             click.echo(f"  forum_sync_error: {forum_result.error or '-'}")
         click.echo(f"  changed: {changed}")
+
+
+    @app.cli.command("reconcile-billing")
+    @click.option("--all", "reconcile_all", is_flag=True, help="Synchronize all Stripe-linked members instead of only higher-risk records.")
+    @click.option("--lookahead-days", default=3, show_default=True, type=int)
+    @with_appcontext
+    def reconcile_billing(reconcile_all, lookahead_days):
+        """Reconciles local billing state with Stripe for Stripe-managed memberships."""
+        today = get_membership_today()
+        cutoff = today + timedelta(days=max(0, lookahead_days))
+        stripe_linked_filter = or_(Member.stripe_customer_id.is_not(None), Member.stripe_subscription_id.is_not(None))
+        query = db.select(Member.id).where(stripe_linked_filter)
+        if not reconcile_all:
+            risky_statuses = tuple(sorted(RESUMABLE_MEMBER_STATUSES | {"cancel_scheduled", "canceled", "failed", "processing", "unpaid"}))
+            query = query.where(
+                or_(
+                    Member.payment_status.in_(risky_statuses),
+                    Member.cancel_at_period_end.is_(True),
+                    Member.membership_ends_on.is_(None),
+                    Member.renewal_due_on.is_(None),
+                    Member.membership_ends_on <= cutoff,
+                )
+            )
+
+        member_ids = db.session.execute(query.order_by(Member.id.asc())).scalars().all()
+        changed_count = 0
+        unchanged_count = 0
+        error_count = 0
+        forum_warning_count = 0
+
+        for member_id in member_ids:
+            member = db.session.get(Member, member_id)
+            if member is None:
+                continue
+            try:
+                changed, _stripe_subscription, forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=True, on_date=today)
+                if changed:
+                    db.session.commit()
+                    changed_count += 1
+                else:
+                    db.session.rollback()
+                    unchanged_count += 1
+                if forum_result and forum_result.error:
+                    forum_warning_count += 1
+                    click.echo(click.style(f"Forum sync warning for {member.email_private}: {forum_result.error}", fg="yellow"))
+            except stripe.StripeError as exc:
+                db.session.rollback()
+                error_count += 1
+                click.echo(click.style(f"Stripe sync failed for {member.email_private}: {exc}", fg="red"), err=True)
+            except Exception as exc:
+                db.session.rollback()
+                error_count += 1
+                click.echo(click.style(f"Billing reconciliation failed for {member.email_private}: {exc}", fg="red"), err=True)
+
+        summary_color = "green" if error_count == 0 else "yellow"
+        click.echo(click.style(
+            f"Processed {len(member_ids)} Stripe-linked membership(s). Changed: {changed_count}. Unchanged: {unchanged_count}. Errors: {error_count}. Forum warnings: {forum_warning_count}.",
+            fg=summary_color,
+        ))
+        if error_count:
+            sys.exit(1)
 
     @app.cli.command("sync-member-forum")
     @click.argument("email")
@@ -2077,11 +2154,11 @@ def create_app():
         if member is None:
             return redirect(url_for("create_membership_profile"))
 
-        if member.stripe_customer_id:
+        has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
+        if has_stripe_reference:
             try:
-                stripe_state_changed = sync_member_subscription_state_from_stripe(member)
-                local_state_changed = sync_member_active_state(member)
-                if stripe_state_changed or local_state_changed:
+                billing_changed, _stripe_subscription, _forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
+                if billing_changed:
                     db.session.commit()
             except stripe.StripeError as exc:
                 app.logger.warning("Could not refresh Stripe billing state for member_id=%s: %s", member.id, exc)
@@ -3000,6 +3077,62 @@ def create_app():
             can_revoke_admin=user.has_role("admin") and current_user.id != user.id and count_users_with_role("admin") > 1,
             admin_count=count_users_with_role("admin"),
         )
+
+    @app.route("/admin/accounts/<int:user_id>/billing-sync", methods=["POST"])
+    @login_required
+    @admin_required
+    def admin_sync_billing_account(user_id):
+        user = db.session.execute(
+            db.select(User)
+            .options(selectinload(User.member), selectinload(User.forum_account))
+            .filter_by(id=user_id)
+        ).scalar_one_or_none()
+        if user is None:
+            flash(_("The selected account could not be found."), "warning")
+            return redirect(url_for("admin_accounts"))
+
+        next_url = request.form.get("next") or url_for("admin_account_detail", user_id=user.id)
+        if user.member is None:
+            flash(_("This account does not have a linked membership profile yet."), "warning")
+            return redirect(next_url)
+        if not (user.member.stripe_customer_id or user.member.stripe_subscription_id):
+            flash(_("No Stripe billing reference is stored for this membership yet."), "warning")
+            return redirect(next_url)
+
+        before_member = snapshot_member_for_audit(user.member)
+        try:
+            changed, stripe_subscription, forum_result = refresh_member_billing_state(user.member, force_stripe_sync=True, sync_forum=True)
+        except stripe.StripeError as exc:
+            db.session.rollback()
+            app.logger.error("Manual Stripe billing sync failed for member_id=%s: %s", user.member.id, exc)
+            flash(_("Stripe billing sync failed right now. Please try again later."), "danger")
+            return redirect(next_url)
+
+        log_audit_event(
+            category="billing",
+            event_type="manual_billing_sync",
+            actor_user=current_user,
+            target_user=user,
+            target_member=user.member,
+            before=before_member,
+            after=snapshot_member_for_audit(user.member),
+            metadata={
+                "changed": changed,
+                "stripe_status": stripe_subscription.get("status") if stripe_subscription else None,
+                "stripe_cancel_at_period_end": stripe_subscription.get("cancel_at_period_end") if stripe_subscription else None,
+                "stripe_cancel_at": stripe_subscription.get("cancel_at") if stripe_subscription else None,
+                "forum_sync_error": forum_result.error if forum_result else None,
+            },
+        )
+        db.session.commit()
+
+        if changed:
+            flash(_("Billing state synchronized successfully."), "success")
+        else:
+            flash(_("Billing already matches the current Stripe state."), "info")
+        if forum_result and forum_result.error:
+            flash(_("Forum sync completed with an issue: %(message)s", message=forum_result.error), "warning")
+        return redirect(next_url)
 
     @app.route("/admin/forum", methods=["GET"])
     @login_required

@@ -47,6 +47,8 @@ NGINX_CONF_PATH=""
 NGINX_ENABLED_PATH=""
 ENV_FILE=""
 SERVICE_FILE=""
+BILLING_RECONCILE_SERVICE_FILE=""
+BILLING_RECONCILE_TIMER_FILE=""
 PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
 USE_LOCAL_DB="1"
@@ -290,6 +292,8 @@ parse_args() {
 resolve_paths() {
     ENV_FILE="${INSTALL_DIR}/.env"
     SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+    BILLING_RECONCILE_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-billing-reconcile.service"
+    BILLING_RECONCILE_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-billing-reconcile.timer"
 
     if [[ -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]]; then
         NGINX_CONF_PATH="/etc/nginx/sites-available/${SERVICE_NAME}.conf"
@@ -1292,6 +1296,52 @@ EOF
     chmod 644 "${SERVICE_FILE}"
 }
 
+render_billing_reconcile_timer_files() {
+    step "Writing billing reconciliation timer"
+    local unit_after="After=network.target"
+    local unit_requires=""
+
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        unit_after="After=network.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    cat > "${BILLING_RECONCILE_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics billing reconciliation
+${unit_after}
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app reconcile-billing --lookahead-days 3
+TimeoutStartSec=180
+PrivateTmp=true
+NoNewPrivileges=true
+EOF
+
+    cat > "${BILLING_RECONCILE_TIMER_FILE}" <<EOF
+[Unit]
+Description=Daily Joanneum Aeronautics billing reconciliation
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=${SERVICE_NAME}-billing-reconcile.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${BILLING_RECONCILE_SERVICE_FILE}" "${BILLING_RECONCILE_TIMER_FILE}"
+}
+
 cert_paths_exist() {
     [[ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" && -f "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ]]
 }
@@ -1579,6 +1629,7 @@ reload_services() {
     step "Reloading system services"
     systemctl daemon-reload
     systemctl enable --now "${SERVICE_NAME}"
+    systemctl enable --now "${SERVICE_NAME}-billing-reconcile.timer"
     nginx -t
     systemctl reload nginx
 }
@@ -1593,6 +1644,7 @@ verify_installation() {
     fi
     systemctl is-active --quiet nginx
     systemctl is-active --quiet "${SERVICE_NAME}"
+    systemctl is-active --quiet "${SERVICE_NAME}-billing-reconcile.timer"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
     success "The application is responding on 127.0.0.1:${APP_PORT}"
 
@@ -1745,6 +1797,7 @@ install_or_update() {
     initialize_database_schema
     ensure_admin_account
     render_service_file
+    render_billing_reconcile_timer_files
     obtain_ssl_certificate
     render_nginx_config
     write_cloudflare_tunnel_files
@@ -1763,6 +1816,13 @@ uninstall_everything() {
         source_existing_env
     fi
 
+    if [[ -f "${BILLING_RECONCILE_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-billing-reconcile.timer" || true
+        rm -f "${BILLING_RECONCILE_TIMER_FILE}"
+    fi
+    if [[ -f "${BILLING_RECONCILE_SERVICE_FILE}" ]]; then
+        rm -f "${BILLING_RECONCILE_SERVICE_FILE}"
+    fi
     if [[ -f "${SERVICE_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}" || true
         rm -f "${SERVICE_FILE}"
