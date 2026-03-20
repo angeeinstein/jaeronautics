@@ -1,31 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ page_title or _('Admin Area') }}{% endblock %}
 {% block content %}
-<div class="container mt-5 mb-5">
-    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-        <div>
-            <h2 class="mb-1">{{ page_title or _('Admin Area') }}</h2>
-            {% if page_description %}
-                <p class="text-muted mb-0">{{ page_description }}</p>
-            {% else %}
-                <p class="text-muted mb-0">{{ _('Manage accounts, memberships, forum access, approvals, logs, and settings.') }}</p>
-            {% endif %}
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-            {% if not current_user.member %}
-                <a href="{{ url_for('create_membership_profile') }}" class="btn btn-primary">{{ _('Create Membership Profile') }}</a>
-            {% else %}
-                <a href="{{ url_for('account') }}" class="btn btn-secondary">{{ _('Open My Account') }}</a>
-            {% endif %}
-            <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
-            <form method="POST" action="{{ url_for('logout') }}" class="mb-0">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-danger">{{ _('Logout') }}</button>
-            </form>
-        </div>
-    </div>
-
-    <div class="card mb-4">
+<div class="container admin-shell mt-4 mb-5">
+    <div class="card admin-section-nav mb-4">
         <div class="card-body py-3">
             <div class="d-flex flex-wrap gap-2">
                 <a href="{{ url_for('admin_dashboard') }}" class="btn {% if active_admin_section == 'dashboard' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Dashboard') }}</a>
@@ -35,6 +12,24 @@
                 <a href="{{ url_for('admin_logs') }}" class="btn {% if active_admin_section == 'logs' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Logs') }}</a>
                 <a href="{{ url_for('admin_settings') }}" class="btn {% if active_admin_section == 'settings' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Settings') }}</a>
             </div>
+        </div>
+    </div>
+
+    <div class="admin-page-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+        <div>
+            <h1 class="h3 mb-1">{{ page_title or _('Admin Area') }}</h1>
+            {% if page_description %}
+                <p class="text-muted mb-0">{{ page_description }}</p>
+            {% else %}
+                <p class="text-muted mb-0">{{ _('Manage accounts, memberships, forum access, approvals, logs, and settings.') }}</p>
+            {% endif %}
+        </div>
+        <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
+            {% block admin_page_actions %}
+                {% if not current_user.member %}
+                    <a href="{{ url_for('create_membership_profile') }}" class="btn btn-primary">{{ _('Create Membership Profile') }}</a>
+                {% endif %}
+            {% endblock %}
         </div>
     </div>
 

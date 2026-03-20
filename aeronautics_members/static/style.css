@@ -860,3 +860,72 @@ hr,
 .container a:not(.btn):not(.dropdown-item):not(.navbar-brand):not(.nav-link):hover {
     color: var(--ja-accent-hover);
 }
+
+
+.admin-shell {
+    max-width: 1280px;
+}
+
+.admin-section-nav {
+    border-top: 2px solid rgba(0, 223, 255, 0.75) !important;
+}
+
+.admin-page-header {
+    padding-inline: 0.2rem;
+}
+
+.admin-page-header h1 {
+    letter-spacing: 0.01em;
+}
+
+.settings-sidebar-card {
+    position: sticky;
+    top: 6rem;
+}
+
+.settings-nav {
+    background-color: var(--ja-surface);
+}
+
+.settings-nav .nav-link {
+    width: 100%;
+    text-align: left;
+    padding: 0.95rem 1.1rem;
+    border: 0 !important;
+    border-bottom: 1px solid var(--ja-border) !important;
+    background-color: transparent !important;
+    color: var(--ja-text) !important;
+    font-weight: 600;
+}
+
+.settings-nav .nav-link:last-child {
+    border-bottom: 0 !important;
+}
+
+.settings-nav .nav-link:hover,
+.settings-nav .nav-link:focus {
+    background-color: rgba(0, 223, 255, 0.10) !important;
+    color: var(--ja-text) !important;
+}
+
+.settings-nav .nav-link.active {
+    background-color: rgba(0, 223, 255, 0.14) !important;
+    color: var(--ja-accent) !important;
+    box-shadow: inset 3px 0 0 var(--ja-accent) !important;
+}
+
+.settings-tab-content .tab-pane > .card:first-child,
+.settings-tab-content .tab-pane > form > .card:first-child {
+    overflow: hidden;
+}
+
+.settings-subcard {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+@media (max-width: 1199.98px) {
+    .settings-sidebar-card {
+        position: static;
+        top: auto;
+    }
+}

@@ -3153,7 +3153,7 @@ def create_app():
         )
         db.session.commit()
         flash(message, "success" if success else "danger")
-        return redirect(url_for("admin_settings"))
+        return redirect(f"{url_for('admin_settings')}#settings-forum")
 
     @app.route("/admin/accounts/<int:user_id>/grant-admin", methods=["POST"])
     @login_required
@@ -3287,37 +3287,6 @@ def create_app():
             valid_templates = {choice for choice, _label in context["template_choices"]}
             valid_forum_providers = {choice for choice, _label in context["forum_provider_choices"]}
             valid_forum_auth_strategies = {choice for choice, _label in context["forum_auth_strategy_choices"]}
-            welcome_sender = request.form.get("welcome_email_sender")
-            auto_email_template = request.form.get("automatic_email_template")
-            forum_provider = (request.form.get("forum_provider") or "discourse").strip() or "discourse"
-            forum_auth_strategy = (request.form.get("forum_auth_strategy") or "discourse_connect").strip() or "discourse_connect"
-            forum_avatar_max_bytes = (request.form.get("forum_avatar_max_bytes") or "").strip()
-            forum_avatar_allowed_types = (request.form.get("forum_avatar_allowed_types") or "").strip()
-
-            if welcome_sender and welcome_sender not in valid_senders:
-                flash(_("Invalid sender account selected."), "danger")
-                return redirect(url_for("admin_settings"))
-
-            if auto_email_template and auto_email_template not in valid_templates:
-                flash(_("Invalid email template selected."), "danger")
-                return redirect(url_for("admin_settings"))
-
-            if forum_provider not in valid_forum_providers:
-                flash(_("Invalid forum provider selected."), "danger")
-                return redirect(url_for("admin_settings"))
-
-            if forum_auth_strategy not in valid_forum_auth_strategies:
-                flash(_("Invalid forum authentication strategy selected."), "danger")
-                return redirect(url_for("admin_settings"))
-
-            if forum_avatar_max_bytes:
-                try:
-                    if int(forum_avatar_max_bytes) <= 0:
-                        raise ValueError
-                except ValueError:
-                    flash(_("The forum avatar size limit must be a positive number of bytes."), "danger")
-                    return redirect(url_for("admin_settings"))
-
             tracked_setting_keys = [
                 "invoice_payments_enabled",
                 "automatic_emails_enabled",
@@ -3329,33 +3298,67 @@ def create_app():
                 key: db.session.get(Setting, key).value if db.session.get(Setting, key) is not None else None
                 for key in tracked_setting_keys
             }
+            settings_section = (request.form.get("settings_section") or "general").strip().lower()
+            if settings_section not in {"general", "forum", "mail", "test"}:
+                settings_section = "general"
+            settings_redirect = f"{url_for('admin_settings')}#settings-{settings_section}"
+            welcome_sender = request.form.get("welcome_email_sender")
+            auto_email_template = request.form.get("automatic_email_template")
+            forum_provider = (request.form.get("forum_provider") or before_settings.get("forum_provider") or "discourse").strip() or "discourse"
+            forum_auth_strategy = (request.form.get("forum_auth_strategy") or before_settings.get("forum_auth_strategy") or "discourse_connect").strip() or "discourse_connect"
+            forum_avatar_max_bytes = (request.form.get("forum_avatar_max_bytes") or before_settings.get("forum_avatar_max_bytes") or "").strip()
+            forum_avatar_allowed_types = (request.form.get("forum_avatar_allowed_types") or before_settings.get("forum_avatar_allowed_types") or "").strip()
 
-            invoice_enabled = "invoice_payments_enabled" in request.form
-            emails_enabled = "automatic_emails_enabled" in request.form
-            forum_enabled = "forum_integration_enabled" in request.form
+            if welcome_sender and welcome_sender not in valid_senders:
+                flash(_("Invalid sender account selected."), "danger")
+                return redirect(settings_redirect)
+
+            if auto_email_template and auto_email_template not in valid_templates:
+                flash(_("Invalid email template selected."), "danger")
+                return redirect(settings_redirect)
+
+            if forum_provider not in valid_forum_providers:
+                flash(_("Invalid forum provider selected."), "danger")
+                return redirect(settings_redirect)
+
+            if forum_auth_strategy not in valid_forum_auth_strategies:
+                flash(_("Invalid forum authentication strategy selected."), "danger")
+                return redirect(settings_redirect)
+
+            if forum_avatar_max_bytes:
+                try:
+                    if int(forum_avatar_max_bytes) <= 0:
+                        raise ValueError
+                except ValueError:
+                    flash(_("The forum avatar size limit must be a positive number of bytes."), "danger")
+                    return redirect(settings_redirect)
+
+            invoice_enabled = (request.form.get("invoice_payments_enabled") == "on") if settings_section == "general" else str(before_settings.get("invoice_payments_enabled") or "False") == "True"
+            emails_enabled = (request.form.get("automatic_emails_enabled") == "on") if settings_section == "general" else str(before_settings.get("automatic_emails_enabled") or "False") == "True"
+            forum_enabled = (request.form.get("forum_integration_enabled") == "on") if settings_section == "forum" else str(before_settings.get("forum_integration_enabled") or "False") == "True"
 
             set_setting_value("invoice_payments_enabled", str(invoice_enabled))
             set_setting_value("automatic_emails_enabled", str(emails_enabled))
-            set_setting_value("welcome_email_sender", welcome_sender or None)
-            set_setting_value("automatic_email_template", auto_email_template or None)
+            set_setting_value("welcome_email_sender", welcome_sender if settings_section == "general" else before_settings.get("welcome_email_sender"))
+            set_setting_value("automatic_email_template", auto_email_template if settings_section == "general" else before_settings.get("automatic_email_template"))
             set_setting_value("forum_integration_enabled", str(forum_enabled))
             set_setting_value("forum_provider", forum_provider)
             set_setting_value("forum_auth_strategy", forum_auth_strategy)
-            set_setting_value("forum_base_url", (request.form.get("forum_base_url") or "").strip() or None)
-            set_setting_value("discourse_api_username", (request.form.get("discourse_api_username") or "").strip() or None)
-            set_setting_value("forum_onboarding_group", (request.form.get("forum_onboarding_group") or "").strip() or None)
-            set_setting_value("forum_member_group", (request.form.get("forum_member_group") or "").strip() or None)
-            set_setting_value("forum_inactive_group", (request.form.get("forum_inactive_group") or "").strip() or None)
-            set_setting_value("forum_onboarding_path", (request.form.get("forum_onboarding_path") or "").strip() or "/")
+            set_setting_value("forum_base_url", ((request.form.get("forum_base_url") if settings_section == "forum" else before_settings.get("forum_base_url")) or "").strip() or None)
+            set_setting_value("discourse_api_username", ((request.form.get("discourse_api_username") if settings_section == "forum" else before_settings.get("discourse_api_username")) or "").strip() or None)
+            set_setting_value("forum_onboarding_group", ((request.form.get("forum_onboarding_group") if settings_section == "forum" else before_settings.get("forum_onboarding_group")) or "").strip() or None)
+            set_setting_value("forum_member_group", ((request.form.get("forum_member_group") if settings_section == "forum" else before_settings.get("forum_member_group")) or "").strip() or None)
+            set_setting_value("forum_inactive_group", ((request.form.get("forum_inactive_group") if settings_section == "forum" else before_settings.get("forum_inactive_group")) or "").strip() or None)
+            set_setting_value("forum_onboarding_path", ((request.form.get("forum_onboarding_path") if settings_section == "forum" else before_settings.get("forum_onboarding_path")) or "").strip() or "/")
             set_setting_value("forum_avatar_max_bytes", forum_avatar_max_bytes or None)
             set_setting_value("forum_avatar_allowed_types", forum_avatar_allowed_types or None)
 
             existing_api_key = before_settings.get("discourse_api_key")
-            submitted_api_key = (request.form.get("discourse_api_key") or "").strip()
+            submitted_api_key = ((request.form.get("discourse_api_key") if settings_section == "forum" else "") or "").strip()
             set_setting_value("discourse_api_key", submitted_api_key or existing_api_key)
 
             existing_connect_secret = before_settings.get("discourse_connect_secret")
-            submitted_connect_secret = (request.form.get("discourse_connect_secret") or "").strip()
+            submitted_connect_secret = ((request.form.get("discourse_connect_secret") if settings_section == "forum" else "") or "").strip()
             set_setting_value("discourse_connect_secret", submitted_connect_secret or existing_connect_secret)
 
             after_settings = {
@@ -3377,7 +3380,7 @@ def create_app():
             )
             db.session.commit()
             flash(_("Settings updated successfully!"), "success")
-            return redirect(url_for("admin_settings"))
+            return redirect(settings_redirect)
 
         return render_template(
             "admin_settings.html",
@@ -3564,11 +3567,11 @@ def create_app():
             mail_account = db.session.get(MailAccount, account_id)
             if mail_account is None:
                 flash(_("The selected mail account could not be found."), "warning")
-                return redirect(url_for("admin_settings"))
+                return redirect(f"{url_for('admin_settings')}#settings-mail")
         else:
             if not form.password.data:
                 flash(_("A password is required for new mail accounts."), "danger")
-                return redirect(url_for("admin_settings"))
+                return redirect(f"{url_for('admin_settings')}#settings-mail")
             mail_account = MailAccount()
             db.session.add(mail_account)
 
@@ -3601,7 +3604,7 @@ def create_app():
             return redirect(url_for("admin_settings", **redirect_kwargs))
 
         flash(_("Mail account saved successfully."), "success")
-        return redirect(url_for("admin_settings"))
+        return redirect(f"{url_for('admin_settings')}#settings-mail")
 
     @app.route("/admin/settings/mail-accounts/<int:mail_account_id>/delete", methods=["POST"])
     @login_required
@@ -3610,7 +3613,7 @@ def create_app():
         mail_account = db.session.get(MailAccount, mail_account_id)
         if mail_account is None:
             flash(_("The selected mail account could not be found."), "warning")
-            return redirect(url_for("admin_settings"))
+            return redirect(f"{url_for('admin_settings')}#settings-mail")
 
         before_mail_account = snapshot_mail_account_for_audit(mail_account)
         welcome_sender_setting = Setting.query.get("welcome_email_sender")
@@ -3631,7 +3634,7 @@ def create_app():
         db.session.delete(mail_account)
         db.session.commit()
         flash(_("Mail account deleted successfully."), "success")
-        return redirect(url_for("admin_settings"))
+        return redirect(f"{url_for('admin_settings')}#settings-mail")
 
     @app.route("/admin/settings/mail-accounts/import", methods=["POST"])
     @login_required
@@ -3642,7 +3645,7 @@ def create_app():
 
         if upload is None or not upload.filename:
             flash(_("Please choose a JSON file to import."), "warning")
-            return redirect(url_for("admin_settings"))
+            return redirect(f"{url_for('admin_settings')}#settings-mail")
 
         try:
             raw_payload = upload.stream.read()
@@ -3650,13 +3653,13 @@ def create_app():
             imported_accounts = normalize_imported_mail_accounts_payload(payload)
         except UnicodeDecodeError:
             flash(_("The uploaded file is not valid UTF-8 JSON."), "danger")
-            return redirect(url_for("admin_settings"))
+            return redirect(f"{url_for('admin_settings')}#settings-mail")
         except json.JSONDecodeError:
             flash(_("The uploaded file is not valid JSON."), "danger")
-            return redirect(url_for("admin_settings"))
+            return redirect(f"{url_for('admin_settings')}#settings-mail")
         except ValueError as exc:
             flash(str(exc), "danger")
-            return redirect(url_for("admin_settings"))
+            return redirect(f"{url_for('admin_settings')}#settings-mail")
 
         created_count = 0
         updated_count = 0
@@ -3723,7 +3726,7 @@ def create_app():
         except IntegrityError:
             db.session.rollback()
             flash(_("Import failed because one of the account keys already exists."), "danger")
-            return redirect(url_for("admin_settings"))
+            return redirect(f"{url_for('admin_settings')}#settings-mail")
 
         if created_count or updated_count:
             flash(
@@ -3747,7 +3750,7 @@ def create_app():
                 "warning",
             )
 
-        return redirect(url_for("admin_settings"))
+        return redirect(f"{url_for('admin_settings')}#settings-mail")
 
     @app.route("/admin/settings/mail-accounts/export", methods=["POST"])
     @login_required
@@ -3756,7 +3759,7 @@ def create_app():
         confirm_password = request.form.get("export_password", "")
         if not current_user.check_password(confirm_password):
             flash(_("Please confirm your current password to export sender accounts."), "danger")
-            return redirect(url_for("admin_settings"))
+            return redirect(f"{url_for('admin_settings')}#settings-mail")
 
         payload = build_mail_accounts_export_payload()
         log_audit_event(
@@ -3787,7 +3790,7 @@ def create_app():
         mail_account = db.session.get(MailAccount, mail_account_id)
         if mail_account is None:
             flash(_("The selected mail account could not be found."), "warning")
-            return redirect(url_for("admin_settings"))
+            return redirect(f"{url_for('admin_settings')}#settings-mail")
 
         success, message = probe_mail_account_connection(mail_account.to_config())
         log_audit_event(
@@ -3852,7 +3855,7 @@ def create_app():
         else:
             flash(_("Invalid form submission. Please check the fields and try again."), "warning")
 
-        return redirect(url_for("admin_settings"))
+        return redirect(f"{url_for('admin_settings')}#settings-test")
 
     @app.route("/login", methods=["POST", "GET"])
     @limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
