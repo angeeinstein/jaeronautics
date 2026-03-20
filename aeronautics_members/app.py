@@ -151,6 +151,13 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
 STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+STRIPE_SETTING_KEYS = ("stripe_publishable_key", "stripe_secret_key", "stripe_price_id", "stripe_webhook_secret")
+DEFAULT_STRIPE_SETTINGS = {
+    "stripe_publishable_key": STRIPE_PUBLISHABLE_KEY or "",
+    "stripe_secret_key": STRIPE_SECRET_KEY or "",
+    "stripe_price_id": STRIPE_PRICE_ID or "",
+    "stripe_webhook_secret": STRIPE_WEBHOOK_SECRET or "",
+}
 MEMBERSHIP_TIMEZONE_NAME = os.getenv("MEMBERSHIP_TIMEZONE", "Europe/Vienna")
 try:
     MEMBERSHIP_TIMEZONE = ZoneInfo(MEMBERSHIP_TIMEZONE_NAME)
@@ -398,7 +405,11 @@ def build_membership_cycle(join_date, annual_amount_cents):
 
 
 def get_stripe_membership_price():
-    price = stripe.Price.retrieve(STRIPE_PRICE_ID, expand=["product"])
+    stripe_settings = apply_runtime_stripe_config()
+    price_id = stripe_settings.get("stripe_price_id") or STRIPE_PRICE_ID
+    if not price_id:
+        raise ValueError("Stripe membership pricing is not configured.")
+    price = stripe.Price.retrieve(price_id, expand=["product"])
     recurring = price.get("recurring") or {}
     interval = recurring.get("interval")
     interval_count = recurring.get("interval_count", 1)
@@ -603,6 +614,7 @@ def get_member_by_stripe_or_email(
 
     if customer_id and fetch_customer_email:
         try:
+            stripe.api_key = STRIPE_SECRET_KEY
             customer = stripe.Customer.retrieve(customer_id)
         except Exception as exc:
             current_app.logger.warning(
@@ -780,6 +792,20 @@ def get_forum_settings_map():
 
 
 
+def get_stripe_settings_map():
+    values = dict(DEFAULT_STRIPE_SETTINGS)
+    values.update(get_settings_map(STRIPE_SETTING_KEYS))
+    return values
+
+
+
+def apply_runtime_stripe_config():
+    stripe_settings = get_stripe_settings_map()
+    stripe.api_key = stripe_settings.get("stripe_secret_key") or STRIPE_SECRET_KEY
+    return stripe_settings
+
+
+
 def get_forum_service():
     return ForumService(get_forum_settings_map())
 
@@ -954,6 +980,7 @@ def sync_member_primary_email(member, new_email):
 
     if email_changed and member.stripe_customer_id:
         try:
+            apply_runtime_stripe_config()
             stripe.Customer.modify(member.stripe_customer_id, email=new_email)
         except Exception as exc:
             current_app.logger.warning(
@@ -1286,12 +1313,14 @@ def build_membership_metadata(member, cycle, activation_mode):
 
 
 def create_checkout_session_for_member(member):
+    stripe_settings = apply_runtime_stripe_config()
+    price_id = stripe_settings.get("stripe_price_id") or STRIPE_PRICE_ID
     price_details = get_stripe_membership_price()
     join_date = get_membership_today()
     cycle = build_membership_cycle(join_date, price_details["unit_amount"])
     activation_mode = "free_period" if cycle["free_period"] else "paid_now"
     membership_metadata = build_membership_metadata(member, cycle, activation_mode)
-    line_items = [{"price": STRIPE_PRICE_ID, "quantity": 1}]
+    line_items = [{"price": price_id, "quantity": 1}]
     prorated_line_item = build_prorated_line_item(cycle, price_details)
     if prorated_line_item is not None:
         line_items.insert(0, prorated_line_item)
@@ -1327,6 +1356,8 @@ def create_checkout_session_for_member(member):
 
 
 def create_invoice_membership_for_member(member):
+    stripe_settings = apply_runtime_stripe_config()
+    price_id = stripe_settings.get("stripe_price_id") or STRIPE_PRICE_ID
     price_details = get_stripe_membership_price()
     join_date = get_membership_today()
     cycle = build_membership_cycle(join_date, price_details["unit_amount"])
@@ -1340,7 +1371,7 @@ def create_invoice_membership_for_member(member):
 
     subscription_params = {
         "customer": customer.id,
-        "items": [{"price": STRIPE_PRICE_ID}],
+        "items": [{"price": price_id}],
         "collection_method": "send_invoice",
         "days_until_due": 30,
         "trial_end": cycle["trial_end_unix"],
@@ -1385,8 +1416,10 @@ def get_latest_stripe_subscription_for_member(member):
         return None
 
     if member.stripe_subscription_id:
+        apply_runtime_stripe_config()
         return stripe.Subscription.retrieve(member.stripe_subscription_id)
 
+    apply_runtime_stripe_config()
     subscription_list = stripe.Subscription.list(customer=member.stripe_customer_id, status="all", limit=1)
     subscriptions = subscription_list.get("data", []) if hasattr(subscription_list, "get") else []
     return subscriptions[0] if subscriptions else None
@@ -1484,6 +1517,7 @@ def get_portal_session(member):
         raise ValueError(_("No Stripe billing profile is available for this membership yet."))
 
     refresh_token = int(datetime.now(timezone.utc).timestamp())
+    apply_runtime_stripe_config()
     return stripe.billing_portal.Session.create(
         customer=member.stripe_customer_id,
         return_url=url_for("account", _external=True, refresh_billing=1, rt=refresh_token),
@@ -2092,7 +2126,7 @@ def create_app():
         return render_template(
             "index.html",
             form=form,
-            stripe_key=STRIPE_PUBLISHABLE_KEY,
+            stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
         )
 
     @app.route("/process-membership", methods=["POST"])
@@ -2838,6 +2872,7 @@ def create_app():
         template_choices = get_email_template_choices(app)
         mail_account_records = get_db_mail_accounts()
         forum_settings = normalize_forum_settings(get_forum_settings_map())
+        stripe_settings = get_stripe_settings_map()
         forum_service = ForumService(forum_settings)
         try:
             mail_accounts = load_mail_accounts_config()
@@ -2865,6 +2900,7 @@ def create_app():
             "sender_choices": sender_choices,
             "template_choices": template_choices,
             "forum_settings": forum_settings,
+            "stripe_settings": stripe_settings,
             "forum_service": forum_service,
             "forum_provider_choices": [("discourse", _("Discourse"))],
             "forum_auth_strategy_choices": [
@@ -3292,6 +3328,7 @@ def create_app():
                 "automatic_emails_enabled",
                 "welcome_email_sender",
                 "automatic_email_template",
+                *STRIPE_SETTING_KEYS,
                 *FORUM_SETTING_KEYS,
             ]
             before_settings = {
@@ -3299,11 +3336,13 @@ def create_app():
                 for key in tracked_setting_keys
             }
             settings_section = (request.form.get("settings_section") or "general").strip().lower()
-            if settings_section not in {"general", "forum", "mail", "test"}:
+            if settings_section not in {"general", "billing", "forum", "mail", "test"}:
                 settings_section = "general"
             settings_redirect = f"{url_for('admin_settings')}#settings-{settings_section}"
             welcome_sender = request.form.get("welcome_email_sender")
             auto_email_template = request.form.get("automatic_email_template")
+            stripe_publishable_key = ((request.form.get("stripe_publishable_key") if settings_section == "billing" else before_settings.get("stripe_publishable_key")) or "").strip()
+            stripe_price_id = ((request.form.get("stripe_price_id") if settings_section == "billing" else before_settings.get("stripe_price_id")) or "").strip()
             forum_provider = (request.form.get("forum_provider") or before_settings.get("forum_provider") or "discourse").strip() or "discourse"
             forum_auth_strategy = (request.form.get("forum_auth_strategy") or before_settings.get("forum_auth_strategy") or "discourse_connect").strip() or "discourse_connect"
             forum_avatar_max_bytes = (request.form.get("forum_avatar_max_bytes") or before_settings.get("forum_avatar_max_bytes") or "").strip()
@@ -3341,6 +3380,8 @@ def create_app():
             set_setting_value("automatic_emails_enabled", str(emails_enabled))
             set_setting_value("welcome_email_sender", welcome_sender if settings_section == "general" else before_settings.get("welcome_email_sender"))
             set_setting_value("automatic_email_template", auto_email_template if settings_section == "general" else before_settings.get("automatic_email_template"))
+            set_setting_value("stripe_publishable_key", stripe_publishable_key or None)
+            set_setting_value("stripe_price_id", stripe_price_id or None)
             set_setting_value("forum_integration_enabled", str(forum_enabled))
             set_setting_value("forum_provider", forum_provider)
             set_setting_value("forum_auth_strategy", forum_auth_strategy)
@@ -3360,6 +3401,14 @@ def create_app():
             existing_connect_secret = before_settings.get("discourse_connect_secret")
             submitted_connect_secret = ((request.form.get("discourse_connect_secret") if settings_section == "forum" else "") or "").strip()
             set_setting_value("discourse_connect_secret", submitted_connect_secret or existing_connect_secret)
+
+            existing_stripe_secret = before_settings.get("stripe_secret_key")
+            submitted_stripe_secret = ((request.form.get("stripe_secret_key") if settings_section == "billing" else "") or "").strip()
+            set_setting_value("stripe_secret_key", submitted_stripe_secret or existing_stripe_secret)
+
+            existing_webhook_secret = before_settings.get("stripe_webhook_secret")
+            submitted_webhook_secret = ((request.form.get("stripe_webhook_secret") if settings_section == "billing" else "") or "").strip()
+            set_setting_value("stripe_webhook_secret", submitted_webhook_secret or existing_webhook_secret)
 
             after_settings = {
                 key: db.session.get(Setting, key).value if db.session.get(Setting, key) is not None else None
@@ -3874,6 +3923,7 @@ def create_app():
             destination = destination if is_safe_next_url(destination) else None
             return redirect(destination or url_for(get_member_portal_target(current_user)))
         form = LoginForm()
+        forum_login_hint = bool(safe_next_url and urlsplit(safe_next_url).path.startswith("/forum"))
         if form.validate_on_submit():
             user = db.session.execute(db.select(User).filter_by(email=form.email.data.strip().lower())).scalar_one_or_none()
             if user and user.check_password(form.password.data):
@@ -3882,7 +3932,7 @@ def create_app():
                 destination = destination if is_safe_next_url(destination) else None
                 return redirect(destination or url_for(get_member_portal_target(user)))
             flash(_("Invalid email or password"), "danger")
-        return render_template("admin/login.html", form=form, next_url=session.get("login_next"))
+        return render_template("account/login.html", form=form, next_url=session.get("login_next"), forum_login_hint=forum_login_hint)
 
 
 
@@ -3918,7 +3968,10 @@ def create_app():
         sig_header = request.headers.get("stripe-signature")
 
         try:
-            event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+            stripe_settings = get_stripe_settings_map()
+            stripe.api_key = stripe_settings.get("stripe_secret_key") or STRIPE_SECRET_KEY
+            webhook_secret = stripe_settings.get("stripe_webhook_secret") or STRIPE_WEBHOOK_SECRET
+            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
         except ValueError as e:
             app.logger.error(f"Webhook Error: Invalid payload: {e}")
             return "Invalid payload", 400
@@ -4188,6 +4241,7 @@ def create_app():
             if dispute["status"] == "lost":
                 charge_id = dispute.get("charge")
                 try:
+                    apply_runtime_stripe_config()
                     charge = stripe.Charge.retrieve(charge_id)
                     customer_id = charge.get("customer")
                     if customer_id:
