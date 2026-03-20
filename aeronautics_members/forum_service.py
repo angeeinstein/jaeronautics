@@ -36,7 +36,7 @@ FORUM_SETTING_DEFAULTS = {
     "discourse_api_key": "",
     "discourse_api_username": "",
     "discourse_connect_secret": "",
-    "forum_onboarding_group": "new-members-onboarding",
+    "forum_onboarding_group": "member-onboarding",
     "forum_member_group": "members",
     "forum_inactive_group": "",
     "forum_onboarding_path": "/",
