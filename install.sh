@@ -49,6 +49,8 @@ ENV_FILE=""
 SERVICE_FILE=""
 BILLING_RECONCILE_SERVICE_FILE=""
 BILLING_RECONCILE_TIMER_FILE=""
+NOTIFICATIONS_SERVICE_FILE=""
+NOTIFICATIONS_TIMER_FILE=""
 PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
 USE_LOCAL_DB="1"
@@ -294,6 +296,8 @@ resolve_paths() {
     SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
     BILLING_RECONCILE_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-billing-reconcile.service"
     BILLING_RECONCILE_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-billing-reconcile.timer"
+    NOTIFICATIONS_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-notifications.service"
+    NOTIFICATIONS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-notifications.timer"
 
     if [[ -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]]; then
         NGINX_CONF_PATH="/etc/nginx/sites-available/${SERVICE_NAME}.conf"
@@ -1357,6 +1361,53 @@ cert_paths_exist() {
     [[ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" && -f "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ]]
 }
 
+render_notifications_timer_files() {
+    step "Writing notification delivery timer"
+    local unit_after="After=network.target"
+    local unit_requires=""
+
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        unit_after="After=network.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    cat > "${NOTIFICATIONS_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics notification delivery
+${unit_after}
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app deliver-notifications
+TimeoutStartSec=180
+PrivateTmp=true
+NoNewPrivileges=true
+EOF
+
+    cat > "${NOTIFICATIONS_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics notification delivery timer
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=15m
+AccuracySec=1m
+Persistent=true
+Unit=${SERVICE_NAME}-notifications.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${NOTIFICATIONS_SERVICE_FILE}" "${NOTIFICATIONS_TIMER_FILE}"
+}
+
 render_nginx_config() {
     step "Writing nginx configuration"
     local static_dir="${INSTALL_DIR}/aeronautics_members/static"
@@ -1653,6 +1704,7 @@ reload_services() {
     systemctl daemon-reload
     systemctl enable --now "${SERVICE_NAME}"
     systemctl enable --now "${SERVICE_NAME}-billing-reconcile.timer"
+    systemctl enable --now "${SERVICE_NAME}-notifications.timer"
     nginx -t
     systemctl reload nginx
 }
@@ -1668,6 +1720,7 @@ verify_installation() {
     systemctl is-active --quiet nginx
     systemctl is-active --quiet "${SERVICE_NAME}"
     systemctl is-active --quiet "${SERVICE_NAME}-billing-reconcile.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-notifications.timer"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
     success "The application is responding on 127.0.0.1:${APP_PORT}"
 
@@ -1821,6 +1874,7 @@ install_or_update() {
     ensure_admin_account
     render_service_file
     render_billing_reconcile_timer_files
+    render_notifications_timer_files
     obtain_ssl_certificate
     render_nginx_config
     write_cloudflare_tunnel_files
@@ -1845,6 +1899,13 @@ uninstall_everything() {
     fi
     if [[ -f "${BILLING_RECONCILE_SERVICE_FILE}" ]]; then
         rm -f "${BILLING_RECONCILE_SERVICE_FILE}"
+    fi
+    if [[ -f "${NOTIFICATIONS_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-notifications.timer" || true
+        rm -f "${NOTIFICATIONS_TIMER_FILE}"
+    fi
+    if [[ -f "${NOTIFICATIONS_SERVICE_FILE}" ]]; then
+        rm -f "${NOTIFICATIONS_SERVICE_FILE}"
     fi
     if [[ -f "${SERVICE_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}" || true
@@ -1950,3 +2011,9 @@ main() {
 }
 
 main "$@"
+
+
+
+
+
+

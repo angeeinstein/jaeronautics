@@ -296,6 +296,87 @@ class AuditLog(db.Model):
     target_member = db.relationship("Member", foreign_keys=[target_member_id], back_populates="audit_logs")
 
 
+class NotificationBatch(db.Model):
+    __tablename__ = "notification_batches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    channel = db.Column(db.String(80), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="sent")
+    recipient_scope = db.Column(db.String(120), nullable=False)
+    recipient_count = db.Column(db.Integer, nullable=False, default=0)
+    event_count = db.Column(db.Integer, nullable=False, default=0)
+    subject = db.Column(db.String(255), nullable=True)
+    error_text = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    sent_at = db.Column(db.DateTime, nullable=True)
+
+    events = db.relationship("NotificationEvent", back_populates="batch")
+
+
+class NotificationChannelState(db.Model):
+    __tablename__ = "notification_channel_states"
+
+    channel = db.Column(db.String(80), primary_key=True)
+    cooldown_stage = db.Column(db.Integer, nullable=False, default=0)
+    next_allowed_at = db.Column(db.DateTime, nullable=True)
+    last_activity_at = db.Column(db.DateTime, nullable=True)
+    last_sent_at = db.Column(db.DateTime, nullable=True)
+    rolling_sent_count = db.Column(db.Integer, nullable=False, default=0)
+    failure_stage = db.Column(db.Integer, nullable=False, default=0)
+    failure_backoff_until = db.Column(db.DateTime, nullable=True)
+    last_failure_at = db.Column(db.DateTime, nullable=True)
+    last_failure_message = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class NotificationEvent(db.Model):
+    __tablename__ = "notification_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    batch_id = db.Column(db.Integer, db.ForeignKey("notification_batches.id"), nullable=True)
+    channel = db.Column(db.String(80), nullable=False)
+    audience = db.Column(db.String(80), nullable=False)
+    severity = db.Column(db.String(40), nullable=False, default="info")
+    event_type = db.Column(db.String(120), nullable=False)
+    summary = db.Column(db.String(255), nullable=False)
+    payload = db.Column(db.JSON, nullable=True)
+    target_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    target_member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=True)
+    recipient_email = db.Column(db.String(255), nullable=True)
+    object_type = db.Column(db.String(80), nullable=True)
+    object_id = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    queued_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    last_attempted_at = db.Column(db.DateTime, nullable=True)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    delivery_error = db.Column(db.Text, nullable=True)
+
+    batch = db.relationship("NotificationBatch", back_populates="events")
+    target_user = db.relationship("User", foreign_keys=[target_user_id])
+    target_member = db.relationship("Member", foreign_keys=[target_member_id])
+
+
+class EmailDeliveryJob(db.Model):
+    __tablename__ = "email_delivery_jobs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email_type = db.Column(db.String(80), nullable=False)
+    recipient_email = db.Column(db.String(255), nullable=True)
+    target_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    target_member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=True)
+    payload = db.Column(db.JSON, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    retry_count = db.Column(db.Integer, nullable=False, default=0)
+    next_attempt_at = db.Column(db.DateTime, nullable=True)
+    last_attempted_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    sent_at = db.Column(db.DateTime, nullable=True)
+
+    target_user = db.relationship("User", foreign_keys=[target_user_id])
+    target_member = db.relationship("Member", foreign_keys=[target_member_id])
+
+
 class Setting(db.Model):
     key = db.Column(db.String(50), primary_key=True)
     value = db.Column(db.String(255), nullable=False)
@@ -322,3 +403,4 @@ class MailAccount(db.Model):
         if self.starttls:
             config["starttls"] = True
         return config
+

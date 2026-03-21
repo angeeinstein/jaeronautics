@@ -1,6 +1,6 @@
 {% extends "admin_layout.html" %}
 {% set page_title = _('Settings') %}
-{% set page_description = _('Billing, email automation, sender accounts, forum integration, and test tools.') %}
+{% set page_description = _('Billing, notifications, email automation, sender accounts, forum integration, and test tools.') %}
 {% block admin_content %}
 <div class="row g-4">
     <div class="col-xl-3">
@@ -8,6 +8,7 @@
             <div class="card-body p-0">
                 <div class="nav settings-nav flex-column nav-pills" id="settings-tab" role="tablist" aria-orientation="vertical">
                     <button class="nav-link active" id="settings-general-tab" data-bs-toggle="pill" data-bs-target="#settings-general" type="button" role="tab" aria-controls="settings-general" aria-selected="true">{{ _('General') }}</button>
+                    <button class="nav-link" id="settings-notifications-tab" data-bs-toggle="pill" data-bs-target="#settings-notifications" type="button" role="tab" aria-controls="settings-notifications" aria-selected="false">{{ _('Notifications') }}</button>
                     <button class="nav-link" id="settings-billing-tab" data-bs-toggle="pill" data-bs-target="#settings-billing" type="button" role="tab" aria-controls="settings-billing" aria-selected="false">{{ _('Billing') }}</button>
                     <button class="nav-link" id="settings-forum-tab" data-bs-toggle="pill" data-bs-target="#settings-forum" type="button" role="tab" aria-controls="settings-forum" aria-selected="false">{{ _('Forum') }}</button>
                     <button class="nav-link" id="settings-mail-tab" data-bs-toggle="pill" data-bs-target="#settings-mail" type="button" role="tab" aria-controls="settings-mail" aria-selected="false">{{ _('Mail Accounts') }}</button>
@@ -83,6 +84,146 @@
                 </form>
             </div>
 
+            <div class="tab-pane fade" id="settings-notifications" role="tabpanel" aria-labelledby="settings-notifications-tab" tabindex="0">
+                <form method="POST" action="{{ url_for('admin_settings') }}" class="d-flex flex-column gap-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="settings_section" value="notifications">
+
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h4 class="mb-0">{{ _('Notifications') }}</h4>
+                            <button type="submit" name="save_settings" class="btn btn-primary">{{ _('Save Settings') }}</button>
+                        </div>
+                        <div class="card-body d-flex flex-column gap-4">
+                            <div class="alert alert-secondary mb-0">
+                                <p class="mb-2">{{ _('Verified admin accounts receive admin notifications automatically when their email address is verified.') }}</p>
+                                <small class="text-muted">{{ _('General review items and high-signal application errors use separate cooldown streams. User status emails are sent immediately when enabled.') }}</small>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="notification_admin_general_enabled" id="notification_admin_general_enabled" {% if notification_settings.get('notification_admin_general_enabled') %}checked{% endif %}>
+                                        <label class="form-check-label" for="notification_admin_general_enabled">{{ _('Enable Admin Review Notifications') }}</label>
+                                    </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="notification_admin_error_enabled" id="notification_admin_error_enabled" {% if notification_settings.get('notification_admin_error_enabled') %}checked{% endif %}>
+                                        <label class="form-check-label" for="notification_admin_error_enabled">{{ _('Enable Admin Error Notifications') }}</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="notification_user_status_enabled" id="notification_user_status_enabled" {% if notification_settings.get('notification_user_status_enabled') %}checked{% endif %}>
+                                        <label class="form-check-label" for="notification_user_status_enabled">{{ _('Enable Member Status Emails') }}</label>
+                                    </div>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label class="form-label" for="notification_sender">{{ _('Notification Sender Account') }}</label>
+                                    <select class="form-select" id="notification_sender" name="notification_sender">
+                                        <option value="">{{ _('Use the welcome email sender') }}</option>
+                                        {% for choice, label in sender_choices %}
+                                            <option value="{{ choice }}" {% if notification_settings.get('notification_sender') == choice %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="text-muted">{{ _('If no dedicated sender is selected, notification emails fall back to the configured welcome email sender.') }}</small>
+                                </div>
+                            </div>
+
+                            <div class="card settings-subcard">
+                                <div class="card-header"><h5 class="mb-0">{{ _('Notification Health') }}</h5></div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-striped align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>{{ _('Channel') }}</th>
+                                                    <th>{{ _('Enabled') }}</th>
+                                                    <th>{{ _('Pending') }}</th>
+                                                    <th>{{ _('Cooldown') }}</th>
+                                                    <th>{{ _('Next Send') }}</th>
+                                                    <th>{{ _('Failure Backoff') }}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% set admin_general_state = notification_health.get('admin_general', {}) %}
+                                                {% set admin_error_state = notification_health.get('admin_error', {}) %}
+                                                {% set user_status_state = notification_health.get('user_status', {}) %}
+                                                <tr>
+                                                    <td>{{ _('Admin Review Queue') }}</td>
+                                                    <td>{{ _('Yes') if admin_general_state.get('enabled') else _('No') }}</td>
+                                                    <td>{{ admin_general_state.get('pending_count', 0) }}</td>
+                                                    <td>
+                                                        {% if admin_general_state.get('cooldown_minutes') %}
+                                                            {{ _('Stage %(stage)s · every %(minutes)s min', stage=admin_general_state.get('cooldown_stage', 0), minutes=admin_general_state.get('cooldown_minutes')) }}
+                                                        {% else %}
+                                                            {{ _('Immediate') }}
+                                                        {% endif %}
+                                                        {% if admin_general_state.get('daily_cap') %}
+                                                            <div class="small text-muted">{{ _('Rolling 24h cap: %(count)s', count=admin_general_state.get('daily_cap')) }}</div>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{% if admin_general_state.get('next_allowed_at') %}{{ admin_general_state.get('next_allowed_at').strftime('%Y-%m-%d %H:%M UTC') }}{% else %}{{ _('Now') }}{% endif %}</td>
+                                                    <td>
+                                                        {% if admin_general_state.get('failure_backoff_until') %}
+                                                            {{ admin_general_state.get('failure_backoff_until').strftime('%Y-%m-%d %H:%M UTC') }}
+                                                        {% else %}
+                                                            -
+                                                        {% endif %}
+                                                        {% if admin_general_state.get('last_failure_message') %}
+                                                            <div class="small text-muted">{{ admin_general_state.get('last_failure_message')[:160] }}</div>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>{{ _('Admin Error Queue') }}</td>
+                                                    <td>{{ _('Yes') if admin_error_state.get('enabled') else _('No') }}</td>
+                                                    <td>{{ admin_error_state.get('pending_count', 0) }}</td>
+                                                    <td>
+                                                        {% if admin_error_state.get('cooldown_minutes') %}
+                                                            {{ _('Stage %(stage)s · every %(minutes)s min', stage=admin_error_state.get('cooldown_stage', 0), minutes=admin_error_state.get('cooldown_minutes')) }}
+                                                        {% else %}
+                                                            {{ _('Immediate') }}
+                                                        {% endif %}
+                                                        {% if admin_error_state.get('daily_cap') %}
+                                                            <div class="small text-muted">{{ _('Rolling 24h cap: %(count)s', count=admin_error_state.get('daily_cap')) }}</div>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{% if admin_error_state.get('next_allowed_at') %}{{ admin_error_state.get('next_allowed_at').strftime('%Y-%m-%d %H:%M UTC') }}{% else %}{{ _('Now') }}{% endif %}</td>
+                                                    <td>
+                                                        {% if admin_error_state.get('failure_backoff_until') %}
+                                                            {{ admin_error_state.get('failure_backoff_until').strftime('%Y-%m-%d %H:%M UTC') }}
+                                                        {% else %}
+                                                            -
+                                                        {% endif %}
+                                                        {% if admin_error_state.get('last_failure_message') %}
+                                                            <div class="small text-muted">{{ admin_error_state.get('last_failure_message')[:160] }}</div>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>{{ _('Member Status Emails') }}</td>
+                                                    <td>{{ _('Yes') if user_status_state.get('enabled') else _('No') }}</td>
+                                                    <td>{{ user_status_state.get('pending_count', 0) }}</td>
+                                                    <td>{{ _('Immediate') }}</td>
+                                                    <td>{% if user_status_state.get('next_allowed_at') %}{{ user_status_state.get('next_allowed_at').strftime('%Y-%m-%d %H:%M UTC') }}{% else %}{{ _('Now') }}{% endif %}</td>
+                                                    <td>
+                                                        {% if user_status_state.get('failure_backoff_until') %}
+                                                            {{ user_status_state.get('failure_backoff_until').strftime('%Y-%m-%d %H:%M UTC') }}
+                                                        {% else %}
+                                                            -
+                                                        {% endif %}
+                                                        {% if user_status_state.get('last_failure_message') %}
+                                                            <div class="small text-muted">{{ user_status_state.get('last_failure_message')[:160] }}</div>
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
             <div class="tab-pane fade" id="settings-billing" role="tabpanel" aria-labelledby="settings-billing-tab" tabindex="0">
                 <form method="POST" action="{{ url_for('admin_settings') }}" class="d-flex flex-column gap-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -433,3 +574,5 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 {% endblock %}
+
+

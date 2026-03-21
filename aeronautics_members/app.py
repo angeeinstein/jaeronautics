@@ -42,6 +42,7 @@ from werkzeug.routing import BuildError
 try:
     from .db_models import (
         AuditLog,
+        EmailDeliveryJob,
         ForumAccount,
         ForumAvatarSubmission,
         MailAccount,
@@ -83,10 +84,19 @@ try:
         normalize_forum_settings,
     )
     from .mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
+    from .notification_service import (
+        ADMIN_ERROR_CHANNEL,
+        ADMIN_GENERAL_CHANNEL,
+        NOTIFICATION_SETTING_KEYS,
+        USER_STATUS_CHANNEL,
+        NotificationService,
+        normalize_notification_settings,
+    )
     from .security_utils import build_public_url, is_trusted_host, normalize_public_base_url
 except ImportError:
     from db_models import (
         AuditLog,
+        EmailDeliveryJob,
         ForumAccount,
         ForumAvatarSubmission,
         MailAccount,
@@ -128,6 +138,14 @@ except ImportError:
         normalize_forum_settings,
     )
     from mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
+    from notification_service import (
+        ADMIN_ERROR_CHANNEL,
+        ADMIN_GENERAL_CHANNEL,
+        NOTIFICATION_SETTING_KEYS,
+        USER_STATUS_CHANNEL,
+        NotificationService,
+        normalize_notification_settings,
+    )
     from security_utils import build_public_url, is_trusted_host, normalize_public_base_url
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -241,6 +259,16 @@ RESUMABLE_MEMBER_STATUSES = {"pending_checkout", "processing", "failed", "unpaid
 TOKEN_MAX_AGE_VERIFY_EMAIL = 60 * 60 * 24 * 7
 TOKEN_MAX_AGE_PASSWORD_RESET = 60 * 60 * 24
 TOKEN_MAX_AGE_FORUM_ENTRY = 60 * 60 * 24 * 30
+TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN = 60 * 60
+EMAIL_JOB_TYPE_WELCOME = "welcome_email"
+EMAIL_JOB_STATUS_PENDING = "pending"
+EMAIL_JOB_STATUS_SENT = "sent"
+EMAIL_JOB_STATUS_EXHAUSTED = "exhausted"
+EMAIL_JOB_STATUS_CANCELED = "canceled"
+WELCOME_EMAIL_RETRY_DELAYS = (
+    timedelta(minutes=15),
+    timedelta(hours=24),
+)
 PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
 ADMIN_DIRECTORY_PAGE_SIZE = 50
 AUDIT_LOG_PAGE_SIZE = 50
@@ -694,15 +722,47 @@ def get_default_sender_account():
 
 
 
-def send_account_action_email(app, to_email, subject, preview_text, action_url, action_label, heading, body_lines):
+def send_account_action_email(
+    app,
+    to_email,
+    subject,
+    preview_text,
+    action_url,
+    action_label,
+    heading,
+    body_lines,
+    failure_event_type="account_action_email_failed",
+    failure_summary=None,
+    failure_payload=None,
+    target_user=None,
+    target_member=None,
+    notify_on_failure=True,
+):
     sender_account = get_default_sender_account()
+    failure_summary = failure_summary or _("An account-related email could not be sent.")
+    payload = {
+        "recipient": to_email,
+        "subject": subject,
+        "sender_account": sender_account or None,
+        **(failure_payload or {}),
+    }
     if not sender_account:
         app.logger.warning("Could not send account email to %s because no sender account is configured.", to_email)
+        if notify_on_failure:
+            queue_curated_admin_notification(
+                ADMIN_ERROR_CHANNEL,
+                failure_event_type,
+                failure_summary,
+                payload=payload,
+                target_user=target_user,
+                target_member=target_member,
+                commit=True,
+            )
         return False
 
     logo_path = os.path.join(app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
     attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
-    return send_mail(
+    success, error_message = send_mail(
         from_account=sender_account,
         to_email=to_email,
         subject=subject,
@@ -714,7 +774,19 @@ def send_account_action_email(app, to_email, subject, preview_text, action_url, 
         heading=heading,
         body_lines=body_lines,
         now=get_now_utc(),
+        return_error=True,
     )
+    if not success and notify_on_failure:
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            failure_event_type,
+            failure_summary,
+            payload={**payload, "error": error_message},
+            target_user=target_user,
+            target_member=target_member,
+            commit=True,
+        )
+    return success
 
 
 
@@ -760,9 +832,11 @@ def send_email_verification_email(app, user):
             _("Please confirm your email address for your Joanneum Aeronautics account."),
             _("This helps us keep your account secure and reach you when needed."),
         ],
+        failure_event_type="verification_email_failed",
+        failure_summary=_("A verification email could not be sent."),
+        failure_payload={"email_type": "verification"},
+        target_user=user,
     )
-
-
 
 def send_password_reset_email(app, user):
     token = build_password_reset_token(user)
@@ -779,9 +853,11 @@ def send_password_reset_email(app, user):
             _("A password reset was requested for your Joanneum Aeronautics account."),
             _("If this was you, use the link below to set a new password. If not, you can ignore this email."),
         ],
+        failure_event_type="password_reset_email_failed",
+        failure_summary=_("A password reset email could not be sent."),
+        failure_payload={"email_type": "password_reset"},
+        target_user=user,
     )
-
-
 
 def set_setting_value(key, value):
     setting = db.session.get(Setting, key)
@@ -828,6 +904,83 @@ def apply_runtime_stripe_config():
 def get_forum_service():
     return ForumService(get_forum_settings_map())
 
+
+
+def get_notification_settings_map():
+    return get_settings_map(NOTIFICATION_SETTING_KEYS)
+
+
+
+def get_notification_service():
+    return NotificationService(current_app._get_current_object())
+
+
+
+def flush_marked_notification_channels():
+    channels = sorted(db.session.info.pop("notification_channels_to_flush", set()))
+    if not channels:
+        return {}
+    try:
+        return get_notification_service().deliver_pending_notifications(channels=channels)
+    except Exception as exc:
+        current_app.logger.error("Could not flush queued notification emails: %s", exc)
+        return {}
+
+
+
+def queue_curated_admin_notification(channel, event_type, summary, payload=None, target_user=None, target_member=None, object_type=None, object_id=None, severity="error", commit=False):
+    if channel not in {ADMIN_GENERAL_CHANNEL, ADMIN_ERROR_CHANNEL}:
+        return None
+    try:
+        service = get_notification_service()
+        if channel == ADMIN_GENERAL_CHANNEL:
+            event = service.queue_admin_general(
+                event_type=event_type,
+                summary=summary,
+                payload=payload,
+                target_user=target_user,
+                target_member=target_member,
+                object_type=object_type,
+                object_id=object_id,
+            )
+        else:
+            event = service.queue_admin_error(
+                event_type=event_type,
+                summary=summary,
+                payload=payload,
+                target_user=target_user,
+                target_member=target_member,
+                object_type=object_type,
+                object_id=object_id,
+                severity=severity,
+            )
+        if commit and event is not None:
+            db.session.commit()
+            flush_marked_notification_channels()
+        return event
+    except Exception as exc:
+        current_app.logger.error("Could not queue admin notification '%s': %s", event_type, exc)
+        if commit:
+            db.session.rollback()
+        return None
+
+
+
+def queue_user_status_notification(event_type, summary, recipient_email, payload=None, target_user=None, target_member=None, object_type=None, object_id=None):
+    try:
+        return get_notification_service().queue_user_status(
+            event_type=event_type,
+            summary=summary,
+            recipient_email=recipient_email,
+            payload=payload,
+            target_user=target_user,
+            target_member=target_member,
+            object_type=object_type,
+            object_id=object_id,
+        )
+    except Exception as exc:
+        current_app.logger.error("Could not queue user notification '%s': %s", event_type, exc)
+        return None
 
 
 def log_out_forum_session_if_possible(user):
@@ -891,8 +1044,193 @@ def snapshot_forum_avatar_submission_for_audit(submission):
 def build_forum_entry_url(user, include_token=False):
     route_values = {}
     if include_token and user is not None:
-        route_values["token"] = generate_token("forum-entry", user_id=user.id)
+        route_values["token"] = generate_token(
+            "forum-entry",
+            user_id=user.id,
+            issued_at=int(get_now_utc().timestamp()),
+        )
     return build_public_url("forum_entry", **route_values)
+
+
+
+def queue_email_delivery_job(email_type, recipient_email=None, target_user=None, target_member=None, payload=None, initial_delay=None, error_message=None):
+    normalized_recipient = (recipient_email or "").strip().lower() or None
+    if initial_delay is None:
+        initial_delay = timedelta()
+
+    query = db.select(EmailDeliveryJob).where(
+        EmailDeliveryJob.email_type == email_type,
+        EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
+    )
+    if target_member is not None and target_member.id is not None:
+        query = query.where(EmailDeliveryJob.target_member_id == target_member.id)
+    elif target_user is not None and target_user.id is not None:
+        query = query.where(EmailDeliveryJob.target_user_id == target_user.id)
+    elif normalized_recipient:
+        query = query.where(EmailDeliveryJob.recipient_email == normalized_recipient)
+    else:
+        return None, False
+
+    existing_job = db.session.execute(
+        query.order_by(EmailDeliveryJob.created_at.asc(), EmailDeliveryJob.id.asc())
+    ).scalars().first()
+    if existing_job is not None:
+        if normalized_recipient:
+            existing_job.recipient_email = normalized_recipient
+        if payload is not None:
+            existing_job.payload = payload
+        if error_message:
+            existing_job.last_error = str(error_message)[:4000]
+        return existing_job, False
+
+    job = EmailDeliveryJob(
+        email_type=email_type,
+        recipient_email=normalized_recipient,
+        target_user_id=target_user.id if target_user is not None else None,
+        target_member_id=target_member.id if target_member is not None else None,
+        payload=payload,
+        status=EMAIL_JOB_STATUS_PENDING,
+        retry_count=0,
+        next_attempt_at=get_now_utc() + initial_delay,
+        last_error=str(error_message)[:4000] if error_message else None,
+    )
+    db.session.add(job)
+    return job, True
+
+
+
+def queue_welcome_email_retry_job(member, error_message=None):
+    if member is None:
+        return None, False
+    return queue_email_delivery_job(
+        EMAIL_JOB_TYPE_WELCOME,
+        recipient_email=member.email_private,
+        target_user=member.user,
+        target_member=member,
+        initial_delay=WELCOME_EMAIL_RETRY_DELAYS[0],
+        error_message=error_message,
+    )
+
+
+
+def mark_email_delivery_jobs_sent(email_type, target_user=None, target_member=None):
+    query = db.select(EmailDeliveryJob).where(
+        EmailDeliveryJob.email_type == email_type,
+        EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
+    )
+    if target_member is not None and target_member.id is not None:
+        query = query.where(EmailDeliveryJob.target_member_id == target_member.id)
+    elif target_user is not None and target_user.id is not None:
+        query = query.where(EmailDeliveryJob.target_user_id == target_user.id)
+    else:
+        return 0
+
+    jobs = db.session.execute(query).scalars().all()
+    if not jobs:
+        return 0
+
+    now = get_now_utc()
+    for job in jobs:
+        job.status = EMAIL_JOB_STATUS_SENT
+        job.sent_at = now
+        job.next_attempt_at = None
+        job.last_error = None
+    return len(jobs)
+
+
+
+def process_email_delivery_jobs(app):
+    now = get_now_utc()
+    summary = {
+        "processed": 0,
+        "sent": 0,
+        "exhausted": 0,
+        "canceled": 0,
+        "failed": 0,
+    }
+    jobs = db.session.execute(
+        db.select(EmailDeliveryJob)
+        .where(
+            EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
+            or_(EmailDeliveryJob.next_attempt_at.is_(None), EmailDeliveryJob.next_attempt_at <= now),
+        )
+        .order_by(EmailDeliveryJob.next_attempt_at.asc(), EmailDeliveryJob.id.asc())
+    ).scalars().all()
+    if not jobs:
+        return summary
+
+    automatic_emails_enabled = get_settings_map().get("automatic_emails_enabled") == "True"
+
+    for job in jobs:
+        summary["processed"] += 1
+        job.last_attempted_at = now
+
+        if job.email_type != EMAIL_JOB_TYPE_WELCOME:
+            job.status = EMAIL_JOB_STATUS_CANCELED
+            job.next_attempt_at = None
+            job.last_error = _("This queued email type is no longer supported.")
+            summary["canceled"] += 1
+            continue
+
+        member = db.session.get(Member, job.target_member_id) if job.target_member_id else None
+        if member is None:
+            job.status = EMAIL_JOB_STATUS_CANCELED
+            job.next_attempt_at = None
+            job.last_error = _("The linked member profile no longer exists.")
+            summary["canceled"] += 1
+            continue
+
+        job.recipient_email = member.email_private
+
+        if not automatic_emails_enabled:
+            job.status = EMAIL_JOB_STATUS_CANCELED
+            job.next_attempt_at = None
+            job.last_error = _("Automatic emails were disabled before this retry could be sent.")
+            summary["canceled"] += 1
+            continue
+
+        success, error_message = send_member_welcome_email(
+            app,
+            member,
+            force_send=False,
+            notify_on_failure=False,
+            queue_retry_on_failure=False,
+            return_error=True,
+        )
+        if success:
+            mark_email_delivery_jobs_sent(EMAIL_JOB_TYPE_WELCOME, target_member=member)
+            job.status = EMAIL_JOB_STATUS_SENT
+            job.sent_at = now
+            job.next_attempt_at = None
+            job.last_error = None
+            summary["sent"] += 1
+            continue
+
+        summary["failed"] += 1
+        job.last_error = (error_message or _("The welcome email could not be sent."))[:4000]
+        job.retry_count += 1
+        if job.retry_count >= len(WELCOME_EMAIL_RETRY_DELAYS):
+            job.status = EMAIL_JOB_STATUS_EXHAUSTED
+            job.next_attempt_at = None
+            summary["exhausted"] += 1
+            queue_curated_admin_notification(
+                ADMIN_ERROR_CHANNEL,
+                "welcome_email_retry_exhausted",
+                _("A welcome email could not be delivered after automatic retries."),
+                payload={
+                    "recipient": member.email_private,
+                    "last_error": job.last_error,
+                    "retry_count": job.retry_count,
+                },
+                target_user=member.user,
+                target_member=member,
+                commit=False,
+            )
+            continue
+
+        job.next_attempt_at = now + WELCOME_EMAIL_RETRY_DELAYS[job.retry_count]
+
+    return summary
 
 
 
@@ -922,6 +1260,21 @@ def sync_member_forum_state(member, raise_on_error=False):
             member.user_id,
             result.desired_state,
             result.error,
+        )
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "forum_sync_failed",
+            _("A forum synchronization attempt failed for %(email)s.", email=member.email_private),
+            payload={
+                "member_email": member.email_private,
+                "forum_username": member.user.forum_username,
+                "desired_state": result.desired_state,
+                "error": result.error,
+            },
+            target_user=member.user,
+            target_member=member,
+            object_type="forum_account",
+            object_id=result.forum_account.id if result and result.forum_account is not None else None,
         )
         if raise_on_error:
             raise ForumProviderError(result.error)
@@ -1637,17 +1990,38 @@ def get_portal_session(member):
 
 
 
-def send_member_welcome_email(app, member, force_send=False):
+def send_member_welcome_email(app, member, force_send=False, notify_on_failure=True, queue_retry_on_failure=None, return_error=False):
     settings = get_settings_map()
+    if queue_retry_on_failure is None:
+        queue_retry_on_failure = not force_send
+
     if not force_send and settings.get("automatic_emails_enabled") != "True":
-        return False
+        return (False, _("Automatic welcome emails are disabled.")) if return_error else False
 
     sender_account = settings.get("welcome_email_sender")
     template_name = settings.get("automatic_email_template")
     if not sender_account or not template_name:
+        error_message = _("Email sender or template is not configured in the admin settings.")
         if force_send:
-            raise ValueError("Email sender or template is not configured in the admin settings.")
-        return False
+            raise ValueError(error_message)
+        if queue_retry_on_failure:
+            queue_welcome_email_retry_job(member, error_message=error_message)
+        if notify_on_failure:
+            queue_curated_admin_notification(
+                ADMIN_ERROR_CHANNEL,
+                "welcome_email_failed",
+                _("A welcome email could not be sent because the sender or template is not configured."),
+                payload={
+                    "recipient": member.email_private,
+                    "sender_account": sender_account or None,
+                    "template_name": template_name or None,
+                    "error": error_message,
+                },
+                target_user=member.user,
+                target_member=member,
+                commit=True,
+            )
+        return (False, error_message) if return_error else False
 
     suggested_username = member.user.forum_username if member.user and member.user.forum_username else generate_suggested_username(member)
     logo_path = os.path.join(app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
@@ -1658,7 +2032,7 @@ def send_member_welcome_email(app, member, force_send=False):
     if forum_service.is_enabled() and member.user is not None:
         forum_entry_url = build_forum_entry_url(member.user, include_token=True)
 
-    return send_mail(
+    success, error_message = send_mail(
         from_account=sender_account,
         to_email=member.email_private,
         subject=_("Welcome to Joanneum Aeronautics!"),
@@ -1672,7 +2046,30 @@ def send_member_welcome_email(app, member, force_send=False):
         forum_integration_enabled=forum_service.is_enabled(),
         forum_entry_url=forum_entry_url,
         now=get_now_utc(),
+        return_error=True,
     )
+    if success:
+        mark_email_delivery_jobs_sent(EMAIL_JOB_TYPE_WELCOME, target_member=member)
+        return (True, None) if return_error else True
+
+    if queue_retry_on_failure:
+        queue_welcome_email_retry_job(member, error_message=error_message)
+    if notify_on_failure:
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "welcome_email_failed",
+            _("A welcome email could not be sent."),
+            payload={
+                "recipient": member.email_private,
+                "sender_account": sender_account,
+                "template_name": template_name,
+                "error": error_message,
+            },
+            target_user=member.user,
+            target_member=member,
+            commit=True,
+        )
+    return (False, error_message) if return_error else False
 
 
 
@@ -1915,14 +2312,13 @@ def create_app():
 
     @app.after_request
     def disable_dynamic_page_caching(response):
-        if request.endpoint == "static":
-            return response
-
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        response.headers["Surrogate-Control"] = "no-store"
-        response.vary.add("Cookie")
+        if request.endpoint != "static":
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            response.headers["Surrogate-Control"] = "no-store"
+            response.vary.add("Cookie")
+        flush_marked_notification_channels()
         return response
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
@@ -2034,6 +2430,7 @@ def create_app():
 
         if changed:
             db.session.commit()
+            flush_marked_notification_channels()
         else:
             db.session.rollback()
 
@@ -2100,6 +2497,7 @@ def create_app():
                 changed, _stripe_subscription, forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=True, on_date=today)
                 if changed:
                     db.session.commit()
+                    flush_marked_notification_channels()
                     changed_count += 1
                 else:
                     db.session.rollback()
@@ -2109,10 +2507,40 @@ def create_app():
                     click.echo(click.style(f"Forum sync warning for {member.email_private}: {forum_result.error}", fg="yellow"))
             except stripe.StripeError as exc:
                 db.session.rollback()
+                queue_curated_admin_notification(
+                    ADMIN_ERROR_CHANNEL,
+                    "billing_reconcile_failed",
+                    _("Billing reconciliation failed for %(email)s.", email=member.email_private),
+                    payload={
+                        "member_email": member.email_private,
+                        "member_id": member.id,
+                        "error": str(exc),
+                    },
+                    target_user=member.user,
+                    target_member=member,
+                    object_type="member",
+                    object_id=member.id,
+                    commit=True,
+                )
                 error_count += 1
                 click.echo(click.style(f"Stripe sync failed for {member.email_private}: {exc}", fg="red"), err=True)
             except Exception as exc:
                 db.session.rollback()
+                queue_curated_admin_notification(
+                    ADMIN_ERROR_CHANNEL,
+                    "billing_reconcile_failed",
+                    _("Billing reconciliation failed for %(email)s.", email=member.email_private),
+                    payload={
+                        "member_email": member.email_private,
+                        "member_id": member.id,
+                        "error": str(exc),
+                    },
+                    target_user=member.user,
+                    target_member=member,
+                    object_type="member",
+                    object_id=member.id,
+                    commit=True,
+                )
                 error_count += 1
                 click.echo(click.style(f"Billing reconciliation failed for {member.email_private}: {exc}", fg="red"), err=True)
 
@@ -2138,6 +2566,7 @@ def create_app():
         result, service = sync_member_forum_state(member)
         if result and result.changed:
             db.session.commit()
+            flush_marked_notification_channels()
         else:
             db.session.rollback()
 
@@ -2176,7 +2605,32 @@ def create_app():
             if result and result.error:
                 error_count += 1
         db.session.commit()
+        flush_marked_notification_channels()
         click.echo(click.style(f"Synchronized {len(members)} member(s). Changed: {changed_count}. Errors: {error_count}.", fg="green" if error_count == 0 else "yellow"))
+
+    @app.cli.command("deliver-notifications")
+    @with_appcontext
+    def deliver_notifications_command():
+        """Delivers queued admin and user notification emails."""
+        email_summary = process_email_delivery_jobs(app)
+        db.session.commit()
+        summary = get_notification_service().deliver_pending_notifications()
+        click.echo(
+            click.style(
+                "Notification delivery summary: "
+                f"queued email retries processed={email_summary.get('processed', 0)}, "
+                f"email retries sent={email_summary.get('sent', 0)}, "
+                f"email retries exhausted={email_summary.get('exhausted', 0)}, "
+                f"sent batches={summary.get('sent_batches', 0)}, "
+                f"failed batches={summary.get('failed_batches', 0)}, "
+                f"sent events={summary.get('sent_events', 0)}, "
+                f"failed events={summary.get('failed_events', 0)}, "
+                f"deferred channels={', '.join(summary.get('deferred_channels', [])) or '-' }.",
+                fg="green" if summary.get("failed_batches", 0) == 0 else "yellow",
+            )
+        )
+        if summary.get("failed_batches", 0):
+            sys.exit(1)
 
     @app.cli.command("cleanup-pending-signups")
     @click.option("--days", default=PENDING_SIGNUP_RETENTION_DAYS, show_default=True, type=int)
@@ -2688,7 +3142,22 @@ def create_app():
                     },
                     metadata={"request_id": request_record.id, "member_note": request_record.member_note},
                 )
+                queue_curated_admin_notification(
+                    ADMIN_GENERAL_CHANNEL,
+                    "identity_change_request_created",
+                    _("A new identity change request was submitted by %(email)s.", email=member.email_private),
+                    payload={
+                        "member_email": member.email_private,
+                        "request_id": request_record.id,
+                        "member_note": request_record.member_note,
+                    },
+                    target_user=current_user,
+                    target_member=member,
+                    object_type="member_profile_change_request",
+                    object_id=request_record.id,
+                )
                 db.session.commit()
+                flush_marked_notification_channels()
                 flash(_("Your identity change request has been submitted for admin review."), "success")
                 return redirect(url_for("account"))
             except ValueError as exc:
@@ -2697,7 +3166,6 @@ def create_app():
 
         flash(_("Please correct the identity change form and try again."), "danger")
         return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
-
     @app.route("/account/identity-request/<int:request_id>/cancel", methods=["POST"])
     @login_required
     def cancel_identity_change_request(request_id):
@@ -2807,11 +3275,24 @@ def create_app():
                 return redirect(url_for(get_member_portal_target(current_user)))
 
             if token_user is not None and not current_user.is_authenticated:
-                flash(
-                    _("Your email address has been verified. Please log in to continue to the forum.") if token_verified_email else _("Please log in to continue to the forum."),
-                    "success" if token_verified_email else "warning",
-                )
-                return redirect(url_for("login", next=url_for("forum_entry"), forum_login_source="welcome_email"))
+                issued_at_raw = token_data.get("issued_at") if isinstance(token_data, dict) else None
+                auto_login_allowed = False
+                try:
+                    issued_at = int(issued_at_raw) if issued_at_raw is not None else None
+                    if issued_at is not None:
+                        age_seconds = int(get_now_utc().timestamp()) - issued_at
+                        auto_login_allowed = 0 <= age_seconds <= TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN
+                except (TypeError, ValueError):
+                    auto_login_allowed = False
+
+                if auto_login_allowed:
+                    login_user(token_user)
+                else:
+                    flash(
+                        _("Your email address has been verified. Please log in to continue to the forum.") if token_verified_email else _("Please log in to continue to the forum."),
+                        "success" if token_verified_email else "warning",
+                    )
+                    return redirect(url_for("login", next=url_for("forum_entry"), forum_login_source="welcome_email"))
 
             if token_user is not None and token_verified_email:
                 flash(_("Your email address has been verified."), "success")
@@ -2887,13 +3368,27 @@ def create_app():
                 after=snapshot_forum_avatar_submission_for_audit(submission),
                 metadata={"forum_state": forum_result.desired_state if forum_result else None},
             )
+            queue_curated_admin_notification(
+                ADMIN_GENERAL_CHANNEL,
+                "forum_avatar_uploaded",
+                _("A new forum avatar approval request was submitted by %(email)s.", email=member.email_private),
+                payload={
+                    "member_email": member.email_private,
+                    "forum_username": current_user.forum_username,
+                    "submission_id": submission.id,
+                },
+                target_user=current_user,
+                target_member=member,
+                object_type="forum_avatar_submission",
+                object_id=submission.id,
+            )
             db.session.commit()
+            flush_marked_notification_channels()
             flash(_("Your profile picture was uploaded and is now waiting for admin approval."), "success")
         except ForumProviderError as exc:
             db.session.rollback()
             flash(str(exc), "danger")
         return redirect(url_for("forum_entry"))
-
     @app.route("/forum/avatar/public/<token>", methods=["GET"])
     def forum_avatar_public_file(token):
         submission = db.session.execute(
@@ -3090,9 +3585,11 @@ def create_app():
             "welcome_email_sender",
             "automatic_email_template",
         ])
+        notification_settings = normalize_notification_settings(get_notification_settings_map())
         forum_settings = normalize_forum_settings(get_forum_settings_map())
         stripe_settings = get_stripe_settings_map()
         forum_service = ForumService(forum_settings)
+        notification_service = NotificationService(app)
         try:
             mail_accounts = load_mail_accounts_config()
             sender_choices = [(account_key, account_key) for account_key in mail_accounts.keys()]
@@ -3119,6 +3616,8 @@ def create_app():
             "sender_choices": sender_choices,
             "template_choices": template_choices,
             "general_settings": general_settings,
+            "notification_settings": notification_settings,
+            "notification_health": notification_service.get_health_snapshot(),
             "forum_settings": forum_settings,
             "stripe_settings": stripe_settings,
             "forum_service": forum_service,
@@ -3254,6 +3753,22 @@ def create_app():
         except stripe.StripeError as exc:
             db.session.rollback()
             app.logger.error("Manual Stripe billing sync failed for member_id=%s: %s", user.member.id, exc)
+            queue_curated_admin_notification(
+                ADMIN_ERROR_CHANNEL,
+                "manual_billing_sync_failed",
+                _("A manual Stripe billing sync failed for %(email)s.", email=user.member.email_private),
+                payload={
+                    "member_email": user.member.email_private,
+                    "user_id": user.id,
+                    "member_id": user.member.id,
+                    "error": str(exc),
+                },
+                target_user=user,
+                target_member=user.member,
+                object_type="member",
+                object_id=user.member.id,
+                commit=True,
+            )
             flash(_("Stripe billing sync failed right now. Please try again later."), "danger")
             return redirect(next_url)
 
@@ -3445,6 +3960,19 @@ def create_app():
             },
             metadata={"review_note": review_note, "error": result.error if result else None},
         )
+        queue_user_status_notification(
+            "forum_avatar_rejected",
+            _("Your forum profile picture was rejected."),
+            recipient_email=(submission.user.email if submission.user is not None else (submission.member.email_private if submission.member is not None else None)),
+            payload={
+                "first_name": submission.member.first_name if submission.member is not None else None,
+                "review_note": review_note,
+            },
+            target_user=submission.user,
+            target_member=submission.member,
+            object_type="forum_avatar_submission",
+            object_id=submission.id,
+        )
         db.session.commit()
         flash(_("The avatar submission was rejected."), "success")
         return redirect(url_for("admin_forum"))
@@ -3612,17 +4140,19 @@ def create_app():
                 "automatic_email_template",
                 *STRIPE_SETTING_KEYS,
                 *FORUM_SETTING_KEYS,
+                *NOTIFICATION_SETTING_KEYS,
             ]
             before_settings = {
                 key: db.session.get(Setting, key).value if db.session.get(Setting, key) is not None else None
                 for key in tracked_setting_keys
             }
             settings_section = (request.form.get("settings_section") or "general").strip().lower()
-            if settings_section not in {"general", "billing", "forum", "mail", "test"}:
+            if settings_section not in {"general", "notifications", "billing", "forum", "mail", "test"}:
                 settings_section = "general"
             settings_redirect = f"{url_for('admin_settings')}#settings-{settings_section}"
             welcome_sender = request.form.get("welcome_email_sender")
             auto_email_template = request.form.get("automatic_email_template")
+            notification_sender = request.form.get("notification_sender")
             stripe_publishable_key = ((request.form.get("stripe_publishable_key") if settings_section == "billing" else before_settings.get("stripe_publishable_key")) or "").strip()
             stripe_price_id = ((request.form.get("stripe_price_id") if settings_section == "billing" else before_settings.get("stripe_price_id")) or "").strip()
             forum_provider = (request.form.get("forum_provider") or before_settings.get("forum_provider") or "discourse").strip() or "discourse"
@@ -3636,6 +4166,10 @@ def create_app():
 
             if auto_email_template and auto_email_template not in valid_templates:
                 flash(_("Invalid email template selected."), "danger")
+                return redirect(settings_redirect)
+
+            if notification_sender and notification_sender not in valid_senders:
+                flash(_("Invalid sender account selected."), "danger")
                 return redirect(settings_redirect)
 
             if forum_provider not in valid_forum_providers:
@@ -3657,11 +4191,18 @@ def create_app():
             invoice_enabled = (request.form.get("invoice_payments_enabled") == "on") if settings_section == "general" else str(before_settings.get("invoice_payments_enabled") or "False") == "True"
             emails_enabled = (request.form.get("automatic_emails_enabled") == "on") if settings_section == "general" else str(before_settings.get("automatic_emails_enabled") or "False") == "True"
             forum_enabled = (request.form.get("forum_integration_enabled") == "on") if settings_section == "forum" else str(before_settings.get("forum_integration_enabled") or "False") == "True"
+            notification_admin_general_enabled = (request.form.get("notification_admin_general_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_admin_general_enabled") or "True") == "True"
+            notification_admin_error_enabled = (request.form.get("notification_admin_error_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_admin_error_enabled") or "True") == "True"
+            notification_user_status_enabled = (request.form.get("notification_user_status_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_user_status_enabled") or "True") == "True"
 
             set_setting_value("invoice_payments_enabled", str(invoice_enabled))
             set_setting_value("automatic_emails_enabled", str(emails_enabled))
             set_setting_value("welcome_email_sender", welcome_sender if settings_section == "general" else before_settings.get("welcome_email_sender"))
             set_setting_value("automatic_email_template", auto_email_template if settings_section == "general" else before_settings.get("automatic_email_template"))
+            set_setting_value("notification_admin_general_enabled", str(notification_admin_general_enabled))
+            set_setting_value("notification_admin_error_enabled", str(notification_admin_error_enabled))
+            set_setting_value("notification_user_status_enabled", str(notification_user_status_enabled))
+            set_setting_value("notification_sender", (notification_sender if settings_section == "notifications" else before_settings.get("notification_sender")) or None)
             set_setting_value("stripe_publishable_key", stripe_publishable_key or None)
             set_setting_value("stripe_price_id", stripe_price_id or None)
             set_setting_value("forum_integration_enabled", str(forum_enabled))
@@ -3832,6 +4373,19 @@ def create_app():
                 "forum_sync_error": forum_result.error if forum_result else None,
             },
         )
+        queue_user_status_notification(
+            "identity_request_approved",
+            _("Your identity change request was approved."),
+            recipient_email=(member.user.email if member.user is not None else member.email_private),
+            payload={
+                "first_name": member.first_name,
+                "admin_note": request_record.admin_note,
+            },
+            target_user=member.user,
+            target_member=member,
+            object_type="member_profile_change_request",
+            object_id=request_record.id,
+        )
         db.session.commit()
         flash(_("Identity change request approved."), "success")
         if forum_result and forum_result.error:
@@ -3860,6 +4414,19 @@ def create_app():
             before={"request_id": request_record.id, "status": "pending"},
             after={"request_id": request_record.id, "status": request_record.status},
             metadata={"member_note": request_record.member_note, "admin_note": request_record.admin_note},
+        )
+        queue_user_status_notification(
+            "identity_request_rejected",
+            _("Your identity change request was rejected."),
+            recipient_email=((request_record.member.user.email if request_record.member.user is not None else request_record.member.email_private) if request_record.member is not None else None),
+            payload={
+                "first_name": request_record.member.first_name if request_record.member is not None else None,
+                "admin_note": request_record.admin_note,
+            },
+            target_user=request_record.member.user if request_record.member is not None else None,
+            target_member=request_record.member,
+            object_type="member_profile_change_request",
+            object_id=request_record.id,
         )
         db.session.commit()
         flash(_("Identity change request rejected."), "success")
@@ -4325,6 +4892,14 @@ def create_app():
             member_data_json = metadata.get("member_data")
             if not member_data_json:
                 app.logger.error("Webhook received without member_data metadata.")
+                queue_curated_admin_notification(
+                    ADMIN_ERROR_CHANNEL,
+                    "stripe_webhook_missing_metadata",
+                    _("A Stripe checkout webhook arrived without member metadata."),
+                    payload={"event_type": event_type, "session_id": session.get("id")},
+                    severity="warning",
+                    commit=True,
+                )
                 return "Missing metadata", 400
 
             try:
@@ -4406,9 +4981,23 @@ def create_app():
                     member.email_private,
                     session.get("id"),
                 )
-            except Exception:
+            except Exception as exc:
                 app.logger.exception("FATAL DB ERROR on Webhook for session %s", session.get("id"))
                 db.session.rollback()
+                queue_curated_admin_notification(
+                    ADMIN_ERROR_CHANNEL,
+                    "stripe_webhook_processing_failed",
+                    _("A Stripe checkout webhook could not be processed."),
+                    payload={
+                        "event_type": event_type,
+                        "session_id": session.get("id"),
+                        "customer_id": session.get("customer"),
+                        "subscription_id": session.get("subscription"),
+                        "error": str(exc),
+                    },
+                    severity="critical",
+                    commit=True,
+                )
                 return "Database save failed", 500
 
         elif event_type == "payment_intent.processing":
@@ -4466,6 +5055,19 @@ def create_app():
                     customer_id,
                     subscription_id,
                     customer_email,
+                )
+                queue_curated_admin_notification(
+                    ADMIN_ERROR_CHANNEL,
+                    "stripe_webhook_member_not_found",
+                    _("A successful Stripe payment webhook could not be matched to a member."),
+                    payload={
+                        "event_type": event_type,
+                        "customer_id": customer_id,
+                        "subscription_id": subscription_id,
+                        "customer_email": customer_email,
+                    },
+                    severity="warning",
+                    commit=True,
                 )
                 return "Member not found", 400
 
@@ -4622,6 +5224,21 @@ def create_app():
     def internal_server_error(e):
         app.logger.error(f"Internal Server Error: {e}")
         db.session.rollback()
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "internal_server_error",
+            _("An internal server error occurred while processing %(path)s.", path=request.path),
+            payload={
+                "path": request.path,
+                "method": request.method,
+                "endpoint": request.endpoint,
+                "error": str(e),
+            },
+            target_user=current_user._get_current_object() if current_user.is_authenticated else None,
+            target_member=current_user.member if current_user.is_authenticated else None,
+            severity="critical",
+            commit=True,
+        )
         return render_template("500.html"), 500
 
     @app.cli.command("send-welcome-email")
@@ -4653,6 +5270,31 @@ application = create_app()
 
 if __name__ == "__main__":
     application.run(debug=False)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
