@@ -150,6 +150,15 @@ def sanitize_notification_error(message):
     return text[:4000]
 
 
+
+def ensure_utc_datetime(value):
+    if value is None:
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 class NotificationService:
     def __init__(self, app=None):
         self.app = app or current_app._get_current_object()
@@ -282,6 +291,8 @@ class NotificationService:
             ladder = CHANNEL_COOLDOWN_LADDERS.get(channel, [0])
             stage = state.cooldown_stage or 0
             stage = min(stage, len(ladder) - 1)
+            failure_backoff_until = ensure_utc_datetime(state.failure_backoff_until)
+            last_sent_at = ensure_utc_datetime(state.last_sent_at)
             health[channel] = {
                 "enabled": self.is_enabled(channel),
                 "pending_count": pending_counts.get(channel, 0),
@@ -290,9 +301,9 @@ class NotificationService:
                 "next_allowed_at": next_gate if next_gate > now else None,
                 "rolling_sent_count": state.rolling_sent_count,
                 "daily_cap": CHANNEL_DAILY_CAPS.get(channel),
-                "failure_backoff_until": state.failure_backoff_until if state.failure_backoff_until and state.failure_backoff_until > now else None,
+                "failure_backoff_until": failure_backoff_until if failure_backoff_until and failure_backoff_until > now else None,
                 "last_failure_message": state.last_failure_message,
-                "last_sent_at": state.last_sent_at,
+                "last_sent_at": last_sent_at,
             }
         return health
 
@@ -574,6 +585,12 @@ class NotificationService:
 
     def _refresh_channel_state(self, channel, now):
         state = self._get_or_create_channel_state(channel)
+        state.last_activity_at = ensure_utc_datetime(state.last_activity_at)
+        state.last_sent_at = ensure_utc_datetime(state.last_sent_at)
+        state.last_failure_at = ensure_utc_datetime(state.last_failure_at)
+        state.next_allowed_at = ensure_utc_datetime(state.next_allowed_at)
+        state.failure_backoff_until = ensure_utc_datetime(state.failure_backoff_until)
+
         quiet_reference = state.last_activity_at or state.last_sent_at or state.last_failure_at
         if quiet_reference is None or quiet_reference <= now - QUIET_RESET_WINDOW:
             state.cooldown_stage = 0
@@ -605,16 +622,19 @@ class NotificationService:
 
     def _get_rolling_sent_window(self, channel, now):
         window_start = now - QUIET_RESET_WINDOW
-        sent_batches = db.session.execute(
-            db.select(NotificationBatch.sent_at)
-            .where(
-                NotificationBatch.channel == channel,
-                NotificationBatch.status == "sent",
-                NotificationBatch.sent_at.is_not(None),
-                NotificationBatch.sent_at >= window_start,
-            )
-            .order_by(NotificationBatch.sent_at.asc())
-        ).scalars().all()
+        sent_batches = [
+            ensure_utc_datetime(sent_at)
+            for sent_at in db.session.execute(
+                db.select(NotificationBatch.sent_at)
+                .where(
+                    NotificationBatch.channel == channel,
+                    NotificationBatch.status == "sent",
+                    NotificationBatch.sent_at.is_not(None),
+                    NotificationBatch.sent_at >= window_start,
+                )
+                .order_by(NotificationBatch.sent_at.asc())
+            ).scalars().all()
+        ]
         return len(sent_batches), (sent_batches[0] if sent_batches else None)
 
     def _record_success(self, state, channel, now):
