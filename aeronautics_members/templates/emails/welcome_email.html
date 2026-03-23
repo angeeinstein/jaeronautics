@@ -39,25 +39,19 @@
                     </div>
                 {% endif %}
 
-                {% if forum_integration_enabled and forum_entry_url %}
-                    <div class="section">
-                        <h4>{{ _('Forum Access') }}</h4>
-                        <p>{{ _('Your forum account uses the following username:') }}</p>
-                        <p class="username-box">{{ suggested_username }}</p>
-                        <p>{{ _('Before member content becomes visible in the forum, please upload a profile picture for approval.') }}</p>
-                        <div class="button-row">
-                            <a href="{{ forum_entry_url }}" target="_blank" rel="noopener">{{ _('Open Forum') }}</a>
-                        </div>
-                    </div>
-                {% endif %}
-
                 <div class="section">
-                    <h4>{{ _('Access Our File Sharing Platform') }}</h4>
-                    <p>{{ _('As a member, you get access to our file sharing platform, LAV-Board.') }}</p>
-                    <p>{{ _('You can create an account at:') }} <a href="https://www.lavboard.at" target="_blank">www.lavboard.at</a></p>
-                    <p><strong>{{ _('Please use your FH email address when registering on the platform.') }}</strong></p>
-                    <p>{{ _('We suggest the following username for you to maintain consistency across our members:') }}</p>
+                    <h4>{{ _('Lavboard Access') }}</h4>
+                    <p>{{ _('Your Lavboard account uses the following username:') }}</p>
                     <p class="username-box">{{ suggested_username }}</p>
+                    {% if forum_integration_enabled and forum_entry_url %}
+                        <p>{{ _('Before member content becomes visible on Lavboard, please upload a profile picture for approval.') }}</p>
+                        <div class="button-row">
+                            <a href="{{ forum_entry_url }}" target="_blank" rel="noopener">{{ _('Open Lavboard') }}</a>
+                        </div>
+                    {% else %}
+                        <p>{{ _('You can sign in at:') }} <a href="https://www.lavboard.at" target="_blank">www.lavboard.at</a></p>
+                        <p><strong>{{ _('Please use your FH email address when registering on the platform.') }}</strong></p>
+                    {% endif %}
                 </div>
 
                 <p>{{ _('If you have any questions, feel free to contact us.') }}</p>

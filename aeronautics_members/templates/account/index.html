@@ -47,16 +47,26 @@
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-header"><h4 class="mb-0">{{ _('Membership Overview') }}</h4></div>
             <div class="card-body">
+                {% set membership_status_labels = {
+                    'paid': _('Active'),
+                    'free_period': _('Active'),
+                    'cancel_scheduled': _('Renewal Canceled'),
+                    'canceled': _('Ended'),
+                    'pending_checkout': _('Payment Setup Incomplete'),
+                    'processing': _('Payment Processing'),
+                    'failed': _('Payment Failed'),
+                    'unpaid': _('Unpaid')
+                } %}
                 <dl class="row mb-0">
                     <dt class="col-sm-5">{{ _('Status') }}</dt>
-                    <dd class="col-sm-7">{{ member.payment_status|replace('_', ' ')|title }}</dd>
-                    <dt class="col-sm-5">{{ _('Active') }}</dt>
+                    <dd class="col-sm-7">{{ membership_status_labels.get(member.payment_status, member.payment_status|replace('_', ' ')|title) }}</dd>
+                    <dt class="col-sm-5">{{ _('Membership Active') }}</dt>
                     <dd class="col-sm-7">{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
-                    <dt class="col-sm-5">{{ _('Coverage Starts') }}</dt>
+                    <dt class="col-sm-5">{{ _('Membership Starts') }}</dt>
                     <dd class="col-sm-7">{{ member.membership_starts_on.strftime('%Y-%m-%d') if member.membership_starts_on else _('Not set') }}</dd>
-                    <dt class="col-sm-5">{{ _('Coverage Ends') }}</dt>
+                    <dt class="col-sm-5">{{ _('Membership Ends') }}</dt>
                     <dd class="col-sm-7">{{ member.membership_ends_on.strftime('%Y-%m-%d') if member.membership_ends_on else _('Not set') }}</dd>
-                    <dt class="col-sm-5">{{ _('Next Renewal') }}</dt>
+                    <dt class="col-sm-5">{{ _('Renews On') }}</dt>
                     <dd class="col-sm-7">
                         {% if member.cancel_at_period_end %}
                             {{ _('Not scheduled') }}
@@ -64,13 +74,29 @@
                             {{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else _('Not set') }}
                         {% endif %}
                     </dd>
-                    <dt class="col-sm-5">{{ _('Auto-Renewal') }}</dt>
-                    <dd class="col-sm-7">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled for the end of the covered year.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
+                    <dt class="col-sm-5">{{ _('Automatic Renewal') }}</dt>
+                    <dd class="col-sm-7">
+                        {% if member.cancel_at_period_end %}
+                            {% if member.membership_ends_on %}
+                                {{ _('No, your membership will end on %(date)s unless you renew again.', date=member.membership_ends_on.strftime('%Y-%m-%d')) }}
+                            {% else %}
+                                {{ _('No, automatic renewal is turned off.') }}
+                            {% endif %}
+                        {% else %}
+                            {{ _('Yes') }}
+                        {% endif %}
+                    </dd>
                     <dt class="col-sm-5">{{ _('Forum Username') }}</dt>
                     <dd class="col-sm-7">{{ current_user.forum_username or _('Not set') }}</dd>
                 </dl>
                 {% if member.cancel_at_period_end %}
-                    <div class="alert alert-warning mt-4 mb-0">{{ _('Your membership stays active until the end of the covered year, but the automatic renewal has been canceled.') }}</div>
+                    <div class="alert alert-warning mt-4 mb-0">
+                        {% if member.membership_ends_on %}
+                            {{ _('Your membership stays active until %(date)s, but it will not renew automatically.', date=member.membership_ends_on.strftime('%Y-%m-%d')) }}
+                        {% else %}
+                            {{ _('Your membership remains active, but it will not renew automatically.') }}
+                        {% endif %}
+                    </div>
                 {% elif can_resume_payment %}
                     <div class="alert alert-info mt-4 mb-0">{{ _('Your account is ready, but the membership payment is not finished yet. Use the resume button above to continue.') }}</div>
                 {% elif not can_manage_billing %}

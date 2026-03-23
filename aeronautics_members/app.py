@@ -760,7 +760,7 @@ def send_account_action_email(
             )
         return False
 
-    logo_path = os.path.join(app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
+    logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
     attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
     success, error_message = send_mail(
         from_account=sender_account,
@@ -2024,7 +2024,7 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
         return (False, error_message) if return_error else False
 
     suggested_username = member.user.forum_username if member.user and member.user.forum_username else generate_suggested_username(member)
-    logo_path = os.path.join(app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
+    logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
     attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
 
     forum_service = get_forum_service()
@@ -4733,7 +4733,7 @@ def create_app():
             recipient = form.recipient.data
             template = form.template.data
 
-            logo_path = os.path.join(app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
+            logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
             attachments = [{"path": logo_path, "cid": "logo"}]
 
             success = send_mail(
