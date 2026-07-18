@@ -19,7 +19,7 @@
                         <div class="row g-4 align-items-start">
                             <div class="col-lg-4">
                                 {% if submission.public_token %}
-                                    <img src="{{ url_for('forum_avatar_public_file', token=submission.public_token) }}" alt="{{ _('Avatar preview') }}" class="img-fluid rounded border mb-3">
+                                    <img src="{{ url_for('forum.forum_avatar_public_file', token=submission.public_token) }}" alt="{{ _('Avatar preview') }}" class="img-fluid rounded border mb-3">
                                 {% endif %}
                                 <div class="small text-muted">{{ _('Uploaded') }}: {{ submission.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</div>
                                 <div class="small text-muted">{{ _('Member') }}: {{ submission.member.email_private }}</div>

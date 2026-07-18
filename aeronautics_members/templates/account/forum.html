@@ -11,7 +11,7 @@
                     {% if current_user.is_authenticated %}
                         <form method="POST" action="{{ url_for('auth.logout') }}" class="mb-0">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="next" value="{{ url_for('auth.login', next=url_for('forum_entry')) }}">
+                            <input type="hidden" name="next" value="{{ url_for('auth.login', next=url_for('forum.forum_entry')) }}">
                             <button type="submit" class="btn btn-sm btn-outline-light">{{ _('Log Out Everywhere') }}</button>
                         </form>
                     {% endif %}
