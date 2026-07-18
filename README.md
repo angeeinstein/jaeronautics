@@ -33,11 +33,18 @@ During installation the script can ask for:
 ```text
 jaeronautics/
 |-- aeronautics_members/    # Flask app package
+|   |-- app.py              # App factory, helpers, CLI commands
+|   |-- blueprints/         # Route handlers (public, auth, account, forum, admin, webhook)
+|   |-- db_models.py        # SQLAlchemy models
+|   `-- *_service.py        # Forum, notification, mail services
+|-- migrations/             # Alembic database migrations
+|-- tests/                  # pytest suite (billing math, webhook, page rendering)
 |-- install.sh              # Linux install/update/repair/uninstall entrypoint
 |-- deploy/                 # Example nginx and systemd files
 |-- docs/                   # Small operational notes
 |-- .env.example            # Safe environment template
 |-- requirements.txt
+|-- requirements-dev.txt    # Test/development dependencies
 `-- wsgi.py                 # Gunicorn entrypoint
 ```
 
