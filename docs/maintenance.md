@@ -19,6 +19,36 @@ flask --app aeronautics_members.app:create_app run --debug
 .\.venv\Scripts\pybabel.exe compile -d aeronautics_members\translations -D messages -f
 ```
 
+## Database Migrations
+
+The schema is managed with Alembic (via Flask-Migrate). Migration scripts live
+in `migrations/versions/`.
+
+`db-init` is safe to run on every deploy and picks the right action
+automatically:
+
+- **Fresh database** – runs the migrations to build the whole schema.
+- **Legacy database** created before migrations existed – reconciles legacy
+  columns, creates any new tables, and stamps it at the baseline revision.
+- **Already migrated** – applies any pending migrations.
+
+```powershell
+flask --app aeronautics_members.app:create_app db-init
+```
+
+To change the schema, edit the models in `db_models.py`, then autogenerate and
+review a migration:
+
+```powershell
+$env:FLASK_APP = "aeronautics_members.app:create_app"
+flask db migrate -m "describe the change"   # writes migrations/versions/<id>_*.py
+# review the generated script, then apply it
+flask db upgrade
+```
+
+On existing servers, apply new migrations during an update with
+`flask db upgrade` (or simply re-run `db-init`, which upgrades to head).
+
 ## Run the Tests
 
 The test suite runs against an ephemeral SQLite database (no MySQL, Redis, or

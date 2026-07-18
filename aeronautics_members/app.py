@@ -29,6 +29,7 @@ from flask import (
 from flask.cli import with_appcontext
 from flask_babel import Babel, _, format_currency, format_date, get_locale
 from flask_limiter import Limiter
+from flask_migrate import Migrate
 from flask_limiter.errors import RateLimitExceeded
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf.csrf import CSRFError, CSRFProtect
@@ -205,6 +206,7 @@ SENSITIVE_AUDIT_FIELD_NAMES = SENSITIVE_SETTING_KEYS | {"password", "pass", "sec
 babel = Babel()
 login_manager = LoginManager()
 csrf = CSRFProtect()
+migrate = Migrate()
 
 
 def get_rate_limit_identity():
@@ -2309,6 +2311,10 @@ def create_app(config_overrides=None):
         app.config.update(config_overrides)
 
     db.init_app(app)
+    # Anchor the migrations directory to the repo root so Alembic commands work
+    # regardless of the process working directory (e.g. when invoked from
+    # install.sh / systemd rather than a shell sitting in the checkout).
+    migrate.init_app(app, db, directory=str(REPO_ROOT / "migrations"))
     login_manager.init_app(app)
     login_manager.login_view = "login"
     babel.init_app(app, locale_selector=select_locale)
@@ -2370,19 +2376,43 @@ def create_app(config_overrides=None):
     @app.cli.command("db-init")
     @with_appcontext
     def db_init():
-        """Creates database tables if they do not exist and upgrades newer account and membership columns when needed."""
-        click.echo("Creating database tables...")
+        """Bring the database schema to the latest Alembic revision, then seed roles.
+
+        Handles three situations so it stays safe to run on every deploy:
+
+        * Fresh database  -> run migrations to build the full schema.
+        * Legacy database created before migrations existed -> converge its
+          columns with the historical ``ensure_*`` helpers, create any newly
+          added tables, then stamp it at the baseline revision so future
+          migrations apply cleanly.
+        * Already migrated -> apply any pending migrations.
+        """
+        from flask_migrate import stamp, upgrade
+
+        click.echo("Preparing database schema...")
         try:
-            db.create_all()
+            inspector = inspect(db.engine)
+            existing_tables = set(inspector.get_table_names())
+
+            if "alembic_version" in existing_tables:
+                upgrade()
+            elif "users" in existing_tables:
+                # Pre-migration install: reconcile legacy columns, add any new
+                # tables, and record that the schema now matches the baseline.
+                ensure_user_schema()
+                ensure_member_schema()
+                db.create_all()
+                stamp()
+            else:
+                upgrade()
+
             seed_default_roles()
-            ensure_user_schema()
-            ensure_member_schema()
             backfill_legacy_admin_roles()
             backfill_member_user_links()
             db.session.commit()
-            click.echo("Database tables created successfully.")
+            click.echo("Database schema is ready.")
         except Exception as e:
-            click.echo(f"Error creating tables: {e}", err=True)
+            click.echo(f"Error preparing database: {e}", err=True)
             sys.exit(1)
 
     @app.cli.command("i18n-init")
