@@ -231,7 +231,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or not current_user.has_role("admin"):
             flash(_("You do not have permission to access this page."), "danger")
-            return redirect(url_for("index"))
+            return redirect(url_for("public.index"))
         return f(*args, **kwargs)
 
     return decorated_function
@@ -2259,7 +2259,7 @@ def create_app(config_overrides=None):
     @app.context_processor
     def inject_language_switcher():
         def switch_lang_url(lang):
-            endpoint = request.endpoint or "index"
+            endpoint = request.endpoint or "public.index"
             values = dict(request.view_args or {})
             values.update(request.args.to_dict(flat=True))
             values["lang"] = lang
@@ -2268,7 +2268,7 @@ def create_app(config_overrides=None):
             except BuildError:
                 fallback_values = request.args.to_dict(flat=True)
                 fallback_values["lang"] = lang
-                return url_for("index", **fallback_values)
+                return url_for("public.index", **fallback_values)
 
         return dict(switch_lang_url=switch_lang_url)
 
@@ -2323,10 +2323,12 @@ def create_app(config_overrides=None):
 
     # Blueprints are imported here (deferred) so their modules can import helpers
     # from this fully-initialized module without a circular import.
+    from .blueprints.public import public_bp
     from .blueprints.webhook import webhook_bp
 
     csrf.exempt(webhook_bp)
     app.register_blueprint(webhook_bp)
+    app.register_blueprint(public_bp)
 
     @app.context_processor
     def inject_babel_globals():
@@ -2825,179 +2827,11 @@ def create_app(config_overrides=None):
             forum_context=forum_context,
         )
 
-    @app.route("/", methods=["GET"])
-    def index():
-        form = MembershipForm()
-        public_settings = get_settings_map(["invoice_payments_enabled"])
-        return render_template(
-            "index.html",
-            form=form,
-            invoice_payments_enabled=public_settings.get("invoice_payments_enabled") == "True",
-            stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
-        )
 
-    @app.route("/process-membership", methods=["POST"])
-    @limiter.limit(RATELIMIT_MEMBERSHIP)
-    def process_membership():
-        form = MembershipForm()
-        settings = get_settings_map(["invoice_payments_enabled"])
 
-        if form.validate_on_submit():
-            form_data = form.data
-            form_data.pop("csrf_token", None)
-            form_data.pop("submit", None)
-            password = form_data.pop("password")
-            form_data.pop("confirm_password", None)
 
-            payment_method = form_data.pop("payment_method", "checkout")
-            form_data["email_private"] = form_data["email_private"].strip().lower()
-            email_address = form_data["email_private"]
 
-            existing_member = db.session.execute(db.select(Member).filter_by(email_private=email_address)).scalar_one_or_none()
-            existing_user = db.session.execute(db.select(User).filter_by(email=email_address)).scalar_one_or_none()
 
-            if existing_member and sync_member_active_state(existing_member):
-                db.session.commit()
-
-            if existing_member is not None:
-                if existing_member.user_id:
-                    flash(_("An account with this email address already exists. Please log in to manage or resume your membership."), "warning")
-                    return redirect(url_for("login"))
-                flash(_("A membership profile with this email address already exists without a linked login. Please contact the club so we can resolve it."), "warning")
-                return redirect(url_for("index"))
-
-            if existing_user is not None:
-                flash(_("An account with this email address already exists. Please log in instead."), "warning")
-                return redirect(url_for("login"))
-
-            if settings.get("invoice_payments_enabled") != "True":
-                payment_method = "checkout"
-
-            member = Member(
-                created_at=get_now_utc(),
-                payment_status="pending_checkout",
-                is_active=False,
-                pending_checkout_started_at=get_now_utc(),
-            )
-            apply_member_profile(member, {**form_data, "terms_accepted": True})
-
-            user = User(
-                email=email_address,
-                forum_username=generate_unique_forum_username(
-                    member.first_name,
-                    member.last_name,
-                    member.year_group,
-                ),
-            )
-            user.set_password(password)
-            member.user = user
-
-            db.session.add(user)
-            db.session.add(member)
-            db.session.flush()
-            log_audit_event(
-                category="membership",
-                event_type="public_membership_signup_started",
-                actor_user=user,
-                target_user=user,
-                target_member=member,
-                before=None,
-                after={"user": snapshot_user_for_audit(user), "member": snapshot_member_for_audit(member)},
-                metadata={"payment_method": payment_method},
-            )
-            db.session.commit()
-            login_user(user)
-
-            try:
-                try:
-                    send_email_verification_email(app, user)
-                except Exception as email_exc:
-                    app.logger.warning("Could not send verification email for user_id=%s: %s", user.id, email_exc)
-
-                if payment_method == "checkout":
-                    session, _cycle = create_checkout_session_for_member(member)
-                    db.session.commit()
-                    return redirect(session.url, code=303)
-
-                if payment_method == "invoice":
-                    _subscription, cycle = create_invoice_membership_for_member(member)
-                    forum_result = None
-                    if cycle["free_period"]:
-                        forum_result, _forum_service = sync_member_forum_state(member)
-                    db.session.commit()
-                    if cycle["free_period"]:
-                        send_member_welcome_email(app, member)
-                        if forum_result and forum_result.error:
-                            app.logger.warning("Forum sync reported an issue after invoice activation for member_id=%s: %s", member.id, forum_result.error)
-                    return redirect(
-                        url_for(
-                            "thank_you",
-                            method="invoice",
-                            phase=cycle["thank_you_phase"],
-                        )
-                    )
-
-            except stripe.StripeError as e:
-                error_body = getattr(e, "json_body", {}) or {}
-                error_details = error_body.get("error", {}) if isinstance(error_body, dict) else {}
-                app.logger.error(
-                    "Stripe Error during membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s member_id=%s",
-                    type(e).__name__,
-                    str(e),
-                    error_details.get("message"),
-                    error_details.get("code"),
-                    error_details.get("param"),
-                    getattr(e, "request_id", None),
-                    getattr(e, "http_status", None),
-                    payment_method,
-                    email_address,
-                    member.id,
-                )
-                flash(_("Your account was created, but payment could not be started. Please log in and resume your membership from your account page."), "warning")
-            except Exception:
-                app.logger.exception(
-                    "Unexpected error during membership signup for email=%s payment_method=%s member_id=%s",
-                    email_address,
-                    payment_method,
-                    member.id,
-                )
-                flash(_("Your account was created, but an unexpected error occurred while starting billing. Please log in and resume your membership from your account page."), "warning")
-
-            return redirect(url_for("account"))
-
-        app.logger.warning(f"Form validation failed. Errors: {form.errors}")
-        flash(_("Please correct the errors below and try again."), "danger")
-        return render_template(
-            "index.html",
-            form=form,
-            invoice_payments_enabled=get_settings_map(["invoice_payments_enabled"]).get("invoice_payments_enabled") == "True",
-            stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
-        )
-
-    @app.route("/thank-you")
-    def thank_you():
-        method = request.args.get("method", "checkout")
-        phase = request.args.get("phase", "prorated")
-        return render_template("thank_you.html", method=method, phase=phase)
-
-    @app.route("/cancel")
-    def cancel():
-        return render_template("cancel.html")
-
-    @app.route("/legal")
-    def legal_texts():
-        return render_template("legal_texts.html")
-
-    @app.route("/__health", methods=["GET"])
-    def health_check():
-        return jsonify(
-            {
-                "status": "ok",
-                "app": "jaeronautics",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "host": request.host,
-            }
-        )
 
     @app.route("/account", methods=["GET"])
     @login_required
@@ -3093,7 +2927,7 @@ def create_app(config_overrides=None):
                             app.logger.warning("Forum sync reported an issue after invoice activation for member_id=%s: %s", member.id, forum_result.error)
                     return redirect(
                         url_for(
-                            "thank_you",
+                            "public.thank_you",
                             method="invoice",
                             phase=cycle["thank_you_phase"],
                         )
@@ -3136,7 +2970,7 @@ def create_app(config_overrides=None):
         member = get_current_member_for_user(current_user)
         if member is None:
             flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
+            return redirect(url_for("public.index"))
 
         profile_form = MemberProfileForm(prefix="profile")
         identity_form = IdentityChangeRequestForm(prefix="identity")
@@ -3190,7 +3024,7 @@ def create_app(config_overrides=None):
         member = get_current_member_for_user(current_user)
         if member is None:
             flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
+            return redirect(url_for("public.index"))
 
         identity_form = IdentityChangeRequestForm(prefix="identity")
         profile_form = MemberProfileForm(prefix="profile")
@@ -3278,7 +3112,7 @@ def create_app(config_overrides=None):
         member = get_current_member_for_user(current_user)
         if member is None:
             flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
+            return redirect(url_for("public.index"))
 
         try:
             portal_session = get_portal_session(member)
@@ -3296,7 +3130,7 @@ def create_app(config_overrides=None):
         member = get_current_member_for_user(current_user)
         if member is None:
             flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
+            return redirect(url_for("public.index"))
         if not can_resume_payment(member):
             flash(_("This membership cannot be resumed from here. Use billing management instead if a Stripe customer already exists."), "warning")
             return redirect(url_for("account"))
@@ -4889,7 +4723,7 @@ def create_app(config_overrides=None):
     @app.route("/register", methods=["GET", "POST"])
     def register():
         flash(_("Accounts are created automatically when you sign up for a membership."), "info")
-        return redirect(url_for("index"))
+        return redirect(url_for("public.index"))
 
     @app.route("/logout", methods=["POST"])
     @login_required
@@ -4900,9 +4734,9 @@ def create_app(config_overrides=None):
         session.pop("login_next", None)
         session.pop("login_source", None)
 
-        next_url = request.form.get("next") or url_for("index")
+        next_url = request.form.get("next") or url_for("public.index")
         if not is_safe_next_url(next_url):
-            next_url = url_for("index")
+            next_url = url_for("public.index")
 
         if forum_logout_error:
             flash(_("You have been logged out here, but the forum session could not be ended automatically."), "warning")
@@ -4950,19 +4784,19 @@ def create_app(config_overrides=None):
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash(_("Your session has expired or the form is invalid. Please try submitting again."), "warning")
-        return redirect(request.referrer or url_for("index"))
+        return redirect(request.referrer or url_for("public.index"))
 
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
         flash(_("Too many requests from your IP address. Please wait a moment and try again."), "warning")
-        return redirect(request.referrer or url_for("index")), 429
+        return redirect(request.referrer or url_for("public.index")), 429
 
     @app.errorhandler(413)
     def request_entity_too_large(e):
         flash(_("The submitted data is too large to process. Please reduce the file size and try again."), "danger")
         if request.path == url_for("upload_forum_avatar"):
             return redirect(url_for("forum_entry"))
-        return redirect(request.referrer or url_for("index"))
+        return redirect(request.referrer or url_for("public.index"))
 
     @app.errorhandler(404)
     def page_not_found(e):

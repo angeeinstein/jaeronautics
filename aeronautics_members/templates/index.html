@@ -13,7 +13,7 @@
             </p>
         </div>
     </div>
-    <form method="POST" action="{{ url_for('process_membership') }}" class="space-y-6">
+    <form method="POST" action="{{ url_for('public.process_membership') }}" class="space-y-6">
         {{ form.hidden_tag() }}
 
         {% if form.errors %}
@@ -134,7 +134,7 @@
             <div class="form-check">
                 {{ form.terms_accepted(class="form-check-input") }}
                 <label class="form-check-label" for="{{ form.terms_accepted.id }}">
-                    {{ _('I accept the') }} <a href="{{ url_for('legal_texts') }}" target="_blank" class="text-primary underline">{{ _('Terms and Conditions') }}</a><span class="text-danger">*</span>
+                    {{ _('I accept the') }} <a href="{{ url_for('public.legal_texts') }}" target="_blank" class="text-primary underline">{{ _('Terms and Conditions') }}</a><span class="text-danger">*</span>
                 </label>
             </div>
         </div>

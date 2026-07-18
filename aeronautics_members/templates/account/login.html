@@ -14,7 +14,7 @@
                             <h5 class="mb-2">{{ _('Forum access is for active members') }}</h5>
                             <p class="mb-2">{{ _('Already a member? Log in below with the account you created during membership signup.') }}</p>
                             <p class="mb-3 fw-semibold">{{ _('Not a member yet? Start with the membership signup first. Your website account and forum access are created from that process.') }}</p>
-                            <a href="{{ url_for('index') }}" class="btn btn-primary">{{ _('Become a Member') }}</a>
+                            <a href="{{ url_for('public.index') }}" class="btn btn-primary">{{ _('Become a Member') }}</a>
                         </div>
                     {% else %}
                         <p class="text-muted mb-4">{{ _('Use the account you created during membership signup to manage your profile, billing, and future services.') }}</p>
@@ -51,7 +51,7 @@
                 <div class="card-footer py-4 bg-light">
                     <div class="d-flex flex-column gap-2 text-center">
                         <a href="{{ url_for('forgot_password') }}" class="fw-bold">{{ _('Forgot your password?') }}</a>
-                        <a href="{{ url_for('index') }}" class="text-muted {% if forum_login_hint %}fw-bold{% endif %}">{{ _('Need a new account? Sign up for membership first') }}</a>
+                        <a href="{{ url_for('public.index') }}" class="text-muted {% if forum_login_hint %}fw-bold{% endif %}">{{ _('Need a new account? Sign up for membership first') }}</a>
                     </div>
                 </div>
             </div>

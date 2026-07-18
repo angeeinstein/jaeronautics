@@ -3,7 +3,7 @@
 {% block content %}
 <div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
 
-    <a href="{{ url_for('index', **cleaned_args) }}" class="text-cyan-600 hover:text-cyan-800 text-sm font-semibold mb-4 inline-block">
+    <a href="{{ url_for('public.index', **cleaned_args) }}" class="text-cyan-600 hover:text-cyan-800 text-sm font-semibold mb-4 inline-block">
         &larr; {{ _('Back to Application') }}
     </a>
 
@@ -99,7 +99,7 @@
     </div>
 
     <!-- Back to Application Button -->
-    <a href="{{ url_for('index', **cleaned_args) }}" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white btn-aeronautics focus:outline-none focus:ring-2 focus:ring-offset-2">
+    <a href="{{ url_for('public.index', **cleaned_args) }}" class="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white btn-aeronautics focus:outline-none focus:ring-2 focus:ring-offset-2">
         &larr; {{ _('Back to Application') }}
     </a>
 </div>
