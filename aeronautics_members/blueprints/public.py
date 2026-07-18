@@ -34,7 +34,6 @@ from ..app import (
     request,
     send_email_verification_email,
     send_member_welcome_email,
-    session,
     snapshot_member_for_audit,
     snapshot_user_for_audit,
     stripe,

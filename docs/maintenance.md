@@ -87,6 +87,20 @@ python -m pytest
 Tests point the app at SQLite via the `DATABASE_URL` environment variable, which
 `create_app` honors as an override for the default MySQL connection string.
 
+## Linting
+
+Ruff runs the pyflakes checks (real bugs: undefined names, unused imports):
+
+```powershell
+ruff check .
+```
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs `ruff check` and the pytest suite on every push
+and pull request. The tests use SQLite, so CI needs no database or other
+services.
+
 ## Send a Welcome Email Manually
 
 ```powershell

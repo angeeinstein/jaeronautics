@@ -9,7 +9,7 @@ CSRF exemption is applied at registration time in create_app.
 import json
 
 import stripe
-from flask import Blueprint, current_app, request, session
+from flask import Blueprint, current_app, request
 from flask_babel import _
 
 from ..db_models import Member, db

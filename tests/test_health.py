@@ -1,7 +1,6 @@
 """Tests for the /__health endpoint's database probe."""
 import json
 
-from conftest import db
 import aeronautics_members.blueprints.public as public_module
 
 
