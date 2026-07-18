@@ -49,6 +49,8 @@ try:
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        NotificationBatch,
+        NotificationEvent,
         ProcessedStripeEvent,
         Role,
         Setting,
@@ -104,6 +106,8 @@ except ImportError:
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        NotificationBatch,
+        NotificationEvent,
         ProcessedStripeEvent,
         Role,
         Setting,
@@ -274,6 +278,11 @@ WELCOME_EMAIL_RETRY_DELAYS = (
     timedelta(hours=24),
 )
 PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
+# Log retention. 0 means keep forever. Audit logs default to keep-forever because
+# they are the account/security trail; higher-churn notification delivery records
+# default to a generous one-year window.
+AUDIT_LOG_RETENTION_DAYS = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "0"))
+NOTIFICATION_RETENTION_DAYS = int(os.getenv("NOTIFICATION_RETENTION_DAYS", "365"))
 ADMIN_DIRECTORY_PAGE_SIZE = 50
 AUDIT_LOG_PAGE_SIZE = 50
 APPROVAL_HISTORY_PAGE_SIZE = 25
@@ -2971,6 +2980,45 @@ def create_app(config_overrides=None):
         if deleted_count:
             db.session.commit()
         click.echo(click.style(f"Deleted {deleted_count} stale pending signup(s).", fg="green"))
+
+    @app.cli.command("cleanup-logs")
+    @click.option("--audit-days", default=AUDIT_LOG_RETENTION_DAYS, show_default=True, type=int,
+                  help="Delete audit logs older than this many days. 0 keeps them forever.")
+    @click.option("--notification-days", default=NOTIFICATION_RETENTION_DAYS, show_default=True, type=int,
+                  help="Delete notification records older than this many days. 0 keeps them forever.")
+    @with_appcontext
+    def cleanup_logs(audit_days, notification_days):
+        """Prunes old audit logs and notification delivery records.
+
+        Retention is generous by design: pass 0 for either window to keep those
+        records forever. Only truly old rows are removed, so recent history is
+        always preserved.
+        """
+        audit_deleted = 0
+        if audit_days > 0:
+            cutoff = get_now_utc() - timedelta(days=audit_days)
+            audit_deleted = db.session.query(AuditLog).filter(AuditLog.created_at < cutoff).delete(synchronize_session=False)
+
+        events_deleted = 0
+        batches_deleted = 0
+        if notification_days > 0:
+            cutoff = get_now_utc() - timedelta(days=notification_days)
+            # Delete old events first, then only batches that no longer have events
+            # so the foreign key from events to batches is never violated.
+            events_deleted = db.session.query(NotificationEvent).filter(
+                NotificationEvent.queued_at < cutoff
+            ).delete(synchronize_session=False)
+            batches_deleted = db.session.query(NotificationBatch).filter(
+                NotificationBatch.created_at < cutoff,
+                ~NotificationBatch.events.any(),
+            ).delete(synchronize_session=False)
+
+        db.session.commit()
+        click.echo(click.style(
+            f"Deleted {audit_deleted} audit log(s), {events_deleted} notification event(s), "
+            f"{batches_deleted} notification batch(es).",
+            fg="green",
+        ))
 
 
 

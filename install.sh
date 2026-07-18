@@ -51,6 +51,8 @@ BILLING_RECONCILE_SERVICE_FILE=""
 BILLING_RECONCILE_TIMER_FILE=""
 NOTIFICATIONS_SERVICE_FILE=""
 NOTIFICATIONS_TIMER_FILE=""
+CLEANUP_LOGS_SERVICE_FILE=""
+CLEANUP_LOGS_TIMER_FILE=""
 UPDATE_COMMAND_PATH="/usr/local/bin/update"
 PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
@@ -299,6 +301,8 @@ resolve_paths() {
     BILLING_RECONCILE_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-billing-reconcile.timer"
     NOTIFICATIONS_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-notifications.service"
     NOTIFICATIONS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-notifications.timer"
+    CLEANUP_LOGS_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.service"
+    CLEANUP_LOGS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.timer"
 
     if [[ -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]]; then
         NGINX_CONF_PATH="/etc/nginx/sites-available/${SERVICE_NAME}.conf"
@@ -1409,6 +1413,52 @@ EOF
     chmod 644 "${NOTIFICATIONS_SERVICE_FILE}" "${NOTIFICATIONS_TIMER_FILE}"
 }
 
+render_cleanup_logs_timer_files() {
+    step "Writing log-retention cleanup timer"
+    local unit_after="After=network.target"
+    local unit_requires=""
+
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        unit_after="After=network.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    cat > "${CLEANUP_LOGS_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics log retention cleanup
+${unit_after}
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app cleanup-logs
+TimeoutStartSec=300
+PrivateTmp=true
+NoNewPrivileges=true
+EOF
+
+    cat > "${CLEANUP_LOGS_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics log retention cleanup timer
+
+[Timer]
+OnCalendar=monthly
+AccuracySec=6h
+Persistent=true
+Unit=${SERVICE_NAME}-cleanup-logs.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${CLEANUP_LOGS_SERVICE_FILE}" "${CLEANUP_LOGS_TIMER_FILE}"
+}
+
 render_update_command() {
     step "Installing 'update' convenience command"
 
@@ -1736,6 +1786,7 @@ reload_services() {
     systemctl enable --now "${SERVICE_NAME}"
     systemctl enable --now "${SERVICE_NAME}-billing-reconcile.timer"
     systemctl enable --now "${SERVICE_NAME}-notifications.timer"
+    systemctl enable --now "${SERVICE_NAME}-cleanup-logs.timer"
     nginx -t
     systemctl reload nginx
 }
@@ -1752,6 +1803,7 @@ verify_installation() {
     systemctl is-active --quiet "${SERVICE_NAME}"
     systemctl is-active --quiet "${SERVICE_NAME}-billing-reconcile.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-notifications.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-cleanup-logs.timer"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
     success "The application is responding on 127.0.0.1:${APP_PORT}"
 
@@ -1906,6 +1958,7 @@ install_or_update() {
     render_service_file
     render_billing_reconcile_timer_files
     render_notifications_timer_files
+    render_cleanup_logs_timer_files
     render_update_command
     obtain_ssl_certificate
     render_nginx_config
@@ -1938,6 +1991,13 @@ uninstall_everything() {
     fi
     if [[ -f "${NOTIFICATIONS_SERVICE_FILE}" ]]; then
         rm -f "${NOTIFICATIONS_SERVICE_FILE}"
+    fi
+    if [[ -f "${CLEANUP_LOGS_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-cleanup-logs.timer" || true
+        rm -f "${CLEANUP_LOGS_TIMER_FILE}"
+    fi
+    if [[ -f "${CLEANUP_LOGS_SERVICE_FILE}" ]]; then
+        rm -f "${CLEANUP_LOGS_SERVICE_FILE}"
     fi
     if [[ -f "${SERVICE_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}" || true

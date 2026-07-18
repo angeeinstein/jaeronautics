@@ -49,6 +49,25 @@ flask db upgrade
 On existing servers, apply new migrations during an update with
 `flask db upgrade` (or simply re-run `db-init`, which upgrades to head).
 
+## Log Retention
+
+Audit logs and notification delivery records grow over time. A monthly
+`cleanup-logs` timer (installed by `install.sh`) prunes only old rows. Retention
+is generous by design and configurable via environment variables (0 = keep
+forever):
+
+- `AUDIT_LOG_RETENTION_DAYS` (default `0`) — audit logs are kept forever unless
+  you set a positive number of days.
+- `NOTIFICATION_RETENTION_DAYS` (default `365`) — notification delivery records
+  older than a year are pruned.
+
+Run it manually at any time (flags override the environment defaults):
+
+```bash
+flask --app aeronautics_members.app:create_app cleanup-logs
+flask --app aeronautics_members.app:create_app cleanup-logs --audit-days 1095 --notification-days 365
+```
+
 ## Run the Tests
 
 The test suite runs against an ephemeral SQLite database (no MySQL, Redis, or
