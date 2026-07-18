@@ -27,7 +27,7 @@
         <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
             {% block admin_page_actions %}
                 {% if not current_user.member %}
-                    <a href="{{ url_for('create_membership_profile') }}" class="btn btn-primary">{{ _('Create Membership Profile') }}</a>
+                    <a href="{{ url_for('account.create_membership_profile') }}" class="btn btn-primary">{{ _('Create Membership Profile') }}</a>
                 {% endif %}
             {% endblock %}
         </div>

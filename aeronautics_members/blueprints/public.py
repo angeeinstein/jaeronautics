@@ -185,7 +185,7 @@ def process_membership():
             )
             flash(_("Your account was created, but an unexpected error occurred while starting billing. Please log in and resume your membership from your account page."), "warning")
 
-        return redirect(url_for("account"))
+        return redirect(url_for("account.account"))
 
     current_app.logger.warning(f"Form validation failed. Errors: {form.errors}")
     flash(_("Please correct the errors below and try again."), "danger")

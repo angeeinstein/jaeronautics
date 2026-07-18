@@ -15,7 +15,7 @@
                             {{ _('Please correct the highlighted errors and try again.') }}
                         </div>
                     {% endif %}
-                    <form method="POST" action="{{ url_for('create_membership_profile') }}" novalidate>
+                    <form method="POST" action="{{ url_for('account.create_membership_profile') }}" novalidate>
                         {{ form.hidden_tag() }}
                         <div class="row g-4">
                             <div class="col-md-6">{{ form.salutation.label(class='form-label') }}{{ form.salutation(class='form-select') }}</div>

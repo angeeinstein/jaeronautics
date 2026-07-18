@@ -22,7 +22,7 @@
                     {% if current_user.is_authenticated %}
                         {% if current_user.member %}
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('account') }}">{{ _('My Account') }}</a>
+                                <a class="nav-link" href="{{ url_for('account.account') }}">{{ _('My Account') }}</a>
                             </li>
                         {% endif %}
                         {% if current_user.has_role('admin') %}

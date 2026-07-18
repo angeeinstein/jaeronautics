@@ -42,7 +42,7 @@
                         </form>
                     {% endif %}
                     {% if current_user.id == user_record.id and not member %}
-                        <a href="{{ url_for('create_membership_profile') }}" class="btn btn-secondary">{{ _('Create Membership Profile') }}</a>
+                        <a href="{{ url_for('account.create_membership_profile') }}" class="btn btn-secondary">{{ _('Create Membership Profile') }}</a>
                     {% endif %}
                 </div>
                 {% if user_record.has_role('admin') and current_user.id == user_record.id %}
