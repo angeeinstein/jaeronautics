@@ -100,6 +100,19 @@ sudo bash install.sh --mode repair
 sudo bash install.sh --mode uninstall
 ```
 
+### Quick Update Command
+
+After the first install, the installer creates an `update` command on the
+system path. To update the app at any time, just type:
+
+```bash
+update
+```
+
+It re-runs the installer in update mode (elevating with `sudo` automatically),
+which pulls the latest code, installs dependencies, applies database
+migrations, and restarts the service.
+
 ## Notes
 
 - Secrets are intentionally not committed. Keep them in `.env`.
