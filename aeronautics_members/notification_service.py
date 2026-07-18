@@ -437,7 +437,7 @@ class NotificationService:
             )
             heading = _("Admin error notifications")
             intro = _("High-signal application issues were recorded and may require attention.")
-            action_url = build_public_url("admin_logs")
+            action_url = build_public_url("admin.admin_logs")
             action_label = _("Open Audit Logs")
         else:
             subject = _(
@@ -446,7 +446,7 @@ class NotificationService:
             )
             heading = _("Admin notifications")
             intro = _("New review tasks or other admin-relevant events were recorded.")
-            action_url = build_public_url("admin_dashboard")
+            action_url = build_public_url("admin.admin_dashboard")
             action_label = _("Open Admin Workspace")
 
         template_vars = {
@@ -477,7 +477,7 @@ class NotificationService:
                 _("Your forum profile picture needs attention"),
                 {
                     "preview_text": _("Your forum profile picture was reviewed and needs to be replaced."),
-                    "action_url": build_public_url("forum_entry"),
+                    "action_url": build_public_url("forum.forum_entry"),
                     "action_label": _("Upload a New Picture"),
                     "heading": _("Your profile picture needs to be replaced"),
                     "body_lines": [
@@ -491,7 +491,7 @@ class NotificationService:
                 _("Your identity change request was approved"),
                 {
                     "preview_text": _("Your identity change request has been approved."),
-                    "action_url": build_public_url("account"),
+                    "action_url": build_public_url("account.account"),
                     "action_label": _("Open My Account"),
                     "heading": _("Identity change approved"),
                     "body_lines": [
@@ -505,7 +505,7 @@ class NotificationService:
                 _("Your identity change request was reviewed"),
                 {
                     "preview_text": _("Your identity change request was rejected."),
-                    "action_url": build_public_url("account"),
+                    "action_url": build_public_url("account.account"),
                     "action_label": _("Open My Account"),
                     "heading": _("Identity change rejected"),
                     "body_lines": [
@@ -518,7 +518,7 @@ class NotificationService:
             _("An update is available for your account"),
             {
                 "preview_text": event.summary,
-                "action_url": build_public_url("account"),
+                "action_url": build_public_url("account.account"),
                 "action_label": _("Open My Account"),
                 "heading": _("Account update"),
                 "body_lines": [event.summary],

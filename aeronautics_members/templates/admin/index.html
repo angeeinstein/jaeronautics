@@ -63,7 +63,7 @@
                                     </div>
                                     <div class="row g-4 mt-1">
                                         <div class="col-lg-6">
-                                            <form method="POST" action="{{ url_for('approve_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                            <form method="POST" action="{{ url_for('admin.approve_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <h5>{{ _('Approve Request') }}</h5>
                                                 {% if request_record.username_would_change %}
@@ -87,7 +87,7 @@
                                             </form>
                                         </div>
                                         <div class="col-lg-6">
-                                            <form method="POST" action="{{ url_for('reject_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                            <form method="POST" action="{{ url_for('admin.reject_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <h5>{{ _('Reject Request') }}</h5>
                                                 <div class="mb-3">
@@ -155,7 +155,7 @@
             {% endif %}
         </div>
         <div class="card-body">
-            <form method="POST" action="{{ url_for('save_mail_account') }}">
+            <form method="POST" action="{{ url_for('admin.save_mail_account') }}">
                 {{ mail_account_form.hidden_tag() }}
                 {{ mail_account_form.mail_account_id }}
                 <div class="row g-3">
@@ -195,7 +195,7 @@
                                     <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
                                     <td class="text-end">
                                         <a href="{{ url_for('admin', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
-                                        <button type="button" class="btn btn-sm btn-danger ms-2" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
+                                        <button type="button" class="btn btn-sm btn-danger ms-2" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('admin.delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
                                     </td>
                                 </tr>
                             {% endfor %}
@@ -212,7 +212,7 @@
         <div class="card-header"><h4>{{ _('Send Test Email') }}</h4></div>
         <div class="card-body">
             {% if test_email_form.sender.choices %}
-                <form method="POST" action="{{ url_for('send_test_email') }}">
+                <form method="POST" action="{{ url_for('admin.send_test_email') }}">
                     {{ test_email_form.hidden_tag() }}
                     <div class="mb-3">{{ test_email_form.sender.label(class="form-label") }}{{ test_email_form.sender(class="form-select") }}</div>
                     <div class="mb-3">{{ test_email_form.recipient.label(class="form-label") }}{{ test_email_form.recipient(class="form-control", placeholder=_('recipient@example.com')) }}</div>

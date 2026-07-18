@@ -27,7 +27,7 @@
                             </div>
                             <div class="col-lg-4">
                                 <h5 class="mb-3">{{ _('Approve') }}</h5>
-                                <form method="POST" action="{{ url_for('approve_forum_avatar_submission', submission_id=submission.id) }}">
+                                <form method="POST" action="{{ url_for('admin.approve_forum_avatar_submission', submission_id=submission.id) }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="mb-3">
                                         <label class="form-label" for="approve-note-{{ submission.id }}">{{ _('Note for the member (optional)') }}</label>
@@ -38,7 +38,7 @@
                             </div>
                             <div class="col-lg-4">
                                 <h5 class="mb-3">{{ _('Reject') }}</h5>
-                                <form method="POST" action="{{ url_for('reject_forum_avatar_submission', submission_id=submission.id) }}">
+                                <form method="POST" action="{{ url_for('admin.reject_forum_avatar_submission', submission_id=submission.id) }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="mb-3">
                                         <label class="form-label" for="reject-note-{{ submission.id }}">{{ _('Reason (optional)') }}</label>
@@ -57,7 +57,7 @@
                         {% for page_number in pending_avatar_pagination.iter_pages() %}
                             {% if page_number %}
                                 <li class="page-item {% if page_number == pending_avatar_pagination.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('admin_forum', page=page_number) }}">{{ page_number }}</a>
+                                    <a class="page-link" href="{{ url_for('admin.admin_forum', page=page_number) }}">{{ page_number }}</a>
                                 </li>
                             {% else %}
                                 <li class="page-item disabled"><span class="page-link">…</span></li>
@@ -96,9 +96,9 @@
                                 <td>{{ forum_account.last_synced_at.strftime('%Y-%m-%d %H:%M') if forum_account.last_synced_at else '-' }}</td>
                                 <td class="text-end">
                                     {% if forum_account.user %}
-                                        <form method="POST" action="{{ url_for('admin_resync_forum_account', user_id=forum_account.user.id) }}" class="mb-0 d-inline-block">
+                                        <form method="POST" action="{{ url_for('admin.admin_resync_forum_account', user_id=forum_account.user.id) }}" class="mb-0 d-inline-block">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <input type="hidden" name="next" value="{{ url_for('admin_forum') }}">
+                                            <input type="hidden" name="next" value="{{ url_for('admin.admin_forum') }}">
                                             <button type="submit" class="btn btn-sm btn-primary">{{ _('Resync') }}</button>
                                         </form>
                                     {% endif %}

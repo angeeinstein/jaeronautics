@@ -7,7 +7,7 @@
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ _('Account') }}</h4>
-                <a href="{{ url_for('admin_accounts') }}" class="btn btn-sm btn-secondary">{{ _('Back to Accounts') }}</a>
+                <a href="{{ url_for('admin.admin_accounts') }}" class="btn btn-sm btn-secondary">{{ _('Back to Accounts') }}</a>
             </div>
             <div class="card-body">
                 <dl class="row mb-0">
@@ -30,13 +30,13 @@
                 </dl>
                 <div class="d-flex flex-wrap gap-2 mt-4">
                     {% if can_grant_admin %}
-                        <form method="POST" action="{{ url_for('grant_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
+                        <form method="POST" action="{{ url_for('admin.grant_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-primary">{{ _('Grant Admin Access') }}</button>
                         </form>
                     {% endif %}
                     {% if can_revoke_admin %}
-                        <form method="POST" action="{{ url_for('revoke_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke admin access?') }}');">
+                        <form method="POST" action="{{ url_for('admin.revoke_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke admin access?') }}');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-danger">{{ _('Revoke Admin Access') }}</button>
                         </form>
@@ -78,9 +78,9 @@
                     </dl>
                     {% if member.stripe_customer_id or member.stripe_subscription_id %}
                         <div class="d-flex flex-wrap gap-2 mt-4">
-                            <form method="POST" action="{{ url_for('admin_sync_billing_account', user_id=user_record.id) }}" class="mb-0">
+                            <form method="POST" action="{{ url_for('admin.admin_sync_billing_account', user_id=user_record.id) }}" class="mb-0">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="next" value="{{ url_for('admin_account_detail', user_id=user_record.id) }}">
+                                <input type="hidden" name="next" value="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">
                                 <button type="submit" class="btn btn-primary">{{ _('Sync Billing') }}</button>
                             </form>
                         </div>
@@ -116,9 +116,9 @@
                     <div class="alert alert-secondary mb-3">{{ latest_forum_submission.review_note }}</div>
                 {% endif %}
                 {% if member %}
-                    <form method="POST" action="{{ url_for('admin_resync_forum_account', user_id=user_record.id) }}" class="mb-0">
+                    <form method="POST" action="{{ url_for('admin.admin_resync_forum_account', user_id=user_record.id) }}" class="mb-0">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="next" value="{{ url_for('admin_account_detail', user_id=user_record.id) }}">
+                        <input type="hidden" name="next" value="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">
                         <button type="submit" class="btn btn-primary">{{ _('Resync Forum') }}</button>
                     </form>
                 {% endif %}

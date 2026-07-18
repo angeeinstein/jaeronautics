@@ -21,7 +21,7 @@
     <div class="col-xl-9">
         <div class="tab-content settings-tab-content" id="settings-tabContent">
             <div class="tab-pane fade show active" id="settings-general" role="tabpanel" aria-labelledby="settings-general-tab" tabindex="0">
-                <form method="POST" action="{{ url_for('admin_settings') }}" class="d-flex flex-column gap-4">
+                <form method="POST" action="{{ url_for('admin.admin_settings') }}" class="d-flex flex-column gap-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="settings_section" value="general">
 
@@ -85,7 +85,7 @@
             </div>
 
             <div class="tab-pane fade" id="settings-notifications" role="tabpanel" aria-labelledby="settings-notifications-tab" tabindex="0">
-                <form method="POST" action="{{ url_for('admin_settings') }}" class="d-flex flex-column gap-4">
+                <form method="POST" action="{{ url_for('admin.admin_settings') }}" class="d-flex flex-column gap-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="settings_section" value="notifications">
 
@@ -225,7 +225,7 @@
                 </form>
             </div>
             <div class="tab-pane fade" id="settings-billing" role="tabpanel" aria-labelledby="settings-billing-tab" tabindex="0">
-                <form method="POST" action="{{ url_for('admin_settings') }}" class="d-flex flex-column gap-4">
+                <form method="POST" action="{{ url_for('admin.admin_settings') }}" class="d-flex flex-column gap-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="settings_section" value="billing">
 
@@ -266,7 +266,7 @@
             </div>
 
             <div class="tab-pane fade" id="settings-forum" role="tabpanel" aria-labelledby="settings-forum-tab" tabindex="0">
-                <form method="POST" action="{{ url_for('admin_settings') }}" class="d-flex flex-column gap-4">
+                <form method="POST" action="{{ url_for('admin.admin_settings') }}" class="d-flex flex-column gap-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="settings_section" value="forum">
                     <input type="hidden" name="invoice_payments_enabled" value="{{ 'on' if general_settings.get('invoice_payments_enabled') == 'True' else '' }}">
@@ -371,7 +371,7 @@
                                 <p class="mb-1">{{ _('Verify that the Discourse API and authentication settings are reachable.') }}</p>
                                 <small class="text-muted">{{ _('This does not grant access to a member. It only checks the forum integration settings.') }}</small>
                             </div>
-                            <form method="POST" action="{{ url_for('test_forum_connection') }}" class="mb-0">
+                            <form method="POST" action="{{ url_for('admin.test_forum_connection') }}" class="mb-0">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-secondary">{{ _('Test Forum Connection') }}</button>
                             </form>
@@ -385,7 +385,7 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h4 class="mb-0">{{ _('Mail Accounts') }}</h4>
                         {% if editing_mail_account %}
-                            <a href="{{ url_for('admin_settings') }}#settings-mail" class="btn btn-sm btn-secondary">{{ _('Cancel Edit') }}</a>
+                            <a href="{{ url_for('admin.admin_settings') }}#settings-mail" class="btn btn-sm btn-secondary">{{ _('Cancel Edit') }}</a>
                         {% endif %}
                     </div>
                     <div class="card-body">
@@ -396,7 +396,7 @@
                                         <h5 class="mb-1">{{ _('Import or Export Sender Accounts') }}</h5>
                                         <p class="text-muted mb-0">{{ _('SMTP providers usually do not offer a standard export file format. Use the Jaeronautics JSON export, the legacy MAIL_ACCOUNTS_JSON mapping, or a JSON list with common SMTP keys.') }}</p>
                                     </div>
-                                    <form method="POST" action="{{ url_for('export_mail_accounts') }}" class="row g-3 align-items-end">
+                                    <form method="POST" action="{{ url_for('admin.export_mail_accounts') }}" class="row g-3 align-items-end">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <div class="col-lg-6">
                                             <label for="export-password" class="form-label">{{ _('Confirm Current Password for Export') }}</label>
@@ -410,7 +410,7 @@
                                         </div>
                                     </form>
                                 </div>
-                                <form method="POST" action="{{ url_for('import_mail_accounts') }}" enctype="multipart/form-data" class="row g-3 align-items-end">
+                                <form method="POST" action="{{ url_for('admin.import_mail_accounts') }}" enctype="multipart/form-data" class="row g-3 align-items-end">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="col-lg-6">
                                         <label for="mail-accounts-file" class="form-label">{{ _('Import JSON File') }}</label>
@@ -432,7 +432,7 @@
                             </div>
                         </div>
 
-                        <form method="POST" action="{{ url_for('save_mail_account') }}">
+                        <form method="POST" action="{{ url_for('admin.save_mail_account') }}">
                             {{ mail_account_form.hidden_tag() }}
                             {{ mail_account_form.mail_account_id }}
                             <div class="row g-3">
@@ -472,12 +472,12 @@
                                                 <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
                                                 <td class="text-end">
                                                     <div class="d-inline-flex flex-wrap justify-content-end gap-2">
-                                                        <a href="{{ url_for('admin_settings', edit_mail_account=mail_account.id) }}#settings-mail" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
-                                                        <form method="POST" action="{{ url_for('test_mail_account_connection', mail_account_id=mail_account.id) }}" class="mb-0">
+                                                        <a href="{{ url_for('admin.admin_settings', edit_mail_account=mail_account.id) }}#settings-mail" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
+                                                        <form method="POST" action="{{ url_for('admin.test_mail_account_connection', mail_account_id=mail_account.id) }}" class="mb-0">
                                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                             <button type="submit" class="btn btn-sm btn-secondary">{{ _('Test') }}</button>
                                                         </form>
-                                                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
+                                                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('admin.delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -497,7 +497,7 @@
                     <div class="card-header"><h4 class="mb-0">{{ _('Send Test Email') }}</h4></div>
                     <div class="card-body">
                         {% if test_email_form.sender.choices %}
-                            <form method="POST" action="{{ url_for('send_test_email') }}">
+                            <form method="POST" action="{{ url_for('admin.send_test_email') }}">
                                 {{ test_email_form.hidden_tag() }}
                                 <div class="mb-3">{{ test_email_form.sender.label(class="form-label") }}{{ test_email_form.sender(class="form-select") }}</div>
                                 <div class="mb-3">{{ test_email_form.recipient.label(class="form-label") }}{{ test_email_form.recipient(class="form-control", placeholder=_('recipient@example.com')) }}</div>

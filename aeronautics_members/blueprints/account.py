@@ -8,6 +8,7 @@ from the app module, which is fully initialized before this is imported.
 from flask import Blueprint, current_app
 
 from ..app import (
+    render_account_dashboard,
     ADMIN_GENERAL_CHANNEL,
     CreateMembershipProfileForm,
     DIRECT_MEMBER_PROFILE_FIELDS,
@@ -93,7 +94,7 @@ def create_membership_profile():
             if existing_member.user_id == current_user.id:
                 return redirect(url_for("account.account"))
             flash(_("A membership profile with this email address already exists. Please contact the club so we can resolve it."), "warning")
-            return redirect(url_for("admin_dashboard" if current_user.has_role("admin") else "index"))
+            return redirect(url_for("admin.admin_dashboard" if current_user.has_role("admin") else "index"))
 
         member = Member(
             created_at=get_now_utc(),

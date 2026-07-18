@@ -4,7 +4,7 @@
 {% block admin_content %}
 <div class="card mb-4">
     <div class="card-body">
-        <form method="GET" action="{{ url_for('admin_accounts') }}" class="row g-3 align-items-end">
+        <form method="GET" action="{{ url_for('admin.admin_accounts') }}" class="row g-3 align-items-end">
             <div class="col-lg-4">
                 <label class="form-label" for="account-q">{{ _('Search') }}</label>
                 <input type="text" class="form-control" id="account-q" name="q" value="{{ search_term }}" placeholder="{{ _('Email, name, or forum username') }}">
@@ -42,7 +42,7 @@
             </div>
             <div class="col-12 d-flex gap-2">
                 <button type="submit" class="btn btn-primary">{{ _('Apply Filters') }}</button>
-                <a href="{{ url_for('admin_accounts') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
+                <a href="{{ url_for('admin.admin_accounts') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
             </div>
         </form>
     </div>
@@ -90,10 +90,10 @@
                                     <div class="dropdown">
                                         <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">{{ _('Actions') }}</button>
                                         <ul class="dropdown-menu dropdown-menu-end">
-                                            <li><a class="dropdown-item" href="{{ url_for('admin_account_detail', user_id=user_record.id) }}">{{ _('View Details') }}</a></li>
+                                            <li><a class="dropdown-item" href="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">{{ _('View Details') }}</a></li>
                                             {% if not user_record.has_role('admin') %}
                                                 <li>
-                                                    <form method="POST" action="{{ url_for('grant_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
+                                                    <form method="POST" action="{{ url_for('admin.grant_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
                                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                         <input type="hidden" name="next" value="{{ request.full_path }}">
                                                         <button type="submit" class="dropdown-item">{{ _('Grant Admin') }}</button>
@@ -101,7 +101,7 @@
                                                 </li>
                                             {% elif current_user.id != user_record.id %}
                                                 <li>
-                                                    <form method="POST" action="{{ url_for('revoke_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke admin access?') }}');">
+                                                    <form method="POST" action="{{ url_for('admin.revoke_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke admin access?') }}');">
                                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                         <input type="hidden" name="next" value="{{ request.full_path }}">
                                                         <button type="submit" class="dropdown-item text-danger">{{ _('Revoke Admin') }}</button>
@@ -123,7 +123,7 @@
                         {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
                             {% if page_num %}
                                 <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('admin_accounts', q=search_term, role=role_filter, membership_status=membership_filter, active=active_filter, page=page_num) }}">{{ page_num }}</a>
+                                    <a class="page-link" href="{{ url_for('admin.admin_accounts', q=search_term, role=role_filter, membership_status=membership_filter, active=active_filter, page=page_num) }}">{{ page_num }}</a>
                                 </li>
                             {% else %}
                                 <li class="page-item disabled"><span class="page-link">&hellip;</span></li>

@@ -453,7 +453,7 @@ class DiscourseConnectProvider(ForumProvider):
         if submission is None or not submission.public_token:
             return None
         cache_bust = submission.file_hash or int(datetime.now(timezone.utc).timestamp())
-        return build_public_url("forum_avatar_public_file", token=submission.public_token, v=cache_bust)
+        return build_public_url("forum.forum_avatar_public_file", token=submission.public_token, v=cache_bust)
 
     def set_avatar(self, forum_account, user, submission):
         avatar_url = self.build_avatar_url(submission)

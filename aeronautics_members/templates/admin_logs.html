@@ -4,7 +4,7 @@
 {% block admin_content %}
 <div class="card mb-4">
     <div class="card-body">
-        <form method="GET" action="{{ url_for('admin_logs') }}" class="row g-3 align-items-end">
+        <form method="GET" action="{{ url_for('admin.admin_logs') }}" class="row g-3 align-items-end">
             <div class="col-lg-5">
                 <label class="form-label" for="log-q">{{ _('Search') }}</label>
                 <input type="text" class="form-control" id="log-q" name="q" value="{{ search_term }}" placeholder="{{ _('Actor, target email, category, or event') }}">
@@ -20,7 +20,7 @@
             </div>
             <div class="col-12 d-flex gap-2">
                 <button type="submit" class="btn btn-primary">{{ _('Apply Filters') }}</button>
-                <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
+                <a href="{{ url_for('admin.admin_logs') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
             </div>
         </form>
     </div>
@@ -72,7 +72,7 @@
                         {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
                             {% if page_num %}
                                 <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('admin_logs', q=search_term, category=category, page=page_num) }}">{{ page_num }}</a>
+                                    <a class="page-link" href="{{ url_for('admin.admin_logs', q=search_term, category=category, page=page_num) }}">{{ page_num }}</a>
                                 </li>
                             {% else %}
                                 <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
