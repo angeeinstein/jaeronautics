@@ -48,6 +48,7 @@ try:
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        ProcessedStripeEvent,
         Role,
         Setting,
         User,
@@ -102,6 +103,7 @@ except ImportError:
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        ProcessedStripeEvent,
         Role,
         Setting,
         User,
@@ -1735,6 +1737,38 @@ def get_member_portal_target(user):
 
 
 
+def stripe_event_already_processed(event_id):
+    """Return True when a Stripe webhook event has already been handled.
+
+    Stripe delivers events at-least-once, so the same event id can arrive more
+    than once (including because we asked Stripe to retry after a transient 5xx).
+    Recording handled ids lets us skip duplicates instead of double-applying them.
+    """
+    if not event_id:
+        return False
+    return (
+        db.session.execute(
+            db.select(ProcessedStripeEvent.id).filter_by(event_id=event_id)
+        ).first()
+        is not None
+    )
+
+
+def record_processed_stripe_event(event_id, event_type=None):
+    """Persist a handled Stripe event id so future duplicates are ignored.
+
+    The unique constraint on ``event_id`` is the real guard against races between
+    concurrent duplicate deliveries; a duplicate insert is tolerated as a no-op.
+    """
+    if not event_id:
+        return
+    db.session.add(ProcessedStripeEvent(event_id=event_id, event_type=event_type))
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+
+
 def build_membership_metadata(member, cycle, activation_mode):
     return {
         "membership_starts_on": cycle["coverage_start"].isoformat(),
@@ -2217,7 +2251,7 @@ def backfill_member_user_links():
         db.session.commit()
 
 
-def create_app():
+def create_app(config_overrides=None):
     app = Flask(__name__)
 
     @app.context_processor
@@ -2237,9 +2271,15 @@ def create_app():
         return dict(switch_lang_url=switch_lang_url)
 
     app.config["SECRET_KEY"] = SECRET_KEY
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    )
+    # A DATABASE_URL override lets tests (and alternative deployments) point at a
+    # different backend such as SQLite without touching the MySQL defaults.
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    else:
+        app.config["SQLALCHEMY_DATABASE_URI"] = (
+            f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["STRIPE_PUBLISHABLE_KEY"] = STRIPE_PUBLISHABLE_KEY
     app.config["STRIPE_SECRET_KEY"] = STRIPE_SECRET_KEY
@@ -2264,6 +2304,9 @@ def create_app():
         if lang in app.config["BABEL_SUPPORTED_LOCALES"]:
             return lang
         return request.accept_languages.best_match(app.config["BABEL_SUPPORTED_LOCALES"])
+
+    if config_overrides:
+        app.config.update(config_overrides)
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -4885,6 +4928,11 @@ def create_app():
             return "Invalid signature", 400
 
         event_type = event["type"]
+        event_id = event.get("id")
+
+        if stripe_event_already_processed(event_id):
+            app.logger.info("Ignoring duplicate Stripe webhook event %s (%s).", event_id, event_type)
+            return "Already processed", 200
 
         if event_type == "checkout.session.completed":
             session = event["data"]["object"]
@@ -5197,6 +5245,7 @@ def create_app():
                 except Exception as e:
                     app.logger.error(f"Error handling dispute for charge {charge_id}: {e}")
 
+        record_processed_stripe_event(event_id, event_type)
         return "Success", 200
 
     @app.errorhandler(CSRFError)

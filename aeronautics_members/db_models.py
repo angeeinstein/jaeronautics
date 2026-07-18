@@ -377,6 +377,15 @@ class EmailDeliveryJob(db.Model):
     target_member = db.relationship("Member", foreign_keys=[target_member_id])
 
 
+class ProcessedStripeEvent(db.Model):
+    __tablename__ = "processed_stripe_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.String(255), unique=True, nullable=False)
+    event_type = db.Column(db.String(120), nullable=True)
+    processed_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
 class Setting(db.Model):
     key = db.Column(db.String(50), primary_key=True)
     value = db.Column(db.String(255), nullable=False)
