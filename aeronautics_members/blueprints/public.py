@@ -6,6 +6,7 @@ from the app module, which is fully initialized before this is imported.
 """
 
 from flask import Blueprint, current_app
+from sqlalchemy import text
 
 from ..app import (
     Member,
@@ -216,11 +217,23 @@ def legal_texts():
 
 @public_bp.route("/__health", methods=["GET"])
 def health_check():
-    return jsonify(
-        {
-            "status": "ok",
-            "app": "jaeronautics",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "host": request.host,
-        }
+    checks = {"app": "ok", "database": "ok"}
+    status_code = 200
+    try:
+        db.session.execute(text("SELECT 1"))
+    except Exception as exc:  # pragma: no cover - exercised only when DB is down
+        checks["database"] = "error"
+        status_code = 503
+        current_app.logger.error("Health check database probe failed: %s", exc)
+    return (
+        jsonify(
+            {
+                "status": "ok" if status_code == 200 else "degraded",
+                "app": "jaeronautics",
+                "checks": checks,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "host": request.host,
+            }
+        ),
+        status_code,
     )
