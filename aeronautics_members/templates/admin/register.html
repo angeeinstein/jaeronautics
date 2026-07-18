@@ -9,7 +9,7 @@
                     <h2 class="mb-0">{{ _('Create Your Account') }}</h2>
                 </div>
                 <div class="card-body p-5">
-                    <form method="POST" action="{{ url_for('register') }}" novalidate>
+                    <form method="POST" action="{{ url_for('auth.register') }}" novalidate>
                         {{ form.hidden_tag() }}
                         <div class="mb-4">
                             {{ form.email.label(class="form-label") }}
@@ -29,7 +29,7 @@
                     </form>
                 </div>
                 <div class="card-footer text-center py-4 bg-light">
-                    <p class="mb-0">{{ _('Already have an account?') }} <a href="{{ url_for('login') }}" class="fw-bold">{{ _('Login here') }}</a></p>
+                    <p class="mb-0">{{ _('Already have an account?') }} <a href="{{ url_for('auth.login') }}" class="fw-bold">{{ _('Login here') }}</a></p>
                 </div>
             </div>
         </div>

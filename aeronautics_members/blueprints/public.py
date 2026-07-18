@@ -84,13 +84,13 @@ def process_membership():
         if existing_member is not None:
             if existing_member.user_id:
                 flash(_("An account with this email address already exists. Please log in to manage or resume your membership."), "warning")
-                return redirect(url_for("login"))
+                return redirect(url_for("auth.login"))
             flash(_("A membership profile with this email address already exists without a linked login. Please contact the club so we can resolve it."), "warning")
             return redirect(url_for("public.index"))
 
         if existing_user is not None:
             flash(_("An account with this email address already exists. Please log in instead."), "warning")
-            return redirect(url_for("login"))
+            return redirect(url_for("auth.login"))
 
         if settings.get("invoice_payments_enabled") != "True":
             payment_method = "checkout"

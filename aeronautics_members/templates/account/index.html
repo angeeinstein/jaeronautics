@@ -17,7 +17,7 @@
                                 <button type="submit" class="btn btn-secondary">{{ _('Resend Verification Email') }}</button>
                             </form>
                         {% endif %}
-                        <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
+                        <a href="{{ url_for('auth.change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
                         {% if forum_context.can_enter_forum %}
                             <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
                         {% endif %}

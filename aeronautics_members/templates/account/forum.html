@@ -9,9 +9,9 @@
                 <div class="d-flex gap-2 flex-wrap">
                     <a href="{{ url_for('account') }}" class="btn btn-sm btn-secondary">{{ _('Back to Account') }}</a>
                     {% if current_user.is_authenticated %}
-                        <form method="POST" action="{{ url_for('logout') }}" class="mb-0">
+                        <form method="POST" action="{{ url_for('auth.logout') }}" class="mb-0">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="next" value="{{ url_for('login', next=url_for('forum_entry')) }}">
+                            <input type="hidden" name="next" value="{{ url_for('auth.login', next=url_for('forum_entry')) }}">
                             <button type="submit" class="btn btn-sm btn-outline-light">{{ _('Log Out Everywhere') }}</button>
                         </form>
                     {% endif %}
