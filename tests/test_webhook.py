@@ -12,6 +12,7 @@ from datetime import date, datetime, timezone
 import pytest
 
 from conftest import Member, ProcessedStripeEvent, app_module, db, make_member
+from aeronautics_members.blueprints import webhook as webhook_module
 
 TODAY = app_module.get_membership_today()
 YEAR_END = date(TODAY.year, 12, 31)
@@ -22,13 +23,14 @@ NEXT_YEAR_START = date(TODAY.year + 1, 1, 1)
 def stub_side_effects(monkeypatch):
     """Neutralize email + forum side effects and record welcome-email sends."""
     sends = []
+    # Patch where the names are looked up: inside the webhook blueprint module.
     monkeypatch.setattr(
-        app_module,
+        webhook_module,
         "send_member_welcome_email",
         lambda app, member, *a, **k: sends.append(member.id),
     )
     monkeypatch.setattr(
-        app_module,
+        webhook_module,
         "sync_member_forum_state",
         lambda member, *a, **k: (None, None),
     )
@@ -38,7 +40,7 @@ def stub_side_effects(monkeypatch):
 def post_event(client, monkeypatch, event):
     """Post a webhook whose signature verification yields ``event``."""
     monkeypatch.setattr(
-        app_module.stripe.Webhook,
+        webhook_module.stripe.Webhook,
         "construct_event",
         staticmethod(lambda payload, sig_header, secret: event),
     )
