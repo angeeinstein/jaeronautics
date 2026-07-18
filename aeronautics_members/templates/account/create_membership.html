@@ -52,7 +52,7 @@
                                 </div>
                             </div>
                             <div class="col-12 d-flex gap-2">
-                                <a href="{{ url_for('admin.admin_dashboard' if current_user.has_role('admin') else 'index') }}" class="btn btn-secondary">{{ _('Back') }}</a>
+                                <a href="{{ url_for('admin.admin_dashboard' if current_user.has_role('admin') else 'public.index') }}" class="btn btn-secondary">{{ _('Back') }}</a>
                                 {{ form.submit(class='btn btn-primary') }}
                             </div>
                         </div>
