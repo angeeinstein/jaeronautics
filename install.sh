@@ -1161,6 +1161,12 @@ write_env_file() {
             public_scheme="https"
         fi
         public_base_url="${public_scheme}://${DOMAIN}"
+
+        if [[ "${public_scheme}" == "http" ]]; then
+            warn "Public deployment configured over plain HTTP (no Let's Encrypt, no Cloudflare Tunnel)."
+            warn "The app requires HTTPS for its session cookie (SESSION_COOKIE_SECURE), so login will NOT work over http://${DOMAIN}."
+            warn "Enable Let's Encrypt or put the site behind a Cloudflare Tunnel (which terminates TLS) before using it."
+        fi
     fi
 
     cat > "${ENV_FILE}" <<EOF
