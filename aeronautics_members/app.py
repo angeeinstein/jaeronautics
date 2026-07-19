@@ -1919,13 +1919,18 @@ def backfill_member_coverage_from_subscription(member, subscription):
     renewal_due_on = parse_iso_date(metadata.get("renewal_due_on"))
     changed = False
 
-    if starts_on and member.membership_starts_on != starts_on:
+    # Subscription metadata is written once at signup and never refreshed on
+    # renewal, so it is stale for any member past their first year. Treat it as a
+    # backfill for MISSING dates only, and never move coverage backwards:
+    # membership_ends_on / renewal_due_on may be filled in or extended, but never
+    # regressed to an older signup-year value (which would expire a paid member).
+    if starts_on and member.membership_starts_on is None:
         member.membership_starts_on = starts_on
         changed = True
-    if ends_on and member.membership_ends_on != ends_on:
+    if ends_on and (member.membership_ends_on is None or ends_on > member.membership_ends_on):
         member.membership_ends_on = ends_on
         changed = True
-    if renewal_due_on and member.renewal_due_on != renewal_due_on:
+    if renewal_due_on and (member.renewal_due_on is None or renewal_due_on > member.renewal_due_on):
         member.renewal_due_on = renewal_due_on
         changed = True
 
