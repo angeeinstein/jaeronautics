@@ -184,8 +184,9 @@ class TestIdempotency:
     def test_claim_released_when_processing_raises(self, client, monkeypatch, stub_side_effects):
         # If the handler raises after claiming the event, the marker must be
         # released so Stripe's retry can reprocess it (no lost event).
-        member = make_member(email="raise@example.com", stripe_customer_id="cus_r",
-                             stripe_subscription_id="sub_r", payment_status="unpaid")
+        # The member must exist so the handler reaches update_member_paid_coverage.
+        make_member(email="raise@example.com", stripe_customer_id="cus_r",
+                    stripe_subscription_id="sub_r", payment_status="unpaid")
 
         def boom(*a, **k):
             raise RuntimeError("processing failed")
