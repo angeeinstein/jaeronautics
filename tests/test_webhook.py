@@ -13,6 +13,7 @@ import pytest
 
 from conftest import Member, ProcessedStripeEvent, app_module, db, make_member
 from aeronautics_members.blueprints import webhook as webhook_module
+from aeronautics_members.db_models import Setting
 
 TODAY = app_module.get_membership_today()
 YEAR_END = date(TODAY.year, 12, 31)
@@ -37,8 +38,16 @@ def stub_side_effects(monkeypatch):
     return sends
 
 
+def _ensure_webhook_secret():
+    """The handler fails closed without a configured signing secret; set one."""
+    if db.session.get(Setting, "stripe_webhook_secret") is None:
+        db.session.add(Setting(key="stripe_webhook_secret", value="whsec_test"))
+        db.session.commit()
+
+
 def post_event(client, monkeypatch, event):
     """Post a webhook whose signature verification yields ``event``."""
+    _ensure_webhook_secret()
     monkeypatch.setattr(
         webhook_module.stripe.Webhook,
         "construct_event",
@@ -49,6 +58,17 @@ def post_event(client, monkeypatch, event):
         data=b"{}",
         headers={"stripe-signature": "t=1,v1=test"},
     )
+
+
+def test_webhook_rejected_when_secret_not_configured(client, monkeypatch):
+    """Audit H3: with no signing secret configured, reject (fail closed)."""
+    # Do NOT configure a secret. construct_event should never be reached.
+    def _boom(*a, **k):
+        raise AssertionError("construct_event must not be called without a secret")
+
+    monkeypatch.setattr(webhook_module.stripe.Webhook, "construct_event", staticmethod(_boom))
+    resp = client.post("/stripe-webhook", data=b"{}", headers={"stripe-signature": "t=1,v1=x"})
+    assert resp.status_code == 500
 
 
 def checkout_event(member, user, activation_mode="free_period", payment_status="no_payment_required", event_id="evt_checkout_1"):

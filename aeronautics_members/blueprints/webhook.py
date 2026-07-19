@@ -50,10 +50,16 @@ def stripe_webhook():
     payload = request.data
     sig_header = request.headers.get("stripe-signature")
 
+    stripe_settings = get_stripe_settings_map()
+    webhook_secret = stripe_settings.get("stripe_webhook_secret") or STRIPE_WEBHOOK_SECRET
+    if not webhook_secret:
+        # Fail closed: without a configured signing secret, construct_event would
+        # verify against an empty key, which an unauthenticated caller can forge.
+        current_app.logger.error("Stripe webhook secret is not configured; rejecting webhook.")
+        return "Webhook signing secret not configured", 500
+
     try:
-        stripe_settings = get_stripe_settings_map()
         stripe.api_key = stripe_settings.get("stripe_secret_key") or STRIPE_SECRET_KEY
-        webhook_secret = stripe_settings.get("stripe_webhook_secret") or STRIPE_WEBHOOK_SECRET
         event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except ValueError as e:
         current_app.logger.error(f"Webhook Error: Invalid payload: {e}")
