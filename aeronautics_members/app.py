@@ -1749,12 +1749,7 @@ def get_member_portal_target(user):
 
 
 def stripe_event_already_processed(event_id):
-    """Return True when a Stripe webhook event has already been handled.
-
-    Stripe delivers events at-least-once, so the same event id can arrive more
-    than once (including because we asked Stripe to retry after a transient 5xx).
-    Recording handled ids lets us skip duplicates instead of double-applying them.
-    """
+    """Return True when a Stripe webhook event id already has a marker row."""
     if not event_id:
         return False
     return (
@@ -1765,19 +1760,40 @@ def stripe_event_already_processed(event_id):
     )
 
 
-def record_processed_stripe_event(event_id, event_type=None):
-    """Persist a handled Stripe event id so future duplicates are ignored.
+def claim_stripe_event(event_id, event_type=None):
+    """Atomically claim a Stripe event before processing it.
 
-    The unique constraint on ``event_id`` is the real guard against races between
-    concurrent duplicate deliveries; a duplicate insert is tolerated as a no-op.
+    Inserts the idempotency marker up front and commits it, so two concurrent
+    deliveries of the same event cannot both proceed: the unique constraint on
+    ``event_id`` lets exactly one committer win. Returns False if the event was
+    already claimed (duplicate), in which case the caller must skip processing.
+    Events without an id cannot be deduplicated, so they are allowed through.
     """
     if not event_id:
-        return
+        return True
     db.session.add(ProcessedStripeEvent(event_id=event_id, event_type=event_type))
     try:
         db.session.commit()
+        return True
     except IntegrityError:
         db.session.rollback()
+        return False
+
+
+def release_stripe_event(event_id):
+    """Release a previously claimed event so Stripe's retry can reprocess it.
+
+    Called when processing failed after the event was claimed, so the marker
+    must not permanently suppress the (now unhandled) event.
+    """
+    if not event_id:
+        return
+    marker = db.session.execute(
+        db.select(ProcessedStripeEvent).filter_by(event_id=event_id)
+    ).scalar_one_or_none()
+    if marker is not None:
+        db.session.delete(marker)
+        db.session.commit()
 
 
 def build_membership_metadata(member, cycle, activation_mode):

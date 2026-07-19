@@ -181,6 +181,28 @@ class TestIdempotency:
 
         assert app_module.stripe_event_already_processed("evt_checkout_1") is True
 
+    def test_claim_released_when_processing_raises(self, client, monkeypatch, stub_side_effects):
+        # If the handler raises after claiming the event, the marker must be
+        # released so Stripe's retry can reprocess it (no lost event).
+        member = make_member(email="raise@example.com", stripe_customer_id="cus_r",
+                             stripe_subscription_id="sub_r", payment_status="unpaid")
+
+        def boom(*a, **k):
+            raise RuntimeError("processing failed")
+
+        monkeypatch.setattr(webhook_module, "update_member_paid_coverage", boom)
+        client.application.config["PROPAGATE_EXCEPTIONS"] = False
+
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        event = {
+            "id": "evt_boom", "type": "invoice.paid",
+            "data": {"object": {"id": "in_b", "customer": "cus_r", "subscription": "sub_r",
+                                "status_transitions": {"paid_at": now_ts}, "created": now_ts}},
+        }
+        resp = post_event(client, monkeypatch, event)
+        assert resp.status_code == 500
+        assert app_module.stripe_event_already_processed("evt_boom") is False
+
     def test_failed_event_is_not_recorded(self, client, monkeypatch, stub_side_effects):
         # A checkout event missing member_data returns 400 and must NOT be
         # marked processed, so Stripe's retry can still be handled later.

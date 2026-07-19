@@ -21,6 +21,7 @@ from ..app import (
     apply_runtime_stripe_config,
     backfill_member_coverage_from_subscription,
     backfill_member_stripe_references,
+    claim_stripe_event,
     first_day_of_year,
     generate_unique_forum_username,
     get_member_by_stripe_or_email,
@@ -31,10 +32,9 @@ from ..app import (
     member_has_active_access,
     parse_iso_date,
     queue_curated_admin_notification,
-    record_processed_stripe_event,
+    release_stripe_event,
     send_member_welcome_email,
     set_member_membership_window,
-    stripe_event_already_processed,
     sync_member_active_state,
     sync_member_forum_state,
     sync_member_subscription_state_from_subscription,
@@ -71,9 +71,29 @@ def stripe_webhook():
     event_type = event["type"]
     event_id = event.get("id")
 
-    if stripe_event_already_processed(event_id):
+    # Claim the event up front so two concurrent duplicate deliveries cannot
+    # both proceed; the loser gets a duplicate-key rejection and is skipped.
+    if not claim_stripe_event(event_id, event_type):
         current_app.logger.info("Ignoring duplicate Stripe webhook event %s (%s).", event_id, event_type)
         return "Already processed", 200
+
+    try:
+        body, status = process_stripe_event(event)
+    except Exception:
+        # Processing failed after the claim; release it so Stripe can retry.
+        release_stripe_event(event_id)
+        raise
+    if status >= 400:
+        release_stripe_event(event_id)
+    return body, status
+
+
+def process_stripe_event(event):
+    """Apply a verified Stripe event and return (body, status).
+
+    Idempotency (claim/release of the event id) is handled by the caller.
+    """
+    event_type = event["type"]
 
     if event_type == "checkout.session.completed":
         session = event["data"]["object"]
@@ -386,5 +406,4 @@ def stripe_webhook():
             except Exception as e:
                 current_app.logger.error(f"Error handling dispute for charge {charge_id}: {e}")
 
-    record_processed_stripe_event(event_id, event_type)
     return "Success", 200
