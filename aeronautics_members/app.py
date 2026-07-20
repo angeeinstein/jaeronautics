@@ -1983,7 +1983,15 @@ def sync_member_subscription_state_from_subscription(member, subscription):
         desired_status = "cancel_scheduled" if coverage_is_current else member.payment_status
         desired_active = coverage_is_current
     elif subscription_status in {"active", "trialing"} and coverage_is_current:
-        desired_status = "free_period" if activation_mode == "free_period" else "paid"
+        # activation_mode is frozen at signup, so it only describes the first
+        # (trial) period: an Oct+ joiner trials for free until Jan 1, a prorated
+        # joiner has already paid. Once the subscription is "active" the annual
+        # fee has actually been charged, so the member is paid regardless of the
+        # stale signup metadata (otherwise a paid renewal reverts to free_period).
+        if subscription_status == "trialing" and activation_mode == "free_period":
+            desired_status = "free_period"
+        else:
+            desired_status = "paid"
         desired_active = True
     else:
         desired_status = None

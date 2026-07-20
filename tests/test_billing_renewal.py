@@ -79,6 +79,54 @@ def test_backfill_still_fills_missing_dates(app):
     assert member.membership_ends_on == date(CUR, 12, 31)
 
 
+def _subscription(status, activation_mode, sub_id="sub_1", cus="cus_1"):
+    return {
+        "id": sub_id, "customer": cus, "status": status,
+        "cancel_at_period_end": False, "cancel_at": None,
+        "metadata": {
+            "activation_mode": activation_mode,
+            "membership_ends_on": f"{CUR}-12-31",
+            "renewal_due_on": f"{CUR + 1}-01-01",
+        },
+    }
+
+
+def _active_member(email, sub_id, cus, payment_status="paid"):
+    return make_member(
+        email=email, payment_status=payment_status, is_active=True,
+        stripe_customer_id=cus, stripe_subscription_id=sub_id,
+        membership_ends_on=date(CUR, 12, 31), renewal_due_on=date(CUR + 1, 1, 1),
+    )
+
+
+def test_active_subscription_is_paid_despite_free_period_metadata(app):
+    # M1: after the Jan 1 charge the subscription is "active"; frozen
+    # activation_mode="free_period" must not revert a paid member.
+    member = _active_member("octpaid@example.com", "sub_1", "cus_1")
+    app_module.sync_member_subscription_state_from_subscription(
+        member, _subscription("active", "free_period"))
+    db.session.commit()
+    assert db.session.get(Member, member.id).payment_status == "paid"
+
+
+def test_trialing_free_period_stays_free_period(app):
+    # An Oct+ joiner is still trialing (free) until Jan 1.
+    member = _active_member("octfree@example.com", "sub_2", "cus_2", payment_status="free_period")
+    app_module.sync_member_subscription_state_from_subscription(
+        member, _subscription("trialing", "free_period", "sub_2", "cus_2"))
+    db.session.commit()
+    assert db.session.get(Member, member.id).payment_status == "free_period"
+
+
+def test_trialing_prorated_joiner_is_paid(app):
+    # A pre-Oct joiner paid a prorated amount; they are paid while trialing.
+    member = _active_member("junepaid@example.com", "sub_3", "cus_3")
+    app_module.sync_member_subscription_state_from_subscription(
+        member, _subscription("trialing", "paid_now", "sub_3", "cus_3"))
+    db.session.commit()
+    assert db.session.get(Member, member.id).payment_status == "paid"
+
+
 def test_backfill_never_regresses_end_date(app):
     member = make_member(
         email="noregress@example.com",
