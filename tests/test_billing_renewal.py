@@ -127,6 +127,28 @@ def test_trialing_prorated_joiner_is_paid(app):
     assert db.session.get(Member, member.id).payment_status == "paid"
 
 
+def test_invoice_coverage_year_from_line_period(app):
+    invoice = {"lines": {"data": [{"period": {"start": app_module.start_of_day_unix(date(CUR + 1, 1, 1))}}]}}
+    assert app_module.invoice_coverage_year(invoice) == CUR + 1
+
+
+def test_update_coverage_uses_explicit_year(app):
+    member = _active_member("explicit@example.com", "sub_e", "cus_e", payment_status="free_period")
+    # Payment timestamp on Dec 31 (would pin to the current year), but the billing
+    # period says next year -> coverage must advance (M2/M3).
+    app_module.update_member_paid_coverage(member, date(CUR, 12, 31), coverage_year=CUR + 1)
+    assert member.membership_ends_on == date(CUR + 1, 12, 31)
+    assert member.renewal_due_on == date(CUR + 2, 1, 1)
+    assert member.membership_starts_on == date(CUR + 1, 1, 1)
+    assert member.payment_status == "paid"
+
+
+def test_update_coverage_never_regresses(app):
+    member = make_member(email="noregress2@example.com", membership_ends_on=date(CUR + 1, 12, 31))
+    app_module.update_member_paid_coverage(member, date(CUR, 6, 1), coverage_year=CUR)
+    assert member.membership_ends_on == date(CUR + 1, 12, 31)
+
+
 def test_backfill_never_regresses_end_date(app):
     member = make_member(
         email="noregress@example.com",

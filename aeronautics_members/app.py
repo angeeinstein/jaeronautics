@@ -700,14 +700,43 @@ def backfill_member_stripe_references(member, customer_id=None, subscription_id=
 
 
 
-def update_member_paid_coverage(member, paid_on):
-    coverage_year = paid_on.year
-    if member.membership_ends_on and member.membership_ends_on >= paid_on:
-        coverage_year = member.membership_ends_on.year
+def invoice_coverage_year(invoice):
+    """Vienna-time year of a Stripe invoice's billing period start, or None.
 
-    starts_on = member.membership_starts_on
-    if starts_on is None or starts_on.year != coverage_year:
-        starts_on = first_day_of_year(coverage_year) if paid_on == first_day_of_year(coverage_year) else paid_on
+    Renewal coverage should follow the invoice's billing period rather than the
+    payment timestamp, which can map to the wrong calendar day near midnight or
+    the year boundary and fail to advance coverage.
+    """
+    if not invoice:
+        return None
+    period_starts = [
+        (line.get("period") or {}).get("start")
+        for line in ((invoice.get("lines") or {}).get("data") or [])
+        if (line.get("period") or {}).get("start")
+    ]
+    period_start = max(period_starts) if period_starts else invoice.get("period_start")
+    if not period_start:
+        return None
+    return to_membership_date(period_start).year
+
+
+def update_member_paid_coverage(member, paid_on, coverage_year=None):
+    if coverage_year is None:
+        coverage_year = paid_on.year
+        if member.membership_ends_on and member.membership_ends_on >= paid_on:
+            coverage_year = member.membership_ends_on.year
+        starts_on = member.membership_starts_on
+        if starts_on is None or starts_on.year != coverage_year:
+            starts_on = first_day_of_year(coverage_year) if paid_on == first_day_of_year(coverage_year) else paid_on
+    else:
+        # A full paid year always runs Jan 1 - Dec 31.
+        starts_on = first_day_of_year(coverage_year)
+
+    # Never regress coverage: an explicit (or derived) year must not move the
+    # membership end date earlier than what the member already has.
+    if member.membership_ends_on and coverage_year < member.membership_ends_on.year:
+        coverage_year = member.membership_ends_on.year
+        starts_on = member.membership_starts_on or first_day_of_year(coverage_year)
 
     set_member_membership_window(
         member,

@@ -28,6 +28,7 @@ from ..app import (
     get_membership_today,
     get_now_utc,
     get_stripe_settings_map,
+    invoice_coverage_year,
     last_day_of_year,
     member_has_active_access,
     parse_iso_date,
@@ -239,13 +240,17 @@ def process_stripe_event(event):
             backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
 
             paid_timestamp = None
+            coverage_year = None
             if event_type.startswith("invoice"):
                 paid_timestamp = (data_object.get("status_transitions") or {}).get("paid_at") or data_object.get("created")
+                # Advance coverage by the invoice's billing period, not the payment
+                # instant, so a renewal charge always lands in the right year.
+                coverage_year = invoice_coverage_year(data_object)
             else:
                 paid_timestamp = data_object.get("created")
             paid_on = to_membership_date(paid_timestamp)
 
-            update_member_paid_coverage(member, paid_on)
+            update_member_paid_coverage(member, paid_on, coverage_year=coverage_year)
             member.pending_checkout_started_at = None
             forum_result, _forum_service = sync_member_forum_state(member)
             db.session.commit()

@@ -251,6 +251,34 @@ class TestInvoicePaid:
         assert stub_side_effects == [member.id]
 
 
+class TestRenewalCoverage:
+    def test_renewal_advances_by_billing_period_not_timestamp(self, client, monkeypatch, stub_side_effects):
+        # M2/M3: a renewal invoice paid at a timestamp that maps to Dec 31 must
+        # still advance coverage to next year, driven by the billing period.
+        make_member(email="renew@example.com", stripe_customer_id="cus_ren",
+                    stripe_subscription_id="sub_ren", payment_status="free_period",
+                    is_active=True, membership_ends_on=YEAR_END)
+        dec31_ts = app_module.start_of_day_unix(date(TODAY.year, 12, 31))
+        next_year_start_ts = app_module.start_of_day_unix(date(TODAY.year + 1, 1, 1))
+        event = {
+            "id": "evt_renew", "type": "invoice.paid",
+            "data": {"object": {
+                "id": "in_ren", "customer": "cus_ren", "subscription": "sub_ren",
+                "status_transitions": {"paid_at": dec31_ts}, "created": dec31_ts,
+                "lines": {"data": [{"period": {"start": next_year_start_ts}}]},
+            }},
+        }
+        resp = post_event(client, monkeypatch, event)
+        assert resp.status_code == 200
+        refreshed = db.session.get(Member, member_id_for("renew@example.com"))
+        assert refreshed.membership_ends_on == date(TODAY.year + 1, 12, 31)
+        assert refreshed.payment_status == "paid"
+
+
+def member_id_for(email):
+    return db.session.execute(db.select(Member.id).filter_by(email_private=email)).scalar_one()
+
+
 class TestSubscriptionDeleted:
     def test_voluntary_cancellation_keeps_coverage_until_year_end(self, client, monkeypatch, stub_side_effects):
         member = make_member(
