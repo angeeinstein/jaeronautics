@@ -864,7 +864,16 @@ def normalize_int(value, default):
 
 
 def member_has_active_membership(member):
-    return bool(member and member.is_active)
+    if member is None:
+        return False
+    # Use the same date-based access rule as the rest of the app so the forum and
+    # the site never disagree: coverage must not have lapsed, regardless of the
+    # possibly-stale is_active flag.
+    try:
+        from .app import member_has_active_access
+    except ImportError:
+        from app import member_has_active_access
+    return member_has_active_access(member)
 
 
 
