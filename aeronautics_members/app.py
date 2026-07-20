@@ -2003,6 +2003,23 @@ def sync_member_subscription_state_from_subscription(member, subscription):
 
     subscription_status = subscription.get("status")
     activation_mode = ((subscription.get("metadata", {}) or {}).get("activation_mode") or "").strip()
+
+    # Safety net for a missed renewal webhook: an active (charged) subscription's
+    # current period is the authoritative paid coverage year, so advance coverage
+    # from it (extend-only) before deciding active state. Without this, a missed
+    # invoice.paid would leave stale (prior-year) coverage and expire a paid member
+    # on the next reconcile.
+    if subscription_status == "active":
+        period_start = subscription.get("current_period_start")
+        active_year = to_membership_date(period_start).year if period_start else None
+        if active_year is not None:
+            active_end = last_day_of_year(active_year)
+            if member.membership_ends_on is None or active_end > member.membership_ends_on:
+                member.membership_starts_on = first_day_of_year(active_year)
+                member.membership_ends_on = active_end
+                member.renewal_due_on = first_day_of_year(active_year + 1)
+                changed = True
+
     coverage_is_current = bool(member.membership_ends_on and member.membership_ends_on >= get_membership_today())
 
     if subscription_status == "canceled":

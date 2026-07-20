@@ -127,6 +127,30 @@ def test_trialing_prorated_joiner_is_paid(app):
     assert db.session.get(Member, member.id).payment_status == "paid"
 
 
+def test_missed_renewal_webhook_recovered_by_subscription_period(app):
+    # M4 safety net: local coverage is stale (last year) because the renewal
+    # webhook was missed, but the active subscription's current period is this
+    # year. A reconcile must advance coverage instead of expiring a paid member.
+    member = make_member(
+        email="missed@example.com", payment_status="paid", is_active=True,
+        stripe_customer_id="cus_m", stripe_subscription_id="sub_m",
+        membership_starts_on=date(PREV, 1, 1), membership_ends_on=date(PREV, 12, 31),
+        renewal_due_on=date(CUR, 1, 1),
+    )
+    sub = {
+        "id": "sub_m", "customer": "cus_m", "status": "active",
+        "cancel_at_period_end": False, "cancel_at": None,
+        "current_period_start": app_module.start_of_day_unix(date(CUR, 1, 1)),
+        "metadata": {"activation_mode": "free_period", "membership_ends_on": f"{PREV}-12-31"},
+    }
+    app_module.sync_member_subscription_state_from_subscription(member, sub)
+    db.session.commit()
+    refreshed = db.session.get(Member, member.id)
+    assert refreshed.membership_ends_on == date(CUR, 12, 31)
+    assert refreshed.is_active is True
+    assert refreshed.payment_status == "paid"
+
+
 def test_invoice_coverage_year_from_line_period(app):
     invoice = {"lines": {"data": [{"period": {"start": app_module.start_of_day_unix(date(CUR + 1, 1, 1))}}]}}
     assert app_module.invoice_coverage_year(invoice) == CUR + 1
