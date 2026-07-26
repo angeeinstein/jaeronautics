@@ -1794,7 +1794,12 @@ obtain_ssl_certificate() {
 reload_services() {
     step "Reloading system services"
     systemctl daemon-reload
-    systemctl enable --now "${SERVICE_NAME}"
+    # enable --now starts a stopped unit but does NOT restart an already-running
+    # one, so on an update gunicorn would keep executing the previous code while
+    # serving the newly deployed templates. Enable, then restart, to guarantee
+    # the app runs the freshly deployed code.
+    systemctl enable "${SERVICE_NAME}"
+    systemctl restart "${SERVICE_NAME}"
     systemctl enable --now "${SERVICE_NAME}-billing-reconcile.timer"
     systemctl enable --now "${SERVICE_NAME}-notifications.timer"
     systemctl enable --now "${SERVICE_NAME}-cleanup-logs.timer"
