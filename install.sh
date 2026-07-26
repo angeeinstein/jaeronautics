@@ -875,7 +875,12 @@ sync_repo_to_dir() {
         warn_local_repo_changes "${target_dir}"
         info "Updating repository in ${target_dir}"
         git_in_dir "${target_dir}" remote set-url origin "${repo_url}" || true
-        retry 3 git_in_dir "${target_dir}" fetch --prune origin
+        # Ensure the requested branch is fetched even if the original clone was a
+        # single-branch (shallow) clone whose refspec only tracks its own branch.
+        # Without this, switching to a different branch fails because
+        # origin/<branch> is never fetched.
+        git_in_dir "${target_dir}" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*" || true
+        retry 3 git_in_dir "${target_dir}" fetch --prune origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
         git_in_dir "${target_dir}" checkout -B "${branch}" "origin/${branch}"
         git_in_dir "${target_dir}" reset --hard "origin/${branch}"
         return
