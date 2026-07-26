@@ -1942,13 +1942,36 @@ def get_latest_stripe_subscription_for_member(member):
 
     if member.stripe_subscription_id:
         apply_runtime_stripe_config()
-        return stripe.Subscription.retrieve(member.stripe_subscription_id)
+        try:
+            return stripe.Subscription.retrieve(member.stripe_subscription_id)
+        except stripe.StripeError as exc:
+            if getattr(exc, "code", None) != "resource_missing":
+                raise
+            # The subscription no longer exists in Stripe (e.g. deleted). Clear the
+            # dead reference and fall through to a customer lookup instead of failing.
+            current_app.logger.warning(
+                "Stripe subscription %s for member_id=%s no longer exists; clearing the stale reference.",
+                member.stripe_subscription_id,
+                member.id,
+            )
+            member.stripe_subscription_id = None
 
     if not member.stripe_customer_id:
         return None
 
     apply_runtime_stripe_config()
-    subscription_list = stripe.Subscription.list(customer=member.stripe_customer_id, status="all", limit=1)
+    try:
+        subscription_list = stripe.Subscription.list(customer=member.stripe_customer_id, status="all", limit=1)
+    except stripe.StripeError as exc:
+        if getattr(exc, "code", None) != "resource_missing":
+            raise
+        current_app.logger.warning(
+            "Stripe customer %s for member_id=%s no longer exists; clearing the stale reference.",
+            member.stripe_customer_id,
+            member.id,
+        )
+        member.stripe_customer_id = None
+        return None
     subscriptions = subscription_list.get("data", []) if hasattr(subscription_list, "get") else []
     return subscriptions[0] if subscriptions else None
 
@@ -2081,6 +2104,9 @@ def refresh_member_billing_state(member, force_stripe_sync=False, sync_forum=Fal
     if has_stripe_reference and force_stripe_sync:
         stripe_subscription = get_latest_stripe_subscription_for_member(member)
         if stripe_subscription and sync_member_subscription_state_from_subscription(member, stripe_subscription):
+            changed = True
+        # The lookup may have cleared a dead subscription/customer reference.
+        if bool(member.stripe_customer_id or member.stripe_subscription_id) != has_stripe_reference:
             changed = True
 
     if sync_member_active_state(member, on_date=on_date):
