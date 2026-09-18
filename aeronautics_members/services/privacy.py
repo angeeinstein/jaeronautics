@@ -57,6 +57,10 @@ from .periods import describe_coverage
 # admin looking at the row should be able to tell erasure from bad data.
 ERASED_TEXT = "(erased)"
 
+# NotificationEvent.summary is NOT NULL and is prose meant for an administrator,
+# so it gets a replacement sentence rather than a blank.
+ERASED_SUMMARY = "Details removed when the account was erased."
+
 # .invalid is reserved by RFC 2606 precisely so it can never resolve, which
 # matters because these addresses sit in columns a mail job might otherwise read.
 ERASED_EMAIL_DOMAIN = "erased.invalid"
@@ -388,6 +392,9 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
         summary["avatar_files_deleted"] = _erase_member_rows(member)
         _erase_member_profile(member, now)
 
+    # Runs whether or not there is a membership profile: an account with none
+    # still has password resets and verification emails addressed to it.
+    _scrub_messaging_history(user, member)
     summary["audit_entries_redacted"] = _redact_audit_snapshots(user, member)
     _erase_user_record(user, now)
 
@@ -466,24 +473,48 @@ def _erase_member_rows(member):
     for request_row in list(member.profile_change_requests):
         db.session.delete(request_row)
 
-    # Queued work and notifications carry the address and name in their payload.
-    # The rows stay so operational history is intact; the contents do not.
+    return files_deleted
+
+
+def _scrub_messaging_history(user, member):
+    """Blank the personal contents of notification, email and queued-work rows.
+
+    The rows stay so the operational history stays readable -- something was
+    sent, on this date, and it failed -- but nothing in them still names a
+    person.
+
+    Matched on the user *or* the member, not the member alone. Plenty of these
+    rows carry only a user (password resets, verification failures), and an
+    account with no membership profile at all -- an administrator, say -- has
+    nothing but those. Filtering on the member would miss every one of them.
+    """
+    conditions_for = lambda model: [model.target_user_id == user.id] + (  # noqa: E731
+        [model.target_member_id == member.id] if member is not None else []
+    )
+
     for model in (NotificationEvent, EmailDeliveryJob):
         for row in db.session.execute(
-            db.select(model).where(model.target_member_id == member.id)
+            db.select(model).where(db.or_(*conditions_for(model)))
         ).scalars():
             row.payload = None
             row.recipient_email = None
+            # An admin notification's one-line summary is written for a human
+            # and routinely embeds the member's address ("a sync failed for
+            # ..."), so clearing the payload alone leaves the address behind.
+            if hasattr(row, "summary"):
+                row.summary = ERASED_SUMMARY
 
+    work_conditions = [ExternalWorkItem.user_id == user.id]
+    if member is not None:
+        work_conditions.append(ExternalWorkItem.member_id == member.id)
     for item in db.session.execute(
-        db.select(ExternalWorkItem).where(ExternalWorkItem.member_id == member.id)
+        db.select(ExternalWorkItem).where(db.or_(*work_conditions))
     ).scalars():
-        # Except the erasure's own forum follow-up, which still needs its target.
+        # Except work still to be done -- including the erasure's own forum
+        # follow-up, which needs its payload to run at all.
         if item.status in {ExternalWorkItem.STATUS_PENDING, ExternalWorkItem.STATUS_PROCESSING}:
             continue
         item.payload = None
-
-    return files_deleted
 
 
 def _redact_audit_snapshots(user, member):

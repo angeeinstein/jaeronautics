@@ -14,6 +14,7 @@ from conftest import app_module, db, make_member, privacy
 from aeronautics_members.db_models import (
     AuditLog,
     EmailDeliveryJob,
+    NotificationEvent,
     ExternalWorkItem,
     ForumAccount,
     ForumAvatarSubmission,
@@ -287,6 +288,60 @@ class TestErasureRemovesThePerson:
         job = db.session.execute(db.select(EmailDeliveryJob)).scalar_one()
         assert job.payload is None
         assert job.recipient_email is None
+
+    def test_a_notification_summary_stops_naming_the_member(self, app):
+        """The summary is prose, and several call sites put the address in it.
+
+        Clearing the structured payload alone would leave "a sync failed for
+        ada@example.com" sitting in the admin notification list.
+        """
+        member = make_member(email="named@example.com")
+        db.session.add(
+            NotificationEvent(
+                channel="admin_errors",
+                audience="admin",
+                event_type="forum_sync_failed",
+                summary="A forum synchronization attempt failed for named@example.com.",
+                payload={"member_email": "named@example.com"},
+                target_user_id=member.user_id,
+                target_member_id=member.id,
+            )
+        )
+        db.session.commit()
+
+        privacy.erase_account(member.user, initiated_by=privacy.INITIATED_BY_MEMBER)
+        db.session.commit()
+
+        event = db.session.execute(db.select(NotificationEvent)).scalar_one()
+        assert "named@example.com" not in event.summary
+        assert event.payload is None
+        # The row itself stays, so the admin history still shows something failed.
+        assert event.event_type == "forum_sync_failed"
+
+    def test_rows_linked_only_to_the_user_are_scrubbed_too(self, app):
+        """Password resets and verification emails carry no member id.
+
+        Matching on the member alone would walk straight past them, and for an
+        account with no membership profile it would find nothing at all.
+        """
+        admin = _make_admin(email="onlyuser@example.com")
+        _make_admin(email="anotheradmin@example.com")
+        db.session.add(
+            EmailDeliveryJob(
+                email_type="password_reset",
+                recipient_email="onlyuser@example.com",
+                target_user_id=admin.id,
+                payload={"email": "onlyuser@example.com"},
+            )
+        )
+        db.session.commit()
+
+        privacy.erase_account(admin, initiated_by=privacy.INITIATED_BY_ADMIN)
+        db.session.commit()
+
+        job = db.session.execute(db.select(EmailDeliveryJob)).scalar_one()
+        assert job.recipient_email is None
+        assert job.payload is None
 
     def test_the_audit_trail_stops_holding_the_old_profile(self, app):
         """Otherwise the data survives in the log and nothing was erased.
