@@ -1,0 +1,127 @@
+"""The Discourse boundary.
+
+Forum accounts live in Discourse, not here. This module owns the handoff: it
+decides what state a member's forum account *should* be in and asks Discourse to
+match it, so membership remains authoritative for access while Discourse remains
+authoritative for forum content.
+
+A sync failure is reported to administrators rather than raised at the member,
+because losing forum access briefly is better than failing the membership
+operation that triggered the sync. The durable-outbox work is what will make
+those retries automatic rather than manual.
+"""
+
+from flask import current_app
+from flask_babel import _
+
+from ..db_models import User, db
+from ..forum_service import FORUM_SETTING_KEYS, ForumProviderError, ForumService
+from ..security_utils import build_public_url
+from .clock import get_now_utc
+from ..notification_service import ADMIN_ERROR_CHANNEL
+from .identity import build_email_verification_claims, generate_token
+from .notifications import queue_curated_admin_notification
+from .settings import get_settings_map
+
+
+
+
+def get_forum_settings_map():
+    return get_settings_map(FORUM_SETTING_KEYS)
+
+
+def get_forum_service():
+    return ForumService(get_forum_settings_map())
+
+
+def build_forum_username_base(first_name, last_name, year_group):
+    last_name_cleaned = "".join(filter(str.isalnum, last_name or "")).capitalize()
+    first_name_initial = first_name[0].upper() if first_name else ""
+    study_field_initial = year_group[0].upper() if year_group else ""
+    year_short = year_group[-2:] if year_group and len(year_group) > 2 else ""
+    return f"{last_name_cleaned}{first_name_initial}_{study_field_initial}{year_short}"
+
+
+def generate_suggested_username(member):
+    """Generates the base forum username using the legacy welcome-email scheme."""
+    return build_forum_username_base(member.first_name, member.last_name, member.year_group)
+
+
+def generate_unique_forum_username(first_name, last_name, year_group, exclude_user_id=None, preferred=None):
+    base = preferred or build_forum_username_base(first_name, last_name, year_group)
+    if not base:
+        base = "Member"
+
+    candidate = base
+    suffix = 2
+    while True:
+        query = db.select(User).filter_by(forum_username=candidate)
+        if exclude_user_id is not None:
+            query = query.filter(User.id != exclude_user_id)
+        existing_user = db.session.execute(query).scalar_one_or_none()
+        if existing_user is None:
+            return candidate
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+
+
+def sync_member_forum_state(member, raise_on_error=False):
+    service = get_forum_service()
+    if member is None or member.user is None:
+        return None, service
+
+    result = service.sync_member(member)
+    if result and result.changed:
+        db.session.flush()
+
+    if result and result.error:
+        current_app.logger.warning(
+            "Forum sync reported an issue for member_id=%s user_id=%s desired_state=%s: %s",
+            member.id,
+            member.user_id,
+            result.desired_state,
+            result.error,
+        )
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "forum_sync_failed",
+            _("A forum synchronization attempt failed for %(email)s.", email=member.email_private),
+            payload={
+                "member_email": member.email_private,
+                "forum_username": member.user.forum_username,
+                "desired_state": result.desired_state,
+                "error": result.error,
+            },
+            target_user=member.user,
+            target_member=member,
+            object_type="forum_account",
+            object_id=result.forum_account.id if result and result.forum_account is not None else None,
+        )
+        if raise_on_error:
+            raise ForumProviderError(result.error)
+
+    return result, service
+
+
+def log_out_forum_session_if_possible(user):
+    if user is None or getattr(user, "forum_account", None) is None:
+        return False, None
+
+    service = get_forum_service()
+    did_log_out, error = service.log_out_user(user)
+    if error:
+        current_app.logger.warning("Forum logout sync failed for user_id=%s: %s", user.id, error)
+    return did_log_out, error
+
+
+def build_forum_entry_url(user, include_token=False):
+    route_values = {}
+    if include_token and user is not None:
+        route_values["token"] = generate_token(
+            "forum-entry",
+            issued_at=int(get_now_utc().timestamp()),
+            **build_email_verification_claims(user),
+        )
+    return build_public_url("forum.forum_entry", **route_values)
+
+

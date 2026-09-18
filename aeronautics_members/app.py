@@ -157,6 +157,77 @@ except ImportError:
 
 # Configuration lives in config.py, a leaf module the service layer can import
 # without depending on this one. Re-exported here so existing imports keep working.
+from .services.identity import (  # noqa: E402
+    TOKEN_MAX_AGE_FORUM_ENTRY,
+    TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN,
+    TOKEN_MAX_AGE_PASSWORD_RESET,
+    TOKEN_MAX_AGE_VERIFY_EMAIL,
+    build_email_verification_claims,
+    build_password_reset_token,
+    email_verification_claims_match,
+    generate_token,
+    get_token_serializer,
+    mark_email_verified_from_token,
+    read_token,
+    rotate_email_verification_nonce,
+    rotate_password_reset_nonce,
+    send_email_verification_email,
+    send_password_reset_email,
+)
+from .services.forum import (  # noqa: E402
+    build_forum_entry_url,
+    build_forum_username_base,
+    generate_suggested_username,
+    generate_unique_forum_username,
+    get_forum_service,
+    get_forum_settings_map,
+    log_out_forum_session_if_possible,
+    sync_member_forum_state,
+)
+from .services.notifications import (  # noqa: E402
+    EMAIL_JOB_STATUS_CANCELED,
+    EMAIL_JOB_STATUS_EXHAUSTED,
+    EMAIL_JOB_STATUS_PENDING,
+    EMAIL_JOB_STATUS_SENT,
+    EMAIL_JOB_TYPE_WELCOME,
+    WELCOME_EMAIL_RETRY_DELAYS,
+    build_mail_accounts_export_payload,
+    flush_marked_notification_channels,
+    get_db_mail_accounts,
+    get_default_sender_account,
+    get_email_template_choices,
+    get_notification_service,
+    get_notification_settings_map,
+    mark_email_delivery_jobs_sent,
+    normalize_imported_mail_account_record,
+    normalize_imported_mail_accounts_payload,
+    normalize_mail_account_key,
+    parse_imported_starttls,
+    queue_curated_admin_notification,
+    queue_email_delivery_job,
+    queue_user_status_notification,
+    queue_welcome_email_retry_job,
+    send_account_action_email,
+)
+from .services.workflows import (  # noqa: E402
+    process_email_delivery_jobs,
+    refresh_member_billing_state,
+    send_member_welcome_email,
+    sync_member_primary_email,
+)
+from .services.audit import (  # noqa: E402
+    get_recent_audit_logs,
+    is_sensitive_audit_field_name,
+    log_audit_event,
+    redact_sensitive_audit_value,
+    redact_settings_states_for_audit,
+    serialize_audit_value,
+    snapshot_forum_account_for_audit,
+    snapshot_forum_avatar_submission_for_audit,
+    snapshot_mail_account_for_audit,
+    snapshot_member_for_audit,
+    snapshot_user_for_audit,
+)
 from .services.billing import (  # noqa: E402
     apply_runtime_stripe_config,
     backfill_member_coverage_from_subscription,
@@ -292,19 +363,6 @@ def admin_required(f):
 
 
 
-TOKEN_MAX_AGE_VERIFY_EMAIL = 60 * 60 * 24 * 7
-TOKEN_MAX_AGE_PASSWORD_RESET = 60 * 60 * 24
-TOKEN_MAX_AGE_FORUM_ENTRY = 60 * 60 * 24 * 30
-TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN = 60 * 60
-EMAIL_JOB_TYPE_WELCOME = "welcome_email"
-EMAIL_JOB_STATUS_PENDING = "pending"
-EMAIL_JOB_STATUS_SENT = "sent"
-EMAIL_JOB_STATUS_EXHAUSTED = "exhausted"
-EMAIL_JOB_STATUS_CANCELED = "canceled"
-WELCOME_EMAIL_RETRY_DELAYS = (
-    timedelta(minutes=15),
-    timedelta(hours=24),
-)
 PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
 # Log retention. 0 means keep forever. Audit logs default to keep-forever because
 # they are the account/security trail; higher-churn notification delivery records
@@ -317,56 +375,18 @@ APPROVAL_HISTORY_PAGE_SIZE = 25
 
 
 
-def build_forum_username_base(first_name, last_name, year_group):
-    last_name_cleaned = "".join(filter(str.isalnum, last_name or "")).capitalize()
-    first_name_initial = first_name[0].upper() if first_name else ""
-    study_field_initial = year_group[0].upper() if year_group else ""
-    year_short = year_group[-2:] if year_group and len(year_group) > 2 else ""
-    return f"{last_name_cleaned}{first_name_initial}_{study_field_initial}{year_short}"
 
 
 
-def generate_suggested_username(member):
-    """Generates the base forum username using the legacy welcome-email scheme."""
-    return build_forum_username_base(member.first_name, member.last_name, member.year_group)
 
 
 
-def generate_unique_forum_username(first_name, last_name, year_group, exclude_user_id=None, preferred=None):
-    base = preferred or build_forum_username_base(first_name, last_name, year_group)
-    if not base:
-        base = "Member"
-
-    candidate = base
-    suffix = 2
-    while True:
-        query = db.select(User).filter_by(forum_username=candidate)
-        if exclude_user_id is not None:
-            query = query.filter(User.id != exclude_user_id)
-        existing_user = db.session.execute(query).scalar_one_or_none()
-        if existing_user is None:
-            return candidate
-        candidate = f"{base}-{suffix}"
-        suffix += 1
 
 
 
-def get_email_template_choices(app):
-    template_choices = []
-    email_template_dir = os.path.join(app.root_path, "templates", "emails")
-    if os.path.isdir(email_template_dir):
-        template_choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
-    return template_choices
 
 
 
-def get_db_mail_accounts():
-    try:
-        return db.session.execute(
-            db.select(MailAccount).order_by(MailAccount.account_key.asc())
-        ).scalars().all()
-    except Exception:
-        return []
 
 
 
@@ -462,211 +482,40 @@ def static_asset_version(app, filename):
 
 
 
-def get_default_sender_account():
-    settings = {s.key: s.value for s in Setting.query.all()}
-    preferred_sender = settings.get("welcome_email_sender")
-    if preferred_sender:
-        return preferred_sender
-
-    try:
-        mail_accounts = load_mail_accounts_config()
-        return next(iter(mail_accounts.keys()), None)
-    except Exception:
-        return None
 
 
 
-def send_account_action_email(
-    app,
-    to_email,
-    subject,
-    preview_text,
-    action_url,
-    action_label,
-    heading,
-    body_lines,
-    failure_event_type="account_action_email_failed",
-    failure_summary=None,
-    failure_payload=None,
-    target_user=None,
-    target_member=None,
-    notify_on_failure=True,
-):
-    sender_account = get_default_sender_account()
-    failure_summary = failure_summary or _("An account-related email could not be sent.")
-    payload = {
-        "recipient": to_email,
-        "subject": subject,
-        "sender_account": sender_account or None,
-        **(failure_payload or {}),
-    }
-    if not sender_account:
-        app.logger.warning("Could not send account email to %s because no sender account is configured.", to_email)
-        if notify_on_failure:
-            queue_curated_admin_notification(
-                ADMIN_ERROR_CHANNEL,
-                failure_event_type,
-                failure_summary,
-                payload=payload,
-                target_user=target_user,
-                target_member=target_member,
-                commit=True,
-            )
-        return False
-
-    logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
-    attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
-    success, error_message = send_mail(
-        from_account=sender_account,
-        to_email=to_email,
-        subject=subject,
-        template_name="member_account_action.html",
-        attachments=attachments,
-        preview_text=preview_text,
-        action_url=action_url,
-        action_label=action_label,
-        heading=heading,
-        body_lines=body_lines,
-        now=get_now_utc(),
-        return_error=True,
-    )
-    if not success and notify_on_failure:
-        queue_curated_admin_notification(
-            ADMIN_ERROR_CHANNEL,
-            failure_event_type,
-            failure_summary,
-            payload={**payload, "error": error_message},
-            target_user=target_user,
-            target_member=target_member,
-            commit=True,
-        )
-    return success
 
 
 
-def get_token_serializer():
-    return URLSafeTimedSerializer(SECRET_KEY)
 
 
 
-def generate_token(purpose, **payload):
-    return get_token_serializer().dumps(payload, salt=f"jaeronautics-{purpose}")
 
 
 
-def read_token(token, purpose, max_age):
-    return get_token_serializer().loads(token, salt=f"jaeronautics-{purpose}", max_age=max_age)
 
 
 
-def rotate_password_reset_nonce(user):
-    user.password_reset_nonce = secrets.token_urlsafe(24)
-    return user.password_reset_nonce
 
 
 
-def build_password_reset_token(user):
-    nonce = user.password_reset_nonce or rotate_password_reset_nonce(user)
-    return generate_token("reset-password", user_id=user.id, nonce=nonce)
 
 
 
-def rotate_email_verification_nonce(user):
-    user.email_verification_nonce = secrets.token_urlsafe(24)
-    return user.email_verification_nonce
 
 
 
-def build_email_verification_claims(user):
-    """Claims that bind a verification link to one address on one account.
-
-    A token carrying only ``user_id`` proves nothing about *which* address was
-    confirmed: it stays valid after the account's email changes, so an old link
-    could be used to mark a newly entered (unproven) address as verified. Binding
-    the address itself plus a rotating nonce scopes each link to the address it
-    was actually sent to.
-    """
-    nonce = user.email_verification_nonce or rotate_email_verification_nonce(user)
-    return {"user_id": user.id, "email": (user.email or "").strip().lower(), "nonce": nonce}
 
 
 
-def email_verification_claims_match(token_data, user):
-    """True when a decoded token still proves ownership of the user's address."""
-    if user is None or not isinstance(token_data, dict):
-        return False
-
-    token_email = (token_data.get("email") or "").strip().lower()
-    current_email = (user.email or "").strip().lower()
-    if not token_email or token_email != current_email:
-        return False
-
-    expected_nonce = user.email_verification_nonce
-    # Tokens predating the nonce carry none; require one so old links cannot be
-    # replayed against an account that has since been issued a fresh link.
-    return bool(expected_nonce) and token_data.get("nonce") == expected_nonce
 
 
 
-def mark_email_verified_from_token(token_data, user):
-    """Verify ``user``'s address if the token really proves ownership of it.
-
-    Returns True when the address was newly marked verified. The nonce is
-    deliberately NOT rotated here: a verification and a forum magic link can be
-    outstanding at the same time, and re-using a link for an already verified
-    address is harmless. Rotation happens when the address changes, which is the
-    event that must invalidate links issued for the previous address.
-    """
-    if not email_verification_claims_match(token_data, user):
-        return False
-    if user.email_is_verified:
-        return False
-    user.email_verified_at = get_now_utc()
-    return True
 
 
 
-def send_email_verification_email(app, user):
-    token = generate_token("verify-email", **build_email_verification_claims(user))
-    verify_url = build_public_url("auth.verify_email", token=token)
-    return send_account_action_email(
-        app,
-        to_email=user.email,
-        subject=_("Verify your Joanneum Aeronautics email"),
-        preview_text=_("Confirm your email address for your Joanneum Aeronautics account."),
-        action_url=verify_url,
-        action_label=_("Verify Email"),
-        heading=_("Confirm your email address"),
-        body_lines=[
-            _("Please confirm your email address for your Joanneum Aeronautics account."),
-            _("This helps us keep your account secure and reach you when needed."),
-        ],
-        failure_event_type="verification_email_failed",
-        failure_summary=_("A verification email could not be sent."),
-        failure_payload={"email_type": "verification"},
-        target_user=user,
-    )
 
-def send_password_reset_email(app, user):
-    token = build_password_reset_token(user)
-    reset_url = build_public_url("auth.reset_password", token=token)
-    return send_account_action_email(
-        app,
-        to_email=user.email,
-        subject=_("Reset your Joanneum Aeronautics password"),
-        preview_text=_("Use this link to choose a new password for your account."),
-        action_url=reset_url,
-        action_label=_("Reset Password"),
-        heading=_("Reset your password"),
-        body_lines=[
-            _("A password reset was requested for your Joanneum Aeronautics account."),
-            _("If this was you, use the link below to set a new password. If not, you can ignore this email."),
-        ],
-        failure_event_type="password_reset_email_failed",
-        failure_summary=_("A password reset email could not be sent."),
-        failure_payload={"email_type": "password_reset"},
-        target_user=user,
-    )
 
 def set_setting_value(key, value):
     setting = db.session.get(Setting, key)
@@ -686,8 +535,6 @@ def set_setting_value(key, value):
 
 
 
-def get_forum_settings_map():
-    return get_settings_map(FORUM_SETTING_KEYS)
 
 
 
@@ -697,336 +544,44 @@ def get_forum_settings_map():
 
 
 
-def get_forum_service():
-    return ForumService(get_forum_settings_map())
 
 
 
-def get_notification_settings_map():
-    return get_settings_map(NOTIFICATION_SETTING_KEYS)
 
 
 
-def get_notification_service():
-    return NotificationService(current_app._get_current_object())
 
 
 
-def flush_marked_notification_channels():
-    channels = sorted(db.session.info.pop("notification_channels_to_flush", set()))
-    if not channels:
-        return {}
-    try:
-        return get_notification_service().deliver_pending_notifications(channels=channels)
-    except Exception as exc:
-        current_app.logger.error("Could not flush queued notification emails: %s", exc)
-        return {}
 
 
 
-def queue_curated_admin_notification(channel, event_type, summary, payload=None, target_user=None, target_member=None, object_type=None, object_id=None, severity="error", commit=False):
-    if channel not in {ADMIN_GENERAL_CHANNEL, ADMIN_ERROR_CHANNEL}:
-        return None
-    try:
-        service = get_notification_service()
-        if channel == ADMIN_GENERAL_CHANNEL:
-            event = service.queue_admin_general(
-                event_type=event_type,
-                summary=summary,
-                payload=payload,
-                target_user=target_user,
-                target_member=target_member,
-                object_type=object_type,
-                object_id=object_id,
-            )
-        else:
-            event = service.queue_admin_error(
-                event_type=event_type,
-                summary=summary,
-                payload=payload,
-                target_user=target_user,
-                target_member=target_member,
-                object_type=object_type,
-                object_id=object_id,
-                severity=severity,
-            )
-        if commit and event is not None:
-            db.session.commit()
-            flush_marked_notification_channels()
-        return event
-    except Exception as exc:
-        current_app.logger.error("Could not queue admin notification '%s': %s", event_type, exc)
-        if commit:
-            db.session.rollback()
-        return None
 
 
 
-def queue_user_status_notification(event_type, summary, recipient_email, payload=None, target_user=None, target_member=None, object_type=None, object_id=None):
-    try:
-        return get_notification_service().queue_user_status(
-            event_type=event_type,
-            summary=summary,
-            recipient_email=recipient_email,
-            payload=payload,
-            target_user=target_user,
-            target_member=target_member,
-            object_type=object_type,
-            object_id=object_id,
-        )
-    except Exception as exc:
-        current_app.logger.error("Could not queue user notification '%s': %s", event_type, exc)
-        return None
-
-
-def log_out_forum_session_if_possible(user):
-    if user is None or getattr(user, "forum_account", None) is None:
-        return False, None
-
-    service = get_forum_service()
-    did_log_out, error = service.log_out_user(user)
-    if error:
-        current_app.logger.warning("Forum logout sync failed for user_id=%s: %s", user.id, error)
-    return did_log_out, error
 
 
 
-def snapshot_forum_account_for_audit(forum_account):
-    if forum_account is None:
-        return None
-    return serialize_audit_value(
-        {
-            "id": forum_account.id,
-            "provider": forum_account.provider,
-            "external_id": forum_account.external_id,
-            "remote_user_id": forum_account.remote_user_id,
-            "state": forum_account.state,
-            "last_synced_email": forum_account.last_synced_email,
-            "last_synced_username": forum_account.last_synced_username,
-            "last_synced_at": forum_account.last_synced_at,
-            "last_error": forum_account.last_error,
-            "member_id": forum_account.member_id,
-            "user_id": forum_account.user_id,
-        }
-    )
 
 
 
-def snapshot_forum_avatar_submission_for_audit(submission):
-    if submission is None:
-        return None
-    return serialize_audit_value(
-        {
-            "id": submission.id,
-            "status": submission.status,
-            "original_filename": submission.original_filename,
-            "content_type": submission.content_type,
-            "file_size": submission.file_size,
-            "file_hash": submission.file_hash,
-            "storage_path": submission.storage_path,
-            "review_note": submission.review_note,
-            "sync_error": submission.sync_error,
-            "forum_synced_at": submission.forum_synced_at,
-            "uploaded_at": submission.uploaded_at,
-            "reviewed_at": submission.reviewed_at,
-            "member_id": submission.member_id,
-            "user_id": submission.user_id,
-            "reviewed_by_user_id": submission.reviewed_by_user_id,
-        }
-    )
 
 
 
-def build_forum_entry_url(user, include_token=False):
-    route_values = {}
-    if include_token and user is not None:
-        route_values["token"] = generate_token(
-            "forum-entry",
-            issued_at=int(get_now_utc().timestamp()),
-            **build_email_verification_claims(user),
-        )
-    return build_public_url("forum.forum_entry", **route_values)
 
 
 
-def queue_email_delivery_job(email_type, recipient_email=None, target_user=None, target_member=None, payload=None, initial_delay=None, error_message=None):
-    normalized_recipient = (recipient_email or "").strip().lower() or None
-    if initial_delay is None:
-        initial_delay = timedelta()
-
-    query = db.select(EmailDeliveryJob).where(
-        EmailDeliveryJob.email_type == email_type,
-        EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
-    )
-    if target_member is not None and target_member.id is not None:
-        query = query.where(EmailDeliveryJob.target_member_id == target_member.id)
-    elif target_user is not None and target_user.id is not None:
-        query = query.where(EmailDeliveryJob.target_user_id == target_user.id)
-    elif normalized_recipient:
-        query = query.where(EmailDeliveryJob.recipient_email == normalized_recipient)
-    else:
-        return None, False
-
-    existing_job = db.session.execute(
-        query.order_by(EmailDeliveryJob.created_at.asc(), EmailDeliveryJob.id.asc())
-    ).scalars().first()
-    if existing_job is not None:
-        if normalized_recipient:
-            existing_job.recipient_email = normalized_recipient
-        if payload is not None:
-            existing_job.payload = payload
-        if error_message:
-            existing_job.last_error = str(error_message)[:4000]
-        return existing_job, False
-
-    job = EmailDeliveryJob(
-        email_type=email_type,
-        recipient_email=normalized_recipient,
-        target_user_id=target_user.id if target_user is not None else None,
-        target_member_id=target_member.id if target_member is not None else None,
-        payload=payload,
-        status=EMAIL_JOB_STATUS_PENDING,
-        retry_count=0,
-        next_attempt_at=get_now_utc() + initial_delay,
-        last_error=str(error_message)[:4000] if error_message else None,
-    )
-    db.session.add(job)
-    return job, True
 
 
 
-def queue_welcome_email_retry_job(member, error_message=None):
-    if member is None:
-        return None, False
-    return queue_email_delivery_job(
-        EMAIL_JOB_TYPE_WELCOME,
-        recipient_email=member.email_private,
-        target_user=member.user,
-        target_member=member,
-        initial_delay=WELCOME_EMAIL_RETRY_DELAYS[0],
-        error_message=error_message,
-    )
 
 
 
-def mark_email_delivery_jobs_sent(email_type, target_user=None, target_member=None):
-    query = db.select(EmailDeliveryJob).where(
-        EmailDeliveryJob.email_type == email_type,
-        EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
-    )
-    if target_member is not None and target_member.id is not None:
-        query = query.where(EmailDeliveryJob.target_member_id == target_member.id)
-    elif target_user is not None and target_user.id is not None:
-        query = query.where(EmailDeliveryJob.target_user_id == target_user.id)
-    else:
-        return 0
-
-    jobs = db.session.execute(query).scalars().all()
-    if not jobs:
-        return 0
-
-    now = get_now_utc()
-    for job in jobs:
-        job.status = EMAIL_JOB_STATUS_SENT
-        job.sent_at = now
-        job.next_attempt_at = None
-        job.last_error = None
-    return len(jobs)
 
 
 
-def process_email_delivery_jobs(app):
-    now = get_now_utc()
-    summary = {
-        "processed": 0,
-        "sent": 0,
-        "exhausted": 0,
-        "canceled": 0,
-        "failed": 0,
-    }
-    jobs = db.session.execute(
-        db.select(EmailDeliveryJob)
-        .where(
-            EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
-            or_(EmailDeliveryJob.next_attempt_at.is_(None), EmailDeliveryJob.next_attempt_at <= now),
-        )
-        .order_by(EmailDeliveryJob.next_attempt_at.asc(), EmailDeliveryJob.id.asc())
-    ).scalars().all()
-    if not jobs:
-        return summary
 
-    automatic_emails_enabled = get_settings_map().get("automatic_emails_enabled") == "True"
 
-    for job in jobs:
-        summary["processed"] += 1
-        job.last_attempted_at = now
-
-        if job.email_type != EMAIL_JOB_TYPE_WELCOME:
-            job.status = EMAIL_JOB_STATUS_CANCELED
-            job.next_attempt_at = None
-            job.last_error = _("This queued email type is no longer supported.")
-            summary["canceled"] += 1
-            continue
-
-        member = db.session.get(Member, job.target_member_id) if job.target_member_id else None
-        if member is None:
-            job.status = EMAIL_JOB_STATUS_CANCELED
-            job.next_attempt_at = None
-            job.last_error = _("The linked member profile no longer exists.")
-            summary["canceled"] += 1
-            continue
-
-        job.recipient_email = member.email_private
-
-        if not automatic_emails_enabled:
-            job.status = EMAIL_JOB_STATUS_CANCELED
-            job.next_attempt_at = None
-            job.last_error = _("Automatic emails were disabled before this retry could be sent.")
-            summary["canceled"] += 1
-            continue
-
-        success, error_message = send_member_welcome_email(
-            app,
-            member,
-            force_send=False,
-            notify_on_failure=False,
-            queue_retry_on_failure=False,
-            return_error=True,
-        )
-        if success:
-            mark_email_delivery_jobs_sent(EMAIL_JOB_TYPE_WELCOME, target_member=member)
-            job.status = EMAIL_JOB_STATUS_SENT
-            job.sent_at = now
-            job.next_attempt_at = None
-            job.last_error = None
-            summary["sent"] += 1
-            continue
-
-        summary["failed"] += 1
-        job.last_error = (error_message or _("The welcome email could not be sent."))[:4000]
-        job.retry_count += 1
-        if job.retry_count >= len(WELCOME_EMAIL_RETRY_DELAYS):
-            job.status = EMAIL_JOB_STATUS_EXHAUSTED
-            job.next_attempt_at = None
-            summary["exhausted"] += 1
-            queue_curated_admin_notification(
-                ADMIN_ERROR_CHANNEL,
-                "welcome_email_retry_exhausted",
-                _("A welcome email could not be delivered after automatic retries."),
-                payload={
-                    "recipient": member.email_private,
-                    "last_error": job.last_error,
-                    "retry_count": job.retry_count,
-                },
-                target_user=member.user,
-                target_member=member,
-                commit=False,
-            )
-            continue
-
-        job.next_attempt_at = now + WELCOME_EMAIL_RETRY_DELAYS[job.retry_count]
-
-    return summary
 
 
 
@@ -1040,145 +595,12 @@ def is_safe_next_url(target):
 
 
 
-def sync_member_forum_state(member, raise_on_error=False):
-    service = get_forum_service()
-    if member is None or member.user is None:
-        return None, service
-
-    result = service.sync_member(member)
-    if result and result.changed:
-        db.session.flush()
-
-    if result and result.error:
-        current_app.logger.warning(
-            "Forum sync reported an issue for member_id=%s user_id=%s desired_state=%s: %s",
-            member.id,
-            member.user_id,
-            result.desired_state,
-            result.error,
-        )
-        queue_curated_admin_notification(
-            ADMIN_ERROR_CHANNEL,
-            "forum_sync_failed",
-            _("A forum synchronization attempt failed for %(email)s.", email=member.email_private),
-            payload={
-                "member_email": member.email_private,
-                "forum_username": member.user.forum_username,
-                "desired_state": result.desired_state,
-                "error": result.error,
-            },
-            target_user=member.user,
-            target_member=member,
-            object_type="forum_account",
-            object_id=result.forum_account.id if result and result.forum_account is not None else None,
-        )
-        if raise_on_error:
-            raise ForumProviderError(result.error)
-
-    return result, service
 
 
 
-def build_forum_context(member):
-    service = get_forum_service()
-    forum_account = member.user.forum_account if member and member.user else None
-    pending_submission = service.get_pending_submission(member) if member else None
-    approved_submission = service.get_current_approved_submission(member) if member else None
-    latest_submission = service.get_latest_submission(member) if member else None
-
-    status_key = "disabled"
-    status_message = _("The forum integration is not enabled yet.")
-    can_upload_avatar = False
-    can_enter_forum = False
-
-    if member is None or member.user is None:
-        status_key = "no_membership"
-        status_message = _("A linked membership profile is required before forum access can be prepared.")
-    elif not service.is_enabled():
-        status_key = "disabled"
-        status_message = _("The forum integration is not enabled yet.")
-    elif not member_has_active_access(member):
-        status_key = "inactive_membership"
-        status_message = _("Your forum access is currently unavailable because your membership is not active.")
-    elif approved_submission is not None:
-        status_key = "active"
-        status_message = _("Your forum access is ready.")
-        can_enter_forum = service.is_ready()
-    elif pending_submission is not None:
-        status_key = "pending_avatar"
-        status_message = _("Your profile picture is under review. You will get full forum access as soon as it is approved.")
-        can_upload_avatar = True
-    elif latest_submission is not None and latest_submission.status == FORUM_AVATAR_STATUS_REJECTED:
-        status_key = "rejected_avatar"
-        status_message = _("Your profile picture was rejected. Please upload a new one to continue.")
-        can_upload_avatar = True
-    else:
-        status_key = "needs_avatar"
-        status_message = _("Upload a profile picture to continue with forum onboarding.")
-        can_upload_avatar = True
-
-    avatar_max_bytes = service.settings["forum_avatar_max_bytes"]
-    avatar_upload_request_limit = service.get_upload_request_limit()
-    return {
-        "service": service,
-        "forum_account": forum_account,
-        "pending_submission": pending_submission,
-        "approved_submission": approved_submission,
-        "latest_submission": latest_submission,
-        "status_key": status_key,
-        "status_message": status_message,
-        "can_upload_avatar": can_upload_avatar,
-        "can_enter_forum": can_enter_forum,
-        "entry_url": url_for("forum.forum_entry"),
-        "forum_error": forum_account.last_error if forum_account is not None else None,
-        "avatar_max_bytes": avatar_max_bytes,
-        "avatar_max_bytes_display": format_bytes_human(avatar_max_bytes),
-        "avatar_upload_request_limit": avatar_upload_request_limit,
-        "avatar_upload_request_limit_display": format_bytes_human(avatar_upload_request_limit),
-    }
 
 
 
-def sync_member_primary_email(member, new_email):
-    new_email = (new_email or "").strip().lower()
-    if not new_email:
-        raise ValueError(_("The private email address is required."))
-
-    existing_member = db.session.execute(
-        db.select(Member).filter(Member.email_private == new_email, Member.id != member.id)
-    ).scalar_one_or_none()
-    if existing_member is not None:
-        raise ValueError(_("A membership profile with this email address already exists."))
-
-    if member.user is not None:
-        existing_user = db.session.execute(
-            db.select(User).filter(User.email == new_email, User.id != member.user.id)
-        ).scalar_one_or_none()
-        if existing_user is not None:
-            raise ValueError(_("An account with this email address already exists."))
-
-    email_changed = member.email_private != new_email
-    member.email_private = new_email
-
-    if member.user is not None and member.user.email != new_email:
-        member.user.email = new_email
-        member.user.email_verified_at = None
-        # Invalidate any verification/forum link issued for the previous address.
-        rotate_email_verification_nonce(member.user)
-
-    if email_changed and member.stripe_customer_id:
-        try:
-            apply_runtime_stripe_config()
-            stripe.Customer.modify(member.stripe_customer_id, email=new_email)
-        except Exception as exc:
-            current_app.logger.warning(
-                "Could not sync Stripe customer email for member_id=%s customer_id=%s: %s",
-                member.id,
-                member.stripe_customer_id,
-                exc,
-            )
-
-    return email_changed
 
 
 
@@ -1239,272 +661,42 @@ def count_users_with_role(role_slug):
 
 
 
-def serialize_audit_value(value):
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    if isinstance(value, Decimal):
-        return str(value)
-    if isinstance(value, dict):
-        return {key: serialize_audit_value(inner_value) for key, inner_value in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [serialize_audit_value(inner_value) for inner_value in value]
-    return value
 
 
 
-def is_sensitive_audit_field_name(field_name):
-    normalized_name = str(field_name or "").strip().lower()
-    if not normalized_name:
-        return False
-    if normalized_name in SENSITIVE_AUDIT_FIELD_NAMES:
-        return True
-    return any(token in normalized_name for token in ("secret", "password", "api_key", "webhook_secret"))
 
 
 
-def redact_sensitive_audit_value(value, placeholder="<configured>"):
-    serialized = serialize_audit_value(value)
-    if isinstance(serialized, dict):
-        redacted = {}
-        for key, inner_value in serialized.items():
-            if is_sensitive_audit_field_name(key):
-                has_secret_value = inner_value is not None and inner_value != "" and inner_value != [] and inner_value != {}
-                redacted[key] = placeholder if has_secret_value else None
-            else:
-                redacted[key] = redact_sensitive_audit_value(inner_value, placeholder=placeholder)
-        return redacted
-    if isinstance(serialized, list):
-        return [redact_sensitive_audit_value(item, placeholder=placeholder) for item in serialized]
-    return serialized
 
 
 
-def redact_settings_states_for_audit(before_settings, after_settings):
-    redacted_before = dict(before_settings or {})
-    redacted_after = dict(after_settings or {})
-    for key in SENSITIVE_SETTING_KEYS:
-        before_value = redacted_before.get(key)
-        after_value = redacted_after.get(key)
-        before_present = before_value not in {None, ""}
-        after_present = after_value not in {None, ""}
-        redacted_before[key] = "<configured>" if before_present else None
-        if not after_present:
-            redacted_after[key] = "<cleared>" if before_present else None
-        elif before_present and before_value != after_value:
-            redacted_after[key] = "<changed>"
-        else:
-            redacted_after[key] = "<configured>"
-    return redacted_before, redacted_after
 
 
 
-def snapshot_user_for_audit(user):
-    if user is None:
-        return None
-    return serialize_audit_value(
-        {
-            "id": user.id,
-            "email": user.email,
-            "forum_username": user.forum_username,
-            "roles": sorted(role.slug for role in user.roles),
-            "email_verified_at": user.email_verified_at,
-        }
-    )
 
 
 
-def snapshot_member_for_audit(member, fields=None):
-    if member is None:
-        return None
-    snapshot_fields = fields or MEMBER_PROFILE_FIELDS
-    payload = {field_name: getattr(member, field_name) for field_name in snapshot_fields}
-    payload.update(
-        {
-            "id": member.id,
-            "payment_status": member.payment_status,
-            "is_active": member.is_active,
-            "membership_starts_on": member.membership_starts_on,
-            "membership_ends_on": member.membership_ends_on,
-            "renewal_due_on": member.renewal_due_on,
-            "cancel_at_period_end": member.cancel_at_period_end,
-            "stripe_customer_id": member.stripe_customer_id,
-            "stripe_subscription_id": member.stripe_subscription_id,
-        }
-    )
-    return serialize_audit_value(payload)
 
 
 
-def snapshot_mail_account_for_audit(mail_account):
-    if mail_account is None:
-        return None
-    return serialize_audit_value(
-        {
-            "id": mail_account.id,
-            "account_key": mail_account.account_key,
-            "host": mail_account.host,
-            "port": mail_account.port,
-            "username": mail_account.username,
-            "starttls": mail_account.starttls,
-        }
-    )
 
 
 
-def normalize_mail_account_key(raw_key):
-    if raw_key is None:
-        return ""
-    normalized = "".join(
-        character if (character.isalnum() or character in {"-", "_"}) else "_"
-        for character in str(raw_key).strip()
-    )
-    while "__" in normalized:
-        normalized = normalized.replace("__", "_")
-    return normalized.strip("_")
 
 
 
-def parse_imported_starttls(value, security_hint=None):
-    if value is not None:
-        if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on", "starttls"}
-        return bool(value)
-
-    security_value = (security_hint or "").strip().lower()
-    if security_value in {"starttls", "tls-starttls", "smtp-starttls", "explicit_tls"}:
-        return True
-    if security_value in {"ssl", "ssl/tls", "tls", "implicit_tls"}:
-        return False
-    return False
 
 
 
-def normalize_imported_mail_account_record(raw_record, fallback_key=None):
-    if not isinstance(raw_record, dict):
-        raise ValueError("Each imported mail account entry must be a JSON object.")
-
-    account_key = normalize_mail_account_key(
-        raw_record.get("account_key")
-        or raw_record.get("key")
-        or raw_record.get("name")
-        or fallback_key
-    )
-    host = (raw_record.get("host") or raw_record.get("smtp_host") or raw_record.get("server") or "").strip()
-    username = (
-        raw_record.get("username")
-        or raw_record.get("user")
-        or raw_record.get("email")
-        or raw_record.get("login")
-        or ""
-    ).strip()
-    password = (
-        raw_record.get("password")
-        or raw_record.get("pass")
-        or raw_record.get("secret")
-        or raw_record.get("smtp_password")
-        or ""
-    )
-    port_value = raw_record.get("port") or raw_record.get("smtp_port")
-    security_hint = raw_record.get("security") or raw_record.get("encryption") or raw_record.get("transport_security")
-    starttls = parse_imported_starttls(raw_record.get("starttls"), security_hint=security_hint)
-
-    if not account_key:
-        raise ValueError("Every imported mail account needs a valid account key.")
-    if not host:
-        raise ValueError(f"Mail account '{account_key}' is missing the SMTP host.")
-    if not username:
-        raise ValueError(f"Mail account '{account_key}' is missing the SMTP username.")
-    if not password:
-        raise ValueError(f"Mail account '{account_key}' is missing the SMTP password.")
-    if port_value in (None, ""):
-        raise ValueError(f"Mail account '{account_key}' is missing the SMTP port.")
-
-    try:
-        port = int(port_value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Mail account '{account_key}' has an invalid SMTP port.") from exc
-
-    if port < 1 or port > 65535:
-        raise ValueError(f"Mail account '{account_key}' has an invalid SMTP port.")
-
-    return {
-        "account_key": account_key,
-        "host": host,
-        "port": port,
-        "username": username,
-        "password": password,
-        "starttls": starttls,
-    }
 
 
 
-def normalize_imported_mail_accounts_payload(payload):
-    raw_records = []
-
-    if isinstance(payload, dict) and isinstance(payload.get("mail_accounts"), list):
-        raw_records = [(None, entry) for entry in payload.get("mail_accounts", [])]
-    elif isinstance(payload, list):
-        raw_records = [(None, entry) for entry in payload]
-    elif isinstance(payload, dict):
-        raw_records = [
-            (key, value)
-            for key, value in payload.items()
-            if isinstance(value, dict)
-        ]
-    else:
-        raise ValueError("The uploaded JSON must be a Jaeronautics export, a legacy mail-account mapping, or a list of mail account objects.")
-
-    if not raw_records:
-        raise ValueError("The uploaded file does not contain any mail accounts.")
-
-    normalized_records = []
-    seen_keys = set()
-    for fallback_key, raw_record in raw_records:
-        normalized = normalize_imported_mail_account_record(raw_record, fallback_key=fallback_key)
-        if normalized["account_key"] in seen_keys:
-            raise ValueError(f"The uploaded file contains the account key '{normalized['account_key']}' more than once.")
-        seen_keys.add(normalized["account_key"])
-        normalized_records.append(normalized)
-
-    return normalized_records
 
 
 
-def build_mail_accounts_export_payload():
-    return {
-        "format": "jaeronautics_mail_accounts",
-        "version": 1,
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "mail_accounts": [
-            {
-                "account_key": mail_account.account_key,
-                "host": mail_account.host,
-                "port": mail_account.port,
-                "username": mail_account.username,
-                "password": mail_account.password,
-                "starttls": mail_account.starttls,
-            }
-            for mail_account in get_db_mail_accounts()
-        ],
-    }
 
 
 
-def log_audit_event(category, event_type, actor_user=None, target_user=None, target_member=None, before=None, after=None, metadata=None):
-    db.session.add(
-        AuditLog(
-            actor_user=actor_user,
-            target_user=target_user,
-            target_member=target_member,
-            category=category,
-            event_type=event_type,
-            before_state=redact_sensitive_audit_value(before) if before is not None else None,
-            after_state=redact_sensitive_audit_value(after) if after is not None else None,
-            event_metadata=redact_sensitive_audit_value(metadata) if metadata is not None else None,
-        )
-    )
 
 
 
@@ -1570,33 +762,6 @@ def get_member_portal_target(user):
 
 
 
-def refresh_member_billing_state(member, force_stripe_sync=False, sync_forum=False, on_date=None):
-    if member is None:
-        return False, None, None
-
-    changed = False
-    stripe_subscription = None
-    has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
-
-    if has_stripe_reference and force_stripe_sync:
-        stripe_subscription = get_latest_stripe_subscription_for_member(member)
-        if stripe_subscription and sync_member_subscription_state_from_subscription(member, stripe_subscription):
-            changed = True
-        # The lookup may have cleared a dead subscription/customer reference.
-        if bool(member.stripe_customer_id or member.stripe_subscription_id) != has_stripe_reference:
-            changed = True
-
-    if sync_member_active_state(member, on_date=on_date):
-        changed = True
-
-    forum_result = None
-    forum_service = get_forum_service()
-    if sync_forum and member.user is not None and (forum_service.is_enabled() or member.user.forum_account is not None):
-        forum_result, _forum_service = sync_member_forum_state(member)
-        if forum_result and forum_result.changed:
-            changed = True
-
-    return changed, stripe_subscription, forum_result
 
 
 
@@ -1613,86 +778,6 @@ def get_portal_session(member):
 
 
 
-def send_member_welcome_email(app, member, force_send=False, notify_on_failure=True, queue_retry_on_failure=None, return_error=False):
-    settings = get_settings_map()
-    if queue_retry_on_failure is None:
-        queue_retry_on_failure = not force_send
-
-    if not force_send and settings.get("automatic_emails_enabled") != "True":
-        return (False, _("Automatic welcome emails are disabled.")) if return_error else False
-
-    sender_account = settings.get("welcome_email_sender")
-    template_name = settings.get("automatic_email_template")
-    if not sender_account or not template_name:
-        error_message = _("Email sender or template is not configured in the admin settings.")
-        if force_send:
-            raise ValueError(error_message)
-        if queue_retry_on_failure:
-            queue_welcome_email_retry_job(member, error_message=error_message)
-        if notify_on_failure:
-            queue_curated_admin_notification(
-                ADMIN_ERROR_CHANNEL,
-                "welcome_email_failed",
-                _("A welcome email could not be sent because the sender or template is not configured."),
-                payload={
-                    "recipient": member.email_private,
-                    "sender_account": sender_account or None,
-                    "template_name": template_name or None,
-                    "error": error_message,
-                },
-                target_user=member.user,
-                target_member=member,
-                commit=True,
-            )
-        return (False, error_message) if return_error else False
-
-    suggested_username = member.user.forum_username if member.user and member.user.forum_username else generate_suggested_username(member)
-    logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
-    attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
-
-    forum_service = get_forum_service()
-    forum_entry_url = None
-    if forum_service.is_enabled() and member.user is not None:
-        forum_entry_url = build_forum_entry_url(member.user, include_token=True)
-
-    success, error_message = send_mail(
-        from_account=sender_account,
-        to_email=member.email_private,
-        subject=_("Welcome to Joanneum Aeronautics!"),
-        template_name=template_name,
-        attachments=attachments,
-        first_name=member.first_name,
-        suggested_username=suggested_username,
-        membership_starts_on=member.membership_starts_on,
-        membership_ends_on=member.membership_ends_on,
-        renewal_due_on=member.renewal_due_on,
-        forum_integration_enabled=forum_service.is_enabled(),
-        forum_entry_url=forum_entry_url,
-        now=get_now_utc(),
-        return_error=True,
-    )
-    if success:
-        mark_email_delivery_jobs_sent(EMAIL_JOB_TYPE_WELCOME, target_member=member)
-        return (True, None) if return_error else True
-
-    if queue_retry_on_failure:
-        queue_welcome_email_retry_job(member, error_message=error_message)
-    if notify_on_failure:
-        queue_curated_admin_notification(
-            ADMIN_ERROR_CHANNEL,
-            "welcome_email_failed",
-            _("A welcome email could not be sent."),
-            payload={
-                "recipient": member.email_private,
-                "sender_account": sender_account,
-                "template_name": template_name,
-                "error": error_message,
-            },
-            target_user=member.user,
-            target_member=member,
-            commit=True,
-        )
-    return (False, error_message) if return_error else False
 
 
 
@@ -1947,15 +1032,6 @@ def get_admin_dashboard_metrics():
     }
 
 
-def get_recent_audit_logs(limit=10, category=None):
-    query = db.select(AuditLog).options(
-        selectinload(AuditLog.actor_user),
-        selectinload(AuditLog.target_user),
-        selectinload(AuditLog.target_member),
-    )
-    if category:
-        query = query.where(AuditLog.category == category)
-    return db.session.execute(query.order_by(AuditLog.created_at.desc()).limit(limit)).scalars().all()
 
 
 def build_account_directory_query(search_term, role_filter, membership_filter, active_filter):
@@ -2061,6 +1137,66 @@ def build_settings_page_context(edit_mail_account_id=None):
             ("discourse_connect", _("DiscourseConnect")),
             ("oauth2_provider", _("OAuth2 Provider (reserved)")),
         ],
+    }
+
+
+
+def build_forum_context(member):
+    service = get_forum_service()
+    forum_account = member.user.forum_account if member and member.user else None
+    pending_submission = service.get_pending_submission(member) if member else None
+    approved_submission = service.get_current_approved_submission(member) if member else None
+    latest_submission = service.get_latest_submission(member) if member else None
+
+    status_key = "disabled"
+    status_message = _("The forum integration is not enabled yet.")
+    can_upload_avatar = False
+    can_enter_forum = False
+
+    if member is None or member.user is None:
+        status_key = "no_membership"
+        status_message = _("A linked membership profile is required before forum access can be prepared.")
+    elif not service.is_enabled():
+        status_key = "disabled"
+        status_message = _("The forum integration is not enabled yet.")
+    elif not member_has_active_access(member):
+        status_key = "inactive_membership"
+        status_message = _("Your forum access is currently unavailable because your membership is not active.")
+    elif approved_submission is not None:
+        status_key = "active"
+        status_message = _("Your forum access is ready.")
+        can_enter_forum = service.is_ready()
+    elif pending_submission is not None:
+        status_key = "pending_avatar"
+        status_message = _("Your profile picture is under review. You will get full forum access as soon as it is approved.")
+        can_upload_avatar = True
+    elif latest_submission is not None and latest_submission.status == FORUM_AVATAR_STATUS_REJECTED:
+        status_key = "rejected_avatar"
+        status_message = _("Your profile picture was rejected. Please upload a new one to continue.")
+        can_upload_avatar = True
+    else:
+        status_key = "needs_avatar"
+        status_message = _("Upload a profile picture to continue with forum onboarding.")
+        can_upload_avatar = True
+
+    avatar_max_bytes = service.settings["forum_avatar_max_bytes"]
+    avatar_upload_request_limit = service.get_upload_request_limit()
+    return {
+        "service": service,
+        "forum_account": forum_account,
+        "pending_submission": pending_submission,
+        "approved_submission": approved_submission,
+        "latest_submission": latest_submission,
+        "status_key": status_key,
+        "status_message": status_message,
+        "can_upload_avatar": can_upload_avatar,
+        "can_enter_forum": can_enter_forum,
+        "entry_url": url_for("forum.forum_entry"),
+        "forum_error": forum_account.last_error if forum_account is not None else None,
+        "avatar_max_bytes": avatar_max_bytes,
+        "avatar_max_bytes_display": format_bytes_human(avatar_max_bytes),
+        "avatar_upload_request_limit": avatar_upload_request_limit,
+        "avatar_upload_request_limit_display": format_bytes_human(avatar_upload_request_limit),
     }
 
 

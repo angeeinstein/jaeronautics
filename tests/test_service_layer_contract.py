@@ -137,3 +137,39 @@ def test_forum_service_does_not_import_the_app_module():
         "forum_service.py reaches back into app.py; the access rule belongs in "
         "services/membership.py so both can import it normally"
     )
+
+
+def test_service_dependency_graph_is_acyclic():
+    """Services must form layers, not a web.
+
+    A cycle between two services means neither can be understood, tested or
+    reused without the other -- and it is what forces the deferred
+    inside-a-function imports this refactor set out to remove.
+    """
+    from collections import defaultdict
+
+    deps = defaultdict(set)
+    for path in _service_modules():
+        for node in ast.walk(ast.parse(path.read_text())):
+            # `from .other import x` -- a sibling service module
+            if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
+                deps[path.stem].add(node.module)
+
+    cycles, seen, stack = [], set(), []
+
+    def visit(module):
+        if module in stack:
+            cycles.append(" -> ".join(stack[stack.index(module):] + [module]))
+            return
+        if module in seen:
+            return
+        stack.append(module)
+        for dependency in sorted(deps.get(module, ())):
+            visit(dependency)
+        stack.pop()
+        seen.add(module)
+
+    for module in sorted(deps):
+        visit(module)
+
+    assert not cycles, "Circular dependencies between services:\n  " + "\n  ".join(cycles)
