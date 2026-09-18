@@ -1241,7 +1241,26 @@ ensure_virtualenv() {
 
     step "Installing Python dependencies"
     run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel
-    run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade -r "${INSTALL_DIR}/requirements.txt"
+
+    # Prefer the lock file: it pins the transitive dependencies too and checks
+    # every download against a recorded hash, so an update installs the same
+    # code that was tested rather than whatever the index happens to serve
+    # today. requirements.txt stays the fallback for checkouts that predate the
+    # lock, and USE_DEPENDENCY_LOCK=0 is the escape hatch if a locked version
+    # ever fails to build on a newer Python -- but reach for it knowing the
+    # install is then unpinned.
+    if [[ -f "${INSTALL_DIR}/requirements.lock" && "${USE_DEPENDENCY_LOCK:-1}" != "0" ]]; then
+        if ! run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir \
+            --require-hashes -r "${INSTALL_DIR}/requirements.lock"; then
+            error "If a pinned version cannot be built here, regenerate requirements.lock;"
+            error "as a temporary measure, re-run with USE_DEPENDENCY_LOCK=0 to install"
+            error "from requirements.txt without pinned transitive versions or hashes."
+            die "Installing the locked dependencies failed."
+        fi
+    else
+        warn "Installing from requirements.txt: transitive versions are not pinned."
+        run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade -r "${INSTALL_DIR}/requirements.txt"
+    fi
 }
 
 collect_configuration() {

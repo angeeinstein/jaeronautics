@@ -74,7 +74,7 @@ The test suite runs against an ephemeral SQLite database (no MySQL, Redis, or
 Stripe credentials required). Install the dev dependencies and run pytest:
 
 ```powershell
-pip install -r requirements.txt -r requirements-dev.txt
+pip install --require-hashes -r requirements-dev.lock
 python -m pytest
 ```
 
@@ -86,6 +86,38 @@ python -m pytest
 
 Tests point the app at SQLite via the `DATABASE_URL` environment variable, which
 `create_app` honors as an override for the default MySQL connection string.
+
+## Dependencies
+
+`requirements.txt` lists the packages the application asks for.
+`requirements.lock` and `requirements-dev.lock` list what actually gets
+installed: those packages, everything they in turn depend on, each pinned to an
+exact version and checked against a recorded SHA-256 hash. `install.sh` deploys
+from `requirements.lock` and CI installs `requirements-dev.lock`, so the
+versions under test are the versions in production, and a package that has been
+tampered with on the index fails the install instead of being deployed.
+
+After changing `requirements.txt`, regenerate **both** lock files — they are
+resolved independently, so updating only one lets the shared pins drift apart:
+
+```powershell
+pip install pip-tools
+pip-compile --generate-hashes --strip-extras --no-header --output-file=requirements.lock requirements.txt
+pip-compile --generate-hashes --strip-extras --no-header --output-file=requirements-dev.lock requirements-dev.txt
+```
+
+`pip-compile` strips the explanatory header comments; put them back (git will
+show what was removed), then run the tests. `tests/test_dependency_lock.py`
+fails if the locks and `requirements.txt` disagree, so a forgotten regeneration
+shows up as a red build rather than as a surprise during a deploy.
+
+To take newer versions of the transitive dependencies without changing anything
+in `requirements.txt`, add `--upgrade` to both commands.
+
+If a locked version cannot be built on a particular machine — a package with no
+wheel for a newer Python, say — `USE_DEPENDENCY_LOCK=0 ./install.sh` falls back
+to `requirements.txt`. That install is unpinned and unverified, so treat it as a
+way to get unstuck, not as a setting to leave in place.
 
 ## Linting
 

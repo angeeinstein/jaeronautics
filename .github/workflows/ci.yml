@@ -18,7 +18,8 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        # The lock file, so CI tests the exact versions a deploy installs.
+        run: pip install --require-hashes -r requirements-dev.lock
 
       - name: Lint (ruff)
         run: ruff check .
