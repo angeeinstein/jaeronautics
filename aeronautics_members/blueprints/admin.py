@@ -1317,8 +1317,8 @@ def admin_request_system_update():
     db.session.commit()
 
     flash(
-        _("The update has been requested. It starts within a minute and the site "
-          "restarts while it runs, so this page may be briefly unavailable."),
+        _("The update has started. The site restarts while it runs, so this page "
+          "may be briefly unavailable; it reloads by itself when the update is done."),
         "info",
     )
     return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))

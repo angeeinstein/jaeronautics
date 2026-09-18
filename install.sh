@@ -103,14 +103,81 @@ die() {
     exit 1
 }
 
+diag_section() {
+    printf '\n----- %s -----\n' "$*"
+}
+
+collect_diagnostics() {
+    # Gather what someone would look up by hand after a failed install. This is
+    # printed into the installer's own output, so it reaches the admin page's
+    # update log too -- which is the whole point: an administrator without shell
+    # access should be able to see *why* it failed, not just that it did.
+    command -v systemctl >/dev/null 2>&1 || return 0
+
+    local units=()
+    [[ -n "${SERVICE_NAME:-}" ]] && units+=("${SERVICE_NAME}")
+    if [[ -n "${SERVICE_NAME:-}" ]]; then
+        units+=(
+            "${SERVICE_NAME}-external-work.timer"
+            "${SERVICE_NAME}-update-runner.path"
+            "${SERVICE_NAME}-notifications.timer"
+            "${SERVICE_NAME}-billing-reconcile.timer"
+        )
+    fi
+    [[ "${USE_LOCAL_DB:-0}" == "1" && -n "${DB_SERVICE_NAME:-}" ]] && units+=("${DB_SERVICE_NAME}")
+    units+=("nginx")
+
+    diag_section "Unit states"
+    local unit
+    for unit in "${units[@]}"; do
+        printf '%-46s %s\n' "${unit}" "$(systemctl is-active "${unit}" 2>&1 || true)"
+    done
+
+    diag_section "Units in a failed state"
+    systemctl --failed --no-pager --no-legend 2>/dev/null || true
+
+    if [[ -n "${SERVICE_NAME:-}" ]]; then
+        diag_section "Last 60 log lines for ${SERVICE_NAME}"
+        journalctl -u "${SERVICE_NAME}" -n 60 --no-pager 2>/dev/null || true
+    fi
+
+    if [[ "${USE_LOCAL_DB:-0}" == "1" && -n "${DB_SERVICE_NAME:-}" ]]; then
+        diag_section "Last 20 log lines for ${DB_SERVICE_NAME}"
+        journalctl -u "${DB_SERVICE_NAME}" -n 20 --no-pager 2>/dev/null || true
+    fi
+
+    diag_section "nginx configuration test"
+    nginx -t 2>&1 || true
+    if [[ -r /var/log/nginx/error.log ]]; then
+        diag_section "Last 20 lines of the nginx error log"
+        tail -n 20 /var/log/nginx/error.log 2>/dev/null || true
+    fi
+
+    if [[ -n "${APP_PORT:-}" ]]; then
+        diag_section "Health endpoint, direct to the application"
+        curl -sS -m 10 -o - -w '\nHTTP %{http_code}\n' "http://127.0.0.1:${APP_PORT}/__health" 2>&1 || true
+    fi
+    if [[ -n "${DOMAIN:-}" ]]; then
+        diag_section "Health endpoint, through nginx"
+        curl -sS -m 10 -k -o - -w '\nHTTP %{http_code}\n' -H "Host: ${DOMAIN}" \
+            "http://127.0.0.1/__health" 2>&1 || true
+    fi
+
+    # Out of disk is a common and easily missed cause of an install failing
+    # halfway through.
+    diag_section "Disk space"
+    df -h "${INSTALL_DIR:-/}" / 2>/dev/null || true
+
+    printf '\n'
+}
+
 on_error() {
     local line="$1"
     local command="$2"
     error "Installer failed at line ${line}: ${command}"
-    if [[ -n "${SERVICE_NAME:-}" ]] && command -v systemctl >/dev/null 2>&1; then
-        warn "Recent ${SERVICE_NAME} service logs:"
-        journalctl -u "${SERVICE_NAME}" -n 20 --no-pager 2>/dev/null || true
-    fi
+    warn "Collecting diagnostics for the failure above."
+    collect_diagnostics
+    error "Installer failed. The diagnostics above show the state at the time of failure."
 }
 trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
 
@@ -1882,6 +1949,10 @@ check_health_endpoint() {
     local response=""
 
     if ! response="$(curl -fsS -L --max-time 20 "$@" "${url}")"; then
+        # Retry without -f so the body and status of the failure are visible;
+        # "it returned 502" is far more useful than "the check failed".
+        warn "Health check failed for ${url}; response was:"
+        curl -sS -L --max-time 20 -o - -w '\nHTTP %{http_code}\n' "$@" "${url}" 2>&1 || true
         return 1
     fi
 
