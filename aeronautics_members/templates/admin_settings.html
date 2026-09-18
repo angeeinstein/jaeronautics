@@ -645,7 +645,7 @@
                         {% if update_state.last_run.log_tail %}
                             <details>
                                 <summary class="text-muted">{{ _('Show the end of the update log') }}</summary>
-                                <pre class="mt-2 p-3 bg-body-tertiary border rounded small text-break" style="white-space: pre-wrap;">{{ update_state.last_run.log_tail }}</pre>
+                                <pre class="mt-2 p-3 bg-body-tertiary border rounded small text-break update-log">{{ update_state.last_run.log_tail }}</pre>
                             </details>
                         {% endif %}
                     </div>

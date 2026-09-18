@@ -1003,3 +1003,13 @@ hr,
     font-size: 1.3rem;
     line-height: 1;
 }
+
+/* Wrap the update log so a long install line does not scroll the page sideways.
+   In the stylesheet rather than a style="" attribute: the deployed CSP sets
+   style-src without 'unsafe-inline', so an inline style attribute is blocked. */
+.update-log {
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 22rem;
+    overflow-y: auto;
+}

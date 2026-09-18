@@ -37,7 +37,11 @@ json_escape() {
 }
 
 current_revision() {
-    git -C "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf 'unknown'
+    # This runs as root against a checkout owned by the application user, which
+    # git refuses by default ("detected dubious ownership"). Reading the commit
+    # id is harmless, so mark the path safe for this invocation only rather than
+    # changing git's global configuration.
+    git -c "safe.directory=${INSTALL_DIR}" -C "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf 'unknown'
 }
 
 write_status() {

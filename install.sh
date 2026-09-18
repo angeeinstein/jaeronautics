@@ -1641,6 +1641,11 @@ server {
     ssl_session_cache shared:SSL:10m;
     ssl_protocols TLSv1.2 TLSv1.3;
 
+    # Tell browsers to use HTTPS for this host from now on. Sent from the
+    # port-80 block too, because TLS terminates at the Cloudflare Tunnel and the
+    # browser still receives this over HTTPS; a browser ignores it on plain HTTP.
+    # No "preload" -- that is hard to reverse and belongs to a deliberate choice.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -1674,6 +1679,11 @@ server {
     listen 80;
     server_name ${DOMAIN};
 
+    # Tell browsers to use HTTPS for this host from now on. Sent from the
+    # port-80 block too, because TLS terminates at the Cloudflare Tunnel and the
+    # browser still receives this over HTTPS; a browser ignores it on plain HTTP.
+    # No "preload" -- that is hard to reverse and belongs to a deliberate choice.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
