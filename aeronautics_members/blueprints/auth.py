@@ -95,6 +95,7 @@ def forgot_password():
 
 
 @auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit(RATELIMIT_PASSWORD_CHANGE, methods=["POST"])
 def reset_password(token):
     try:
         token_data = read_token(token, "reset-password", TOKEN_MAX_AGE_PASSWORD_RESET)

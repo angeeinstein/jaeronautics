@@ -100,16 +100,39 @@ def _normalize_allowed_extensions(allowed_extensions):
     return normalized or ["jpg", "png", "webp"]
 
 
+# An image file can be small on disk and enormous once decoded -- a "decompression
+# bomb". A few hundred kilobytes can expand to tens of gigabytes of pixels, which
+# takes the server down before any size check on the decoded image could run.
+MAX_AVATAR_PIXELS = 25_000_000
+
+if Image is not None:
+    # Make Pillow itself refuse, as a backstop for any path that opens an image
+    # without going through the check below.
+    Image.MAX_IMAGE_PIXELS = MAX_AVATAR_PIXELS
+
+
 def _load_image_for_processing(raw_bytes):
     if Image is None or ImageOps is None:
         raise ForumProviderError("Avatar processing is unavailable because Pillow is not installed on the server yet.")
+
+    too_large = ForumProviderError(
+        "The uploaded image is too large to process safely. Please choose a smaller image."
+    )
     try:
         with Image.open(BytesIO(raw_bytes)) as image:
+            # Image.open only parses the header, so the dimensions are known
+            # before any pixel data is decoded. Checking here is the difference
+            # between rejecting a bomb and being flattened by one: the previous
+            # check ran after load(), by which point the memory was already gone.
+            width, height = image.size
+            if width * height > MAX_AVATAR_PIXELS:
+                raise too_large
+
             processed = ImageOps.exif_transpose(image)
             processed.load()
-            if processed.width * processed.height > 25_000_000:
-                raise ForumProviderError("The uploaded image is too large to process safely. Please choose a smaller image.")
             return processed
+    except Image.DecompressionBombError as exc:
+        raise too_large from exc
     except (UnidentifiedImageError, OSError) as exc:
         raise ForumProviderError("Please upload a valid JPG, PNG, or WebP image.") from exc
 

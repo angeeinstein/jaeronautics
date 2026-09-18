@@ -1399,6 +1399,20 @@ RestartSec=5
 TimeoutStartSec=60
 PrivateTmp=true
 NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 
 [Install]
 WantedBy=multi-user.target
@@ -1434,6 +1448,20 @@ ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_ap
 TimeoutStartSec=180
 PrivateTmp=true
 NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 EOF
 
     cat > "${BILLING_RECONCILE_TIMER_FILE}" <<EOF
@@ -1484,6 +1512,20 @@ ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_ap
 TimeoutStartSec=180
 PrivateTmp=true
 NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 EOF
 
     cat > "${NOTIFICATIONS_TIMER_FILE}" <<EOF
@@ -1531,6 +1573,20 @@ ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_ap
 TimeoutStartSec=300
 PrivateTmp=true
 NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 EOF
 
     cat > "${CLEANUP_LOGS_TIMER_FILE}" <<EOF
@@ -1577,6 +1633,20 @@ ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_ap
 TimeoutStartSec=600
 PrivateTmp=true
 NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 EOF
 
     cat > "${EXTERNAL_WORK_TIMER_FILE}" <<EOF

@@ -182,12 +182,6 @@ class Member(db.Model):
         return f"{self.street} {self.house_number}, {self.postal_code} {self.city}, {self.country}"
 
     @property
-    def has_current_coverage(self):
-        if not self.membership_ends_on:
-            return self.is_active
-        return self.membership_ends_on >= date.today()
-
-    @property
     def open_identity_change_request(self):
         return next(
             (request for request in self.profile_change_requests if request.status == "pending"),
