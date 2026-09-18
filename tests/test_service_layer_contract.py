@@ -34,10 +34,29 @@ def test_services_exist():
     assert _service_modules(), "no service modules found; extraction not started?"
 
 
+def _locally_bound_names(tree):
+    """Names the module binds itself, so they are not the Flask globals.
+
+    ``checkout_session = stripe.checkout.Session.create(...)`` is a local
+    variable that happens to share a name with Flask's ``session``; only a name
+    the module never binds can be the imported one.
+    """
+    bound = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            bound.add(node.id)
+        elif isinstance(node, ast.arg):
+            bound.add(node.arg)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+    return bound
+
+
 def test_services_do_not_use_presentation_helpers():
     offenders = []
     for path in _service_modules():
         tree = ast.parse(path.read_text())
+        bound = _locally_bound_names(tree)
         for node in ast.walk(tree):
             # Imported by name: `from flask import flash`
             if isinstance(node, ast.ImportFrom):
@@ -47,8 +66,13 @@ def test_services_do_not_use_presentation_helpers():
                             f"{path.name}:{node.lineno} imports {alias.name!r} "
                             f"-- {FORBIDDEN[alias.name]}"
                         )
-            # Called directly: `flash(...)`, or attribute use like `request.form`
-            elif isinstance(node, ast.Name) and node.id in FORBIDDEN:
+            # Used as a global: `flash(...)`, `request.form`. A name the module
+            # assigns itself is its own variable, not the Flask one.
+            elif (
+                isinstance(node, ast.Name)
+                and node.id in FORBIDDEN
+                and node.id not in bound
+            ):
                 offenders.append(
                     f"{path.name}:{node.lineno} uses {node.id!r} "
                     f"-- {FORBIDDEN[node.id]}"
