@@ -434,8 +434,10 @@
                         </div>
 
                         <form method="POST" action="{{ url_for('admin.save_mail_account') }}">
+                            {# hidden_tag() already emits mail_account_id along with the CSRF
+                               token; rendering it again produced two elements with the same
+                               id, which breaks label association and getElementById. #}
                             {{ mail_account_form.hidden_tag() }}
-                            {{ mail_account_form.mail_account_id }}
                             <div class="row g-3">
                                 <div class="col-md-4">{{ mail_account_form.account_key.label(class="form-label") }}{{ mail_account_form.account_key(class="form-control", placeholder=_('e.g. office')) }}</div>
                                 <div class="col-md-4">{{ mail_account_form.host.label(class="form-label") }}{{ mail_account_form.host(class="form-control", placeholder=_('smtp.example.com')) }}</div>
