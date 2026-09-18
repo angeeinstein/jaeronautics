@@ -58,6 +58,26 @@ def grant_period(
         if existing is not None:
             return existing
 
+    # One payment can be reported twice: a Checkout subscription produces
+    # checkout.session.completed *and* invoice.paid, and the invoice id is not
+    # yet known at checkout time, so the id above cannot match them up. Keep one
+    # period per member, reason and coverage year, and prefer the window already
+    # recorded -- for a prorated first year that is the accurate one, where a
+    # whole calendar year would claim coverage that was never bought.
+    same_year = [
+        period
+        for period in active_periods(member, on_date=None, include_future=True)
+        if period.reason == reason and period.ends_on.year == ends_on.year
+    ]
+    if same_year:
+        existing = same_year[0]
+        if stripe_invoice_id and not existing.stripe_invoice_id:
+            # Attach the evidence that arrived with the later event.
+            existing.stripe_invoice_id = stripe_invoice_id
+        if stripe_subscription_id and not existing.stripe_subscription_id:
+            existing.stripe_subscription_id = stripe_subscription_id
+        return existing
+
     period = MembershipPeriod(
         member=member,
         starts_on=starts_on,

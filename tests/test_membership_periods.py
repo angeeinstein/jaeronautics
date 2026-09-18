@@ -168,3 +168,68 @@ def test_describe_coverage_is_plain_serializable_data(app):
     assert current["reason"] == "paid"
     assert current["stripe_invoice_id"] == "in_desc"
     assert any(p["revoked"] and p["revoked_reason"] == "superseded" for p in described["periods"])
+
+
+class TestOnePaymentOneRecord:
+    """A single payment must leave one coverage record, not two.
+
+    Found on the live deployment: a Checkout signup fires both
+    checkout.session.completed and invoice.paid, so the ledger gained two rows
+    for one payment -- and the second claimed a whole calendar year when only the
+    prorated remainder had been bought.
+    """
+
+    def test_checkout_then_invoice_keeps_one_record(self, app):
+        member = make_member(email="onepay@example.com")
+        # checkout.session.completed: prorated window, invoice id not yet known.
+        periods.grant_period(
+            member, date(CUR, 9, 18), date(CUR, 12, 31),
+            MembershipPeriod.REASON_PAID, stripe_subscription_id="sub_x")
+        # invoice.paid for the same payment, arriving moments later.
+        periods.grant_calendar_year(
+            member, CUR, MembershipPeriod.REASON_PAID,
+            stripe_invoice_id="in_x", stripe_subscription_id="sub_x")
+        db.session.commit()
+
+        assert len(member.membership_periods) == 1
+        period = member.membership_periods[0]
+        # The prorated window is kept: it is what was actually paid for.
+        assert (period.starts_on, period.ends_on) == (date(CUR, 9, 18), date(CUR, 12, 31))
+        # ...and the invoice that proves it is attached once it is known.
+        assert period.stripe_invoice_id == "in_x"
+
+    def test_next_year_renewal_is_a_separate_record(self, app):
+        member = make_member(email="renewrec@example.com")
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID,
+                                    stripe_invoice_id="in_a")
+        periods.grant_calendar_year(member, CUR + 1, MembershipPeriod.REASON_PAID,
+                                    stripe_invoice_id="in_b")
+        db.session.commit()
+
+        assert len(member.membership_periods) == 2
+        assert {p.ends_on.year for p in member.membership_periods} == {CUR, CUR + 1}
+
+    def test_a_revoked_record_does_not_block_a_new_grant(self, app):
+        # After a lost dispute the member may pay again for the same year.
+        member = make_member(email="regrant@example.com")
+        first = periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID,
+                                            stripe_invoice_id="in_lost")
+        periods.revoke_period(first, "chargeback")
+        db.session.commit()
+
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID,
+                                    stripe_invoice_id="in_new")
+        db.session.commit()
+
+        assert len(member.membership_periods) == 2
+        assert periods.has_coverage(member, on_date=date(CUR, 6, 1)) is True
+
+    def test_free_then_paid_in_one_year_are_distinct(self, app):
+        # Different grounds for coverage stay separately recorded.
+        member = make_member(email="freethenpaid@example.com")
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_FREE_PERIOD)
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID,
+                                    stripe_invoice_id="in_f")
+        db.session.commit()
+
+        assert {p.reason for p in member.membership_periods} == {"free_period", "paid"}
