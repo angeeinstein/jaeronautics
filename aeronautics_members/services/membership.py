@@ -89,12 +89,36 @@ def build_membership_cycle(join_date, annual_amount_cents):
 def member_has_active_access(member, on_date=None):
     """Whether the member may use member-only features right now.
 
-    Driven by the coverage dates rather than the cached ``is_active`` flag, so
-    the site and the forum cannot disagree when the flag is stale.
+    The coverage ledger decides when it has anything to say. A member with
+    periods recorded has access exactly while one of them covers today, so a
+    revoked period -- a lost chargeback, say -- really does remove access rather
+    than being contradicted by a cached flag that nobody updated.
+
+    Members with no periods at all fall back to the cached fields. That covers
+    accounts predating the ledger, and it is why the health report counts
+    members who have access with no record behind it: that count going above
+    zero means some path grants coverage without saying why.
+
+    Reads ``member.membership_periods`` directly rather than importing the
+    periods service, which would make these two modules import each other.
     """
     if member is None:
         return False
+
     today = on_date or get_membership_today()
+
+    recorded = member.membership_periods or []
+    if recorded:
+        # The ledger has authority as soon as it holds *any* record for this
+        # member, including one that was revoked. Deciding on the unrevoked ones
+        # alone would mean a member whose only coverage was revoked fell back to
+        # the cached fields -- which still say "paid", and would hand back the
+        # access the revocation was meant to take away.
+        return any(
+            p.revoked_at is None and p.starts_on <= today <= p.ends_on
+            for p in recorded
+        )
+
     if not member.membership_ends_on or member.membership_ends_on < today:
         return False
     return member.payment_status in ACTIVE_MEMBER_STATUSES or member.is_active

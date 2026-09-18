@@ -24,6 +24,7 @@ from flask import current_app
 from flask_babel import _, get_locale
 
 from ..config import STRIPE_PRICE_ID, STRIPE_SECRET_KEY
+from ..db_models import MembershipPeriod
 from ..security_utils import build_public_url
 from .clock import (
     first_day_of_year,
@@ -45,6 +46,7 @@ from .membership import (
     set_member_membership_window,
     sync_member_active_state,
 )
+from .periods import grant_period
 from .settings import get_stripe_settings_map
 
 
@@ -383,6 +385,16 @@ def create_invoice_membership_for_member(member):
             payment_status="free_period",
             is_active=True,
             cancel_at_period_end=False,
+        )
+        # This grants access, so it needs a record saying why. Without one the
+        # member would be covered with nothing in the ledger to support it.
+        grant_period(
+            member,
+            cycle["coverage_start"],
+            cycle["coverage_end"],
+            MembershipPeriod.REASON_FREE_PERIOD,
+            stripe_subscription_id=subscription.id,
+            note="Free rest-of-year period for an October or later signup (invoice billing).",
         )
     else:
         set_member_membership_window(

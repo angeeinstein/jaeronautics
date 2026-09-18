@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 
-from conftest import db, make_member, periods
+from conftest import app_module, db, make_member, periods
 from aeronautics_members.db_models import MembershipPeriod
 from aeronautics_members.services import ValidationError
 
@@ -233,3 +233,59 @@ class TestOnePaymentOneRecord:
         db.session.commit()
 
         assert {p.reason for p in member.membership_periods} == {"free_period", "paid"}
+
+
+class TestLedgerGovernsAccess:
+    """The ledger decides access once it has something to say about a member."""
+
+    def test_revoked_coverage_removes_access_despite_stale_flags(self, app):
+        """The case the ledger exists for.
+
+        After a lost chargeback the coverage is revoked. If access still came
+        from the cached fields, a flag nobody updated would keep the member in.
+        """
+        member = make_member(
+            email="revokedaccess@example.com",
+            payment_status="paid", is_active=True,          # stale, says active
+            membership_ends_on=date(CUR, 12, 31),
+        )
+        period = periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
+        db.session.commit()
+
+        assert app_module.member_has_active_access(member, on_date=date(CUR, 6, 1)) is True
+
+        periods.revoke_period(period, "chargeback lost")
+        db.session.commit()
+
+        assert app_module.member_has_active_access(member, on_date=date(CUR, 6, 1)) is False
+
+    def test_ledger_grants_access_before_the_cached_fields_catch_up(self, app):
+        member = make_member(
+            email="ledgerfirst@example.com",
+            payment_status="unpaid", is_active=False, membership_ends_on=None,
+        )
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
+        db.session.commit()
+
+        assert app_module.member_has_active_access(member, on_date=date(CUR, 6, 1)) is True
+
+    def test_access_ends_when_the_recorded_period_does(self, app):
+        member = make_member(email="expiring@example.com", payment_status="paid", is_active=True)
+        periods.grant_period(member, date(CUR, 1, 1), date(CUR, 6, 30),
+                             MembershipPeriod.REASON_PAID)
+        db.session.commit()
+
+        assert app_module.member_has_active_access(member, on_date=date(CUR, 6, 30)) is True
+        assert app_module.member_has_active_access(member, on_date=date(CUR, 7, 1)) is False
+
+    def test_members_without_records_still_use_the_cached_fields(self, app):
+        # Accounts predating the ledger must not lose access.
+        member = make_member(
+            email="legacyaccess@example.com",
+            payment_status="paid", is_active=True,
+            membership_ends_on=date(CUR, 12, 31),
+        )
+        db.session.commit()
+
+        assert member.membership_periods == []
+        assert app_module.member_has_active_access(member, on_date=date(CUR, 6, 1)) is True
