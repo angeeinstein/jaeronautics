@@ -28,7 +28,7 @@ from pathlib import Path
 from flask import current_app
 
 from ..config import REPO_ROOT
-from . import ConflictError, ServiceError
+from . import ConflictError, ServiceError, ValidationError
 from .clock import get_now_utc
 
 # Where the web process and the privileged runner exchange files. Overridable so
@@ -40,6 +40,9 @@ UPDATE_STATE_DIR = Path(
 REQUEST_FILENAME = "request.json"
 STATUS_FILENAME = "status.json"
 LOG_FILENAME = "last-run.log"
+
+# Written by the installer before each update, on the privileged side.
+ROLLBACK_FILE = Path(os.getenv("ROLLBACK_FILE", "/etc/jaeronautics/rollback.conf"))
 
 # How much of the running update's output to show. An install log is long and
 # the interesting part is always the end.
@@ -165,6 +168,41 @@ def read_live_log_tail(lines=LIVE_LOG_TAIL_LINES):
     return "".join(tail).strip() or None
 
 
+def read_rollback_point():
+    """The revision the installer recorded before the last update, if any.
+
+    Read for display only. The rollback itself never takes a revision from this
+    side: the runner reads the same file as root, so the web process cannot
+    choose what to roll back to.
+    """
+    try:
+        text = ROLLBACK_FILE.read_text()
+    except (FileNotFoundError, PermissionError):
+        return None
+    except OSError as exc:
+        current_app.logger.warning("Could not read the rollback point: %s", exc)
+        return None
+
+    values = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip().strip('"')
+
+    revision = values.get("ROLLBACK_REVISION")
+    if not revision:
+        return None
+    return {
+        "revision": revision,
+        "short_revision": revision[:8],
+        "recorded_at": values.get("ROLLBACK_RECORDED_AT") or None,
+        "schema_revision": values.get("ROLLBACK_SCHEMA_REVISION") or None,
+        "database_backup": values.get("ROLLBACK_DB_BACKUP") or None,
+    }
+
+
 def describe_progress(log_text, status):
     """Turn the installer's [STEP] markers into something a bar can show.
 
@@ -221,6 +259,7 @@ def describe_update_state(force_remote_check=False):
         "runner_installed": runner_is_installed(),
         "in_progress": in_progress,
         "progress": progress,
+        "rollback_point": read_rollback_point(),
         "last_run": {
             "state": status.get("state"),
             "requested_at": status.get("requested_at"),
@@ -234,12 +273,26 @@ def describe_update_state(force_remote_check=False):
     }
 
 
-def request_update(requested_by_user_id):
-    """Ask the privileged runner to install an update.
+def request_update(requested_by_user_id, action="update"):
+    """Ask the privileged runner to install an update, or to roll one back.
 
-    Writes the request and returns immediately: the update takes minutes and
+    Writes the request and returns immediately: the work takes minutes and
     restarts the very process serving this request, so it cannot be awaited.
+
+    ``action`` is the only influence the request has, and it chooses between two
+    fixed operations. Neither carries a target: what an update installs and what
+    a rollback returns to both come from the installer's own state, on the
+    privileged side. An attacker reaching this endpoint can move the deployment
+    between two revisions someone already chose, not to one of their own.
     """
+    if action not in {"update", "rollback"}:
+        raise ValidationError(f"Unknown update action: {action!r}")
+    if action == "rollback" and read_rollback_point() is None:
+        raise ConflictError(
+            "There is no recorded version to roll back to yet. A rollback point is "
+            "written the first time you install an update from here.",
+            code="no_rollback_point",
+        )
     if not runner_is_installed():
         raise ServiceError(
             "The update runner is not installed on this server, so updates cannot "
@@ -256,6 +309,7 @@ def request_update(requested_by_user_id):
     payload = {
         "requested_at": get_now_utc().isoformat(),
         "requested_by_user_id": requested_by_user_id,
+        "action": action,
         "revision_before": get_local_version().get("revision"),
     }
     request_path = UPDATE_STATE_DIR / REQUEST_FILENAME

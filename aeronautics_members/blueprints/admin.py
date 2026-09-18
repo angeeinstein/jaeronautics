@@ -1298,16 +1298,17 @@ def admin_request_system_update():
     and must stay that way. It records a request that the root-side watcher
     picks up, which is also why there is nothing to wait for here.
     """
+    action = "rollback" if request.form.get("action") == "rollback" else "update"
     before = describe_update_state()
     try:
-        request_update(requested_by_user_id=current_user.id)
+        request_update(requested_by_user_id=current_user.id, action=action)
     except ServiceError as exc:
         flash(exc.message, "warning" if exc.http_status < 500 else "danger")
         return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
 
     log_audit_event(
         category="system",
-        event_type="update_requested",
+        event_type="rollback_requested" if action == "rollback" else "update_requested",
         actor_user=current_user,
         target_user=current_user,
         before={"revision": (before.get("local") or {}).get("revision")},
@@ -1316,9 +1317,16 @@ def admin_request_system_update():
     )
     db.session.commit()
 
-    flash(
-        _("The update has started. The site restarts while it runs, so this page "
-          "may be briefly unavailable; it reloads by itself when the update is done."),
-        "info",
-    )
+    if action == "rollback":
+        flash(
+            _("The rollback has started. The site restarts while it runs, so this "
+              "page may be briefly unavailable; it reloads by itself when it is done."),
+            "info",
+        )
+    else:
+        flash(
+            _("The update has started. The site restarts while it runs, so this page "
+              "may be briefly unavailable; it reloads by itself when the update is done."),
+            "info",
+        )
     return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))

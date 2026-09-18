@@ -641,6 +641,36 @@
                             </button>
                             <span class="text-muted ms-2">{{ _('Starts immediately. Takes a few minutes to finish, and the page follows along.') }}</span>
                         </form>
+
+                        {% if update_state.rollback_point %}
+                        <hr class="my-4">
+                        <h5>{{ _('Go back to the previous version') }}</h5>
+                        <p class="text-muted small mb-2">
+                            {{ _('If an update caused a problem, this returns the site to the version that was running before it.') }}
+                            {{ _('It restores the program only: data added since the update stays, and the database structure is left as it is.') }}
+                        </p>
+                        <dl class="row small mb-3">
+                            <dt class="col-sm-4">{{ _('Would return to') }}</dt>
+                            <dd class="col-sm-8"><code>{{ update_state.rollback_point.short_revision }}</code></dd>
+                            {% if update_state.rollback_point.recorded_at %}
+                            <dt class="col-sm-4">{{ _('Recorded') }}</dt>
+                            <dd class="col-sm-8"><span class="text-muted">{{ update_state.rollback_point.recorded_at }}</span></dd>
+                            {% endif %}
+                            {% if update_state.rollback_point.database_backup %}
+                            <dt class="col-sm-4">{{ _('Database backup') }}</dt>
+                            <dd class="col-sm-8"><code class="small">{{ update_state.rollback_point.database_backup }}</code></dd>
+                            {% endif %}
+                        </dl>
+                        <form method="POST" action="{{ url_for('admin.admin_request_system_update') }}"
+                              data-confirm="{{ _('Go back to the previous version? The site will restart and be briefly unavailable.') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="rollback">
+                            <button type="submit" class="btn btn-outline-secondary"
+                                    {% if not update_state.runner_installed or update_state.in_progress %}disabled{% endif %}>
+                                {{ _('Roll back to %(revision)s', revision=update_state.rollback_point.short_revision) }}
+                            </button>
+                        </form>
+                        {% endif %}
                     </div>
                 </div>
 

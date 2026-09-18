@@ -59,6 +59,11 @@ UPDATE_RUNNER_SERVICE_FILE=""
 UPDATE_RUNNER_TIMER_FILE=""
 UPDATE_RUNNER_PATH_FILE=""
 UPDATE_RUNNER_SCRIPT="/usr/local/lib/jaeronautics/update-runner.sh"
+# Where the revision running before the last update is recorded, so there is
+# something concrete to go back to.
+ROLLBACK_FILE="${STATE_DIR}/rollback.conf"
+SKIP_DB_BACKUP="${SKIP_DB_BACKUP:-0}"
+LAST_DB_BACKUP_FILE=""
 UPDATE_STATE_DIR="/var/lib/jaeronautics/updates"
 UPDATE_COMMAND_PATH="/usr/local/bin/update"
 PACKAGE_CACHE_UPDATED=0
@@ -101,6 +106,21 @@ error() { log "ERR" "${COLOR_RED}" "$*"; }
 die() {
     error "$*"
     exit 1
+}
+
+require_safe_sql_identifier() {
+    # DB_NAME and DB_USER are interpolated straight into CREATE DATABASE, CREATE
+    # USER and GRANT. Quoting them correctly for MySQL is fiddly and easy to get
+    # subtly wrong, and a database called anything but a plain identifier is a
+    # poor idea regardless -- so reject those names up front instead. MySQL
+    # limits a user name to 32 characters and a database name to 64.
+    local label="$1" value="$2" max_length="$3"
+    if [[ ! "${value}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        die "${label} must contain only letters, digits and underscores and start with a letter or underscore. Got: ${value}"
+    fi
+    if (( ${#value} > max_length )); then
+        die "${label} must be at most ${max_length} characters. Got ${#value}."
+    fi
 }
 
 diag_section() {
@@ -309,6 +329,14 @@ load_state() {
 parse_args() {
     while (($#)); do
         case "$1" in
+            --rollback)
+                MODE="rollback"
+                shift
+                ;;
+            --skip-db-backup)
+                SKIP_DB_BACKUP=1
+                shift
+                ;;
             --mode)
                 MODE="${2:-}"
                 shift 2
@@ -913,16 +941,39 @@ backup_runtime_state() {
     fi
 
     if [[ "${USE_LOCAL_DB:-1}" == "1" && ( "${DB_HOST:-127.0.0.1}" == "127.0.0.1" || "${DB_HOST:-localhost}" == "localhost" ) && -n "${DB_NAME:-}" ]]; then
+        # This dump is the only way back from a migration, because a rollback
+        # restores code and deliberately leaves the schema alone. Failing to take
+        # it is therefore a reason to stop, not a warning to scroll past.
         if dump_client="$(db_dump_client 2>/dev/null)"; then
             dump_file="${BACKUP_DIR}/${APP_NAME}-db-${backup_stamp}.sql.gz"
             if "${dump_client}" --protocol=socket -u root --single-transaction --quick --skip-lock-tables "${DB_NAME}" | gzip -c > "${dump_file}"; then
                 info "Backed up MariaDB database to ${dump_file}"
+                LAST_DB_BACKUP_FILE="${dump_file}"
             else
                 rm -f "${dump_file}" 2>/dev/null || true
-                warn "Database backup failed for ${DB_NAME}. Continuing without a DB dump."
+                if [[ "${SKIP_DB_BACKUP:-0}" == "1" ]]; then
+                    warn "Database backup failed for ${DB_NAME}, continuing because --skip-db-backup was given."
+                else
+                    die "Database backup failed for ${DB_NAME}. Refusing to continue: without it there is no way back from a schema change. Fix the problem, or re-run with --skip-db-backup if you accept that risk."
+                fi
             fi
+        elif [[ "${SKIP_DB_BACKUP:-0}" == "1" ]]; then
+            warn "No mysqldump/mariadb-dump found, continuing because --skip-db-backup was given."
         else
-            warn "Could not find mysqldump/mariadb-dump. Continuing without a DB dump backup."
+            die "Could not find mysqldump or mariadb-dump, so no database backup can be taken. Install one, or re-run with --skip-db-backup if you accept that risk."
+        fi
+    fi
+
+    # Staged avatar uploads are real data the database does not hold: they are
+    # files awaiting an administrator's approval, and a restore without them
+    # loses those submissions silently.
+    if [[ -d "${INSTALL_DIR}/storage" ]] && command_exists tar; then
+        local storage_archive="${BACKUP_DIR}/${APP_NAME}-storage-${backup_stamp}.tar.gz"
+        if tar -czf "${storage_archive}" -C "${INSTALL_DIR}" storage 2>/dev/null; then
+            info "Backed up uploaded files to ${storage_archive}"
+        else
+            rm -f "${storage_archive}" 2>/dev/null || true
+            warn "Could not back up ${INSTALL_DIR}/storage."
         fi
     fi
 
@@ -941,6 +992,91 @@ warn_local_repo_changes() {
     if [[ -n "$(git_in_dir "${target_dir}" status --porcelain)" ]]; then
         warn "Local git changes were detected in ${target_dir}. Repo changes are no longer auto-backed up by the installer and will be discarded by update. Runtime configuration and the local database are backed up separately."
     fi
+}
+
+record_rollback_point() {
+    # Called before the checkout moves, so this records what is running *now*.
+    local revision alembic_revision
+    revision="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf '')"
+    [[ -n "${revision}" ]] || return 0
+
+    alembic_revision="$(current_schema_revision)"
+
+    mkdir -p "${STATE_DIR}"
+    cat > "${ROLLBACK_FILE}" <<EOF
+# Written by install.sh before an update. "rollback --rollback" returns here.
+ROLLBACK_REVISION="${revision}"
+ROLLBACK_BRANCH="${BRANCH:-}"
+ROLLBACK_SCHEMA_REVISION="${alembic_revision}"
+ROLLBACK_DB_BACKUP="${LAST_DB_BACKUP_FILE:-}"
+ROLLBACK_RECORDED_AT="$(date --iso-8601=seconds)"
+EOF
+    chmod 600 "${ROLLBACK_FILE}"
+    info "Recorded rollback point at ${revision:0:8}."
+}
+
+current_schema_revision() {
+    # Read straight from the database rather than through the application, which
+    # may be the very thing that is broken.
+    local client
+    if ! client="$(db_client 2>/dev/null)"; then
+        printf ''
+        return 0
+    fi
+    "${client}" --protocol=socket -u root -N -B -e \
+        "SELECT version_num FROM \`${DB_NAME}\`.alembic_version LIMIT 1;" 2>/dev/null || printf ''
+}
+
+roll_back_installation() {
+    [[ -f "${ROLLBACK_FILE}" ]] || die "No rollback point has been recorded yet, so there is nothing to go back to."
+    # shellcheck disable=SC1090
+    source "${ROLLBACK_FILE}"
+    [[ -n "${ROLLBACK_REVISION:-}" ]] || die "The rollback point in ${ROLLBACK_FILE} has no revision recorded."
+
+    local current_revision
+    current_revision="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+    if [[ "${current_revision}" == "${ROLLBACK_REVISION}" ]]; then
+        success "Already running ${ROLLBACK_REVISION:0:8}; nothing to roll back."
+        return 0
+    fi
+
+    step "Rolling back to ${ROLLBACK_REVISION:0:8}"
+    info "Recorded at ${ROLLBACK_RECORDED_AT:-unknown}, currently running ${current_revision:0:8}."
+
+    local schema_now
+    schema_now="$(current_schema_revision)"
+    if [[ -n "${ROLLBACK_SCHEMA_REVISION:-}" && -n "${schema_now}" && "${schema_now}" != "${ROLLBACK_SCHEMA_REVISION}" ]]; then
+        # Deliberately not undone. Every migration here only adds tables and
+        # columns, which older code ignores, so leaving the schema forward is
+        # safe. Undoing it would mean dropping tables -- destroying everything
+        # written since the update, which is worse than the fault being escaped.
+        warn "The database schema moved from ${ROLLBACK_SCHEMA_REVISION} to ${schema_now} during that update."
+        warn "The rollback restores the code only and leaves the schema as it is."
+        if [[ -n "${ROLLBACK_DB_BACKUP:-}" && -f "${ROLLBACK_DB_BACKUP}" ]]; then
+            warn "To put the data back as well, restore ${ROLLBACK_DB_BACKUP} by hand afterwards."
+        fi
+    fi
+
+    git_in_dir "${INSTALL_DIR}" fetch --prune origin || true
+    git_in_dir "${INSTALL_DIR}" checkout --detach "${ROLLBACK_REVISION}" \
+        || die "Could not check out ${ROLLBACK_REVISION}. The repository may have been rewritten."
+
+    # Reinstall from the rolled-back revision so dependencies, unit files and the
+    # nginx configuration all match the code that is about to run.
+    ensure_virtualenv
+    render_service_file
+    render_billing_reconcile_timer_files
+    render_notifications_timer_files
+    render_cleanup_logs_timer_files
+    render_external_work_timer_files
+    render_update_runner
+    render_update_command
+    render_nginx_config
+    systemctl daemon-reload
+    reload_services
+    verify_installation
+
+    success "Rolled back to ${ROLLBACK_REVISION:0:8}."
 }
 
 sync_repo_to_dir() {
@@ -1299,6 +1435,10 @@ ensure_database() {
     fi
 
     step "Configuring local MariaDB database"
+    # The password is escaped because it is a string literal and may legitimately
+    # contain anything; the names are identifiers and are validated instead.
+    require_safe_sql_identifier "The database name" "${DB_NAME}" 64
+    require_safe_sql_identifier "The database user" "${DB_USER}" 32
     local password_sql
     password_sql="$(sql_escape "${DB_PASSWORD}")"
     run_db_sql "
@@ -1764,14 +1904,23 @@ if [[ ! -f "\${INSTALLER}" ]]; then
     echo "Installer not found at \${INSTALLER}. Is ${APP_NAME} still installed?" >&2
     exit 1
 fi
-if [[ \${EUID} -ne 0 ]]; then
-    exec sudo bash "\${INSTALLER}" --mode update "\$@"
+# "update --rollback" (or "rollback") returns to the revision that was running
+# before the last update.
+MODE_ARGS=(--mode update)
+if [[ "\${1:-}" == "--rollback" || "\$(basename "\$0")" == "rollback" ]]; then
+    MODE_ARGS=(--rollback)
+    [[ "\${1:-}" == "--rollback" ]] && shift
 fi
-exec bash "\${INSTALLER}" --mode update "\$@"
+if [[ \${EUID} -ne 0 ]]; then
+    exec sudo bash "\${INSTALLER}" "\${MODE_ARGS[@]}" "\$@"
+fi
+exec bash "\${INSTALLER}" "\${MODE_ARGS[@]}" "\$@"
 EOF
 
     chmod 755 "${UPDATE_COMMAND_PATH}"
-    success "Run 'update' any time to update ${APP_NAME} (it will elevate with sudo automatically)."
+    # A 'rollback' alias, so going back is as easy to remember as going forward.
+    ln -sf "${UPDATE_COMMAND_PATH}" "$(dirname "${UPDATE_COMMAND_PATH}")/rollback"
+    success "Run 'update' any time to update ${APP_NAME}, or 'rollback' to return to the previous version."
 }
 
 render_nginx_config() {
@@ -2241,6 +2390,9 @@ install_or_update() {
     source_existing_env
     if [[ "${INSTALLATION_EXISTS}" == "1" ]]; then
         backup_runtime_state
+        # Must run before ensure_repo_present moves the checkout, or it would
+        # record the revision being installed rather than the one being replaced.
+        record_rollback_point
     fi
 
     detect_redis_service_name
@@ -2426,13 +2578,17 @@ main() {
             print_cloudflare_tunnel_help
             success "Installation finished successfully."
             ;;
+        rollback)
+            roll_back_installation
+            cleanup_bootstrap_dir
+            ;;
         uninstall)
             print_summary
             uninstall_everything
             cleanup_bootstrap_dir
             ;;
         *)
-            die "Invalid mode '${MODE}'. Expected install, update, repair, or uninstall."
+            die "Invalid mode '${MODE}'. Expected install, update, repair, rollback, or uninstall."
             ;;
     esac
 }

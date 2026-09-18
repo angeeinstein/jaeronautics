@@ -21,6 +21,7 @@ CLAIM_FILE="${STATE_DIR}/request.processing.json"
 STATUS_FILE="${STATE_DIR}/status.json"
 LOG_FILE="${STATE_DIR}/last-run.log"
 UPDATE_COMMAND="${UPDATE_COMMAND:-/usr/local/bin/update}"
+ROLLBACK_FILE="${ROLLBACK_FILE:-/etc/jaeronautics/rollback.conf}"
 INSTALL_DIR="${INSTALL_DIR:-/var/www/jaeronautics}"
 # Keep the tail short: it is rendered on a web page, and a full install log is
 # both large and more likely to contain incidental detail.
@@ -105,6 +106,16 @@ main() {
     REQUESTED_BY="$(read_request_field requested_by_user_id)"
     [[ "${REQUESTED_BY}" =~ ^[0-9]+$ ]] || REQUESTED_BY="null"
 
+    # The request may ask for a rollback instead of an update, but that is the
+    # whole of its influence: which revision to return to comes from this side,
+    # from the rollback point install.sh recorded. Anything unrecognised is
+    # treated as an update rather than trusted.
+    local action command_args=()
+    action="$(read_request_field action)"
+    if [[ "${action}" == "rollback" ]]; then
+        command_args=(--rollback)
+    fi
+
     local started_at revision_before expected_steps
     started_at="$(date --iso-8601=seconds)"
     revision_before="$(current_revision)"
@@ -126,7 +137,7 @@ main() {
     fi
 
     local exit_code=0
-    if ! stdbuf -oL -eL "${UPDATE_COMMAND}" >>"${LOG_FILE}" 2>&1; then
+    if ! stdbuf -oL -eL "${UPDATE_COMMAND}" "${command_args[@]+"${command_args[@]}"}" >>"${LOG_FILE}" 2>&1; then
         exit_code=$?
     fi
 

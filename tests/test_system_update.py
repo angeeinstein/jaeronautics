@@ -214,3 +214,89 @@ class TestRunnerScript:
         # Without an atomic claim, a slow update could be started twice by
         # consecutive timer ticks.
         assert "mv -n" in self.RUNNER.read_text()
+
+
+class TestRollback:
+    """Rolling back is a second fixed action, not a free choice of revision."""
+
+    def _record_point(self, tmp_path, monkeypatch, revision="a" * 40):
+        rollback_file = tmp_path / "rollback.conf"
+        rollback_file.write_text(
+            f'ROLLBACK_REVISION="{revision}"\n'
+            'ROLLBACK_SCHEMA_REVISION="b7e2d15a4c83"\n'
+            'ROLLBACK_DB_BACKUP="/var/backups/jaeronautics/db.sql.gz"\n'
+            'ROLLBACK_RECORDED_AT="2026-09-18T20:00:00+00:00"\n'
+        )
+        monkeypatch.setattr(system_update, "ROLLBACK_FILE", rollback_file)
+        return rollback_file
+
+    def test_rollback_point_is_read_for_display(self, app, tmp_path, monkeypatch):
+        self._record_point(tmp_path, monkeypatch)
+        point = system_update.read_rollback_point()
+        assert point["short_revision"] == "a" * 8
+        assert point["database_backup"].endswith("db.sql.gz")
+
+    def test_missing_rollback_point_is_not_an_error(self, app, tmp_path, monkeypatch):
+        monkeypatch.setattr(system_update, "ROLLBACK_FILE", tmp_path / "absent.conf")
+        assert system_update.read_rollback_point() is None
+
+    def test_rollback_request_names_the_action_only(self, app, state_dir, tmp_path, monkeypatch):
+        """The request must not be able to choose which revision to land on.
+
+        It selects between two operations whose targets both come from the
+        privileged side. If a revision could be named here, reaching this
+        endpoint would mean running any code as root.
+        """
+        self._record_point(tmp_path, monkeypatch)
+
+        system_update.request_update(requested_by_user_id=3, action="rollback")
+
+        payload = json.loads((state_dir / system_update.REQUEST_FILENAME).read_text())
+        assert payload["action"] == "rollback"
+        assert not ({"revision", "target", "ref", "branch", "commit"} & set(payload))
+
+    def test_rollback_is_refused_without_a_recorded_point(self, app, state_dir, tmp_path, monkeypatch):
+        monkeypatch.setattr(system_update, "ROLLBACK_FILE", tmp_path / "absent.conf")
+        with pytest.raises(ConflictError):
+            system_update.request_update(requested_by_user_id=3, action="rollback")
+
+    def test_unknown_actions_are_rejected(self, app, state_dir):
+        from aeronautics_members.services import ValidationError
+
+        with pytest.raises(ValidationError):
+            system_update.request_update(requested_by_user_id=3, action="rm -rf /")
+
+    def test_only_an_admin_may_roll_back(self, client, state_dir, tmp_path, monkeypatch):
+        self._record_point(tmp_path, monkeypatch)
+        member = make_member(email="notadmin@example.com")
+        _login(client, member.user_id)
+
+        response = client.post("/admin/system-update", data={"action": "rollback"})
+
+        assert response.status_code in (302, 403)
+        assert not (state_dir / system_update.REQUEST_FILENAME).exists()
+
+    def test_admin_rollback_is_audited_distinctly(self, client, state_dir, tmp_path, monkeypatch, admin_user):
+        self._record_point(tmp_path, monkeypatch)
+        _login(client, admin_user.id)
+
+        client.post("/admin/system-update", data={"action": "rollback"})
+
+        entry = db.session.execute(
+            db.select(AuditLog).filter_by(event_type="rollback_requested")
+        ).scalar_one()
+        assert entry.actor_user_id == admin_user.id
+
+
+class TestRunnerRollbackHandling:
+    RUNNER = Path(__file__).resolve().parent.parent / "deploy" / "update-runner.sh"
+
+    def test_runner_only_honours_the_known_action(self):
+        source = self.RUNNER.read_text()
+        assert 'action="$(read_request_field action)"' in source
+        assert '"${action}" == "rollback"' in source
+
+    def test_runner_does_not_take_a_revision_from_the_request(self):
+        source = self.RUNNER.read_text()
+        for field in ("revision", "target", "commit", "ref"):
+            assert f"read_request_field {field}" not in source
