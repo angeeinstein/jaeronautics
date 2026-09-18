@@ -77,3 +77,66 @@ def test_hsts_is_sent():
     # preload is effectively irreversible; it should be a deliberate decision,
     # not something that arrives with a default config.
     assert "preload" not in header
+
+
+VENDOR = REPO / "aeronautics_members" / "static" / "vendor"
+
+
+def test_no_external_asset_origins_in_templates():
+    """Every script and stylesheet must come from this origin.
+
+    A third-party CDN is a dependency that can change under you, needs its own
+    CSP allowance, and leaks every visitor's address to whoever runs it. It is
+    also what produced the source-map console errors: the browser asked the CDN
+    for files the CSP would not let it fetch.
+    """
+    offenders = []
+    for path in TEMPLATES.rglob("*.html"):
+        # Email bodies are rendered by mail clients, not by the browser under
+        # this CSP, and they legitimately link out.
+        if "emails" in path.parts:
+            continue
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            # Assets only: a <script src>, an <img src>, or a stylesheet <link>.
+            # A plain <a href> is a link the visitor chooses to follow.
+            is_asset = re.search(r'\bsrc\s*=\s*["\']https?://', line, re.I) or (
+                "<link" in line.lower()
+                and re.search(r'\bhref\s*=\s*["\']https?://', line, re.I)
+            )
+            if is_asset:
+                offenders.append(f"{path.relative_to(TEMPLATES)}:{lineno}: {line.strip()[:90]}")
+
+    assert not offenders, (
+        "Assets must be served from this origin; vendor them into static/ instead:\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+def test_vendored_assets_are_present():
+    # The templates reference these by path, so a missing file is an unstyled
+    # site rather than a test failure anywhere else.
+    for name in ("bootstrap.min.css", "bootstrap.bundle.min.js"):
+        asset = VENDOR / name
+        assert asset.exists(), f"{name} is missing from static/vendor"
+        assert asset.stat().st_size > 10_000, f"{name} looks truncated"
+
+
+def test_vendored_assets_request_no_source_maps():
+    """A source map reference is a request the CSP will refuse."""
+    for asset in VENDOR.iterdir():
+        assert "sourceMappingURL" not in asset.read_text(errors="replace"), (
+            f"{asset.name} points at a source map that is not vendored"
+        )
+
+
+def test_csp_allows_only_this_origin_for_code():
+    csp = next(
+        line for line in NGINX_CONF.read_text().splitlines()
+        if "Content-Security-Policy" in line
+    )
+    for directive in ("script-src", "style-src"):
+        value = csp.split(directive)[1].split(";")[0]
+        assert "http" not in value, f"{directive} still allows an external origin: {value.strip()}"
+    # Defences that cost nothing once everything is same-origin.
+    for directive in ("object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'"):
+        assert directive in csp, f"CSP is missing {directive}"

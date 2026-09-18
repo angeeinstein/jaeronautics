@@ -1735,7 +1735,7 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://cdn.jsdelivr.net/npm/; style-src 'self' https://cdn.jsdelivr.net/npm/; frame-src https://js.stripe.com; img-src 'self' data:;" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; frame-src 'none';" always;
 
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
@@ -1773,7 +1773,7 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://cdn.jsdelivr.net/npm/; style-src 'self' https://cdn.jsdelivr.net/npm/; frame-src https://js.stripe.com; img-src 'self' data:;" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; frame-src 'none';" always;
 
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
