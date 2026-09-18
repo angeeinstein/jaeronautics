@@ -157,6 +157,18 @@ except ImportError:
 
 # Configuration lives in config.py, a leaf module the service layer can import
 # without depending on this one. Re-exported here so existing imports keep working.
+from .services.membership import (  # noqa: E402
+    ACTIVE_MEMBER_STATUSES,
+    PAYMENT_EVIDENCE_STATUSES,
+    RESUMABLE_MEMBER_STATUSES,
+    build_membership_cycle,
+    format_membership_date_display,
+    invoice_coverage_year,
+    member_has_active_access,
+    set_member_membership_window,
+    sync_member_active_state,
+    update_member_paid_coverage,
+)
 from .services.clock import (  # noqa: E402
     first_day_of_year,
     get_membership_now,
@@ -259,8 +271,6 @@ IDENTITY_MEMBER_FIELDS = (
 )
 
 MEMBER_PROFILE_FIELDS = IDENTITY_MEMBER_FIELDS + DIRECT_MEMBER_PROFILE_FIELDS
-ACTIVE_MEMBER_STATUSES = {"paid", "free_period", "canceled", "cancel_scheduled"}
-RESUMABLE_MEMBER_STATUSES = {"pending_checkout", "processing", "failed", "unpaid"}
 TOKEN_MAX_AGE_VERIFY_EMAIL = 60 * 60 * 24 * 7
 TOKEN_MAX_AGE_PASSWORD_RESET = 60 * 60 * 24
 TOKEN_MAX_AGE_FORUM_ENTRY = 60 * 60 * 24 * 30
@@ -393,35 +403,6 @@ def subscription_has_scheduled_cancellation(subscription):
 
 
 
-def build_membership_cycle(join_date, annual_amount_cents):
-    current_year = join_date.year
-    next_year_start = first_day_of_year(current_year + 1)
-    current_year_end = last_day_of_year(current_year)
-    total_days = (first_day_of_year(current_year + 1) - first_day_of_year(current_year)).days
-    remaining_days = (current_year_end - join_date).days + 1
-    free_period = join_date >= date(current_year, 10, 1)
-    prorated_amount_cents = 0
-    if not free_period:
-        prorated_amount_cents = int(
-            (Decimal(annual_amount_cents) * Decimal(remaining_days) / Decimal(total_days)).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-        )
-
-    return {
-        "join_date": join_date,
-        "coverage_start": join_date,
-        "coverage_end": current_year_end,
-        "renewal_due_on": next_year_start,
-        "trial_end_unix": start_of_day_unix(next_year_start),
-        "trial_end_iso": next_year_start.isoformat(),
-        "free_period": free_period,
-        "prorated_amount_cents": prorated_amount_cents,
-        "remaining_days": remaining_days,
-        "total_days": total_days,
-        "current_year": current_year,
-        "thank_you_phase": "free_period" if free_period else "prorated",
-    }
 
 
 
@@ -455,12 +436,6 @@ def get_stripe_membership_price():
 
 
 
-def format_membership_date_display(value):
-    locale = str(get_locale()) if get_locale() else None
-    try:
-        return format_date(value, format="long", locale=locale)
-    except Exception:
-        return value.isoformat()
 
 
 
@@ -543,43 +518,12 @@ def build_member_payload(member):
 
 
 
-def member_has_active_access(member, on_date=None):
-    if member is None:
-        return False
-    today = on_date or get_membership_today()
-    if not member.membership_ends_on or member.membership_ends_on < today:
-        return False
-    return member.payment_status in ACTIVE_MEMBER_STATUSES or member.is_active
 
 
 
-def sync_member_active_state(member, on_date=None):
-    if member is None:
-        return False
-
-    today = on_date or get_membership_today()
-    changed = False
-
-    if member.membership_ends_on and member.membership_ends_on < today and member.is_active:
-        member.is_active = False
-        changed = True
-        if member.payment_status in ACTIVE_MEMBER_STATUSES:
-            member.payment_status = "expired"
-    elif member.membership_ends_on and member.membership_ends_on >= today and member.payment_status in ACTIVE_MEMBER_STATUSES and not member.is_active:
-        member.is_active = True
-        changed = True
-
-    return changed
 
 
 
-def set_member_membership_window(member, starts_on, ends_on, renewal_due_on, payment_status, is_active, cancel_at_period_end=False):
-    member.membership_starts_on = starts_on
-    member.membership_ends_on = ends_on
-    member.renewal_due_on = renewal_due_on
-    member.payment_status = payment_status
-    member.is_active = is_active
-    member.cancel_at_period_end = cancel_at_period_end
 
 
 
@@ -673,53 +617,8 @@ def backfill_member_stripe_references(member, customer_id=None, subscription_id=
 
 
 
-def invoice_coverage_year(invoice):
-    """Vienna-time year of a Stripe invoice's billing period start, or None.
-
-    Renewal coverage should follow the invoice's billing period rather than the
-    payment timestamp, which can map to the wrong calendar day near midnight or
-    the year boundary and fail to advance coverage.
-    """
-    if not invoice:
-        return None
-    period_starts = [
-        (line.get("period") or {}).get("start")
-        for line in ((invoice.get("lines") or {}).get("data") or [])
-        if (line.get("period") or {}).get("start")
-    ]
-    period_start = max(period_starts) if period_starts else invoice.get("period_start")
-    if not period_start:
-        return None
-    return to_membership_date(period_start).year
 
 
-def update_member_paid_coverage(member, paid_on, coverage_year=None):
-    if coverage_year is None:
-        coverage_year = paid_on.year
-        if member.membership_ends_on and member.membership_ends_on >= paid_on:
-            coverage_year = member.membership_ends_on.year
-        starts_on = member.membership_starts_on
-        if starts_on is None or starts_on.year != coverage_year:
-            starts_on = first_day_of_year(coverage_year) if paid_on == first_day_of_year(coverage_year) else paid_on
-    else:
-        # A full paid year always runs Jan 1 - Dec 31.
-        starts_on = first_day_of_year(coverage_year)
-
-    # Never regress coverage: an explicit (or derived) year must not move the
-    # membership end date earlier than what the member already has.
-    if member.membership_ends_on and coverage_year < member.membership_ends_on.year:
-        coverage_year = member.membership_ends_on.year
-        starts_on = member.membership_starts_on or first_day_of_year(coverage_year)
-
-    set_member_membership_window(
-        member,
-        starts_on=starts_on,
-        ends_on=last_day_of_year(coverage_year),
-        renewal_due_on=first_day_of_year(coverage_year + 1),
-        payment_status="paid",
-        is_active=True,
-        cancel_at_period_end=member.cancel_at_period_end,
-    )
 
 
 
@@ -2048,11 +1947,6 @@ def create_invoice_membership_for_member(member):
 
 
 
-# Statuses that were established by real evidence -- a paid invoice, a completed
-# Checkout, or an explicitly granted free period -- rather than merely inferred
-# from the Stripe subscription lifecycle. Reconciliation may preserve these, but
-# must never promote a member into one without such evidence.
-PAYMENT_EVIDENCE_STATUSES = {"paid", "free_period"}
 
 
 def subscription_period_bounds(subscription):
@@ -3437,10 +3331,8 @@ def create_app(config_overrides=None):
     return app
 
 
-application = create_app()
-
 if __name__ == "__main__":
-    application.run(debug=False)
+    create_app().run(debug=False)
 
 
 

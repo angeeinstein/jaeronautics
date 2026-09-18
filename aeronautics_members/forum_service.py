@@ -26,9 +26,11 @@ except ImportError:  # pragma: no cover - optional until dependencies are instal
 try:
     from .db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
     from .security_utils import build_public_url
+    from .services.membership import member_has_active_access
 except ImportError:
     from db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
     from security_utils import build_public_url
+    from services.membership import member_has_active_access
 
 FORUM_STATE_INACTIVE = "inactive"
 FORUM_STATE_ONBOARDING = "onboarding"
@@ -872,10 +874,6 @@ def member_has_active_membership(member):
     # Use the same date-based access rule as the rest of the app so the forum and
     # the site never disagree: coverage must not have lapsed, regardless of the
     # possibly-stale is_active flag.
-    try:
-        from .app import member_has_active_access
-    except ImportError:
-        from app import member_has_active_access
     return member_has_active_access(member)
 
 

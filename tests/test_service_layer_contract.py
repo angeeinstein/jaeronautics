@@ -79,3 +79,37 @@ def test_service_errors_carry_a_code_and_status():
 
     detailed = ValidationError("bad field", details={"field": "email"})
     assert detailed.to_dict()["error"]["details"] == {"field": "email"}
+
+
+def test_services_are_importable_without_the_flask_app():
+    """The service layer must not require app.py to be loaded.
+
+    If importing a service pulls in the app module, the dependency arrow has
+    flipped back around and the layer is decorative. Run in a subprocess so this
+    is unaffected by what the rest of the suite already imported.
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "from aeronautics_members.services import membership, clock\n"
+        "assert 'aeronautics_members.app' not in sys.modules, 'app.py was imported'\n"
+        "from datetime import date\n"
+        "assert membership.build_membership_cycle(date(2025, 7, 1), 12000)"
+        "['prorated_amount_cents'] == 6049\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], cwd=str(REPO), capture_output=True, text=True,
+        env={"PATH": "/usr/bin:/bin:/usr/local/bin", "SECRET_KEY": "x"},
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_forum_service_does_not_import_the_app_module():
+    """This import was previously deferred into a function to dodge a cycle."""
+    source = (REPO / "aeronautics_members" / "forum_service.py").read_text()
+    assert "from .app import" not in source and "from app import" not in source, (
+        "forum_service.py reaches back into app.py; the access rule belongs in "
+        "services/membership.py so both can import it normally"
+    )
