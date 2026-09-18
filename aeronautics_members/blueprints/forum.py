@@ -7,45 +7,73 @@ from the app module, which is fully initialized before this is imported.
 
 from flask import Blueprint, current_app
 
-from ..app import (
-    ADMIN_GENERAL_CHANNEL,
-    BadSignature,
-    ForumAvatarSubmission,
-    ForumProviderError,
-    Path,
-    SignatureExpired,
+from ..services.audit import (
+    log_audit_event,
+    snapshot_forum_avatar_submission_for_audit,
+)
+from ..services.clock import (
+    get_now_utc,
+)
+from ..services.forum import (
+    get_forum_service,
+    log_out_forum_session_if_possible,
+    sync_member_forum_state,
+)
+from ..services.identity import (
     TOKEN_MAX_AGE_FORUM_ENTRY,
     TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN,
-    User,
-    _,
-    abort,
-    build_forum_context,
-    current_user,
-    db,
-    flash,
-    flush_marked_notification_channels,
-    format_bytes_human,
-    get_current_member_for_user,
-    get_forum_service,
-    get_member_portal_target,
-    get_now_utc,
-    log_audit_event,
-    log_out_forum_session_if_possible,
-    login_required,
-    login_user,
-    logout_user,
-    member_has_active_access,
-    queue_curated_admin_notification,
-    read_token,
     mark_email_verified_from_token,
+    read_token,
+)
+from ..services.membership import (
+    member_has_active_access,
+)
+from ..services.notifications import (
+    flush_marked_notification_channels,
+    queue_curated_admin_notification,
+)
+from flask import (
+    abort,
+    flash,
     redirect,
     render_template,
     request,
     send_file,
     session,
-    snapshot_forum_avatar_submission_for_audit,
-    sync_member_forum_state,
     url_for,
+)
+from flask_babel import (
+    _,
+)
+from flask_login import (
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from itsdangerous import (
+    BadSignature,
+    SignatureExpired,
+)
+from pathlib import (
+    Path,
+)
+from ..db_models import (
+    ForumAvatarSubmission,
+    User,
+    db,
+)
+from ..forum_service import (
+    ForumProviderError,
+)
+from ..notification_service import (
+    ADMIN_GENERAL_CHANNEL,
+)
+from ..app import (
+    build_forum_context,
+    format_bytes_human,
+    get_current_member_for_user,
+    get_member_portal_target,
 )
 
 forum_bp = Blueprint("forum", __name__)

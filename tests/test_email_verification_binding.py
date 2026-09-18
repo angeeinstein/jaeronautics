@@ -5,14 +5,14 @@ so an old link could mark a newly entered (unproven) address as verified. That
 matters because DiscourseConnect asserts this address to the forum, which
 associates forum accounts by email.
 """
-from conftest import app_module, db, make_member
+from conftest import clock, db, identity, make_member, workflows
 from aeronautics_members.db_models import User
 from aeronautics_members.forum_service import DiscourseConnectProvider
 
 
 def _issue_verification_token(user):
-    token = app_module.generate_token(
-        "verify-email", **app_module.build_email_verification_claims(user)
+    token = identity.generate_token(
+        "verify-email", **identity.build_email_verification_claims(user)
     )
     db.session.commit()
     return token
@@ -26,7 +26,7 @@ def test_token_does_not_verify_a_changed_address(app, client):
     # The account moves to a different address before the link is used.
     user.email = "attacker@example.com"
     user.email_verified_at = None
-    app_module.rotate_email_verification_nonce(user)
+    identity.rotate_email_verification_nonce(user)
     db.session.commit()
 
     resp = client.get(f"/verify-email/{token}", follow_redirects=False)
@@ -53,7 +53,7 @@ def test_rotated_nonce_revokes_outstanding_links(app, client):
 
     # Same address, but the nonce was rotated (e.g. an address change that was
     # then reverted). The old link must no longer be accepted.
-    app_module.rotate_email_verification_nonce(user)
+    identity.rotate_email_verification_nonce(user)
     db.session.commit()
 
     client.get(f"/verify-email/{token}", follow_redirects=False)
@@ -66,7 +66,7 @@ def test_legacy_token_without_claims_is_rejected(app, client):
     # which address they were sent to.
     member = make_member(email="legacy@example.com")
     user = member.user
-    token = app_module.generate_token("verify-email", user_id=user.id)
+    token = identity.generate_token("verify-email", user_id=user.id)
 
     client.get(f"/verify-email/{token}", follow_redirects=False)
 
@@ -76,11 +76,11 @@ def test_legacy_token_without_claims_is_rejected(app, client):
 def test_email_change_rotates_the_nonce(app):
     member = make_member(email="change@example.com")
     user = member.user
-    app_module.build_email_verification_claims(user)
+    identity.build_email_verification_claims(user)
     db.session.commit()
     original_nonce = user.email_verification_nonce
 
-    app_module.sync_member_primary_email(member, "changed@example.com")
+    workflows.sync_member_primary_email(member, "changed@example.com")
     db.session.commit()
 
     assert user.email_verification_nonce != original_nonce
@@ -94,7 +94,7 @@ class TestDiscourseActivation:
         member = make_member(email="sso@example.com")
         user = member.user
         if verified:
-            user.email_verified_at = app_module.get_now_utc()
+            user.email_verified_at = clock.get_now_utc()
         db.session.commit()
         provider = DiscourseConnectProvider(settings={})
         return provider.build_sso_payload(user, member, desired_state="active", nonce="n1")

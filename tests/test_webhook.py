@@ -11,11 +11,11 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from conftest import Member, ProcessedStripeEvent, app_module, db, make_member
+from conftest import Member, ProcessedStripeEvent, clock, db, make_member, webhook_inbox
 from aeronautics_members.blueprints import webhook as webhook_module
 from aeronautics_members.db_models import Setting
 
-TODAY = app_module.get_membership_today()
+TODAY = clock.get_membership_today()
 YEAR_END = date(TODAY.year, 12, 31)
 NEXT_YEAR_START = date(TODAY.year + 1, 1, 1)
 
@@ -179,7 +179,7 @@ class TestIdempotency:
 
         post_event(client, monkeypatch, event)
 
-        assert app_module.stripe_event_already_processed("evt_checkout_1") is True
+        assert webhook_inbox.stripe_event_already_processed("evt_checkout_1") is True
 
     def test_claim_released_when_processing_raises(self, client, monkeypatch, stub_side_effects):
         # If the handler raises after claiming the event, the marker must be
@@ -202,7 +202,7 @@ class TestIdempotency:
         }
         resp = post_event(client, monkeypatch, event)
         assert resp.status_code == 500
-        assert app_module.stripe_event_already_processed("evt_boom") is False
+        assert webhook_inbox.stripe_event_already_processed("evt_boom") is False
 
     def test_event_abandoned_by_a_crash_is_reprocessed(self, client, monkeypatch, stub_side_effects):
         # Simulate a process killed mid-handler: the event was claimed but never
@@ -212,11 +212,11 @@ class TestIdempotency:
         event = checkout_event(member, member.user, activation_mode="free_period",
                                event_id="evt_crash")
 
-        assert app_module.claim_stripe_event("evt_crash", "checkout.session.completed") is True
+        assert webhook_inbox.claim_stripe_event("evt_crash", "checkout.session.completed") is True
         row = db.session.execute(
             db.select(ProcessedStripeEvent).filter_by(event_id="evt_crash")
         ).scalar_one()
-        row.claimed_at = app_module.get_now_utc() - app_module.STRIPE_EVENT_LEASE - timedelta(minutes=1)
+        row.claimed_at = clock.get_now_utc() - webhook_inbox.STRIPE_EVENT_LEASE - timedelta(minutes=1)
         db.session.commit()
 
         resp = post_event(client, monkeypatch, event)
@@ -239,7 +239,7 @@ class TestIdempotency:
         resp = post_event(client, monkeypatch, event)
 
         assert resp.status_code == 400
-        assert app_module.stripe_event_already_processed("evt_missing_meta") is False
+        assert webhook_inbox.stripe_event_already_processed("evt_missing_meta") is False
 
 
 class TestInvoicePaid:
@@ -281,8 +281,8 @@ class TestRenewalCoverage:
         make_member(email="renew@example.com", stripe_customer_id="cus_ren",
                     stripe_subscription_id="sub_ren", payment_status="free_period",
                     is_active=True, membership_ends_on=YEAR_END)
-        dec31_ts = app_module.start_of_day_unix(date(TODAY.year, 12, 31))
-        next_year_start_ts = app_module.start_of_day_unix(date(TODAY.year + 1, 1, 1))
+        dec31_ts = clock.start_of_day_unix(date(TODAY.year, 12, 31))
+        next_year_start_ts = clock.start_of_day_unix(date(TODAY.year + 1, 1, 1))
         event = {
             "id": "evt_renew", "type": "invoice.paid",
             "data": {"object": {
@@ -319,7 +319,7 @@ class TestDisputeLost:
 
         assert resp.status_code == 500
         # Released, so Stripe's retry is handled rather than ignored.
-        assert app_module.stripe_event_already_processed("evt_dispute_err") is False
+        assert webhook_inbox.stripe_event_already_processed("evt_dispute_err") is False
 
     def test_lost_dispute_deactivates_member(self, client, monkeypatch, stub_side_effects):
         member = make_member(email="disputed@example.com", stripe_customer_id="cus_d",

@@ -25,6 +25,15 @@ if str(REPO_ROOT) not in sys.path:
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from aeronautics_members import app as app_module  # noqa: E402
+from aeronautics_members.services import (  # noqa: E402
+    billing,
+    clock,
+    identity,
+    members,
+    membership,
+    webhook_inbox,
+    workflows,
+)
 from aeronautics_members.db_models import (  # noqa: E402
     Member,
     ProcessedStripeEvent,
@@ -33,7 +42,10 @@ from aeronautics_members.db_models import (  # noqa: E402
 )
 
 # Re-export commonly used names so tests can ``from conftest import app_module``.
-__all__ = ["app_module", "Member", "User", "ProcessedStripeEvent", "db"]
+__all__ = [
+    "app_module", "Member", "User", "ProcessedStripeEvent", "db",
+    "billing", "clock", "identity", "members", "membership", "webhook_inbox", "workflows",
+]
 
 
 @pytest.fixture

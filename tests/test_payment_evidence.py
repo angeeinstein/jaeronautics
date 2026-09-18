@@ -12,7 +12,7 @@ fails, so there the lifecycle *is* usable evidence.
 """
 from datetime import date
 
-from conftest import app_module, db, make_member
+from conftest import billing, clock, db, make_member
 from aeronautics_members.db_models import Member
 
 CUR = date.today().year
@@ -54,7 +54,7 @@ class TestInvoiceBilledNotTreatedAsPaid:
         # The prorated invoice is outstanding; a trialing send_invoice
         # subscription must not grant paid access.
         member = _invoice_member("inv_trial@example.com")
-        app_module.sync_member_subscription_state_from_subscription(
+        billing.sync_member_subscription_state_from_subscription(
             member, _subscription("trialing", "paid_now", "send_invoice"))
         db.session.commit()
 
@@ -66,7 +66,7 @@ class TestInvoiceBilledNotTreatedAsPaid:
         # The trial ended so Stripe reports "active", but the invoice may still
         # be unpaid -- status alone is not payment evidence.
         member = _invoice_member("inv_active@example.com")
-        app_module.sync_member_subscription_state_from_subscription(
+        billing.sync_member_subscription_state_from_subscription(
             member, _subscription("active", "paid_now", "send_invoice"))
         db.session.commit()
 
@@ -83,10 +83,10 @@ class TestInvoiceBilledNotTreatedAsPaid:
             membership_ends_on=date(CUR - 1, 12, 31),
         )
         sub = _subscription("active", "paid_now", "send_invoice", "sub_c", "cus_c")
-        sub["items"] = {"data": [{"current_period_start": app_module.start_of_day_unix(date(CUR, 1, 1))}]}
+        sub["items"] = {"data": [{"current_period_start": clock.start_of_day_unix(date(CUR, 1, 1))}]}
         sub["metadata"]["membership_ends_on"] = f"{CUR - 1}-12-31"
 
-        app_module.sync_member_subscription_state_from_subscription(member, sub)
+        billing.sync_member_subscription_state_from_subscription(member, sub)
         db.session.commit()
 
         assert db.session.get(Member, member.id).membership_ends_on == date(CUR - 1, 12, 31)
@@ -94,7 +94,7 @@ class TestInvoiceBilledNotTreatedAsPaid:
     def test_paid_invoice_member_keeps_paid_status(self, app):
         # Once invoice.paid established payment, reconciliation preserves it.
         member = _invoice_member("inv_paid@example.com", status="paid", active=True)
-        app_module.sync_member_subscription_state_from_subscription(
+        billing.sync_member_subscription_state_from_subscription(
             member, _subscription("active", "paid_now", "send_invoice"))
         db.session.commit()
 
@@ -105,7 +105,7 @@ class TestInvoiceBilledNotTreatedAsPaid:
     def test_free_period_invoice_member_stays_free(self, app):
         # An Oct+ joiner billed by invoice owes nothing this year.
         member = _invoice_member("inv_free@example.com", status="free_period", active=True)
-        app_module.sync_member_subscription_state_from_subscription(
+        billing.sync_member_subscription_state_from_subscription(
             member, _subscription("trialing", "free_period", "send_invoice"))
         db.session.commit()
 
@@ -117,7 +117,7 @@ class TestInvoiceBilledNotTreatedAsPaid:
 class TestAutomaticPaymentStillTrusted:
     def test_checkout_subscription_active_is_paid(self, app):
         member = _invoice_member("auto@example.com", sub_id="sub_a", cus="cus_a")
-        app_module.sync_member_subscription_state_from_subscription(
+        billing.sync_member_subscription_state_from_subscription(
             member, _subscription("active", "paid_now", "charge_automatically", "sub_a", "cus_a"))
         db.session.commit()
 
@@ -131,7 +131,7 @@ class TestAutomaticPaymentStillTrusted:
         member = _invoice_member("auto2@example.com", sub_id="sub_b", cus="cus_b")
         sub = _subscription("active", "paid_now", "charge_automatically", "sub_b", "cus_b")
         del sub["collection_method"]
-        app_module.sync_member_subscription_state_from_subscription(member, sub)
+        billing.sync_member_subscription_state_from_subscription(member, sub)
         db.session.commit()
 
         assert db.session.get(Member, member.id).payment_status == "paid"
@@ -142,22 +142,22 @@ class TestSubscriptionPeriodBounds:
 
     def test_reads_item_level_period(self):
         sub = {"items": {"data": [{"current_period_start": 111, "current_period_end": 222}]}}
-        assert app_module.subscription_period_bounds(sub) == (111, 222)
+        assert billing.subscription_period_bounds(sub) == (111, 222)
 
     def test_falls_back_to_legacy_top_level_period(self):
         sub = {"current_period_start": 333, "current_period_end": 444}
-        assert app_module.subscription_period_bounds(sub) == (333, 444)
+        assert billing.subscription_period_bounds(sub) == (333, 444)
 
     def test_item_level_wins_over_top_level(self):
         sub = {
             "current_period_start": 1, "current_period_end": 2,
             "items": {"data": [{"current_period_start": 111, "current_period_end": 222}]},
         }
-        assert app_module.subscription_period_bounds(sub) == (111, 222)
+        assert billing.subscription_period_bounds(sub) == (111, 222)
 
     def test_empty_subscription_returns_none(self):
-        assert app_module.subscription_period_bounds({}) == (None, None)
-        assert app_module.subscription_period_bounds(None) == (None, None)
+        assert billing.subscription_period_bounds({}) == (None, None)
+        assert billing.subscription_period_bounds(None) == (None, None)
 
 
 def test_missed_renewal_recovered_from_item_level_period(app):
@@ -179,11 +179,11 @@ def test_missed_renewal_recovered_from_item_level_period(app):
         "collection_method": "charge_automatically",
         "cancel_at_period_end": False, "cancel_at": None,
         # Basil shape: period lives on the item, not the subscription.
-        "items": {"data": [{"current_period_start": app_module.start_of_day_unix(date(CUR, 1, 1))}]},
+        "items": {"data": [{"current_period_start": clock.start_of_day_unix(date(CUR, 1, 1))}]},
         "metadata": {"activation_mode": "free_period", "membership_ends_on": f"{CUR - 1}-12-31"},
     }
 
-    app_module.sync_member_subscription_state_from_subscription(member, sub)
+    billing.sync_member_subscription_state_from_subscription(member, sub)
     db.session.commit()
 
     refreshed = db.session.get(Member, member.id)

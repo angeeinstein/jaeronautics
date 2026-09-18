@@ -8,39 +8,71 @@ from the app module, which is fully initialized before this is imported.
 from flask import Blueprint, current_app
 from sqlalchemy import text
 
-from ..app import (
-    Member,
-    MembershipForm,
+from ..config import (
     RATELIMIT_MEMBERSHIP,
     STRIPE_PUBLISHABLE_KEY,
-    User,
-    _,
-    apply_member_profile,
+)
+from ..services.audit import (
+    log_audit_event,
+    snapshot_member_for_audit,
+    snapshot_user_for_audit,
+)
+from ..services.billing import (
     create_checkout_session_for_member,
     create_invoice_membership_for_member,
-    datetime,
-    db,
-    flash,
-    generate_unique_forum_username,
+)
+from ..services.clock import (
     get_now_utc,
+)
+from ..services.forum import (
+    generate_unique_forum_username,
+    sync_member_forum_state,
+)
+from ..services.identity import (
+    send_email_verification_email,
+)
+from ..services.members import (
+    apply_member_profile,
+)
+from ..services.membership import (
+    sync_member_active_state,
+)
+from ..services.settings import (
     get_settings_map,
     get_stripe_settings_map,
+)
+from ..services.workflows import (
+    send_member_welcome_email,
+)
+import stripe
+from datetime import (
+    datetime,
+    timezone,
+)
+from flask import (
+    flash,
     jsonify,
-    limiter,
-    log_audit_event,
-    login_user,
     redirect,
     render_template,
     request,
-    send_email_verification_email,
-    send_member_welcome_email,
-    snapshot_member_for_audit,
-    snapshot_user_for_audit,
-    stripe,
-    sync_member_active_state,
-    sync_member_forum_state,
-    timezone,
     url_for,
+)
+from flask_babel import (
+    _,
+)
+from flask_login import (
+    login_user,
+)
+from ..db_models import (
+    Member,
+    User,
+    db,
+)
+from ..forms import (
+    MembershipForm,
+)
+from ..app import (
+    limiter,
 )
 
 public_bp = Blueprint("public", __name__)

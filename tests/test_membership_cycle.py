@@ -14,13 +14,13 @@ from datetime import date
 
 import pytest
 
-from conftest import app_module
+from conftest import clock, membership
 
-build_membership_cycle = app_module.build_membership_cycle
-first_day_of_year = app_module.first_day_of_year
-last_day_of_year = app_module.last_day_of_year
-parse_iso_date = app_module.parse_iso_date
-to_membership_date = app_module.to_membership_date
+build_membership_cycle = membership.build_membership_cycle
+first_day_of_year = clock.first_day_of_year
+last_day_of_year = clock.last_day_of_year
+parse_iso_date = clock.parse_iso_date
+to_membership_date = clock.to_membership_date
 
 ANNUAL = 12000  # cents
 
@@ -119,5 +119,5 @@ class TestDateHelpers:
         assert to_membership_date(1751371200) == date(2025, 7, 1)
 
     def test_to_membership_date_falsy_returns_today(self):
-        assert to_membership_date(0) == app_module.get_membership_today()
-        assert to_membership_date(None) == app_module.get_membership_today()
+        assert to_membership_date(0) == clock.get_membership_today()
+        assert to_membership_date(None) == clock.get_membership_today()

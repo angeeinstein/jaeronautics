@@ -9,7 +9,7 @@ from datetime import date, timedelta
 import pytest
 import stripe
 
-from conftest import app_module, db, make_member
+from conftest import app_module, db, make_member, workflows
 
 
 def _resource_missing():
@@ -28,7 +28,7 @@ def test_deleted_subscription_reference_is_cleared(app, monkeypatch):
     monkeypatch.setattr(app_module.stripe.Subscription, "list",
                         staticmethod(lambda *a, **k: {"data": []}))
 
-    changed, sub, _forum = app_module.refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
+    changed, sub, _forum = workflows.refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
     db.session.commit()
 
     assert sub is None
@@ -43,4 +43,4 @@ def test_other_stripe_error_still_raises(app, monkeypatch):
                         staticmethod(lambda *a, **k: (_ for _ in ()).throw(stripe.APIConnectionError("network down"))))
 
     with pytest.raises(stripe.StripeError):
-        app_module.refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
+        workflows.refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)

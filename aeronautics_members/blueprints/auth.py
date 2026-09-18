@@ -7,40 +7,58 @@ from the app module, which is fully initialized before this is imported.
 
 from flask import Blueprint, current_app
 
-from ..app import (
-    BadSignature,
-    ChangePasswordForm,
-    EmailRequestForm,
-    LoginForm,
+from ..config import (
     RATELIMIT_LOGIN,
     RATELIMIT_PASSWORD_CHANGE,
     RATELIMIT_REGISTER,
-    SetPasswordForm,
-    SignatureExpired,
+)
+from ..services.forum import (
+    log_out_forum_session_if_possible,
+)
+from ..services.identity import (
     TOKEN_MAX_AGE_PASSWORD_RESET,
     TOKEN_MAX_AGE_VERIFY_EMAIL,
-    User,
-    _,
-    current_user,
-    db,
-    flash,
-    get_member_portal_target,
-    is_safe_next_url,
-    limiter,
-    log_out_forum_session_if_possible,
-    login_required,
-    login_user,
-    logout_user,
-    read_token,
-    mark_email_verified_from_token,
     email_verification_claims_match,
+    mark_email_verified_from_token,
+    read_token,
+    rotate_password_reset_nonce,
+    send_password_reset_email,
+)
+from flask import (
+    flash,
     redirect,
     render_template,
     request,
-    rotate_password_reset_nonce,
-    send_password_reset_email,
     session,
     url_for,
+)
+from flask_babel import (
+    _,
+)
+from flask_login import (
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from itsdangerous import (
+    BadSignature,
+    SignatureExpired,
+)
+from ..db_models import (
+    User,
+    db,
+)
+from ..forms import (
+    ChangePasswordForm,
+    EmailRequestForm,
+    LoginForm,
+    SetPasswordForm,
+)
+from ..app import (
+    is_safe_next_url,
+    get_member_portal_target,
+    limiter,
     urlsplit,
 )
 

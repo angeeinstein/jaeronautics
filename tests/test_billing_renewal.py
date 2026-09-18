@@ -7,7 +7,7 @@ signup-year window and expire them.
 """
 from datetime import date
 
-from conftest import app_module, db, make_member
+from conftest import billing, clock, db, make_member, membership
 from aeronautics_members.db_models import Member
 
 CUR = date.today().year
@@ -44,7 +44,7 @@ def test_renewed_member_keeps_coverage_on_resync(app):
         renewal_due_on=date(CUR + 1, 1, 1),
     )
 
-    app_module.sync_member_subscription_state_from_subscription(member, _stale_subscription())
+    billing.sync_member_subscription_state_from_subscription(member, _stale_subscription())
     db.session.commit()
 
     refreshed = db.session.get(Member, member.id)
@@ -72,7 +72,7 @@ def test_backfill_still_fills_missing_dates(app):
     sub["metadata"]["membership_ends_on"] = f"{CUR}-12-31"
     sub["metadata"]["membership_starts_on"] = f"{CUR}-06-01"
 
-    changed = app_module.backfill_member_coverage_from_subscription(member, sub)
+    changed = billing.backfill_member_coverage_from_subscription(member, sub)
     db.session.commit()
 
     assert changed is True
@@ -103,7 +103,7 @@ def test_active_subscription_is_paid_despite_free_period_metadata(app):
     # M1: after the Jan 1 charge the subscription is "active"; frozen
     # activation_mode="free_period" must not revert a paid member.
     member = _active_member("octpaid@example.com", "sub_1", "cus_1")
-    app_module.sync_member_subscription_state_from_subscription(
+    billing.sync_member_subscription_state_from_subscription(
         member, _subscription("active", "free_period"))
     db.session.commit()
     assert db.session.get(Member, member.id).payment_status == "paid"
@@ -112,7 +112,7 @@ def test_active_subscription_is_paid_despite_free_period_metadata(app):
 def test_trialing_free_period_stays_free_period(app):
     # An Oct+ joiner is still trialing (free) until Jan 1.
     member = _active_member("octfree@example.com", "sub_2", "cus_2", payment_status="free_period")
-    app_module.sync_member_subscription_state_from_subscription(
+    billing.sync_member_subscription_state_from_subscription(
         member, _subscription("trialing", "free_period", "sub_2", "cus_2"))
     db.session.commit()
     assert db.session.get(Member, member.id).payment_status == "free_period"
@@ -121,7 +121,7 @@ def test_trialing_free_period_stays_free_period(app):
 def test_trialing_prorated_joiner_is_paid(app):
     # A pre-Oct joiner paid a prorated amount; they are paid while trialing.
     member = _active_member("junepaid@example.com", "sub_3", "cus_3")
-    app_module.sync_member_subscription_state_from_subscription(
+    billing.sync_member_subscription_state_from_subscription(
         member, _subscription("trialing", "paid_now", "sub_3", "cus_3"))
     db.session.commit()
     assert db.session.get(Member, member.id).payment_status == "paid"
@@ -140,10 +140,10 @@ def test_missed_renewal_webhook_recovered_by_subscription_period(app):
     sub = {
         "id": "sub_m", "customer": "cus_m", "status": "active",
         "cancel_at_period_end": False, "cancel_at": None,
-        "current_period_start": app_module.start_of_day_unix(date(CUR, 1, 1)),
+        "current_period_start": clock.start_of_day_unix(date(CUR, 1, 1)),
         "metadata": {"activation_mode": "free_period", "membership_ends_on": f"{PREV}-12-31"},
     }
-    app_module.sync_member_subscription_state_from_subscription(member, sub)
+    billing.sync_member_subscription_state_from_subscription(member, sub)
     db.session.commit()
     refreshed = db.session.get(Member, member.id)
     assert refreshed.membership_ends_on == date(CUR, 12, 31)
@@ -152,15 +152,15 @@ def test_missed_renewal_webhook_recovered_by_subscription_period(app):
 
 
 def test_invoice_coverage_year_from_line_period(app):
-    invoice = {"lines": {"data": [{"period": {"start": app_module.start_of_day_unix(date(CUR + 1, 1, 1))}}]}}
-    assert app_module.invoice_coverage_year(invoice) == CUR + 1
+    invoice = {"lines": {"data": [{"period": {"start": clock.start_of_day_unix(date(CUR + 1, 1, 1))}}]}}
+    assert membership.invoice_coverage_year(invoice) == CUR + 1
 
 
 def test_update_coverage_uses_explicit_year(app):
     member = _active_member("explicit@example.com", "sub_e", "cus_e", payment_status="free_period")
     # Payment timestamp on Dec 31 (would pin to the current year), but the billing
     # period says next year -> coverage must advance (M2/M3).
-    app_module.update_member_paid_coverage(member, date(CUR, 12, 31), coverage_year=CUR + 1)
+    membership.update_member_paid_coverage(member, date(CUR, 12, 31), coverage_year=CUR + 1)
     assert member.membership_ends_on == date(CUR + 1, 12, 31)
     assert member.renewal_due_on == date(CUR + 2, 1, 1)
     assert member.membership_starts_on == date(CUR + 1, 1, 1)
@@ -169,7 +169,7 @@ def test_update_coverage_uses_explicit_year(app):
 
 def test_update_coverage_never_regresses(app):
     member = make_member(email="noregress2@example.com", membership_ends_on=date(CUR + 1, 12, 31))
-    app_module.update_member_paid_coverage(member, date(CUR, 6, 1), coverage_year=CUR)
+    membership.update_member_paid_coverage(member, date(CUR, 6, 1), coverage_year=CUR)
     assert member.membership_ends_on == date(CUR + 1, 12, 31)
 
 
@@ -181,7 +181,7 @@ def test_backfill_never_regresses_end_date(app):
         renewal_due_on=date(CUR + 1, 1, 1),
     )
     # Metadata carries older (signup-year) dates; none of them must be applied.
-    changed = app_module.backfill_member_coverage_from_subscription(member, _stale_subscription())
+    changed = billing.backfill_member_coverage_from_subscription(member, _stale_subscription())
     assert changed is False
     assert member.membership_ends_on == date(CUR, 12, 31)
     assert member.membership_starts_on == date(CUR, 1, 1)

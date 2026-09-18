@@ -7,50 +7,82 @@ from the app module, which is fully initialized before this is imported.
 
 from flask import Blueprint, current_app
 
-from ..app import (
-    render_account_dashboard,
-    ADMIN_GENERAL_CHANNEL,
-    CreateMembershipProfileForm,
+from ..services.audit import (
+    log_audit_event,
+    snapshot_member_for_audit,
+    snapshot_user_for_audit,
+)
+from ..services.billing import (
+    create_checkout_session_for_member,
+    create_invoice_membership_for_member,
+)
+from ..services.clock import (
+    get_now_utc,
+)
+from ..services.forum import (
+    generate_unique_forum_username,
+    sync_member_forum_state,
+)
+from ..services.identity import (
+    send_email_verification_email,
+)
+from ..services.members import (
     DIRECT_MEMBER_PROFILE_FIELDS,
     IDENTITY_MEMBER_FIELDS,
-    IdentityChangeRequestForm,
-    Member,
-    MemberProfileChangeRequest,
-    MemberProfileForm,
-    Setting,
-    _,
     apply_member_profile,
-    can_resume_payment,
-    create_checkout_session_for_member,
-    create_identity_change_request,
-    create_invoice_membership_for_member,
-    current_user,
-    datetime,
-    db,
-    flash,
-    flush_marked_notification_channels,
-    generate_unique_forum_username,
-    get_current_member_for_user,
-    get_now_utc,
-    get_portal_session,
-    has_identity_changes,
-    log_audit_event,
-    login_required,
-    member_has_active_access,
     normalize_optional_member_value,
+)
+from ..services.membership import (
+    member_has_active_access,
+)
+from ..services.notifications import (
+    flush_marked_notification_channels,
     queue_curated_admin_notification,
+)
+from ..services.workflows import (
+    send_member_welcome_email,
+    sync_member_primary_email,
+)
+import stripe
+from datetime import (
+    datetime,
+    timezone,
+)
+from flask import (
+    flash,
     redirect,
     render_template,
     request,
-    send_email_verification_email,
-    send_member_welcome_email,
-    snapshot_member_for_audit,
-    snapshot_user_for_audit,
-    stripe,
-    sync_member_forum_state,
-    sync_member_primary_email,
-    timezone,
     url_for,
+)
+from flask_babel import (
+    _,
+)
+from flask_login import (
+    current_user,
+    login_required,
+)
+from ..db_models import (
+    Member,
+    MemberProfileChangeRequest,
+    Setting,
+    db,
+)
+from ..forms import (
+    CreateMembershipProfileForm,
+    IdentityChangeRequestForm,
+    MemberProfileForm,
+)
+from ..notification_service import (
+    ADMIN_GENERAL_CHANNEL,
+)
+from ..app import (
+    can_resume_payment,
+    create_identity_change_request,
+    get_current_member_for_user,
+    get_portal_session,
+    has_identity_changes,
+    render_account_dashboard,
 )
 
 account_bp = Blueprint("account", __name__)
