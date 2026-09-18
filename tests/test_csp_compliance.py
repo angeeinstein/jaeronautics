@@ -129,14 +129,43 @@ def test_vendored_assets_request_no_source_maps():
         )
 
 
-def test_csp_allows_only_this_origin_for_code():
+# Third-party origins the policy allows on purpose, each with the reason. Any
+# origin not listed here fails the test below, so a CDN cannot creep back in
+# without someone deciding to add it.
+DELIBERATE_EXTERNAL_ORIGINS = {
+    "https://static.cloudflareinsights.com": "Cloudflare Web Analytics beacon, injected by the tunnel",
+    "https://cloudflareinsights.com": "where that beacon reports back",
+}
+
+
+def test_csp_allows_no_unrecorded_external_origin():
     csp = next(
         line for line in NGINX_CONF.read_text().splitlines()
         if "Content-Security-Policy" in line
     )
-    for directive in ("script-src", "style-src"):
+    unexpected = []
+    for directive in ("script-src", "style-src", "connect-src"):
+        if directive not in csp:
+            continue
         value = csp.split(directive)[1].split(";")[0]
-        assert "http" not in value, f"{directive} still allows an external origin: {value.strip()}"
+        for token in value.split():
+            if token.startswith("http") and token not in DELIBERATE_EXTERNAL_ORIGINS:
+                unexpected.append(f"{directive}: {token}")
+
+    assert not unexpected, (
+        "CSP allows an external origin that is not recorded as deliberate:\n  "
+        + "\n  ".join(unexpected)
+        + "\nAdd it to DELIBERATE_EXTERNAL_ORIGINS with a reason, or serve it from this origin."
+    )
+
+
+def test_stylesheets_stay_same_origin():
+    # Nothing needs a third-party stylesheet now that Bootstrap is vendored.
+    csp = next(
+        line for line in NGINX_CONF.read_text().splitlines()
+        if "Content-Security-Policy" in line
+    )
+    assert "http" not in csp.split("style-src")[1].split(";")[0]
     # Defences that cost nothing once everything is same-origin.
     for directive in ("object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'"):
         assert directive in csp, f"CSP is missing {directive}"
