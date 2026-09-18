@@ -157,6 +157,7 @@ except ImportError:
 
 # Configuration lives in config.py, a leaf module the service layer can import
 # without depending on this one. Re-exported here so existing imports keep working.
+from .services.diagnostics import collect_system_health  # noqa: E402
 from .services.system_update import describe_update_state  # noqa: E402
 from .services.outbox import (  # noqa: E402
     failed_items,
@@ -1079,6 +1080,7 @@ def build_settings_page_context(edit_mail_account_id=None):
         # Version/update state for the Maintenance tab. Same service call the
         # JSON status endpoint uses, so the page and the API cannot disagree.
         "update_state": describe_update_state(),
+        "system_health": collect_system_health(),
         "test_email_form": test_email_form,
         "mail_account_form": mail_account_form,
         "mail_account_records": mail_account_records,
@@ -1668,6 +1670,40 @@ def create_app(config_overrides=None):
         if deleted_count:
             db.session.commit()
         click.echo(click.style(f"Deleted {deleted_count} stale pending signup(s).", fg="green"))
+
+    @app.cli.command("system-check")
+    @with_appcontext
+    def system_check():
+        """Report whether this installation is healthy.
+
+        The same facts the admin Maintenance tab shows, for anyone who does have
+        shell access.
+        """
+        health = collect_system_health()
+
+        click.echo("Schema:")
+        schema = health["schema"]
+        click.echo(f"  applied revision : {schema['applied'] or 'unknown'}")
+        click.echo(f"  expected revision: {schema['expected'] or 'unknown'}")
+        click.echo(f"  up to date       : {'yes' if schema['up_to_date'] else 'NO'}")
+
+        click.echo("Membership:")
+        for key, value in health["membership"].items():
+            click.echo(f"  {key.replace('_', ' '):26s}: {value}")
+
+        click.echo("Background work:")
+        for key, value in health["queues"].items():
+            click.echo(f"  {key.replace('_', ' '):26s}: {value}")
+
+        for problem in health["problems"]:
+            click.echo(f"PROBLEM: {problem}", err=True)
+        for warning in health["warnings"]:
+            click.echo(f"WARNING: {warning}")
+
+        if health["healthy"]:
+            click.echo("Everything looks healthy.")
+        else:
+            sys.exit(1)
 
     @app.cli.command("process-external-work")
     @click.option("--limit", default=50, show_default=True, type=int,

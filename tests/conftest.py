@@ -50,6 +50,19 @@ __all__ = [
 ]
 
 
+def _expected_head():
+    """The Alembic head the migration files define."""
+    import re
+    revisions, parents = set(), set()
+    for path in (REPO_ROOT / "migrations" / "versions").glob("*.py"):
+        text = path.read_text()
+        revisions.add(re.search(r"^revision = ['\"](\w+)['\"]", text, re.M).group(1))
+        down = re.search(r"^down_revision = ['\"]?(\w+)['\"]?", text, re.M).group(1)
+        if down != "None":
+            parents.add(down)
+    return (revisions - parents).pop()
+
+
 @pytest.fixture
 def app(tmp_path):
     db_file = tmp_path / "test.db"
@@ -65,6 +78,16 @@ def app(tmp_path):
     )
     with application.app_context():
         db.create_all()
+        # create_all() builds the current schema but records no Alembic
+        # revision, so stamp it to match a real deployment -- otherwise health
+        # checks that compare applied against expected see a phantom mismatch.
+        db.session.execute(db.text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        db.session.execute(db.text("DELETE FROM alembic_version"))
+        db.session.execute(
+            db.text("INSERT INTO alembic_version (version_num) VALUES (:rev)"),
+            {"rev": _expected_head()},
+        )
+        db.session.commit()
         try:
             yield application
         finally:
