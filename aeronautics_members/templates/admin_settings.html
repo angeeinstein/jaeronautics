@@ -598,8 +598,33 @@
                         </dl>
 
                         {% if update_state.in_progress %}
-                            <div class="alert alert-info" role="alert">
-                                {{ _('An update is running. The site restarts while it finishes, so this page may be briefly unavailable.') }}
+                            <div id="update-progress"
+                                 data-status-url="{{ url_for('admin.admin_system_update_status') }}"
+                                 data-label-running="{{ _('Update running') }}"
+                                 data-label-finished="{{ _('Finished. Reloading the page...') }}"
+                                 data-label-restarting="{{ _('The site is restarting...') }}">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <strong id="update-progress-state">{{ _('Update running') }}</strong>
+                                    <span class="text-muted small" id="update-progress-step">
+                                        {%- if update_state.progress.current_step %}{{ update_state.progress.current_step }}{% endif -%}
+                                    </span>
+                                </div>
+                                {# The bar starts indeterminate (full-width stripes) and the
+                                   poller narrows it to a real percentage once it has one. The
+                                   width is set through the CSSOM rather than a style attribute,
+                                   which the CSP blocks. #}
+                                <div class="progress mb-3" role="progressbar"
+                                     aria-label="{{ _('Update progress') }}"
+                                     aria-valuemin="0" aria-valuemax="100">
+                                    <div id="update-progress-bar"
+                                         class="progress-bar progress-bar-striped progress-bar-animated w-100"
+                                         data-percent="{{ update_state.progress.percent if update_state.progress.percent is not none else '' }}">
+                                    </div>
+                                </div>
+                                <div class="alert alert-info mb-3" role="alert">
+                                    {{ _('The site restarts while the update finishes, so this page may be briefly unavailable. It reloads by itself when the update is done.') }}
+                                </div>
+                                <pre id="update-progress-log" class="p-3 border rounded small text-break update-log">{{ update_state.last_run.log_tail or _('Waiting for output...') }}</pre>
                             </div>
                         {% elif update_state.update_available %}
                             <div class="alert alert-warning" role="alert">{{ _('A newer version is available.') }}</div>
@@ -647,7 +672,7 @@
                         {% if update_state.last_run.log_tail %}
                             <details>
                                 <summary class="text-muted">{{ _('Show the end of the update log') }}</summary>
-                                <pre class="mt-2 p-3 bg-body-tertiary border rounded small text-break update-log">{{ update_state.last_run.log_tail }}</pre>
+                                <pre class="mt-2 p-3 border rounded small text-break update-log">{{ update_state.last_run.log_tail }}</pre>
                             </details>
                         {% endif %}
                     </div>
@@ -681,6 +706,7 @@
 <script src="{{ url_for('static', filename='mail-account-delete-modal.js') }}"></script>
 <script src="{{ url_for('static', filename='admin-settings-tabs.js') }}"></script>
 <script src="{{ url_for('static', filename='confirm-submit.js') }}"></script>
+<script src="{{ url_for('static', filename='update-progress.js') }}"></script>
 {% endblock %}
 
 

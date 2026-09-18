@@ -39,6 +39,11 @@ UPDATE_STATE_DIR = Path(
 
 REQUEST_FILENAME = "request.json"
 STATUS_FILENAME = "status.json"
+LOG_FILENAME = "last-run.log"
+
+# How much of the running update's output to show. An install log is long and
+# the interesting part is always the end.
+LIVE_LOG_TAIL_LINES = 40
 
 # How long a remote-revision lookup is reused. The check is a network call to
 # the git remote, so it is not made on every page load.
@@ -142,6 +147,51 @@ def update_is_in_progress():
     return read_status().get("state") in {"requested", "running"}
 
 
+def read_live_log_tail(lines=LIVE_LOG_TAIL_LINES):
+    """The end of the running update's output, or None.
+
+    The runner writes this file as it goes, so an administrator can watch
+    progress instead of waiting for a summary once everything is finished.
+    """
+    log_path = UPDATE_STATE_DIR / LOG_FILENAME
+    try:
+        with log_path.open("r", errors="replace") as handle:
+            tail = handle.readlines()[-lines:]
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        current_app.logger.warning("Could not read the update log: %s", exc)
+        return None
+    return "".join(tail).strip() or None
+
+
+def describe_progress(log_text, status):
+    """Turn the installer's [STEP] markers into something a bar can show.
+
+    The number of steps is not fixed -- a local database or a TLS certificate
+    each add their own -- so the expected total comes from how many the previous
+    successful update actually took, and the first ever run simply has no
+    percentage to show.
+    """
+    steps = [
+        line[len("[STEP]"):].strip()
+        for line in (log_text or "").splitlines()
+        if line.startswith("[STEP]")
+    ]
+    expected = status.get("steps_expected") or 0
+    percent = None
+    if expected and steps:
+        # Hold just short of complete until the runner says it finished, so the
+        # bar never sits at 100% while work is still going on.
+        percent = min(int(len(steps) * 100 / expected), 95)
+    return {
+        "steps_done": len(steps),
+        "steps_expected": expected or None,
+        "percent": percent,
+        "current_step": steps[-1] if steps else None,
+    }
+
+
 def describe_update_state(force_remote_check=False):
     """Everything the admin page needs, as plain serializable data."""
     local = get_local_version()
@@ -153,6 +203,14 @@ def describe_update_state(force_remote_check=False):
         remote_check_failed = remote is None
 
     update_available = bool(remote and local.get("revision") and remote != local["revision"])
+    in_progress = update_is_in_progress()
+
+    # While the update runs, prefer what the log says right now over the summary
+    # the runner will only write when it finishes.
+    log_tail = status.get("log_tail")
+    if in_progress:
+        log_tail = read_live_log_tail() or log_tail
+    progress = describe_progress(log_tail, status)
 
     return {
         "local": local,
@@ -161,7 +219,8 @@ def describe_update_state(force_remote_check=False):
         "remote_check_failed": remote_check_failed,
         "update_available": update_available,
         "runner_installed": runner_is_installed(),
-        "in_progress": update_is_in_progress(),
+        "in_progress": in_progress,
+        "progress": progress,
         "last_run": {
             "state": status.get("state"),
             "requested_at": status.get("requested_at"),
@@ -170,7 +229,7 @@ def describe_update_state(force_remote_check=False):
             "exit_code": status.get("exit_code"),
             "revision_before": status.get("revision_before"),
             "revision_after": status.get("revision_after"),
-            "log_tail": status.get("log_tail"),
+            "log_tail": log_tail,
         },
     }
 

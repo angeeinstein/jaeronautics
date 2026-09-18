@@ -1012,4 +1012,9 @@ hr,
     word-break: break-word;
     max-height: 22rem;
     overflow-y: auto;
+    /* Bootstrap's bg-body-tertiary follows its own light theme, which leaves
+       pale text on a pale panel here. Use this site's palette instead. */
+    background-color: var(--ja-surface-alt);
+    color: var(--ja-text);
+    border-color: var(--ja-border) !important;
 }

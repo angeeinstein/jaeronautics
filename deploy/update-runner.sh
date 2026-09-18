@@ -25,6 +25,9 @@ INSTALL_DIR="${INSTALL_DIR:-/var/www/jaeronautics}"
 # Keep the tail short: it is rendered on a web page, and a full install log is
 # both large and more likely to contain incidental detail.
 LOG_TAIL_LINES="${LOG_TAIL_LINES:-40}"
+# Group allowed to read the log, so the web application can show progress while
+# the update is still running. Falls back to root-only if unset.
+LOG_GROUP="${LOG_GROUP:-}"
 
 json_escape() {
     # Escape a string for embedding in JSON without needing python or jq.
@@ -44,9 +47,21 @@ current_revision() {
     git -c "safe.directory=${INSTALL_DIR}" -C "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf 'unknown'
 }
 
+read_status_number() {
+    # Pull a numeric field out of the previous status file, or print 0.
+    local value
+    value="$(sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9]\{1,\}\).*/\1/p" "${STATUS_FILE}" 2>/dev/null | head -n1)"
+    printf '%s' "${value:-0}"
+}
+
+count_steps() {
+    grep -c '^\[STEP\]' "${LOG_FILE}" 2>/dev/null || printf '0'
+}
+
 write_status() {
     local state="$1" exit_code="$2" started_at="$3" finished_at="$4"
     local revision_before="$5" revision_after="$6" log_tail="$7"
+    local steps_done="${8:-0}" steps_expected="${9:-0}"
     local requested_at="${REQUESTED_AT:-}" requested_by="${REQUESTED_BY:-null}"
 
     local tmp="${STATUS_FILE}.tmp"
@@ -60,6 +75,8 @@ write_status() {
   "exit_code": ${exit_code},
   "revision_before": "$(json_escape "${revision_before}")",
   "revision_after": "$(json_escape "${revision_after}")",
+  "steps_done": ${steps_done},
+  "steps_expected": ${steps_expected},
   "log_tail": "$(json_escape "${log_tail}")"
 }
 EOF
@@ -88,16 +105,30 @@ main() {
     REQUESTED_BY="$(read_request_field requested_by_user_id)"
     [[ "${REQUESTED_BY}" =~ ^[0-9]+$ ]] || REQUESTED_BY="null"
 
-    local started_at revision_before
+    local started_at revision_before expected_steps
     started_at="$(date --iso-8601=seconds)"
     revision_before="$(current_revision)"
-    write_status "running" 0 "${started_at}" "" "${revision_before}" "" ""
+    # How many steps the last successful update took. Using the real previous
+    # run rather than a hardcoded guess keeps the bar honest when the number of
+    # steps changes with the configuration (local database, TLS, and so on).
+    expected_steps="$(read_status_number steps_expected)"
+    write_status "running" 0 "${started_at}" "" "${revision_before}" "" "" 0 "${expected_steps}"
+
+    # Create the log and make it readable before the update starts, so the admin
+    # page can tail it live rather than only seeing output once everything is
+    # over. stdbuf keeps the installer's output unbuffered for the same reason.
+    : > "${LOG_FILE}"
+    if [[ -n "${LOG_GROUP}" ]]; then
+        chgrp "${LOG_GROUP}" "${LOG_FILE}" 2>/dev/null || true
+        chmod 640 "${LOG_FILE}" 2>/dev/null || true
+    else
+        chmod 600 "${LOG_FILE}" 2>/dev/null || true
+    fi
 
     local exit_code=0
-    if ! "${UPDATE_COMMAND}" >"${LOG_FILE}" 2>&1; then
+    if ! stdbuf -oL -eL "${UPDATE_COMMAND}" >>"${LOG_FILE}" 2>&1; then
         exit_code=$?
     fi
-    chmod 640 "${LOG_FILE}" 2>/dev/null || true
 
     local finished_at revision_after log_tail state
     finished_at="$(date --iso-8601=seconds)"
@@ -109,8 +140,10 @@ main() {
         state="failed"
     fi
 
+    local steps_done
+    steps_done="$(count_steps)"
     write_status "${state}" "${exit_code}" "${started_at}" "${finished_at}" \
-        "${revision_before}" "${revision_after}" "${log_tail}"
+        "${revision_before}" "${revision_after}" "${log_tail}" "${steps_done}" "${steps_done}"
     rm -f "${CLAIM_FILE}"
 }
 

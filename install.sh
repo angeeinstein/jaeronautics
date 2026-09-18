@@ -57,6 +57,7 @@ EXTERNAL_WORK_SERVICE_FILE=""
 EXTERNAL_WORK_TIMER_FILE=""
 UPDATE_RUNNER_SERVICE_FILE=""
 UPDATE_RUNNER_TIMER_FILE=""
+UPDATE_RUNNER_PATH_FILE=""
 UPDATE_RUNNER_SCRIPT="/usr/local/lib/jaeronautics/update-runner.sh"
 UPDATE_STATE_DIR="/var/lib/jaeronautics/updates"
 UPDATE_COMMAND_PATH="/usr/local/bin/update"
@@ -313,6 +314,7 @@ resolve_paths() {
     EXTERNAL_WORK_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.timer"
     UPDATE_RUNNER_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.service"
     UPDATE_RUNNER_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.timer"
+    UPDATE_RUNNER_PATH_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.path"
 
     if [[ -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]]; then
         NGINX_CONF_PATH="/etc/nginx/sites-available/${SERVICE_NAME}.conf"
@@ -1567,25 +1569,42 @@ Type=oneshot
 Environment=UPDATE_STATE_DIR=${UPDATE_STATE_DIR}
 Environment=UPDATE_COMMAND=${UPDATE_COMMAND_PATH}
 Environment=INSTALL_DIR=${INSTALL_DIR}
+Environment=LOG_GROUP=${APP_GROUP}
 ExecStart=${UPDATE_RUNNER_SCRIPT}
 TimeoutStartSec=1800
 EOF
 
+    # A path unit starts the runner the moment the request file appears, so an
+    # administrator does not wait out a polling interval.
+    cat > "${UPDATE_RUNNER_PATH_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics update request watcher (immediate)
+
+[Path]
+PathExists=${UPDATE_STATE_DIR}/request.json
+Unit=${SERVICE_NAME}-update-runner.service
+
+[Install]
+WantedBy=paths.target
+EOF
+
+    # The timer stays as a safety net: it recovers a request written while the
+    # path unit was not running, which the path unit alone would never notice.
     cat > "${UPDATE_RUNNER_TIMER_FILE}" <<EOF
 [Unit]
-Description=Joanneum Aeronautics update request watcher
+Description=Joanneum Aeronautics update request watcher (fallback poll)
 
 [Timer]
-OnBootSec=1min
-OnUnitActiveSec=1min
-AccuracySec=15s
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
 Unit=${SERVICE_NAME}-update-runner.service
 
 [Install]
 WantedBy=timers.target
 EOF
 
-    chmod 644 "${UPDATE_RUNNER_SERVICE_FILE}" "${UPDATE_RUNNER_TIMER_FILE}"
+    chmod 644 "${UPDATE_RUNNER_SERVICE_FILE}" "${UPDATE_RUNNER_TIMER_FILE}" "${UPDATE_RUNNER_PATH_FILE}"
 }
 
 render_update_command() {
@@ -1933,6 +1952,7 @@ reload_services() {
     systemctl enable --now "${SERVICE_NAME}-cleanup-logs.timer"
     systemctl enable --now "${SERVICE_NAME}-external-work.timer"
     systemctl enable --now "${SERVICE_NAME}-update-runner.timer"
+    systemctl enable --now "${SERVICE_NAME}-update-runner.path"
     nginx -t
     systemctl reload nginx
 }
@@ -2155,6 +2175,10 @@ uninstall_everything() {
     fi
     if [[ -f "${EXTERNAL_WORK_SERVICE_FILE}" ]]; then
         rm -f "${EXTERNAL_WORK_SERVICE_FILE}"
+    fi
+    if [[ -f "${UPDATE_RUNNER_PATH_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-update-runner.path" || true
+        rm -f "${UPDATE_RUNNER_PATH_FILE}"
     fi
     if [[ -f "${UPDATE_RUNNER_TIMER_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}-update-runner.timer" || true
