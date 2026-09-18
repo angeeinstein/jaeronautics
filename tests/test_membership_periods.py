@@ -1,0 +1,170 @@
+"""The coverage ledger: access should have evidence behind it.
+
+``payment_status`` records what a member's state is; these rows record why. The
+distinction is what the invoice-billing bug came down to -- a member could be
+marked paid with nothing behind it, and no field could contradict that.
+"""
+from datetime import date
+
+import pytest
+
+from conftest import db, make_member, periods
+from aeronautics_members.db_models import MembershipPeriod
+from aeronautics_members.services import ValidationError
+
+CUR = date.today().year
+
+
+class TestGranting:
+    def test_grant_records_the_reason(self, app):
+        member = make_member(email="g@example.com")
+        period = periods.grant_period(
+            member, date(CUR, 1, 1), date(CUR, 12, 31),
+            MembershipPeriod.REASON_PAID, stripe_invoice_id="in_1",
+        )
+        db.session.commit()
+
+        assert period.reason == "paid"
+        assert period.stripe_invoice_id == "in_1"
+        assert periods.has_coverage(member, on_date=date(CUR, 6, 1)) is True
+
+    def test_grant_is_idempotent_per_invoice(self, app):
+        """A redelivered invoice.paid must not grant coverage twice."""
+        member = make_member(email="idem@example.com")
+        first = periods.grant_period(
+            member, date(CUR, 1, 1), date(CUR, 12, 31),
+            MembershipPeriod.REASON_PAID, stripe_invoice_id="in_dup")
+        db.session.commit()
+        second = periods.grant_period(
+            member, date(CUR, 1, 1), date(CUR, 12, 31),
+            MembershipPeriod.REASON_PAID, stripe_invoice_id="in_dup")
+        db.session.commit()
+
+        assert first.id == second.id
+        assert len(member.membership_periods) == 1
+
+    def test_calendar_year_grant_spans_the_whole_year(self, app):
+        member = make_member(email="year@example.com")
+        period = periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
+        db.session.commit()
+        assert (period.starts_on, period.ends_on) == (date(CUR, 1, 1), date(CUR, 12, 31))
+
+    @pytest.mark.parametrize("kwargs", [
+        {"starts_on": date(CUR, 12, 31), "ends_on": date(CUR, 1, 1)},   # ends before it starts
+        {"starts_on": None, "ends_on": date(CUR, 12, 31)},              # missing bound
+    ])
+    def test_invalid_window_is_rejected(self, app, kwargs):
+        member = make_member(email="bad@example.com")
+        with pytest.raises(ValidationError):
+            periods.grant_period(member, reason=MembershipPeriod.REASON_PAID, **kwargs)
+
+    def test_unknown_reason_is_rejected(self, app):
+        # A grant must state grounds the system recognises, so an unsupported
+        # one cannot be created by accident.
+        member = make_member(email="reason@example.com")
+        with pytest.raises(ValidationError):
+            periods.grant_period(member, date(CUR, 1, 1), date(CUR, 12, 31), "because")
+
+
+class TestRevocation:
+    def test_revoked_period_stops_granting_access_but_is_kept(self, app):
+        member = make_member(email="rev@example.com")
+        period = periods.grant_period(
+            member, date(CUR, 1, 1), date(CUR, 12, 31), MembershipPeriod.REASON_PAID)
+        db.session.commit()
+
+        assert periods.revoke_period(period, "Chargeback lost.") is True
+        db.session.commit()
+
+        assert periods.has_coverage(member, on_date=date(CUR, 6, 1)) is False
+        # Kept on the record, so an admin can still see what was believed.
+        assert len(member.membership_periods) == 1
+        assert member.membership_periods[0].revoked_reason == "Chargeback lost."
+
+    def test_revoking_twice_is_a_no_op(self, app):
+        member = make_member(email="rev2@example.com")
+        period = periods.grant_period(
+            member, date(CUR, 1, 1), date(CUR, 12, 31), MembershipPeriod.REASON_PAID)
+        db.session.commit()
+        periods.revoke_period(period, "first")
+        assert periods.revoke_period(period, "second") is False
+        assert period.revoked_reason == "first"
+
+    def test_only_paid_periods_of_that_subscription_are_revoked(self, app):
+        # A lost dispute invalidates what that payment bought, not a separate
+        # free grant the member also holds.
+        member = make_member(email="mix@example.com")
+        periods.grant_period(member, date(CUR, 1, 1), date(CUR, 6, 30),
+                             MembershipPeriod.REASON_PAID, stripe_subscription_id="sub_a")
+        periods.grant_period(member, date(CUR, 7, 1), date(CUR, 12, 31),
+                             MembershipPeriod.REASON_FREE_PERIOD, stripe_subscription_id="sub_a")
+        periods.grant_period(member, date(CUR + 1, 1, 1), date(CUR + 1, 12, 31),
+                             MembershipPeriod.REASON_PAID, stripe_subscription_id="sub_b")
+        db.session.commit()
+
+        revoked = periods.revoke_periods_for_subscription(member, "sub_a", "dispute lost")
+        db.session.commit()
+
+        assert revoked == 1
+        remaining = {(p.reason, p.is_revoked) for p in member.membership_periods}
+        assert ("free_period", False) in remaining
+        assert ("paid", True) in remaining
+
+
+class TestProjection:
+    def test_cached_fields_follow_the_ledger(self, app):
+        member = make_member(email="proj@example.com", payment_status="unpaid", is_active=False)
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
+        db.session.commit()
+
+        assert periods.project_coverage_onto_member(member, on_date=date(CUR, 6, 1)) is True
+        assert member.membership_ends_on == date(CUR, 12, 31)
+        assert member.renewal_due_on == date(CUR + 1, 1, 1)
+        assert member.payment_status == "paid"
+        assert member.is_active is True
+
+    def test_projection_never_shortens_existing_coverage(self, app):
+        # A ledger that has not caught up with a renewal must not pull a paid
+        # member's coverage backwards.
+        member = make_member(
+            email="noregress@example.com",
+            membership_ends_on=date(CUR + 1, 12, 31), payment_status="paid", is_active=True)
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
+        db.session.commit()
+
+        periods.project_coverage_onto_member(member)
+        assert member.membership_ends_on == date(CUR + 1, 12, 31)
+
+    def test_paid_evidence_outranks_a_free_grant(self, app):
+        member = make_member(email="rank@example.com", payment_status="unpaid", is_active=False)
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_FREE_PERIOD)
+        periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
+        db.session.commit()
+
+        periods.project_coverage_onto_member(member, on_date=date(CUR, 6, 1))
+        assert member.payment_status == "paid"
+
+    def test_empty_ledger_leaves_the_member_alone(self, app):
+        member = make_member(email="none@example.com", payment_status="unpaid")
+        assert periods.project_coverage_onto_member(member) is False
+        assert member.payment_status == "unpaid"
+
+
+def test_describe_coverage_is_plain_serializable_data(app):
+    """The same description must serve an admin page and a JSON client."""
+    member = make_member(email="desc@example.com")
+    periods.grant_calendar_year(
+        member, CUR, MembershipPeriod.REASON_PAID, stripe_invoice_id="in_desc")
+    revoked = periods.grant_calendar_year(member, CUR - 1, MembershipPeriod.REASON_FREE_PERIOD)
+    periods.revoke_period(revoked, "superseded")
+    db.session.commit()
+
+    described = periods.describe_coverage(member, on_date=date(CUR, 6, 1))
+
+    assert described["has_coverage"] is True
+    assert described["coverage_end"] == date(CUR, 12, 31)
+    assert len(described["periods"]) == 2
+    current = next(p for p in described["periods"] if p["covers_today"])
+    assert current["reason"] == "paid"
+    assert current["stripe_invoice_id"] == "in_desc"
+    assert any(p["revoked"] and p["revoked_reason"] == "superseded" for p in described["periods"])

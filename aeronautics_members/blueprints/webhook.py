@@ -39,6 +39,12 @@ from ..services.forum import (
 from ..services.members import (
     apply_member_profile,
 )
+from ..db_models import MembershipPeriod
+from ..services.periods import (
+    grant_calendar_year,
+    grant_period,
+    revoke_periods_for_subscription,
+)
 from ..services.membership import (
     invoice_coverage_year,
     member_has_active_access,
@@ -183,6 +189,12 @@ def process_stripe_event(event):
                     is_active=True,
                     cancel_at_period_end=False,
                 )
+                # Record why: joined on/after Oct 1, so the rest of the year is free.
+                grant_period(
+                    member, starts_on, ends_on, MembershipPeriod.REASON_FREE_PERIOD,
+                    stripe_subscription_id=subscription_id,
+                    note="Free rest-of-year period for an October or later signup.",
+                )
                 member.pending_checkout_started_at = None
             elif session_payment_status == "paid":
                 set_member_membership_window(
@@ -193,6 +205,12 @@ def process_stripe_event(event):
                     payment_status="paid",
                     is_active=True,
                     cancel_at_period_end=False,
+                )
+                grant_period(
+                    member, starts_on, ends_on, MembershipPeriod.REASON_PAID,
+                    stripe_invoice_id=session.get("invoice"),
+                    stripe_subscription_id=subscription_id,
+                    note="Prorated membership paid during Checkout.",
                 )
                 member.pending_checkout_started_at = None
             else:
@@ -276,6 +294,15 @@ def process_stripe_event(event):
             paid_on = to_membership_date(paid_timestamp)
 
             update_member_paid_coverage(member, paid_on, coverage_year=coverage_year)
+            # The paid invoice is the evidence for this coverage year, and its id
+            # is the idempotency key: a redelivered event cannot grant twice.
+            grant_calendar_year(
+                member,
+                coverage_year or paid_on.year,
+                MembershipPeriod.REASON_PAID,
+                stripe_invoice_id=data_object.get("id") if event_type.startswith("invoice") else None,
+                stripe_subscription_id=subscription_id,
+            )
             member.pending_checkout_started_at = None
             forum_result, _forum_service = sync_member_forum_state(member)
             db.session.commit()
@@ -435,6 +462,12 @@ def process_stripe_event(event):
                 if member:
                     member.is_active = False
                     member.payment_status = "dispute_lost"
+                    # The payment was reversed, so revoke the coverage it bought
+                    # rather than leaving an unsupported grant on the record.
+                    revoke_periods_for_subscription(
+                        member, member.stripe_subscription_id,
+                        reason=f"Chargeback lost for charge {charge_id}.",
+                    )
                     db.session.commit()
                     current_app.logger.error(
                         "DISPUTE LOST for Stripe Customer ID: %s. Member has been deactivated.",

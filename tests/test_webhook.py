@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from conftest import Member, ProcessedStripeEvent, clock, db, make_member, webhook_inbox
+from conftest import Member, ProcessedStripeEvent, clock, db, make_member, periods, webhook_inbox
 from aeronautics_members.blueprints import webhook as webhook_module
 from aeronautics_members.db_models import Setting
 
@@ -408,3 +408,75 @@ class TestSubscriptionDeleted:
         refreshed = db.session.get(Member, member.id)
         assert refreshed.payment_status == "failed"
         assert refreshed.is_active is False
+
+
+class TestCoverageLedger:
+    """Every grant of access through the webhook must leave evidence behind."""
+
+    def test_paid_invoice_records_a_period_with_the_invoice_id(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="ledger_inv@example.com", stripe_customer_id="cus_l",
+                             stripe_subscription_id="sub_l", payment_status="unpaid")
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        event = {
+            "id": "evt_ledger_1", "type": "invoice.paid",
+            "data": {"object": {"id": "in_ledger_1", "customer": "cus_l", "subscription": "sub_l",
+                                "status_transitions": {"paid_at": now_ts}, "created": now_ts}},
+        }
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        granted = [p for p in refreshed.membership_periods if not p.is_revoked]
+        assert len(granted) == 1
+        assert granted[0].reason == "paid"
+        assert granted[0].stripe_invoice_id == "in_ledger_1"
+
+    def test_redelivered_invoice_does_not_grant_twice(self, client, monkeypatch, stub_side_effects):
+        # The inbox already dedupes by event id; this guards the ledger itself,
+        # since Stripe can send the same invoice under a different event.
+        member = make_member(email="ledger_dup@example.com", stripe_customer_id="cus_d2",
+                             stripe_subscription_id="sub_d2", payment_status="unpaid")
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+
+        def invoice_event(event_id):
+            return {
+                "id": event_id, "type": "invoice.paid",
+                "data": {"object": {"id": "in_same", "customer": "cus_d2", "subscription": "sub_d2",
+                                    "status_transitions": {"paid_at": now_ts}, "created": now_ts}},
+            }
+
+        post_event(client, monkeypatch, invoice_event("evt_dup_a"))
+        post_event(client, monkeypatch, invoice_event("evt_dup_b"))
+
+        refreshed = db.session.get(Member, member.id)
+        assert len(refreshed.membership_periods) == 1
+
+    def test_free_period_checkout_records_why_it_was_free(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="ledger_free@example.com")
+        event = checkout_event(member, member.user, activation_mode="free_period",
+                               event_id="evt_ledger_free")
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert [p.reason for p in refreshed.membership_periods] == ["free_period"]
+
+    def test_lost_dispute_revokes_the_coverage_it_bought(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="ledger_disp@example.com", stripe_customer_id="cus_dl",
+                             stripe_subscription_id="sub_dl", payment_status="paid",
+                             is_active=True, membership_ends_on=YEAR_END)
+        periods.grant_calendar_year(member, TODAY.year, "paid",
+                                    stripe_invoice_id="in_dl", stripe_subscription_id="sub_dl")
+        db.session.commit()
+        monkeypatch.setattr(webhook_module.stripe.Charge, "retrieve",
+                            staticmethod(lambda *a, **k: {"customer": "cus_dl"}))
+        event = {
+            "id": "evt_dl", "type": "charge.dispute.closed",
+            "data": {"object": {"status": "lost", "charge": "ch_dl"}},
+        }
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert all(p.is_revoked for p in refreshed.membership_periods)
+        assert periods.has_coverage(refreshed) is False

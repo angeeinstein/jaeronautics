@@ -170,9 +170,12 @@ class Member(db.Model):
         order_by="desc(ForumAvatarSubmission.uploaded_at)",
         cascade="all, delete-orphan",
     )
-
-    def __repr__(self):
-        return f"<Member {self.first_name} {self.last_name}>"
+    membership_periods = db.relationship(
+        "MembershipPeriod",
+        back_populates="member",
+        order_by="desc(MembershipPeriod.ends_on)",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def full_address(self):
@@ -190,6 +193,69 @@ class Member(db.Model):
             (request for request in self.profile_change_requests if request.status == "pending"),
             None,
         )
+
+    def __repr__(self):
+        return f"<Member {self.first_name} {self.last_name}>"
+
+
+class MembershipPeriod(db.Model):
+    """A window of membership coverage, and the reason the member has it.
+
+    The Member row carries ``payment_status``, ``is_active`` and the coverage
+    dates, but those are a *summary*: several code paths write them, and they
+    record only the current state, never why it is what it is. That is how a
+    member could be marked paid without any payment having happened -- nothing in
+    the row could contradict it.
+
+    This table is the evidence behind that summary. Each row says which window
+    was granted, on what grounds, and -- for a payment -- which Stripe invoice
+    proves it. A grant that turns out to be invalid (a lost dispute, a refund) is
+    revoked rather than deleted, so the history of what was believed and when
+    stays intact.
+
+    The Member fields remain as a cached projection of these rows, because most
+    reads want "is this member active" without a join; ``services/periods.py``
+    owns recomputing them so the two cannot drift silently.
+    """
+
+    __tablename__ = "membership_periods"
+
+    # Why coverage was granted.
+    REASON_PAID = "paid"
+    REASON_FREE_PERIOD = "free_period"
+    REASON_ADMIN_GRANT = "admin_grant"
+
+    id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=False, index=True)
+
+    starts_on = db.Column(db.Date, nullable=False)
+    ends_on = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(30), nullable=False)
+
+    # Evidence. A paid period should carry the invoice that paid for it; this is
+    # also the idempotency key, so a redelivered webhook cannot grant twice.
+    stripe_invoice_id = db.Column(db.String(255), nullable=True, unique=True)
+    stripe_subscription_id = db.Column(db.String(255), nullable=True)
+    granted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    note = db.Column(db.String(500), nullable=True)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_reason = db.Column(db.String(255), nullable=True)
+
+    member = db.relationship("Member", back_populates="membership_periods")
+    granted_by = db.relationship("User", foreign_keys=[granted_by_user_id])
+
+    @property
+    def is_revoked(self):
+        return self.revoked_at is not None
+
+    def covers(self, day):
+        return not self.is_revoked and self.starts_on <= day <= self.ends_on
+
+    def __repr__(self):
+        state = " revoked" if self.is_revoked else ""
+        return f"<MembershipPeriod member_id={self.member_id} {self.starts_on}..{self.ends_on} {self.reason}{state}>"
 
 
 class ForumAccount(db.Model):
