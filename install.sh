@@ -55,6 +55,10 @@ CLEANUP_LOGS_SERVICE_FILE=""
 CLEANUP_LOGS_TIMER_FILE=""
 EXTERNAL_WORK_SERVICE_FILE=""
 EXTERNAL_WORK_TIMER_FILE=""
+UPDATE_RUNNER_SERVICE_FILE=""
+UPDATE_RUNNER_TIMER_FILE=""
+UPDATE_RUNNER_SCRIPT="/usr/local/lib/jaeronautics/update-runner.sh"
+UPDATE_STATE_DIR="/var/lib/jaeronautics/updates"
 UPDATE_COMMAND_PATH="/usr/local/bin/update"
 PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
@@ -307,6 +311,8 @@ resolve_paths() {
     CLEANUP_LOGS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.timer"
     EXTERNAL_WORK_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.service"
     EXTERNAL_WORK_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.timer"
+    UPDATE_RUNNER_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.service"
+    UPDATE_RUNNER_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.timer"
 
     if [[ -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]]; then
         NGINX_CONF_PATH="/etc/nginx/sites-available/${SERVICE_NAME}.conf"
@@ -1193,6 +1199,7 @@ STRIPE_WEBHOOK_SECRET=$(dotenv_quote "${STRIPE_WEBHOOK_SECRET}")
 PUBLIC_BASE_URL=$(dotenv_quote "${public_base_url}")
 RATELIMIT_STORAGE_URI=$(dotenv_quote "${RATELIMIT_STORAGE_URI}")
 MAIL_ACCOUNTS_JSON=$(dotenv_quote "${MAIL_ACCOUNTS_JSON}")
+UPDATE_STATE_DIR=$(dotenv_quote "${UPDATE_STATE_DIR}")
 EOF
 
     chown root:"${APP_GROUP}" "${ENV_FILE}"
@@ -1520,6 +1527,65 @@ WantedBy=timers.target
 EOF
 
     chmod 644 "${EXTERNAL_WORK_SERVICE_FILE}" "${EXTERNAL_WORK_TIMER_FILE}"
+}
+
+render_update_runner() {
+    step "Installing admin-page update runner"
+
+    # The web application runs unprivileged and must never be able to run the
+    # update itself: a sudoers rule for it would turn any compromise of the web
+    # process into root in one step. Instead the app writes a request into this
+    # directory, and the root-owned runner below acts on it. The request carries
+    # no instructions -- what gets deployed comes from this installer's own
+    # state -- so the unprivileged side can ask for an update but cannot choose
+    # what an update is.
+    install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${UPDATE_STATE_DIR}"
+    install -d -m 0755 "$(dirname "${UPDATE_RUNNER_SCRIPT}")"
+
+    # Write via a temporary file and rename: bash reads a script incrementally,
+    # so truncating this file while an update is running would corrupt the very
+    # process performing it.
+    local runner_tmp="${UPDATE_RUNNER_SCRIPT}.tmp"
+    if [[ -f "${INSTALL_DIR}/deploy/update-runner.sh" ]]; then
+        cp -f "${INSTALL_DIR}/deploy/update-runner.sh" "${runner_tmp}"
+    else
+        warn "deploy/update-runner.sh not found; the admin update button will be unavailable."
+        return
+    fi
+    chmod 750 "${runner_tmp}"
+    mv -f "${runner_tmp}" "${UPDATE_RUNNER_SCRIPT}"
+
+    cat > "${UPDATE_RUNNER_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics admin-requested update runner
+After=network.target
+
+[Service]
+Type=oneshot
+# Runs as root by design: installing an update needs systemd, nginx and
+# packages. It acts only on a request file written by the web application.
+Environment=UPDATE_STATE_DIR=${UPDATE_STATE_DIR}
+Environment=UPDATE_COMMAND=${UPDATE_COMMAND_PATH}
+Environment=INSTALL_DIR=${INSTALL_DIR}
+ExecStart=${UPDATE_RUNNER_SCRIPT}
+TimeoutStartSec=1800
+EOF
+
+    cat > "${UPDATE_RUNNER_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics update request watcher
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=15s
+Unit=${SERVICE_NAME}-update-runner.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${UPDATE_RUNNER_SERVICE_FILE}" "${UPDATE_RUNNER_TIMER_FILE}"
 }
 
 render_update_command() {
@@ -1856,6 +1922,7 @@ reload_services() {
     systemctl enable --now "${SERVICE_NAME}-notifications.timer"
     systemctl enable --now "${SERVICE_NAME}-cleanup-logs.timer"
     systemctl enable --now "${SERVICE_NAME}-external-work.timer"
+    systemctl enable --now "${SERVICE_NAME}-update-runner.timer"
     nginx -t
     systemctl reload nginx
 }
@@ -1874,6 +1941,7 @@ verify_installation() {
     systemctl is-active --quiet "${SERVICE_NAME}-notifications.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-cleanup-logs.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-external-work.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-update-runner.timer"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
     success "The application is responding on 127.0.0.1:${APP_PORT}"
 
@@ -2030,6 +2098,7 @@ install_or_update() {
     render_notifications_timer_files
     render_cleanup_logs_timer_files
     render_external_work_timer_files
+    render_update_runner
     render_update_command
     obtain_ssl_certificate
     render_nginx_config
@@ -2077,6 +2146,15 @@ uninstall_everything() {
     if [[ -f "${EXTERNAL_WORK_SERVICE_FILE}" ]]; then
         rm -f "${EXTERNAL_WORK_SERVICE_FILE}"
     fi
+    if [[ -f "${UPDATE_RUNNER_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-update-runner.timer" || true
+        rm -f "${UPDATE_RUNNER_TIMER_FILE}"
+    fi
+    if [[ -f "${UPDATE_RUNNER_SERVICE_FILE}" ]]; then
+        rm -f "${UPDATE_RUNNER_SERVICE_FILE}"
+    fi
+    rm -f "${UPDATE_RUNNER_SCRIPT}"
+    rm -rf "${UPDATE_STATE_DIR}"
     if [[ -f "${SERVICE_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}" || true
         rm -f "${SERVICE_FILE}"

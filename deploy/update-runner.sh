@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+#
+# Privileged half of the admin-page update button.
+#
+# The web application runs unprivileged and cannot install an update. It writes
+# a request file; this script -- run as root by a systemd timer -- notices the
+# request and performs the update.
+#
+# The request deliberately carries no instructions. What gets deployed comes
+# from the installer's own state (remote and branch), so the unprivileged side
+# can ask for an update but cannot choose what "an update" means. That is the
+# whole reason this is not simply a sudoers rule.
+#
+# Installed by install.sh; not intended to be run by hand.
+
+set -Eeuo pipefail
+
+STATE_DIR="${UPDATE_STATE_DIR:-/var/lib/jaeronautics/updates}"
+REQUEST_FILE="${STATE_DIR}/request.json"
+CLAIM_FILE="${STATE_DIR}/request.processing.json"
+STATUS_FILE="${STATE_DIR}/status.json"
+LOG_FILE="${STATE_DIR}/last-run.log"
+UPDATE_COMMAND="${UPDATE_COMMAND:-/usr/local/bin/update}"
+INSTALL_DIR="${INSTALL_DIR:-/var/www/jaeronautics}"
+# Keep the tail short: it is rendered on a web page, and a full install log is
+# both large and more likely to contain incidental detail.
+LOG_TAIL_LINES="${LOG_TAIL_LINES:-40}"
+
+json_escape() {
+    # Escape a string for embedding in JSON without needing python or jq.
+    local s=${1//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    s=${s//$'\r'/}
+    s=${s//$'\t'/\\t}
+    printf '%s' "${s}"
+}
+
+current_revision() {
+    git -C "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf 'unknown'
+}
+
+write_status() {
+    local state="$1" exit_code="$2" started_at="$3" finished_at="$4"
+    local revision_before="$5" revision_after="$6" log_tail="$7"
+    local requested_at="${REQUESTED_AT:-}" requested_by="${REQUESTED_BY:-null}"
+
+    local tmp="${STATUS_FILE}.tmp"
+    cat > "${tmp}" <<EOF
+{
+  "state": "$(json_escape "${state}")",
+  "requested_at": "$(json_escape "${requested_at}")",
+  "requested_by_user_id": ${requested_by:-null},
+  "started_at": "$(json_escape "${started_at}")",
+  "finished_at": "$(json_escape "${finished_at}")",
+  "exit_code": ${exit_code},
+  "revision_before": "$(json_escape "${revision_before}")",
+  "revision_after": "$(json_escape "${revision_after}")",
+  "log_tail": "$(json_escape "${log_tail}")"
+}
+EOF
+    # World-readable so the unprivileged web process can show progress.
+    chmod 644 "${tmp}"
+    mv -f "${tmp}" "${STATUS_FILE}"
+}
+
+read_request_field() {
+    # Minimal field read; the request file is written by us and is flat JSON.
+    sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" "${CLAIM_FILE}" | head -n1
+}
+
+main() {
+    [[ -d "${STATE_DIR}" ]] || exit 0
+    # Nothing requested: this is the normal case on almost every timer tick.
+    [[ -f "${REQUEST_FILE}" ]] || exit 0
+
+    # Claim atomically, so a slow update cannot be started twice if the timer
+    # fires again while it is still going.
+    if ! mv -n "${REQUEST_FILE}" "${CLAIM_FILE}" 2>/dev/null || [[ ! -f "${CLAIM_FILE}" ]]; then
+        exit 0
+    fi
+
+    REQUESTED_AT="$(read_request_field requested_at)"
+    REQUESTED_BY="$(read_request_field requested_by_user_id)"
+    [[ "${REQUESTED_BY}" =~ ^[0-9]+$ ]] || REQUESTED_BY="null"
+
+    local started_at revision_before
+    started_at="$(date --iso-8601=seconds)"
+    revision_before="$(current_revision)"
+    write_status "running" 0 "${started_at}" "" "${revision_before}" "" ""
+
+    local exit_code=0
+    if ! "${UPDATE_COMMAND}" >"${LOG_FILE}" 2>&1; then
+        exit_code=$?
+    fi
+    chmod 640 "${LOG_FILE}" 2>/dev/null || true
+
+    local finished_at revision_after log_tail state
+    finished_at="$(date --iso-8601=seconds)"
+    revision_after="$(current_revision)"
+    log_tail="$(tail -n "${LOG_TAIL_LINES}" "${LOG_FILE}" 2>/dev/null || printf '')"
+    if [[ ${exit_code} -eq 0 ]]; then
+        state="completed"
+    else
+        state="failed"
+    fi
+
+    write_status "${state}" "${exit_code}" "${started_at}" "${finished_at}" \
+        "${revision_before}" "${revision_after}" "${log_tail}"
+    rm -f "${CLAIM_FILE}"
+}
+
+main "$@"

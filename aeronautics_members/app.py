@@ -157,6 +157,7 @@ except ImportError:
 
 # Configuration lives in config.py, a leaf module the service layer can import
 # without depending on this one. Re-exported here so existing imports keep working.
+from .services.system_update import describe_update_state  # noqa: E402
 from .services.outbox import (  # noqa: E402
     failed_items,
     pending_count,
@@ -1075,6 +1076,9 @@ def build_settings_page_context(edit_mail_account_id=None):
     test_email_form.sender.choices = sender_choices
     test_email_form.template.choices = template_choices
     return {
+        # Version/update state for the Maintenance tab. Same service call the
+        # JSON status endpoint uses, so the page and the API cannot disagree.
+        "update_state": describe_update_state(),
         "test_email_form": test_email_form,
         "mail_account_form": mail_account_form,
         "mail_account_records": mail_account_records,

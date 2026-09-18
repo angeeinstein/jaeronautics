@@ -13,6 +13,7 @@
                     <button class="nav-link" id="settings-forum-tab" data-bs-toggle="pill" data-bs-target="#settings-forum" type="button" role="tab" aria-controls="settings-forum" aria-selected="false">{{ _('Forum') }}</button>
                     <button class="nav-link" id="settings-mail-tab" data-bs-toggle="pill" data-bs-target="#settings-mail" type="button" role="tab" aria-controls="settings-mail" aria-selected="false">{{ _('Mail Accounts') }}</button>
                     <button class="nav-link" id="settings-test-tab" data-bs-toggle="pill" data-bs-target="#settings-test" type="button" role="tab" aria-controls="settings-test" aria-selected="false">{{ _('Test Tools') }}</button>
+                    <button class="nav-link" id="settings-maintenance-tab" data-bs-toggle="pill" data-bs-target="#settings-maintenance" type="button" role="tab" aria-controls="settings-maintenance" aria-selected="false">{{ _('Maintenance') }}</button>
                 </div>
             </div>
         </div>
@@ -510,6 +511,92 @@
                     </div>
                 </div>
             </div>
+
+            <div class="tab-pane fade" id="settings-maintenance" role="tabpanel" aria-labelledby="settings-maintenance-tab" tabindex="0">
+                <div class="card">
+                    <div class="card-header"><h4 class="mb-0">{{ _('Software Version') }}</h4></div>
+                    <div class="card-body">
+                        {% if not update_state.runner_installed %}
+                            <div class="alert alert-warning" role="alert">
+                                {{ _('Updates cannot be started from this page because the update runner is not installed on this server. Run the installer once from a shell to set it up.') }}
+                            </div>
+                        {% endif %}
+
+                        <dl class="row mb-3">
+                            <dt class="col-sm-4">{{ _('Installed version') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ update_state.local.short_revision or _('unknown') }}</code>
+                                {% if update_state.local.branch %}<span class="text-muted">({{ update_state.local.branch }})</span>{% endif %}
+                                {% if update_state.local.committed_at %}<br><small class="text-muted">{{ update_state.local.committed_at }}</small>{% endif %}
+                                {% if update_state.local.subject %}<br><small class="text-muted">{{ update_state.local.subject }}</small>{% endif %}
+                            </dd>
+                            <dt class="col-sm-4">{{ _('Latest available') }}</dt>
+                            <dd class="col-sm-8">
+                                {% if update_state.remote_check_failed %}
+                                    <span class="text-muted">{{ _('Could not be checked right now.') }}</span>
+                                {% else %}
+                                    <code>{{ update_state.remote_short_revision or _('unknown') }}</code>
+                                {% endif %}
+                            </dd>
+                        </dl>
+
+                        {% if update_state.in_progress %}
+                            <div class="alert alert-info" role="alert">
+                                {{ _('An update is running. The site restarts while it finishes, so this page may be briefly unavailable.') }}
+                            </div>
+                        {% elif update_state.update_available %}
+                            <div class="alert alert-warning" role="alert">{{ _('A newer version is available.') }}</div>
+                        {% elif not update_state.remote_check_failed %}
+                            <div class="alert alert-success" role="alert">{{ _('This installation is up to date.') }}</div>
+                        {% endif %}
+
+                        <form method="POST" action="{{ url_for('admin.admin_request_system_update') }}"
+                              data-confirm="{{ _('Install the update now? The site will restart and be briefly unavailable.') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-primary"
+                                    {% if not update_state.runner_installed or update_state.in_progress %}disabled{% endif %}>
+                                {{ _('Install update now') }}
+                            </button>
+                            <span class="text-muted ms-2">{{ _('Starts within a minute. Takes a few minutes to finish.') }}</span>
+                        </form>
+                    </div>
+                </div>
+
+                {% if update_state.last_run.state %}
+                <div class="card mt-4">
+                    <div class="card-header"><h4 class="mb-0">{{ _('Last Update') }}</h4></div>
+                    <div class="card-body">
+                        <dl class="row mb-3">
+                            <dt class="col-sm-4">{{ _('Result') }}</dt>
+                            <dd class="col-sm-8">
+                                {% if update_state.last_run.state == 'completed' %}
+                                    <span class="badge bg-success">{{ _('Completed') }}</span>
+                                {% elif update_state.last_run.state == 'failed' %}
+                                    <span class="badge bg-danger">{{ _('Failed') }}</span>
+                                    <span class="text-muted ms-2">{{ _('exit code') }} {{ update_state.last_run.exit_code }}</span>
+                                {% else %}
+                                    <span class="badge bg-info">{{ update_state.last_run.state }}</span>
+                                {% endif %}
+                            </dd>
+                            {% if update_state.last_run.finished_at %}
+                            <dt class="col-sm-4">{{ _('Finished') }}</dt>
+                            <dd class="col-sm-8"><small class="text-muted">{{ update_state.last_run.finished_at }}</small></dd>
+                            {% endif %}
+                            {% if update_state.last_run.revision_after %}
+                            <dt class="col-sm-4">{{ _('Version after') }}</dt>
+                            <dd class="col-sm-8"><code>{{ update_state.last_run.revision_after[:8] }}</code></dd>
+                            {% endif %}
+                        </dl>
+                        {% if update_state.last_run.log_tail %}
+                            <details>
+                                <summary class="text-muted">{{ _('Show the end of the update log') }}</summary>
+                                <pre class="mt-2 p-3 bg-body-tertiary border rounded small text-break" style="white-space: pre-wrap;">{{ update_state.last_run.log_tail }}</pre>
+                            </details>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
@@ -536,6 +623,7 @@
 </div>
 <script src="{{ url_for('static', filename='mail-account-delete-modal.js') }}"></script>
 <script src="{{ url_for('static', filename='admin-settings-tabs.js') }}"></script>
+<script src="{{ url_for('static', filename='confirm-submit.js') }}"></script>
 {% endblock %}
 
 

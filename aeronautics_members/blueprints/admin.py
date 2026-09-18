@@ -5,7 +5,7 @@ Route handlers moved verbatim out of app.py (dedented; @app.route ->
 from the app module, which is fully initialized before this is imported.
 """
 
-from flask import Blueprint, current_app
+from flask import Blueprint, current_app, jsonify
 
 from ..config import (
     RATELIMIT_ADMIN_EMAIL,
@@ -41,6 +41,13 @@ from ..services.notifications import (
     normalize_imported_mail_accounts_payload,
     queue_curated_admin_notification,
     queue_user_status_notification,
+)
+from ..services import (
+    ServiceError,
+)
+from ..services.system_update import (
+    describe_update_state,
+    request_update,
 )
 from ..services.workflows import (
     refresh_member_billing_state,
@@ -1265,3 +1272,53 @@ def send_test_email():
         flash(_("Invalid form submission. Please check the fields and try again."), "warning")
 
     return redirect(f"{url_for('admin.admin_settings')}#settings-test")
+
+
+@admin_bp.route("/admin/system-update/status", methods=["GET"])
+@login_required
+@admin_required
+def admin_system_update_status():
+    """Current and available version, as JSON.
+
+    The page polls this while an update runs. It returns exactly what the HTML
+    panel renders, from the same service call, so the two cannot drift.
+    """
+    force = request.args.get("refresh") == "1"
+    return jsonify(describe_update_state(force_remote_check=force))
+
+
+@admin_bp.route("/admin/system-update", methods=["POST"])
+@login_required
+@admin_required
+@limiter.limit(RATELIMIT_ADMIN_EMAIL, methods=["POST"])
+def admin_request_system_update():
+    """Ask the privileged runner to install the available update.
+
+    This deliberately does not run the update: the web process is unprivileged
+    and must stay that way. It records a request that the root-side watcher
+    picks up, which is also why there is nothing to wait for here.
+    """
+    before = describe_update_state()
+    try:
+        request_update(requested_by_user_id=current_user.id)
+    except ServiceError as exc:
+        flash(exc.message, "warning" if exc.http_status < 500 else "danger")
+        return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
+
+    log_audit_event(
+        category="system",
+        event_type="update_requested",
+        actor_user=current_user,
+        target_user=current_user,
+        before={"revision": (before.get("local") or {}).get("revision")},
+        after={"revision": before.get("remote_revision")},
+        metadata={"branch": (before.get("local") or {}).get("branch")},
+    )
+    db.session.commit()
+
+    flash(
+        _("The update has been requested. It starts within a minute and the site "
+          "restarts while it runs, so this page may be briefly unavailable."),
+        "info",
+    )
+    return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
