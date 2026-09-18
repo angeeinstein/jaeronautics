@@ -246,31 +246,5 @@
         </div>
     </div>
 </div>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var deleteModal = document.getElementById('deleteMailAccountModal');
-    if (!deleteModal) {
-        return;
-    }
-
-    deleteModal.addEventListener('show.bs.modal', function (event) {
-        var trigger = event.relatedTarget;
-        if (!trigger) {
-            return;
-        }
-
-        var deleteUrl = trigger.getAttribute('data-delete-url') || '#';
-        var accountKey = trigger.getAttribute('data-account-key') || '';
-        var deleteForm = deleteModal.querySelector('#delete-mail-account-form');
-        var accountName = deleteModal.querySelector('#delete-mail-account-name');
-
-        if (deleteForm) {
-            deleteForm.action = deleteUrl;
-        }
-        if (accountName) {
-            accountName.textContent = accountKey;
-        }
-    });
-});
-</script>
+<script src="{{ url_for('static', filename='mail-account-delete-modal.js') }}"></script>
 {% endblock %}

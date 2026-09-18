@@ -408,7 +408,10 @@ class DiscourseConnectProvider(ForumProvider):
             "email": user.email,
             "username": user.forum_username or f"member-{user.id}",
             "name": full_name,
-            "require_activation": "false",
+            # Discourse trusts the address we assert only when we vouch for it.
+            # If we have not verified ownership ourselves, ask Discourse to run
+            # its own activation instead of silently accepting the address.
+            "require_activation": "false" if user.email_is_verified else "true",
         }
         if avatar_url:
             payload["avatar_url"] = avatar_url

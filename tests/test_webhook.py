@@ -7,7 +7,7 @@ observe how membership state transitions and how duplicate events are handled.
 """
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -204,6 +204,29 @@ class TestIdempotency:
         assert resp.status_code == 500
         assert app_module.stripe_event_already_processed("evt_boom") is False
 
+    def test_event_abandoned_by_a_crash_is_reprocessed(self, client, monkeypatch, stub_side_effects):
+        # Simulate a process killed mid-handler: the event was claimed but never
+        # completed. A redelivery after the lease expires must actually run the
+        # work instead of being acknowledged as a duplicate.
+        member = make_member(email="crash@example.com")
+        event = checkout_event(member, member.user, activation_mode="free_period",
+                               event_id="evt_crash")
+
+        assert app_module.claim_stripe_event("evt_crash", "checkout.session.completed") is True
+        row = db.session.execute(
+            db.select(ProcessedStripeEvent).filter_by(event_id="evt_crash")
+        ).scalar_one()
+        row.claimed_at = app_module.get_now_utc() - app_module.STRIPE_EVENT_LEASE - timedelta(minutes=1)
+        db.session.commit()
+
+        resp = post_event(client, monkeypatch, event)
+
+        assert resp.status_code == 200
+        assert resp.data != b"Already processed"
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.is_active is True
+        assert stub_side_effects == [member.id]
+
     def test_failed_event_is_not_recorded(self, client, monkeypatch, stub_side_effects):
         # A checkout event missing member_data returns 400 and must NOT be
         # marked processed, so Stripe's retry can still be handled later.
@@ -277,6 +300,46 @@ class TestRenewalCoverage:
 
 def member_id_for(email):
     return db.session.execute(db.select(Member.id).filter_by(email_private=email)).scalar_one()
+
+
+class TestDisputeLost:
+    def test_unreachable_stripe_fails_instead_of_acknowledging(self, client, monkeypatch, stub_side_effects):
+        # Swallowing the error and returning 200 would drop the event for good,
+        # leaving a member active on a charge that was lost.
+        def boom(*a, **k):
+            raise RuntimeError("stripe unreachable")
+
+        monkeypatch.setattr(webhook_module.stripe.Charge, "retrieve", staticmethod(boom))
+        event = {
+            "id": "evt_dispute_err", "type": "charge.dispute.closed",
+            "data": {"object": {"status": "lost", "charge": "ch_1"}},
+        }
+
+        resp = post_event(client, monkeypatch, event)
+
+        assert resp.status_code == 500
+        # Released, so Stripe's retry is handled rather than ignored.
+        assert app_module.stripe_event_already_processed("evt_dispute_err") is False
+
+    def test_lost_dispute_deactivates_member(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="disputed@example.com", stripe_customer_id="cus_d",
+                             payment_status="paid", is_active=True,
+                             membership_ends_on=YEAR_END)
+        monkeypatch.setattr(
+            webhook_module.stripe.Charge, "retrieve",
+            staticmethod(lambda *a, **k: {"customer": "cus_d"}),
+        )
+        event = {
+            "id": "evt_dispute_ok", "type": "charge.dispute.closed",
+            "data": {"object": {"status": "lost", "charge": "ch_2"}},
+        }
+
+        resp = post_event(client, monkeypatch, event)
+
+        assert resp.status_code == 200
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.is_active is False
+        assert refreshed.payment_status == "dispute_lost"
 
 
 class TestSubscriptionDeleted:

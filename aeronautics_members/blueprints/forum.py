@@ -37,6 +37,7 @@ from ..app import (
     member_has_active_access,
     queue_curated_admin_notification,
     read_token,
+    mark_email_verified_from_token,
     redirect,
     render_template,
     request,
@@ -60,11 +61,13 @@ def forum_entry():
             token_data = read_token(token, "forum-entry", TOKEN_MAX_AGE_FORUM_ENTRY)
             token_user = db.session.get(User, int(token_data.get("user_id")))
         except (BadSignature, SignatureExpired, ValueError, TypeError):
+            token_data = None
             token_user = None
             flash(_("This forum access link is invalid or has expired."), "warning")
 
-        if token_user is not None and not token_user.email_is_verified:
-            token_user.email_verified_at = get_now_utc()
+        # Only treat the link as proof of email ownership when it was issued for
+        # the address the account currently holds; otherwise it just signs in.
+        if token_user is not None and mark_email_verified_from_token(token_data, token_user):
             db.session.commit()
             token_verified_email = True
 
@@ -221,6 +224,15 @@ def forum_discourse_connect():
 
     if not member_has_active_access(member):
         flash(_("Your membership is not active, so forum access is unavailable right now."), "warning")
+        return redirect(url_for("forum.forum_entry"))
+
+    # DiscourseConnect asserts this address to the forum, which associates forum
+    # accounts by email. Never vouch for an address we have not verified.
+    if not current_user.email_is_verified:
+        flash(
+            _("Please confirm your email address before signing in to the forum. We have sent you a verification link."),
+            "warning",
+        )
         return redirect(url_for("forum.forum_entry"))
 
     forum_result, service = sync_member_forum_state(member)

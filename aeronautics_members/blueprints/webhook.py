@@ -22,6 +22,7 @@ from ..app import (
     backfill_member_coverage_from_subscription,
     backfill_member_stripe_references,
     claim_stripe_event,
+    complete_stripe_event,
     first_day_of_year,
     generate_unique_forum_username,
     get_member_by_stripe_or_email,
@@ -80,12 +81,16 @@ def stripe_webhook():
 
     try:
         body, status = process_stripe_event(event)
-    except Exception:
+    except Exception as exc:
         # Processing failed after the claim; release it so Stripe can retry.
-        release_stripe_event(event_id)
+        release_stripe_event(event_id, error=exc)
         raise
+
     if status >= 400:
-        release_stripe_event(event_id)
+        release_stripe_event(event_id, error=body)
+    else:
+        # Only a handler that ran to completion may suppress redeliveries.
+        complete_stripe_event(event_id)
     return body, status
 
 
@@ -397,18 +402,37 @@ def process_stripe_event(event):
             try:
                 apply_runtime_stripe_config()
                 charge = stripe.Charge.retrieve(charge_id)
-                customer_id = charge.get("customer")
-                if customer_id:
-                    member = Member.query.filter_by(stripe_customer_id=customer_id).first()
-                    if member:
-                        member.is_active = False
-                        member.payment_status = "dispute_lost"
-                        db.session.commit()
-                        current_app.logger.error(
-                            "DISPUTE LOST for Stripe Customer ID: %s. Member has been deactivated.",
-                            customer_id,
+            except Exception as exc:
+                # Swallowing this and reporting success would drop the event for
+                # good: the member stays active on a charge we lost. Fail so the
+                # claim is released and Stripe retries the delivery.
+                current_app.logger.error("Could not load charge %s for lost dispute: %s", charge_id, exc)
+                return "Could not resolve disputed charge", 500
+
+            customer_id = charge.get("customer")
+            if customer_id:
+                member = Member.query.filter_by(stripe_customer_id=customer_id).first()
+                if member:
+                    member.is_active = False
+                    member.payment_status = "dispute_lost"
+                    db.session.commit()
+                    current_app.logger.error(
+                        "DISPUTE LOST for Stripe Customer ID: %s. Member has been deactivated.",
+                        customer_id,
+                    )
+                    # Revoke forum access to match the local state change.
+                    forum_result, _forum_service = sync_member_forum_state(member)
+                    db.session.commit()
+                    if forum_result and forum_result.error:
+                        current_app.logger.warning(
+                            "Forum sync reported an issue after a lost dispute for member_id=%s: %s",
+                            member.id,
+                            forum_result.error,
                         )
-            except Exception as e:
-                current_app.logger.error(f"Error handling dispute for charge {charge_id}: {e}")
+                else:
+                    current_app.logger.warning(
+                        "Lost dispute for Stripe customer %s, but no member holds that reference.",
+                        customer_id,
+                    )
 
     return "Success", 200

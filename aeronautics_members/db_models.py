@@ -47,6 +47,9 @@ class User(UserMixin, db.Model):
     forum_username = db.Column(db.String(255), unique=True, nullable=True)
     email_verified_at = db.Column(db.DateTime, nullable=True)
     password_reset_nonce = db.Column(db.String(255), nullable=True)
+    # Rotated whenever the address changes or a verification link is used, so a
+    # verification token issued for an older address cannot be replayed.
+    email_verification_nonce = db.Column(db.String(255), nullable=True)
 
     member = db.relationship("Member", back_populates="user", uselist=False)
     forum_account = db.relationship("ForumAccount", back_populates="user", uselist=False)
@@ -378,12 +381,30 @@ class EmailDeliveryJob(db.Model):
 
 
 class ProcessedStripeEvent(db.Model):
+    """Durable inbox for incoming Stripe webhook events.
+
+    This is more than a "seen it" marker: the row records whether the work the
+    event describes actually *finished*. A row claimed but never completed (for
+    example because the process was killed mid-handler) holds an expired lease,
+    which lets a later redelivery take it over instead of being waved through as
+    a duplicate. Only ``status == "completed"`` suppresses reprocessing.
+    """
+
     __tablename__ = "processed_stripe_events"
+
+    STATUS_PROCESSING = "processing"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
 
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.String(255), unique=True, nullable=False)
     event_type = db.Column(db.String(120), nullable=True)
-    processed_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    # Null until the handler finishes; set when the event reaches "completed".
+    processed_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_PROCESSING)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    claimed_at = db.Column(db.DateTime, nullable=True, default=utcnow)
+    last_error = db.Column(db.Text, nullable=True)
 
 
 class Setting(db.Model):

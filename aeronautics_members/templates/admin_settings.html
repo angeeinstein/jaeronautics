@@ -534,45 +534,8 @@
         </div>
     </div>
 </div>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var deleteModal = document.getElementById('deleteMailAccountModal');
-    if (deleteModal) {
-        deleteModal.addEventListener('show.bs.modal', function (event) {
-            var trigger = event.relatedTarget;
-            if (!trigger) {
-                return;
-            }
-            var deleteUrl = trigger.getAttribute('data-delete-url');
-            var accountKey = trigger.getAttribute('data-account-key');
-            var form = document.getElementById('delete-mail-account-form');
-            var nameNode = document.getElementById('delete-mail-account-name');
-            if (form) {
-                form.setAttribute('action', deleteUrl || '#');
-            }
-            if (nameNode) {
-                nameNode.textContent = accountKey || '';
-            }
-        });
-    }
-
-    var tabTriggerList = [].slice.call(document.querySelectorAll('#settings-tab button[data-bs-toggle="pill"]'));
-    var currentHash = window.location.hash;
-    var matchedTab = currentHash ? document.querySelector('#settings-tab button[data-bs-target="' + currentHash + '"]') : null;
-    if (matchedTab && window.bootstrap && window.bootstrap.Tab) {
-        window.bootstrap.Tab.getOrCreateInstance(matchedTab).show();
-    }
-
-    tabTriggerList.forEach(function (tabTrigger) {
-        tabTrigger.addEventListener('shown.bs.tab', function (event) {
-            var target = event.target.getAttribute('data-bs-target');
-            if (target) {
-                history.replaceState(null, '', target);
-            }
-        });
-    });
-});
-</script>
+<script src="{{ url_for('static', filename='mail-account-delete-modal.js') }}"></script>
+<script src="{{ url_for('static', filename='admin-settings-tabs.js') }}"></script>
 {% endblock %}
 
 

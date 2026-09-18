@@ -25,7 +25,6 @@ from ..app import (
     db,
     flash,
     get_member_portal_target,
-    get_now_utc,
     is_safe_next_url,
     limiter,
     log_out_forum_session_if_possible,
@@ -33,6 +32,8 @@ from ..app import (
     login_user,
     logout_user,
     read_token,
+    mark_email_verified_from_token,
+    email_verification_claims_match,
     redirect,
     render_template,
     request,
@@ -110,14 +111,19 @@ def verify_email(token):
         token_data = read_token(token, "verify-email", TOKEN_MAX_AGE_VERIFY_EMAIL)
         user = db.session.get(User, int(token_data.get("user_id")))
     except (BadSignature, SignatureExpired, ValueError, TypeError):
+        token_data = None
+        user = None
+
+    # The link must still prove ownership of the address currently on the
+    # account: a token issued for a previous address must not verify a new one.
+    if user is not None and not email_verification_claims_match(token_data, user):
         user = None
 
     if user is None:
         flash(_("This verification link is invalid or has expired."), "danger")
         return redirect(url_for("auth.login"))
 
-    if not user.email_is_verified:
-        user.email_verified_at = get_now_utc()
+    if mark_email_verified_from_token(token_data, user):
         db.session.commit()
     flash(_("Your email address has been verified."), "success")
     if current_user.is_authenticated and current_user.id == user.id:

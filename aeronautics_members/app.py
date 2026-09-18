@@ -859,8 +859,63 @@ def build_password_reset_token(user):
 
 
 
+def rotate_email_verification_nonce(user):
+    user.email_verification_nonce = secrets.token_urlsafe(24)
+    return user.email_verification_nonce
+
+
+
+def build_email_verification_claims(user):
+    """Claims that bind a verification link to one address on one account.
+
+    A token carrying only ``user_id`` proves nothing about *which* address was
+    confirmed: it stays valid after the account's email changes, so an old link
+    could be used to mark a newly entered (unproven) address as verified. Binding
+    the address itself plus a rotating nonce scopes each link to the address it
+    was actually sent to.
+    """
+    nonce = user.email_verification_nonce or rotate_email_verification_nonce(user)
+    return {"user_id": user.id, "email": (user.email or "").strip().lower(), "nonce": nonce}
+
+
+
+def email_verification_claims_match(token_data, user):
+    """True when a decoded token still proves ownership of the user's address."""
+    if user is None or not isinstance(token_data, dict):
+        return False
+
+    token_email = (token_data.get("email") or "").strip().lower()
+    current_email = (user.email or "").strip().lower()
+    if not token_email or token_email != current_email:
+        return False
+
+    expected_nonce = user.email_verification_nonce
+    # Tokens predating the nonce carry none; require one so old links cannot be
+    # replayed against an account that has since been issued a fresh link.
+    return bool(expected_nonce) and token_data.get("nonce") == expected_nonce
+
+
+
+def mark_email_verified_from_token(token_data, user):
+    """Verify ``user``'s address if the token really proves ownership of it.
+
+    Returns True when the address was newly marked verified. The nonce is
+    deliberately NOT rotated here: a verification and a forum magic link can be
+    outstanding at the same time, and re-using a link for an already verified
+    address is harmless. Rotation happens when the address changes, which is the
+    event that must invalidate links issued for the previous address.
+    """
+    if not email_verification_claims_match(token_data, user):
+        return False
+    if user.email_is_verified:
+        return False
+    user.email_verified_at = get_now_utc()
+    return True
+
+
+
 def send_email_verification_email(app, user):
-    token = generate_token("verify-email", user_id=user.id)
+    token = generate_token("verify-email", **build_email_verification_claims(user))
     verify_url = build_public_url("auth.verify_email", token=token)
     return send_account_action_email(
         app,
@@ -1088,8 +1143,8 @@ def build_forum_entry_url(user, include_token=False):
     if include_token and user is not None:
         route_values["token"] = generate_token(
             "forum-entry",
-            user_id=user.id,
             issued_at=int(get_now_utc().timestamp()),
+            **build_email_verification_claims(user),
         )
     return build_public_url("forum.forum_entry", **route_values)
 
@@ -1409,6 +1464,8 @@ def sync_member_primary_email(member, new_email):
     if member.user is not None and member.user.email != new_email:
         member.user.email = new_email
         member.user.email_verified_at = None
+        # Invalidate any verification/forum link issued for the previous address.
+        rotate_email_verification_nonce(member.user)
 
     if email_changed and member.stripe_customer_id:
         try:
@@ -1778,51 +1835,133 @@ def get_member_portal_target(user):
 
 
 def stripe_event_already_processed(event_id):
-    """Return True when a Stripe webhook event id already has a marker row."""
+    """Return True when a Stripe webhook event was handled through to completion.
+
+    A merely claimed (in-flight or abandoned) event is deliberately not
+    "processed": its work may never have finished.
+    """
     if not event_id:
         return False
     return (
         db.session.execute(
-            db.select(ProcessedStripeEvent.id).filter_by(event_id=event_id)
+            db.select(ProcessedStripeEvent.id).filter_by(
+                event_id=event_id, status=ProcessedStripeEvent.STATUS_COMPLETED
+            )
         ).first()
         is not None
     )
 
 
-def claim_stripe_event(event_id, event_type=None):
-    """Atomically claim a Stripe event before processing it.
+# How long a claimed-but-unfinished event stays reserved before a redelivery may
+# take it over. Long enough that a slow handler is not raced, short enough that a
+# killed process does not suppress the event until Stripe stops retrying.
+STRIPE_EVENT_LEASE = timedelta(minutes=15)
 
-    Inserts the idempotency marker up front and commits it, so two concurrent
-    deliveries of the same event cannot both proceed: the unique constraint on
-    ``event_id`` lets exactly one committer win. Returns False if the event was
-    already claimed (duplicate), in which case the caller must skip processing.
-    Events without an id cannot be deduplicated, so they are allowed through.
+
+def claim_stripe_event(event_id, event_type=None):
+    """Claim a Stripe event for processing, returning False to skip it.
+
+    Recording "seen" before the work runs is what makes concurrent duplicate
+    deliveries safe, but on its own it means a process killed mid-handler leaves
+    an event that looks handled and never was. So the claim carries a lease: only
+    a *completed* event suppresses reprocessing, while a stale in-flight claim is
+    taken over by the next delivery. Events without an id cannot be deduplicated
+    and are always allowed through.
     """
     if not event_id:
         return True
-    db.session.add(ProcessedStripeEvent(event_id=event_id, event_type=event_type))
+
+    now = get_now_utc()
+    db.session.add(
+        ProcessedStripeEvent(
+            event_id=event_id,
+            event_type=event_type,
+            status=ProcessedStripeEvent.STATUS_PROCESSING,
+            attempts=1,
+            claimed_at=now,
+        )
+    )
     try:
         db.session.commit()
         return True
     except IntegrityError:
         db.session.rollback()
+
+    existing = db.session.execute(
+        db.select(ProcessedStripeEvent).filter_by(event_id=event_id)
+    ).scalar_one_or_none()
+    if existing is None:
+        # The competing row vanished between the conflict and this read; let the
+        # delivery through rather than dropping the event.
+        return True
+
+    if existing.status == ProcessedStripeEvent.STATUS_COMPLETED:
         return False
 
+    claimed_at = existing.claimed_at
+    if claimed_at is not None and claimed_at.tzinfo is None:
+        claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+    lease_active = (
+        existing.status == ProcessedStripeEvent.STATUS_PROCESSING
+        and claimed_at is not None
+        and (now - claimed_at) < STRIPE_EVENT_LEASE
+    )
+    if lease_active:
+        # Another delivery is genuinely still working on it; Stripe will retry.
+        return False
 
-def release_stripe_event(event_id):
-    """Release a previously claimed event so Stripe's retry can reprocess it.
+    # Failed, or abandoned by a process that died holding the claim: take it over.
+    existing.status = ProcessedStripeEvent.STATUS_PROCESSING
+    existing.attempts = (existing.attempts or 0) + 1
+    existing.claimed_at = now
+    if existing.event_type is None:
+        existing.event_type = event_type
+    db.session.commit()
+    current_app.logger.info(
+        "Retrying Stripe webhook event %s (%s), attempt %s.",
+        event_id,
+        existing.event_type,
+        existing.attempts,
+    )
+    return True
 
-    Called when processing failed after the event was claimed, so the marker
-    must not permanently suppress the (now unhandled) event.
+
+def complete_stripe_event(event_id):
+    """Mark a claimed event as finished so redeliveries are ignored."""
+    if not event_id:
+        return
+    record = db.session.execute(
+        db.select(ProcessedStripeEvent).filter_by(event_id=event_id)
+    ).scalar_one_or_none()
+    if record is None:
+        return
+    record.status = ProcessedStripeEvent.STATUS_COMPLETED
+    record.processed_at = get_now_utc()
+    record.last_error = None
+    db.session.commit()
+
+
+def release_stripe_event(event_id, error=None):
+    """Release a claimed event so Stripe's retry can reprocess it.
+
+    The row is kept (rather than deleted) so failures stay visible and the
+    attempt count survives, but its status no longer suppresses redelivery.
     """
     if not event_id:
         return
-    marker = db.session.execute(
+    # Processing may have failed mid-transaction; start from a clean session so
+    # the release itself can commit.
+    db.session.rollback()
+    record = db.session.execute(
         db.select(ProcessedStripeEvent).filter_by(event_id=event_id)
     ).scalar_one_or_none()
-    if marker is not None:
-        db.session.delete(marker)
-        db.session.commit()
+    if record is None:
+        return
+    record.status = ProcessedStripeEvent.STATUS_FAILED
+    record.claimed_at = None
+    if error is not None:
+        record.last_error = str(error)[:2000]
+    db.session.commit()
 
 
 def build_membership_metadata(member, cycle, activation_mode):
@@ -1936,6 +2075,49 @@ def create_invoice_membership_for_member(member):
 
 
 
+# Statuses that were established by real evidence -- a paid invoice, a completed
+# Checkout, or an explicitly granted free period -- rather than merely inferred
+# from the Stripe subscription lifecycle. Reconciliation may preserve these, but
+# must never promote a member into one without such evidence.
+PAYMENT_EVIDENCE_STATUSES = {"paid", "free_period"}
+
+
+def subscription_period_bounds(subscription):
+    """Return the (start, end) unix timestamps of a subscription's current period.
+
+    Stripe's Basil API version (2025-03-31) removed the top-level
+    ``current_period_start`` / ``current_period_end`` fields and moved them onto
+    each subscription item. Read the item-level values first and fall back to the
+    legacy top-level fields, so this keeps working whichever API version the
+    installed library and the account negotiate.
+    """
+    if not subscription:
+        return None, None
+
+    items = ((subscription.get("items") or {}).get("data")) or []
+    starts = [item.get("current_period_start") for item in items if item.get("current_period_start")]
+    ends = [item.get("current_period_end") for item in items if item.get("current_period_end")]
+
+    period_start = min(starts) if starts else subscription.get("current_period_start")
+    period_end = max(ends) if ends else subscription.get("current_period_end")
+    return period_start, period_end
+
+
+def subscription_collects_payment_automatically(subscription):
+    """True when Stripe itself collects payment for this subscription.
+
+    A ``charge_automatically`` subscription only becomes (and stays) ``active``
+    once the latest invoice was actually paid, so its status is usable as
+    evidence of payment. A ``send_invoice`` subscription goes ``active`` when the
+    trial ends and stays ``active`` while the invoice is merely outstanding, so
+    its status proves nothing about whether money arrived.
+    """
+    if not subscription:
+        return False
+    collection_method = subscription.get("collection_method") or "charge_automatically"
+    return collection_method == "charge_automatically"
+
+
 def get_latest_stripe_subscription_for_member(member):
     if member is None:
         return None
@@ -2032,8 +2214,17 @@ def sync_member_subscription_state_from_subscription(member, subscription):
     # from it (extend-only) before deciding active state. Without this, a missed
     # invoice.paid would leave stale (prior-year) coverage and expire a paid member
     # on the next reconcile.
-    if subscription_status == "active":
-        period_start = subscription.get("current_period_start")
+    automatic_payment = subscription_collects_payment_automatically(subscription)
+
+    # Safety net for a missed renewal webhook: an active *automatically charged*
+    # subscription's current period is the authoritative paid coverage year, so
+    # advance coverage from it (extend-only) before deciding active state. Without
+    # this, a missed invoice.paid would leave stale (prior-year) coverage and
+    # expire a paid member on the next reconcile. Invoice-billed subscriptions are
+    # excluded: they go active on an unpaid invoice, so their period is not
+    # evidence of paid coverage.
+    if subscription_status == "active" and automatic_payment:
+        period_start, _period_end = subscription_period_bounds(subscription)
         active_year = to_membership_date(period_start).year if period_start else None
         if active_year is not None:
             active_end = last_day_of_year(active_year)
@@ -2058,10 +2249,28 @@ def sync_member_subscription_state_from_subscription(member, subscription):
         # fee has actually been charged, so the member is paid regardless of the
         # stale signup metadata (otherwise a paid renewal reverts to free_period).
         if subscription_status == "trialing" and activation_mode == "free_period":
+            # An explicitly granted free rest-of-year period.
             desired_status = "free_period"
-        else:
+            desired_active = True
+        elif automatic_payment:
+            # Stripe collects payment itself here, so "active" means the annual fee
+            # was really charged and "trialing" follows a completed Checkout. Trust
+            # the lifecycle over the stale signup metadata, otherwise a paid renewal
+            # would revert to free_period.
             desired_status = "paid"
-        desired_active = True
+            desired_active = True
+        elif member.payment_status in PAYMENT_EVIDENCE_STATUSES:
+            # Invoice-billed, and real evidence (invoice.paid) already established
+            # the status. Preserve it, but never promote into it from here.
+            desired_status = member.payment_status
+            desired_active = True
+        else:
+            # Invoice-billed and still unpaid: Stripe marks the subscription active
+            # once the trial ends even while the invoice is merely outstanding, so
+            # this is not proof of payment and must not grant access. Leave the
+            # local state for the invoice webhooks to settle.
+            desired_status = None
+            desired_active = member.is_active
     else:
         desired_status = None
         desired_active = member.is_active
@@ -2232,6 +2441,8 @@ def ensure_user_schema():
         alter_statements.append("ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL")
     if "password_reset_nonce" not in columns:
         alter_statements.append("ALTER TABLE users ADD COLUMN password_reset_nonce VARCHAR(255) NULL")
+    if "email_verification_nonce" not in columns:
+        alter_statements.append("ALTER TABLE users ADD COLUMN email_verification_nonce VARCHAR(255) NULL")
 
     with db.engine.begin() as connection:
         for statement in alter_statements:
@@ -2751,7 +2962,13 @@ def create_app(config_overrides=None):
                 ensure_user_schema()
                 ensure_member_schema()
                 db.create_all()
-                stamp()
+                # ensure_* reconciles legacy columns and create_all builds every
+                # table from the current models, so the schema really is at head
+                # and stamping head is accurate. This holds only for migrations
+                # that add tables/columns; one that transforms existing data must
+                # be applied to a legacy database by hand, since create_all
+                # cannot reproduce its effect.
+                stamp("head")
             else:
                 upgrade()
 
@@ -2871,7 +3088,8 @@ def create_app(config_overrides=None):
             click.echo(f"  stripe_cancel_at: {stripe_subscription.get('cancel_at') or '-'}")
             click.echo(f"  stripe_canceled_at: {stripe_subscription.get('canceled_at') or '-'}")
             click.echo(f"  stripe_trial_end: {stripe_subscription.get('trial_end') or '-'}")
-            click.echo(f"  stripe_current_period_end: {stripe_subscription.get('current_period_end') or '-'}")
+            _period_start, period_end = subscription_period_bounds(stripe_subscription)
+            click.echo(f"  stripe_current_period_end: {period_end or '-'}")
             click.echo(f"  stripe_cancellation_reason: {cancellation_details.get('reason') or '-'}")
             click.echo(f"  derived_cancel_scheduled: {subscription_has_scheduled_cancellation(stripe_subscription)}")
         if member.user and member.user.forum_account:
