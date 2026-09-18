@@ -2,8 +2,8 @@
 
 These drive the real ``/stripe-webhook`` route against a SQLite database with
 Stripe's signature verification and the side-effecting helpers
-(``send_member_welcome_email``, ``sync_member_forum_state``) stubbed out, so we
-observe how membership state transitions and how duplicate events are handled.
+(``send_member_welcome_email``) stubbed out, so we observe how membership state
+transitions and how duplicate events are handled.
 """
 
 import json
@@ -11,9 +11,9 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from conftest import Member, ProcessedStripeEvent, clock, db, make_member, periods, webhook_inbox
+from conftest import Member, ProcessedStripeEvent, clock, db, make_member, outbox, periods, webhook_inbox
 from aeronautics_members.blueprints import webhook as webhook_module
-from aeronautics_members.db_models import Setting
+from aeronautics_members.db_models import ExternalWorkItem, Setting
 
 TODAY = clock.get_membership_today()
 YEAR_END = date(TODAY.year, 12, 31)
@@ -30,11 +30,8 @@ def stub_side_effects(monkeypatch):
         "send_member_welcome_email",
         lambda app, member, *a, **k: sends.append(member.id),
     )
-    monkeypatch.setattr(
-        webhook_module,
-        "sync_member_forum_state",
-        lambda member, *a, **k: (None, None),
-    )
+    # Forum sync is no longer called from the webhook at all -- it is queued as
+    # external work -- so there is nothing to stub for it here.
     return sends
 
 
@@ -480,3 +477,61 @@ class TestCoverageLedger:
         refreshed = db.session.get(Member, member.id)
         assert all(p.is_revoked for p in refreshed.membership_periods)
         assert periods.has_coverage(refreshed) is False
+
+
+class TestExternalWorkIsQueued:
+    """The webhook must not make remote calls in its own handler.
+
+    Discourse sync used to run inline here, with a 20-second network timeout
+    inside the handler Stripe is waiting on.
+    """
+
+    def test_paid_invoice_queues_the_forum_sync(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="queued@example.com", stripe_customer_id="cus_q",
+                             stripe_subscription_id="sub_q", payment_status="unpaid")
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        event = {
+            "id": "evt_queue", "type": "invoice.paid",
+            "data": {"object": {"id": "in_q", "customer": "cus_q", "subscription": "sub_q",
+                                "status_transitions": {"paid_at": now_ts}, "created": now_ts}},
+        }
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        queued = db.session.execute(db.select(ExternalWorkItem)).scalars().all()
+        assert [i.kind for i in queued] == [ExternalWorkItem.KIND_FORUM_SYNC]
+        assert queued[0].member_id == member.id
+        assert queued[0].status == ExternalWorkItem.STATUS_PENDING
+
+    def test_queued_work_survives_a_forum_outage(self, client, monkeypatch, stub_side_effects):
+        """The local change commits; the sync is retried rather than lost."""
+        member = make_member(email="outage@example.com", stripe_customer_id="cus_o",
+                             stripe_subscription_id="sub_o", payment_status="unpaid")
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        event = {
+            "id": "evt_outage", "type": "invoice.paid",
+            "data": {"object": {"id": "in_o", "customer": "cus_o", "subscription": "sub_o",
+                                "status_transitions": {"paid_at": now_ts}, "created": now_ts}},
+        }
+        post_event(client, monkeypatch, event)
+
+        # Discourse is down when the worker runs.
+        monkeypatch.setitem(
+            outbox._HANDLERS, ExternalWorkItem.KIND_FORUM_SYNC,
+            lambda item: (_ for _ in ()).throw(RuntimeError("discourse down")),
+        )
+        completed, failed = outbox.process_pending()
+        assert (completed, failed) == (0, 1)
+
+        # The payment still landed, and the sync is still owed.
+        assert db.session.get(Member, member.id).payment_status == "paid"
+        item = db.session.execute(db.select(ExternalWorkItem)).scalars().one()
+        assert item.status == ExternalWorkItem.STATUS_PENDING
+
+        # When the forum comes back, the same item is picked up and finishes.
+        ran = []
+        monkeypatch.setitem(outbox._HANDLERS, ExternalWorkItem.KIND_FORUM_SYNC, lambda i: ran.append(i.id))
+        item.not_before = None
+        db.session.commit()
+        assert outbox.process_pending() == (1, 0)
+        assert ran == [item.id]

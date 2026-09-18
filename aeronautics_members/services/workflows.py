@@ -17,7 +17,8 @@ from flask import current_app
 from flask_babel import _
 from sqlalchemy import or_
 
-from ..db_models import EmailDeliveryJob, Member, User, db
+from ..db_models import EmailDeliveryJob, ExternalWorkItem, Member, User, db
+from . import ExternalServiceError
 from ..mail_utils import send_mail
 from ..notification_service import ADMIN_ERROR_CHANNEL
 from .billing import (
@@ -34,6 +35,7 @@ from .forum import (
 )
 from .identity import rotate_email_verification_nonce
 from .membership import sync_member_active_state
+from .outbox import register_handler
 from .notifications import (
     EMAIL_JOB_STATUS_CANCELED,
     EMAIL_JOB_STATUS_EXHAUSTED,
@@ -295,3 +297,22 @@ def process_email_delivery_jobs(app):
         job.next_attempt_at = now + WELCOME_EMAIL_RETRY_DELAYS[job.retry_count]
 
     return summary
+
+
+def _handle_forum_sync_work(item):
+    """Outbox handler: bring one member's Discourse state up to date.
+
+    Raises on a reported sync error so the item is retried with backoff rather
+    than being marked done while the two systems still disagree.
+    """
+    member = item.member
+    if member is None or member.user is None:
+        # The member was deleted after the work was queued; nothing left to do.
+        return
+    result, _service = sync_member_forum_state(member)
+    db.session.commit()
+    if result is not None and result.error:
+        raise ExternalServiceError(f"Forum sync failed for member_id={member.id}: {result.error}")
+
+
+register_handler(ExternalWorkItem.KIND_FORUM_SYNC, _handle_forum_sync_work)

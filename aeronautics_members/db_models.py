@@ -446,6 +446,64 @@ class EmailDeliveryJob(db.Model):
     target_member = db.relationship("Member", foreign_keys=[target_member_id])
 
 
+class ExternalWorkItem(db.Model):
+    """Work to be carried out against another system, recorded before it is done.
+
+    Forum synchronisation and similar calls used to run inline, in the middle of
+    the request or webhook that caused them. Two problems followed. The remote
+    call sat inside the handler with its own network timeout, so a slow Discourse
+    made Stripe's webhook time out; and when the call failed after the local
+    change had already been committed, the two systems simply disagreed and
+    nothing remembered that they did.
+
+    A row here is written in the *same transaction* as the change that requires
+    it, so either both happen or neither does. A worker then claims the row,
+    performs the call, and records success or a retry. Nothing is lost if the
+    worker dies holding a claim: the lease expires and the item is picked up
+    again, exactly as with the webhook inbox.
+
+    ``dedupe_key`` collapses repeated requests for the same outcome -- five
+    membership changes in a minute need one forum sync, not five.
+    """
+
+    __tablename__ = "external_work_items"
+
+    KIND_FORUM_SYNC = "forum_sync"
+
+    STATUS_PENDING = "pending"
+    STATUS_PROCESSING = "processing"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(60), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_PENDING, index=True)
+
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    payload = db.Column(db.JSON, nullable=True)
+
+    # Set while an item is outstanding and cleared once it finishes, so a unique
+    # index can hold at most one open item per outcome without blocking history.
+    dedupe_key = db.Column(db.String(255), nullable=True, unique=True)
+    reason = db.Column(db.String(255), nullable=True)
+
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    # Honoured by the worker so a failing item backs off instead of spinning.
+    not_before = db.Column(db.DateTime, nullable=True)
+    claimed_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    member = db.relationship("Member", foreign_keys=[member_id])
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    def __repr__(self):
+        return f"<ExternalWorkItem {self.kind} {self.status} member_id={self.member_id}>"
+
+
 class ProcessedStripeEvent(db.Model):
     """Durable inbox for incoming Stripe webhook events.
 

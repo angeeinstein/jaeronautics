@@ -157,6 +157,11 @@ except ImportError:
 
 # Configuration lives in config.py, a leaf module the service layer can import
 # without depending on this one. Re-exported here so existing imports keep working.
+from .services.outbox import (  # noqa: E402
+    failed_items,
+    pending_count,
+    process_pending,
+)
 from .services.identity import (  # noqa: E402
     TOKEN_MAX_AGE_FORUM_ENTRY,
     TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN,
@@ -1659,6 +1664,26 @@ def create_app(config_overrides=None):
         if deleted_count:
             db.session.commit()
         click.echo(click.style(f"Deleted {deleted_count} stale pending signup(s).", fg="green"))
+
+    @app.cli.command("process-external-work")
+    @click.option("--limit", default=50, show_default=True, type=int,
+                  help="Maximum number of work items to process in this run.")
+    @with_appcontext
+    def process_external_work(limit):
+        """Perform queued work against other systems (currently Discourse sync).
+
+        Items are claimed under a lease, so running this while another copy is
+        already running is safe -- a second worker simply finds nothing to claim.
+        """
+        completed, failed = process_pending(limit=limit)
+        outstanding = pending_count()
+        click.echo(f"External work: {completed} completed, {failed} failed, {outstanding} still queued.")
+
+        stuck = failed_items(limit=10)
+        if stuck:
+            click.echo("Items that exhausted their retries:")
+            for item in stuck:
+                click.echo(f"  #{item.id} {item.kind} member_id={item.member_id}: {item.last_error}")
 
     @app.cli.command("cleanup-logs")
     @click.option("--audit-days", default=AUDIT_LOG_RETENTION_DAYS, show_default=True, type=int,

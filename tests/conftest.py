@@ -31,6 +31,7 @@ from aeronautics_members.services import (  # noqa: E402
     identity,
     members,
     membership,
+    outbox,
     periods,
     webhook_inbox,
     workflows,
@@ -45,7 +46,7 @@ from aeronautics_members.db_models import (  # noqa: E402
 # Re-export commonly used names so tests can ``from conftest import app_module``.
 __all__ = [
     "app_module", "Member", "User", "ProcessedStripeEvent", "db",
-    "billing", "clock", "identity", "members", "membership", "periods", "webhook_inbox", "workflows",
+    "billing", "clock", "identity", "members", "membership", "outbox", "periods", "webhook_inbox", "workflows",
 ]
 
 

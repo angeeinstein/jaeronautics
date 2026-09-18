@@ -34,12 +34,12 @@ from ..services.clock import (
 )
 from ..services.forum import (
     generate_unique_forum_username,
-    sync_member_forum_state,
 )
 from ..services.members import (
     apply_member_profile,
 )
 from ..db_models import MembershipPeriod
+from ..services.outbox import enqueue_forum_sync
 from ..services.periods import (
     grant_calendar_year,
     grant_period,
@@ -304,14 +304,15 @@ def process_stripe_event(event):
                 stripe_subscription_id=subscription_id,
             )
             member.pending_checkout_started_at = None
-            forum_result, _forum_service = sync_member_forum_state(member)
+            # Queued rather than called here: the sync commits with the coverage
+            # change, so it cannot be lost, and Discourse being slow no longer
+            # makes Stripe's webhook time out.
+            enqueue_forum_sync(member, reason="Payment confirmed.")
             db.session.commit()
             current_app.logger.info(
                 "SUCCESS: Payment confirmed and member coverage updated for Stripe Customer ID: %s",
                 customer_id,
             )
-            if forum_result and forum_result.error:
-                current_app.logger.warning("Forum sync reported an issue after payment success for member_id=%s: %s", member.id, forum_result.error)
 
             if member_has_active_access(member) and previous_status in {"unpaid", "processing", "pending_checkout", "failed"}:
                 send_member_welcome_email(current_app._get_current_object(), member)
@@ -347,10 +348,9 @@ def process_stripe_event(event):
             fetch_customer_email=True,
         )
         if member:
-            state_changed = sync_member_subscription_state_from_subscription(member, subscription)
-            forum_result, _forum_service = sync_member_forum_state(member)
-            if state_changed or (forum_result and forum_result.changed):
-                db.session.commit()
+            sync_member_subscription_state_from_subscription(member, subscription)
+            enqueue_forum_sync(member, reason="Subscription updated.")
+            db.session.commit()
             current_app.logger.info(
                 "Subscription updated for member_id=%s customer=%s subscription=%s status=%s cancel_at_period_end=%s cancel_at=%s",
                 member.id,
@@ -360,8 +360,6 @@ def process_stripe_event(event):
                 subscription.get("cancel_at_period_end"),
                 subscription.get("cancel_at"),
             )
-            if forum_result and forum_result.error:
-                current_app.logger.warning("Forum sync reported an issue after subscription update for member_id=%s: %s", member.id, forum_result.error)
         else:
             current_app.logger.warning(
                 "Subscription update webhook received, but no member was found for customer=%s subscription=%s status=%s cancel_at_period_end=%s cancel_at=%s",
@@ -388,11 +386,9 @@ def process_stripe_event(event):
             member.payment_status = "failed"
             if not member_has_active_access(member):
                 member.is_active = False
-            forum_result, _forum_service = sync_member_forum_state(member)
+            enqueue_forum_sync(member, reason="Payment failed.")
             db.session.commit()
             current_app.logger.warning("Payment failed for Stripe Customer ID: %s", customer_id)
-            if forum_result and forum_result.error:
-                current_app.logger.warning("Forum sync reported an issue after payment failure for member_id=%s: %s", member.id, forum_result.error)
         else:
             current_app.logger.warning(
                 "Webhook for failed payment received, but no Stripe Customer ID was provided."
@@ -431,10 +427,8 @@ def process_stripe_event(event):
                 )
 
             sync_member_active_state(member, event_date)
-            forum_result, _forum_service = sync_member_forum_state(member)
+            enqueue_forum_sync(member, reason="Subscription canceled.")
             db.session.commit()
-            if forum_result and forum_result.error:
-                current_app.logger.warning("Forum sync reported an issue after subscription deletion for member_id=%s: %s", member.id, forum_result.error)
         else:
             current_app.logger.warning(
                 "Webhook for subscription cancellation received, but no member found for Stripe reference customer=%s subscription=%s",
@@ -473,15 +467,10 @@ def process_stripe_event(event):
                         "DISPUTE LOST for Stripe Customer ID: %s. Member has been deactivated.",
                         customer_id,
                     )
-                    # Revoke forum access to match the local state change.
-                    forum_result, _forum_service = sync_member_forum_state(member)
+                    # Revoke forum access to match the local state change. Queued
+                    # so a forum outage cannot leave the revocation undone.
+                    enqueue_forum_sync(member, reason="Chargeback lost.")
                     db.session.commit()
-                    if forum_result and forum_result.error:
-                        current_app.logger.warning(
-                            "Forum sync reported an issue after a lost dispute for member_id=%s: %s",
-                            member.id,
-                            forum_result.error,
-                        )
                 else:
                     current_app.logger.warning(
                         "Lost dispute for Stripe customer %s, but no member holds that reference.",

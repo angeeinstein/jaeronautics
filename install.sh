@@ -53,6 +53,8 @@ NOTIFICATIONS_SERVICE_FILE=""
 NOTIFICATIONS_TIMER_FILE=""
 CLEANUP_LOGS_SERVICE_FILE=""
 CLEANUP_LOGS_TIMER_FILE=""
+EXTERNAL_WORK_SERVICE_FILE=""
+EXTERNAL_WORK_TIMER_FILE=""
 UPDATE_COMMAND_PATH="/usr/local/bin/update"
 PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
@@ -303,6 +305,8 @@ resolve_paths() {
     NOTIFICATIONS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-notifications.timer"
     CLEANUP_LOGS_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.service"
     CLEANUP_LOGS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.timer"
+    EXTERNAL_WORK_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.service"
+    EXTERNAL_WORK_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.timer"
 
     if [[ -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]]; then
         NGINX_CONF_PATH="/etc/nginx/sites-available/${SERVICE_NAME}.conf"
@@ -1470,6 +1474,54 @@ EOF
     chmod 644 "${CLEANUP_LOGS_SERVICE_FILE}" "${CLEANUP_LOGS_TIMER_FILE}"
 }
 
+render_external_work_timer_files() {
+    step "Writing external work (forum sync) worker timer"
+    local unit_after="After=network.target"
+    local unit_requires=""
+
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        unit_after="After=network.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    cat > "${EXTERNAL_WORK_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics external work worker (Discourse sync)
+${unit_after}
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app process-external-work
+TimeoutStartSec=600
+PrivateTmp=true
+NoNewPrivileges=true
+EOF
+
+    cat > "${EXTERNAL_WORK_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics external work worker timer
+
+[Timer]
+# Queued forum syncs should land quickly, so members do not wait for access.
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=30s
+Persistent=true
+Unit=${SERVICE_NAME}-external-work.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${EXTERNAL_WORK_SERVICE_FILE}" "${EXTERNAL_WORK_TIMER_FILE}"
+}
+
 render_update_command() {
     step "Installing 'update' convenience command"
 
@@ -1803,6 +1855,7 @@ reload_services() {
     systemctl enable --now "${SERVICE_NAME}-billing-reconcile.timer"
     systemctl enable --now "${SERVICE_NAME}-notifications.timer"
     systemctl enable --now "${SERVICE_NAME}-cleanup-logs.timer"
+    systemctl enable --now "${SERVICE_NAME}-external-work.timer"
     nginx -t
     systemctl reload nginx
 }
@@ -1820,6 +1873,7 @@ verify_installation() {
     systemctl is-active --quiet "${SERVICE_NAME}-billing-reconcile.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-notifications.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-cleanup-logs.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-external-work.timer"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
     success "The application is responding on 127.0.0.1:${APP_PORT}"
 
@@ -1975,6 +2029,7 @@ install_or_update() {
     render_billing_reconcile_timer_files
     render_notifications_timer_files
     render_cleanup_logs_timer_files
+    render_external_work_timer_files
     render_update_command
     obtain_ssl_certificate
     render_nginx_config
@@ -2014,6 +2069,13 @@ uninstall_everything() {
     fi
     if [[ -f "${CLEANUP_LOGS_SERVICE_FILE}" ]]; then
         rm -f "${CLEANUP_LOGS_SERVICE_FILE}"
+    fi
+    if [[ -f "${EXTERNAL_WORK_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-external-work.timer" || true
+        rm -f "${EXTERNAL_WORK_TIMER_FILE}"
+    fi
+    if [[ -f "${EXTERNAL_WORK_SERVICE_FILE}" ]]; then
+        rm -f "${EXTERNAL_WORK_SERVICE_FILE}"
     fi
     if [[ -f "${SERVICE_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}" || true
