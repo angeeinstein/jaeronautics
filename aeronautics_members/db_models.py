@@ -50,6 +50,10 @@ class User(UserMixin, db.Model):
     # Rotated whenever the address changes or a verification link is used, so a
     # verification token issued for an older address cannot be replayed.
     email_verification_nonce = db.Column(db.String(255), nullable=True)
+    # Set when the person's data was erased. The row survives because the
+    # membership ledger and the audit trail reference it and must stay readable;
+    # what made it a person is gone. See services/privacy.py.
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     member = db.relationship("Member", back_populates="user", uselist=False)
     forum_account = db.relationship("ForumAccount", back_populates="user", uselist=False)
@@ -154,6 +158,10 @@ class Member(db.Model):
     membership_ends_on = db.Column(db.Date, nullable=True)
     renewal_due_on = db.Column(db.Date, nullable=True)
     cancel_at_period_end = db.Column(db.Boolean, nullable=False, default=False)
+    # Erasure marker. The profile columns above are overwritten with placeholders
+    # rather than dropped, because they are NOT NULL and because the membership
+    # periods, invoices and audit entries that must be kept all point here.
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship("User", back_populates="member", uselist=False)
     forum_account = db.relationship("ForumAccount", back_populates="member", uselist=False)
@@ -463,6 +471,9 @@ class ExternalWorkItem(db.Model):
     __tablename__ = "external_work_items"
 
     KIND_FORUM_SYNC = "forum_sync"
+    # Queued when an erasure could not reach Discourse. The local data is already
+    # gone at that point, so this has to keep retrying on its own.
+    KIND_FORUM_ANONYMISE = "forum_anonymise"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"

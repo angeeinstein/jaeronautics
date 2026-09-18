@@ -309,7 +309,15 @@ limiter = Limiter(
 
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    user = db.session.get(User, int(user_id))
+    # An erased account must not keep browsing on a session issued before the
+    # erasure. Clearing the password hash stops new logins but says nothing
+    # about sessions that already exist, and an expelled member being signed in
+    # somewhere else is exactly when that matters. Returning None here ends
+    # every one of them at the next request.
+    if user is not None and user.deleted_at is not None:
+        return None
+    return user
 
 
 

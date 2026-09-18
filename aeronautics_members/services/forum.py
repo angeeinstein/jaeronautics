@@ -15,7 +15,12 @@ from flask import current_app
 from flask_babel import _
 
 from ..db_models import User, db
-from ..forum_service import FORUM_SETTING_KEYS, ForumProviderError, ForumService
+from ..forum_service import (
+    FORUM_SETTING_KEYS,
+    FORUM_STATE_ANONYMISED,
+    ForumProviderError,
+    ForumService,
+)
 from ..security_utils import build_public_url
 from .clock import get_now_utc
 from ..notification_service import ADMIN_ERROR_CHANNEL
@@ -112,6 +117,42 @@ def log_out_forum_session_if_possible(user):
     if error:
         current_app.logger.warning("Forum logout sync failed for user_id=%s: %s", user.id, error)
     return did_log_out, error
+
+
+def anonymise_forum_account(user, queue_retry=True):
+    """Anonymise the member's Discourse identity and clear the local link.
+
+    Returns ``(anonymised, deferred)``. Erasure calls this with the local data
+    about to disappear, so a Discourse outage must not abort it -- the work is
+    queued on the outbox instead, and the local side is cleared either way.
+    That is the safe order: the copy we control goes now, and the copy we do not
+    control is retried until it goes too.
+    """
+    if user is None or getattr(user, "forum_account", None) is None:
+        return False, False
+
+    service = get_forum_service()
+    anonymised, error = service.anonymize_user(user)
+
+    deferred = False
+    if error and queue_retry:
+        from .outbox import enqueue_forum_anonymise
+
+        current_app.logger.warning(
+            "Discourse anonymisation failed for user_id=%s; queued for retry: %s", user.id, error
+        )
+        enqueue_forum_anonymise(user, reason="account_erasure")
+        deferred = True
+
+    forum_account = user.forum_account
+    forum_account.state = FORUM_STATE_ANONYMISED
+    forum_account.last_synced_email = None
+    forum_account.last_synced_username = None
+    forum_account.last_synced_at = get_now_utc()
+    if not error:
+        forum_account.last_error = None
+
+    return anonymised, deferred
 
 
 def build_forum_entry_url(user, include_token=False):

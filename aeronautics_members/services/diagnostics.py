@@ -58,10 +58,18 @@ def get_schema_revision():
 
 def get_membership_summary():
     today = get_membership_today()
-    members = _count(Member)
-    active = _count(Member, Member.is_active.is_(True))
+    # Erased members keep their row and their coverage dates, because the
+    # payment record has to survive. They are not members any more, so every
+    # count below excludes them -- otherwise erasing someone would leave the
+    # association's own membership numbers overstated.
+    present = Member.deleted_at.is_(None)
+
+    members = _count(Member, present)
+    erased = _count(Member, Member.deleted_at.isnot(None))
+    active = _count(Member, present, Member.is_active.is_(True))
     covered = _count(
         Member,
+        present,
         Member.membership_ends_on.isnot(None),
         Member.membership_ends_on >= today,
         Member.payment_status.in_(sorted(ACTIVE_MEMBER_STATUSES)),
@@ -74,6 +82,7 @@ def get_membership_summary():
     without_evidence = db.session.execute(
         db.select(db.func.count(Member.id))
         .where(
+            present,
             Member.membership_ends_on.isnot(None),
             Member.membership_ends_on >= today,
             Member.payment_status.in_(sorted(ACTIVE_MEMBER_STATUSES)),
@@ -83,6 +92,7 @@ def get_membership_summary():
 
     return {
         "members": members,
+        "erased_members": erased,
         "active_flag": active,
         "currently_covered": covered,
         "coverage_periods": periods,

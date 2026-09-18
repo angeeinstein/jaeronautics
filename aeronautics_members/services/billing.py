@@ -26,6 +26,7 @@ from flask_babel import _, get_locale
 from ..config import STRIPE_PRICE_ID, STRIPE_SECRET_KEY
 from ..db_models import MembershipPeriod
 from ..security_utils import build_public_url
+from . import ExternalServiceError
 from .clock import (
     first_day_of_year,
     get_membership_today,
@@ -537,6 +538,59 @@ def sync_member_subscription_state_from_subscription(member, subscription):
         changed = True
 
     return changed
+
+
+def cancel_member_subscription(member, *, reason=None):
+    """End the member's subscription in Stripe now. Returns whether one was cancelled.
+
+    Immediate rather than at period end, because the callers are erasure and
+    expulsion: there will be nobody left to bill, and a subscription set to lapse
+    "later" is one an unnoticed webhook failure can quietly keep alive.
+
+    Cancelling does not refund anything -- Stripe only stops future invoices.
+    Refunding the unused part of a year is a separate decision (and a separate
+    booking for the treasurer), so it is deliberately not bundled in here.
+
+    Already-cancelled and already-deleted subscriptions count as success: the
+    caller asked for the subscription to be gone, and it is.
+    """
+    if member is None or not member.stripe_subscription_id:
+        return False
+
+    apply_runtime_stripe_config()
+    subscription_id = member.stripe_subscription_id
+    try:
+        stripe.Subscription.cancel(
+            subscription_id,
+            # Stripe would otherwise create a final prorated invoice for the
+            # unused time, which is the opposite of what cancelling for erasure
+            # should do.
+            prorate=False,
+        )
+    except stripe.StripeError as exc:
+        if getattr(exc, "code", None) != "resource_missing":
+            raise ExternalServiceError(
+                "Stripe could not cancel the subscription.",
+                code="subscription_cancel_failed",
+                details={"stripe_code": getattr(exc, "code", None)},
+            ) from exc
+        # Already gone in Stripe; the local reference is what is stale.
+        current_app.logger.warning(
+            "Stripe subscription %s for member_id=%s was already gone when cancelling (%s).",
+            subscription_id,
+            member.id,
+            reason or "no reason given",
+        )
+
+    member.stripe_subscription_id = None
+    member.cancel_at_period_end = False
+    current_app.logger.info(
+        "Cancelled Stripe subscription %s for member_id=%s (%s).",
+        subscription_id,
+        member.id,
+        reason or "no reason given",
+    )
+    return True
 
 
 def sync_member_subscription_state_from_stripe(member):

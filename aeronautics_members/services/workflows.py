@@ -309,10 +309,37 @@ def _handle_forum_sync_work(item):
     if member is None or member.user is None:
         # The member was deleted after the work was queued; nothing left to do.
         return
+    if member.deleted_at is not None:
+        # Erased between queueing and running. Syncing now would push the
+        # placeholder profile to Discourse and undo the anonymisation.
+        return
     result, _service = sync_member_forum_state(member)
     db.session.commit()
     if result is not None and result.error:
         raise ExternalServiceError(f"Forum sync failed for member_id={member.id}: {result.error}")
 
 
+def _handle_forum_anonymise_work(item):
+    """Outbox handler: retry a Discourse anonymisation an erasure could not do.
+
+    The local data is already gone by the time this runs, so there is nothing to
+    fall back to -- this has to keep trying until Discourse accepts it. Raising
+    on failure is what puts it back in the queue with backoff.
+    """
+    user = item.user
+    if user is None or user.forum_account is None:
+        return
+    anonymised, error = get_forum_service().anonymize_user(user)
+    db.session.commit()
+    if error:
+        raise ExternalServiceError(f"Forum anonymisation failed for user_id={user.id}: {error}")
+    if not anonymised:
+        # No remote account to anonymise (already gone, or the integration is
+        # switched off). Nothing further will change that, so stop retrying.
+        current_app.logger.info(
+            "No Discourse account to anonymise for user_id=%s; marking the work done.", user.id
+        )
+
+
 register_handler(ExternalWorkItem.KIND_FORUM_SYNC, _handle_forum_sync_work)
+register_handler(ExternalWorkItem.KIND_FORUM_ANONYMISE, _handle_forum_anonymise_work)

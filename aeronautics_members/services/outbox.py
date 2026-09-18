@@ -104,6 +104,23 @@ def enqueue_forum_sync(member, reason=None):
     )
 
 
+def enqueue_forum_anonymise(user, reason=None):
+    """Queue a Discourse anonymisation for one account.
+
+    Keyed by user rather than member, because by the time this runs the local
+    profile is already erased and the forum account is reached through the user.
+    """
+    if user is None:
+        return None
+    return enqueue(
+        ExternalWorkItem.KIND_FORUM_ANONYMISE,
+        member=user.member,
+        user=user,
+        dedupe_key=f"{ExternalWorkItem.KIND_FORUM_ANONYMISE}:user:{user.id}",
+        reason=reason,
+    )
+
+
 def claim_next(kinds=None, now=None):
     """Claim one due item, or return None.
 

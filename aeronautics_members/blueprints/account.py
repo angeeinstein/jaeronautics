@@ -23,9 +23,28 @@ from ..services.forum import (
     generate_unique_forum_username,
     sync_member_forum_state,
 )
+from ..config import (
+    RATELIMIT_ACCOUNT_DELETION,
+    RATELIMIT_DATA_EXPORT,
+)
+from ..services import (
+    ServiceError,
+)
 from ..services.identity import (
+    read_token,
     send_email_verification_email,
 )
+from ..services.privacy import (
+    INITIATED_BY_MEMBER,
+    TOKEN_MAX_AGE_ACCOUNT_DELETION,
+    account_deletion_claims_match,
+    describe_deletion_impact,
+    erase_account,
+    export_account_data,
+    export_filename_for,
+    send_account_deletion_email,
+)
+from ._responses import json_download_response
 from ..services.members import (
     DIRECT_MEMBER_PROFILE_FIELDS,
     IDENTITY_MEMBER_FIELDS,
@@ -61,6 +80,7 @@ from flask_babel import (
 from flask_login import (
     current_user,
     login_required,
+    logout_user,
 )
 from ..db_models import (
     Member,
@@ -77,6 +97,7 @@ from ..notification_service import (
     ADMIN_GENERAL_CHANNEL,
 )
 from ..app import (
+    limiter,
     can_resume_payment,
     create_identity_change_request,
     get_current_member_for_user,
@@ -426,3 +447,130 @@ def resend_verification_email():
         current_app.logger.warning("Could not resend verification email for user_id=%s: %s", current_user.id, exc)
         flash(_("We could not send a verification email right now."), "danger")
     return redirect(url_for("account.account"))
+
+
+@account_bp.route("/account/data-export", methods=["GET"])
+@login_required
+@limiter.limit(RATELIMIT_DATA_EXPORT)
+def export_my_data():
+    """Download everything the association holds about you, as JSON.
+
+    GDPR Art. 15 and 20. Self-service because the alternative -- emailing an
+    administrator who then assembles it by hand -- is slower and reliably
+    incomplete.
+    """
+    payload = export_account_data(current_user)
+
+    log_audit_event(
+        category="privacy",
+        event_type="data_exported",
+        actor_user=current_user,
+        target_user=current_user,
+        target_member=current_user.member,
+        metadata={"self_service": True, "sections": sorted(payload)},
+    )
+    db.session.commit()
+
+    return json_download_response(payload, export_filename_for(current_user))
+
+
+@account_bp.route("/account/delete", methods=["POST"])
+@login_required
+@limiter.limit(RATELIMIT_ACCOUNT_DELETION)
+def request_account_deletion():
+    """Start a member-initiated erasure by emailing a confirmation link.
+
+    Nothing is erased here. Requiring the mailbox as well as the session means a
+    borrowed laptop or a hijacked session cannot destroy an account, and it
+    gives the member a moment to change their mind.
+    """
+    try:
+        sent = send_account_deletion_email(current_app._get_current_object(), current_user)
+    except Exception as exc:
+        current_app.logger.warning(
+            "Could not send account deletion email for user_id=%s: %s", current_user.id, exc
+        )
+        flash(_("We could not send the confirmation email right now. Please try again later."), "danger")
+        return redirect(url_for("account.account"))
+
+    if not sent:
+        flash(
+            _("We could not send the confirmation email because no sender account is "
+              "configured yet. Please contact the board instead."),
+            "warning",
+        )
+        return redirect(url_for("account.account"))
+
+    log_audit_event(
+        category="privacy",
+        event_type="account_deletion_requested",
+        actor_user=current_user,
+        target_user=current_user,
+        target_member=current_user.member,
+    )
+    db.session.commit()
+
+    flash(
+        _("We sent a confirmation link to %(email)s. Your account will be deleted "
+          "once you open it. The link is valid for one hour.", email=current_user.email),
+        "info",
+    )
+    return redirect(url_for("account.account"))
+
+
+@account_bp.route("/account/delete/<token>", methods=["GET", "POST"])
+@login_required
+@limiter.limit(RATELIMIT_ACCOUNT_DELETION, methods=["POST"])
+def confirm_account_deletion(token):
+    """Show what deletion will do, then -- on POST -- do it.
+
+    The GET deliberately changes nothing. Mail clients, link scanners and
+    chat previews fetch URLs in emails without being asked, and an account that
+    erased itself because a spam filter opened the link would be unrecoverable.
+    """
+    try:
+        token_data = read_token(token, "delete-account", TOKEN_MAX_AGE_ACCOUNT_DELETION)
+    except Exception:
+        flash(_("This deletion link is invalid or has expired. Please start again."), "warning")
+        return redirect(url_for("account.account"))
+
+    if not account_deletion_claims_match(token_data, current_user):
+        flash(_("This deletion link does not belong to the account you are signed in to."), "warning")
+        return redirect(url_for("account.account"))
+
+    impact = describe_deletion_impact(current_user, actor_user=current_user)
+
+    if request.method == "GET":
+        return render_template(
+            "account_delete_confirm.html",
+            token=token,
+            impact=impact,
+            member=current_user.member,
+        )
+
+    if "last_admin" in impact["blockers"]:
+        flash(
+            _("You are the only administrator. Give someone else admin access "
+              "before deleting your account."),
+            "warning",
+        )
+        return redirect(url_for("account.account"))
+
+    email_for_message = current_user.email
+    try:
+        erase_account(current_user, actor_user=current_user, initiated_by=INITIATED_BY_MEMBER)
+    except ServiceError as exc:
+        db.session.rollback()
+        flash(exc.message, "warning" if exc.http_status < 500 else "danger")
+        return redirect(url_for("account.account"))
+
+    db.session.commit()
+    current_app.logger.info("Account erased on member request (previously %s).", email_for_message)
+
+    # Sign out last: the session belongs to an account that no longer exists.
+    logout_user()
+    flash(
+        _("Your account and personal data have been deleted. Thank you for having been a member."),
+        "success",
+    )
+    return redirect(url_for("public.index"))

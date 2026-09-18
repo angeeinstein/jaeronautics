@@ -545,6 +545,10 @@
                                     {% if system_health.membership.revoked_periods %}
                                     <dt class="col-7">{{ _('Revoked records') }}</dt><dd class="col-5">{{ system_health.membership.revoked_periods }}</dd>
                                     {% endif %}
+                                    {% if system_health.membership.erased_members %}
+                                    {# Not a problem: their payment records are kept on purpose. #}
+                                    <dt class="col-7">{{ _('Erased accounts') }}</dt><dd class="col-5">{{ system_health.membership.erased_members }}</dd>
+                                    {% endif %}
                                 </dl>
                             </div>
                             <div class="col-md-6">

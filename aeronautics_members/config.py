@@ -70,6 +70,10 @@ RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "5 per hour")
 RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "10 per hour")
 RATELIMIT_PASSWORD_CHANGE = os.getenv("RATELIMIT_PASSWORD_CHANGE", "5 per 15 minute")
 RATELIMIT_ADMIN_EMAIL = os.getenv("RATELIMIT_ADMIN_EMAIL", "5 per 10 minute")
+# Data exports assemble a member's whole record, so they are cheap to request
+# and expensive to serve; deletion requests send an email each time.
+RATELIMIT_DATA_EXPORT = os.getenv("RATELIMIT_DATA_EXPORT", "10 per hour")
+RATELIMIT_ACCOUNT_DELETION = os.getenv("RATELIMIT_ACCOUNT_DELETION", "5 per hour")
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
 
 SENSITIVE_SETTING_KEYS = {"stripe_secret_key", "stripe_webhook_secret", "discourse_api_key", "discourse_connect_secret"}

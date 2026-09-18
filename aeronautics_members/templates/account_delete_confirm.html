@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Confirm Account Deletion') }}{% endblock %}
+{% block content %}
+{#
+  Reached from the link in the confirmation email. Opening it does nothing on
+  its own -- mail clients and link scanners fetch URLs without being asked, and
+  an account that erased itself because a spam filter followed the link could
+  not be brought back. The button below is what erases it.
+#}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-7 col-md-9">
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-danger text-white text-center py-4">
+                    <h2 class="mb-0">{{ _('Delete your account') }}</h2>
+                </div>
+                <div class="card-body p-5">
+                    <p>{{ _('This erases your personal data and cannot be undone. Here is exactly what happens:') }}</p>
+                    <ul>
+                        <li>{{ _('Your name, address, phone numbers and email addresses are overwritten.') }}</li>
+                        <li>{{ _('Your login stops working immediately and you are signed out.') }}</li>
+                        {% if impact.has_forum_account %}
+                            <li>{{ _('Your forum account is anonymised. Your posts stay in their threads under an anonymous name, so other members’ conversations are not broken up.') }}</li>
+                        {% endif %}
+                        <li>{{ _('We keep a record of which membership periods were paid for, and the matching invoice numbers, without your personal details. Austrian bookkeeping law requires us to keep this for seven years.') }}</li>
+                    </ul>
+
+                    {% if impact.subscription_active %}
+                        <div class="alert alert-warning">
+                            <strong>{{ _('Your membership subscription will be cancelled immediately, with no refund.') }}</strong>
+                            {% if impact.coverage_end %}
+                                {{ _('You have paid for your membership until %(date)s and that time is lost.', date=impact.coverage_end) }}
+                            {% endif %}
+                            {{ _('If you only want to stop being a member, cancel your membership instead: it then keeps running until the end of the period you paid for, and you can still delete your account afterwards.') }}
+                            <div class="mt-2">
+                                <a href="{{ url_for('account.account') }}" class="btn btn-sm btn-primary">{{ _('Take me back to cancel instead') }}</a>
+                            </div>
+                        </div>
+                    {% elif impact.coverage_end %}
+                        <div class="alert alert-warning">
+                            {{ _('Your membership is paid until %(date)s. Deleting your account ends your access now, and the remaining time is not refunded.', date=impact.coverage_end) }}
+                        </div>
+                    {% endif %}
+                    {% if impact.is_last_admin %}
+                        <div class="alert alert-danger">
+                            {{ _('You are the only administrator of this site. Give someone else admin access first, otherwise nobody can administer it.') }}
+                        </div>
+                    {% endif %}
+
+                    <div class="d-flex flex-wrap gap-2 mt-4">
+                        <a href="{{ url_for('account.export_my_data') }}" class="btn btn-secondary">
+                            {{ _('Download my data first') }}
+                        </a>
+                        <a href="{{ url_for('account.account') }}" class="btn btn-primary">
+                            {{ _('Keep my account') }}
+                        </a>
+                        {% if not impact.is_last_admin %}
+                            <form method="POST" class="mb-0"
+                                  data-confirm="{{ _('Delete your account and erase your personal data? This cannot be undone.') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-danger">
+                                    {{ _('Delete my account permanently') }}
+                                </button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+    <script src="{{ url_for('static', filename='confirm-submit.js') }}"></script>
+{% endblock %}

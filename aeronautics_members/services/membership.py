@@ -105,6 +105,12 @@ def member_has_active_access(member, on_date=None):
     if member is None:
         return False
 
+    # An erased member keeps their coverage rows -- they are the accounting
+    # record -- so the ledger below would still report them as covered. The
+    # membership ended with the erasure regardless of what was paid for.
+    if getattr(member, "deleted_at", None) is not None:
+        return False
+
     today = on_date or get_membership_today()
 
     recorded = member.membership_periods or []

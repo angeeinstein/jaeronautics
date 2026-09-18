@@ -36,6 +36,15 @@ from ..services.members import (
 from ..services.membership import (
     member_has_active_access,
 )
+from ..services.privacy import (
+    INITIATED_BY_ADMIN,
+    describe_deletion_impact,
+    erase_account,
+    export_account_data,
+    export_filename_for,
+    refresh_subscription_state_before_deletion,
+)
+from ._responses import json_download_response
 from ..services.notifications import (
     build_mail_accounts_export_payload,
     normalize_imported_mail_accounts_payload,
@@ -222,6 +231,8 @@ def admin_account_detail(user_id):
         can_grant_admin=not user.has_role("admin"),
         can_revoke_admin=user.has_role("admin") and current_user.id != user.id and count_users_with_role("admin") > 1,
         admin_count=count_users_with_role("admin"),
+        deletion_impact=describe_deletion_impact(user, actor_user=current_user),
+        live_subscription=refresh_subscription_state_before_deletion(user.member),
     )
 
 
@@ -1330,3 +1341,90 @@ def admin_request_system_update():
             "info",
         )
     return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/data-export", methods=["GET"])
+@login_required
+@admin_required
+def admin_export_account_data(user_id):
+    """Download everything held about one account, as JSON.
+
+    Members can do this themselves, but an administrator handling a request that
+    arrived by post or email needs the same file, and answering it by hand from
+    the database is how a subject access request ends up incomplete.
+    """
+    user = db.session.execute(
+        db.select(User).options(selectinload(User.member), selectinload(User.roles)).filter_by(id=user_id)
+    ).scalar_one_or_none()
+    if user is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+
+    payload = export_account_data(user)
+
+    # Handing over someone's personal data is itself worth recording -- and the
+    # entry names the file, not its contents.
+    log_audit_event(
+        category="privacy",
+        event_type="data_exported",
+        actor_user=current_user,
+        target_user=user,
+        target_member=user.member,
+        metadata={"sections": sorted(payload)},
+    )
+    db.session.commit()
+
+    return json_download_response(payload, export_filename_for(user))
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/delete", methods=["POST"])
+@login_required
+@admin_required
+def admin_delete_account(user_id):
+    """Erase a member's personal data, keeping the records that must survive.
+
+    Deliberately not blocked when the member still has a paid subscription: an
+    expelled member is exactly the case this exists for. The confirmation panel
+    states the consequences instead, and the subscription is cancelled here so
+    the association stops charging someone it no longer has a record of.
+    """
+    user = db.session.execute(
+        db.select(User)
+        .options(selectinload(User.member), selectinload(User.roles), selectinload(User.forum_account))
+        .filter_by(id=user_id)
+    ).scalar_one_or_none()
+    if user is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+
+    # Typing the address is the confirmation step; a stray double-click on a
+    # destructive button should not be enough.
+    typed = (request.form.get("confirm_email") or "").strip().lower()
+    if typed != (user.email or "").strip().lower():
+        flash(_("The typed email address did not match, so nothing was deleted."), "warning")
+        return redirect(url_for("admin.admin_account_detail", user_id=user.id))
+
+    try:
+        summary = erase_account(
+            user,
+            actor_user=current_user,
+            initiated_by=INITIATED_BY_ADMIN,
+            note=(request.form.get("reason") or "").strip() or None,
+        )
+    except ServiceError as exc:
+        db.session.rollback()
+        flash(exc.message, "warning" if exc.http_status < 500 else "danger")
+        return redirect(url_for("admin.admin_account_detail", user_id=user.id))
+
+    db.session.commit()
+
+    flash(_("The account's personal data has been erased."), "success")
+    if summary["subscription_cancelled"]:
+        flash(_("The Stripe subscription was cancelled. No refund was issued."), "info")
+    if summary["forum_deferred"]:
+        flash(
+            _("The forum could not be reached, so the forum account will be "
+              "anonymised automatically as soon as it is back."),
+            "warning",
+        )
+    return redirect(url_for("admin.admin_account_detail", user_id=user.id))

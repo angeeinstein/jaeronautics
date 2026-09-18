@@ -167,4 +167,80 @@
         {% endif %}
     </div>
 </div>
+
+<div class="card mt-4" id="account-privacy">
+    <div class="card-header"><h4 class="mb-0">{{ _('Personal Data') }}</h4></div>
+    <div class="card-body">
+        <p class="mb-3">
+            {{ _('Download a copy of everything stored about this account, or erase the personal data on request.') }}
+        </p>
+        <a href="{{ url_for('admin.admin_export_account_data', user_id=user_record.id) }}" class="btn btn-secondary">
+            {{ _('Download data export (JSON)') }}
+        </a>
+
+        <hr class="my-4">
+
+        {% if deletion_impact.already_erased %}
+            <div class="alert alert-secondary mb-0">
+                {{ _('The personal data on this account was erased on %(date)s. The membership and payment record was kept.', date=user_record.deleted_at.strftime('%Y-%m-%d')) }}
+            </div>
+        {% elif deletion_impact.is_self %}
+            <div class="alert alert-secondary mb-0">
+                {{ _('You cannot delete your own account here. Use your account page, so the confirmation goes to your mailbox.') }}
+            </div>
+        {% elif deletion_impact.is_last_admin %}
+            <div class="alert alert-warning mb-0">
+                {{ _('This is the last remaining administrator account and cannot be deleted. Grant admin access to someone else first.') }}
+            </div>
+        {% else %}
+            <h5 class="text-danger">{{ _('Delete personal data') }}</h5>
+            <p>{{ _('This cannot be undone. Before you continue, note what it does:') }}</p>
+            <ul>
+                <li>{{ _('Name, address, phone numbers and email addresses are overwritten.') }}</li>
+                <li>{{ _('The login stops working and any admin role is removed.') }}</li>
+                <li>
+                    {{ _('Membership periods and payment records are kept without personal details, because bookkeeping law requires it.') }}
+                    {% if deletion_impact.paid_periods %}
+                        <strong>{{ _('%(count)s paid period(s) will be retained.', count=deletion_impact.paid_periods) }}</strong>
+                    {% endif %}
+                </li>
+                {% if deletion_impact.has_forum_account %}
+                    <li>{{ _('The forum account is anonymised. Posts stay, under an anonymous name.') }}</li>
+                {% endif %}
+            </ul>
+
+            {% if deletion_impact.subscription_active %}
+                <div class="alert alert-warning">
+                    <strong>{{ _('This member has an active subscription.') }}</strong>
+                    {{ _('It will be cancelled immediately. No refund is issued — if the association wants to refund the unused part of the year, do that in Stripe first.') }}
+                    {% if live_subscription and live_subscription.get('status') %}
+                        <div class="small mt-1">{{ _('Stripe currently reports the subscription as: %(status)s', status=live_subscription.get('status')) }}</div>
+                    {% endif %}
+                </div>
+            {% endif %}
+            {% if deletion_impact.coverage_end %}
+                <div class="alert alert-warning">
+                    {{ _('This member has paid coverage until %(date)s. Deleting the account ends their access now.', date=deletion_impact.coverage_end) }}
+                </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('admin.admin_delete_account', user_id=user_record.id) }}" class="mt-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="delete-reason" class="form-label">{{ _('Reason (recorded in the audit log)') }}</label>
+                    <input type="text" class="form-control" id="delete-reason" name="reason" maxlength="255"
+                           placeholder="{{ _('e.g. deletion requested by the member, or expulsion decided on ...') }}">
+                </div>
+                <div class="mb-3">
+                    <label for="delete-confirm-email" class="form-label">
+                        {{ _('Type %(email)s to confirm', email=user_record.email) }}
+                    </label>
+                    <input type="text" class="form-control" id="delete-confirm-email" name="confirm_email"
+                           autocomplete="off" required>
+                </div>
+                <button type="submit" class="btn btn-danger">{{ _('Erase personal data') }}</button>
+            </form>
+        {% endif %}
+    </div>
+</div>
 {% endblock %}

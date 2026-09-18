@@ -202,6 +202,58 @@
         </div>
     </div>
 </div>
+
+<div class="card mt-4" id="account-privacy">
+    <div class="card-header"><h4 class="mb-0">{{ _('Your Data') }}</h4></div>
+    <div class="card-body">
+        <p>{{ _('You can download everything we store about you, or ask us to delete it.') }}</p>
+        <a href="{{ url_for('account.export_my_data') }}" class="btn btn-secondary">
+            {{ _('Download my data (JSON)') }}
+        </a>
+
+        <hr class="my-4">
+
+        <h5>{{ _('Delete my account') }}</h5>
+        <p class="mb-2">
+            {{ _('We will erase your name, address and contact details, and your login will stop working. This cannot be undone.') }}
+        </p>
+        <p class="mb-3">
+            {{ _('We keep a record of the membership fees you paid — without your personal details — because bookkeeping law requires it.') }}
+        </p>
+        {#
+          Leaving and deleting are two different decisions, and doing them in
+          the wrong order costs the member the rest of a year they have already
+          paid for. So when there is still something to lose, say so here rather
+          than only on the confirmation page they reach after committing.
+        #}
+        {% if member and member.stripe_subscription_id and not member.cancel_at_period_end %}
+            <div class="alert alert-warning">
+                <strong>{{ _('You have an active membership subscription.') }}</strong>
+                {% if member.membership_ends_on %}
+                    {{ _('You have already paid for your membership until %(date)s.', date=member.membership_ends_on.strftime('%d.%m.%Y')) }}
+                {% endif %}
+                {{ _('If you cancel your membership first, it keeps running until then and simply does not renew. Deleting your account now cancels it immediately, and the remaining time is not refunded.') }}
+                {% if can_manage_billing %}
+                    <form method="POST" action="{{ url_for('account.manage_member_billing') }}" class="mt-2 mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-primary">{{ _('Cancel my membership instead') }}</button>
+                    </form>
+                {% endif %}
+            </div>
+        {% elif member and member.cancel_at_period_end and member.membership_ends_on %}
+            <p class="mb-3">
+                {{ _('Your membership is already set to end on %(date)s. If you delete your account before then, you lose the remaining time without a refund.', date=member.membership_ends_on.strftime('%d.%m.%Y')) }}
+            </p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('account.request_account_deletion') }}" class="mb-0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger">{{ _('Email me a deletion link') }}</button>
+        </form>
+        <p class="form-text mb-0">
+            {{ _('We send a confirmation link to your email address; nothing is deleted until you open it.') }}
+        </p>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}

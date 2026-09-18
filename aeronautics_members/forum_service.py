@@ -36,6 +36,9 @@ FORUM_STATE_INACTIVE = "inactive"
 FORUM_STATE_ONBOARDING = "onboarding"
 FORUM_STATE_ACTIVE = "active"
 FORUM_STATE_SYNC_ERROR = "sync_error"
+# Terminal: the account was erased and the remote identity anonymised. Nothing
+# should sync into this state again, which is why it is distinct from inactive.
+FORUM_STATE_ANONYMISED = "anonymised"
 
 FORUM_AVATAR_STATUS_PENDING = "pending"
 FORUM_AVATAR_STATUS_APPROVED = "approved"
@@ -332,6 +335,9 @@ class ForumProvider:
     def log_out_user(self, forum_account, user):
         raise NotImplementedError
 
+    def anonymize_user(self, forum_account, user):
+        raise NotImplementedError
+
 
 class DiscourseConnectProvider(ForumProvider):
     slug = "discourse"
@@ -513,6 +519,41 @@ class DiscourseConnectProvider(ForumProvider):
             f"/admin/users/{quote(str(forum_account.remote_user_id))}/log_out",
         )
         return True
+
+    def anonymize_user(self, forum_account, user):
+        """Replace the forum identity with an anonymous one, keeping the posts.
+
+        Discourse's own anonymise: username, email and avatar are replaced with
+        generated values and the account is detached from its external id, so a
+        later login cannot land back on it.
+
+        The posts stay, deliberately. They are conversations other members took
+        part in, and removing one side of a thread damages their records to
+        protect data the anonymisation has already removed. Discourse also
+        refuses to delete an account with any real posting history, so deletion
+        is not a reliable option to build on in the first place.
+        """
+        if not self._resolve_remote_user_id(forum_account):
+            return False
+
+        self._request(
+            "PUT",
+            f"/admin/users/{quote(str(forum_account.remote_user_id))}/anonymize.json",
+        )
+        return True
+
+    def _resolve_remote_user_id(self, forum_account):
+        """Fill in the remote id from the external id, tolerating a missing user."""
+        if forum_account.remote_user_id:
+            return forum_account.remote_user_id
+        try:
+            remote_user = self.get_remote_user_by_external_id(forum_account.external_id)
+        except ForumProviderError as exc:
+            if "failed (404)" in str(exc):
+                return None
+            raise
+        forum_account.remote_user_id = remote_user.get("id")
+        return forum_account.remote_user_id
 
 
 class DiscourseConnectAuthStrategy(ForumAuthStrategy):
@@ -849,6 +890,22 @@ class ForumService:
             if user.forum_account is not None:
                 user.forum_account.last_error = str(exc)
                 user.forum_account.last_synced_at = datetime.now(timezone.utc)
+            return False, str(exc)
+
+    def anonymize_user(self, user):
+        """Anonymise the member's forum identity. Returns (done, error)."""
+        if user is None or user.forum_account is None:
+            return False, None
+        if not self.is_ready():
+            # Not an error the caller should retry forever: with the integration
+            # switched off there is no remote account to anonymise.
+            return False, None
+        try:
+            result = self.provider.anonymize_user(user.forum_account, user)
+            return bool(result), None
+        except ForumProviderError as exc:
+            user.forum_account.last_error = str(exc)
+            user.forum_account.last_synced_at = datetime.now(timezone.utc)
             return False, str(exc)
 
 
