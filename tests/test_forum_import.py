@@ -179,6 +179,103 @@ class TestImporting:
         assert _profiles()[0].user.member is None
 
 
+class TestWhatTheReportSaysAboutYearGroups:
+    """Six hundred rows is too many to eyeball, so the report has to summarise.
+
+    Two questions it must answer: which year groups exist and how many people
+    are in each -- enough to spot a typo -- and exactly who could not be placed
+    at all, by name, because that list gets fixed by hand.
+    """
+
+    def test_it_counts_every_distinct_year_group(self, app):
+        report = import_forum_people([
+            _person(uid="1", username="OneA_L23"),
+            _person(uid="2", username="TwoB_L23"),
+            _person(uid="3", username="ThreeC_M20", year_group="MAV20"),
+        ])
+        db.session.commit()
+
+        assert report["year_group_counts"] == {"LAV23": 2, "MAV20": 1}
+
+    def test_a_derived_year_group_is_counted_like_any_other(self, app):
+        """The table is about where people ended up, not how they got there."""
+        report = import_forum_people([
+            _person(uid="1", username="OneA_L23", year_group=None),
+            _person(uid="2", username="TwoB_L23"),
+        ])
+        db.session.commit()
+
+        assert report["year_group_counts"] == {"LAV23": 2}
+
+    def test_case_and_spacing_are_counted_as_written(self, app):
+        """A stray 'lav23' is a typo to show, not one to normalise away.
+
+        Folding case here would hide exactly the mistake this table exists to
+        surface -- and the value is stored as written, so the count would then
+        describe something the database does not contain.
+        """
+        report = import_forum_people([
+            _person(uid="1", username="OneA_L23", year_group="LAV23"),
+            _person(uid="2", username="TwoB_L23", year_group="lav23"),
+        ])
+        db.session.commit()
+
+        assert report["year_group_counts"] == {"LAV23": 1, "lav23": 1}
+
+    def test_people_with_no_year_group_are_named_not_just_counted(self, app):
+        report = import_forum_people([
+            _person(uid="1", username="Placeable_L23"),
+            _person(uid="2", username="NoSuffixAtAll", year_group=None,
+                    joined_on="2019-04-01"),
+        ])
+        db.session.commit()
+
+        assert report["unknown_year_group"] == [{
+            "source_user_id": "2",
+            "source_username": "NoSuffixAtAll",
+            "joined_on": "2019-04-01",
+        }]
+
+    def test_the_registration_year_comes_along_to_identify_them(self, app):
+        """It is usually enough to guess the cohort from."""
+        report = import_forum_people([
+            _person(uid="2", username="Mystery", year_group=None, joined_on="2016-10-02"),
+        ])
+        db.session.commit()
+
+        assert report["unknown_year_group"][0]["joined_on"] == "2016-10-02"
+
+    def test_a_skipped_entry_is_not_reported_as_missing_a_year_group(self, app):
+        """It was never imported, so it is a problem, not a gap to fill in."""
+        report = import_forum_people([{"source_username": "NoIdHere_L21"}])
+        db.session.commit()
+
+        assert report["skipped"] == 1
+        assert report["unknown_year_group"] == []
+
+    def test_the_log_line_carries_counts_but_not_names(self, app, caplog):
+        """The report goes to a terminal; the log is kept, shipped and read.
+
+        Six hundred usernames and everyone's year group in an application log
+        is a copy of the membership list in a place nobody is guarding.
+        """
+        import logging
+
+        with caplog.at_level(logging.INFO):
+            import_forum_people([
+                _person(uid="1", username="Placeable_L23"),
+                _person(uid="2", username="SecretName", year_group=None),
+            ])
+        db.session.commit()
+
+        logged = "\n".join(record.getMessage() for record in caplog.records)
+        assert "Forum import" in logged
+        assert "SecretName" not in logged
+        assert "LAV23" not in logged
+        assert "year_groups_unknown" in logged
+        assert "year_groups_distinct" in logged
+
+
 class TestRunningItTwice:
     """Imports get re-run. One that cannot be is one nobody dares fix."""
 
@@ -286,6 +383,49 @@ class TestTheCommand:
 
         assert "Dry run" in result.output
         assert _profiles() == []
+
+    def test_year_groups_lists_the_table_and_the_gaps(self, app, tmp_path):
+        path = self._export(tmp_path, [
+            _person(uid="1", username="OneA_L23"),
+            _person(uid="2", username="TwoB_L23"),
+            _person(uid="3", username="ThreeC_M20", year_group="MAV20"),
+            _person(uid="4", username="Mystery", year_group=None, joined_on="2016-10-02"),
+        ])
+
+        result = app.test_cli_runner().invoke(
+            args=["import-forum-people", path, "--dry-run", "--year-groups"]
+        )
+
+        assert result.exit_code == 0
+        assert "LAV23" in result.output
+        assert "MAV20" in result.output
+        # The one nobody could place is named, with the year to identify it by.
+        assert "Mystery" in result.output
+        assert "2016" in result.output
+        assert "uid     4" in result.output
+
+    def test_without_the_flag_it_says_how_to_see_them(self, app, tmp_path):
+        """A four-line report is useless if nobody knows the detail exists."""
+        path = self._export(tmp_path, [
+            _person(uid="1", username="OneA_L23"),
+            _person(uid="4", username="Mystery", year_group=None),
+        ])
+
+        result = app.test_cli_runner().invoke(args=["import-forum-people", path, "--dry-run"])
+
+        assert "1 distinct year groups" in result.output
+        assert "1 people without one" in result.output
+        assert "--year-groups" in result.output
+        assert "Mystery" not in result.output, "the name only appears when asked for"
+
+    def test_it_says_so_when_there_is_nothing_to_fix(self, app, tmp_path):
+        path = self._export(tmp_path, [_person(uid="1", username="OneA_L23")])
+
+        result = app.test_cli_runner().invoke(
+            args=["import-forum-people", path, "--dry-run", "--year-groups"]
+        )
+
+        assert "Everyone has a year group." in result.output
 
 
 def test_the_placeholder_address_is_unique_per_person(app):

@@ -1507,8 +1507,10 @@ def create_app(config_overrides=None):
                   help="Directory holding the old forum's avatar files.")
     @click.option("--dry-run", is_flag=True,
                   help="Report what would happen and write nothing.")
+    @click.option("--year-groups", is_flag=True,
+                  help="List every year group found, and everyone left without one.")
     @with_appcontext
-    def import_forum_people_command(export_file, avatar_dir, dry_run):
+    def import_forum_people_command(export_file, avatar_dir, dry_run, year_groups):
         """Imports people from the old forum's export. See docs/forum-import.md.
 
         Safe to run more than once: people are matched on the old forum's own
@@ -1535,12 +1537,59 @@ def create_app(config_overrides=None):
                 f"differs from the one their username spells; the exported field was "
                 f"kept (usually somebody who went on to the master's)."
             )
+        if year_groups:
+            _echo_year_groups(report)
+        else:
+            unplaced = len(report["unknown_year_group"])
+            click.echo(
+                f"{len(report['year_group_counts'])} distinct year groups; "
+                f"{unplaced} people without one. Re-run with --year-groups to list them."
+            )
+
         for problem in report["problems"]:
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if dry_run:
             click.echo(click.style("Dry run: nothing was written.", fg="cyan"))
         elif report["created"] or report["updated"]:
             click.echo(click.style("Imported.", fg="green"))
+
+    def _echo_year_groups(report):
+        """The year groups as a table, then everyone the rules could not place.
+
+        Sorted by name rather than by count, because the reason to read this is
+        to spot the one that looks wrong -- a typo sorts next to the value it
+        was meant to be, where by frequency it would sit alone at the bottom.
+        """
+        counts = report["year_group_counts"]
+        if counts:
+            widest = max(len(name) for name in counts)
+            total = sum(counts.values())
+            click.echo(f"\nYear groups ({len(counts)} distinct, {total} people):")
+            for name in sorted(counts):
+                count = counts[name]
+                bar = "#" * count
+                click.echo(f"  {name:<{widest}}  {count:>4}  {bar}")
+
+        unplaced = report["unknown_year_group"]
+        if not unplaced:
+            click.echo("\nEveryone has a year group.")
+            return
+
+        click.echo(click.style(
+            f"\n{len(unplaced)} people with no year group "
+            f"(nothing in the export's field, nothing readable in the username):",
+            fg="yellow",
+        ))
+        for person in sorted(unplaced, key=lambda p: (p["joined_on"] or "", p["source_username"])):
+            joined = (person["joined_on"] or "")[:4] or "????"
+            click.echo(
+                f"  uid {person['source_user_id']:>5}  "
+                f"{person['source_username']:<24}  registered {joined}"
+            )
+        click.echo(
+            "\nTo fix any of these, set year_group on that person in the export "
+            "JSON and run the import again -- it updates rather than duplicates."
+        )
 
     @app.cli.command("sync-member-billing")
     @click.argument("email")

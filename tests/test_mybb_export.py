@@ -56,6 +56,7 @@ CREATE TABLE `lav_users` (
   `uid` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `username` varchar(120) NOT NULL DEFAULT '',
   `email` varchar(220) NOT NULL DEFAULT '',
+  `usergroup` int(10) NOT NULL DEFAULT '2',
   `postnum` int(10) NOT NULL DEFAULT '0',
   `regdate` bigint(30) NOT NULL DEFAULT '0',
   `lastpost` bigint(30) NOT NULL DEFAULT '0',
@@ -64,8 +65,8 @@ CREATE TABLE `lav_users` (
   PRIMARY KEY (`uid`)
 ) ENGINE=MyISAM;
 
-INSERT INTO `lav_users` VALUES (142,'PopovicA_L23','a.popovic@edu.fh-joanneum.at',2,1700694000,1717286400,'./uploads/avatars/avatar_142.jpg?dateline=1700694000','fine'),(7,'OBrienC_M20','c.obrien@edu.fh-joanneum.at',41,1580000000,0,'','note with an \\'apostrophe\\' in it');
-INSERT INTO `lav_users` VALUES (9,'RemoteR_L21','r.remote@edu.fh-joanneum.at',3,1600000000,1600000001,'https://example.com/avatar.png',NULL);
+INSERT INTO `lav_users` VALUES (142,'PopovicA_L23','a.popovic@edu.fh-joanneum.at',2,2,1700694000,1717286400,'./uploads/avatars/avatar_142.jpg?dateline=1700694000','fine'),(7,'OBrienC_M20','c.obrien@edu.fh-joanneum.at',7,41,1580000000,0,'','note with an \\'apostrophe\\' in it');
+INSERT INTO `lav_users` VALUES (9,'RemoteR_L21','r.remote@edu.fh-joanneum.at',7,3,1600000000,1600000001,'https://example.com/avatar.png',NULL);
 
 CREATE TABLE `lav_userfields` (
   `ufid` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -75,6 +76,23 @@ CREATE TABLE `lav_userfields` (
 ) ENGINE=MyISAM;
 
 INSERT INTO `lav_userfields` VALUES (142,'Undisclosed','LAV23'),(7,'','MAV20'),(9,'','');
+
+CREATE TABLE `lav_usergroups` (
+  `gid` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `title` varchar(120) NOT NULL DEFAULT '',
+  PRIMARY KEY (`gid`)
+) ENGINE=MyISAM;
+
+INSERT INTO `lav_usergroups` VALUES (2,'Registered'),(4,'Administrators'),(7,'Banned');
+
+CREATE TABLE `lav_banned` (
+  `uid` int(10) unsigned NOT NULL,
+  `reason` varchar(255) NOT NULL DEFAULT '',
+  `lifted` bigint(30) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`uid`)
+) ENGINE=MyISAM;
+
+INSERT INTO `lav_banned` VALUES (7,'non active student',0),(9,'',0);
 """
 
 
@@ -247,6 +265,73 @@ class TestTheCommandLine:
         mybb_export.main([str(dump), "--out", str(out)])
 
         assert len(json.loads(out.read_text())) == 3
+
+
+class TestWhoWasStillActive:
+    """On this forum "Banned" is how a graduating member was deactivated.
+
+    The ban reasons in the real dump say so outright -- "non active student",
+    "Not active student/exchange semester", "Is now a Lecturer" -- and 220 of
+    the 230 banned accounts follow the university naming convention, 188 have
+    avatars and 89 have posts. That is not spam. It is the only record of who
+    left and why, it exists nowhere but this dump, and switching the old forum
+    off destroys it. So carry it, whatever is eventually done with it.
+    """
+
+    def test_the_group_comes_across_by_name(self, people):
+        rows, _summary = people
+        by_uid = {person["source_user_id"]: person for person in rows}
+
+        assert by_uid["142"]["source_group"] == "Registered"
+        assert by_uid["7"]["source_group"] == "Banned"
+
+    def test_the_reason_an_account_was_closed_is_kept(self, people):
+        """"non active student" is the whole point; the group alone loses it."""
+        rows, _summary = people
+        conor = next(p for p in rows if p["source_user_id"] == "7")
+
+        assert conor["source_group_reason"] == "non active student"
+
+    def test_an_empty_reason_is_none_rather_than_an_empty_string(self, people):
+        rows, _summary = people
+        remote = next(p for p in rows if p["source_user_id"] == "9")
+
+        assert remote["source_group"] == "Banned"
+        assert remote["source_group_reason"] is None
+
+    def test_somebody_never_banned_has_no_reason(self, people):
+        rows, _summary = people
+        anna = next(p for p in rows if p["source_user_id"] == "142")
+
+        assert anna["source_group_reason"] is None
+
+    def test_the_summary_counts_the_groups(self, people):
+        """So the split is visible before importing, not after."""
+        _rows, summary = people
+
+        assert dict(summary["group_counts"]) == {"Banned": 2, "Registered": 1}
+
+    def test_a_dump_without_the_groups_table_still_exports(self):
+        """Nothing here is worth failing an import over."""
+        without = DUMP.replace("INSERT INTO `lav_usergroups`", "INSERT INTO `other_x`")
+
+        rows, _summary = mybb_export.build_people(without)
+
+        assert len(rows) == 3
+        # Falls back to the raw gid rather than inventing a name.
+        assert next(p for p in rows if p["source_user_id"] == "7")["source_group"] == "7"
+
+    def test_the_importer_ignores_what_it_has_not_been_taught(self, app):
+        """These two fields ride along unused until somebody decides on them."""
+        from aeronautics_members.services.forum_import import import_forum_people
+        from conftest import db
+
+        rows, _summary = mybb_export.build_people(DUMP)
+        report = import_forum_people(rows)
+        db.session.commit()
+
+        assert report["created"] == 3
+        assert report["problems"] == []
 
 
 class TestTheDialectMyBBActuallyWrites:

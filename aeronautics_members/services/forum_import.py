@@ -160,6 +160,13 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
         "avatars_stored": 0,
         "year_groups_derived": 0,
         "year_groups_disagreeing": 0,
+        # Every distinct year group and how many people carry it, counted on the
+        # exact stored string rather than a normalised one: a stray "lav23" or a
+        # trailing space is a typo somebody should see, not one to tidy away.
+        "year_group_counts": {},
+        # The people the rules could not place at all. Small enough to fix by
+        # hand, which is the point of listing them rather than counting them.
+        "unknown_year_group": [],
         "problems": [],
     }
     now = get_now_utc()
@@ -193,6 +200,20 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
             from_username = derive_year_group(source_username)
             if from_username and from_username.upper() != year_group.upper():
                 report["year_groups_disagreeing"] += 1
+
+        if year_group:
+            report["year_group_counts"][year_group] = (
+                report["year_group_counts"].get(year_group, 0) + 1
+            )
+        else:
+            # The username is what somebody needs to recognise the person and
+            # fill the gap in by hand, so it goes in whole, next to the year
+            # they registered -- which is usually enough to guess the cohort.
+            report["unknown_year_group"].append({
+                "source_user_id": source_user_id,
+                "source_username": source_username,
+                "joined_on": entry.get("joined_on"),
+            })
 
         display_name = (entry.get("display_name") or "").strip() or source_username
 
@@ -253,5 +274,14 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
     else:
         db.session.flush()
 
-    current_app.logger.info("Forum import: %s", {k: v for k, v in report.items() if k != "problems"})
+    # Counters only. The other keys hold six hundred usernames and a year group
+    # per person, which belongs in the operator's terminal, not in a log file
+    # that is kept, shipped and read by people with no reason to see it.
+    counters = {
+        key: value for key, value in report.items()
+        if isinstance(value, int)
+    }
+    counters["year_groups_distinct"] = len(report["year_group_counts"])
+    counters["year_groups_unknown"] = len(report["unknown_year_group"])
+    current_app.logger.info("Forum import: %s", counters)
     return report

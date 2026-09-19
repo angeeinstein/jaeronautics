@@ -160,6 +160,33 @@ A JSON array, one object per person. Only `source_user_id` and
 ]
 ```
 
+### `source_group` — who had already left
+
+`source_group` and `source_group_reason` are carried across but **nothing acts
+on them yet**. They are here because the old forum is the only place this
+information exists, and switching it off destroys it.
+
+On this board, MyBB's *Banned* group is not punishment. It is how a member who
+stopped being a student was deactivated — the reasons in the ban log read
+`non active student`, `Not active student/exchange semester`, `Is now a
+Lecturer`. The September 2026 dump splits 507 Registered, 230 Banned, 3
+Administrators, and the banned accounts are plainly real people: 220 of 230
+follow the university naming convention, 188 have avatars, 89 have posts.
+
+Two things follow, and both are decisions rather than defaults:
+
+* **These people should almost certainly still be imported.** Eighty-nine of
+  them wrote posts that need a name and a face against them, which is the whole
+  reason for the import. Nothing about an imported account grants access
+  anyway — no password, no membership, no permission — so importing a closed
+  account is not reopening it.
+* **Not every row is a person.** `LAVBoard_System` is the board's own account
+  (group Administrators, no posts) and `Test_User` is a test account. Decide
+  whether to drop them from `people.json` before importing; the importer has no
+  opinion about it.
+
+### The remaining fields
+
 `display_name` may be null; the username is used instead. `year_group` may be
 null. It can be recovered from the username suffix, which is the same rule the
 portal uses in reverse: `…_L23` → `LAV23`, `…_M25` → `MAV25`. A few people
@@ -173,6 +200,28 @@ missing one.
 
 On the September 2026 export that covered 735 of 740 people — 488 from the
 Jahrgang field, 247 from the username, 5 left unknown.
+
+To see the whole picture rather than the counts, add `--year-groups` to the
+import command. It prints every distinct year group with how many people carry
+it, and then names everyone the rules could not place, with the year they
+registered:
+
+```
+Year groups (33 distinct, 735 people):
+  ATM17     5  #####
+  LAV23    36  ####################################
+  ...
+
+5 people with no year group (nothing in the export's field, nothing readable
+in the username):
+  uid    11  dpilz                     registered 2014
+  ...
+```
+
+Year groups are counted exactly as written, so a stray `lav23` or a trailing
+space shows up as its own row rather than being quietly folded into `LAV23`.
+To fill a gap, set `year_group` on that person in `people.json` and run the
+import again — it updates rather than duplicates.
 
 The report also counts `year_groups_disagreeing`: people whose exported field
 and username say different things. This is normal and needs no action. It is

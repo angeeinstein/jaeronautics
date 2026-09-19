@@ -233,6 +233,40 @@ def find_jahrgang_field(dump, prefix_table):
     return None, None
 
 
+def find_groups(dump, prefix):
+    """gid -> group title, so "7" can be reported as "Banned" rather than a number."""
+    table = find_table(dump, "usergroups", prefix)
+    if not table:
+        return {}
+    return {
+        row.get("gid"): (row.get("title") or "").strip()
+        for row in rows_of(dump, table)
+        if row.get("gid")
+    }
+
+
+def find_ban_reasons(dump, prefix):
+    """uid -> why an account was closed, from the ban log.
+
+    On this forum "Banned" is not punishment: the reasons read "non active
+    student", "Not active student/exchange semester", "Is now a Lecturer". It
+    is how a graduating member was deactivated, and it is the only record of
+    that anywhere -- the users table keeps the group but not the why.
+    """
+    table = find_table(dump, "banned", prefix)
+    if not table:
+        return {}
+    reasons = {}
+    for row in rows_of(dump, table):
+        uid = row.get("uid")
+        if not uid:
+            continue
+        reason = (row.get("reason") or "").strip()
+        if reason:
+            reasons[uid] = reason
+    return reasons
+
+
 def _timestamp_to_date(value, zone):
     try:
         seconds = int(value)
@@ -287,12 +321,18 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE, pref
             if value:
                 year_groups[row.get("ufid")] = value
 
+    groups = find_groups(dump, prefix)
+    ban_reasons = find_ban_reasons(dump, prefix)
+
     people, remote_avatars = [], 0
     avatar_directories = {}
+    group_counts = {}
     for row in rows_of(dump, users_table):
         uid = row.get("uid")
         if not uid:
             continue
+        group = groups.get(row.get("usergroup")) or row.get("usergroup")
+        group_counts[group] = group_counts.get(group, 0) + 1
         avatar = row.get("avatar") or ""
         if avatar.startswith("http"):
             remote_avatars += 1
@@ -309,6 +349,11 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE, pref
             "joined_on": _timestamp_to_date(row.get("regdate"), zone),
             "last_posted_on": _timestamp_to_date(row.get("lastpost"), zone),
             "avatar_file": avatar_file,
+            # Carried across but not yet acted on. Deciding what "Banned"
+            # should mean in the new system is a separate question; losing the
+            # answer when the old forum is switched off is not recoverable.
+            "source_group": group,
+            "source_group_reason": ban_reasons.get(uid),
         })
 
     # The dangerous failure is the quiet one: a statement this parser cannot
@@ -324,6 +369,7 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE, pref
         "rows_unread": max(offered - len(people), 0),
         "jahrgang_field": jahrgang_field,
         "jahrgang_label": field_label,
+        "group_counts": sorted(group_counts.items(), key=lambda item: -item[1]),
         "with_year_group": sum(1 for person in people if person["year_group"]),
         "with_avatar": sum(1 for person in people if person["avatar_file"]),
         "remote_avatars": remote_avatars,
@@ -358,6 +404,8 @@ def main(argv=None):
         print(f"  NOT READ         : {summary['rows_unread']} of {summary['rows_offered']} rows "
               f"in the dump could not be parsed", file=sys.stderr)
     print(f"  with year group  : {summary['with_year_group']}")
+    for group, count in summary["group_counts"]:
+        print(f"  in group         : {group} ({count})")
     print(f"  with avatar file : {summary['with_avatar']}")
     if summary["remote_avatars"]:
         print(f"  remote avatars   : {summary['remote_avatars']} (hosted elsewhere, no local file)")
