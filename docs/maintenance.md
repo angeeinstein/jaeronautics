@@ -87,6 +87,41 @@ python -m pytest
 Tests point the app at SQLite via the `DATABASE_URL` environment variable, which
 `create_app` honors as an override for the default MySQL connection string.
 
+## Where Secrets Live (a recorded decision)
+
+Four third-party secrets are stored as ordinary rows in the `settings` table:
+`stripe_secret_key`, `stripe_webhook_secret`, `discourse_api_key` and
+`discourse_connect_secret`. SMTP passwords live in `mail_accounts`. The Flask
+`SECRET_KEY` and the database password are in `.env` instead.
+
+**The decision: leave them in the database, unencrypted, and protect the copies
+instead.** Application-level encryption would need a key, and on a single-server
+deployment that key can only live next to the database — on the same disk, read
+by the same process. It would raise the effort of a casual look at a backup file
+without changing what an attacker who reaches the server can do, which is the
+threat that actually matters here.
+
+What the protection rests on, and what must stay true:
+
+- The database user is scoped to this one database, and MariaDB listens on
+  localhost (or a private host, for an external database).
+- `/var/backups/jaeronautics` is `chmod 700` and root-owned. The database dump
+  is gzipped, **not encrypted**, and contains every secret above, as does the
+  copied `.env`. **Anywhere you copy a backup inherits that.** Do not put one in
+  cloud storage, a shared drive or an email attachment without encrypting it
+  first (`gpg -c` is enough).
+- Audit entries and admin notifications redact these keys at the point of
+  capture (`services/audit.py`), so they do not leak into the log page.
+- The mail-account export requires the administrator's password to be re-entered
+  and is audited, but the downloaded file contains **cleartext SMTP passwords**.
+  Treat that file like a password list; delete it after use.
+
+Revisit this if the database ever moves to managed or shared hosting, if
+backups start leaving the machine automatically, or if more than a couple of
+people hold administrator accounts. At that point the answer changes to keeping
+the secrets in deployment configuration (`.env`, systemd credentials) rather
+than in rows that every backup copies.
+
 ## Data Export and Account Deletion
 
 `aeronautics_members/services/privacy.py` implements the two data-protection

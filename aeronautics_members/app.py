@@ -752,97 +752,6 @@ def get_portal_session(member):
 
 
 
-def ensure_user_schema():
-    inspector = inspect(db.engine)
-    if "users" not in inspector.get_table_names():
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("users")}
-    alter_statements = []
-    if "forum_username" not in columns:
-        alter_statements.append("ALTER TABLE users ADD COLUMN forum_username VARCHAR(255) NULL")
-    if "email_verified_at" not in columns:
-        alter_statements.append("ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL")
-    if "password_reset_nonce" not in columns:
-        alter_statements.append("ALTER TABLE users ADD COLUMN password_reset_nonce VARCHAR(255) NULL")
-    if "email_verification_nonce" not in columns:
-        alter_statements.append("ALTER TABLE users ADD COLUMN email_verification_nonce VARCHAR(255) NULL")
-
-    with db.engine.begin() as connection:
-        for statement in alter_statements:
-            connection.execute(sql_text(statement))
-
-        inspector = inspect(connection)
-        unique_constraints = inspector.get_unique_constraints("users")
-        indexes = inspector.get_indexes("users")
-        has_forum_username_unique = any(
-            constraint.get("column_names") == ["forum_username"]
-            for constraint in unique_constraints
-        ) or any(
-            index.get("unique") and index.get("column_names") == ["forum_username"]
-            for index in indexes
-        )
-        if not has_forum_username_unique:
-            connection.execute(
-                sql_text("CREATE UNIQUE INDEX uq_users_forum_username ON users (forum_username)")
-            )
-
-
-
-def ensure_member_schema():
-    inspector = inspect(db.engine)
-    if "member" not in inspector.get_table_names():
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("member")}
-    alter_statements = []
-
-    if "user_id" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN user_id INTEGER NULL")
-    if "pending_checkout_started_at" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN pending_checkout_started_at DATETIME NULL")
-    if "stripe_subscription_id" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN stripe_subscription_id VARCHAR(255) NULL")
-    if "membership_starts_on" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN membership_starts_on DATE NULL")
-    if "membership_ends_on" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN membership_ends_on DATE NULL")
-    if "renewal_due_on" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN renewal_due_on DATE NULL")
-    if "cancel_at_period_end" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN cancel_at_period_end BOOLEAN NOT NULL DEFAULT 0")
-
-    with db.engine.begin() as connection:
-        for statement in alter_statements:
-            connection.execute(sql_text(statement))
-
-        inspector = inspect(connection)
-        unique_constraints = inspector.get_unique_constraints("member")
-        indexes = inspector.get_indexes("member")
-        has_subscription_unique = any(
-            constraint.get("column_names") == ["stripe_subscription_id"]
-            for constraint in unique_constraints
-        ) or any(
-            index.get("unique") and index.get("column_names") == ["stripe_subscription_id"]
-            for index in indexes
-        )
-        if not has_subscription_unique:
-            connection.execute(
-                sql_text("CREATE UNIQUE INDEX uq_member_stripe_subscription_id ON member (stripe_subscription_id)")
-            )
-
-        has_user_unique = any(
-            constraint.get("column_names") == ["user_id"]
-            for constraint in unique_constraints
-        ) or any(
-            index.get("unique") and index.get("column_names") == ["user_id"]
-            for index in indexes
-        )
-        if not has_user_unique:
-            connection.execute(sql_text("CREATE UNIQUE INDEX uq_member_user_id ON member (user_id)"))
-
-
-
 def backfill_legacy_admin_roles():
     inspector = inspect(db.engine)
     if "users" not in inspector.get_table_names():
@@ -1317,39 +1226,46 @@ def create_app(config_overrides=None):
     def db_init():
         """Bring the database schema to the latest Alembic revision, then seed roles.
 
-        Handles three situations so it stays safe to run on every deploy:
+        Two situations, both safe to run on every deploy:
 
-        * Fresh database  -> run migrations to build the full schema.
-        * Legacy database created before migrations existed -> converge its
-          columns with the historical ``ensure_*`` helpers, create any newly
-          added tables, then stamp it at the baseline revision so future
-          migrations apply cleanly.
+        * Fresh database -> run migrations to build the full schema.
         * Already migrated -> apply any pending migrations.
+
+        A third case used to exist: a database created before migrations, which
+        was reconciled column by column and then stamped at head. That is gone
+        deliberately. Stamping records migrations as applied without running
+        them, which is only truthful while every migration merely adds tables
+        and columns -- ``create_all`` cannot reproduce one that transforms data,
+        and the coverage-ledger migration backfills rows. A database stamped
+        past that would look migrated while holding none of the evidence.
+
+        Since no such database will be migrated into this system -- members
+        re-subscribe through the new portal instead -- the branch has no
+        legitimate user left, only the chance to silently skip a migration on a
+        database restored from a partial backup. It now refuses and says so.
         """
-        from flask_migrate import stamp, upgrade
+        from flask_migrate import upgrade
 
         click.echo("Preparing database schema...")
         try:
             inspector = inspect(db.engine)
             existing_tables = set(inspector.get_table_names())
 
-            if "alembic_version" in existing_tables:
-                upgrade()
-            elif "users" in existing_tables:
-                # Pre-migration install: reconcile legacy columns, add any new
-                # tables, and record that the schema now matches the baseline.
-                ensure_user_schema()
-                ensure_member_schema()
-                db.create_all()
-                # ensure_* reconciles legacy columns and create_all builds every
-                # table from the current models, so the schema really is at head
-                # and stamping head is accurate. This holds only for migrations
-                # that add tables/columns; one that transforms existing data must
-                # be applied to a legacy database by hand, since create_all
-                # cannot reproduce its effect.
-                stamp("head")
-            else:
-                upgrade()
+            if "users" in existing_tables and "alembic_version" not in existing_tables:
+                click.echo(
+                    "This database has application tables but no Alembic version "
+                    "record, so there is no way to tell which migrations it has "
+                    "already had.\n"
+                    "Refusing to guess: stamping it would mark every migration as "
+                    "applied without running any of them.\n"
+                    "If this is an empty or throwaway database, drop it and run "
+                    "db-init again. If it holds data you need, restore it into a "
+                    "staging copy and migrate that first.",
+                    err=True,
+                )
+                sys.exit(1)
+
+            upgrade()
 
             seed_default_roles()
             backfill_legacy_admin_roles()
