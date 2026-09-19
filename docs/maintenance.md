@@ -36,6 +36,20 @@ automatically:
 flask --app aeronautics_members.app:create_app db-init
 ```
 
+`tests/test_migrations_match_models.py` builds the schema both ways — once by
+running every migration from the baseline, once from `db.create_all()` — and
+fails if they disagree on a table or a column. Every other test gets its schema
+from the models, so without that comparison a model change shipped without its
+migration would leave the suite green and the next *fresh* install missing a
+column. It compares names rather than types, since SQLite reports types loosely
+and a type comparison would fail on dialect differences while catching nothing
+real.
+
+`migrations/env.py` passes `disable_existing_loggers=False` to `fileConfig`.
+The default is `True`, which switches off every logger that already exists — and
+`db-init` runs the migrations in-process on every install and update, so
+anything the application logged afterwards in that process would go nowhere.
+
 To change the schema, edit the models in `db_models.py`, then autogenerate and
 review a migration:
 

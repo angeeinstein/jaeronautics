@@ -10,8 +10,15 @@ from alembic import context
 config = context.config
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
-fileConfig(config.config_file_name)
+#
+# disable_existing_loggers defaults to True, which switches off every logger
+# that already exists -- including the application's. That matters because the
+# migrations are not only run by the `flask db` commands: `db-init` runs them
+# in-process during every install and update, and anything the application
+# logged afterwards in that process would go nowhere. It also made a test
+# asserting on a logged warning fail only when a test that runs the migrations
+# happened to go first.
+fileConfig(config.config_file_name, disable_existing_loggers=False)
 logger = logging.getLogger('alembic.env')
 
 
