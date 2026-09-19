@@ -375,6 +375,60 @@ class TestSubscriptionDeleted:
         assert refreshed.is_active is True
         assert refreshed.membership_ends_on == YEAR_END
 
+    def test_immediate_cancellation_does_not_take_back_the_paid_year(self, client, monkeypatch, stub_side_effects):
+        """The two-step flow must survive the portal cancelling straight away.
+
+        Stripe's customer portal can be configured to cancel either at the end
+        of the billing period or immediately. In the second case this event
+        arrives in the middle of a year the member has already paid for, and
+        treating "subscription gone" as "access gone" would take back what they
+        bought -- the exact outcome cancelling-before-deleting exists to avoid.
+
+        Coverage comes from the ledger, so what matters is that nothing here
+        revokes the period. Only a lost chargeback does that, because only then
+        was the money actually taken back.
+        """
+        member = make_member(
+            email="immediate_cancel@example.com",
+            stripe_customer_id="cus_now_1",
+            stripe_subscription_id="sub_now_1",
+            payment_status="paid",
+            is_active=True,
+            membership_starts_on=date(TODAY.year, 1, 1),
+            membership_ends_on=YEAR_END,
+            renewal_due_on=NEXT_YEAR_START,
+        )
+        periods.grant_period(
+            member,
+            starts_on=date(TODAY.year, 1, 1),
+            ends_on=YEAR_END,
+            reason="paid",
+            stripe_invoice_id="in_now_1",
+        )
+        db.session.commit()
+
+        event = {
+            "id": "evt_sub_del_now",
+            "type": "customer.subscription.deleted",
+            "created": int(datetime.now(timezone.utc).timestamp()),
+            "data": {
+                "object": {
+                    "id": "sub_now_1",
+                    "customer": "cus_now_1",
+                    "status": "canceled",
+                    "cancellation_details": {"reason": "cancellation_requested"},
+                    "metadata": {},
+                }
+            },
+        }
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert [p.revoked_at for p in refreshed.membership_periods] == [None]
+        assert refreshed.membership_ends_on == YEAR_END
+        assert refreshed.is_active is True
+
     def test_cancellation_for_failed_payment_deactivates(self, client, monkeypatch, stub_side_effects):
         member = make_member(
             stripe_customer_id="cus_fail_1",
