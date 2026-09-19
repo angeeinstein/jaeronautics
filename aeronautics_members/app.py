@@ -1,3 +1,4 @@
+import getpass
 import json
 import os
 import secrets
@@ -1530,7 +1531,12 @@ def create_app(config_overrides=None):
 
     @app.cli.command("import-forum-people")
     @click.argument("export_file", type=click.Path(exists=True, dir_okay=False))
-    @click.option("--avatar-dir", type=click.Path(exists=True, file_okay=False),
+    # Deliberately not click.Path(exists=True): this command is run as the
+    # application user against a directory somebody unpacked as root, and a
+    # folder inside /root is unreadable rather than absent. Click cannot tell
+    # the difference and reports "does not exist" about a directory that
+    # plainly does, which sends people looking for the wrong problem.
+    @click.option("--avatar-dir", type=click.Path(file_okay=False),
                   help="Directory holding the old forum's avatar files.")
     @click.option("--dry-run", is_flag=True,
                   help="Report what would happen and write nothing.")
@@ -1544,6 +1550,9 @@ def create_app(config_overrides=None):
         user id, so a second run updates rather than duplicates. Run it with
         --dry-run first; the report is the same either way.
         """
+        if avatar_dir:
+            _check_avatar_dir_is_readable(avatar_dir)
+
         people = load_people(export_file)
         report = import_forum_people(people, avatar_dir=avatar_dir, dry_run=dry_run)
 
@@ -1579,6 +1588,53 @@ def create_app(config_overrides=None):
             click.echo(click.style("Dry run: nothing was written.", fg="cyan"))
         elif report["created"] or report["updated"]:
             click.echo(click.style("Imported.", fg="green"))
+
+    def _check_avatar_dir_is_readable(avatar_dir):
+        """Fail before importing 740 people with none of their avatars.
+
+        Says which of the three things is actually wrong, because they look
+        identical from the error Click would otherwise give and lead to three
+        different fixes.
+        """
+        path = Path(avatar_dir)
+        whoami = getpass.getuser()
+
+        if not path.exists():
+            # Either genuinely absent, or somewhere this user cannot traverse.
+            # A parent that cannot be entered is the common case on a server,
+            # and is not what "does not exist" leads somebody to check.
+            unreadable_parent = next(
+                (
+                    parent for parent in path.parents
+                    if parent.exists() and not os.access(parent, os.R_OK | os.X_OK)
+                ),
+                None,
+            )
+            if unreadable_parent is not None:
+                raise click.ClickException(
+                    f"{avatar_dir} cannot be reached as {whoami}: {unreadable_parent} "
+                    f"is not readable by that user. Move the avatars somewhere it can "
+                    f"read, such as /var/tmp, rather than running this as root -- "
+                    f"avatars written by root are files the application cannot manage."
+                )
+            raise click.ClickException(f"No such directory: {avatar_dir}")
+
+        if not path.is_dir():
+            raise click.ClickException(f"Not a directory: {avatar_dir}")
+
+        if not os.access(path, os.R_OK | os.X_OK):
+            raise click.ClickException(
+                f"{avatar_dir} is not readable by {whoami}. Fix the permissions "
+                f"rather than running this as root."
+            )
+
+        # An empty directory imports every person with no picture and reports
+        # 677 missing files, which reads as data loss rather than a wrong path.
+        if not any(path.iterdir()):
+            raise click.ClickException(
+                f"{avatar_dir} is empty. Point --avatar-dir at the directory that "
+                f"holds the avatar files themselves."
+            )
 
     def _echo_year_groups(report):
         """The year groups as a table, then everyone the rules could not place.

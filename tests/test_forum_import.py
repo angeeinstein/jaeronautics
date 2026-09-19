@@ -8,6 +8,7 @@ one of six hundred entries is malformed.
 """
 import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -520,3 +521,89 @@ class TestADryRunWritesNothingAtAll:
         assert report["avatars_stored"] == 0
         assert "could not be read" in report["problems"][0]
         assert staged() == []
+
+
+class TestPointingAtTheAvatars:
+    """The four ways --avatar-dir goes wrong need four different fixes.
+
+    Click's own check cannot tell them apart: it stats the path as the calling
+    user, so a directory inside an unreadable parent is reported as "does not
+    exist" about a directory that plainly does. That sends somebody looking
+    for a missing folder when the answer is to move a readable one -- which is
+    the actual shape of this job, where the avatars get unpacked as root and
+    the import runs as the application user.
+    """
+
+    def _run(self, app, tmp_path, avatar_dir):
+        export = tmp_path / "people.json"
+        export.write_text(json.dumps([_person(avatar_file="avatar_142.jpg")]))
+        return app.test_cli_runner().invoke(args=[
+            "import-forum-people", str(export), "--dry-run",
+            "--avatar-dir", str(avatar_dir),
+        ])
+
+    def test_a_genuinely_missing_directory_says_so(self, app, tmp_path):
+        result = self._run(app, tmp_path, tmp_path / "not-here")
+
+        assert result.exit_code != 0
+        assert "No such directory" in result.output
+
+    def test_an_unreadable_parent_is_named_rather_than_called_missing(self, app, tmp_path, monkeypatch):
+        """The /root case, seen the way the application user sees it.
+
+        To that user the folder inside is simply not there, and the parent
+        cannot be entered to find out why. The inaccessibility is simulated
+        rather than made real with chmod, because the suite may run as root --
+        and root bypasses the permission bits, so a genuinely 0o000 directory
+        would still be readable here and this branch would never be taken.
+        """
+        import os as os_module
+
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        target = locked / "avatars"  # deliberately not created
+
+        real_access = os_module.access
+        monkeypatch.setattr(
+            os_module,
+            "access",
+            lambda path, mode, **kw: False if Path(path) == locked else real_access(path, mode, **kw),
+        )
+
+        result = self._run(app, tmp_path, target)
+
+        assert result.exit_code != 0
+        assert "cannot be reached" in result.output
+        assert str(locked) in result.output, "name the directory to fix"
+        assert "No such directory" not in result.output
+
+    def test_an_empty_directory_is_refused_rather_than_importing_nobody(self, app, tmp_path):
+        """Otherwise it reports 677 missing files, which reads as data loss."""
+        empty = tmp_path / "empty"
+        empty.mkdir()
+
+        result = self._run(app, tmp_path, empty)
+
+        assert result.exit_code != 0
+        assert "is empty" in result.output
+
+    def test_a_file_is_not_a_directory(self, app, tmp_path):
+        not_a_dir = tmp_path / "avatars.zip"
+        not_a_dir.write_bytes(b"pk")
+
+        result = self._run(app, tmp_path, not_a_dir)
+
+        assert result.exit_code != 0
+
+    def test_a_good_directory_is_accepted(self, app, tmp_path):
+        """The guard must not refuse the case it exists to protect."""
+        from PIL import Image
+
+        good = tmp_path / "avatars"
+        good.mkdir()
+        Image.new("RGB", (32, 32), (1, 2, 3)).save(good / "avatar_142.jpg")
+
+        result = self._run(app, tmp_path, good)
+
+        assert result.exit_code == 0, result.output
+        assert "avatars=1" in result.output
