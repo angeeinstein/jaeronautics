@@ -625,6 +625,18 @@ class TestRedundantRolesAreNotStoredTwice:
         assert "Open the admin workspace" in body
         assert "Install a new version" in body
 
+    def test_but_folded_away_until_asked(self, client):
+        """A dozen capability lines above the controls buries the controls."""
+        boss = _user("folded@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = _user("foldedtarget@example.com", ROLE_SUPERADMIN)
+        _login(client, boss.id)
+
+        body = client.get(f"/admin/accounts/{target.id}").get_data(as_text=True)
+
+        assert "Show what this account can currently do" in body
+        # No <details open>: everything on this page starts closed.
+        assert "<details open" not in body
+
     def test_dropping_the_covering_role_leaves_the_other_tickable(self, client):
         """The covered box must still post, or unticking one would clear both."""
         boss = _user("redboss6@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)

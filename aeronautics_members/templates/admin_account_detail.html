@@ -43,16 +43,19 @@
                       about one role at a time.
                     #}
                     <hr class="mt-4">
-                    <h6 class="text-muted text-uppercase small">{{ _('Can currently do') }}</h6>
-                    {# The question the role list is really being asked. Ticking
-                       or unticking a role that another one covers changes
-                       nothing here, which is the point. #}
+                    {# The question the role list is really being asked, but only
+                       when somebody asks it: a dozen lines of capability above
+                       the controls buries the controls. Folded like the
+                       per-role lists below, for the same reason. #}
                     {% if effective_permissions %}
-                        <ul class="small text-muted mb-3">
-                            {% for label in effective_permissions %}<li>{{ label }}</li>{% endfor %}
-                        </ul>
+                        <details class="small text-muted mb-3">
+                            <summary>{{ _('Show what this account can currently do (%(count)s)', count=effective_permissions|length) }}</summary>
+                            <ul class="mb-0 mt-1">
+                                {% for label in effective_permissions %}<li>{{ label }}</li>{% endfor %}
+                            </ul>
+                        </details>
                     {% else %}
-                        <p class="small text-muted mb-3">{{ _('Nothing beyond an ordinary member account.') }}</p>
+                        <p class="small text-muted mb-3">{{ _('This account has no access beyond an ordinary member.') }}</p>
                     {% endif %}
 
                     <h6 class="text-muted text-uppercase small">{{ _('Roles') }}</h6>
