@@ -415,6 +415,37 @@ permission table.
   14 days. An import that sets that status by accident would quietly delete the
   archive a fortnight later. Give archival rows a status of their own.
 
+### Identity: what actually names a person
+
+`User.id`. It is what Discourse knows people by — `build_sso_payload` sends
+`"external_id": str(user.id)` and `ForumAccount.external_id` stores the same —
+and it is what every foreign key in this database points at. Email address and
+forum username are mutable attributes with unique constraints; changing either
+orphans nothing, because nothing identifies by them.
+
+There is deliberately **no human-facing account number**. Add one only if the
+board finds itself needing to quote an account out loud, and note that `user.id`
+is sequential: fine in an authenticated admin URL, wrong for a public profile
+link, which would advertise how many accounts exist.
+
+### Not "alumni" — two facts, not one label
+
+A status meaning "used to be a student" collides with the truth that such a
+person can rejoin and become an active member. The way out is to store no label,
+because the two facts are already separate and already available:
+
+- **Can they sign in?** `password_hash IS NULL` says no.
+- **Are they a member?** The coverage ledger says.
+
+An imported forum person is simply *no password, no coverage*. Someone who
+returns gets a password and a membership — the same row, with nothing to
+un-label and no state machine to get wrong. "No membership since 2016" is text
+the directory *derives*; it is not a column.
+
+The only thing worth storing is how the row got there (`imported_at` or
+similar), which is provenance rather than status, and it is what gates the rule
+below.
+
 ### Email addresses are history, never identity
 
 The old accounts used university addresses, which are disabled when a student
@@ -452,6 +483,52 @@ association's own interest in its history plus a standing offer to remove
 anyone who asks, which is a weaker footing and worth re-examining if the
 archive is ever made public outside the forum, or if photographs are shown
 somewhere the subjects would not expect.
+
+## Planned: Forum Access Control (not built)
+
+Blocking one person from the forum, and showing different people different parts
+of it — institute staff, for instance, should not necessarily see everything.
+Since this portal is the only identity provider, it has to drive that.
+
+**Half of it already exists.** `_build_group_fields()` in `forum_service.py`
+turns a desired state into Discourse `add_groups` / `remove_groups`, driven by
+the `forum_onboarding_group`, `forum_member_group` and `forum_inactive_group`
+settings. Discourse applies category permissions per group. So the boundary is
+already where it belongs:
+
+> The portal decides which groups somebody is in. Discourse decides what each
+> group can see.
+
+Granular access therefore needs **no new mechanism here** — it needs more groups
+and category permissions configured in Discourse. What is missing on this side:
+
+- `get_desired_state()` derives purely from membership, so one person cannot be
+  treated differently from another in the same state.
+- Three group names, hard-coded as settings.
+- No blocked state.
+
+The shape to build is a `FORUM_PROFILES` table mapping a profile name to a set
+of Discourse groups — the same shape as `ROLE_PERMISSIONS` — plus a nullable
+per-account override, where the membership-derived default applies unless
+somebody sets one. Blocking is then a profile with no groups. Institute staff
+need no special code: no portal role, no membership, forum profile `staff`.
+
+**Do not put forum groups in `ROLE_PERMISSIONS`.** A portal role says what
+somebody may do *here*; a forum profile says what they may see *there*. Same
+shape, different meaning. Conflating them means granting forum visibility would
+silently imply portal capabilities, which is the exact class of mistake the
+permission table exists to prevent. Two tables.
+
+### The portal must survive without it
+
+The launch plan is portal and new forum together, with the fallback of going
+live on the portal alone while the old forum keeps running. That fallback is the
+`forum_integration_enabled = False` configuration, and
+`tests/test_forum_disabled_deployment.py` exercises it against the **real**
+`ForumService` rather than a stub: signing in, the account page, saving a
+profile, the data export, both forum routes refusing without a 500, every admin
+page rendering, the health report staying green, and no forum work piling up in
+the outbox with nothing to deliver it to.
 
 ## Data Export and Account Deletion
 
