@@ -24,7 +24,13 @@ The guards, and why each exists:
 """
 
 from ..db_models import Role, User, db
-from ..permissions import PROTECTED_PERMISSIONS, ROLE_PERMISSIONS, permissions_for, roles_with
+from ..permissions import (
+    PROTECTED_PERMISSIONS,
+    ROLE_PERMISSIONS,
+    minimal_roles,
+    permissions_for,
+    roles_with,
+)
 from . import ConflictError, ValidationError
 
 
@@ -58,11 +64,16 @@ def describe_role_change(user, requested_slugs):
     if user is None:
         raise ValidationError("An account is required.")
 
-    requested = set(requested_slugs or ())
-    unknown = requested - set(ROLE_PERMISSIONS)
+    asked_for = set(requested_slugs or ())
+    unknown = asked_for - set(ROLE_PERMISSIONS)
     if unknown:
         raise ValidationError(f"Unknown role(s): {', '.join(sorted(unknown))}")
 
+    # Ticking Admin as well as Super Admin describes the same account as Super
+    # Admin alone, so only one of those may be stored -- otherwise the same
+    # access has two spellings and the badges disagree with the checkboxes.
+    # This removes nothing the account can do: the covering role grants it all.
+    requested = minimal_roles(asked_for)
     current = {role.slug for role in user.roles}
     losing = permissions_for(current) - permissions_for(requested)
 
@@ -83,6 +94,7 @@ def describe_role_change(user, requested_slugs):
     return {
         "current": sorted(current),
         "requested": sorted(requested),
+        "redundant": sorted(asked_for - requested),
         "granted": sorted(requested - current),
         "revoked": sorted(current - requested),
         "permissions_lost": sorted(losing),

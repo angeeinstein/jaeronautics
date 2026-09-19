@@ -7,7 +7,14 @@ from the app module, which is fully initialized before this is imported.
 
 from flask import Blueprint, current_app, jsonify
 
-from ..permissions import Permission, ROLE_PERMISSIONS, role_description, role_label
+from ..permissions import (
+    PERMISSION_LABELS,
+    Permission,
+    ROLE_PERMISSIONS,
+    covering_role,
+    role_description,
+    role_label,
+)
 from ..config import (
     RATELIMIT_ADMIN_EMAIL,
     STRIPE_SETTING_KEYS,
@@ -262,9 +269,22 @@ def admin_account_detail(user_id):
                 "label": role_label(slug),
                 "description": role_description(slug),
                 "held": user.has_role(slug),
+                # Naming the role that already grants all of this is the whole
+                # answer to "why is Admin unticked on a Super Admin?".
+                "covered_by": (
+                    role_label(covering_role(slug, {r.slug for r in user.roles}))
+                    if covering_role(slug, {r.slug for r in user.roles})
+                    else None
+                ),
             }
             for slug in assignable_roles()
         ],
+        # What the account can actually do, which is the question the role list
+        # is really being asked.
+        effective_permissions=sorted(
+            PERMISSION_LABELS.get(permission, permission)
+            for permission in user.permissions
+        ),
         role_change_blocked=(
             _("You cannot change your own roles here.")
             if current_user.id == user.id
@@ -582,6 +602,17 @@ def update_account_roles(user_id):
         db.session.rollback()
         flash(str(exc), "danger")
         return redirect(url_for("admin.admin_account_detail", user_id=user_id))
+
+    # Saying so beats silently dropping a box somebody deliberately ticked.
+    if change["redundant"]:
+        flash(
+            _(
+                "%(roles)s already covered by another selected role, so it was not "
+                "stored separately. The account can do exactly the same either way.",
+                roles=", ".join(role_label(slug) for slug in change["redundant"]),
+            ),
+            "info",
+        )
 
     if not change["changed"]:
         flash(_("No role changes were made."), "info")

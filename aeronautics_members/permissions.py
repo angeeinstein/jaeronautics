@@ -101,12 +101,62 @@ PROTECTED_PERMISSIONS = {
 }
 
 
+# Short descriptions for showing what an account can actually do, which is the
+# only question a role list is really being asked.
+PERMISSION_LABELS = {
+    Permission.ADMIN_ACCESS: "Open the admin workspace",
+    Permission.ACCOUNTS_VIEW: "See member accounts",
+    Permission.ACCOUNTS_BILLING: "Re-sync a member's billing with Stripe",
+    Permission.ACCOUNTS_PRIVACY: "Export a member's data and erase accounts",
+    Permission.APPROVALS_REVIEW: "Approve profile change requests",
+    Permission.FORUM_MODERATE: "Moderate the forum and avatars",
+    Permission.LOGS_VIEW: "Read the audit log",
+    Permission.NOTIFICATIONS_MANAGE: "Send test email and resolve undelivered email",
+    Permission.SETTINGS_GENERAL: "Change general and notification settings",
+    Permission.SETTINGS_CREDENTIALS: "Read and change the Stripe, Discourse and SMTP credentials",
+    Permission.SYSTEM_UPDATE: "Install a new version and roll one back",
+    Permission.ROLES_MANAGE: "Grant and revoke access for other people",
+}
+
+
 def permissions_for(role_slugs):
     """Every capability carried by this set of role slugs."""
     granted = set()
     for slug in role_slugs:
         granted |= ROLE_PERMISSIONS.get(slug, frozenset())
     return granted
+
+
+def covering_role(slug, selected_slugs):
+    """A selected role that already grants everything ``slug`` does, if any.
+
+    "Admin and Super Admin" and "Super Admin alone" describe an identical
+    account, because the second bundle contains the first. Offering both as
+    distinct choices asks a question with no answer, so the redundant one is
+    named here -- shown as already included, and dropped when the change is
+    saved so the stored set has one spelling.
+    """
+    mine = ROLE_PERMISSIONS.get(slug, frozenset())
+    if not mine:
+        return None
+    for other in sorted(selected_slugs):
+        if other == slug:
+            continue
+        theirs = ROLE_PERMISSIONS.get(other, frozenset())
+        if not mine <= theirs:
+            continue
+        # Two roles granting exactly the same thing would otherwise cover each
+        # other and both be dropped; keep the first by name.
+        if mine == theirs and other > slug:
+            continue
+        return other
+    return None
+
+
+def minimal_roles(slugs):
+    """``slugs`` with anything another of them already covers removed."""
+    selected = set(slugs)
+    return {slug for slug in selected if covering_role(slug, selected) is None}
 
 
 def roles_with(permission):

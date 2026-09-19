@@ -249,6 +249,18 @@ The account list is read-only for roles, deliberately: deciding from a list
 means deciding without seeing what else the account holds or who else could do
 the job.
 
+**A role another ticked role already covers is not stored separately.** Ticking
+Admin as well as Super Admin describes the same account as Super Admin alone,
+because the second bundle contains the first — so offering both as distinct
+states asks a question with no answer. `minimal_roles()` drops the covered one,
+the form marks it *included in Super Admin*, and saving says so rather than
+dropping it silently. Roles that merely overlap, such as a moderator and a
+treasurer, both survive; only genuine containment is collapsed.
+
+The page also lists what the account **can currently do**, because that is the
+question a role list is really being asked, and it is what makes an unticked
+Admin box on a Super Admin unalarming.
+
 Three refusals, all enforced in the service so they hold however the change
 arrives:
 

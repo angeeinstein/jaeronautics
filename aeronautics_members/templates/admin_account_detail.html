@@ -43,6 +43,18 @@
                       about one role at a time.
                     #}
                     <hr class="mt-4">
+                    <h6 class="text-muted text-uppercase small">{{ _('Can currently do') }}</h6>
+                    {# The question the role list is really being asked. Ticking
+                       or unticking a role that another one covers changes
+                       nothing here, which is the point. #}
+                    {% if effective_permissions %}
+                        <ul class="small text-muted mb-3">
+                            {% for label in effective_permissions %}<li>{{ label }}</li>{% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="small text-muted mb-3">{{ _('Nothing beyond an ordinary member account.') }}</p>
+                    {% endif %}
+
                     <h6 class="text-muted text-uppercase small">{{ _('Roles') }}</h6>
                     {% if role_change_blocked %}
                         <div class="alert alert-secondary mb-0">
@@ -58,18 +70,30 @@
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             {% for option in role_options %}
                                 <div class="form-check">
+                                    {#
+                                      Never disabled, even when covered: unticking the
+                                      covering role has to leave this one tickable in the
+                                      same submission, and a disabled box posts nothing.
+                                    #}
                                     <input class="form-check-input" type="checkbox" name="roles"
                                            value="{{ option.slug }}" id="role-{{ option.slug }}"
+                                           data-role-permissions="{{ option.slug }}"
                                            {% if option.held %}checked{% endif %}
                                            {% if user_record.deleted_at %}disabled{% endif %}>
                                     <label class="form-check-label" for="role-{{ option.slug }}">
                                         {{ option.label }}
+                                        {% if option.covered_by %}
+                                            <span class="badge text-bg-secondary ms-1">{{ _('included in %(role)s', role=option.covered_by) }}</span>
+                                        {% endif %}
                                         {% if option.description %}
                                             <span class="d-block text-muted small">{{ option.description }}</span>
                                         {% endif %}
                                     </label>
                                 </div>
                             {% endfor %}
+                            <p class="text-muted small mt-2 mb-0">
+                                {{ _('A role that another ticked role already covers is not stored separately — it would describe the same account twice.') }}
+                            </p>
                             {% if not user_record.deleted_at %}
                                 <button type="submit" class="btn btn-primary btn-sm mt-3">{{ _('Save roles') }}</button>
                             {% endif %}

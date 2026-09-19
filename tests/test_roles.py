@@ -560,3 +560,94 @@ class TestTheAccountListIsReadOnly:
         body = client.get("/admin/accounts").get_data(as_text=True)
 
         assert f"/admin/accounts/{target.user_id}" in body
+
+
+class TestRedundantRolesAreNotStoredTwice:
+    """"Admin + Super Admin" and "Super Admin" describe the same account.
+
+    Offering both as distinct states asks a question with no answer: whichever
+    you pick, the account can do exactly the same things. So only one spelling
+    is stored, and the form says which role covers which.
+    """
+
+    def _set(self, client, user_id, *slugs):
+        return client.post(
+            f"/admin/accounts/{user_id}/roles", data={"roles": list(slugs)},
+            follow_redirects=True,
+        )
+
+    def test_ticking_both_stores_only_the_covering_role(self, client):
+        boss = _user("redboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = make_member(email="bothticked@example.com")
+        _login(client, boss.id)
+
+        self._set(client, target.user_id, ROLE_ADMIN, ROLE_SUPERADMIN)
+
+        assert [r.slug for r in target.user.roles] == [ROLE_SUPERADMIN]
+
+    def test_and_loses_nothing(self, client):
+        """The covering role grants everything the dropped one did."""
+        boss = _user("redboss2@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = make_member(email="nothinglost@example.com")
+        _login(client, boss.id)
+
+        self._set(client, target.user_id, ROLE_ADMIN, ROLE_SUPERADMIN)
+
+        assert target.user.permissions == ROLE_PERMISSIONS[ROLE_SUPERADMIN]
+        assert target.user.can(Permission.ADMIN_ACCESS) is True
+
+    def test_the_drop_is_reported_rather_than_silent(self, client):
+        boss = _user("redboss3@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = make_member(email="told@example.com")
+        _login(client, boss.id)
+
+        body = self._set(client, target.user_id, ROLE_ADMIN, ROLE_SUPERADMIN).get_data(as_text=True)
+
+        assert "not stored separately" in body
+
+    def test_the_page_says_which_role_covers_which(self, client):
+        boss = _user("redboss4@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = _user("covered@example.com", ROLE_SUPERADMIN)
+        _login(client, boss.id)
+
+        body = client.get(f"/admin/accounts/{target.id}").get_data(as_text=True)
+
+        assert "included in Super Admin" in body
+
+    def test_the_page_lists_what_the_account_can_actually_do(self, client):
+        """So an unticked Admin box on a Super Admin is not alarming."""
+        boss = _user("redboss5@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = _user("effective@example.com", ROLE_SUPERADMIN)
+        _login(client, boss.id)
+
+        body = client.get(f"/admin/accounts/{target.id}").get_data(as_text=True)
+
+        assert "Open the admin workspace" in body
+        assert "Install a new version" in body
+
+    def test_dropping_the_covering_role_leaves_the_other_tickable(self, client):
+        """The covered box must still post, or unticking one would clear both."""
+        boss = _user("redboss6@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = _user("stepdown@example.com", ROLE_SUPERADMIN)
+        _login(client, boss.id)
+
+        self._set(client, target.id, ROLE_ADMIN)
+
+        assert [r.slug for r in target.roles] == [ROLE_ADMIN]
+
+    def test_two_orthogonal_roles_both_survive(self, app, monkeypatch):
+        """Only a role that is genuinely covered is dropped."""
+        from aeronautics_members.permissions import minimal_roles
+
+        monkeypatch.setitem(
+            ROLE_PERMISSIONS, "moderator",
+            frozenset({Permission.ADMIN_ACCESS, Permission.FORUM_MODERATE}),
+        )
+        monkeypatch.setitem(
+            ROLE_PERMISSIONS, "treasurer",
+            frozenset({Permission.ADMIN_ACCESS, Permission.ACCOUNTS_BILLING}),
+        )
+
+        assert minimal_roles({"moderator", "treasurer"}) == {"moderator", "treasurer"}
+        # ...and a role inside another still is.
+        assert minimal_roles({ROLE_ADMIN, ROLE_SUPERADMIN}) == {ROLE_SUPERADMIN}
