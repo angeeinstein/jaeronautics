@@ -4,7 +4,7 @@
 distinction is what the invoice-billing bug came down to -- a member could be
 marked paid with nothing behind it, and no field could contradict that.
 """
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -13,6 +13,19 @@ from aeronautics_members.db_models import MembershipPeriod
 from aeronautics_members.services import ValidationError
 
 CUR = date.today().year
+
+
+def make_returning_member(**kwargs):
+    """A member who joined in an earlier year.
+
+    A full Jan-Dec paid grant only makes sense for someone who was already a
+    member when the year began; for a first year the grant is clamped to the
+    join date, because that is all the member paid for. Tests about projection
+    and access want the renewal case, so they say so explicitly rather than
+    relying on a member created "today" being granted the whole year.
+    """
+    kwargs.setdefault("created_at", datetime(CUR - 1, 3, 1, tzinfo=timezone.utc))
+    return make_member(**kwargs)
 
 
 class TestGranting:
@@ -44,7 +57,7 @@ class TestGranting:
         assert len(member.membership_periods) == 1
 
     def test_calendar_year_grant_spans_the_whole_year(self, app):
-        member = make_member(email="year@example.com")
+        member = make_returning_member(email="year@example.com")
         period = periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
         db.session.commit()
         assert (period.starts_on, period.ends_on) == (date(CUR, 1, 1), date(CUR, 12, 31))
@@ -113,7 +126,7 @@ class TestRevocation:
 
 class TestProjection:
     def test_cached_fields_follow_the_ledger(self, app):
-        member = make_member(email="proj@example.com", payment_status="unpaid", is_active=False)
+        member = make_returning_member(email="proj@example.com", payment_status="unpaid", is_active=False)
         periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
         db.session.commit()
 
@@ -136,7 +149,7 @@ class TestProjection:
         assert member.membership_ends_on == date(CUR + 1, 12, 31)
 
     def test_paid_evidence_outranks_a_free_grant(self, app):
-        member = make_member(email="rank@example.com", payment_status="unpaid", is_active=False)
+        member = make_returning_member(email="rank@example.com", payment_status="unpaid", is_active=False)
         periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_FREE_PERIOD)
         periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID)
         db.session.commit()
@@ -152,7 +165,7 @@ class TestProjection:
 
 def test_describe_coverage_is_plain_serializable_data(app):
     """The same description must serve an admin page and a JSON client."""
-    member = make_member(email="desc@example.com")
+    member = make_returning_member(email="desc@example.com")
     periods.grant_calendar_year(
         member, CUR, MembershipPeriod.REASON_PAID, stripe_invoice_id="in_desc")
     revoked = periods.grant_calendar_year(member, CUR - 1, MembershipPeriod.REASON_FREE_PERIOD)
@@ -211,7 +224,7 @@ class TestOnePaymentOneRecord:
 
     def test_a_revoked_record_does_not_block_a_new_grant(self, app):
         # After a lost dispute the member may pay again for the same year.
-        member = make_member(email="regrant@example.com")
+        member = make_returning_member(email="regrant@example.com")
         first = periods.grant_calendar_year(member, CUR, MembershipPeriod.REASON_PAID,
                                             stripe_invoice_id="in_lost")
         periods.revoke_period(first, "chargeback")
@@ -244,7 +257,7 @@ class TestLedgerGovernsAccess:
         After a lost chargeback the coverage is revoked. If access still came
         from the cached fields, a flag nobody updated would keep the member in.
         """
-        member = make_member(
+        member = make_returning_member(
             email="revokedaccess@example.com",
             payment_status="paid", is_active=True,          # stale, says active
             membership_ends_on=date(CUR, 12, 31),
@@ -260,7 +273,7 @@ class TestLedgerGovernsAccess:
         assert app_module.member_has_active_access(member, on_date=date(CUR, 6, 1)) is False
 
     def test_ledger_grants_access_before_the_cached_fields_catch_up(self, app):
-        member = make_member(
+        member = make_returning_member(
             email="ledgerfirst@example.com",
             payment_status="unpaid", is_active=False, membership_ends_on=None,
         )

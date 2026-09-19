@@ -37,6 +37,7 @@ def grant_period(
     stripe_subscription_id=None,
     granted_by_user_id=None,
     note=None,
+    window_is_inferred=False,
 ):
     """Record that ``member`` is covered from ``starts_on`` to ``ends_on``.
 
@@ -55,14 +56,6 @@ def grant_period(
         MembershipPeriod.REASON_ADMIN_GRANT,
     }:
         raise ValidationError(f"Unknown membership period reason: {reason!r}")
-
-    # Coverage cannot begin before the member existed. A first year is prorated
-    # from the join date, but the invoice that pays for it names only a calendar
-    # year, so granting from it alone would claim the months before they joined
-    # -- months they were not members and did not pay for.
-    joined_on = datetime_to_membership_date(member.created_at)
-    if joined_on and starts_on < joined_on <= ends_on:
-        starts_on = joined_on
 
     if stripe_invoice_id:
         existing = db.session.execute(
@@ -89,13 +82,15 @@ def grant_period(
             existing.stripe_invoice_id = stripe_invoice_id
         if stripe_subscription_id and not existing.stripe_subscription_id:
             existing.stripe_subscription_id = stripe_subscription_id
-        # Keep the narrower window. Stripe does not order its events, so which
-        # of checkout.session.completed and invoice.paid arrives first is
-        # arbitrary -- and the two describe the same payment differently: one
-        # knows the prorated join date, the other only a calendar year. Taking
-        # the later start makes the record say the same thing either way, and
-        # never claims more coverage than was actually bought.
-        if starts_on > existing.starts_on:
+        # Stripe does not order its events, so which of
+        # checkout.session.completed and invoice.paid arrives first is
+        # arbitrary -- and the two describe the same payment differently.
+        # Checkout carries the real prorated window; an invoice carries only a
+        # calendar year, from which a window is inferred. A stated window is
+        # therefore always better evidence than an inferred one, and an
+        # inferred one never overrides what was stated. That makes the record
+        # identical whichever event lands first.
+        if not window_is_inferred and starts_on != existing.starts_on:
             existing.starts_on = starts_on
         return existing
 
@@ -114,12 +109,27 @@ def grant_period(
 
 
 def grant_calendar_year(member, year, reason, **evidence):
-    """Grant a full Jan 1 - Dec 31 membership year.
+    """Grant a membership year, clamped to the day the member actually joined.
 
-    Renewals always cover a whole calendar year, because the association runs one
-    shared cycle rather than per-member anniversaries.
+    Renewals cover a whole calendar year, because the association runs one shared
+    cycle rather than per-member anniversaries. A *first* year does not: it is
+    prorated from the join date, and the paid invoice names only the year, not
+    the window. Granting Jan 1 from that invoice alone would claim the months
+    before the member joined -- months they did not pay for -- so the start is
+    clamped to their join date when they joined during the year in question.
+
+    An explicit administrative grant is left alone: a human naming a year means
+    that year.
     """
-    return grant_period(member, first_day_of_year(year), last_day_of_year(year), reason, **evidence)
+    starts_on = first_day_of_year(year)
+    ends_on = last_day_of_year(year)
+
+    if reason != MembershipPeriod.REASON_ADMIN_GRANT:
+        joined_on = datetime_to_membership_date(member.created_at) if member else None
+        if joined_on and starts_on < joined_on <= ends_on:
+            starts_on = joined_on
+
+    return grant_period(member, starts_on, ends_on, reason, window_is_inferred=True, **evidence)
 
 
 def revoke_period(period, reason):
