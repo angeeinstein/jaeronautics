@@ -136,26 +136,91 @@ def _decode(raw):
     return raw
 
 
+def _read_quoted_group(text, start):
+    """Index just past the ``(...)`` beginning at ``start``, respecting quotes.
+
+    A regex cannot do this: values contain parentheses, commas and escaped
+    quotes, and a non-greedy match stops at the first ``)`` inside a signature
+    or a smiley.
+    """
+    depth, index, in_string, escaped = 0, start, False, False
+    while index < len(text):
+        character = text[index]
+        if escaped:
+            escaped = False
+        elif in_string and character == "\\":
+            escaped = True
+        elif character == "'":
+            in_string = not in_string
+        elif not in_string:
+            if character == "(":
+                depth += 1
+            elif character == ")":
+                depth -= 1
+                if depth == 0:
+                    return index
+        index += 1
+    return -1
+
+
+def _insert_tuples(dump, table):
+    """Every VALUES tuple for a table, however the dump spells the statement.
+
+    MyBB's own backup tool writes its SQL by hand rather than shelling out to
+    mysqldump, so the table and column names arrive without backticks and the
+    statement may or may not list columns. Accept all of it.
+    """
+    header = re.compile(
+        rf"INSERT\s+(?:IGNORE\s+)?INTO\s+`?{re.escape(table)}`?\s*", re.I
+    )
+    values_keyword = re.compile(r"\s*VALUES\s*", re.I)
+
+    for match in header.finditer(dump):
+        position = match.end()
+        columns = None
+        if dump[position : position + 1] == "(":
+            end = _read_quoted_group(dump, position)
+            if end == -1:
+                continue
+            columns = [name.strip().strip("`\"") for name in _split_values(dump[position + 1 : end])]
+            position = end + 1
+
+        keyword = values_keyword.match(dump, position)
+        if not keyword:
+            continue
+        position = keyword.end()
+
+        while position < len(dump) and dump[position] == "(":
+            end = _read_quoted_group(dump, position)
+            if end == -1:
+                break
+            yield columns, _split_values(dump[position + 1 : end])
+            position = end + 1
+            while position < len(dump) and dump[position] in " \t\r\n":
+                position += 1
+            if position < len(dump) and dump[position] == ",":
+                position += 1
+                while position < len(dump) and dump[position] in " \t\r\n":
+                    position += 1
+            else:
+                break
+
+
 def rows_of(dump, table):
     """Every row of a table, as dicts keyed by column name."""
-    names = columns_of(dump, table)
-    if not names:
-        return []
-
+    declared = columns_of(dump, table)
     rows = []
-    for statement in re.finditer(
-        rf"INSERT INTO `{re.escape(table)}`(?: \(([^)]*)\))? VALUES\s*(.*?);\s*$",
-        dump,
-        re.S | re.M,
-    ):
-        explicit = statement.group(1)
-        keys = re.findall(r"`([^`]+)`", explicit) if explicit else names
-        for tuple_body in re.finditer(r"\((.*?)\)(?=\s*,\s*\(|\s*$)", statement.group(2), re.S):
-            values = _split_values(tuple_body.group(1))
-            if len(values) != len(keys):
-                continue
-            rows.append({key: _decode(value) for key, value in zip(keys, values)})
+    for columns, values in _insert_tuples(dump, table):
+        keys = columns or declared
+        if not keys or len(values) != len(keys):
+            continue
+        rows.append({key: _decode(value) for key, value in zip(keys, values)})
     return rows
+
+
+def count_inserts(dump, table):
+    """How many rows the dump offers, whether or not they could be read."""
+    return sum(1 for _columns, _values in _insert_tuples(dump, table))
 
 
 def find_jahrgang_field(dump, prefix_table):
@@ -246,10 +311,17 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE, pref
             "avatar_file": avatar_file,
         })
 
+    # The dangerous failure is the quiet one: a statement this parser cannot
+    # read is skipped row by row, so a changed dialect loses people without
+    # raising anything. Count what the dump offers and compare.
+    offered = count_inserts(dump, users_table)
+
     return people, {
         "prefix": prefix,
         "rejected_prefixes": rejected,
         "users_table": users_table,
+        "rows_offered": offered,
+        "rows_unread": max(offered - len(people), 0),
         "jahrgang_field": jahrgang_field,
         "jahrgang_label": field_label,
         "with_year_group": sum(1 for person in people if person["year_group"]),
@@ -282,6 +354,9 @@ def main(argv=None):
     print(f"users table        : {summary['users_table']}")
     print(f"year group field   : {summary['jahrgang_field']} ({summary['jahrgang_label'] or 'not found'})")
     print(f"people             : {len(people)}")
+    if summary["rows_unread"]:
+        print(f"  NOT READ         : {summary['rows_unread']} of {summary['rows_offered']} rows "
+              f"in the dump could not be parsed", file=sys.stderr)
     print(f"  with year group  : {summary['with_year_group']}")
     print(f"  with avatar file : {summary['with_avatar']}")
     if summary["remote_avatars"]:

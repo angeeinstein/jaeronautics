@@ -249,6 +249,79 @@ class TestTheCommandLine:
         assert len(json.loads(out.read_text())) == 3
 
 
+class TestTheDialectMyBBActuallyWrites:
+    """MyBB's own backup tool does not shell out to mysqldump.
+
+    It builds the SQL itself, and the result is not what the fixture above
+    looks like: the table name arrives bare while the column names are
+    backticked. The first converter required backticks on the table, matched
+    zero statements against the real 1 MB dump, and reported "people: 0"
+    with no error at all.
+    """
+
+    REAL = (
+        "CREATE TABLE `mybb_users` (\n"
+        "  `uid` int(10) unsigned NOT NULL AUTO_INCREMENT,\n"
+        "  `username` varchar(120) NOT NULL DEFAULT '',\n"
+        "  `email` varchar(220) NOT NULL DEFAULT '',\n"
+        "  `postnum` int(10) NOT NULL DEFAULT '0',\n"
+        "  `regdate` bigint(30) NOT NULL DEFAULT '0',\n"
+        "  `lastpost` bigint(30) NOT NULL DEFAULT '0',\n"
+        "  `avatar` varchar(200) NOT NULL DEFAULT '',\n"
+        "  PRIMARY KEY (`uid`)\n"
+        ") ENGINE=MyISAM;\n"
+        "INSERT INTO mybb_users (`uid`,`username`,`email`,`postnum`,`regdate`,"
+        "`lastpost`,`avatar`) VALUES (5,'HuberT_L19','t.huber@edu.fh-joanneum.at',"
+        "8,1560000000,1590000000,'./uploads/avatars/avatar_5.jpg?dateline=1560000000');\n"
+    )
+
+    def test_a_bare_table_name_with_backticked_columns_is_read(self):
+        rows = mybb_export.rows_of(self.REAL, "mybb_users")
+
+        assert [row["username"] for row in rows] == ["HuberT_L19"]
+
+    def test_the_columns_come_from_the_statement_not_the_create(self):
+        """The INSERT lists its own columns; they are what the values line up with."""
+        rows = mybb_export.rows_of(self.REAL, "mybb_users")
+
+        assert rows[0]["uid"] == "5"
+        assert rows[0]["avatar"].endswith("avatar_5.jpg?dateline=1560000000")
+
+
+class TestRowsThatCannotBeRead:
+    """Dropping rows silently is the failure this converter must not have."""
+
+    def test_the_summary_says_how_many_rows_went_unread(self):
+        """A statement with the wrong number of values is skipped, so it is counted."""
+        broken = DUMP + (
+            "INSERT INTO `lav_users` (`uid`,`username`) VALUES (99,'ShortRow_L25',"
+            "'extra','values','that','do','not','fit');\n"
+        )
+
+        _rows, summary = mybb_export.build_people(broken)
+
+        assert summary["rows_offered"] == 4
+        assert summary["rows_unread"] == 1
+
+    def test_nothing_unread_is_reported_as_nothing(self, people):
+        _rows, summary = people
+
+        assert summary["rows_offered"] == 3
+        assert summary["rows_unread"] == 0
+
+    def test_unread_rows_are_shouted_about_on_stderr(self, tmp_path, capsys):
+        """Printed to stderr, because this is read by somebody skimming."""
+        dump = tmp_path / "backup.sql"
+        dump.write_text(DUMP + (
+            "INSERT INTO `lav_users` (`uid`,`username`) VALUES (99,'ShortRow_L25',"
+            "'extra','values','that','do','not','fit');\n"
+        ))
+
+        mybb_export.main([str(dump), "--out", str(tmp_path / "people.json")])
+
+        assert "NOT READ" in capsys.readouterr().err
+
+
 def test_a_missing_dump_says_so_without_a_traceback(tmp_path):
     """This is run by hand, on a server, by somebody not reading Python."""
     with pytest.raises(SystemExit) as excinfo:
