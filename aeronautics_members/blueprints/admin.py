@@ -276,6 +276,13 @@ def admin_account_detail(user_id):
                     if covering_role(slug, {r.slug for r in user.roles})
                     else None
                 ),
+                # What ticking this box would actually hand over. Reading the
+                # source to find that out is not a reasonable ask of somebody
+                # deciding whether a fellow student should have it.
+                "permissions": sorted(
+                    PERMISSION_LABELS.get(permission, permission)
+                    for permission in ROLE_PERMISSIONS[slug]
+                ),
             }
             for slug in assignable_roles()
         ],

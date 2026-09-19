@@ -65,6 +65,11 @@
                         {% if role_removal_warning %}
                             <div class="alert alert-warning small">{{ role_removal_warning }}</div>
                         {% endif %}
+                        {# The union rule, stated once. A list of checkboxes
+                           otherwise leaves it to be inferred. #}
+                        <p class="small text-muted">
+                            {{ _('The account gets the combined permissions of every role selected here.') }}
+                        </p>
                         <form method="POST" action="{{ url_for('admin.update_account_roles', user_id=user_record.id) }}"
                               data-confirm="{{ _('Change this account’s roles?') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -88,6 +93,14 @@
                                         {% if option.description %}
                                             <span class="d-block text-muted small">{{ option.description }}</span>
                                         {% endif %}
+                                        {# What ticking this box hands over, without
+                                           having to read permissions.py to find out. #}
+                                        <details class="small text-muted">
+                                            <summary>{{ _('Show what this role can do') }}</summary>
+                                            <ul class="mb-0">
+                                                {% for label in option.permissions %}<li>{{ label }}</li>{% endfor %}
+                                            </ul>
+                                        </details>
                                     </label>
                                 </div>
                             {% endfor %}

@@ -259,7 +259,26 @@ treasurer, both survive; only genuine containment is collapsed.
 
 The page also lists what the account **can currently do**, because that is the
 question a role list is really being asked, and it is what makes an unticked
-Admin box on a Super Admin unalarming.
+Admin box on a Super Admin unalarming. Each role additionally discloses its own
+capabilities, so deciding what to hand somebody does not mean reading this file.
+
+**Compared with Stripe's team-role dialog**, which is the closest widely used
+model: checkboxes, plain-language descriptions, per-role disclosure, "only a
+super administrator can grant this role" and "the account creator gets it
+automatically" all match. Two things there are deliberately not copied —
+grouped, collapsed role categories with a search box, which earn their keep at
+Stripe's dozen-plus groups and are chrome around one decision at two; and the
+two-day cooling-off on sensitive actions after a role change, an
+account-takeover brake that at this scale would mostly lock the one
+administrator out of the update button.
+
+One thing differs on purpose. Stripe lets Super Administrator and Administrator
+both be ticked and explains the union with a banner; this collapses the
+redundant one instead. Stripe's roles are largely orthogonal, so containment is
+the exception there and collapsing would look like a bug; here containment is
+currently the only relationship between the two roles, which is precisely why
+the redundant state was confusing. The union banner is borrowed regardless,
+since a list of checkboxes otherwise leaves that rule to be inferred.
 
 Three refusals, all enforced in the service so they hold however the change
 arrives:

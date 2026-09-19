@@ -651,3 +651,42 @@ class TestRedundantRolesAreNotStoredTwice:
         assert minimal_roles({"moderator", "treasurer"}) == {"moderator", "treasurer"}
         # ...and a role inside another still is.
         assert minimal_roles({ROLE_ADMIN, ROLE_SUPERADMIN}) == {ROLE_SUPERADMIN}
+
+    def test_each_role_can_be_inspected_before_it_is_granted(self, client):
+        """Deciding what to hand someone should not need reading the source."""
+        boss = _user("inspect@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = make_member(email="inspectme@example.com")
+        _login(client, boss.id)
+
+        body = client.get(f"/admin/accounts/{target.user_id}").get_data(as_text=True)
+
+        assert "Show what this role can do" in body
+        # Super Admin's list names what only it carries...
+        assert "Install a new version and roll one back" in body
+        # ...and Admin's names what an ordinary administrator gets.
+        assert "Approve profile change requests" in body
+
+    def test_the_union_rule_is_stated_rather_than_implied(self, client):
+        boss = _user("union@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = make_member(email="unionme@example.com")
+        _login(client, boss.id)
+
+        body = client.get(f"/admin/accounts/{target.user_id}").get_data(as_text=True)
+
+        assert "combined permissions of every role selected" in body
+
+    def test_a_new_role_is_inspectable_with_no_template_change(self, app, monkeypatch, client):
+        monkeypatch.setitem(
+            ROLE_PERMISSIONS, "moderator",
+            frozenset({Permission.ADMIN_ACCESS, Permission.FORUM_MODERATE}),
+        )
+        app_module.seed_default_roles()
+        db.session.commit()
+        boss = _user("newrole@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = make_member(email="newrolefor@example.com")
+        _login(client, boss.id)
+
+        body = client.get(f"/admin/accounts/{target.user_id}").get_data(as_text=True)
+
+        assert 'value="moderator"' in body
+        assert "Moderate the forum and avatars" in body
