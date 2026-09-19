@@ -177,7 +177,18 @@ def read_rollback_point():
     """
     try:
         text = ROLLBACK_FILE.read_text()
-    except (FileNotFoundError, PermissionError):
+    except FileNotFoundError:
+        # Normal before the first update: nothing has been replaced yet.
+        return None
+    except PermissionError:
+        # Not normal, and indistinguishable from the above on the page unless
+        # it is said out loud -- which is exactly how a rollback panel that
+        # could never appear went unnoticed.
+        current_app.logger.warning(
+            "The rollback point at %s exists but is not readable by this process, "
+            "so the admin page cannot offer a rollback. It should be group-readable "
+            "by the application user.", ROLLBACK_FILE,
+        )
         return None
     except OSError as exc:
         current_app.logger.warning("Could not read the rollback point: %s", exc)

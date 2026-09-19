@@ -1011,7 +1011,13 @@ ROLLBACK_SCHEMA_REVISION="${alembic_revision}"
 ROLLBACK_DB_BACKUP="${LAST_DB_BACKUP_FILE:-}"
 ROLLBACK_RECORDED_AT="$(date --iso-8601=seconds)"
 EOF
-    chmod 600 "${ROLLBACK_FILE}"
+    # Readable by the application group, not just root: the admin page shows
+    # the rollback point, and the web process runs unprivileged. At 0600 it got
+    # PermissionError and -- because a missing file is the normal state before
+    # the first update -- silently rendered no rollback panel at all. The file
+    # holds a revision, a schema revision and a backup path; no secrets.
+    chown "root:${APP_GROUP}" "${ROLLBACK_FILE}" 2>/dev/null || true
+    chmod 640 "${ROLLBACK_FILE}"
     info "Recorded rollback point at ${revision:0:8}."
 }
 

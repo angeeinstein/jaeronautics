@@ -674,6 +674,18 @@
                                 {{ _('Roll back to %(revision)s', revision=update_state.rollback_point.short_revision) }}
                             </button>
                         </form>
+                        {% else %}
+                        {#
+                          Say why there is nothing here. Silence looks identical
+                          whether no update has run yet or the file cannot be
+                          read -- which is how a rollback panel that could never
+                          appear stayed unnoticed.
+                        #}
+                        <hr class="my-4">
+                        <h5 class="text-muted">{{ _('Go back to the previous version') }}</h5>
+                        <p class="text-muted small mb-0">
+                            {{ _('No rollback point has been recorded yet. One is written automatically just before each update, so this appears after the next one.') }}
+                        </p>
                         {% endif %}
                     </div>
                 </div>
