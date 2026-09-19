@@ -25,7 +25,7 @@
                                             <h5>{{ _('Current Data') }}</h5>
                                             <p class="mb-2"><strong>{{ _('Name:') }}</strong> {{ request_record.member.title or '' }} {{ request_record.member.first_name }} {{ request_record.member.last_name }}</p>
                                             <p class="mb-2"><strong>{{ _('Salutation:') }}</strong> {{ request_record.member.salutation }}</p>
-                                            <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.member.year_group }}</p>
+                                            <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.member.year_group or _('Not a student') }}</p>
                                             <p class="mb-0"><strong>{{ _('Forum Username:') }}</strong> {{ request_record.current_forum_username or _('Not set') }}</p>
                                         </div>
                                     </div>
@@ -34,7 +34,7 @@
                                             <h5>{{ _('Requested Data') }}</h5>
                                             <p class="mb-2"><strong>{{ _('Name:') }}</strong> {{ request_record.requested_title or '' }} {{ request_record.requested_first_name }} {{ request_record.requested_last_name }}</p>
                                             <p class="mb-2"><strong>{{ _('Salutation:') }}</strong> {{ request_record.requested_salutation }}</p>
-                                            <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.requested_year_group }}</p>
+                                            <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.requested_year_group or _('Not a student') }}</p>
                                             <p class="mb-2"><strong>{{ _('Suggested Forum Username:') }}</strong> {{ request_record.suggested_forum_username }}</p>
                                             {% if request_record.member_note %}
                                                 <p class="mb-0"><strong>{{ _('Member Note:') }}</strong> {{ request_record.member_note }}</p>

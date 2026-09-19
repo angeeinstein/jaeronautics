@@ -36,8 +36,14 @@ IDENTITY_MEMBER_FIELDS = (
 MEMBER_PROFILE_FIELDS = IDENTITY_MEMBER_FIELDS + DIRECT_MEMBER_PROFILE_FIELDS
 
 
+# Fields that are stored as NULL rather than "" when left empty. The year group
+# is here because empty means something specific -- not a student -- and two
+# spellings of that ("" and NULL) would have to be checked for everywhere.
+OPTIONAL_MEMBER_FIELDS = {"title", "phone_work", "email_work", "year_group"}
+
+
 def normalize_optional_member_value(field_name, value):
-    if value == "" and field_name in {"title", "phone_work", "email_work"}:
+    if field_name in OPTIONAL_MEMBER_FIELDS and not (value or "").strip():
         return None
     return value
 

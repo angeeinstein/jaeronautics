@@ -177,7 +177,11 @@ class Member(db.Model):
     email_private = db.Column(db.String(255), nullable=False, unique=True)
     phone_work = db.Column(db.String(50), nullable=True)
     email_work = db.Column(db.String(255), nullable=True)
-    year_group = db.Column(db.String(50), nullable=False)
+    # Null means "not a student". Membership is open to non-students under the
+    # statutes, and they are full members -- same rights, same fee, no year
+    # group to give. Deliberately not paired with an is_student flag: two
+    # columns can disagree and nothing would reconcile them, where one cannot.
+    year_group = db.Column(db.String(50), nullable=True)
     terms_accepted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     pending_checkout_started_at = db.Column(db.DateTime, nullable=True)
@@ -220,6 +224,15 @@ class Member(db.Model):
         order_by="desc(MembershipPeriod.ends_on)",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def is_student(self):
+        """Whether this member is a student, which is what having a year group means.
+
+        Derived rather than stored so it cannot contradict the year group. Reads
+        as a question about the person instead of a null check about a column.
+        """
+        return bool((self.year_group or "").strip())
 
     @property
     def full_address(self):
@@ -414,7 +427,10 @@ class MemberProfileChangeRequest(db.Model):
     requested_title = db.Column(db.String(50), nullable=True)
     requested_first_name = db.Column(db.String(100), nullable=False)
     requested_last_name = db.Column(db.String(100), nullable=False)
-    requested_year_group = db.Column(db.String(50), nullable=False)
+    # Nullable for the same reason as Member.year_group, and so the change
+    # request can carry "I have graduated and am no longer a student" -- which
+    # approving applies by assigning the null straight across.
+    requested_year_group = db.Column(db.String(50), nullable=True)
 
     status = db.Column(db.String(20), nullable=False, default="pending")
     member_note = db.Column(db.Text, nullable=True)

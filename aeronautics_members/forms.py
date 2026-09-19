@@ -20,6 +20,8 @@ from wtforms.validators import (
     NumberRange,
     Optional,
     Regexp,
+    StopValidation,
+    ValidationError,
 )
 
 COUNTRIES = [
@@ -100,6 +102,37 @@ YEAR_GROUP_VALIDATOR = Regexp(
     r"^[A-Z]+[0-9]{2}$",
     message=_l("Invalid format. Please use uppercase letters followed by two numbers, like LAV25."),
 )
+
+MEMBER_KIND_CHOICES = [
+    ("student", _l("Student at FH Joanneum")),
+    ("non_student", _l("Not a student")),
+]
+
+
+class YearGroupRequirement:
+    """Year group is required of students and meaningless for anyone else.
+
+    Runs first in the chain and decides whether the rest of it should run at
+    all, because ``Optional()`` cannot be used here: it raises StopValidation
+    on an empty field, which would skip an inline ``validate_year_group`` too,
+    and the requirement depends on another field's value rather than this
+    one's.
+    """
+
+    def __call__(self, form, field):
+        if form.member_kind.data == "student":
+            if not (field.data or "").strip():
+                raise ValidationError(_("Please enter your year group, for example LAV25."))
+            return  # let Length and the format check run
+
+        # Not a student. Anything in the box is a leftover from before the
+        # choice was switched, not something the member is claiming, so drop it
+        # rather than refusing the form over a field they cannot even see.
+        field.data = None
+        raise StopValidation()
+
+
+YEAR_GROUP_FIELD_VALIDATORS = [YearGroupRequirement(), Length(max=50), YEAR_GROUP_VALIDATOR]
 PHONE_VALIDATOR = Regexp(r"^\+?[0-9\s\-\(\)]*$", message=_l("Invalid phone number format"))
 
 
@@ -117,7 +150,11 @@ class MembershipForm(FlaskForm):
     email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
-    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    member_kind = RadioField(
+        _l("Membership"), choices=MEMBER_KIND_CHOICES, default="student",
+        validators=[DataRequired()],
+    )
+    year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     password = PasswordField(_l("Password"), validators=[DataRequired(), Length(min=8, max=128)])
     confirm_password = PasswordField(_l("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
     payment_method = RadioField(
@@ -147,7 +184,11 @@ class CreateMembershipProfileForm(FlaskForm):
     email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
-    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    member_kind = RadioField(
+        _l("Membership"), choices=MEMBER_KIND_CHOICES, default="student",
+        validators=[DataRequired()],
+    )
+    year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     payment_method = RadioField(
         _l("Payment Method"),
         choices=[("checkout", _l("Card or SEPA Direct Debit")), ("invoice", _l("Invoice"))],
@@ -210,7 +251,11 @@ class IdentityChangeRequestForm(FlaskForm):
     title = StringField(_l("Title"), validators=[Optional()])
     first_name = StringField(_l("First Name"), validators=[DataRequired()])
     last_name = StringField(_l("Last Name"), validators=[DataRequired()])
-    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    member_kind = RadioField(
+        _l("Membership"), choices=MEMBER_KIND_CHOICES, default="student",
+        validators=[DataRequired()],
+    )
+    year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     member_note = TextAreaField(_l("Why should this be changed?"), validators=[Optional(), Length(max=1000)])
     submit = SubmitField(_("Submit Change Request"))
 

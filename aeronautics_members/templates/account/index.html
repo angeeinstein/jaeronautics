@@ -172,7 +172,7 @@
                         <h5>{{ _('Pending Change Request') }}</h5>
                         <p class="mb-2"><strong>{{ _('Requested Name:') }}</strong> {{ pending_request.requested_title or '' }} {{ pending_request.requested_first_name }} {{ pending_request.requested_last_name }}</p>
                         <p class="mb-2"><strong>{{ _('Requested Salutation:') }}</strong> {{ pending_request.requested_salutation }}</p>
-                        <p class="mb-2"><strong>{{ _('Requested Year Group:') }}</strong> {{ pending_request.requested_year_group }}</p>
+                        <p class="mb-2"><strong>{{ _('Requested Year Group:') }}</strong> {{ pending_request.requested_year_group or _('Not a student') }}</p>
                         {% if pending_request.member_note %}
                             <p class="mb-2"><strong>{{ _('Your Note:') }}</strong> {{ pending_request.member_note }}</p>
                         {% endif %}
@@ -192,7 +192,19 @@
                             <div class="col-md-8">{{ identity_form.title.label(class="form-label") }}{{ identity_form.title(class="form-control") }}</div>
                             <div class="col-md-6">{{ identity_form.first_name.label(class="form-label") }}{{ identity_form.first_name(class="form-control") }}</div>
                             <div class="col-md-6">{{ identity_form.last_name.label(class="form-label") }}{{ identity_form.last_name(class="form-control") }}</div>
-                            <div class="col-md-6">{{ identity_form.year_group.label(class="form-label") }}{{ identity_form.year_group(class="form-control", oninput="this.value = this.value.toUpperCase()") }}</div>
+                            <div class="col-md-6" data-member-kind>
+                                <label class="form-label d-block">{{ identity_form.member_kind.label.text }}</label>
+                                {% for subfield in identity_form.member_kind %}
+                                    <div class="form-check form-check-inline">
+                                        {{ subfield(class="form-check-input") }}
+                                        <label class="form-check-label" for="{{ subfield.id }}">{{ subfield.label.text }}</label>
+                                    </div>
+                                {% endfor %}
+                                <div class="mt-2" data-year-group-field>
+                                    {{ identity_form.year_group.label(class="form-label") }}{{ identity_form.year_group(class="form-control", oninput="this.value = this.value.toUpperCase()") }}
+                                    {% for error in identity_form.year_group.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                </div>
+                            </div>
                             <div class="col-12">{{ identity_form.member_note.label(class="form-label") }}{{ identity_form.member_note(class="form-control", rows="4", placeholder=_('Optional note for the admin, for example if you need to correct a typo.')) }}</div>
                         </div>
                         <div class="mt-4">{{ identity_form.submit(class="btn btn-primary") }}</div>
@@ -258,4 +270,5 @@
 
 {% block extra_scripts %}
     <script src="{{ url_for('static', filename='forum-avatar-upload.js') }}"></script>
+    <script src="{{ url_for('static', filename='member-kind-toggle.js') }}"></script>
 {% endblock %}

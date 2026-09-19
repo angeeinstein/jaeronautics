@@ -44,7 +44,13 @@ def build_forum_username_base(first_name, last_name, year_group):
     first_name_initial = first_name[0].upper() if first_name else ""
     study_field_initial = year_group[0].upper() if year_group else ""
     year_short = year_group[-2:] if year_group and len(year_group) > 2 else ""
-    return f"{last_name_cleaned}{first_name_initial}_{study_field_initial}{year_short}"
+    suffix = f"{study_field_initial}{year_short}"
+    # A member who is not a student has no year group, and the separator exists
+    # only to introduce one. Keeping it would hand them "HuberA_", which reads
+    # as a name with something missing off the end.
+    if not suffix:
+        return f"{last_name_cleaned}{first_name_initial}"
+    return f"{last_name_cleaned}{first_name_initial}_{suffix}"
 
 
 def generate_suggested_username(member):

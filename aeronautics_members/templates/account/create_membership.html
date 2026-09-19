@@ -35,7 +35,19 @@
                             </div>
                             <div class="col-md-6">{{ form.phone_work.label(class='form-label') }}{{ form.phone_work(class='form-control') }}</div>
                             <div class="col-md-6">{{ form.email_work.label(class='form-label') }}{{ form.email_work(class='form-control') }}</div>
-                            <div class="col-md-6">{{ form.year_group.label(class='form-label') }}{{ form.year_group(class='form-control') }}</div>
+                            <div class="col-md-6" data-member-kind>
+                                <label class="form-label d-block">{{ form.member_kind.label.text }}</label>
+                                {% for subfield in form.member_kind %}
+                                    <div class="form-check form-check-inline">
+                                        {{ subfield(class='form-check-input') }}
+                                        <label class="form-check-label" for="{{ subfield.id }}">{{ subfield.label.text }}</label>
+                                    </div>
+                                {% endfor %}
+                                <div class="mt-2" data-year-group-field>
+                                    {{ form.year_group.label(class='form-label') }}{{ form.year_group(class='form-control') }}
+                                    {% for error in form.year_group.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                                </div>
+                            </div>
                             <div class="col-12">
                                 <label class="form-label d-block">{{ form.payment_method.label.text }}</label>
                                 {% for subfield in form.payment_method %}
@@ -62,4 +74,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='member-kind-toggle.js') }}"></script>
 {% endblock %}
