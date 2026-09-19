@@ -139,13 +139,22 @@ def _timestamp_to_date(value, zone):
     return datetime.fromtimestamp(seconds, tz=timezone.utc).astimezone(zone).date().isoformat()
 
 
-def _avatar_filename(value):
-    """`./uploads/avatars/avatar_142.jpg?dateline=169...` -> `avatar_142.jpg`."""
+def _avatar_parts(value):
+    """`./uploads/avatars/avatar_142.jpg?dateline=169...` -> dir, filename.
+
+    The directory is reported rather than used: it is the one thing somebody
+    fetching the files off the hosting needs to know, and guessing it wrong
+    means downloading twelve years of attachments by mistake.
+    """
     if not value:
-        return None
+        return None, None
     if value.startswith("http://") or value.startswith("https://"):
-        return None  # remote avatar, nothing local to copy
-    return value.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1] or None
+        return None, None  # hosted elsewhere, nothing local to copy
+    path = value.split("?", 1)[0].strip().lstrip("./")
+    if not path:
+        return None, None
+    directory, _, filename = path.rpartition("/")
+    return (directory or None), (filename or None)
 
 
 def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE):
@@ -168,6 +177,7 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE):
                 year_groups[row.get("ufid")] = value
 
     people, remote_avatars = [], 0
+    avatar_directories = {}
     for row in rows_of(dump, users_table):
         uid = row.get("uid")
         if not uid:
@@ -175,6 +185,9 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE):
         avatar = row.get("avatar") or ""
         if avatar.startswith("http"):
             remote_avatars += 1
+        avatar_directory, avatar_file = _avatar_parts(avatar)
+        if avatar_directory:
+            avatar_directories[avatar_directory] = avatar_directories.get(avatar_directory, 0) + 1
         people.append({
             "source_user_id": str(uid),
             "source_username": row.get("username"),
@@ -184,7 +197,7 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE):
             "post_count": int(row.get("postnum") or 0),
             "joined_on": _timestamp_to_date(row.get("regdate"), zone),
             "last_posted_on": _timestamp_to_date(row.get("lastpost"), zone),
-            "avatar_file": _avatar_filename(avatar),
+            "avatar_file": avatar_file,
         })
 
     return people, {
@@ -194,6 +207,9 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE):
         "with_year_group": sum(1 for person in people if person["year_group"]),
         "with_avatar": sum(1 for person in people if person["avatar_file"]),
         "remote_avatars": remote_avatars,
+        # Where the files actually live on the old host, counted, so the right
+        # directory gets downloaded rather than the whole uploads tree.
+        "avatar_directories": sorted(avatar_directories.items(), key=lambda item: -item[1]),
     }
 
 
@@ -216,6 +232,8 @@ def main(argv=None):
     print(f"  with avatar file : {summary['with_avatar']}")
     if summary["remote_avatars"]:
         print(f"  remote avatars   : {summary['remote_avatars']} (hosted elsewhere, no local file)")
+    for directory, count in summary["avatar_directories"]:
+        print(f"  files live in    : {directory}/  ({count})")
     print(f"written            : {args.out}")
     if not summary["jahrgang_field"]:
         print("\nNo Jahrgang field was found. Pass --jahrgang-field fidN; the ids are in "

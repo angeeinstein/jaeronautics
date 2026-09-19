@@ -144,6 +144,13 @@ def test_an_empty_year_group_is_none_not_an_empty_string(people):
     assert remote["year_group"] is None
 
 
+def test_it_says_where_the_avatar_files_live(people):
+    """Guessing the directory means downloading years of attachments instead."""
+    _rows, summary = people
+
+    assert summary["avatar_directories"] == [("uploads/avatars", 1)]
+
+
 def test_the_summary_counts_what_was_found(people):
     _rows, summary = people
     assert summary["with_year_group"] == 2

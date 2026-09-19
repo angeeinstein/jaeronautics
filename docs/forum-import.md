@@ -81,6 +81,32 @@ mysql --batch --raw -e "…query…" forumdb | …   # or use phpMyAdmin's JSON 
 
 ## 3. Copy the avatars
 
+**Run the converter first.** It prints the directory the avatar paths point at,
+counted — `files live in: uploads/avatars/ (431)` — so the right folder gets
+fetched. That matters on a webspace holding years of attachments: archiving all
+of `uploads/` can mean gigabytes when the avatars are a few dozen megabytes.
+
+On IONOS there are two routes:
+
+- **Webspace Explorer** (Webspace nutzen → File Manager). Open the directory the
+  converter named, tick it, press **Archivieren**, download the archive. No
+  client, no credentials.
+- **SSH**, which is faster for hundreds of small files because it is one
+  transfer instead of hundreds. Check *Sichere FTP-Zugänge verwalten* first: an
+  account has to be listed as **SFTP + SSH**, and a plain **SFTP** one is
+  refused by `rssh` with *Allowed commands: sftp*.
+
+  ```bash
+  ssh u75967994@home511202816.1and1-data.host
+  tar czf ~/avatars.tar.gz -C /homepages/31/d511202816/htdocs uploads/avatars
+  exit
+  scp u75967994@home511202816.1and1-data.host:~/avatars.tar.gz .
+  ```
+
+### Where the originals are
+
+
+
 They are plain files under the forum root, in the path named by `u.avatar` —
 by default `uploads/avatars/`. Copy the whole directory; the importer matches
 each file to a person by the name recorded in the export.
