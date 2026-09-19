@@ -56,8 +56,28 @@ class TestTheYearGroupFallback:
         assert derive_year_group(username) == expected
 
     @pytest.mark.parametrize(
+        "username,expected",
+        [
+            ("PopovicA_LAV23", "LAV23"),
+            ("EinsteinA_MAV25", "MAV25"),
+            # ATM is a third programme. It appears in the old forum's Jahrgang
+            # field but never as a single letter, so this is the only way it
+            # is ever recovered from a username.
+            ("SomeoneX_ATM18", "ATM18"),
+        ],
+    )
+    def test_it_also_reads_a_programme_spelled_out(self, username, expected):
+        """Sixteen of the old forum's people wrote it the long way."""
+        assert derive_year_group(username) == expected
+
+    @pytest.mark.parametrize(
         "username",
-        ["NoSuffix", "Weird_X23", "Trailing_", "TooLong_L2345", "Nondigit_LAB"],
+        [
+            "NoSuffix", "Weird_X23", "Trailing_", "TooLong_L2345", "Nondigit_LAB",
+            "Unknown_XYZ23",   # right shape, not a programme we run
+            "Digits_12345",
+            "Mixed_LAV2X",
+        ],
     )
     def test_anything_else_is_left_unknown(self, username):
         """A wrong year group is worse than a missing one."""
@@ -120,6 +140,37 @@ class TestImporting:
         db.session.commit()
 
         assert _profiles()[0].display_name == "PopovicA_L23"
+
+    def test_the_exported_field_beats_the_username_and_says_so(self, app):
+        """Somebody who joined as LAV21 and went on to the master's is MAV24.
+
+        The name they registered under never changed, so the two disagree for
+        nineteen people in the real export. The field is the later truth; the
+        count exists so a run that suddenly disagrees about half the forum is
+        not silent.
+        """
+        report = import_forum_people([
+            _person(uid="1", username="PopovicA_L21", year_group="MAV24"),
+        ])
+        db.session.commit()
+
+        assert _profiles()[0].year_group == "MAV24"
+        assert report["year_groups_disagreeing"] == 1
+        assert report["problems"] == [], "a progression is not a problem to fix"
+
+    def test_agreeing_does_not_count_as_disagreeing(self, app):
+        report = import_forum_people([_person()])
+        db.session.commit()
+
+        assert report["year_groups_disagreeing"] == 0
+
+    def test_a_username_with_no_year_group_cannot_disagree(self, app):
+        report = import_forum_people([
+            _person(uid="1", username="NoSuffixHere", year_group="LAV23"),
+        ])
+        db.session.commit()
+
+        assert report["year_groups_disagreeing"] == 0
 
     def test_they_are_not_members(self, app):
         import_forum_people([_person()])

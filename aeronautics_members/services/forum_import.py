@@ -42,9 +42,16 @@ IMPORTED_EMAIL_DOMAIN = "imported.invalid"
 
 # The portal builds usernames as Lastname + initial + _ + programme letter +
 # year, so the mapping runs backwards for a year group the export did not carry.
-# Only these two programmes exist; an unknown letter is left alone rather than
-# guessed, because a wrong year group is worse than a missing one.
+# An unknown letter is left alone rather than guessed, because a wrong year
+# group is worse than a missing one.
 PROGRAMME_PREFIXES = {"L": "LAV", "M": "MAV"}
+
+# A handful of people registered before that convention settled and spelled the
+# programme out: PopovicA_LAV23 rather than PopovicA_L23. Reading that is not a
+# guess, it is the year group written down, so accept it -- and ATM, a third
+# programme that appears in the old forum's Jahrgang field but never as a single
+# letter, is only ever reachable this way.
+PROGRAMME_NAMES = frozenset({"LAV", "MAV", "ATM"})
 
 AVATAR_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
 AVATAR_MAX_BYTES = 512 * 1024
@@ -55,19 +62,28 @@ def imported_email_for(source_system, source_user_id):
 
 
 def derive_year_group(username):
-    """``PopovicA_L23`` -> ``LAV23``. Returns None when the rule does not apply.
+    """``PopovicA_L23`` -> ``LAV23``, ``PopovicA_LAV23`` -> ``LAV23``.
 
-    The suffix is the same one ``build_forum_username_base`` writes, read in
-    reverse. Anything that does not match exactly is left as None: an invented
+    Returns None when neither rule applies. The short suffix is the one
+    ``build_forum_username_base`` writes, read in reverse; the long one is the
+    programme already spelled out. Anything else is left as None: an invented
     year group would be indistinguishable from an exported one.
+
+    On the real export the long form appears sixteen times, and where those
+    people also had a Jahrgang field, thirteen of them agreed with it exactly.
     """
     if not username or "_" not in username:
         return None
     suffix = username.rsplit("_", 1)[1].strip().upper()
-    if len(suffix) != 3 or not suffix[1:].isdigit():
-        return None
-    programme = PROGRAMME_PREFIXES.get(suffix[0])
-    return f"{programme}{suffix[1:]}" if programme else None
+
+    if len(suffix) == 3 and suffix[1:].isdigit():
+        programme = PROGRAMME_PREFIXES.get(suffix[0])
+        return f"{programme}{suffix[1:]}" if programme else None
+
+    if len(suffix) == 5 and suffix[3:].isdigit() and suffix[:3] in PROGRAMME_NAMES:
+        return suffix
+
+    return None
 
 
 def _as_date(value):
@@ -143,6 +159,7 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
         "skipped": 0,
         "avatars_stored": 0,
         "year_groups_derived": 0,
+        "year_groups_disagreeing": 0,
         "problems": [],
     }
     now = get_now_utc()
@@ -167,6 +184,15 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
             year_group = derive_year_group(source_username)
             if year_group:
                 report["year_groups_derived"] += 1
+        else:
+            # The exported field wins, and where the two differ it is usually
+            # right for a reason: somebody who joined as LAV21 and went on to
+            # the master's is MAV24 in the field and still LAV21 in the name
+            # they registered under. Counted rather than flagged, so a run that
+            # suddenly disagrees about half the forum is visible.
+            from_username = derive_year_group(source_username)
+            if from_username and from_username.upper() != year_group.upper():
+                report["year_groups_disagreeing"] += 1
 
         display_name = (entry.get("display_name") or "").strip() or source_username
 

@@ -37,10 +37,31 @@ python scripts/mybb_export.py backup__20260919_210211_Xwyis10ESUeobhvu.sql.gz --
 ```
 
 It finds the table prefix and the Jahrgang field itself, and prints what it
-found so you can check before importing. Timestamps are read in the board's
-timezone (`--timezone`, default `Europe/Vienna`): MyBB stores them as UTC but
-displayed them locally, so reading them as UTC would move every late-evening
-registration a day earlier than the forum has shown for a decade.
+found so you can check before importing. The September 2026 dump gave:
+
+```
+table prefix       : mybb_
+  ignored          : mybb_tapatalk_ (plugin tables)
+users table        : mybb_users
+year group field   : fid4 (Jahrgang)
+people             : 740
+  with year group  : 488
+  with avatar file : 677
+  remote avatars   : 1 (hosted elsewhere, no local file)
+  files live in    : uploads/avatars/  (677)
+```
+
+Check three things against that before going further. **`year group field`**
+must name `Jahrgang`, not some other custom field — everything downstream is
+built on it. **`people`** must be roughly the number the forum's own member
+list shows. And a **`NOT READ`** line means this script could not parse some
+of the dump's rows and silently exported fewer people than the forum has;
+stop if you see one.
+
+Timestamps are read in the board's timezone (`--timezone`, default
+`Europe/Vienna`): MyBB stores them as UTC but displayed them locally, so
+reading them as UTC would move every late-evening registration a day earlier
+than the forum has shown for a decade.
 
 Nothing leaves your machine — the dump holds six hundred real addresses, and
 only the JSON needs to travel.
@@ -141,10 +162,25 @@ A JSON array, one object per person. Only `source_user_id` and
 
 `display_name` may be null; the username is used instead. `year_group` may be
 null. It can be recovered from the username suffix, which is the same rule the
-portal uses in reverse: `…_L23` → `LAV23`, `…_M25` → `MAV25`. The importer does
-that as a fallback rather than leaving the field empty, and the run's report
-says how many were derived rather than exported. Anything that does not match
-the rule exactly is left empty: a wrong year group is worse than a missing one.
+portal uses in reverse: `…_L23` → `LAV23`, `…_M25` → `MAV25`. A few people
+registered before that convention settled and spelled the programme out, so
+`…_LAV23` and `…_ATM18` are read too — `ATM` is a third programme that appears
+in the old forum's Jahrgang field but never as a single letter. The importer
+uses this as a fallback rather than leaving the field empty, and the run's
+report says how many were derived rather than exported. Anything that does not
+match one of those two shapes is left empty: a wrong year group is worse than a
+missing one.
+
+On the September 2026 export that covered 735 of 740 people — 488 from the
+Jahrgang field, 247 from the username, 5 left unknown.
+
+The report also counts `year_groups_disagreeing`: people whose exported field
+and username say different things. This is normal and needs no action. It is
+mostly somebody who registered as `…_L21` during the bachelor's and whose
+Jahrgang field was later updated to `MAV24` when they moved to the master's —
+the username never changes, the field does. **The exported field always wins.**
+There were 20 of these. A run that suddenly reports hundreds means the export
+lined up the wrong column, and is worth stopping for.
 
 ## 4b. Running the import
 

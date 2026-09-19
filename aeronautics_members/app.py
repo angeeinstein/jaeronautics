@@ -1529,6 +1529,12 @@ def create_app(config_overrides=None):
             f"avatars={report['avatars_stored']} "
             f"year_groups_derived={report['year_groups_derived']}"
         )
+        if report["year_groups_disagreeing"]:
+            click.echo(
+                f"  {report['year_groups_disagreeing']} people have a year group that "
+                f"differs from the one their username spells; the exported field was "
+                f"kept (usually somebody who went on to the master's)."
+            )
         for problem in report["problems"]:
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if dry_run:
