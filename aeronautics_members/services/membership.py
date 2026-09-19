@@ -135,6 +135,18 @@ def sync_member_active_state(member, on_date=None):
     if member is None:
         return False
 
+    # An erased member is never active again, whatever the dates say. Erasure
+    # cancels the subscription, Stripe reports that back as
+    # customer.subscription.deleted, and the handler sets payment_status to
+    # "canceled" -- which is in ACTIVE_MEMBER_STATUSES, because a member who
+    # cancels keeps the coverage they paid for. Without this guard the rule
+    # below then flips is_active back on and the erasure appears to undo itself.
+    if getattr(member, "deleted_at", None) is not None:
+        if member.is_active:
+            member.is_active = False
+            return True
+        return False
+
     today = on_date or get_membership_today()
     changed = False
 
@@ -194,8 +206,16 @@ def update_member_paid_coverage(member, paid_on, coverage_year=None):
         if starts_on is None or starts_on.year != coverage_year:
             starts_on = first_day_of_year(coverage_year) if paid_on == first_day_of_year(coverage_year) else paid_on
     else:
-        # A full paid year always runs Jan 1 - Dec 31.
+        # A renewal covers the whole year, Jan 1 - Dec 31.
         starts_on = first_day_of_year(coverage_year)
+        # ...but a member's *first* year is prorated from the day they joined,
+        # and the invoice they just paid says so. Overwriting that with Jan 1
+        # would claim coverage for months they were not a member and did not pay
+        # for, contradicting both the coverage ledger and the invoice itself.
+        # Only widen to Jan 1 when the existing window is from an earlier year.
+        existing_start = member.membership_starts_on
+        if existing_start and existing_start.year == coverage_year and existing_start > starts_on:
+            starts_on = existing_start
 
     # Never regress coverage: an explicit (or derived) year must not move the
     # membership end date earlier than what the member already has.

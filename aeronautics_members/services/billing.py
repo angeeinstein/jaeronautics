@@ -205,6 +205,13 @@ def build_membership_metadata(member, cycle, activation_mode):
 
 
 def backfill_member_stripe_references(member, customer_id=None, subscription_id=None):
+    # Never re-attach a subscription to an erased member. Erasure cancels the
+    # subscription and clears the reference; Stripe then reports the
+    # cancellation back, and backfilling from that event would write the dead
+    # subscription id straight back onto the row it was just removed from.
+    if getattr(member, "deleted_at", None) is not None:
+        return False
+
     changed = False
 
     if customer_id and isinstance(customer_id, str) and customer_id.startswith("cus_") and member.stripe_customer_id != customer_id:
