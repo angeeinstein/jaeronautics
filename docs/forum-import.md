@@ -28,6 +28,25 @@ everywhere `fid3` appears below.
 
 ## 2. Export the people
 
+The quickest route is the dump you already have. MyBB's **Tools & Maintenance →
+Database Backups** writes a gzipped `mysqldump`, and `scripts/mybb_export.py`
+turns one into the importer's JSON without a database connection:
+
+```bash
+python scripts/mybb_export.py backup__20260919_210211_Xwyis10ESUeobhvu.sql.gz --out people.json
+```
+
+It finds the table prefix and the Jahrgang field itself, and prints what it
+found so you can check before importing. Timestamps are read in the board's
+timezone (`--timezone`, default `Europe/Vienna`): MyBB stores them as UTC but
+displayed them locally, so reading them as UTC would move every late-evening
+registration a day earlier than the forum has shown for a decade.
+
+Nothing leaves your machine — the dump holds six hundred real addresses, and
+only the JSON needs to travel.
+
+### Or query the database directly
+
 ```sql
 SELECT
     u.uid                                  AS source_user_id,
