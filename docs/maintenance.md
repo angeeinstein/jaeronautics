@@ -131,11 +131,45 @@ portal tells a member who has just paid that they are in a *free trial* until
 > Dienst nicht mehr verfügbar sein.
 
 The invoice line directly beneath it does show the payment, so this is
-confusing rather than untrue. The tidier construction is `billing_cycle_anchor`
-with `proration_behavior`, letting Stripe compute the proration itself and
-describe the subscription as a subscription. That is surgery on billing which
-currently works and is well covered by tests, so it has not been done; revisit
-it if members actually ask.
+confusing rather than untrue.
+
+**The portal text itself cannot be changed.** Stripe's Customer Portal exposes
+branding, the business name, links and which features are enabled — not the
+copy. There is no setting that rewrites that sentence.
+
+**Only half the cases are wrong.** `build_membership_cycle` splits on
+`FREE_PERIOD_START_MONTH = 10`:
+
+- Joining January–September charges the prorated remainder now, so "free trial"
+  is simply wrong — the member has just paid.
+- Joining October–December charges nothing until 1 January, so "free trial" is
+  exactly right. Any fix must leave this case alone rather than replacing
+  accurate wording with a construction that then has to be told not to charge.
+
+**The tidier construction is now available.** When this was built, Checkout could
+not anchor a billing cycle, which is why `trial_end` was used. It can now — in
+`stripe==13.0.1` (API `2025-09-30.clover`), `subscription_data` accepts
+`billing_cycle_anchor` and `proration_behavior`, alongside `trial_end`. Anchoring
+to 1 January with `proration_behavior="create_prorations"` would leave the
+subscription `active` rather than `trialing`, let Stripe compute the proration,
+and make `build_prorated_line_item` unnecessary on the Checkout path.
+
+Two things would have to be established in the sandbox first, and neither can be
+settled by reading the parameter docs:
+
+- **When the proration is collected.** The docs say what the anchor does, not
+  whether `mode=subscription` charges the first invoice at the session or defers
+  it to the anchor. If it defers, members would join without paying, which is far
+  worse than confusing wording.
+- **Whether the amounts agree.** Ours is day-based — `€10 × remaining/365`,
+  half-up, verified against Stripe at €2,85. Stripe prorates by seconds. The
+  checkout page prints the amount before the member pays, so a one-cent
+  divergence would have the page and the charge disagree.
+
+This is surgery on billing that currently works, is covered by tests, and has
+been verified end to end against real Stripe. **Decision: left as it is.**
+Revisit only if members actually ask, and test the two points above in the
+sandbox before changing anything.
 
 ## Where Secrets Live (a recorded decision)
 
