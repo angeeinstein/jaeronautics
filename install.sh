@@ -38,6 +38,10 @@ USE_CLOUDFLARE_TUNNEL="${BOOTSTRAP_USE_CLOUDFLARE_TUNNEL:-0}"
 CLOUDFLARE_ORIGIN_HOST="${BOOTSTRAP_CLOUDFLARE_ORIGIN_HOST:-}"
 ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-}"
+# The revision that was running before bootstrap_self_update replaced the
+# checkout. Carried across the re-exec because by then HEAD is already the new
+# revision, and the rollback point has to name the one being replaced.
+PRE_UPDATE_REVISION="${BOOTSTRAP_PRE_UPDATE_REVISION:-}"
 NONINTERACTIVE="${BOOTSTRAP_NONINTERACTIVE:-0}"
 
 PACKAGE_MANAGER=""
@@ -997,7 +1001,14 @@ warn_local_repo_changes() {
 record_rollback_point() {
     # Called before the checkout moves, so this records what is running *now*.
     local revision alembic_revision
-    revision="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf '')"
+    # PRE_UPDATE_REVISION is what was running before the self-update replaced
+    # the checkout. Without it this reads HEAD, which by now is the revision
+    # being installed -- so the rollback point named the version we are moving
+    # *to*, and rolling back could only ever report "already running that".
+    revision="${PRE_UPDATE_REVISION}"
+    if [[ -z "${revision}" ]]; then
+        revision="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf '')"
+    fi
     [[ -n "${revision}" ]] || return 0
 
     alembic_revision="$(current_schema_revision)"
@@ -1143,6 +1154,13 @@ bootstrap_self_update() {
         rm -rf "${BOOTSTRAP_DIR}" 2>/dev/null || true
     fi
 
+    # Read HEAD before syncing. This is the last moment the old revision is
+    # still checked out: sync_repo_to_dir moves it, and everything after the
+    # re-exec below sees only the new one.
+    if [[ -z "${PRE_UPDATE_REVISION}" && -d "${INSTALL_DIR}/.git" ]]; then
+        PRE_UPDATE_REVISION="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf '')"
+    fi
+
     sync_repo_to_dir "${bootstrap_target}" "${REPO_URL}" "${BRANCH}"
     chmod +x "${bootstrap_target}/install.sh"
 
@@ -1165,6 +1183,7 @@ bootstrap_self_update() {
         BOOTSTRAP_ADMIN_EMAIL="${ADMIN_EMAIL}" \
         BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
         BOOTSTRAP_NONINTERACTIVE="${NONINTERACTIVE}" \
+        BOOTSTRAP_PRE_UPDATE_REVISION="${PRE_UPDATE_REVISION}" \
         bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}"
     exit $?
 }
