@@ -202,3 +202,21 @@ class TestTheCommandLine:
         mybb_export.main([str(dump), "--out", str(out)])
 
         assert len(json.loads(out.read_text())) == 3
+
+
+def test_a_missing_dump_says_so_without_a_traceback(tmp_path):
+    """This is run by hand, on a server, by somebody not reading Python."""
+    with pytest.raises(SystemExit) as excinfo:
+        mybb_export.read_dump(tmp_path / "not-here.sql.gz")
+
+    assert "No such file" in str(excinfo.value)
+
+
+def test_a_file_only_named_gz_says_so(tmp_path):
+    path = tmp_path / "plain.sql.gz"
+    path.write_text(DUMP)
+
+    with pytest.raises(SystemExit) as excinfo:
+        mybb_export.read_dump(path)
+
+    assert "not gzipped" in str(excinfo.value)

@@ -39,9 +39,14 @@ DEFAULT_TIMEZONE = "Europe/Vienna"
 
 def read_dump(path):
     path = Path(path)
+    if not path.exists():
+        raise SystemExit(f"No such file: {path}")
     opener = gzip.open if path.suffix == ".gz" else open
-    with opener(path, "rt", encoding="utf-8", errors="replace") as handle:
-        return handle.read()
+    try:
+        with opener(path, "rt", encoding="utf-8", errors="replace") as handle:
+            return handle.read()
+    except gzip.BadGzipFile:
+        raise SystemExit(f"{path} is named .gz but is not gzipped.") from None
 
 
 def find_table(dump, suffix):
