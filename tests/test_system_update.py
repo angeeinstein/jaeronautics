@@ -27,10 +27,22 @@ def state_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def admin_user(app):
+    """Installing and rolling back a version is super-admin work."""
     user = User(email="updateadmin@example.com")
     user.set_password("x")
-    user.grant_role(app_module.get_role("admin"))
     db.session.add(user)
+    user.grant_role(app_module.get_role("admin"))
+    user.grant_role(app_module.get_role("superadmin"))
+    db.session.commit()
+    return user
+
+
+@pytest.fixture
+def plain_admin_user(app):
+    user = User(email="plainadmin@example.com")
+    user.set_password("x")
+    db.session.add(user)
+    user.grant_role(app_module.get_role("admin"))
     db.session.commit()
     return user
 
@@ -66,13 +78,33 @@ class TestAuthorisation:
         _login(client, member.user_id)
         assert client.get("/admin/system-update/status").status_code in (302, 403)
 
-    def test_admin_may_request_an_update(self, client, state_dir, admin_user):
+    def test_superadmin_may_request_an_update(self, client, state_dir, admin_user):
         _login(client, admin_user.id)
 
         response = client.post("/admin/system-update", follow_redirects=False)
 
         assert response.status_code == 302
         assert _request_file(state_dir).exists()
+
+    def test_an_ordinary_admin_cannot_request_an_update(self, client, state_dir, plain_admin_user):
+        """Installing a version is the one thing the admin role no longer carries."""
+        _login(client, plain_admin_user.id)
+
+        response = client.post("/admin/system-update", follow_redirects=False)
+
+        assert response.status_code == 302
+        assert not _request_file(state_dir).exists()
+
+    def test_an_ordinary_admin_cannot_roll_back(self, client, state_dir, plain_admin_user):
+        _login(client, plain_admin_user.id)
+
+        client.post("/admin/system-update", data={"action": "rollback"})
+
+        assert not _request_file(state_dir).exists()
+
+    def test_an_ordinary_admin_cannot_read_the_status_endpoint(self, client, state_dir, plain_admin_user):
+        _login(client, plain_admin_user.id)
+        assert client.get("/admin/system-update/status").status_code == 302
 
     def test_get_is_not_accepted(self, client, state_dir, admin_user):
         # A state-changing action must not be reachable by navigation.

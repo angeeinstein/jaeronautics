@@ -8,6 +8,26 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
 
+ROLE_ADMIN = "admin"
+ROLE_SUPERADMIN = "superadmin"
+
+# Roles that carry another role's access without it being granted separately.
+# A superadmin is an administrator with more, not a parallel kind of account --
+# holding one role but not the other would produce a superadmin who cannot open
+# the admin workspace, which is a bug waiting to be filed rather than a policy.
+#
+# Kept as data so a later role (moderator, treasurer) is a line here rather than
+# another special case scattered through the checks.
+ROLE_IMPLIES = {
+    ROLE_SUPERADMIN: (ROLE_ADMIN,),
+}
+
+
+def roles_conferring(slug):
+    """Every role that grants ``slug``, including ``slug`` itself."""
+    return {slug} | {
+        holder for holder, implied in ROLE_IMPLIES.items() if slug in implied
+    }
 
 
 def utcnow():
@@ -106,9 +126,27 @@ class User(UserMixin, db.Model):
 
     @property
     def is_admin(self):
-        return self.has_role("admin")
+        return self.has_role(ROLE_ADMIN)
+
+    @property
+    def is_superadmin(self):
+        return self.has_role(ROLE_SUPERADMIN)
 
     def has_role(self, slug):
+        """Whether this account has ``slug``, directly or through implication.
+
+        Every access check goes through here, so a superadmin passes an
+        admin_required check without needing both rows granted.
+        """
+        conferring = roles_conferring(slug)
+        return any(role.slug in conferring for role in self.roles)
+
+    def has_role_directly(self, slug):
+        """Whether the role row itself is granted, ignoring implication.
+
+        Used where the grant is the subject rather than the access -- revoking a
+        role, and counting who actually holds one.
+        """
         return any(role.slug == slug for role in self.roles)
 
     def grant_role(self, role):
@@ -122,8 +160,11 @@ class User(UserMixin, db.Model):
 
     @property
     def role(self):
-        if self.has_role("admin"):
-            return "admin"
+        """The single most privileged role, for display."""
+        if self.has_role(ROLE_SUPERADMIN):
+            return ROLE_SUPERADMIN
+        if self.has_role(ROLE_ADMIN):
+            return ROLE_ADMIN
         return "user"
 
 

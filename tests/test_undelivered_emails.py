@@ -16,10 +16,12 @@ from aeronautics_members.services import notifications
 
 
 def _admin(client, email="mailadmin@example.com"):
+    """A super admin: the queue lives on the Maintenance tab."""
     user = User(email=email)
     user.set_password("x")
-    user.grant_role(app_module.get_role("admin"))
     db.session.add(user)
+    user.grant_role(app_module.get_role("admin"))
+    user.grant_role(app_module.get_role("superadmin"))
     db.session.commit()
     with client.session_transaction() as session:
         session["_user_id"] = str(user.id)

@@ -20,10 +20,12 @@ CUR = date.today().year
 
 
 def _login_admin(client, app):
+    """A super admin: the health report lives on the Maintenance tab."""
     user = User(email="healthadmin@example.com")
     user.set_password("x")
-    user.grant_role(app_module.get_role("admin"))
     db.session.add(user)
+    user.grant_role(app_module.get_role("admin"))
+    user.grant_role(app_module.get_role("superadmin"))
     db.session.commit()
     with client.session_transaction() as session:
         session["_user_id"] = str(user.id)

@@ -206,6 +206,58 @@ people hold administrator accounts. At that point the answer changes to keeping
 the secrets in deployment configuration (`.env`, systemd credentials) rather
 than in rows that every backup copies.
 
+## Roles
+
+Two roles carry access, and a super admin **is** an administrator — the
+implication lives in `ROLE_IMPLIES` in `db_models.py`, so `has_role("admin")` is
+true for a super admin without the second row being granted. A later role
+(moderator, treasurer) is a line in that table rather than another special case
+spread through the checks.
+
+| | Admin | Super Admin |
+|---|---|---|
+| Members, approvals, forum, logs, undelivered emails | yes | yes |
+| General and Notification settings, test email | yes | yes |
+| Install an update, roll one back | no | yes |
+| Billing and Forum settings (Stripe and Discourse credentials) | no | yes |
+| Mail accounts, including the cleartext SMTP export | no | yes |
+| Grant or revoke admin and super admin | no | yes |
+
+The restricted tabs and buttons are **not rendered** for an ordinary
+administrator, so a stored secret never reaches their browser. That is a
+convenience, not the boundary: `superadmin_required` on each route, and a check
+on `settings_section` inside the settings handler, are what actually decide.
+Reconstructing the form by hand gets a redirect and a flash.
+
+### Where the first super admin comes from
+
+This is the awkward question when splitting a privilege out of an existing role,
+and it has three answers depending on the situation:
+
+- **An installation that already exists.** Migration `f2b6a90c1d73` grants the
+  role to every current administrator. That is not an escalation — those
+  accounts could already press the update button — and skipping it would be a
+  silent *demotion* locking the site out of its own update mechanism, which is
+  how the fix would have had to arrive. Erased accounts are skipped.
+- **A fresh installation.** No administrators exist when the migration runs, so
+  nothing is granted. `create-admin`, which `install.sh` calls, takes the role
+  when the database has no super admin yet; the first account created is one.
+  `--superadmin` / `--no-superadmin` force it either way.
+- **Recovery**, when the last super admin leaves or erases their account:
+
+  ```bash
+  sudo -u jaeronautics /var/www/jaeronautics/.venv/bin/flask \
+    --app aeronautics_members.app:create_app grant-superadmin someone@example.com
+  ```
+
+  It needs a shell on the server, which is the right bar — anyone with one can
+  already read this database and change this code.
+
+Three guards keep somebody in charge: a super admin cannot strip their own role
+from the interface, the last one cannot be erased (`last_superadmin` blocker),
+and revoking *admin* from a super admin removes both, because removing only the
+admin row would leave the access untouched through the implication.
+
 ## Data Export and Account Deletion
 
 `aeronautics_members/services/privacy.py` implements the two data-protection

@@ -53,8 +53,11 @@ try:
         NotificationBatch,
         NotificationEvent,
         ProcessedStripeEvent,
+        ROLE_ADMIN,
+        ROLE_SUPERADMIN,
         Role,
         Setting,
+        roles_conferring,
         User,
         UserRole,
         db,
@@ -110,8 +113,11 @@ except ImportError:
         NotificationBatch,
         NotificationEvent,
         ProcessedStripeEvent,
+        ROLE_ADMIN,
+        ROLE_SUPERADMIN,
         Role,
         Setting,
+        roles_conferring,
         User,
         UserRole,
         db,
@@ -326,8 +332,33 @@ def load_user(user_id):
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.has_role("admin"):
+        if not current_user.is_authenticated or not current_user.has_role(ROLE_ADMIN):
             flash(_("You do not have permission to access this page."), "danger")
+            return redirect(url_for("public.index"))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def superadmin_required(f):
+    """For actions that can take over the installation or walk off with its keys.
+
+    Installing or rolling back a version, the settings holding third-party
+    credentials, the mail-account export that downloads cleartext SMTP
+    passwords, and granting administrator access.
+
+    The user interface hides these from an ordinary administrator, but hiding a
+    link is not access control -- the URL is still there to be typed, and
+    somebody who was an administrator yesterday knows it. This is the check that
+    actually decides. An administrator who reaches one is sent to the dashboard
+    rather than the public page, because they are legitimately signed in here.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.has_role(ROLE_SUPERADMIN):
+            flash(_("That action is restricted to super administrators."), "danger")
+            if current_user.is_authenticated and current_user.has_role(ROLE_ADMIN):
+                return redirect(url_for("admin.admin_dashboard"))
             return redirect(url_for("public.index"))
         return f(*args, **kwargs)
 
@@ -624,12 +655,24 @@ def get_role(slug, label=None, description=None):
 
 def seed_default_roles():
     get_role("admin", label="Admin", description="Can access the admin workspace.")
+    get_role(
+        "superadmin",
+        label="Super Admin",
+        description="Can install updates, manage credentials and grant administrator access.",
+    )
 
 
 
 def count_users_with_role(role_slug):
+    """How many accounts have this access, counting implied grants.
+
+    The last-administrator guards depend on this. Counting only the literal role
+    would let the last superadmin be erased on the grounds that they were not
+    technically an admin, taking the site's administration with them.
+    """
+    conferring = roles_conferring(role_slug)
     return db.session.scalar(
-        db.select(func.count()).select_from(User).where(User.roles.any(Role.slug == role_slug))
+        db.select(func.count()).select_from(User).where(User.roles.any(Role.slug.in_(conferring)))
     ) or 0
 
 
@@ -1321,14 +1364,31 @@ def create_app(config_overrides=None):
     @app.cli.command("create-admin")
     @click.argument("email")
     @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+    @click.option(
+        "--superadmin/--no-superadmin",
+        default=None,
+        help="Force the super administrator role on or off. The default takes it "
+             "only when the installation has no super administrator yet.",
+    )
     @with_appcontext
-    def create_admin(email, password):
-        """Creates or promotes an admin user."""
+    def create_admin(email, password, superadmin):
+        """Creates or promotes an admin user.
+
+        On a fresh installation this is the bootstrap: with no super
+        administrator in the database, the first account created here takes that
+        role, because otherwise nobody could ever install an update. On an
+        installation that already has one, it creates an ordinary administrator
+        and the existing super administrator decides whether to promote them.
+        """
         normalized_email = (email or "").strip().lower()
         seed_default_roles()
         admin_role = get_role("admin", label="Admin", description="Can access the admin workspace.")
+        superadmin_role = get_role(ROLE_SUPERADMIN)
         user = db.session.execute(db.select(User).filter_by(email=normalized_email)).scalar_one_or_none()
         created = user is None
+
+        if superadmin is None:
+            superadmin = count_users_with_role(ROLE_SUPERADMIN) == 0
 
         if created:
             user = User(email=normalized_email)
@@ -1336,6 +1396,8 @@ def create_app(config_overrides=None):
 
         before_user = snapshot_user_for_audit(user)
         user.grant_role(admin_role)
+        if superadmin:
+            user.grant_role(superadmin_role)
         user.set_password(password)
         db.session.flush()
         log_audit_event(
@@ -1346,14 +1408,67 @@ def create_app(config_overrides=None):
             target_member=user.member,
             before=before_user,
             after=snapshot_user_for_audit(user),
-            metadata={"granted_role": "admin", "source": "create_admin_cli", "created_user": created},
+            metadata={
+                "granted_role": ROLE_SUPERADMIN if superadmin else ROLE_ADMIN,
+                "source": "create_admin_cli",
+                "created_user": created,
+            },
         )
         db.session.commit()
 
+        what = "super admin" if superadmin else "admin"
         if created:
-            click.echo(click.style(f"Created admin user: {normalized_email}", fg="green"))
+            click.echo(click.style(f"Created {what} user: {normalized_email}", fg="green"))
         else:
-            click.echo(click.style(f"Granted admin access to: {normalized_email}", fg="green"))
+            click.echo(click.style(f"Granted {what} access to: {normalized_email}", fg="green"))
+
+    @app.cli.command("grant-superadmin")
+    @click.argument("email")
+    @with_appcontext
+    def grant_superadmin(email):
+        """Grants super administrator access to an existing account.
+
+        The recovery path, for when the last super administrator leaves the
+        association or erases their account. It needs shell access on the
+        server, which is the right bar: anyone with that can already read this
+        database and change this code, so the command hands out nothing they
+        could not take anyway.
+        """
+        normalized_email = (email or "").strip().lower()
+        seed_default_roles()
+        user = db.session.execute(db.select(User).filter_by(email=normalized_email)).scalar_one_or_none()
+        if user is None:
+            click.echo(click.style(f"No account found for {normalized_email}", fg="red"), err=True)
+            sys.exit(1)
+        if user.deleted_at is not None:
+            click.echo(
+                click.style(
+                    f"{normalized_email} was erased and cannot sign in; create a new account instead.",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+        if user.has_role_directly(ROLE_SUPERADMIN):
+            click.echo(f"{normalized_email} is already a super admin.")
+            return
+
+        before_user = snapshot_user_for_audit(user)
+        user.grant_role(get_role(ROLE_ADMIN))
+        user.grant_role(get_role(ROLE_SUPERADMIN))
+        db.session.flush()
+        log_audit_event(
+            category="access",
+            event_type="superadmin_role_granted",
+            actor_user=None,
+            target_user=user,
+            target_member=user.member,
+            before=before_user,
+            after=snapshot_user_for_audit(user),
+            metadata={"granted_role": ROLE_SUPERADMIN, "source": "grant_superadmin_cli"},
+        )
+        db.session.commit()
+        click.echo(click.style(f"Granted super admin access to: {normalized_email}", fg="green"))
 
     @app.cli.command("sync-member-billing")
     @click.argument("email")

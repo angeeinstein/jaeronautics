@@ -77,8 +77,13 @@ def mocked(app, monkeypatch):
 @pytest.fixture
 def seeded(mocked):
     admin_user = User(email="admin@t.co"); admin_user.set_password("password123")
-    admin_user.grant_role(app_module.get_role("admin")); admin_user.email_verified_at = datetime.utcnow()
-    db.session.add(admin_user); db.session.commit()
+    db.session.add(admin_user)
+    admin_user.grant_role(app_module.get_role("admin"))
+    # The smoke suite drives the whole admin surface, including the parts that
+    # are now super-admin only (role changes, mail accounts, updates).
+    admin_user.grant_role(app_module.get_role("superadmin"))
+    admin_user.email_verified_at = datetime.utcnow()
+    db.session.commit()
 
     member = make_member(email="m@t.co", payment_status="paid", is_active=True,
                          stripe_customer_id="cus_1", stripe_subscription_id="sub_1")

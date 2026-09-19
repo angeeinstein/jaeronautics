@@ -95,6 +95,8 @@ from sqlalchemy.orm import (
     selectinload,
 )
 from ..db_models import (
+    ROLE_ADMIN,
+    ROLE_SUPERADMIN,
     AuditLog,
     EmailDeliveryJob,
     ForumAccount,
@@ -139,9 +141,14 @@ from ..app import (
     get_role,
     limiter,
     set_setting_value,
+    superadmin_required,
 )
 
 admin_bp = Blueprint("admin", __name__)
+
+# Settings tabs holding third-party credentials. Kept beside the route that
+# enforces it so the list and the check cannot drift apart.
+SUPERADMIN_SETTINGS_SECTIONS = {"billing", "forum"}
 
 
 @admin_bp.route("/admin", methods=["GET"])
@@ -231,9 +238,19 @@ def admin_account_detail(user_id):
         forum_context=build_forum_context(user.member),
         latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
         recent_logs=recent_logs,
+        # Role changes are a super admin's business, so an ordinary admin gets
+        # none of these buttons at all.
+        can_manage_roles=current_user.has_role(ROLE_SUPERADMIN),
         can_grant_admin=not user.has_role("admin"),
         can_revoke_admin=user.has_role("admin") and current_user.id != user.id and count_users_with_role("admin") > 1,
+        can_grant_superadmin=user.deleted_at is None and not user.has_role_directly(ROLE_SUPERADMIN),
+        can_revoke_superadmin=(
+            user.has_role_directly(ROLE_SUPERADMIN)
+            and current_user.id != user.id
+            and count_users_with_role(ROLE_SUPERADMIN) > 1
+        ),
         admin_count=count_users_with_role("admin"),
+        superadmin_count=count_users_with_role(ROLE_SUPERADMIN),
         deletion_impact=describe_deletion_impact(user, actor_user=current_user),
         live_subscription=refresh_subscription_state_before_deletion(user.member),
     )
@@ -497,7 +514,7 @@ def reject_forum_avatar_submission(submission_id):
 
 @admin_bp.route("/admin/settings/test-forum-connection", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 def test_forum_connection():
     service = get_forum_service()
     try:
@@ -522,7 +539,7 @@ def test_forum_connection():
 
 @admin_bp.route("/admin/accounts/<int:user_id>/grant-admin", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 def grant_admin_access(user_id):
     user = db.session.get(User, user_id)
     if user is None:
@@ -553,7 +570,7 @@ def grant_admin_access(user_id):
 
 @admin_bp.route("/admin/accounts/<int:user_id>/revoke-admin", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 def revoke_admin_access(user_id):
     user = db.session.get(User, user_id)
     if user is None:
@@ -572,8 +589,17 @@ def revoke_admin_access(user_id):
         flash(_("You cannot remove the last remaining admin account."), "danger")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
+    if user.has_role_directly(ROLE_SUPERADMIN) and count_users_with_role(ROLE_SUPERADMIN) <= 1:
+        flash(_("You cannot remove the last remaining super admin account."), "danger")
+        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
     before_user = snapshot_user_for_audit(user)
-    user.revoke_role("admin")
+    # Super admin implies admin, so removing only the admin row would leave the
+    # access untouched and the button looking broken. Taking away administrator
+    # access means exactly that.
+    also_superadmin = user.has_role_directly(ROLE_SUPERADMIN)
+    user.revoke_role(ROLE_SUPERADMIN)
+    user.revoke_role(ROLE_ADMIN)
     log_audit_event(
         category="access",
         event_type="admin_role_revoked",
@@ -582,10 +608,89 @@ def revoke_admin_access(user_id):
         target_member=user.member,
         before=before_user,
         after=snapshot_user_for_audit(user),
-        metadata={"revoked_role": "admin"},
+        metadata={"revoked_role": ROLE_SUPERADMIN if also_superadmin else ROLE_ADMIN},
     )
     db.session.commit()
     flash(_("Admin access revoked."), "success")
+    return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/grant-superadmin", methods=["POST"])
+@login_required
+@superadmin_required
+def grant_superadmin_access(user_id):
+    user = db.session.get(User, user_id)
+    if user is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+
+    if user.deleted_at is not None:
+        flash(_("This account was erased and cannot be given access."), "danger")
+        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
+    if user.has_role_directly(ROLE_SUPERADMIN):
+        flash(_("This account already has super admin access."), "info")
+        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
+    before_user = snapshot_user_for_audit(user)
+    user.grant_role(get_role(ROLE_ADMIN, label="Admin", description="Can access the admin workspace."))
+    user.grant_role(get_role(ROLE_SUPERADMIN))
+    log_audit_event(
+        category="access",
+        event_type="superadmin_role_granted",
+        actor_user=current_user,
+        target_user=user,
+        target_member=user.member,
+        before=before_user,
+        after=snapshot_user_for_audit(user),
+        metadata={"granted_role": ROLE_SUPERADMIN},
+    )
+    db.session.commit()
+    flash(_("Super admin access granted."), "success")
+    return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/revoke-superadmin", methods=["POST"])
+@login_required
+@superadmin_required
+def revoke_superadmin_access(user_id):
+    """Step an account back down to ordinary administrator."""
+    user = db.session.get(User, user_id)
+    if user is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+
+    if not user.has_role_directly(ROLE_SUPERADMIN):
+        flash(_("This account does not currently have super admin access."), "info")
+        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
+    # The same two guards the admin role has, for the same reason: an
+    # installation with no super admin cannot install an update or a fix, and
+    # recovering from that needs a shell on the server.
+    if current_user.id == user.id:
+        flash(_("You cannot remove your own super admin access from the UI."), "danger")
+        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
+    if count_users_with_role(ROLE_SUPERADMIN) <= 1:
+        flash(_("You cannot remove the last remaining super admin account."), "danger")
+        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
+    before_user = snapshot_user_for_audit(user)
+    user.revoke_role(ROLE_SUPERADMIN)
+    # They stay an administrator: the admin row was granted alongside it.
+    user.grant_role(get_role(ROLE_ADMIN, label="Admin", description="Can access the admin workspace."))
+    log_audit_event(
+        category="access",
+        event_type="superadmin_role_revoked",
+        actor_user=current_user,
+        target_user=user,
+        target_member=user.member,
+        before=before_user,
+        after=snapshot_user_for_audit(user),
+        metadata={"revoked_role": ROLE_SUPERADMIN},
+    )
+    db.session.commit()
+    flash(_("Super admin access revoked. The account is still an administrator."), "success")
     return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
 
@@ -671,6 +776,17 @@ def admin_settings():
         settings_section = (request.form.get("settings_section") or "general").strip().lower()
         if settings_section not in {"general", "notifications", "billing", "forum", "mail", "test"}:
             settings_section = "general"
+
+        # Billing and Forum hold third-party credentials -- the Stripe secret and
+        # webhook secret, the Discourse API key and connect secret. Those tabs are
+        # not rendered for an ordinary administrator, but the form they would have
+        # posted is trivial to reconstruct, so the decision is made here as well.
+        # Every other section only touches the settings a plain admin may change,
+        # because the unselected ones are written back from before_settings.
+        if settings_section in SUPERADMIN_SETTINGS_SECTIONS and not current_user.has_role(ROLE_SUPERADMIN):
+            flash(_("Those settings can only be changed by a super administrator."), "danger")
+            return redirect(url_for("admin.admin_settings"))
+
         settings_redirect = f"{url_for('admin.admin_settings')}#settings-{settings_section}"
         welcome_sender = request.form.get("welcome_email_sender")
         auto_email_template = request.form.get("automatic_email_template")
@@ -960,7 +1076,7 @@ def reject_profile_change_request(request_id):
 
 @admin_bp.route("/admin/settings/mail-accounts", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 def save_mail_account():
     form = MailAccountForm(prefix="mail")
     account_id = int(form.mail_account_id.data) if form.mail_account_id.data else None
@@ -1034,7 +1150,7 @@ def save_mail_account():
 
 @admin_bp.route("/admin/settings/mail-accounts/<int:mail_account_id>/delete", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 def delete_mail_account(mail_account_id):
     mail_account = db.session.get(MailAccount, mail_account_id)
     if mail_account is None:
@@ -1065,7 +1181,7 @@ def delete_mail_account(mail_account_id):
 
 @admin_bp.route("/admin/settings/mail-accounts/import", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 def import_mail_accounts():
     upload = request.files.get("mail_accounts_file")
     overwrite_existing = request.form.get("overwrite_existing") == "1"
@@ -1182,7 +1298,7 @@ def import_mail_accounts():
 
 @admin_bp.route("/admin/settings/mail-accounts/export", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 def export_mail_accounts():
     confirm_password = request.form.get("export_password", "")
     if not current_user.check_password(confirm_password):
@@ -1213,7 +1329,7 @@ def export_mail_accounts():
 
 @admin_bp.route("/admin/settings/mail-accounts/<int:mail_account_id>/test-connection", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 @limiter.limit(RATELIMIT_ADMIN_EMAIL)
 def test_mail_account_connection(mail_account_id):
     mail_account = db.session.get(MailAccount, mail_account_id)
@@ -1336,7 +1452,7 @@ def admin_resolve_undelivered_email(job_id, action):
 
 @admin_bp.route("/admin/system-update/status", methods=["GET"])
 @login_required
-@admin_required
+@superadmin_required
 def admin_system_update_status():
     """Current and available version, as JSON.
 
@@ -1349,7 +1465,7 @@ def admin_system_update_status():
 
 @admin_bp.route("/admin/system-update", methods=["POST"])
 @login_required
-@admin_required
+@superadmin_required
 @limiter.limit(RATELIMIT_ADMIN_EMAIL, methods=["POST"])
 def admin_request_system_update():
     """Ask the privileged runner to install the available update.

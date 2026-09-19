@@ -9,11 +9,22 @@
                 <div class="nav settings-nav flex-column nav-pills" id="settings-tab" role="tablist" aria-orientation="vertical">
                     <button class="nav-link active" id="settings-general-tab" data-bs-toggle="pill" data-bs-target="#settings-general" type="button" role="tab" aria-controls="settings-general" aria-selected="true">{{ _('General') }}</button>
                     <button class="nav-link" id="settings-notifications-tab" data-bs-toggle="pill" data-bs-target="#settings-notifications" type="button" role="tab" aria-controls="settings-notifications" aria-selected="false">{{ _('Notifications') }}</button>
+                    {#
+                      Hidden, not disabled. These tabs hold the third-party
+                      credentials and the system controls, and an ordinary
+                      administrator has no use for the sight of them. The routes
+                      behind them check the role themselves -- this only keeps
+                      the secrets out of the HTML in the first place.
+                    #}
+                    {% if current_user.is_superadmin %}
                     <button class="nav-link" id="settings-billing-tab" data-bs-toggle="pill" data-bs-target="#settings-billing" type="button" role="tab" aria-controls="settings-billing" aria-selected="false">{{ _('Billing') }}</button>
                     <button class="nav-link" id="settings-forum-tab" data-bs-toggle="pill" data-bs-target="#settings-forum" type="button" role="tab" aria-controls="settings-forum" aria-selected="false">{{ _('Forum') }}</button>
                     <button class="nav-link" id="settings-mail-tab" data-bs-toggle="pill" data-bs-target="#settings-mail" type="button" role="tab" aria-controls="settings-mail" aria-selected="false">{{ _('Mail Accounts') }}</button>
+                    {% endif %}
                     <button class="nav-link" id="settings-test-tab" data-bs-toggle="pill" data-bs-target="#settings-test" type="button" role="tab" aria-controls="settings-test" aria-selected="false">{{ _('Test Tools') }}</button>
+                    {% if current_user.is_superadmin %}
                     <button class="nav-link" id="settings-maintenance-tab" data-bs-toggle="pill" data-bs-target="#settings-maintenance" type="button" role="tab" aria-controls="settings-maintenance" aria-selected="false">{{ _('Maintenance') }}</button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -225,6 +236,7 @@
                     </div>
                 </form>
             </div>
+            {% if current_user.is_superadmin %}
             <div class="tab-pane fade" id="settings-billing" role="tabpanel" aria-labelledby="settings-billing-tab" tabindex="0">
                 <form method="POST" action="{{ url_for('admin.admin_settings') }}" class="d-flex flex-column gap-4">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -495,6 +507,7 @@
                 </div>
             </div>
 
+            {% endif %}
             <div class="tab-pane fade" id="settings-test" role="tabpanel" aria-labelledby="settings-test-tab" tabindex="0">
                 <div class="card">
                     <div class="card-header"><h4 class="mb-0">{{ _('Send Test Email') }}</h4></div>
@@ -514,6 +527,7 @@
                 </div>
             </div>
 
+            {% if current_user.is_superadmin %}
             <div class="tab-pane fade" id="settings-maintenance" role="tabpanel" aria-labelledby="settings-maintenance-tab" tabindex="0">
                 <div class="card mb-4">
                     <div class="card-header d-flex justify-content-between align-items-center">
@@ -785,6 +799,7 @@
                 </div>
                 {% endif %}
             </div>
+            {% endif %}
         </div>
     </div>
 </div>

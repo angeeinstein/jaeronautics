@@ -44,6 +44,8 @@ from flask_babel import _
 
 from ..security_utils import build_public_url
 from ..db_models import (
+    ROLE_ADMIN,
+    ROLE_SUPERADMIN,
     AuditLog,
     EmailDeliveryJob,
     ExternalWorkItem,
@@ -276,6 +278,13 @@ def describe_deletion_impact(user, actor_user=None):
         "already_erased": is_erased(user),
         "is_admin": is_admin,
         "is_last_admin": is_admin and _count_active_admins() <= 1,
+        "is_superadmin": user.has_role(ROLE_SUPERADMIN),
+        # Losing the last super admin is worse than losing the last admin: an
+        # installation with none cannot install an update, including the update
+        # that would fix whatever went wrong. Recovering needs a shell.
+        "is_last_superadmin": (
+            user.has_role(ROLE_SUPERADMIN) and _count_active_holders(ROLE_SUPERADMIN) <= 1
+        ),
         "is_self": bool(actor_user is not None and actor_user.id == user.id),
         "has_forum_account": user.forum_account is not None,
         "subscription_active": False,
@@ -308,6 +317,8 @@ def describe_deletion_impact(user, actor_user=None):
         impact["blockers"].append("already_erased")
     if impact["is_last_admin"]:
         impact["blockers"].append("last_admin")
+    if impact["is_last_superadmin"]:
+        impact["blockers"].append("last_superadmin")
     if impact["is_self"]:
         impact["blockers"].append("self_deletion_via_admin_page")
 
@@ -323,14 +334,24 @@ def describe_deletion_impact(user, actor_user=None):
     return impact
 
 
-def _count_active_admins():
-    from ..db_models import Role
+def _count_active_holders(slug):
+    """Accounts that still have this access and can still sign in.
+
+    Counts implied grants, so a super admin counts as an administrator: erasing
+    the only one on the grounds that no row literally said "admin" would leave
+    nobody able to administer the site.
+    """
+    from ..db_models import Role, roles_conferring
 
     return db.session.scalar(
         db.select(db.func.count())
         .select_from(User)
-        .where(User.roles.any(Role.slug == "admin"), User.deleted_at.is_(None))
+        .where(User.roles.any(Role.slug.in_(roles_conferring(slug))), User.deleted_at.is_(None))
     ) or 0
+
+
+def _count_active_admins():
+    return _count_active_holders(ROLE_ADMIN)
 
 
 def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, note=None):
@@ -352,6 +373,13 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
             "This is the only administrator account; grant admin access to "
             "someone else before erasing it.",
             code="last_admin",
+        )
+    if "last_superadmin" in impact["blockers"]:
+        raise ConflictError(
+            "This is the only super administrator account; grant super admin "
+            "access to someone else before erasing it, otherwise nobody can "
+            "install an update.",
+            code="last_superadmin",
         )
     if initiated_by == INITIATED_BY_ADMIN and impact["is_self"]:
         raise ConflictError(
