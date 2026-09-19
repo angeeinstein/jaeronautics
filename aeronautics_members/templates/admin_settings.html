@@ -569,6 +569,51 @@
                                 </dl>
                             </div>
                         </div>
+                        {% if undelivered_emails %}
+                            {#
+                              Nothing prunes these rows, so without a way to act on
+                              them one mistyped address would leave the health report
+                              permanently red with no explanation of what to do.
+                            #}
+                            <hr>
+                            <h6 class="text-muted text-uppercase small">{{ _('Emails that could not be delivered') }}</h6>
+                            <p class="small text-muted">
+                                {{ _('Retrying sends to the address currently on the member’s profile, so correct a typo there first. Dismissing keeps the record and stops reporting it.') }}
+                            </p>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle small mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ _('Recipient') }}</th>
+                                            <th>{{ _('Type') }}</th>
+                                            <th>{{ _('Last tried') }}</th>
+                                            <th>{{ _('Error') }}</th>
+                                            <th class="text-end">{{ _('Action') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for job in undelivered_emails %}
+                                            <tr>
+                                                <td>{{ job.recipient_email or '-' }}</td>
+                                                <td>{{ job.email_type|replace('_', ' ') }}</td>
+                                                <td>{{ job.last_attempted_at.strftime('%Y-%m-%d %H:%M') if job.last_attempted_at else '-' }}</td>
+                                                <td class="text-muted">{{ (job.last_error or '-')|truncate(90) }}</td>
+                                                <td class="text-end text-nowrap">
+                                                    <form method="POST" action="{{ url_for('admin.admin_resolve_undelivered_email', job_id=job.id, action='retry') }}" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <button type="submit" class="btn btn-sm btn-outline-primary">{{ _('Retry') }}</button>
+                                                    </form>
+                                                    <form method="POST" action="{{ url_for('admin.admin_resolve_undelivered_email', job_id=job.id, action='dismiss') }}" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <button type="submit" class="btn btn-sm btn-outline-secondary">{{ _('Dismiss') }}</button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% endif %}
                         <hr>
                         <div class="small text-muted">
                             {{ _('Database schema') }}:

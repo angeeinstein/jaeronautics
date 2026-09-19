@@ -47,9 +47,11 @@ from ..services.privacy import (
 from ._responses import json_download_response
 from ..services.notifications import (
     build_mail_accounts_export_payload,
+    dismiss_email_delivery_job,
     normalize_imported_mail_accounts_payload,
     queue_curated_admin_notification,
     queue_user_status_notification,
+    requeue_email_delivery_job,
 )
 from ..services import (
     ServiceError,
@@ -94,6 +96,7 @@ from sqlalchemy.orm import (
 )
 from ..db_models import (
     AuditLog,
+    EmailDeliveryJob,
     ForumAccount,
     ForumAvatarSubmission,
     MailAccount,
@@ -1283,6 +1286,52 @@ def send_test_email():
         flash(_("Invalid form submission. Please check the fields and try again."), "warning")
 
     return redirect(f"{url_for('admin.admin_settings')}#settings-test")
+
+
+@admin_bp.route("/admin/undelivered-emails/<int:job_id>/<any(retry, dismiss):action>", methods=["POST"])
+@login_required
+@admin_required
+def admin_resolve_undelivered_email(job_id, action):
+    """Retry or dismiss an email that gave up.
+
+    Without this the health report is a dead end: it says an email could not be
+    delivered and there is no way to see which, fix it, or make it stop saying
+    so. Nothing prunes these rows, so one mistyped address would leave the panel
+    permanently red.
+    """
+    job = db.session.get(EmailDeliveryJob, job_id)
+    if job is None:
+        flash(_("That queued email no longer exists."), "warning")
+        return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")
+
+    recipient = job.recipient_email
+    if action == "retry":
+        changed = requeue_email_delivery_job(job)
+        message = (
+            _("Queued for another delivery attempt to %(email)s.", email=recipient)
+            if changed
+            else _("That email is no longer waiting to be resolved.")
+        )
+    else:
+        changed = dismiss_email_delivery_job(job)
+        message = (
+            _("Dismissed the undelivered email to %(email)s.", email=recipient)
+            if changed
+            else _("That email is no longer waiting to be resolved.")
+        )
+
+    if changed:
+        log_audit_event(
+            category="notification",
+            event_type=f"undelivered_email_{action}",
+            actor_user=current_user,
+            target_user=job.target_user,
+            target_member=job.target_member,
+            metadata={"job_id": job.id, "email_type": job.email_type, "recipient": recipient},
+        )
+    db.session.commit()
+    flash(message, "success" if changed else "warning")
+    return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")
 
 
 @admin_bp.route("/admin/system-update/status", methods=["GET"])

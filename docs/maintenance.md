@@ -327,10 +327,31 @@ sudo -u jaeronautics /var/www/jaeronautics/.venv/bin/flask \
   --app aeronautics_members.app:create_app deliver-notifications
 ```
 
-Emails addressed to domains that do not exist — invented addresses used while
-testing — will never send. They exhaust after a day and are then listed as a
-problem until the rows are removed; that is working as intended, not a fault to
-chase.
+Emails addressed to domains that do not exist — a mistyped address at signup, or
+the invented ones used while testing — will never send. They exhaust after a day
+and then appear under **Emails that could not be delivered** on the Maintenance
+tab, with the recipient, the error and two buttons:
+
+- **Retry** puts the job back at the front of the queue. Delivery re-reads the
+  address from the member's profile rather than the one recorded on the job, so
+  correct the typo on the profile first and the retry goes to the new address.
+- **Dismiss** stops reporting it. The row is cancelled, not deleted: what was
+  attempted for a member is part of that account's record and the data export
+  reads it.
+
+Nothing prunes these rows — `cleanup-logs` covers audit and notification history
+only — so without those buttons a single mistyped address would have left the
+health report permanently red with no way to clear it but SQL.
+
+## Translations in Background Jobs
+
+The Babel locale selector reads the request's `Accept-Language`, and Babel calls
+it for *every* `_()`. The notification timer, the CLI commands and the webhook
+worker have an application context but no request, so a translated string in any
+of them raised `Working outside of request context` and took the whole pass down
+— reachable, for instance, by turning automatic emails off while a welcome-email
+retry was queued. The selector now returns the default locale when there is no
+request. Background code may use `_()` freely; it will render in English.
 
 ## Dependencies
 

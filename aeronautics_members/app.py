@@ -18,6 +18,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    has_request_context,
     jsonify,
     redirect,
     render_template,
@@ -194,6 +195,7 @@ from .services.notifications import (  # noqa: E402
     get_email_template_choices,
     get_notification_service,
     get_notification_settings_map,
+    list_undelivered_emails,
     normalize_imported_mail_accounts_payload,
     queue_curated_admin_notification,
     queue_user_status_notification,
@@ -998,6 +1000,9 @@ def build_settings_page_context(edit_mail_account_id=None):
         # JSON status endpoint uses, so the page and the API cannot disagree.
         "update_state": describe_update_state(),
         "system_health": collect_system_health(),
+        # The health report counts undelivered emails; this is what an admin
+        # needs to actually resolve one -- who it was for, and why it failed.
+        "undelivered_emails": list_undelivered_emails(),
         "test_email_form": test_email_form,
         "mail_account_form": mail_account_form,
         "mail_account_records": mail_account_records,
@@ -1133,6 +1138,13 @@ def create_app(config_overrides=None):
     app.config["BABEL_DEFAULT_TIMEZONE"] = "UTC"
 
     def select_locale():
+        # Babel calls this for every _() -- including from the notification
+        # timer, the CLI commands and the webhook worker, where there is no
+        # request to read a language from. Touching `request` there raised
+        # "Working outside of request context" and took the whole pass down
+        # with it, which is a strange way for a translated log line to fail.
+        if not has_request_context():
+            return app.config["BABEL_DEFAULT_LOCALE"]
         lang = request.args.get("lang")
         if lang in app.config["BABEL_SUPPORTED_LOCALES"]:
             return lang

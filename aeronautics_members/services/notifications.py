@@ -279,6 +279,52 @@ def mark_email_delivery_jobs_sent(email_type, target_user=None, target_member=No
 
 
 
+def list_undelivered_emails(limit=25):
+    """Emails that gave up retrying, newest first.
+
+    The health report counts these, which is enough to notice a problem and not
+    enough to do anything about it. An administrator needs the recipient and the
+    error before they can tell a mistyped address from a broken mail server.
+    """
+    return db.session.execute(
+        db.select(EmailDeliveryJob)
+        .where(EmailDeliveryJob.status == EMAIL_JOB_STATUS_EXHAUSTED)
+        .order_by(EmailDeliveryJob.last_attempted_at.desc(), EmailDeliveryJob.id.desc())
+        .limit(limit)
+    ).scalars().all()
+
+
+def requeue_email_delivery_job(job):
+    """Put an exhausted job back at the front of the queue.
+
+    The delivery pass re-reads the member's current address rather than the one
+    recorded on the job, so correcting a typo on the profile and retrying here
+    sends to the corrected address. Returns False if the job is not exhausted,
+    which is what a double-submitted form looks like.
+    """
+    if job is None or job.status != EMAIL_JOB_STATUS_EXHAUSTED:
+        return False
+    job.status = EMAIL_JOB_STATUS_PENDING
+    job.retry_count = 0
+    job.next_attempt_at = get_now_utc()
+    job.last_error = None
+    return True
+
+
+def dismiss_email_delivery_job(job):
+    """Stop reporting a job nobody intends to deliver.
+
+    Rows are cancelled rather than deleted: the history of what was attempted
+    for a member is part of the account's record, and the data export reads it.
+    """
+    if job is None or job.status != EMAIL_JOB_STATUS_EXHAUSTED:
+        return False
+    job.status = EMAIL_JOB_STATUS_CANCELED
+    job.next_attempt_at = None
+    job.last_error = _("Dismissed by an administrator without being delivered.")
+    return True
+
+
 def get_db_mail_accounts():
     try:
         return db.session.execute(
