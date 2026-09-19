@@ -23,6 +23,16 @@ import mybb_export  # noqa: E402
 
 DUMP = """
 -- MySQL dump 10.13
+-- Tapatalk adds its own users table. Picking the first CREATE TABLE ending in
+-- "users" found this one on the real forum and exported nobody.
+CREATE TABLE `mybb_tapatalk_users` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `push_type` varchar(20) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM;
+
+INSERT INTO `mybb_tapatalk_users` VALUES (1,'apns');
+
 CREATE TABLE `lav_profilefields` (
   `fid` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(200) NOT NULL DEFAULT '',
@@ -31,6 +41,16 @@ CREATE TABLE `lav_profilefields` (
 ) ENGINE=MyISAM;
 
 INSERT INTO `lav_profilefields` VALUES (1,'Sex','select'),(3,'Jahrgang','text');
+
+CREATE TABLE `lav_posts` (
+  `pid` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`pid`)
+) ENGINE=MyISAM;
+
+CREATE TABLE `lav_threads` (
+  `tid` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`tid`)
+) ENGINE=MyISAM;
 
 CREATE TABLE `lav_users` (
   `uid` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -65,7 +85,32 @@ def people():
 
 def test_it_finds_the_table_prefix(people):
     _rows, summary = people
+    assert summary["prefix"] == "lav_"
     assert summary["users_table"] == "lav_users"
+
+
+def test_a_plugins_users_table_does_not_win(people):
+    """Tapatalk's mybb_tapatalk_users has no uid and exported nobody.
+
+    The prefix is chosen by which candidate also has userfields, profilefields,
+    posts and threads beside it -- a plugin table has none of them.
+    """
+    _rows, summary = people
+
+    assert summary["users_table"] != "mybb_tapatalk_users"
+    assert "mybb_tapatalk_" in summary["rejected_prefixes"]
+
+
+def test_an_explicit_prefix_overrides_detection():
+    _rows, summary = mybb_export.build_people(DUMP, prefix="lav_")
+    assert summary["users_table"] == "lav_users"
+
+
+def test_finding_nobody_exits_nonzero(tmp_path):
+    """Zero people is an error, not a successful export of nothing."""
+    dump = tmp_path / "empty.sql"
+    dump.write_text("CREATE TABLE `x_users` (\n  `uid` int\n) ENGINE=MyISAM;\n")
+    assert mybb_export.main([str(dump), "--out", str(tmp_path / "out.json")]) == 1
 
 
 def test_it_finds_the_jahrgang_field_without_being_told(people):

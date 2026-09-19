@@ -49,8 +49,43 @@ def read_dump(path):
         raise SystemExit(f"{path} is named .gz but is not gzipped.") from None
 
 
-def find_table(dump, suffix):
-    """The real table name for a MyBB table, whatever prefix was configured."""
+# Tables MyBB itself always has. A plugin can add its own `..._users` table --
+# Tapatalk does -- so the prefix is the one where these exist together, not
+# whichever table happens to end in "users" first.
+CORE_TABLES = ("users", "userfields", "profilefields", "posts", "threads", "settings")
+
+
+def all_tables(dump):
+    return set(re.findall(r"CREATE TABLE `([^`]+)`", dump))
+
+
+def find_prefix(dump):
+    """The MyBB table prefix, chosen by which candidate has the core tables.
+
+    Returns (prefix, rejected) so the caller can say what it passed over --
+    silently picking a plugin's table produced an empty export and a confusing
+    zero rather than an error.
+    """
+    tables = all_tables(dump)
+    scored = []
+    for table in tables:
+        if not table.endswith("users"):
+            continue
+        prefix = table[: -len("users")]
+        score = sum(1 for core in CORE_TABLES if f"{prefix}{core}" in tables)
+        scored.append((score, -len(prefix), prefix))
+    if not scored:
+        return None, []
+    scored.sort(reverse=True)
+    best = scored[0][2]
+    return best, [prefix for _score, _length, prefix in scored[1:]]
+
+
+def find_table(dump, suffix, prefix=None):
+    """The real table name for a MyBB table, or None when it is absent."""
+    if prefix is not None:
+        name = f"{prefix}{suffix}"
+        return name if name in all_tables(dump) else None
     match = re.search(rf"CREATE TABLE `([^`]*{re.escape(suffix)})`", dump)
     return match.group(1) if match else None
 
@@ -162,13 +197,19 @@ def _avatar_parts(value):
     return (directory or None), (filename or None)
 
 
-def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE):
+def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE, prefix=None):
     zone = ZoneInfo(timezone_name)
-    users_table = find_table(dump, "users")
+    rejected = []
+    if prefix is None:
+        prefix, rejected = find_prefix(dump)
+    if prefix is None:
+        raise SystemExit("No MyBB users table found -- is this a MyBB dump?")
+
+    users_table = find_table(dump, "users", prefix)
     if not users_table:
-        raise SystemExit("No users table found -- is this a MyBB dump?")
-    fields_table = find_table(dump, "userfields")
-    profilefields_table = find_table(dump, "profilefields")
+        raise SystemExit(f"No table named {prefix}users in this dump.")
+    fields_table = find_table(dump, "userfields", prefix)
+    profilefields_table = find_table(dump, "profilefields", prefix)
 
     field_label = None
     if jahrgang_field is None and profilefields_table:
@@ -206,6 +247,8 @@ def build_people(dump, jahrgang_field=None, timezone_name=DEFAULT_TIMEZONE):
         })
 
     return people, {
+        "prefix": prefix,
+        "rejected_prefixes": rejected,
         "users_table": users_table,
         "jahrgang_field": jahrgang_field,
         "jahrgang_label": field_label,
@@ -223,13 +266,19 @@ def main(argv=None):
     parser.add_argument("dump", help="mysqldump file (.sql or .sql.gz)")
     parser.add_argument("--out", default="people.json", help="where to write the JSON")
     parser.add_argument("--jahrgang-field", help="e.g. fid3, if the lookup gets it wrong")
+    parser.add_argument("--prefix", help="table prefix, e.g. mybb_ (detected by default)")
     parser.add_argument("--timezone", default=DEFAULT_TIMEZONE,
                         help=f"the board's timezone for reading timestamps (default {DEFAULT_TIMEZONE})")
     args = parser.parse_args(argv)
 
-    people, summary = build_people(read_dump(args.dump), args.jahrgang_field, args.timezone)
+    people, summary = build_people(
+        read_dump(args.dump), args.jahrgang_field, args.timezone, args.prefix
+    )
     Path(args.out).write_text(json.dumps(people, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    print(f"table prefix       : {summary['prefix']}")
+    if summary["rejected_prefixes"]:
+        print(f"  ignored          : {', '.join(summary['rejected_prefixes'])} (plugin tables)")
     print(f"users table        : {summary['users_table']}")
     print(f"year group field   : {summary['jahrgang_field']} ({summary['jahrgang_label'] or 'not found'})")
     print(f"people             : {len(people)}")
@@ -240,6 +289,10 @@ def main(argv=None):
     for directory, count in summary["avatar_directories"]:
         print(f"  files live in    : {directory}/  ({count})")
     print(f"written            : {args.out}")
+    if not people:
+        print("\nNo people were found. If the prefix above looks wrong, pass --prefix.",
+              file=sys.stderr)
+        return 1
     if not summary["jahrgang_field"]:
         print("\nNo Jahrgang field was found. Pass --jahrgang-field fidN; the ids are in "
               "the profilefields table.", file=sys.stderr)
