@@ -5,29 +5,13 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import UniqueConstraint
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from .permissions import Permission, permissions_for
+
 
 db = SQLAlchemy()
 
 ROLE_ADMIN = "admin"
 ROLE_SUPERADMIN = "superadmin"
-
-# Roles that carry another role's access without it being granted separately.
-# A superadmin is an administrator with more, not a parallel kind of account --
-# holding one role but not the other would produce a superadmin who cannot open
-# the admin workspace, which is a bug waiting to be filed rather than a policy.
-#
-# Kept as data so a later role (moderator, treasurer) is a line here rather than
-# another special case scattered through the checks.
-ROLE_IMPLIES = {
-    ROLE_SUPERADMIN: (ROLE_ADMIN,),
-}
-
-
-def roles_conferring(slug):
-    """Every role that grants ``slug``, including ``slug`` itself."""
-    return {slug} | {
-        holder for holder, implied in ROLE_IMPLIES.items() if slug in implied
-    }
 
 
 def utcnow():
@@ -125,27 +109,31 @@ class User(UserMixin, db.Model):
         return self.email_verified_at is not None
 
     @property
-    def is_admin(self):
-        return self.has_role(ROLE_ADMIN)
+    def permissions(self):
+        """Everything this account may do, from the roles it holds."""
+        return permissions_for(role.slug for role in self.roles)
+
+    def can(self, permission):
+        """The access check. Nothing outside permissions.py asks about roles.
+
+        An erased account can do nothing: its rows survive as the record, and
+        ``load_user`` already refuses the session, but a check that reached here
+        with one must not answer yes.
+        """
+        if self.deleted_at is not None:
+            return False
+        return permission in self.permissions
 
     @property
-    def is_superadmin(self):
-        return self.has_role(ROLE_SUPERADMIN)
+    def is_admin(self):
+        return self.can(Permission.ADMIN_ACCESS)
 
     def has_role(self, slug):
-        """Whether this account has ``slug``, directly or through implication.
+        """Whether this role is granted. About the grant, not about access.
 
-        Every access check goes through here, so a superadmin passes an
-        admin_required check without needing both rows granted.
-        """
-        conferring = roles_conferring(slug)
-        return any(role.slug in conferring for role in self.roles)
-
-    def has_role_directly(self, slug):
-        """Whether the role row itself is granted, ignoring implication.
-
-        Used where the grant is the subject rather than the access -- revoking a
-        role, and counting who actually holds one.
+        Use :meth:`can` to decide what somebody may do. This is for the places
+        where the role itself is the subject: revoking it, counting holders, and
+        showing which badges an account carries.
         """
         return any(role.slug == slug for role in self.roles)
 
@@ -160,12 +148,11 @@ class User(UserMixin, db.Model):
 
     @property
     def role(self):
-        """The single most privileged role, for display."""
-        if self.has_role(ROLE_SUPERADMIN):
-            return ROLE_SUPERADMIN
-        if self.has_role(ROLE_ADMIN):
-            return ROLE_ADMIN
-        return "user"
+        """One role name for display. The most capable one the account holds."""
+        held = [role.slug for role in self.roles]
+        if not held:
+            return "user"
+        return max(held, key=lambda slug: len(permissions_for([slug])))
 
 
 class Member(db.Model):

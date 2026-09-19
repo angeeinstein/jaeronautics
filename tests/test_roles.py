@@ -1,15 +1,17 @@
-"""The super admin role: what it carries, who may hold it, and how it starts.
+"""Capabilities: what each role may do, who may hold one, and how the first starts.
 
-Splitting a privilege out of ``admin`` is easy to get subtly wrong in two
-directions. Too strict and the installation locks itself out of the update
-button -- which is also how the fix would have been delivered. Too loose and the
-split is decorative, because the tab is hidden while the URL behind it still
-works.
+Access is decided by capability, never by role name, so these tests ask what an
+account *can do* rather than what it is called. Splitting a privilege out is
+easy to get subtly wrong in two directions: too strict and the installation
+locks itself out of the update button -- which is also how the fix would have
+been delivered -- and too loose makes the split decorative, because the tab is
+hidden while the URL behind it still works.
 """
 import pytest
 
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import ROLE_ADMIN, ROLE_SUPERADMIN, User
+from aeronautics_members.permissions import Permission, ROLE_PERMISSIONS, roles_with
 from aeronautics_members.services import ConflictError, privacy
 
 
@@ -28,37 +30,71 @@ def _login(client, user_id):
         session["_user_id"] = str(user_id)
 
 
-class TestImplication:
-    """A super admin is an administrator with more, not a parallel account."""
+class TestCapabilities:
+    """Roles are bundles of capabilities; nothing else asks about role names."""
 
-    def test_a_superadmin_passes_an_admin_check(self, app):
-        user = _user("implied@example.com", ROLE_SUPERADMIN)
+    def test_a_superadmin_can_do_everything_an_admin_can(self, app):
+        admin_can = ROLE_PERMISSIONS[ROLE_ADMIN]
+        superadmin_can = ROLE_PERMISSIONS[ROLE_SUPERADMIN]
 
+        assert admin_can < superadmin_can
+
+    def test_the_superadmin_role_alone_opens_the_admin_workspace(self, app):
+        """There is no implication: the bundle simply contains the capability."""
+        user = _user("solo@example.com", ROLE_SUPERADMIN)
+
+        assert user.can(Permission.ADMIN_ACCESS) is True
         assert user.is_admin is True
-        assert user.has_role(ROLE_ADMIN) is True
+        assert user.has_role(ROLE_ADMIN) is False  # the row itself is not granted
 
-    def test_but_does_not_hold_the_admin_row(self, app):
-        """The distinction revoking and counting depend on."""
-        user = _user("implied2@example.com", ROLE_SUPERADMIN)
-
-        assert user.has_role_directly(ROLE_ADMIN) is False
-        assert user.has_role_directly(ROLE_SUPERADMIN) is True
-
-    def test_an_admin_is_not_a_superadmin(self, app):
+    def test_an_admin_cannot_update_or_manage_credentials_or_roles(self, app):
         user = _user("plain@example.com", ROLE_ADMIN)
 
-        assert user.is_superadmin is False
+        assert user.can(Permission.SYSTEM_UPDATE) is False
+        assert user.can(Permission.SETTINGS_CREDENTIALS) is False
+        assert user.can(Permission.ROLES_MANAGE) is False
+        # But everything an administrator is for still works.
+        assert user.can(Permission.ACCOUNTS_VIEW) is True
+        assert user.can(Permission.APPROVALS_REVIEW) is True
+        assert user.can(Permission.SETTINGS_GENERAL) is True
 
-    def test_the_displayed_role_names_the_strongest(self, app):
+    def test_an_account_with_no_roles_can_do_nothing(self, app):
+        user = _user("nobody@example.com")
+
+        assert user.permissions == set()
+        assert user.can(Permission.ADMIN_ACCESS) is False
+
+    def test_an_erased_account_can_do_nothing(self, app, monkeypatch):
+        """Its rows survive as the record; its access must not."""
+        monkeypatch.setattr(privacy, "cancel_member_subscription", lambda m, reason=None: False)
+        monkeypatch.setattr(privacy, "anonymise_forum_account", lambda u: (False, False))
+        user = _user("erased@example.com", ROLE_ADMIN)
+        _user("spare@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        privacy.erase_account(user, initiated_by=privacy.INITIATED_BY_MEMBER)
+        db.session.commit()
+
+        assert user.can(Permission.ADMIN_ACCESS) is False
+
+    def test_the_displayed_role_names_the_most_capable(self, app):
         assert _user("d1@example.com", ROLE_ADMIN, ROLE_SUPERADMIN).role == ROLE_SUPERADMIN
         assert _user("d2@example.com", ROLE_ADMIN).role == ROLE_ADMIN
         assert _user("d3@example.com").role == "user"
 
-    def test_counting_admins_includes_implied_ones(self, app):
-        """Otherwise the last-admin guard would not see a lone super admin."""
+    def test_counting_asks_about_the_capability_not_the_role(self, app):
+        """A lone super admin still counts as somebody who can administer."""
         _user("onlysuper@example.com", ROLE_SUPERADMIN)
 
-        assert app_module.count_users_with_role(ROLE_ADMIN) == 1
+        assert app_module.count_users_with_permission(Permission.ADMIN_ACCESS) == 1
+        assert app_module.count_users_with_permission(Permission.SYSTEM_UPDATE) == 1
+
+    def test_every_capability_is_carried_by_some_role(self, app):
+        """A capability no role has is a route nobody can reach."""
+        declared = {
+            value for name, value in vars(Permission).items()
+            if not name.startswith("_") and isinstance(value, str)
+        }
+        for permission in declared:
+            assert roles_with(permission), f"no role grants {permission}"
 
 
 class TestTheUpdateSurfaceIsRestricted:
@@ -154,7 +190,7 @@ class TestRoleManagementIsRestricted:
 
         client.post(f"/admin/accounts/{admin.id}/grant-superadmin")
 
-        assert admin.is_superadmin is False
+        assert admin.can(Permission.SYSTEM_UPDATE) is False
 
     def test_a_superadmin_can_grant_and_revoke(self, client):
         boss = _user("boss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
@@ -162,10 +198,10 @@ class TestRoleManagementIsRestricted:
         _login(client, boss.id)
 
         client.post(f"/admin/accounts/{target.user_id}/grant-superadmin")
-        assert target.user.is_superadmin is True
+        assert target.user.can(Permission.SYSTEM_UPDATE) is True
 
         client.post(f"/admin/accounts/{target.user_id}/revoke-superadmin")
-        assert target.user.is_superadmin is False
+        assert target.user.can(Permission.SYSTEM_UPDATE) is False
         # Stepped down to ordinary administrator, not thrown out entirely.
         assert target.user.has_role(ROLE_ADMIN) is True
 
@@ -178,7 +214,7 @@ class TestRoleManagementIsRestricted:
         client.post(f"/admin/accounts/{other.id}/revoke-admin")
 
         assert other.has_role(ROLE_ADMIN) is False
-        assert other.is_superadmin is False
+        assert other.can(Permission.SYSTEM_UPDATE) is False
 
     def test_a_superadmin_cannot_strip_their_own_role(self, client):
         """The reachable half of "do not leave nobody in charge".
@@ -193,7 +229,7 @@ class TestRoleManagementIsRestricted:
 
         client.post(f"/admin/accounts/{boss.id}/revoke-superadmin")
 
-        assert boss.is_superadmin is True
+        assert boss.can(Permission.SYSTEM_UPDATE) is True
 
     def test_one_of_two_superadmins_may_be_stepped_down(self, client):
         boss = _user("stays@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
@@ -202,7 +238,7 @@ class TestRoleManagementIsRestricted:
 
         client.post(f"/admin/accounts/{second.id}/revoke-superadmin")
 
-        assert second.is_superadmin is False
+        assert second.can(Permission.SYSTEM_UPDATE) is False
         assert second.has_role(ROLE_ADMIN) is True
 
     def test_an_erased_account_cannot_be_promoted(self, client, monkeypatch):
@@ -216,7 +252,7 @@ class TestRoleManagementIsRestricted:
 
         client.post(f"/admin/accounts/{gone.user_id}/grant-superadmin")
 
-        assert gone.user.is_superadmin is False
+        assert gone.user.can(Permission.SYSTEM_UPDATE) is False
 
 
 class TestTheUiHidesWhatItDoesNotOffer:
@@ -307,7 +343,7 @@ class TestBootstrap:
         )
 
         user = db.session.execute(db.select(User).filter_by(email="first@example.com")).scalar_one()
-        assert user.is_superadmin is True
+        assert user.can(Permission.SYSTEM_UPDATE) is True
 
     def test_a_later_admin_does_not(self, app):
         runner = app.test_cli_runner()
@@ -316,7 +352,7 @@ class TestBootstrap:
 
         second = db.session.execute(db.select(User).filter_by(email="two@example.com")).scalar_one()
         assert second.has_role(ROLE_ADMIN) is True
-        assert second.is_superadmin is False
+        assert second.can(Permission.SYSTEM_UPDATE) is False
 
     def test_the_flag_forces_it_either_way(self, app):
         runner = app.test_cli_runner()
@@ -324,7 +360,7 @@ class TestBootstrap:
         runner.invoke(args=["create-admin", "b@example.com", "--password", "pw", "--superadmin"])
 
         second = db.session.execute(db.select(User).filter_by(email="b@example.com")).scalar_one()
-        assert second.is_superadmin is True
+        assert second.can(Permission.SYSTEM_UPDATE) is True
 
     def test_grant_superadmin_is_the_recovery_path(self, app):
         existing = _user("recover@example.com", ROLE_ADMIN)
@@ -333,9 +369,76 @@ class TestBootstrap:
 
         db.session.refresh(existing)
         assert result.exit_code == 0
-        assert existing.is_superadmin is True
+        assert existing.can(Permission.SYSTEM_UPDATE) is True
 
     def test_granting_to_an_unknown_address_fails_loudly(self, app):
         result = app.test_cli_runner().invoke(args=["grant-superadmin", "nobody@example.com"])
 
         assert result.exit_code == 1
+
+
+class TestAddingARoleNeedsNoOtherChange:
+    """The point of the whole arrangement, exercised rather than asserted.
+
+    A future moderator is defined here exactly as it would be in
+    permissions.py -- one entry, nothing else -- and then has to work: reach the
+    forum queue, be refused the settings it was not given, and count towards the
+    lockout guards for the capabilities it does carry.
+    """
+
+    @pytest.fixture
+    def moderator_role(self, app, monkeypatch):
+        bundle = frozenset({Permission.ADMIN_ACCESS, Permission.FORUM_MODERATE})
+        monkeypatch.setitem(ROLE_PERMISSIONS, "moderator", bundle)
+        app_module.seed_default_roles()
+        db.session.commit()
+        return bundle
+
+    def test_the_role_row_appears_from_the_table_alone(self, app, moderator_role):
+        from aeronautics_members.db_models import Role
+
+        row = db.session.execute(db.select(Role).filter_by(slug="moderator")).scalar_one_or_none()
+        assert row is not None
+
+    def test_its_holder_reaches_what_the_entry_lists(self, client, moderator_role):
+        mod = _user("mod@example.com", "moderator")
+        _login(client, mod.id)
+
+        assert client.get("/admin").status_code == 200
+        assert client.get("/admin/forum").status_code == 200
+
+    def test_and_is_refused_what_it_does_not(self, client, moderator_role):
+        mod = _user("mod2@example.com", "moderator")
+        _login(client, mod.id)
+
+        assert client.get("/admin/settings").status_code == 302
+        assert client.get("/admin/logs").status_code == 302
+        assert client.post("/admin/system-update").status_code == 302
+
+    def test_it_counts_towards_the_capabilities_it_carries(self, app, moderator_role):
+        """So the last-admin guard sees a moderator as somebody still in charge."""
+        _user("mod3@example.com", "moderator")
+
+        assert app_module.count_users_with_permission(Permission.ADMIN_ACCESS) == 1
+        assert app_module.count_users_with_permission(Permission.SYSTEM_UPDATE) == 0
+
+    def test_no_route_or_template_mentions_it(self, app, moderator_role):
+        """If adding a role needed edits elsewhere, they would be here."""
+        import pathlib
+
+        root = pathlib.Path(app_module.__file__).parent
+        for path in list(root.rglob("*.py")) + list(root.rglob("*.html")):
+            if path.name == "permissions.py":
+                continue
+            assert "moderator" not in path.read_text(), f"{path} names the role"
+
+    def test_the_navigation_offers_only_what_it_can_reach(self, client, moderator_role):
+        """A link that bounces you is worse than no link."""
+        mod = _user("mod4@example.com", "moderator")
+        _login(client, mod.id)
+
+        body = client.get("/admin").get_data(as_text=True)
+
+        assert "/admin/forum" in body
+        assert "/admin/settings" not in body
+        assert "/admin/logs" not in body

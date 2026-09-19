@@ -7,6 +7,7 @@ from the app module, which is fully initialized before this is imported.
 
 from flask import Blueprint, current_app, jsonify
 
+from ..permissions import Permission
 from ..config import (
     RATELIMIT_ADMIN_EMAIL,
     STRIPE_SETTING_KEYS,
@@ -131,29 +132,29 @@ from ..app import (
     ADMIN_DIRECTORY_PAGE_SIZE,
     APPROVAL_HISTORY_PAGE_SIZE,
     AUDIT_LOG_PAGE_SIZE,
-    admin_required,
     build_account_directory_query,
     build_forum_context,
     build_settings_page_context,
-    count_users_with_role,
+    count_users_with_permission,
     decorate_pending_identity_requests,
     get_admin_dashboard_metrics,
     get_role,
     limiter,
+    requires,
     set_setting_value,
-    superadmin_required,
 )
 
 admin_bp = Blueprint("admin", __name__)
 
-# Settings tabs holding third-party credentials. Kept beside the route that
-# enforces it so the list and the check cannot drift apart.
-SUPERADMIN_SETTINGS_SECTIONS = {"billing", "forum"}
+# Settings tabs holding third-party credentials. The page itself only needs
+# SETTINGS_GENERAL, so these sections carry their own check; kept beside the
+# route that enforces it so the list and the check cannot drift apart.
+CREDENTIAL_SETTINGS_SECTIONS = {"billing", "forum"}
 
 
 @admin_bp.route("/admin", methods=["GET"])
 @login_required
-@admin_required
+@requires(Permission.ADMIN_ACCESS)
 def admin_dashboard():
     metrics = get_admin_dashboard_metrics()
     pending_request_preview = db.session.execute(
@@ -175,7 +176,7 @@ def admin_dashboard():
 
 @admin_bp.route("/admin/accounts", methods=["GET"])
 @login_required
-@admin_required
+@requires(Permission.ACCOUNTS_VIEW)
 def admin_accounts():
     search_term = (request.args.get("q") or "").strip()
     role_filter = request.args.get("role", "all")
@@ -202,7 +203,7 @@ def admin_accounts():
 
 @admin_bp.route("/admin/accounts/<int:user_id>", methods=["GET"])
 @login_required
-@admin_required
+@requires(Permission.ACCOUNTS_VIEW)
 def admin_account_detail(user_id):
     user = db.session.execute(
         db.select(User)
@@ -240,17 +241,21 @@ def admin_account_detail(user_id):
         recent_logs=recent_logs,
         # Role changes are a super admin's business, so an ordinary admin gets
         # none of these buttons at all.
-        can_manage_roles=current_user.has_role(ROLE_SUPERADMIN),
-        can_grant_admin=not user.has_role("admin"),
-        can_revoke_admin=user.has_role("admin") and current_user.id != user.id and count_users_with_role("admin") > 1,
-        can_grant_superadmin=user.deleted_at is None and not user.has_role_directly(ROLE_SUPERADMIN),
-        can_revoke_superadmin=(
-            user.has_role_directly(ROLE_SUPERADMIN)
+        can_manage_roles=current_user.can(Permission.ROLES_MANAGE),
+        can_grant_admin=user.deleted_at is None and not user.has_role(ROLE_ADMIN),
+        can_revoke_admin=(
+            user.has_role(ROLE_ADMIN)
             and current_user.id != user.id
-            and count_users_with_role(ROLE_SUPERADMIN) > 1
+            and count_users_with_permission(Permission.ADMIN_ACCESS) > 1
         ),
-        admin_count=count_users_with_role("admin"),
-        superadmin_count=count_users_with_role(ROLE_SUPERADMIN),
+        can_grant_superadmin=user.deleted_at is None and not user.has_role(ROLE_SUPERADMIN),
+        can_revoke_superadmin=(
+            user.has_role(ROLE_SUPERADMIN)
+            and current_user.id != user.id
+            and count_users_with_permission(Permission.SYSTEM_UPDATE) > 1
+        ),
+        admin_count=count_users_with_permission(Permission.ADMIN_ACCESS),
+        superadmin_count=count_users_with_permission(Permission.SYSTEM_UPDATE),
         deletion_impact=describe_deletion_impact(user, actor_user=current_user),
         live_subscription=refresh_subscription_state_before_deletion(user.member),
     )
@@ -258,7 +263,7 @@ def admin_account_detail(user_id):
 
 @admin_bp.route("/admin/accounts/<int:user_id>/billing-sync", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.ACCOUNTS_BILLING)
 def admin_sync_billing_account(user_id):
     user = db.session.execute(
         db.select(User)
@@ -331,7 +336,7 @@ def admin_sync_billing_account(user_id):
 
 @admin_bp.route("/admin/forum", methods=["GET"])
 @login_required
-@admin_required
+@requires(Permission.FORUM_MODERATE)
 def admin_forum():
     page = request.args.get("page", 1, type=int)
     pending_avatar_pagination = db.paginate(
@@ -365,7 +370,7 @@ def admin_forum():
 
 @admin_bp.route("/admin/accounts/<int:user_id>/forum-resync", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.FORUM_MODERATE)
 def admin_resync_forum_account(user_id):
     user = db.session.execute(
         db.select(User)
@@ -406,7 +411,7 @@ def admin_resync_forum_account(user_id):
 
 @admin_bp.route("/admin/forum/submissions/<int:submission_id>/approve", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.FORUM_MODERATE)
 def approve_forum_avatar_submission(submission_id):
     submission = db.session.execute(
         db.select(ForumAvatarSubmission)
@@ -456,7 +461,7 @@ def approve_forum_avatar_submission(submission_id):
 
 @admin_bp.route("/admin/forum/submissions/<int:submission_id>/reject", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.FORUM_MODERATE)
 def reject_forum_avatar_submission(submission_id):
     submission = db.session.execute(
         db.select(ForumAvatarSubmission)
@@ -514,7 +519,7 @@ def reject_forum_avatar_submission(submission_id):
 
 @admin_bp.route("/admin/settings/test-forum-connection", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.SETTINGS_CREDENTIALS)
 def test_forum_connection():
     service = get_forum_service()
     try:
@@ -539,7 +544,7 @@ def test_forum_connection():
 
 @admin_bp.route("/admin/accounts/<int:user_id>/grant-admin", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.ROLES_MANAGE)
 def grant_admin_access(user_id):
     user = db.session.get(User, user_id)
     if user is None:
@@ -570,7 +575,7 @@ def grant_admin_access(user_id):
 
 @admin_bp.route("/admin/accounts/<int:user_id>/revoke-admin", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.ROLES_MANAGE)
 def revoke_admin_access(user_id):
     user = db.session.get(User, user_id)
     if user is None:
@@ -585,11 +590,11 @@ def revoke_admin_access(user_id):
         flash(_("You cannot remove your own admin access from the UI."), "danger")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
-    if count_users_with_role("admin") <= 1:
+    if count_users_with_permission(Permission.ADMIN_ACCESS) <= 1:
         flash(_("You cannot remove the last remaining admin account."), "danger")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
-    if user.has_role_directly(ROLE_SUPERADMIN) and count_users_with_role(ROLE_SUPERADMIN) <= 1:
+    if user.has_role(ROLE_SUPERADMIN) and count_users_with_permission(Permission.SYSTEM_UPDATE) <= 1:
         flash(_("You cannot remove the last remaining super admin account."), "danger")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
@@ -597,7 +602,7 @@ def revoke_admin_access(user_id):
     # Super admin implies admin, so removing only the admin row would leave the
     # access untouched and the button looking broken. Taking away administrator
     # access means exactly that.
-    also_superadmin = user.has_role_directly(ROLE_SUPERADMIN)
+    also_superadmin = user.has_role(ROLE_SUPERADMIN)
     user.revoke_role(ROLE_SUPERADMIN)
     user.revoke_role(ROLE_ADMIN)
     log_audit_event(
@@ -617,7 +622,7 @@ def revoke_admin_access(user_id):
 
 @admin_bp.route("/admin/accounts/<int:user_id>/grant-superadmin", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.ROLES_MANAGE)
 def grant_superadmin_access(user_id):
     user = db.session.get(User, user_id)
     if user is None:
@@ -628,7 +633,7 @@ def grant_superadmin_access(user_id):
         flash(_("This account was erased and cannot be given access."), "danger")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
-    if user.has_role_directly(ROLE_SUPERADMIN):
+    if user.has_role(ROLE_SUPERADMIN):
         flash(_("This account already has super admin access."), "info")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
@@ -652,7 +657,7 @@ def grant_superadmin_access(user_id):
 
 @admin_bp.route("/admin/accounts/<int:user_id>/revoke-superadmin", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.ROLES_MANAGE)
 def revoke_superadmin_access(user_id):
     """Step an account back down to ordinary administrator."""
     user = db.session.get(User, user_id)
@@ -660,7 +665,7 @@ def revoke_superadmin_access(user_id):
         flash(_("The selected account could not be found."), "warning")
         return redirect(url_for("admin.admin_accounts"))
 
-    if not user.has_role_directly(ROLE_SUPERADMIN):
+    if not user.has_role(ROLE_SUPERADMIN):
         flash(_("This account does not currently have super admin access."), "info")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
@@ -671,7 +676,7 @@ def revoke_superadmin_access(user_id):
         flash(_("You cannot remove your own super admin access from the UI."), "danger")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
-    if count_users_with_role(ROLE_SUPERADMIN) <= 1:
+    if count_users_with_permission(Permission.SYSTEM_UPDATE) <= 1:
         flash(_("You cannot remove the last remaining super admin account."), "danger")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
@@ -696,7 +701,7 @@ def revoke_superadmin_access(user_id):
 
 @admin_bp.route("/admin/approvals", methods=["GET"])
 @login_required
-@admin_required
+@requires(Permission.APPROVALS_REVIEW)
 def admin_approvals():
     pending_identity_requests = db.session.execute(
         db.select(MemberProfileChangeRequest)
@@ -746,7 +751,7 @@ def admin_approvals():
 
 @admin_bp.route("/admin/settings", methods=["GET", "POST"])
 @login_required
-@admin_required
+@requires(Permission.SETTINGS_GENERAL)
 def admin_settings():
     edit_mail_account_id = request.args.get("edit_mail_account", type=int)
     context = build_settings_page_context(edit_mail_account_id=edit_mail_account_id)
@@ -783,8 +788,8 @@ def admin_settings():
         # posted is trivial to reconstruct, so the decision is made here as well.
         # Every other section only touches the settings a plain admin may change,
         # because the unselected ones are written back from before_settings.
-        if settings_section in SUPERADMIN_SETTINGS_SECTIONS and not current_user.has_role(ROLE_SUPERADMIN):
-            flash(_("Those settings can only be changed by a super administrator."), "danger")
+        if settings_section in CREDENTIAL_SETTINGS_SECTIONS and not current_user.can(Permission.SETTINGS_CREDENTIALS):
+            flash(_("You do not have permission to change those settings."), "danger")
             return redirect(url_for("admin.admin_settings"))
 
         settings_redirect = f"{url_for('admin.admin_settings')}#settings-{settings_section}"
@@ -902,7 +907,7 @@ def admin_settings():
 
 @admin_bp.route("/admin/logs", methods=["GET"])
 @login_required
-@admin_required
+@requires(Permission.LOGS_VIEW)
 def admin_logs():
     actor_user = aliased(User)
     target_user = aliased(User)
@@ -959,7 +964,7 @@ def admin_logs():
 
 @admin_bp.route("/admin/profile-requests/<int:request_id>/approve", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.APPROVALS_REVIEW)
 def approve_profile_change_request(request_id):
     request_record = db.session.get(MemberProfileChangeRequest, request_id)
     if request_record is None or request_record.status != "pending":
@@ -1035,7 +1040,7 @@ def approve_profile_change_request(request_id):
 
 @admin_bp.route("/admin/profile-requests/<int:request_id>/reject", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.APPROVALS_REVIEW)
 def reject_profile_change_request(request_id):
     request_record = db.session.get(MemberProfileChangeRequest, request_id)
     if request_record is None or request_record.status != "pending":
@@ -1076,7 +1081,7 @@ def reject_profile_change_request(request_id):
 
 @admin_bp.route("/admin/settings/mail-accounts", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.SETTINGS_CREDENTIALS)
 def save_mail_account():
     form = MailAccountForm(prefix="mail")
     account_id = int(form.mail_account_id.data) if form.mail_account_id.data else None
@@ -1150,7 +1155,7 @@ def save_mail_account():
 
 @admin_bp.route("/admin/settings/mail-accounts/<int:mail_account_id>/delete", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.SETTINGS_CREDENTIALS)
 def delete_mail_account(mail_account_id):
     mail_account = db.session.get(MailAccount, mail_account_id)
     if mail_account is None:
@@ -1181,7 +1186,7 @@ def delete_mail_account(mail_account_id):
 
 @admin_bp.route("/admin/settings/mail-accounts/import", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.SETTINGS_CREDENTIALS)
 def import_mail_accounts():
     upload = request.files.get("mail_accounts_file")
     overwrite_existing = request.form.get("overwrite_existing") == "1"
@@ -1298,7 +1303,7 @@ def import_mail_accounts():
 
 @admin_bp.route("/admin/settings/mail-accounts/export", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.SETTINGS_CREDENTIALS)
 def export_mail_accounts():
     confirm_password = request.form.get("export_password", "")
     if not current_user.check_password(confirm_password):
@@ -1329,7 +1334,7 @@ def export_mail_accounts():
 
 @admin_bp.route("/admin/settings/mail-accounts/<int:mail_account_id>/test-connection", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.SETTINGS_CREDENTIALS)
 @limiter.limit(RATELIMIT_ADMIN_EMAIL)
 def test_mail_account_connection(mail_account_id):
     mail_account = db.session.get(MailAccount, mail_account_id)
@@ -1358,7 +1363,7 @@ def test_mail_account_connection(mail_account_id):
 
 @admin_bp.route("/admin/settings/send-test-email", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.NOTIFICATIONS_MANAGE)
 @limiter.limit(RATELIMIT_ADMIN_EMAIL)
 def send_test_email():
     form = TestEmailForm()
@@ -1406,7 +1411,7 @@ def send_test_email():
 
 @admin_bp.route("/admin/undelivered-emails/<int:job_id>/<any(retry, dismiss):action>", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.NOTIFICATIONS_MANAGE)
 def admin_resolve_undelivered_email(job_id, action):
     """Retry or dismiss an email that gave up.
 
@@ -1452,7 +1457,7 @@ def admin_resolve_undelivered_email(job_id, action):
 
 @admin_bp.route("/admin/system-update/status", methods=["GET"])
 @login_required
-@superadmin_required
+@requires(Permission.SYSTEM_UPDATE)
 def admin_system_update_status():
     """Current and available version, as JSON.
 
@@ -1465,7 +1470,7 @@ def admin_system_update_status():
 
 @admin_bp.route("/admin/system-update", methods=["POST"])
 @login_required
-@superadmin_required
+@requires(Permission.SYSTEM_UPDATE)
 @limiter.limit(RATELIMIT_ADMIN_EMAIL, methods=["POST"])
 def admin_request_system_update():
     """Ask the privileged runner to install the available update.
@@ -1510,7 +1515,7 @@ def admin_request_system_update():
 
 @admin_bp.route("/admin/accounts/<int:user_id>/data-export", methods=["GET"])
 @login_required
-@admin_required
+@requires(Permission.ACCOUNTS_PRIVACY)
 def admin_export_account_data(user_id):
     """Download everything held about one account, as JSON.
 
@@ -1544,7 +1549,7 @@ def admin_export_account_data(user_id):
 
 @admin_bp.route("/admin/accounts/<int:user_id>/delete", methods=["POST"])
 @login_required
-@admin_required
+@requires(Permission.ACCOUNTS_PRIVACY)
 def admin_delete_account(user_id):
     """Erase a member's personal data, keeping the records that must survive.
 

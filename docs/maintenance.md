@@ -206,33 +206,60 @@ people hold administrator accounts. At that point the answer changes to keeping
 the secrets in deployment configuration (`.env`, systemd credentials) rather
 than in rows that every backup copies.
 
-## Roles
+## Roles and Permissions
 
-Two roles carry access, and a super admin **is** an administrator — the
-implication lives in `ROLE_IMPLIES` in `db_models.py`, so `has_role("admin")` is
-true for a super admin without the second row being granted. A later role
-(moderator, treasurer) is a line in that table rather than another special case
-spread through the checks.
+**Access is decided by capability, never by role name.** A route says what it
+does — `@requires(Permission.SYSTEM_UPDATE)` — and `permissions.py` alone says
+which roles carry that. Templates ask the same question:
+`current_user.can('logs.view')`.
 
-| | Admin | Super Admin |
+That indirection is the point. Checking roles at each call site works until a
+second kind of privileged user appears: adding a forum moderator would mean
+finding every route a moderator should reach and editing its check, which is
+exactly the kind of sweep that gets one route wrong and nobody notices for a
+year.
+
+`ROLE_PERMISSIONS` is the whole access model:
+
+| Capability | Admin | Super Admin |
 |---|---|---|
-| Members, approvals, forum, logs, undelivered emails | yes | yes |
-| General and Notification settings, test email | yes | yes |
-| Install an update, roll one back | no | yes |
-| Billing and Forum settings (Stripe and Discourse credentials) | no | yes |
-| Mail accounts, including the cleartext SMTP export | no | yes |
-| Grant or revoke admin and super admin | no | yes |
+| `admin.access` — open the admin workspace | yes | yes |
+| `accounts.view`, `accounts.billing`, `accounts.privacy` | yes | yes |
+| `approvals.review`, `forum.moderate`, `logs.view` | yes | yes |
+| `notifications.manage` — test email, undelivered queue | yes | yes |
+| `settings.general` | yes | yes |
+| `settings.credentials` — Stripe/Discourse keys, mail accounts | no | yes |
+| `system.update` — install a version, roll one back | no | yes |
+| `roles.manage` — grant or revoke access | no | yes |
 
-The restricted tabs and buttons are **not rendered** for an ordinary
-administrator, so a stored secret never reaches their browser. That is a
-convenience, not the boundary: `superadmin_required` on each route, and a check
-on `settings_section` inside the settings handler, are what actually decide.
-Reconstructing the form by hand gets a redirect and a flash.
+There is **no role implication**: `superadmin` is not "admin plus extra" by
+inheritance, its bundle simply contains the admin bundle. One mechanism rather
+than two, and the table shows the whole truth.
+
+### Adding a role
+
+Add an entry to `ROLE_PERMISSIONS`, grant it, done — no route, template or
+decorator changes. `seed_default_roles()` creates the row from that table on the
+next start. A moderator would be:
+
+```python
+"moderator": frozenset({Permission.ADMIN_ACCESS, Permission.FORUM_MODERATE}),
+```
+
+`tests/test_roles.py::TestAddingARoleNeedsNoOtherChange` does exactly this and
+then checks the claim rather than asserting it: the row appears, the holder
+reaches `/admin/forum`, is bounced from settings, logs and updates, counts
+towards the capabilities it carries, is offered only the navigation it can use —
+and no file outside `permissions.py` mentions the role at all.
+
+Navigation and settings tabs are keyed on the same capability the page behind
+them requires, so a partial role sees a coherent interface instead of links that
+bounce it. Hiding is a convenience; `requires(...)` is what decides.
 
 ### Where the first super admin comes from
 
-This is the awkward question when splitting a privilege out of an existing role,
-and it has three answers depending on the situation:
+The awkward question when splitting a privilege out of an existing role, with
+three answers:
 
 - **An installation that already exists.** Migration `f2b6a90c1d73` grants the
   role to every current administrator. That is not an escalation — those
@@ -241,9 +268,9 @@ and it has three answers depending on the situation:
   how the fix would have had to arrive. Erased accounts are skipped.
 - **A fresh installation.** No administrators exist when the migration runs, so
   nothing is granted. `create-admin`, which `install.sh` calls, takes the role
-  when the database has no super admin yet; the first account created is one.
+  when nobody can yet install an update; the first account created is one.
   `--superadmin` / `--no-superadmin` force it either way.
-- **Recovery**, when the last super admin leaves or erases their account:
+- **Recovery**, when the last one leaves or erases their account:
 
   ```bash
   sudo -u jaeronautics /var/www/jaeronautics/.venv/bin/flask \
@@ -253,10 +280,17 @@ and it has three answers depending on the situation:
   It needs a shell on the server, which is the right bar — anyone with one can
   already read this database and change this code.
 
-Three guards keep somebody in charge: a super admin cannot strip their own role
-from the interface, the last one cannot be erased (`last_superadmin` blocker),
-and revoking *admin* from a super admin removes both, because removing only the
-admin row would leave the access untouched through the implication.
+### Not locking everybody out
+
+The guards count **capability holders, not superadmins**, so a future role
+carrying `system.update` starts counting towards "somebody can still install an
+update" without the guards being touched. `PROTECTED_PERMISSIONS` names the
+capabilities that must never reach zero holders.
+
+Concretely: an account cannot strip its own role from the interface, the last
+account that can install an update cannot be erased (`last_superadmin` blocker),
+and revoking *admin* from a super admin removes both roles, since removing one
+row would otherwise leave the access untouched.
 
 ## Data Export and Account Deletion
 

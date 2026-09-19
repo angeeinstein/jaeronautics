@@ -62,11 +62,11 @@
                     {% endif %}
                 </div>
                 {% if can_manage_roles %}
-                    {% if user_record.has_role('admin') and current_user.id == user_record.id %}
+                    {% if user_record.can('admin.access') and current_user.id == user_record.id %}
                         <div class="alert alert-secondary mt-4 mb-0">{{ _('You cannot revoke your own admin access from the UI.') }}</div>
-                    {% elif user_record.has_role('admin') and admin_count <= 1 %}
+                    {% elif user_record.can('admin.access') and admin_count <= 1 %}
                         <div class="alert alert-secondary mt-4 mb-0">{{ _('This is the last remaining admin account.') }}</div>
-                    {% elif user_record.has_role_directly('superadmin') and superadmin_count <= 1 %}
+                    {% elif user_record.can('system.update') and superadmin_count <= 1 %}
                         <div class="alert alert-secondary mt-4 mb-0">{{ _('This is the last remaining super admin account. Grant the role to someone else first, or use grant-superadmin on the server.') }}</div>
                     {% endif %}
                 {% endif %}

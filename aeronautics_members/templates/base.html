@@ -25,7 +25,7 @@
                                 <a class="nav-link" href="{{ url_for('account.account') }}">{{ _('My Account') }}</a>
                             </li>
                         {% endif %}
-                        {% if current_user.has_role('admin') %}
+                        {% if current_user.can('admin.access') %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('admin.admin_dashboard') }}">{{ _('Admin') }}</a>
                             </li>

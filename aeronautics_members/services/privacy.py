@@ -43,9 +43,8 @@ import os
 from flask_babel import _
 
 from ..security_utils import build_public_url
+from ..permissions import Permission
 from ..db_models import (
-    ROLE_ADMIN,
-    ROLE_SUPERADMIN,
     AuditLog,
     EmailDeliveryJob,
     ExternalWorkItem,
@@ -270,20 +269,21 @@ def describe_deletion_impact(user, actor_user=None):
         raise ValidationError("An account is required.")
 
     member = user.member
-    is_admin = any(role.slug == "admin" for role in user.roles)
+    is_admin = user.can(Permission.ADMIN_ACCESS)
 
     impact = {
         "user_id": user.id,
         "member_id": member.id if member else None,
         "already_erased": is_erased(user),
         "is_admin": is_admin,
-        "is_last_admin": is_admin and _count_active_admins() <= 1,
-        "is_superadmin": user.has_role(ROLE_SUPERADMIN),
-        # Losing the last super admin is worse than losing the last admin: an
-        # installation with none cannot install an update, including the update
-        # that would fix whatever went wrong. Recovering needs a shell.
+        "is_last_admin": is_admin and _count_active_holders(Permission.ADMIN_ACCESS) <= 1,
+        "is_superadmin": user.can(Permission.SYSTEM_UPDATE),
+        # Losing the last account that can install an update is worse than
+        # losing the last administrator: the installation cannot then deploy the
+        # fix for whatever went wrong. Recovering needs a shell on the server.
         "is_last_superadmin": (
-            user.has_role(ROLE_SUPERADMIN) and _count_active_holders(ROLE_SUPERADMIN) <= 1
+            user.can(Permission.SYSTEM_UPDATE)
+            and _count_active_holders(Permission.SYSTEM_UPDATE) <= 1
         ),
         "is_self": bool(actor_user is not None and actor_user.id == user.id),
         "has_forum_account": user.forum_account is not None,
@@ -334,24 +334,24 @@ def describe_deletion_impact(user, actor_user=None):
     return impact
 
 
-def _count_active_holders(slug):
-    """Accounts that still have this access and can still sign in.
+def _count_active_holders(permission):
+    """Accounts that could still do this and can still sign in.
 
-    Counts implied grants, so a super admin counts as an administrator: erasing
-    the only one on the grounds that no row literally said "admin" would leave
-    nobody able to administer the site.
+    Asks about the capability rather than about a role, so a role added to
+    permissions.py with one of the protected permissions immediately counts
+    towards "somebody else can still do this" without these guards changing.
     """
-    from ..db_models import Role, roles_conferring
+    from ..db_models import Role
+    from ..permissions import roles_with
 
+    slugs = roles_with(permission)
+    if not slugs:
+        return 0
     return db.session.scalar(
         db.select(db.func.count())
         .select_from(User)
-        .where(User.roles.any(Role.slug.in_(roles_conferring(slug))), User.deleted_at.is_(None))
+        .where(User.roles.any(Role.slug.in_(slugs)), User.deleted_at.is_(None))
     ) or 0
-
-
-def _count_active_admins():
-    return _count_active_holders(ROLE_ADMIN)
 
 
 def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, note=None):

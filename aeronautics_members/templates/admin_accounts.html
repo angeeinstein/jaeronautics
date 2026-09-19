@@ -91,7 +91,7 @@
                                         <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">{{ _('Actions') }}</button>
                                         <ul class="dropdown-menu dropdown-menu-end">
                                             <li><a class="dropdown-item" href="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">{{ _('View Details') }}</a></li>
-                                            {% if not user_record.has_role('admin') %}
+                                            {% if not user_record.can('admin.access') %}
                                                 <li>
                                                     <form method="POST" action="{{ url_for('admin.grant_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
                                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

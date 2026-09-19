@@ -57,7 +57,6 @@ try:
         ROLE_SUPERADMIN,
         Role,
         Setting,
-        roles_conferring,
         User,
         UserRole,
         db,
@@ -117,7 +116,6 @@ except ImportError:
         ROLE_SUPERADMIN,
         Role,
         Setting,
-        roles_conferring,
         User,
         UserRole,
         db,
@@ -164,6 +162,13 @@ except ImportError:
 
 # Configuration lives in config.py, a leaf module the service layer can import
 # without depending on this one. Re-exported here so existing imports keep working.
+from .permissions import (  # noqa: E402
+    Permission,
+    ROLE_PERMISSIONS,
+    role_description,
+    role_label,
+    roles_with,
+)
 from .services.diagnostics import collect_system_health  # noqa: E402
 from .services.system_update import describe_update_state  # noqa: E402
 from .services.outbox import (  # noqa: E402
@@ -329,40 +334,37 @@ def load_user(user_id):
 
 
 
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.has_role(ROLE_ADMIN):
-            flash(_("You do not have permission to access this page."), "danger")
-            return redirect(url_for("public.index"))
-        return f(*args, **kwargs)
+def requires(*permissions):
+    """Gate a route on capabilities rather than on who somebody is.
 
-    return decorated_function
+    ``@requires(Permission.SYSTEM_UPDATE)`` says what the route does; which
+    roles carry that is permissions.py's business alone. A role added there
+    reaches every route its bundle lists without one of them being edited,
+    which is the whole point -- the alternative is finding each route a new
+    role should reach and hoping none is missed.
 
-
-def superadmin_required(f):
-    """For actions that can take over the installation or walk off with its keys.
-
-    Installing or rolling back a version, the settings holding third-party
-    credentials, the mail-account export that downloads cleartext SMTP
-    passwords, and granting administrator access.
-
-    The user interface hides these from an ordinary administrator, but hiding a
-    link is not access control -- the URL is still there to be typed, and
-    somebody who was an administrator yesterday knows it. This is the check that
-    actually decides. An administrator who reaches one is sent to the dashboard
-    rather than the public page, because they are legitimately signed in here.
+    The interface hides what it will not offer, but hiding a link is not access
+    control: the URL is still there to be typed, and somebody who had the role
+    yesterday knows it. This is the check that decides. Somebody who may reach
+    the admin workspace at all is sent back to the dashboard rather than to the
+    public page, because they are legitimately signed in here.
     """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.has_role(ROLE_SUPERADMIN):
-            flash(_("That action is restricted to super administrators."), "danger")
-            if current_user.is_authenticated and current_user.has_role(ROLE_ADMIN):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if current_user.is_authenticated and all(
+                current_user.can(permission) for permission in permissions
+            ):
+                return f(*args, **kwargs)
+
+            flash(_("You do not have permission to access this page."), "danger")
+            if current_user.is_authenticated and current_user.can(Permission.ADMIN_ACCESS):
                 return redirect(url_for("admin.admin_dashboard"))
             return redirect(url_for("public.index"))
-        return f(*args, **kwargs)
 
-    return decorated_function
+        return decorated_function
+
+    return decorator
 
 
 
@@ -654,26 +656,37 @@ def get_role(slug, label=None, description=None):
 
 
 def seed_default_roles():
-    get_role("admin", label="Admin", description="Can access the admin workspace.")
-    get_role(
-        "superadmin",
-        label="Super Admin",
-        description="Can install updates, manage credentials and grant administrator access.",
-    )
+    """Create a row for every role the permission table defines.
+
+    Driven off ROLE_PERMISSIONS so adding a role there is genuinely the only
+    edit: the row appears on the next start, ready to be granted.
+    """
+    for slug in ROLE_PERMISSIONS:
+        get_role(slug, label=role_label(slug), description=role_description(slug))
 
 
 
 def count_users_with_role(role_slug):
-    """How many accounts have this access, counting implied grants.
-
-    The last-administrator guards depend on this. Counting only the literal role
-    would let the last superadmin be erased on the grounds that they were not
-    technically an admin, taking the site's administration with them.
-    """
-    conferring = roles_conferring(role_slug)
+    """How many accounts hold this role. About the grant, not about access."""
     return db.session.scalar(
-        db.select(func.count()).select_from(User).where(User.roles.any(Role.slug.in_(conferring)))
+        db.select(func.count()).select_from(User).where(User.roles.any(Role.slug == role_slug))
     ) or 0
+
+
+def count_users_with_permission(permission, active_only=True):
+    """How many accounts could still do this, whatever role gives it to them.
+
+    The lockout guards ask this rather than counting super admins, so a role
+    added to permissions.py with SYSTEM_UPDATE starts counting towards "somebody
+    can still install an update" without the guards being touched.
+    """
+    slugs = roles_with(permission)
+    if not slugs:
+        return 0
+    query = db.select(func.count()).select_from(User).where(User.roles.any(Role.slug.in_(slugs)))
+    if active_only:
+        query = query.where(User.deleted_at.is_(None))
+    return db.session.scalar(query) or 0
 
 
 
@@ -1388,7 +1401,9 @@ def create_app(config_overrides=None):
         created = user is None
 
         if superadmin is None:
-            superadmin = count_users_with_role(ROLE_SUPERADMIN) == 0
+            # The bootstrap: with nobody able to install an update, the first
+            # account created here has to be able to, or nothing ever can.
+            superadmin = count_users_with_permission(Permission.SYSTEM_UPDATE) == 0
 
         if created:
             user = User(email=normalized_email)
@@ -1449,7 +1464,7 @@ def create_app(config_overrides=None):
                 err=True,
             )
             sys.exit(1)
-        if user.has_role_directly(ROLE_SUPERADMIN):
+        if user.has_role(ROLE_SUPERADMIN):
             click.echo(f"{normalized_email} is already a super admin.")
             return
 
