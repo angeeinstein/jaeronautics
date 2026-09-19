@@ -97,8 +97,32 @@ A JSON array, one object per person. Only `source_user_id` and
 `display_name` may be null; the username is used instead. `year_group` may be
 null. It can be recovered from the username suffix, which is the same rule the
 portal uses in reverse: `…_L23` → `LAV23`, `…_M25` → `MAV25`. The importer does
-that as a fallback rather than leaving the field empty, and records that the
-value was derived rather than exported.
+that as a fallback rather than leaving the field empty, and the run's report
+says how many were derived rather than exported. Anything that does not match
+the rule exactly is left empty: a wrong year group is worse than a missing one.
+
+## 4b. Running the import
+
+```bash
+flask --app aeronautics_members.app:create_app import-forum-people people.json --dry-run
+flask --app aeronautics_members.app:create_app import-forum-people people.json \
+      --avatar-dir /path/to/uploads/avatars
+```
+
+Always the dry run first — it produces the identical report and writes nothing.
+The run is safe to repeat: people are matched on the old forum's `uid`, so a
+second run updates rather than duplicating, and the `user.id` that Discourse
+knows them by never moves. Avatars go through the same normalisation an uploaded
+avatar gets, so an enormous 2014 JPEG does not become a second class of file the
+rest of the application has never seen.
+
+Two things are reported rather than resolved, because both need a person:
+
+- an entry whose forum username already belongs to an account — almost
+  certainly the same student returning, which is a link to make by hand;
+- an avatar file named in the export but missing from the directory.
+
+Neither stops the rest of the import.
 
 ## 5. Do the portal first, then Discourse
 

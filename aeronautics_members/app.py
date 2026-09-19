@@ -211,6 +211,10 @@ from .services.notifications import (  # noqa: E402
     queue_curated_admin_notification,
     queue_user_status_notification,
 )
+from .services.forum_import import (  # noqa: E402
+    import_forum_people,
+    load_people,
+)
 from .services.workflows import (  # noqa: E402
     process_email_delivery_jobs,
     refresh_member_billing_state,
@@ -1496,6 +1500,41 @@ def create_app(config_overrides=None):
         )
         db.session.commit()
         click.echo(click.style(f"Granted super admin access to: {normalized_email}", fg="green"))
+
+    @app.cli.command("import-forum-people")
+    @click.argument("export_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--avatar-dir", type=click.Path(exists=True, file_okay=False),
+                  help="Directory holding the old forum's avatar files.")
+    @click.option("--dry-run", is_flag=True,
+                  help="Report what would happen and write nothing.")
+    @with_appcontext
+    def import_forum_people_command(export_file, avatar_dir, dry_run):
+        """Imports people from the old forum's export. See docs/forum-import.md.
+
+        Safe to run more than once: people are matched on the old forum's own
+        user id, so a second run updates rather than duplicates. Run it with
+        --dry-run first; the report is the same either way.
+        """
+        people = load_people(export_file)
+        report = import_forum_people(people, avatar_dir=avatar_dir, dry_run=dry_run)
+
+        if dry_run:
+            db.session.rollback()
+        else:
+            db.session.commit()
+
+        click.echo(
+            f"seen={report['seen']} created={report['created']} "
+            f"updated={report['updated']} skipped={report['skipped']} "
+            f"avatars={report['avatars_stored']} "
+            f"year_groups_derived={report['year_groups_derived']}"
+        )
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        if dry_run:
+            click.echo(click.style("Dry run: nothing was written.", fg="cyan"))
+        elif report["created"] or report["updated"]:
+            click.echo(click.style("Imported.", fg="green"))
 
     @app.cli.command("sync-member-billing")
     @click.argument("email")
