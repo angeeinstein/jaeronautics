@@ -87,6 +87,56 @@ python -m pytest
 Tests point the app at SQLite via the `DATABASE_URL` environment variable, which
 `create_app` honors as an override for the default MySQL connection string.
 
+## Updating and Rolling Back
+
+Settings → Maintenance has the update button. The web process never installs
+anything itself: it writes a request file, and a root-owned watcher acts on it.
+The request carries no branch, remote or revision, so reaching that endpoint
+cannot choose what gets deployed — which is the whole reason this is not a
+sudoers rule.
+
+**A rollback restores the program only.** It does *not* restore the database.
+The schema is deliberately left where it is, because every migration here adds
+tables and columns that older code simply ignores, while undoing one would mean
+dropping tables and destroying everything written since the update. Data added
+after the update therefore stays. If you also need the data as it was, the
+rollback point names the dump taken just before the update, and you restore it
+by hand.
+
+Two things about the timing are easy to trip over:
+
+- `update` runs `install.sh` **from the current checkout**, and the rollback
+  point is written *before* that checkout moves. So a change to how the
+  rollback point is recorded takes effect one update after it is deployed.
+- Running the update when there is nothing new still records a rollback point —
+  of the revision already running. The panel then offers a rollback to the
+  version you are on, and taking it does nothing ("already running ...").
+  A meaningful rollback needs an update that actually changed the revision.
+
+The rollback point lives at `/etc/jaeronautics/rollback.conf`, owned by
+`root:jaeronautics` at mode 0640 so the admin page can read it. At 0600 the page
+cannot, and — because a missing file is the normal state before the first
+update — the panel silently showed nothing at all. It now says why it is empty,
+and an unreadable file is logged.
+
+## Billing Shows Up in Stripe as a Trial
+
+The association bills one shared calendar year, which is implemented by giving
+the subscription `trial_end = 1 January` and charging the prorated remainder as
+a separate one-off line item. Stripe takes that literally, so its customer
+portal tells a member who has just paid that they are in a *free trial* until
+31 December:
+
+> Nach dem Ende Ihrer kostenlosen Testphase am 31. Dezember 2026 wird dieser
+> Dienst nicht mehr verfügbar sein.
+
+The invoice line directly beneath it does show the payment, so this is
+confusing rather than untrue. The tidier construction is `billing_cycle_anchor`
+with `proration_behavior`, letting Stripe compute the proration itself and
+describe the subscription as a subscription. That is surgery on billing which
+currently works and is well covered by tests, so it has not been done; revisit
+it if members actually ask.
+
 ## Where Secrets Live (a recorded decision)
 
 Four third-party secrets are stored as ordinary rows in the `settings` table:
