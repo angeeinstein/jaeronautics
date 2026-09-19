@@ -101,7 +101,14 @@ def get_remote_version(force=False):
         return _remote_cache["value"]
 
     branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"])
-    if not branch or branch == "HEAD":
+    if branch == "HEAD":
+        # A rollback checks the old revision out detached, so there is no
+        # current branch to compare against. Falling back to the branch the
+        # installer recorded matters here more than anywhere else: having just
+        # gone back a version, the administrator most needs to be told that a
+        # newer one exists and they can go forward again.
+        branch = (read_rollback_point() or {}).get("branch")
+    if not branch:
         return None
 
     output = _run_git(["ls-remote", "origin", f"refs/heads/{branch}"], timeout=20)
@@ -211,6 +218,9 @@ def read_rollback_point():
         "recorded_at": values.get("ROLLBACK_RECORDED_AT") or None,
         "schema_revision": values.get("ROLLBACK_SCHEMA_REVISION") or None,
         "database_backup": values.get("ROLLBACK_DB_BACKUP") or None,
+        # The branch this installation tracks. After a rollback HEAD is
+        # detached, and this is the only record of where "forward" is.
+        "branch": values.get("ROLLBACK_BRANCH") or None,
     }
 
 

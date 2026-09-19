@@ -346,3 +346,62 @@ class TestAHungUpdateCannotWedgeTheButton:
         source = self.INSTALLER.read_text()
         assert 'apt-get "${APT_NETWORK_OPTS[@]}" update' in source
         assert 'apt-get "${APT_NETWORK_OPTS[@]}" install' in source
+
+
+class TestTheRemoteCheckSurvivesARollback:
+    """A rollback detaches HEAD, and the update check used to give up.
+
+    `git rev-parse --abbrev-ref HEAD` returns the literal "HEAD" on a detached
+    checkout, so the page reported "Latest available: could not be checked" --
+    at exactly the moment an administrator has just gone back a version and
+    most needs to be told a newer one exists.
+    """
+
+    def test_a_detached_head_falls_back_to_the_recorded_branch(self, app, tmp_path, monkeypatch):
+        rollback_file = tmp_path / "rollback.conf"
+        rollback_file.write_text(
+            'ROLLBACK_REVISION="' + "a" * 40 + '"\n'
+            'ROLLBACK_BRANCH="main"\n'
+        )
+        monkeypatch.setattr(system_update, "ROLLBACK_FILE", rollback_file)
+        monkeypatch.setattr(system_update, "_remote_cache", {"checked_at": None, "value": None})
+
+        asked = []
+
+        def fake_git(args, timeout=None):
+            if args[:2] == ["rev-parse", "--abbrev-ref"]:
+                return "HEAD"          # detached, as after a rollback
+            asked.append(args)
+            return "b" * 40 + "\trefs/heads/main"
+
+        monkeypatch.setattr(system_update, "_run_git", fake_git)
+        with app.test_request_context("/"):
+            revision = system_update.get_remote_version(force=True)
+
+        assert revision == "b" * 40
+        assert any("refs/heads/main" in " ".join(a) for a in asked), asked
+
+    def test_without_a_recorded_branch_it_still_gives_up_quietly(self, app, tmp_path, monkeypatch):
+        monkeypatch.setattr(system_update, "ROLLBACK_FILE", tmp_path / "absent.conf")
+        monkeypatch.setattr(system_update, "_remote_cache", {"checked_at": None, "value": None})
+        monkeypatch.setattr(
+            system_update, "_run_git",
+            lambda args, timeout=None: "HEAD" if args[:2] == ["rev-parse", "--abbrev-ref"] else "",
+        )
+        with app.test_request_context("/"):
+            assert system_update.get_remote_version(force=True) is None
+
+    def test_the_rollback_point_exposes_the_branch(self, app, tmp_path, monkeypatch):
+        rollback_file = tmp_path / "rollback.conf"
+        rollback_file.write_text(
+            'ROLLBACK_REVISION="' + "c" * 40 + '"\nROLLBACK_BRANCH="release"\n'
+        )
+        monkeypatch.setattr(system_update, "ROLLBACK_FILE", rollback_file)
+        with app.test_request_context("/"):
+            assert system_update.read_rollback_point()["branch"] == "release"
+
+    def test_the_page_does_not_call_a_detached_head_a_branch(self):
+        template = (Path(__file__).resolve().parent.parent / "aeronautics_members"
+                    / "templates" / "admin_settings.html").read_text()
+        assert "rolled back" in template
+        assert "update_state.local.branch == 'HEAD'" in template

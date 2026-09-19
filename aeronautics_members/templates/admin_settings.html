@@ -587,7 +587,14 @@
                             <dt class="col-sm-4">{{ _('Installed version') }}</dt>
                             <dd class="col-sm-8">
                                 <code>{{ update_state.local.short_revision or _('unknown') }}</code>
-                                {% if update_state.local.branch %}<span class="text-muted">({{ update_state.local.branch }})</span>{% endif %}
+                                {# After a rollback the checkout is detached, so git reports the
+                                   branch as the literal "HEAD". Saying that to an administrator is
+                                   worse than useless; say what actually happened. #}
+                                {% if update_state.local.branch == 'HEAD' %}
+                                    <span class="badge text-bg-warning">{{ _('rolled back') }}</span>
+                                {% elif update_state.local.branch %}
+                                    <span class="text-muted">({{ update_state.local.branch }})</span>
+                                {% endif %}
                                 {% if update_state.local.committed_at %}<br><small class="text-muted">{{ update_state.local.committed_at }}</small>{% endif %}
                                 {% if update_state.local.subject %}<br><small class="text-muted">{{ update_state.local.subject }}</small>{% endif %}
                             </dd>
