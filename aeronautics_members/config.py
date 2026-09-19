@@ -66,8 +66,11 @@ except Exception:
     MEMBERSHIP_TIMEZONE_NAME = "UTC"
 RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "redis://127.0.0.1:6379/0")
 RATELIMIT_LOGIN = os.getenv("RATELIMIT_LOGIN", "10 per 15 minute")
-RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "5 per hour")
-RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "10 per hour")
+RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "20 per hour")
+# Keyed by IP, so a whole lecture hall on one campus NAT shares a single
+# budget. Ten an hour is easily reached by legitimate members at a signup
+# drive; this is generous enough for that while still bounding abuse.
+RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "40 per hour")
 RATELIMIT_PASSWORD_CHANGE = os.getenv("RATELIMIT_PASSWORD_CHANGE", "5 per 15 minute")
 RATELIMIT_ADMIN_EMAIL = os.getenv("RATELIMIT_ADMIN_EMAIL", "5 per 10 minute")
 # Data exports assemble a member's whole record, so they are cheap to request

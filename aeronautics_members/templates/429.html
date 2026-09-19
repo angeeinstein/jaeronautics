@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Too Many Requests') }}{% endblock %}
+{% block content %}
+{#
+  Rendered rather than redirected. A 429 carrying a Location header does
+  nothing in a browser -- redirects are not followed on 429 -- so the previous
+  handler left a member staring at an unstyled "Redirecting..." page with no
+  explanation of what had happened or what to do.
+#}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card text-center shadow-lg border-0">
+                <div class="card-body p-5">
+                    <h1 class="display-1 text-primary">429</h1>
+                    <h2 class="card-title mb-4">{{ _('Too many attempts') }}</h2>
+                    <p class="lead">
+                        {{ _('We have had a lot of requests from your network in a short time, so this one was held back.') }}
+                    </p>
+                    <p>
+                        {{ _('Please wait a few minutes and try again. If you are on university WiFi, someone else on the same network may have triggered this.') }}
+                    </p>
+                    <div class="mt-5">
+                        <a href="{{ url_for('public.index') }}" class="btn btn-primary btn-lg">{{ _('Back to the start') }}</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

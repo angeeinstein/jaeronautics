@@ -1753,8 +1753,10 @@ def create_app(config_overrides=None):
 
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
-        flash(_("Too many requests from your IP address. Please wait a moment and try again."), "warning")
-        return redirect(request.referrer or url_for("public.index")), 429
+        # Rendered, not redirected. Browsers do not follow a Location header on
+        # a 429, so returning a redirect left the member on an unstyled
+        # "Redirecting..." page that never went anywhere and explained nothing.
+        return render_template("429.html"), 429
 
     @app.errorhandler(413)
     def request_entity_too_large(e):
