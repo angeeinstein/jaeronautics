@@ -196,12 +196,19 @@ collect_diagnostics() {
 }
 
 on_error() {
+    # Capture the failing status before anything else runs and overwrites it.
+    local failed_status=$?
     local line="$1"
     local command="$2"
     error "Installer failed at line ${line}: ${command}"
     warn "Collecting diagnostics for the failure above."
     collect_diagnostics
     error "Installer failed. The diagnostics above show the state at the time of failure."
+    # Exit non-zero explicitly. Without this the handler's own last command --
+    # which succeeds -- became the script's status, so a failed install exited 0.
+    # The update runner reads that status, so the admin page showed a green
+    # "Completed" for a deploy that had just printed "Installer failed".
+    exit "$(( failed_status == 0 ? 1 : failed_status ))"
 }
 trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
 
@@ -1071,6 +1078,16 @@ roll_back_installation() {
     fi
 
     step "Rolling back to ${ROLLBACK_REVISION:0:8}"
+
+    # The unit file names the database and cache services it must start after.
+    # install_or_update detects them; this path did not, so the rollback wrote
+    # "After=network.target .service" and "Requires=.service" and systemd
+    # dropped the ordering -- the app would then be free to start before
+    # MariaDB on the next reboot.
+    detect_redis_service_name
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        detect_db_service_name
+    fi
     info "Recorded at ${ROLLBACK_RECORDED_AT:-unknown}, currently running ${current_revision:0:8}."
 
     local schema_now

@@ -128,3 +128,57 @@ class TestTheRollbackPointNamesTheOldRevision:
         """The equality guard stays: it is right, it was just always hit."""
         block = re.search(r"roll_back_installation\(\) \{(.*?)\n\}", INSTALLER, re.S)
         assert "nothing to roll back" in block.group(1)
+
+
+class TestAFailedInstallerIsReportedAsFailed:
+    """The ERR trap printed the failure and then let the script exit 0.
+
+    Seen on the live server: a rollback logged "[ERR] Installer failed." and
+    the admin page showed a green "Completed" with exit_code 0. The update
+    runner records success on a zero exit, so a broken deploy was indis-
+    tinguishable from a good one -- the worst possible failure mode for the
+    thing an administrator checks to find out whether a deploy worked.
+    """
+
+    def test_the_trap_exits_non_zero(self):
+        block = re.search(r"on_error\(\) \{(.*?)\n\}", INSTALLER, re.S)
+        assert block, "on_error not found"
+        body = block.group(1)
+        assert "exit" in body, "the handler returns instead of exiting"
+
+    def test_the_failing_status_is_captured_before_anything_overwrites_it(self):
+        body = re.search(r"on_error\(\) \{(.*?)\n\}", INSTALLER, re.S).group(1)
+        capture = body.find("$?")
+        first_command = body.find("error ")
+        assert capture != -1, "the failing status is never read"
+        assert capture < first_command, "$? is read after other commands have changed it"
+
+    def test_a_zero_status_still_exits_non_zero(self):
+        """An ERR trap with $? == 0 must not exit 0 and claim success."""
+        body = re.search(r"on_error\(\) \{(.*?)\n\}", INSTALLER, re.S).group(1)
+        assert "== 0 ? 1" in body or "|| 1" in body or ":-1" in body, body[-300:]
+
+
+class TestRollbackRendersUsableUnitFiles:
+    """A rollback wrote 'After=.service' because nothing had detected the names.
+
+    systemd reported "Failed to add dependency on .service, ignoring", which
+    drops the ordering silently: the app still runs, but nothing makes it start
+    after MariaDB, so a reboot can bring it up before its database.
+    """
+
+    def test_the_service_names_are_detected_before_units_are_written(self):
+        block = re.search(r"roll_back_installation\(\) \{(.*?)\n\}", INSTALLER, re.S)
+        assert block, "roll_back_installation not found"
+        body = block.group(1)
+
+        detect = body.find("detect_redis_service_name")
+        render = body.find("\n    render_service_file")
+        assert detect != -1, "the rollback never detects the service names"
+        assert render != -1
+        assert detect < render, "the unit file is written before the names are known"
+
+    def test_the_database_service_is_detected_for_a_local_database(self):
+        body = re.search(r"roll_back_installation\(\) \{(.*?)\n\}", INSTALLER, re.S).group(1)
+        assert "detect_db_service_name" in body
+        assert "USE_LOCAL_DB" in body, "detection must follow the same condition as the unit file"
