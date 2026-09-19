@@ -434,3 +434,89 @@ def test_the_placeholder_address_is_unique_per_person(app):
 
     assert first != second
     assert first.endswith(f"@{IMPORTED_EMAIL_DOMAIN}")
+
+
+class TestADryRunWritesNothingAtAll:
+    """Not even the avatars.
+
+    The rollback at the end of a dry run undoes the database and nothing else.
+    Storing an avatar writes a file, so a dry run pointed at the real export
+    would leave six hundred normalised images in the staging directory with
+    every row that referenced them discarded -- orphans nothing will ever
+    clean up, created by the command whose whole promise is that it changes
+    nothing.
+    """
+
+    def _avatar(self, tmp_path):
+        from PIL import Image
+
+        source = tmp_path / "avatars"
+        source.mkdir()
+        Image.new("RGB", (64, 64), (10, 20, 30)).save(source / "avatar_142.jpg")
+        return source
+
+    @pytest.fixture
+    def staged(self, app):
+        """How many imported avatars appeared while the test ran.
+
+        Counted as a delta: the staging directory is a real one shared by the
+        whole suite, so asserting it is empty would only pass depending on
+        which tests ran first.
+        """
+        from aeronautics_members.forum_service import get_forum_storage_dir
+
+        storage = get_forum_storage_dir()
+
+        def existing():
+            return set(storage.glob("imported-*")) if storage.exists() else set()
+
+        before = existing()
+        yield lambda: sorted(existing() - before)
+
+    def test_no_avatar_file_is_left_behind(self, app, tmp_path, staged):
+        report = import_forum_people(
+            [_person(avatar_file="avatar_142.jpg")],
+            avatar_dir=str(self._avatar(tmp_path)),
+            dry_run=True,
+        )
+
+        assert report["avatars_stored"] == 1, "the report still says what would happen"
+        assert staged() == [], "a dry run must not write an avatar"
+
+    def test_a_real_run_does_write_one(self, app, tmp_path, staged):
+        """The other half of the pair: the guard must not disable the feature."""
+        report = import_forum_people(
+            [_person(avatar_file="avatar_142.jpg")],
+            avatar_dir=str(self._avatar(tmp_path)),
+        )
+        db.session.commit()
+
+        assert report["avatars_stored"] == 1
+        assert len(staged()) == 1
+        assert _profiles()[0].avatar_path
+
+    def test_a_missing_avatar_is_still_reported_on_a_dry_run(self, app, tmp_path):
+        """The point of the rehearsal is finding this before the real run."""
+        report = import_forum_people(
+            [_person(avatar_file="not-here.jpg")],
+            avatar_dir=str(self._avatar(tmp_path)),
+            dry_run=True,
+        )
+
+        assert report["avatars_stored"] == 0
+        assert "avatar file not found" in report["problems"][0]
+
+    def test_an_unreadable_image_is_found_on_a_dry_run_too(self, app, tmp_path, staged):
+        """Decoding happens either way; only the write is skipped."""
+        source = self._avatar(tmp_path)
+        (source / "broken.jpg").write_bytes(b"this is not an image")
+
+        report = import_forum_people(
+            [_person(avatar_file="broken.jpg")],
+            avatar_dir=str(source),
+            dry_run=True,
+        )
+
+        assert report["avatars_stored"] == 0
+        assert "could not be read" in report["problems"][0]
+        assert staged() == []

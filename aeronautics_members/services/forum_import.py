@@ -118,13 +118,19 @@ def load_people(path):
     return payload
 
 
-def _store_avatar(user_id, avatar_dir, avatar_file):
+def _store_avatar(user_id, avatar_dir, avatar_file, *, dry_run=False):
     """Copy one avatar through the same normalisation an upload would get.
 
     Old forum avatars are whatever a student uploaded in 2014 -- any size, any
     format, occasionally enormous. Running them through the existing pipeline
     means the imported ones cannot be a second class of file that the rest of
     the application has never seen.
+
+    On a dry run every check still runs -- the file is found, decoded and
+    normalised, so a missing or corrupt one is reported -- and only the write
+    is skipped. The rollback at the end of a dry run undoes the database and
+    nothing else, so writing here would leave six hundred images in the
+    staging directory with every row that referenced them discarded.
     """
     source = Path(avatar_dir) / avatar_file
     if not source.exists():
@@ -137,6 +143,9 @@ def _store_avatar(user_id, avatar_dir, avatar_file):
         )
     except Exception as exc:  # noqa: BLE001 -- one bad image must not stop 600 people
         return None, f"avatar could not be read ({avatar_file}): {exc}"
+
+    if dry_run:
+        return None, None  # readable, and deliberately not written
 
     storage_dir = get_forum_storage_dir()
     storage_dir.mkdir(parents=True, exist_ok=True)
@@ -262,12 +271,17 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
         avatar_file = (entry.get("avatar_file") or "").strip()
         if avatar_dir and avatar_file and not profile.avatar_path:
             db.session.flush()
-            stored, problem = _store_avatar(profile.user_id, avatar_dir, avatar_file)
-            if stored:
-                profile.avatar_path = stored
-                report["avatars_stored"] += 1
-            elif problem:
+            stored, problem = _store_avatar(
+                profile.user_id, avatar_dir, avatar_file, dry_run=dry_run
+            )
+            if problem:
                 report["problems"].append(f"{source_username}: {problem}")
+            else:
+                # Counted either way, so the rehearsal reports the same number
+                # the real run will store.
+                report["avatars_stored"] += 1
+                if stored:
+                    profile.avatar_path = stored
 
     if dry_run:
         db.session.rollback()
