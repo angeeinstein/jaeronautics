@@ -129,8 +129,10 @@
                         <dd class="col-sm-8">{{ member.title or '' }} {{ member.first_name }} {{ member.last_name }}</dd>
                         <dt class="col-sm-4">{{ _('Private Email') }}</dt>
                         <dd class="col-sm-8">{{ member.email_private }}</dd>
+                        <dt class="col-sm-4">{{ _('Category') }}</dt>
+                        <dd class="col-sm-8">{{ member.category_label }}</dd>
                         <dt class="col-sm-4">{{ _('Year Group') }}</dt>
-                        <dd class="col-sm-8">{{ member.year_group or _('Not a student') }}</dd>
+                        <dd class="col-sm-8">{{ member.year_group or _('None') }}</dd>
                         <dt class="col-sm-4">{{ _('Payment Status') }}</dt>
                         <dd class="col-sm-8">{{ member.payment_status|replace('_', ' ')|title }}</dd>
                         <dt class="col-sm-4">{{ _('Active') }}</dt>

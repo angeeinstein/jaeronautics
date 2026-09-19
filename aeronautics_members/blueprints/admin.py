@@ -926,6 +926,7 @@ def approve_profile_change_request(request_id):
     member.title = request_record.requested_title
     member.first_name = request_record.requested_first_name
     member.last_name = request_record.requested_last_name
+    member.member_category = request_record.requested_member_category
     member.year_group = request_record.requested_year_group
 
     if member.user is not None and request.form.get("override_forum_username") == "1":

@@ -172,7 +172,8 @@
                         <h5>{{ _('Pending Change Request') }}</h5>
                         <p class="mb-2"><strong>{{ _('Requested Name:') }}</strong> {{ pending_request.requested_title or '' }} {{ pending_request.requested_first_name }} {{ pending_request.requested_last_name }}</p>
                         <p class="mb-2"><strong>{{ _('Requested Salutation:') }}</strong> {{ pending_request.requested_salutation }}</p>
-                        <p class="mb-2"><strong>{{ _('Requested Year Group:') }}</strong> {{ pending_request.requested_year_group or _('Not a student') }}</p>
+                        <p class="mb-2"><strong>{{ _('Requested Category:') }}</strong> {{ member_category_label(pending_request.requested_member_category) }}</p>
+                        <p class="mb-2"><strong>{{ _('Requested Year Group:') }}</strong> {{ pending_request.requested_year_group or _('None') }}</p>
                         {% if pending_request.member_note %}
                             <p class="mb-2"><strong>{{ _('Your Note:') }}</strong> {{ pending_request.member_note }}</p>
                         {% endif %}
@@ -192,14 +193,20 @@
                             <div class="col-md-8">{{ identity_form.title.label(class="form-label") }}{{ identity_form.title(class="form-control") }}</div>
                             <div class="col-md-6">{{ identity_form.first_name.label(class="form-label") }}{{ identity_form.first_name(class="form-control") }}</div>
                             <div class="col-md-6">{{ identity_form.last_name.label(class="form-label") }}{{ identity_form.last_name(class="form-control") }}</div>
-                            <div class="col-md-6" data-member-kind>
-                                <label class="form-label d-block">{{ identity_form.member_kind.label.text }}</label>
-                                {% for subfield in identity_form.member_kind %}
-                                    <div class="form-check form-check-inline">
+                            <div class="col-md-6" data-member-kind
+                                 data-year-group-categories="{{ year_group_categories }}"
+                                 data-year-group-required="{{ year_group_required_categories }}">
+                                <label class="form-label d-block">{{ identity_form.member_category.label.text }}</label>
+                                {% for subfield in identity_form.member_category %}
+                                    <div class="form-check">
                                         {{ subfield(class="form-check-input") }}
-                                        <label class="form-check-label" for="{{ subfield.id }}">{{ subfield.label.text }}</label>
+                                        <label class="form-check-label" for="{{ subfield.id }}">
+                                            {{ subfield.label.text }}
+                                            <small class="text-muted d-block">{{ member_category_description(subfield.data) }}</small>
+                                        </label>
                                     </div>
                                 {% endfor %}
+                                {% for error in identity_form.member_category.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                 <div class="mt-2" data-year-group-field>
                                     {{ identity_form.year_group.label(class="form-label") }}{{ identity_form.year_group(class="form-control", oninput="this.value = this.value.toUpperCase()") }}
                                     {% for error in identity_form.year_group.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}

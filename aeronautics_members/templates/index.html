@@ -100,12 +100,17 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1" data-member-kind>
-            <span class="block text-sm font-medium text-gray-700">{{ _(form.member_kind.label.text) }}<span class="text-red-500">*</span></span>
-            {% for choice in form.member_kind %}
-                <label class="mt-1 block text-sm text-gray-700">{{ choice }} {{ choice.label.text }}</label>
+        <div class="grid grid-cols-1" data-member-kind
+             data-year-group-categories="{{ year_group_categories }}"
+             data-year-group-required="{{ year_group_required_categories }}">
+            <span class="block text-sm font-medium text-gray-700">{{ _(form.member_category.label.text) }}<span class="text-red-500">*</span></span>
+            {% for choice in form.member_category %}
+                <label class="mt-1 block text-sm text-gray-700">
+                    {{ choice }} {{ choice.label.text }}
+                    <span class="text-gray-500">&ndash; {{ member_category_description(choice.data) }}</span>
+                </label>
             {% endfor %}
-            {% for error in form.member_kind.errors %}<span class="text-red-500 text-sm">{{ error }}</span>{% endfor %}
+            {% for error in form.member_category.errors %}<span class="text-red-500 text-sm">{{ error }}</span>{% endfor %}
 
             <div class="mt-3" data-year-group-field>
                 <label for="year_group" class="block text-sm font-medium text-gray-700">{{ _(form.year_group.label.text) }}<span class="text-red-500">*</span></label>

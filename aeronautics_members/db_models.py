@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import UniqueConstraint
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from .member_categories import DEFAULT_CATEGORY, MemberCategory, category_label
 from .permissions import Permission, permissions_for
 
 
@@ -177,10 +178,16 @@ class Member(db.Model):
     email_private = db.Column(db.String(255), nullable=False, unique=True)
     phone_work = db.Column(db.String(50), nullable=True)
     email_work = db.Column(db.String(255), nullable=True)
-    # Null means "not a student". Membership is open to non-students under the
-    # statutes, and they are full members -- same rights, same fee, no year
-    # group to give. Deliberately not paired with an is_student flag: two
-    # columns can disagree and nothing would reconcile them, where one cannot.
+    # What kind of member this is: student, alumni, staff, partner, honorary.
+    # The rules about who is asked for a year group, and what each kind is
+    # called, live in member_categories.py rather than here.
+    member_category = db.Column(
+        db.String(20), nullable=False,
+        default=DEFAULT_CATEGORY, server_default=DEFAULT_CATEGORY,
+    )
+    # Null where the category has none to give. It cannot stand in for the
+    # category: an alumnus has a year group, and so may a lecturer who studied
+    # here, so the two say different things about a person.
     year_group = db.Column(db.String(50), nullable=True)
     terms_accepted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
@@ -227,12 +234,17 @@ class Member(db.Model):
 
     @property
     def is_student(self):
-        """Whether this member is a student, which is what having a year group means.
+        """Whether this member is a current student.
 
-        Derived rather than stored so it cannot contradict the year group. Reads
-        as a question about the person instead of a null check about a column.
+        Reads the category, not the year group. Those came apart once alumni
+        existed: an alumnus has a year group and is not a student.
         """
-        return bool((self.year_group or "").strip())
+        return self.member_category == MemberCategory.STUDENT
+
+    @property
+    def category_label(self):
+        """The readable name of this member's category, for screens and emails."""
+        return category_label(self.member_category)
 
     @property
     def full_address(self):
@@ -427,9 +439,14 @@ class MemberProfileChangeRequest(db.Model):
     requested_title = db.Column(db.String(50), nullable=True)
     requested_first_name = db.Column(db.String(100), nullable=False)
     requested_last_name = db.Column(db.String(100), nullable=False)
-    # Nullable for the same reason as Member.year_group, and so the change
-    # request can carry "I have graduated and am no longer a student" -- which
-    # approving applies by assigning the null straight across.
+    # The category being asked for, so "I have graduated, make me alumni" is a
+    # request an admin approves like any other identity change.
+    requested_member_category = db.Column(
+        db.String(20), nullable=False,
+        default=DEFAULT_CATEGORY, server_default=DEFAULT_CATEGORY,
+    )
+    # Nullable because the requested category may be one with no year group.
+    # Approving assigns both straight across.
     requested_year_group = db.Column(db.String(50), nullable=True)
 
     status = db.Column(db.String(20), nullable=False, default="pending")

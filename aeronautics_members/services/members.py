@@ -30,6 +30,7 @@ IDENTITY_MEMBER_FIELDS = (
     "title",
     "first_name",
     "last_name",
+    "member_category",
     "year_group",
 )
 

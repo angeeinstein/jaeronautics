@@ -162,6 +162,13 @@ except ImportError:
 
 # Configuration lives in config.py, a leaf module the service layer can import
 # without depending on this one. Re-exported here so existing imports keep working.
+from .member_categories import (  # noqa: E402
+    CATEGORY_ORDER,
+    categories_showing_year_group,
+    category_description,
+    category_label,
+    requires_year_group,
+)
 from .permissions import (  # noqa: E402
     Permission,
     ROLE_PERMISSIONS,
@@ -625,6 +632,7 @@ def create_identity_change_request(member, requested_by_user, form_data):
         requested_title=normalize_optional_member_value("title", form_data.get("title")),
         requested_first_name=form_data["first_name"],
         requested_last_name=form_data["last_name"],
+        requested_member_category=form_data["member_category"],
         requested_year_group=normalize_optional_member_value("year_group", form_data.get("year_group")),
         member_note=(form_data.get("member_note") or "").strip() or None,
         status="pending",
@@ -870,15 +878,6 @@ def populate_member_profile_form(form, member):
         getattr(form, field_name).data = getattr(member, field_name)
 
 
-def member_kind_for(year_group):
-    """Which radio a stored year group corresponds to.
-
-    The kind is not stored -- having a year group is what being a student
-    means -- so the form's choice is derived back out of it when editing.
-    """
-    return "student" if (year_group or "").strip() else "non_student"
-
-
 def populate_identity_change_form(form, member, pending_request=None):
     if pending_request is not None:
         form.salutation.data = pending_request.requested_salutation
@@ -886,7 +885,7 @@ def populate_identity_change_form(form, member, pending_request=None):
         form.first_name.data = pending_request.requested_first_name
         form.last_name.data = pending_request.requested_last_name
         form.year_group.data = pending_request.requested_year_group
-        form.member_kind.data = member_kind_for(pending_request.requested_year_group)
+        form.member_category.data = pending_request.requested_member_category
         form.member_note.data = pending_request.member_note
         return
 
@@ -895,7 +894,7 @@ def populate_identity_change_form(form, member, pending_request=None):
     form.first_name.data = member.first_name
     form.last_name.data = member.last_name
     form.year_group.data = member.year_group
-    form.member_kind.data = member_kind_for(member.year_group)
+    form.member_category.data = member.member_category
 
 
 def decorate_pending_identity_requests(requests_):
@@ -1277,6 +1276,23 @@ def create_app(config_overrides=None):
             babel=babel,
             get_locale=get_locale,
             cleaned_args=cleaned_args,
+        )
+
+    @app.context_processor
+    def inject_member_category_rules():
+        """Hands the year group rules to the page so JavaScript need not know them.
+
+        Rendered into data attributes and read back by member-kind-toggle.js,
+        which keeps member_categories.py the only place the rule is written
+        down.
+        """
+        return dict(
+            year_group_categories=" ".join(categories_showing_year_group()),
+            year_group_required_categories=" ".join(
+                category for category in CATEGORY_ORDER if requires_year_group(category)
+            ),
+            member_category_label=category_label,
+            member_category_description=category_description,
         )
 
     @app.template_filter("redact_audit_payload")

@@ -384,6 +384,50 @@ account that can install an update cannot be erased (`last_superadmin` blocker),
 and revoking *admin* from a super admin removes both roles, since removing one
 row would otherwise leave the access untouched.
 
+## Member categories
+
+Membership is not only for students, and never was — the statutes allow it.
+`member.member_category` records which kind, and everything about the
+categories lives in `aeronautics_members/member_categories.py`: the list, the
+labels, the descriptions, and which categories are asked for a year group.
+
+| Category | Year group | Who |
+| --- | --- | --- |
+| `student` | required | Currently studying at FH Joanneum |
+| `alumni` | offered, optional | Studied here and is still a member |
+| `staff` | not asked | Works at the institute, e.g. a lecturer |
+| `partner` | not asked | Joined on behalf of a company |
+| `honorary` | not asked | Appointed by the association |
+
+**The year group cannot stand in for the category.** An alumnus has one, and so
+may a lecturer who studied here, so the two say different things about a
+person. An earlier version of this tried to derive "is a student" from whether
+a year group was present; it works only while there are exactly two kinds of
+member, and it broke the moment alumni existed. `Member.is_student` reads the
+category.
+
+Alumni are *offered* the year group but not required to give one: somebody who
+studied here in 2006 may genuinely not know their cohort, and refusing their
+membership over a label nobody needs would be absurd.
+
+**Adding a category** is an edit to `member_categories.py` plus a migration
+only if existing rows need re-pointing. The forms, the show/hide behaviour and
+the admin screens all read from that module — the browser gets the rule through
+`data-year-group-categories`, rendered from Python, so `member-kind-toggle.js`
+never restates it. `tests/test_member_categories.py` fails if a new category is
+added without a label, a description or a year group rule.
+
+**Nothing about money is in there.** Every category pays the same annual fee
+today, and there is one `stripe_price_id` for everyone. If alumni are ever
+charged differently, `member_category` is what the billing code would key off,
+and the work is in `services/billing.py` — a price per category, plus deciding
+what happens when somebody's category changes mid-period.
+
+**Changing category is an identity change**, so it goes through the existing
+request-and-approve flow rather than being self-service: `member_category` is
+in `IDENTITY_MEMBER_FIELDS`, which is what puts it in the audit snapshot and
+the approval screen.
+
 ## Planned: Archival Forum Accounts (not built)
 
 Roughly 500–600 people have used the forum over the last decade. The intention

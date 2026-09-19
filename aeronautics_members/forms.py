@@ -24,6 +24,13 @@ from wtforms.validators import (
     ValidationError,
 )
 
+from .member_categories import (
+    DEFAULT_CATEGORY,
+    category_choices,
+    requires_year_group,
+    shows_year_group,
+)
+
 COUNTRIES = [
     ("", _l("-- Select a Country --")),
     ("Afghanistan", "Afghanistan"), ("Albania", "Albania"), ("Algeria", "Algeria"),
@@ -103,33 +110,39 @@ YEAR_GROUP_VALIDATOR = Regexp(
     message=_l("Invalid format. Please use uppercase letters followed by two numbers, like LAV25."),
 )
 
-MEMBER_KIND_CHOICES = [
-    ("student", _l("Student at FH Joanneum")),
-    ("non_student", _l("Not a student")),
-]
-
-
 class YearGroupRequirement:
-    """Year group is required of students and meaningless for anyone else.
+    """Applies the year group rules for whichever member category was chosen.
 
     Runs first in the chain and decides whether the rest of it should run at
     all, because ``Optional()`` cannot be used here: it raises StopValidation
     on an empty field, which would skip an inline ``validate_year_group`` too,
     and the requirement depends on another field's value rather than this
     one's.
+
+    Which categories are asked, and which must answer, is not decided here --
+    see member_categories.py.
     """
 
     def __call__(self, form, field):
-        if form.member_kind.data == "student":
-            if not (field.data or "").strip():
-                raise ValidationError(_("Please enter your year group, for example LAV25."))
-            return  # let Length and the format check run
+        category = form.member_category.data
+        value = (field.data or "").strip()
 
-        # Not a student. Anything in the box is a leftover from before the
-        # choice was switched, not something the member is claiming, so drop it
-        # rather than refusing the form over a field they cannot even see.
-        field.data = None
-        raise StopValidation()
+        if not shows_year_group(category):
+            # Not asked of this category. Anything in the box is a leftover
+            # from before the choice was switched, not something the member is
+            # claiming, so drop it rather than refusing the form over a field
+            # they cannot even see.
+            field.data = None
+            raise StopValidation()
+
+        if not value:
+            if requires_year_group(category):
+                raise ValidationError(_("Please enter your year group, for example LAV25."))
+            # Offered but not required -- an alumnus who does not remember.
+            field.data = None
+            raise StopValidation()
+
+        return  # let Length and the format check run
 
 
 YEAR_GROUP_FIELD_VALIDATORS = [YearGroupRequirement(), Length(max=50), YEAR_GROUP_VALIDATOR]
@@ -150,8 +163,8 @@ class MembershipForm(FlaskForm):
     email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
-    member_kind = RadioField(
-        _l("Membership"), choices=MEMBER_KIND_CHOICES, default="student",
+    member_category = RadioField(
+        _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
@@ -184,8 +197,8 @@ class CreateMembershipProfileForm(FlaskForm):
     email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
-    member_kind = RadioField(
-        _l("Membership"), choices=MEMBER_KIND_CHOICES, default="student",
+    member_category = RadioField(
+        _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
@@ -251,8 +264,8 @@ class IdentityChangeRequestForm(FlaskForm):
     title = StringField(_l("Title"), validators=[Optional()])
     first_name = StringField(_l("First Name"), validators=[DataRequired()])
     last_name = StringField(_l("Last Name"), validators=[DataRequired()])
-    member_kind = RadioField(
-        _l("Membership"), choices=MEMBER_KIND_CHOICES, default="student",
+    member_category = RadioField(
+        _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
