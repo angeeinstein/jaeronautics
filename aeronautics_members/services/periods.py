@@ -18,7 +18,12 @@ history an administrator may need to explain a member's access.
 
 from ..db_models import MembershipPeriod, db
 from . import ValidationError
-from .clock import get_membership_today, first_day_of_year, last_day_of_year
+from .clock import (
+    datetime_to_membership_date,
+    first_day_of_year,
+    get_membership_today,
+    last_day_of_year,
+)
 from .membership import ACTIVE_MEMBER_STATUSES
 
 
@@ -51,6 +56,14 @@ def grant_period(
     }:
         raise ValidationError(f"Unknown membership period reason: {reason!r}")
 
+    # Coverage cannot begin before the member existed. A first year is prorated
+    # from the join date, but the invoice that pays for it names only a calendar
+    # year, so granting from it alone would claim the months before they joined
+    # -- months they were not members and did not pay for.
+    joined_on = datetime_to_membership_date(member.created_at)
+    if joined_on and starts_on < joined_on <= ends_on:
+        starts_on = joined_on
+
     if stripe_invoice_id:
         existing = db.session.execute(
             db.select(MembershipPeriod).filter_by(stripe_invoice_id=stripe_invoice_id)
@@ -76,6 +89,14 @@ def grant_period(
             existing.stripe_invoice_id = stripe_invoice_id
         if stripe_subscription_id and not existing.stripe_subscription_id:
             existing.stripe_subscription_id = stripe_subscription_id
+        # Keep the narrower window. Stripe does not order its events, so which
+        # of checkout.session.completed and invoice.paid arrives first is
+        # arbitrary -- and the two describe the same payment differently: one
+        # knows the prorated join date, the other only a calendar year. Taking
+        # the later start makes the record say the same thing either way, and
+        # never claims more coverage than was actually bought.
+        if starts_on > existing.starts_on:
+            existing.starts_on = starts_on
         return existing
 
     period = MembershipPeriod(

@@ -43,6 +43,19 @@ def to_membership_date(unix_timestamp):
     return datetime.fromtimestamp(unix_timestamp, timezone.utc).astimezone(MEMBERSHIP_TIMEZONE).date()
 
 
+def datetime_to_membership_date(value):
+    """The membership-timezone calendar day a stored datetime falls on.
+
+    Stored timestamps are UTC; membership dates are Europe/Vienna, so a naive
+    ``.date()`` lands on the wrong day around midnight.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(MEMBERSHIP_TIMEZONE).date()
+
+
 def first_day_of_year(year):
     return date(year, 1, 1)
 
