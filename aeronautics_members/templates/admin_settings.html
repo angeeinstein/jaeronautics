@@ -557,7 +557,15 @@
                                     <dt class="col-7">{{ _('Forum tasks queued') }}</dt><dd class="col-5">{{ system_health.queues.external_work_pending }}</dd>
                                     <dt class="col-7">{{ _('Forum tasks failed') }}</dt><dd class="col-5">{{ system_health.queues.external_work_failed }}</dd>
                                     <dt class="col-7">{{ _('Stripe events handled') }}</dt><dd class="col-5">{{ system_health.queues.webhook_events_completed }}</dd>
-                                    <dt class="col-7">{{ _('Emails queued') }}</dt><dd class="col-5">{{ system_health.queues.emails_pending }}</dd>
+                                    <dt class="col-7">{{ _('Emails queued') }}</dt>
+                                    <dd class="col-5">
+                                        {{ system_health.queues.emails_pending }}
+                                        {% if system_health.queues.emails_overdue %}
+                                            {# A count alone cannot distinguish an email backing off
+                                               from one nobody is delivering. This says which. #}
+                                            <span class="badge bg-danger">{{ _('%(count)s overdue', count=system_health.queues.emails_overdue) }}</span>
+                                        {% endif %}
+                                    </dd>
                                 </dl>
                             </div>
                         </div>

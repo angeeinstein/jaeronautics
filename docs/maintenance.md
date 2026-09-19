@@ -270,6 +270,68 @@ revisiting, the GDPR-shaped answer is Art. 18 restriction — refusing or
 suspending a deletion while a dispute is actually open — not keeping everyone's
 identity indefinitely against a hypothetical one.
 
+## Cloudflare Email Address Obfuscation
+
+The site sits behind Cloudflare, and the zone has **Email Address Obfuscation**
+switched on. Cloudflare rewrites every email address it finds in an HTML
+response into `<a href="/cdn-cgi/l/email-protection" class="__cf_email__"
+data-cfemail="...">[email&nbsp;protected]</a>` and injects a same-origin script
+that decodes it in the browser. The CSP allows that script (`script-src 'self'`,
+and it is served from `/cdn-cgi/`), so in a normal browser the addresses do
+appear — but the markup is rewritten either way.
+
+In prose that is only untidy. In the audit log it is not: the before/after
+snapshots are rendered as JSON in a `<pre>`, and Cloudflare replaces the address
+*inside a JSON string literal* with an anchor element, so an administrator
+copying a payload out gets broken JSON instead of the record. Those blocks are
+therefore wrapped in Cloudflare's own `<!--email_off-->` opt-out markers, which
+keeps them verbatim whether or not the zone setting is on.
+
+Downloads are unaffected: the data export is served as `application/json` and
+Cloudflare only rewrites `text/html`.
+
+**To turn it off** for the members site — recommended, since every page here is
+behind a login and there are no addresses for a scraper to harvest:
+
+- Zone-wide: Cloudflare dashboard → the zone → **Scrape Shield** (newer
+  dashboards: **Security → Settings**) → *Email Address Obfuscation* → off.
+- Or, to keep it on for the public site, leave the zone setting alone and add a
+  **Configuration Rule** matching the members hostname with *Email Obfuscation*
+  set to off.
+
+Afterwards a page's HTML should contain no `__cf_email__` and no
+`/cdn-cgi/scripts/.../email-decode.min.js`.
+
+## When Queued Emails Stop Moving
+
+A failed welcome email is retried after 15 minutes and again after 24 hours,
+then marked `exhausted` and reported as a problem. The retries are driven by the
+`jaeronautics-notifications.timer`, which fires every 15 minutes.
+
+The health panel used to show only how many emails were queued, and to warn
+only above twenty. That cannot distinguish three emails backing off normally
+from three emails nobody is delivering — which is the failure that actually
+happens, because it looks like nothing at all. It now also counts emails whose
+`next_attempt_at` passed more than an hour ago (four missed runs) and reports
+that as a problem naming the timer:
+
+```bash
+systemctl status jaeronautics-notifications.timer
+systemctl list-timers | grep jaeronautics
+```
+
+To run a delivery pass by hand:
+
+```bash
+sudo -u jaeronautics /var/www/jaeronautics/.venv/bin/flask \
+  --app aeronautics_members.app:create_app deliver-notifications
+```
+
+Emails addressed to domains that do not exist — invented addresses used while
+testing — will never send. They exhaust after a day and are then listed as a
+problem until the rows are removed; that is working as intended, not a fault to
+chase.
+
 ## Dependencies
 
 `requirements.txt` lists the packages the application asks for.

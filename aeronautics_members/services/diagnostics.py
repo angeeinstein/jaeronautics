@@ -10,6 +10,8 @@ Maintenance tab -- an administrator sees it in the browser, and someone with
 shell access gets the identical report.
 """
 
+from datetime import timedelta
+
 from ..db_models import (
     EmailDeliveryJob,
     ExternalWorkItem,
@@ -18,8 +20,15 @@ from ..db_models import (
     ProcessedStripeEvent,
     db,
 )
-from .clock import get_membership_today
+from .clock import get_membership_today, get_now_utc
 from .membership import ACTIVE_MEMBER_STATUSES
+
+# How far past its scheduled attempt a queued email has to be before the delay
+# stops being ordinary backoff and starts meaning nobody is delivering it. The
+# timer runs every 15 minutes, so an hour is four missed runs -- generous enough
+# not to fire on a slow SMTP server, tight enough to catch a stopped timer the
+# same morning rather than never.
+QUEUE_STALL_GRACE = timedelta(hours=1)
 
 
 def _count(model, *filters):
@@ -123,6 +132,16 @@ def get_queue_summary():
         ),
         "emails_pending": _count(EmailDeliveryJob, EmailDeliveryJob.status == "pending"),
         "emails_exhausted": _count(EmailDeliveryJob, EmailDeliveryJob.status == "exhausted"),
+        # Queued emails whose retry was due well over an hour ago. A count on its
+        # own says nothing -- three emails backing off for a day look exactly
+        # like three emails nobody is delivering -- and the difference is whether
+        # the deliver-notifications timer is alive.
+        "emails_overdue": _count(
+            EmailDeliveryJob,
+            EmailDeliveryJob.status == "pending",
+            EmailDeliveryJob.next_attempt_at.isnot(None),
+            EmailDeliveryJob.next_attempt_at < get_now_utc() - QUEUE_STALL_GRACE,
+        ),
     }
 
 
@@ -149,6 +168,12 @@ def collect_system_health():
         )
     if queues["emails_exhausted"]:
         problems.append(f"{queues['emails_exhausted']} email(s) could not be delivered.")
+    if queues["emails_overdue"]:
+        problems.append(
+            f"{queues['emails_overdue']} queued email(s) are long past their retry time. "
+            "Check that the notification timer is running: "
+            "systemctl status jaeronautics-notifications.timer"
+        )
     if membership["covered_without_evidence"]:
         problems.append(
             f"{membership['covered_without_evidence']} member(s) have access with no coverage "
