@@ -233,11 +233,30 @@ lined up the wrong column, and is worth stopping for.
 
 ## 4b. Running the import
 
+On a deployed server this runs as the application user, out of the virtualenv —
+not as `root`, and not with a bare `flask`, which is not on `PATH`:
+
 ```bash
-flask --app aeronautics_members.app:create_app import-forum-people people.json --dry-run
-flask --app aeronautics_members.app:create_app import-forum-people people.json \
-      --avatar-dir /path/to/uploads/avatars
+cd /var/www/jaeronautics
+
+# Rehearse. Writes nothing at all, avatars included.
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     import-forum-people people.json --dry-run --year-groups \
+     --avatar-dir /path/to/avatars
+
+# The real thing.
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     import-forum-people people.json --avatar-dir /path/to/avatars
 ```
+
+**As `jaeronautics`, not as `root`.** The import writes normalised avatars into
+`storage/forum_avatar_staging/`, and files written by root there are files the
+application cannot later replace or delete. Both `people.json` and the avatar
+directory therefore have to be readable by that user — if the dry run reports
+every avatar as missing, that is the reason, and the fix is to move the folder
+somewhere readable rather than to run the import as root.
 
 Always the dry run first — it produces the identical report and writes nothing.
 The run is safe to repeat: people are matched on the old forum's `uid`, so a
