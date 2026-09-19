@@ -6,7 +6,6 @@ changes are the blueprint route decorator and app.logger -> current_app.logger.
 CSRF exemption is applied at registration time in create_app.
 """
 
-import json
 
 import stripe
 from flask import Blueprint, current_app, request
@@ -34,9 +33,6 @@ from ..services.clock import (
 )
 from ..services.forum import (
     generate_unique_forum_username,
-)
-from ..services.members import (
-    apply_member_profile,
 )
 from ..db_models import MembershipPeriod
 from ..services.outbox import enqueue_forum_sync
@@ -130,41 +126,53 @@ def process_stripe_event(event):
     if event_type == "checkout.session.completed":
         session = event["data"]["object"]
         metadata = session.get("metadata", {})
-        member_data_json = metadata.get("member_data")
-        if not member_data_json:
-            current_app.logger.error("Webhook received without member_data metadata.")
-            queue_curated_admin_notification(
-                ADMIN_ERROR_CHANNEL,
-                "stripe_webhook_missing_metadata",
-                _("A Stripe checkout webhook arrived without member metadata."),
-                payload={"event_type": event_type, "session_id": session.get("id")},
-                severity="warning",
-                commit=True,
-            )
-            return "Missing metadata", 400
+        customer_id = session.get("customer")
+        subscription_id = session.get("subscription")
 
         try:
-            member_data = json.loads(member_data_json)
-            customer_id = session.get("customer")
-            subscription_id = session.get("subscription")
+            # The member already exists: signup commits the profile before it
+            # asks Stripe for a Checkout session, so these identifiers always
+            # resolve. The profile deliberately does not travel through Stripe
+            # -- see create_checkout_session_for_member -- and the copy held
+            # here is in any case fresher than one snapshotted at checkout time.
             member = get_member_by_stripe_or_email(
                 customer_id=customer_id,
                 subscription_id=subscription_id,
                 member_id=metadata.get("member_id"),
                 user_id=metadata.get("user_id"),
-                email=member_data.get("email_private"),
+                email=metadata.get("member_email")
+                or (session.get("customer_details") or {}).get("email"),
             )
-            previously_active = member_has_active_access(member)
             if member is None:
-                member = Member(created_at=get_now_utc(), payment_status="pending_checkout", is_active=False)
-                db.session.add(member)
+                # Nothing can be done here without inventing a member, and a
+                # blank one would be worse than a loud failure: it would hold a
+                # paid subscription that nobody can match to a person.
+                current_app.logger.error(
+                    "Checkout completed for a member that cannot be resolved (session=%s, customer=%s).",
+                    session.get("id"), customer_id,
+                )
+                queue_curated_admin_notification(
+                    ADMIN_ERROR_CHANNEL,
+                    "stripe_webhook_unknown_member",
+                    _("A completed Stripe checkout could not be matched to a member."),
+                    payload={
+                        "event_type": event_type,
+                        "session_id": session.get("id"),
+                        "customer_id": customer_id,
+                        "subscription_id": subscription_id,
+                    },
+                    severity="warning",
+                    commit=True,
+                )
+                return "Unknown member", 400
 
-            apply_member_profile(member, {**member_data, "terms_accepted": True})
+            previously_active = member_has_active_access(member)
             member.pending_checkout_started_at = member.pending_checkout_started_at or get_now_utc()
+            # The attempt is finished, so stop pointing resume at its session.
+            member.stripe_checkout_session_id = None
             backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
 
             if member.user is not None:
-                member.user.email = member.email_private
                 if not member.user.forum_username:
                     member.user.forum_username = generate_unique_forum_username(
                         member.first_name,

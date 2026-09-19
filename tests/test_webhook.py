@@ -6,7 +6,6 @@ Stripe's signature verification and the side-effecting helpers
 transitions and how duplicate events are handled.
 """
 
-import json
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -69,22 +68,10 @@ def test_webhook_rejected_when_secret_not_configured(client, monkeypatch):
 
 
 def checkout_event(member, user, activation_mode="free_period", payment_status="no_payment_required", event_id="evt_checkout_1"):
-    profile = {
-        "salutation": member.salutation,
-        "first_name": member.first_name,
-        "last_name": member.last_name,
-        "street": member.street,
-        "house_number": member.house_number,
-        "postal_code": member.postal_code,
-        "city": member.city,
-        "country": member.country,
-        "phone_private": member.phone_private,
-        "email_private": member.email_private,
-        "year_group": member.year_group,
-        "terms_accepted": True,
-    }
+    # Identifiers only. The profile is deliberately not carried through Stripe;
+    # the handler reads it from the database. See TestCheckoutMetadata.
     metadata = {
-        "member_data": json.dumps(profile),
+        "member_email": member.email_private,
         "member_id": str(member.id),
         "user_id": str(user.id),
         "membership_starts_on": TODAY.isoformat(),
@@ -225,8 +212,8 @@ class TestIdempotency:
         assert stub_side_effects == [member.id]
 
     def test_failed_event_is_not_recorded(self, client, monkeypatch, stub_side_effects):
-        # A checkout event missing member_data returns 400 and must NOT be
-        # marked processed, so Stripe's retry can still be handled later.
+        # A checkout that cannot be matched to a member returns 400 and must NOT
+        # be marked processed, so Stripe's retry can still be handled later.
         event = {
             "id": "evt_missing_meta",
             "type": "checkout.session.completed",

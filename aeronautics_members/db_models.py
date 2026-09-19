@@ -152,6 +152,11 @@ class Member(db.Model):
     pending_checkout_started_at = db.Column(db.DateTime, nullable=True)
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
+    # The last Checkout session started for this member. Kept so resuming an
+    # abandoned signup returns to the session that is already open instead of
+    # creating a second one -- two open sessions can both be completed, which
+    # buys the association two subscriptions for one member.
+    stripe_checkout_session_id = db.Column(db.String(255), nullable=True)
     payment_status = db.Column(db.String(50), nullable=False, default="unpaid")
     is_active = db.Column(db.Boolean, nullable=False, default=False)
     membership_starts_on = db.Column(db.Date, nullable=True)

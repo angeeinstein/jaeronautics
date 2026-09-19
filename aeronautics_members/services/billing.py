@@ -14,7 +14,6 @@ merely outstanding -- so for those, payment must come from an actual paid
 invoice, never from the status.
 """
 
-import json
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -36,7 +35,6 @@ from .clock import (
     to_membership_date,
 )
 from .members import (
-    build_member_payload,
     get_member_by_email,
     get_member_by_stripe_reference,
 )
@@ -305,7 +303,45 @@ def get_latest_stripe_subscription_for_member(member):
     return subscriptions[0] if subscriptions else None
 
 
+def get_open_checkout_session(member):
+    """The member's previous Checkout session, if it is still usable.
+
+    Returns None when there is none, when it has expired, or when Stripe cannot
+    be asked -- in every case the caller should simply start a new one, so a
+    lookup failure must not be an error.
+    """
+    if member is None or not member.stripe_checkout_session_id:
+        return None
+    apply_runtime_stripe_config()
+    try:
+        session = stripe.checkout.Session.retrieve(member.stripe_checkout_session_id)
+    except stripe.StripeError as exc:
+        current_app.logger.warning(
+            "Could not load stored Checkout session %s for member_id=%s: %s",
+            member.stripe_checkout_session_id, member.id, exc,
+        )
+        return None
+    if session.get("status") == "open" and session.get("url"):
+        return session
+    return None
+
+
 def create_checkout_session_for_member(member):
+    """Start (or resume) the member's Checkout session for the current year.
+
+    Sending someone back to a Checkout session they already have open is the
+    point: two open sessions for one member can both be completed, which buys
+    the association two subscriptions and one confused student.
+    """
+    existing = get_open_checkout_session(member)
+    if existing is not None:
+        current_app.logger.info(
+            "Reusing open Checkout session %s for member_id=%s.", existing.get("id"), member.id
+        )
+        join_date = get_membership_today()
+        price_details = get_stripe_membership_price()
+        return existing, build_membership_cycle(join_date, price_details["unit_amount"])
+
     stripe_settings = apply_runtime_stripe_config()
     price_id = stripe_settings.get("stripe_price_id") or STRIPE_PRICE_ID
     price_details = get_stripe_membership_price()
@@ -318,12 +354,24 @@ def create_checkout_session_for_member(member):
     if prorated_line_item is not None:
         line_items.insert(0, prorated_line_item)
 
-    checkout_payload = build_member_payload(member)
     checkout_session = stripe.checkout.Session.create(
+        # Scoped to the member and the membership year, so a double-submitted
+        # form or a retried request returns the session that already exists
+        # rather than opening a second one. Stripe keeps a key for 24 hours,
+        # which is also how long a Checkout session stays open.
+        idempotency_key=f"checkout:member:{member.id}:{cycle['current_year']}",
+        # Identifiers only. The profile itself is deliberately NOT sent: Stripe
+        # caps a metadata value at 500 characters, and a perfectly ordinary
+        # profile -- a double-barrelled surname, a title, two long university
+        # addresses -- serialises past that and makes Session.create fail, so
+        # the member is left unable to pay. The webhook reads the profile from
+        # this database instead, which is also the copy that is actually
+        # current: a member who edits their address mid-checkout used to have
+        # it silently overwritten by the snapshot taken when checkout began.
+        metadata=membership_metadata,
         payment_method_types=["card", "sepa_debit"],
         line_items=line_items,
         mode="subscription",
-        metadata={**membership_metadata, "member_data": json.dumps(checkout_payload)},
         subscription_data={
             "trial_end": cycle["trial_end_unix"],
             "metadata": membership_metadata,
@@ -343,6 +391,7 @@ def create_checkout_session_for_member(member):
         cancel_url=build_public_url("public.cancel"),
     )
     member.pending_checkout_started_at = get_now_utc()
+    member.stripe_checkout_session_id = checkout_session.get("id")
     return checkout_session, cycle
 
 
