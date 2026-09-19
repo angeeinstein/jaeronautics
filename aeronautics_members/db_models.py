@@ -61,6 +61,9 @@ class User(UserMixin, db.Model):
 
     member = db.relationship("Member", back_populates="user", uselist=False)
     forum_account = db.relationship("ForumAccount", back_populates="user", uselist=False)
+    imported_forum_profile = db.relationship(
+        "ImportedForumProfile", back_populates="user", uselist=False
+    )
     roles = db.relationship("Role", secondary="user_roles", back_populates="users")
     requested_profile_changes = db.relationship(
         "MemberProfileChangeRequest",
@@ -312,6 +315,62 @@ class ForumAccount(db.Model):
 
     user = db.relationship("User", back_populates="forum_account")
     member = db.relationship("Member", back_populates="forum_account")
+
+
+class ImportedForumProfile(db.Model):
+    """A person carried over from the old forum, who is not a member.
+
+    Roughly 500-600 of these exist: students from the last decade whose posts
+    should keep a name and a face beside them. They are not members and mostly
+    never will be again, but some may come back, so this is deliberately *not*
+    a status like "alumni" -- a label about somebody's past contradicts their
+    being able to rejoin. Two facts already say everything needed, and neither
+    is stored here:
+
+    * whether they can sign in -- ``users.password_hash IS NULL`` says no;
+    * whether they are a member -- the coverage ledger says.
+
+    This table holds only what the old forum knew and this database otherwise
+    has nowhere to put: a display name, a year group, an avatar. ``Member``
+    cannot hold them, because it requires a postal address, a phone number and
+    a unique private email address, none of which exist for somebody who left
+    in 2016.
+
+    ``source_user_id`` is the old forum's own key, which makes re-running the
+    import idempotent rather than duplicating six hundred people.
+    """
+
+    __tablename__ = "imported_forum_profiles"
+    __table_args__ = (
+        UniqueConstraint("source_system", "source_user_id", name="uq_imported_forum_source"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
+
+    source_system = db.Column(db.String(40), nullable=False, default="mybb")
+    source_user_id = db.Column(db.String(64), nullable=False)
+    source_username = db.Column(db.String(255), nullable=False)
+    # Kept as history, never as identity. The old addresses are university
+    # accounts, disabled when a student leaves, and the university may reissue
+    # one to a later student of the same name -- so this must never reach
+    # users.email, where the sign-in and password-reset paths would find it.
+    source_email = db.Column(db.String(255), nullable=True)
+
+    display_name = db.Column(db.String(200), nullable=False)
+    year_group = db.Column(db.String(50), nullable=True)
+    avatar_path = db.Column(db.String(255), nullable=True)
+    post_count = db.Column(db.Integer, nullable=True)
+    joined_on = db.Column(db.Date, nullable=True)
+    last_posted_on = db.Column(db.Date, nullable=True)
+
+    imported_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    # Set when a returning student takes the account over, by an administrator
+    # who recognises them. Never by matching an email address: that match is
+    # the takeover route, not a convenience.
+    claimed_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", back_populates="imported_forum_profile")
 
 
 class ForumAvatarSubmission(db.Model):
