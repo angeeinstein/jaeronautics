@@ -513,6 +513,51 @@ class TestBillingIsStoppedFirst:
         assert member.deleted_at is not None
 
 
+class TestStripeIsLeftAlone:
+    """Cancelling stops the billing; the customer record stays, on purpose.
+
+    Stripe is the association's accounting record under the same seven-year
+    retention, its finalised invoices keep the name and address regardless, and
+    the customer id retained on the erased row is the one path left from an
+    anonymous membership period back to who paid. So the erasure must not touch
+    it -- and must say so before the member confirms.
+    """
+
+    def test_the_customer_reference_survives_the_erasure(self, app):
+        member = _paid_member(email="keepstripe@example.com")
+        customer_id = member.stripe_customer_id
+
+        privacy.erase_account(member.user, initiated_by=privacy.INITIATED_BY_MEMBER)
+        db.session.commit()
+
+        assert member.stripe_customer_id == customer_id
+
+    def test_the_impact_reports_that_stripe_holds_a_copy(self, app):
+        member = _paid_member(email="impactstripe@example.com")
+
+        impact = privacy.describe_deletion_impact(member.user)
+
+        assert impact["has_stripe_customer"] is True
+
+    def test_an_account_stripe_never_saw_does_not_claim_otherwise(self, app):
+        member = make_member(email="nostripeimpact@example.com")
+
+        impact = privacy.describe_deletion_impact(member.user)
+
+        assert impact["has_stripe_customer"] is False
+
+    def test_the_confirmation_page_says_stripe_keeps_its_own_copy(self, client):
+        """The member should learn this before deleting, not afterwards."""
+        member = _paid_member(email="tellthem@example.com")
+        _login(client, member.user_id)
+        token = privacy.build_account_deletion_token(member.user)
+
+        response = client.get(f"/account/delete/{token}")
+
+        assert response.status_code == 200
+        assert "Stripe" in response.get_data(as_text=True)
+
+
 class TestTheForumIsNotAllowedToBlockErasure:
     def test_a_forum_outage_defers_rather_than_aborts(self, app, monkeypatch):
         monkeypatch.setattr(privacy, "anonymise_forum_account", lambda user: (False, True))

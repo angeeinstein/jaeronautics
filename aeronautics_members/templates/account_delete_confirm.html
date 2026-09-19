@@ -23,6 +23,12 @@
                             <li>{{ _('Your forum account is anonymised. Your posts stay in their threads under an anonymous name, so other members’ conversations are not broken up.') }}</li>
                         {% endif %}
                         <li>{{ _('We keep a record of which membership periods were paid for, and the matching invoice numbers, without your personal details. Austrian bookkeeping law requires us to keep this for seven years.') }}</li>
+                        {% if impact.has_stripe_customer %}
+                            {# Stripe is a separate controller and our accounting
+                               record; the invoices it issued keep the name and
+                               address they were made out to whatever we do here. #}
+                            <li>{{ _('Your payments were handled by Stripe, who keep their own record of them — including the name and address on each invoice — under their retention rules and Austrian bookkeeping law. Deleting your account here does not delete that. Your data download names your Stripe customer number so you can ask Stripe directly.') }}</li>
+                        {% endif %}
                     </ul>
 
                     {% if impact.subscription_active %}

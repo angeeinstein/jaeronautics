@@ -27,6 +27,15 @@ Three details are easy to get wrong and are handled here on purpose:
 * **Billing has to stop first.** Anonymising a member with a live subscription
   leaves Stripe renewing it every January against a customer nobody can identify
   any more. If the subscription cannot be cancelled, nothing is erased.
+
+Stripe itself is deliberately left untouched beyond that cancellation. It is the
+association's accounting record, subject to the same seven-year retention, and
+its finalised invoices keep the name and address they were issued to no matter
+what is done to the customer object -- so blanking that would be theatre rather
+than erasure, while closing the one remaining path from an anonymous membership
+period back to who paid for it. ``docs/maintenance.md`` records the reasoning;
+the deletion confirmation page tells the member plainly that Stripe keeps its
+own copy.
 """
 
 import os
@@ -271,6 +280,10 @@ def describe_deletion_impact(user, actor_user=None):
         "has_forum_account": user.forum_account is not None,
         "subscription_active": False,
         "subscription_id": member.stripe_subscription_id if member else None,
+        # Whether Stripe holds its own copy of this person, which erasure here
+        # does not and cannot remove. Drives the sentence saying so before the
+        # member confirms, rather than leaving them to find out afterwards.
+        "has_stripe_customer": bool(member.stripe_customer_id) if member else False,
         "coverage_end": None,
         "paid_periods": 0,
         "blockers": [],

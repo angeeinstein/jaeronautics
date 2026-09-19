@@ -207,6 +207,12 @@
                 {% if deletion_impact.has_forum_account %}
                     <li>{{ _('The forum account is anonymised. Posts stay, under an anonymous name.') }}</li>
                 {% endif %}
+                {% if deletion_impact.has_stripe_customer %}
+                    {# Left there on purpose: Stripe is the association's
+                       accounting record, and the retained customer id below is
+                       the only way back from an erased row to who paid. #}
+                    <li>{{ _('The Stripe customer is left as it is — it is the association’s accounting record and the only remaining link between this erased account and who paid. The customer number stays on the row below.') }}</li>
+                {% endif %}
             </ul>
 
             {% if deletion_impact.subscription_active %}

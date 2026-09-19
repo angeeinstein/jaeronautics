@@ -239,9 +239,36 @@ last remaining administrator, and an administrator erasing themselves from the
 admin page (they can use their own account page, where the confirmation goes to
 their mailbox).
 
-Stripe keeps its own copy of the customer under its own retention rules. The
-export names the Stripe customer id so a member can ask Stripe directly; if you
-also want the customer removed there, delete it in the Stripe dashboard.
+**Stripe is deliberately left alone (a recorded decision).** Erasure cancels the
+subscription and stops there. It does not blank the customer's name or email in
+Stripe, and it was briefly written to do so before this decision reversed it.
+Three reasons:
+
+- It would not work. Stripe copies `customer_name`, `customer_email` and
+  `customer_address` onto an invoice when the invoice is finalised and stops
+  updating them afterwards, so every invoice keeps the identity whatever is done
+  to the customer object. Scrubbing the customer buys a tidy dashboard and the
+  appearance of an erasure that did not happen.
+- Stripe is the accounting record, and the retention that § 132 BAO requires of
+  the association applies to it as much as to the rows here. The seven-year
+  obligation that keeps `membership_periods` is the same one that keeps this.
+- The erased member row keeps `stripe_customer_id` on purpose. With Stripe
+  intact that id is the one remaining path from an anonymous membership period
+  back to who paid it — access-controlled to whoever holds the Stripe dashboard,
+  not readable from this application. If a payment is disputed years later, that
+  is where the answer is.
+
+So the member-facing promise is that *this* system forgets them, and the
+deletion confirmation page says plainly that Stripe does not and why. The export
+names the Stripe customer id so a member can ask Stripe directly; if the board
+does want a customer removed there, delete it in the Stripe dashboard by hand.
+
+There is no deletion hold and no retained identity record: an erasure is final
+here, and a member who misbehaves and then deletes leaves anonymous forum posts
+and nothing else. That is a choice, not an oversight. If it ever needs
+revisiting, the GDPR-shaped answer is Art. 18 restriction — refusing or
+suspending a deletion while a dispute is actually open — not keeping everyone's
+identity indefinitely against a hypothetical one.
 
 ## Dependencies
 
