@@ -26,6 +26,11 @@ INSTALL_DIR="${INSTALL_DIR:-/var/www/jaeronautics}"
 # Keep the tail short: it is rendered on a web page, and a full install log is
 # both large and more likely to contain incidental detail.
 LOG_TAIL_LINES="${LOG_TAIL_LINES:-40}"
+# An update that hangs -- an unresponsive package mirror, a held dpkg lock --
+# would otherwise stay "running" forever, and the admin page refuses to start a
+# new one while that is true. So the button would disable itself permanently
+# and only a shell could clear it. Bound the run and record a failure instead.
+UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-2700}"
 # Group allowed to read the log, so the web application can show progress while
 # the update is still running. Falls back to root-only if unset.
 LOG_GROUP="${LOG_GROUP:-}"
@@ -137,8 +142,16 @@ main() {
     fi
 
     local exit_code=0
-    if ! stdbuf -oL -eL "${UPDATE_COMMAND}" "${command_args[@]+"${command_args[@]}"}" >>"${LOG_FILE}" 2>&1; then
+    if ! stdbuf -oL -eL timeout --signal=TERM --kill-after=60 "${UPDATE_TIMEOUT}" \
+        "${UPDATE_COMMAND}" "${command_args[@]+"${command_args[@]}"}" >>"${LOG_FILE}" 2>&1; then
         exit_code=$?
+    fi
+    if [[ ${exit_code} -eq 124 ]]; then
+        printf '\n[ERROR] The update was stopped after %s seconds without finishing.\n' \
+            "${UPDATE_TIMEOUT}" >>"${LOG_FILE}"
+        printf '[ERROR] It is usually a package mirror that stopped responding, or a held dpkg lock.\n' \
+            >>"${LOG_FILE}"
+        printf '[ERROR] Run "update" from a shell to see where it stops.\n' >>"${LOG_FILE}"
     fi
 
     local finished_at revision_after log_tail state

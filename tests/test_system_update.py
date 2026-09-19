@@ -6,6 +6,7 @@ These tests cover both halves of that: only an administrator may write a
 request, and the request itself carries no say over what gets deployed.
 """
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -300,3 +301,48 @@ class TestRunnerRollbackHandling:
         source = self.RUNNER.read_text()
         for field in ("revision", "target", "commit", "ref"):
             assert f"read_request_field {field}" not in source
+
+
+class TestAHungUpdateCannotWedgeTheButton:
+    """An update that never finishes must not disable updates permanently.
+
+    request_update refuses while the recorded state is "running", so a hang --
+    an unresponsive package mirror, a held dpkg lock -- used to leave the admin
+    page unable to start another update at all, recoverable only from a shell.
+    Seen live: apt stopped responding mid-update and the run sat at 0 of 16
+    steps indefinitely.
+    """
+
+    RUNNER = Path(__file__).resolve().parent.parent / "deploy" / "update-runner.sh"
+    INSTALLER = Path(__file__).resolve().parent.parent / "install.sh"
+
+    def test_the_runner_bounds_the_update(self):
+        source = self.RUNNER.read_text()
+        assert "UPDATE_TIMEOUT" in source
+        assert "timeout --signal=TERM" in source, "the update command is not run under a timeout"
+
+    def test_a_timeout_is_explained_in_the_log(self):
+        """Exit 124 on its own tells an administrator nothing."""
+        source = self.RUNNER.read_text()
+        assert "124" in source
+        assert "mirror" in source.lower() or "lock" in source.lower()
+
+    def test_the_timeout_is_longer_than_a_normal_update(self):
+        source = self.RUNNER.read_text()
+        match = re.search(r"UPDATE_TIMEOUT=\"\$\{UPDATE_TIMEOUT:-(\d+)\}\"", source)
+        assert match, "no default timeout found"
+        # Real updates here take well under a minute; allow a wide margin so a
+        # slow-but-working run is never cut short.
+        assert int(match.group(1)) >= 900, match.group(1)
+
+    def test_apt_cannot_wait_forever_on_a_mirror(self):
+        """apt has no default network timeout at all."""
+        source = self.INSTALLER.read_text()
+        assert "Acquire::http::Timeout" in source
+        assert "Acquire::Retries" in source
+        assert "DPkg::Lock::Timeout" in source
+
+    def test_the_apt_options_are_actually_passed(self):
+        source = self.INSTALLER.read_text()
+        assert 'apt-get "${APT_NETWORK_OPTS[@]}" update' in source
+        assert 'apt-get "${APT_NETWORK_OPTS[@]}" install' in source

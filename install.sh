@@ -238,6 +238,15 @@ tty_print() {
     fi
 }
 
+# Give up on a stalled mirror rather than hanging forever; apt has no default
+# timeout at all.
+APT_NETWORK_OPTS=(
+    -o Acquire::http::Timeout=30
+    -o Acquire::https::Timeout=30
+    -o Acquire::Retries=2
+    -o DPkg::Lock::Timeout=120
+)
+
 retry() {
     local attempts="$1"
     shift
@@ -444,7 +453,11 @@ update_package_index_once() {
     case "${PACKAGE_MANAGER}" in
         apt)
             export DEBIAN_FRONTEND=noninteractive
-            retry 3 apt-get update
+            # Bound the network waits. Without these apt will sit on an
+            # unresponsive mirror indefinitely, and because the update runs
+            # unattended behind the admin button there is nobody to notice --
+            # the update simply never finishes and the button stays disabled.
+            retry 3 apt-get "${APT_NETWORK_OPTS[@]}" update
             ;;
         dnf)
             retry 3 dnf makecache
@@ -462,7 +475,7 @@ install_packages() {
 
     case "${PACKAGE_MANAGER}" in
         apt)
-            retry 3 apt-get install -y "$@"
+            retry 3 apt-get "${APT_NETWORK_OPTS[@]}" install -y "$@"
             ;;
         dnf)
             retry 3 dnf install -y "$@"
