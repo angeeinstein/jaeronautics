@@ -28,46 +28,52 @@
                     <dt class="col-sm-5">{{ _('Email Verified') }}</dt>
                     <dd class="col-sm-7">{% if user_record.email_is_verified %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
                 </dl>
-                <div class="d-flex flex-wrap gap-2 mt-4">
-                    {# Who may administer the site is a super admin's decision, so an
-                       ordinary administrator sees none of these. #}
-                    {% if can_manage_roles %}
-                        {% if can_grant_admin %}
-                            <form method="POST" action="{{ url_for('admin.grant_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-primary">{{ _('Grant Admin Access') }}</button>
-                            </form>
-                        {% endif %}
-                        {% if can_revoke_admin %}
-                            <form method="POST" action="{{ url_for('admin.revoke_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke admin access?') }}');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-danger">{{ _('Revoke Admin Access') }}</button>
-                            </form>
-                        {% endif %}
-                        {% if can_grant_superadmin %}
-                            <form method="POST" action="{{ url_for('admin.grant_superadmin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('A super admin can install updates, read the stored credentials and grant this access to others. Continue?') }}');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-outline-primary">{{ _('Grant Super Admin Access') }}</button>
-                            </form>
-                        {% endif %}
-                        {% if can_revoke_superadmin %}
-                            <form method="POST" action="{{ url_for('admin.revoke_superadmin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke super admin access? The account stays an administrator.') }}');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-outline-danger">{{ _('Revoke Super Admin Access') }}</button>
-                            </form>
-                        {% endif %}
-                    {% endif %}
-                    {% if current_user.id == user_record.id and not member %}
+                {% if current_user.id == user_record.id and not member %}
+                    <div class="mt-4">
                         <a href="{{ url_for('account.create_membership_profile') }}" class="btn btn-secondary">{{ _('Create Membership Profile') }}</a>
-                    {% endif %}
-                </div>
+                    </div>
+                {% endif %}
+
                 {% if can_manage_roles %}
-                    {% if user_record.can('admin.access') and current_user.id == user_record.id %}
-                        <div class="alert alert-secondary mt-4 mb-0">{{ _('You cannot revoke your own admin access from the UI.') }}</div>
-                    {% elif user_record.can('admin.access') and admin_count <= 1 %}
-                        <div class="alert alert-secondary mt-4 mb-0">{{ _('This is the last remaining admin account.') }}</div>
-                    {% elif user_record.can('system.update') and superadmin_count <= 1 %}
-                        <div class="alert alert-secondary mt-4 mb-0">{{ _('This is the last remaining super admin account. Grant the role to someone else first, or use grant-superadmin on the server.') }}</div>
+                    {#
+                      One form for every role rather than a grant and a revoke
+                      button per role: the list comes from the permission table,
+                      so a role added there appears here with nothing to change,
+                      and the guards are about the resulting set rather than
+                      about one role at a time.
+                    #}
+                    <hr class="mt-4">
+                    <h6 class="text-muted text-uppercase small">{{ _('Roles') }}</h6>
+                    {% if role_change_blocked %}
+                        <div class="alert alert-secondary mb-0">
+                            {{ role_change_blocked }}
+                            {{ _('Another administrator can change them, or use grant-superadmin on the server.') }}
+                        </div>
+                    {% else %}
+                        {% if role_removal_warning %}
+                            <div class="alert alert-warning small">{{ role_removal_warning }}</div>
+                        {% endif %}
+                        <form method="POST" action="{{ url_for('admin.update_account_roles', user_id=user_record.id) }}"
+                              data-confirm="{{ _('Change this account’s roles?') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            {% for option in role_options %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="roles"
+                                           value="{{ option.slug }}" id="role-{{ option.slug }}"
+                                           {% if option.held %}checked{% endif %}
+                                           {% if user_record.deleted_at %}disabled{% endif %}>
+                                    <label class="form-check-label" for="role-{{ option.slug }}">
+                                        {{ option.label }}
+                                        {% if option.description %}
+                                            <span class="d-block text-muted small">{{ option.description }}</span>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                            {% if not user_record.deleted_at %}
+                                <button type="submit" class="btn btn-primary btn-sm mt-3">{{ _('Save roles') }}</button>
+                            {% endif %}
+                        </form>
                     {% endif %}
                 {% endif %}
             </div>

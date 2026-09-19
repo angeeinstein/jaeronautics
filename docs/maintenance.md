@@ -236,6 +236,30 @@ There is **no role implication**: `superadmin` is not "admin plus extra" by
 inheritance, its bundle simply contains the admin bundle. One mechanism rather
 than two, and the table shows the whole truth.
 
+### Changing an account's roles
+
+One form on the account page, one endpoint: **the whole set is posted**, and
+`services/access.py` works out the difference. There is no grant-this and
+revoke-that per role, because the guards that matter are about the *resulting*
+state — is anybody left who can install an update — and a per-role endpoint has
+to re-derive that each time, in each of its copies. It also means a role added
+to the table is assignable with no new route and no new button.
+
+The account list is read-only for roles, deliberately: deciding from a list
+means deciding without seeing what else the account holds or who else could do
+the job.
+
+Three refusals, all enforced in the service so they hold however the change
+arrives:
+
+- **Not your own account.** Removing your own last privileged role locks you
+  out, and a confirmation dialog is not where that should be discovered.
+- **Not the last holder of a protected capability.** `PROTECTED_PERMISSIONS`
+  names what must never reach zero holders — administering the site, installing
+  an update, granting access — and the check counts what would remain *after*
+  the change, ignoring erased accounts, which cannot sign in to do anything.
+- **Not an erased account.**
+
 ### Adding a role
 
 Add an entry to `ROLE_PERMISSIONS`, grant it, done — no route, template or

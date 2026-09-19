@@ -7,7 +7,7 @@ from the app module, which is fully initialized before this is imported.
 
 from flask import Blueprint, current_app, jsonify
 
-from ..permissions import Permission, ROLE_PERMISSIONS, role_label
+from ..permissions import Permission, ROLE_PERMISSIONS, role_description, role_label
 from ..config import (
     RATELIMIT_ADMIN_EMAIL,
     STRIPE_SETTING_KEYS,
@@ -37,6 +37,7 @@ from ..services.members import (
 from ..services.membership import (
     member_has_active_access,
 )
+from ..services.access import assignable_roles, describe_role_change, set_account_roles
 from ..services.privacy import (
     INITIATED_BY_ADMIN,
     describe_deletion_impact,
@@ -96,8 +97,6 @@ from sqlalchemy.orm import (
     selectinload,
 )
 from ..db_models import (
-    ROLE_ADMIN,
-    ROLE_SUPERADMIN,
     AuditLog,
     EmailDeliveryJob,
     ForumAccount,
@@ -135,10 +134,8 @@ from ..app import (
     build_account_directory_query,
     build_forum_context,
     build_settings_page_context,
-    count_users_with_permission,
     decorate_pending_identity_requests,
     get_admin_dashboard_metrics,
-    get_role,
     limiter,
     requires,
     set_setting_value,
@@ -150,6 +147,18 @@ admin_bp = Blueprint("admin", __name__)
 # SETTINGS_GENERAL, so these sections carry their own check; kept beside the
 # route that enforces it so the list and the check cannot drift apart.
 CREDENTIAL_SETTINGS_SECTIONS = {"billing", "forum"}
+
+
+def _role_removal_warning(user):
+    """Why this account's roles cannot simply be cleared, if that is the case.
+
+    Shown beside the editor so the reason is visible before somebody unticks a
+    box and gets a refusal; the same check runs again when the form is posted.
+    """
+    if user.deleted_at is not None:
+        return None
+    blockers = describe_role_change(user, [])["blockers"]
+    return blockers[0][1] if blockers else None
 
 
 @admin_bp.route("/admin", methods=["GET"])
@@ -243,23 +252,25 @@ def admin_account_detail(user_id):
         forum_context=build_forum_context(user.member),
         latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
         recent_logs=recent_logs,
-        # Role changes are a super admin's business, so an ordinary admin gets
-        # none of these buttons at all.
+        # The role editor. Every assignable role, whether this account holds it,
+        # and what refusing would say -- worked out server-side so the form and
+        # the guard cannot disagree about what is possible.
         can_manage_roles=current_user.can(Permission.ROLES_MANAGE),
-        can_grant_admin=user.deleted_at is None and not user.has_role(ROLE_ADMIN),
-        can_revoke_admin=(
-            user.has_role(ROLE_ADMIN)
-            and current_user.id != user.id
-            and count_users_with_permission(Permission.ADMIN_ACCESS) > 1
+        role_options=[
+            {
+                "slug": slug,
+                "label": role_label(slug),
+                "description": role_description(slug),
+                "held": user.has_role(slug),
+            }
+            for slug in assignable_roles()
+        ],
+        role_change_blocked=(
+            _("You cannot change your own roles here.")
+            if current_user.id == user.id
+            else None
         ),
-        can_grant_superadmin=user.deleted_at is None and not user.has_role(ROLE_SUPERADMIN),
-        can_revoke_superadmin=(
-            user.has_role(ROLE_SUPERADMIN)
-            and current_user.id != user.id
-            and count_users_with_permission(Permission.SYSTEM_UPDATE) > 1
-        ),
-        admin_count=count_users_with_permission(Permission.ADMIN_ACCESS),
-        superadmin_count=count_users_with_permission(Permission.SYSTEM_UPDATE),
+        role_removal_warning=_role_removal_warning(user),
         deletion_impact=describe_deletion_impact(user, actor_user=current_user),
         live_subscription=refresh_subscription_state_before_deletion(user.member),
     )
@@ -546,161 +557,54 @@ def test_forum_connection():
     return redirect(f"{url_for('admin.admin_settings')}#settings-forum")
 
 
-@admin_bp.route("/admin/accounts/<int:user_id>/grant-admin", methods=["POST"])
+@admin_bp.route("/admin/accounts/<int:user_id>/roles", methods=["POST"])
 @login_required
 @requires(Permission.ROLES_MANAGE)
-def grant_admin_access(user_id):
+def update_account_roles(user_id):
+    """Set an account's roles to exactly what the form ticked.
+
+    One endpoint rather than a grant and a revoke per role: the guards that
+    matter are about the resulting state -- is anybody left who can install an
+    update -- and a per-role endpoint has to re-derive that each time. It also
+    means a role added to permissions.py is assignable with no new route.
+    """
     user = db.session.get(User, user_id)
     if user is None:
         flash(_("The selected account could not be found."), "warning")
         return redirect(url_for("admin.admin_accounts"))
 
-    if not user.has_role("admin"):
-        admin_role = get_role("admin", label="Admin", description="Can access the admin workspace.")
-        before_user = snapshot_user_for_audit(user)
-        user.grant_role(admin_role)
-        log_audit_event(
-            category="access",
-            event_type="admin_role_granted",
-            actor_user=current_user,
-            target_user=user,
-            target_member=user.member,
-            before=before_user,
-            after=snapshot_user_for_audit(user),
-            metadata={"granted_role": "admin"},
+    before_user = snapshot_user_for_audit(user)
+    try:
+        change = set_account_roles(
+            user, request.form.getlist("roles"), actor_user=current_user
         )
-        db.session.commit()
-        flash(_("Admin access granted."), "success")
-    else:
-        flash(_("This account already has admin access."), "info")
+    except ServiceError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(url_for("admin.admin_account_detail", user_id=user_id))
 
-    return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+    if not change["changed"]:
+        flash(_("No role changes were made."), "info")
+        return redirect(url_for("admin.admin_account_detail", user_id=user_id))
 
-
-@admin_bp.route("/admin/accounts/<int:user_id>/revoke-admin", methods=["POST"])
-@login_required
-@requires(Permission.ROLES_MANAGE)
-def revoke_admin_access(user_id):
-    user = db.session.get(User, user_id)
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    if not user.has_role("admin"):
-        flash(_("This account does not currently have admin access."), "info")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    if current_user.id == user.id:
-        flash(_("You cannot remove your own admin access from the UI."), "danger")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    if count_users_with_permission(Permission.ADMIN_ACCESS) <= 1:
-        flash(_("You cannot remove the last remaining admin account."), "danger")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    if user.has_role(ROLE_SUPERADMIN) and count_users_with_permission(Permission.SYSTEM_UPDATE) <= 1:
-        flash(_("You cannot remove the last remaining super admin account."), "danger")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    before_user = snapshot_user_for_audit(user)
-    # Super admin implies admin, so removing only the admin row would leave the
-    # access untouched and the button looking broken. Taking away administrator
-    # access means exactly that.
-    also_superadmin = user.has_role(ROLE_SUPERADMIN)
-    user.revoke_role(ROLE_SUPERADMIN)
-    user.revoke_role(ROLE_ADMIN)
     log_audit_event(
         category="access",
-        event_type="admin_role_revoked",
+        event_type="account_roles_changed",
         actor_user=current_user,
         target_user=user,
         target_member=user.member,
         before=before_user,
         after=snapshot_user_for_audit(user),
-        metadata={"revoked_role": ROLE_SUPERADMIN if also_superadmin else ROLE_ADMIN},
+        metadata={
+            "granted_roles": change["granted"],
+            "revoked_roles": change["revoked"],
+            "permissions_gained": change["permissions_gained"],
+            "permissions_lost": change["permissions_lost"],
+        },
     )
     db.session.commit()
-    flash(_("Admin access revoked."), "success")
-    return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/grant-superadmin", methods=["POST"])
-@login_required
-@requires(Permission.ROLES_MANAGE)
-def grant_superadmin_access(user_id):
-    user = db.session.get(User, user_id)
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    if user.deleted_at is not None:
-        flash(_("This account was erased and cannot be given access."), "danger")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    if user.has_role(ROLE_SUPERADMIN):
-        flash(_("This account already has super admin access."), "info")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    before_user = snapshot_user_for_audit(user)
-    user.grant_role(get_role(ROLE_ADMIN, label="Admin", description="Can access the admin workspace."))
-    user.grant_role(get_role(ROLE_SUPERADMIN))
-    log_audit_event(
-        category="access",
-        event_type="superadmin_role_granted",
-        actor_user=current_user,
-        target_user=user,
-        target_member=user.member,
-        before=before_user,
-        after=snapshot_user_for_audit(user),
-        metadata={"granted_role": ROLE_SUPERADMIN},
-    )
-    db.session.commit()
-    flash(_("Super admin access granted."), "success")
-    return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/revoke-superadmin", methods=["POST"])
-@login_required
-@requires(Permission.ROLES_MANAGE)
-def revoke_superadmin_access(user_id):
-    """Step an account back down to ordinary administrator."""
-    user = db.session.get(User, user_id)
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    if not user.has_role(ROLE_SUPERADMIN):
-        flash(_("This account does not currently have super admin access."), "info")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    # The same two guards the admin role has, for the same reason: an
-    # installation with no super admin cannot install an update or a fix, and
-    # recovering from that needs a shell on the server.
-    if current_user.id == user.id:
-        flash(_("You cannot remove your own super admin access from the UI."), "danger")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    if count_users_with_permission(Permission.SYSTEM_UPDATE) <= 1:
-        flash(_("You cannot remove the last remaining super admin account."), "danger")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    before_user = snapshot_user_for_audit(user)
-    user.revoke_role(ROLE_SUPERADMIN)
-    # They stay an administrator: the admin row was granted alongside it.
-    user.grant_role(get_role(ROLE_ADMIN, label="Admin", description="Can access the admin workspace."))
-    log_audit_event(
-        category="access",
-        event_type="superadmin_role_revoked",
-        actor_user=current_user,
-        target_user=user,
-        target_member=user.member,
-        before=before_user,
-        after=snapshot_user_for_audit(user),
-        metadata={"revoked_role": ROLE_SUPERADMIN},
-    )
-    db.session.commit()
-    flash(_("Super admin access revoked. The account is still an administrator."), "success")
-    return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+    flash(_("Roles updated."), "success")
+    return redirect(url_for("admin.admin_account_detail", user_id=user_id))
 
 
 @admin_bp.route("/admin/approvals", methods=["GET"])

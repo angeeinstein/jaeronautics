@@ -92,29 +92,13 @@
                                 <td>{% if member %}{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
                                 <td class="text-end text-nowrap">
                                     {#
-                                      Flat buttons rather than a dropdown. Most people
-                                      viewing this list may only open an account, and a
-                                      menu holding one item is a click in the way. The
-                                      role buttons appear only for somebody who may
-                                      actually use them -- ungated, they were a button
-                                      that bounced an ordinary administrator.
+                                      Just the link. Changing roles from a list means
+                                      deciding without the context that makes the
+                                      decision safe -- what else the account holds, and
+                                      whether anybody else could still do the job. That
+                                      lives on the account itself.
                                     #}
                                     <a class="btn btn-secondary btn-sm" href="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">{{ _('View') }}</a>
-                                    {% if can_manage_roles and user_record.deleted_at is none %}
-                                        {% if not user_record.can('admin.access') %}
-                                            <form method="POST" action="{{ url_for('admin.grant_admin_access', user_id=user_record.id) }}" class="d-inline mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <input type="hidden" name="next" value="{{ request.full_path }}">
-                                                <button type="submit" class="btn btn-outline-primary btn-sm">{{ _('Grant Admin') }}</button>
-                                            </form>
-                                        {% elif current_user.id != user_record.id %}
-                                            <form method="POST" action="{{ url_for('admin.revoke_admin_access', user_id=user_record.id) }}" class="d-inline mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke admin access?') }}');">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <input type="hidden" name="next" value="{{ request.full_path }}">
-                                                <button type="submit" class="btn btn-outline-danger btn-sm">{{ _('Revoke Admin') }}</button>
-                                            </form>
-                                        {% endif %}
-                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}

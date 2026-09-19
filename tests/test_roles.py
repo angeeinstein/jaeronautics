@@ -13,6 +13,7 @@ from conftest import app_module, db, make_member
 from aeronautics_members.db_models import ROLE_ADMIN, ROLE_SUPERADMIN, User
 from aeronautics_members.permissions import Permission, ROLE_PERMISSIONS, roles_with
 from aeronautics_members.services import ConflictError, privacy
+from aeronautics_members.services.access import describe_role_change
 
 
 def _user(email, *roles):
@@ -174,13 +175,18 @@ class TestCredentialsAreRestricted:
         assert "application/json" not in response.headers.get("Content-Type", "")
 
 
-class TestRoleManagementIsRestricted:
-    def test_an_admin_cannot_grant_admin(self, client):
+class TestSettingRoles:
+    """One endpoint takes the whole set, so the guards are about the result."""
+
+    def _set(self, client, user_id, *slugs):
+        return client.post(f"/admin/accounts/{user_id}/roles", data={"roles": list(slugs)})
+
+    def test_an_admin_cannot_change_anyones_roles(self, client):
         admin = _user("nogrant@example.com", ROLE_ADMIN)
         target = make_member(email="target@example.com")
         _login(client, admin.id)
 
-        client.post(f"/admin/accounts/{target.user_id}/grant-admin")
+        self._set(client, target.user_id, ROLE_ADMIN)
 
         assert target.user.has_role(ROLE_ADMIN) is False
 
@@ -188,60 +194,98 @@ class TestRoleManagementIsRestricted:
         admin = _user("selfpromote@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        client.post(f"/admin/accounts/{admin.id}/grant-superadmin")
+        self._set(client, admin.id, ROLE_ADMIN, ROLE_SUPERADMIN)
 
         assert admin.can(Permission.SYSTEM_UPDATE) is False
 
-    def test_a_superadmin_can_grant_and_revoke(self, client):
+    def test_a_superadmin_sets_the_whole_set_at_once(self, client):
         boss = _user("boss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
         target = make_member(email="promoteme@example.com")
         _login(client, boss.id)
 
-        client.post(f"/admin/accounts/{target.user_id}/grant-superadmin")
+        self._set(client, target.user_id, ROLE_ADMIN, ROLE_SUPERADMIN)
         assert target.user.can(Permission.SYSTEM_UPDATE) is True
 
-        client.post(f"/admin/accounts/{target.user_id}/revoke-superadmin")
+        self._set(client, target.user_id, ROLE_ADMIN)
         assert target.user.can(Permission.SYSTEM_UPDATE) is False
-        # Stepped down to ordinary administrator, not thrown out entirely.
         assert target.user.has_role(ROLE_ADMIN) is True
 
-    def test_revoking_admin_from_a_superadmin_removes_both(self, client):
-        """Otherwise implication would leave the access and the button look broken."""
+    def test_clearing_every_box_removes_all_access(self, client):
         boss = _user("boss2@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
         other = _user("other@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
         _login(client, boss.id)
 
-        client.post(f"/admin/accounts/{other.id}/revoke-admin")
+        self._set(client, other.id)
 
-        assert other.has_role(ROLE_ADMIN) is False
-        assert other.can(Permission.SYSTEM_UPDATE) is False
+        assert other.roles == []
+        assert other.can(Permission.ADMIN_ACCESS) is False
 
-    def test_a_superadmin_cannot_strip_their_own_role(self, client):
-        """The reachable half of "do not leave nobody in charge".
-
-        The count guard beneath it is defence in depth and cannot be reached
-        through the interface: stripping the only super admin means stripping
-        yourself, which this catches first. The count is what stops the erasure
-        route, which is covered separately.
-        """
+    def test_nobody_may_edit_their_own_roles(self, client):
+        """The escalation and the self-lockout are the same check."""
         boss = _user("lonely@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
         _login(client, boss.id)
 
-        client.post(f"/admin/accounts/{boss.id}/revoke-superadmin")
+        self._set(client, boss.id, ROLE_ADMIN)
 
         assert boss.can(Permission.SYSTEM_UPDATE) is True
 
-    def test_one_of_two_superadmins_may_be_stepped_down(self, client):
-        boss = _user("stays@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        second = _user("stepsdown@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+    def test_the_last_holder_of_a_protected_capability_is_refused(self, app):
+        """Checked at the service, because HTTP cannot reach this case.
+
+        Taking the last SYSTEM_UPDATE away means editing the only account that
+        has it, and only that account can manage roles -- so the self-edit
+        refusal catches it first. The guard underneath still has to be right:
+        the erasure route reaches the same situation, and a future role holding
+        ROLES_MANAGE would reach this one.
+        """
+        boss = _user("onlyupdater@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+
+        change = describe_role_change(boss, [ROLE_ADMIN])
+
+        # One per protected capability that would lose its last holder: this
+        # account is the only one that can install an update *and* the only one
+        # that can grant access.
+        assert {code for code, _message in change["blockers"]} == {"last_holder"}
+        assert len(change["blockers"]) == 2
+
+    def test_the_refusal_says_what_would_be_lost(self, app):
+        boss = _user("explain@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+
+        change = describe_role_change(boss, [ROLE_ADMIN])
+
+        messages = " ".join(message for _code, message in change["blockers"])
+        assert "install an update" in messages
+        assert "grant access to anyone else" in messages
+
+    def test_a_second_holder_makes_it_allowed(self, app):
+        boss = _user("one@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        _user("two@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+
+        assert describe_role_change(boss, [ROLE_ADMIN])["blockers"] == []
+
+    def test_an_erased_holder_does_not_count_as_cover(self, app, monkeypatch):
+        """They cannot sign in, so they cannot install anything."""
+        monkeypatch.setattr(privacy, "cancel_member_subscription", lambda m, reason=None: False)
+        monkeypatch.setattr(privacy, "anonymise_forum_account", lambda u: (False, False))
+        boss = _user("survivor@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        leaving = _user("leaving@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        privacy.erase_account(leaving, initiated_by=privacy.INITIATED_BY_MEMBER)
+        db.session.commit()
+
+        change = describe_role_change(boss, [ROLE_ADMIN])
+
+        assert {code for code, _message in change["blockers"]} == {"last_holder"}
+
+    def test_an_unknown_role_is_refused(self, client):
+        boss = _user("boss4@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = make_member(email="unknownrole@example.com")
         _login(client, boss.id)
 
-        client.post(f"/admin/accounts/{second.id}/revoke-superadmin")
+        self._set(client, target.user_id, "wizard")
 
-        assert second.can(Permission.SYSTEM_UPDATE) is False
-        assert second.has_role(ROLE_ADMIN) is True
+        assert target.user.roles == []
 
-    def test_an_erased_account_cannot_be_promoted(self, client, monkeypatch):
+    def test_an_erased_account_cannot_be_given_a_role(self, client, monkeypatch):
         monkeypatch.setattr(privacy, "cancel_member_subscription", lambda m, reason=None: False)
         monkeypatch.setattr(privacy, "anonymise_forum_account", lambda u: (False, False))
         boss = _user("boss3@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
@@ -250,9 +294,25 @@ class TestRoleManagementIsRestricted:
         db.session.commit()
         _login(client, boss.id)
 
-        client.post(f"/admin/accounts/{gone.user_id}/grant-superadmin")
+        self._set(client, gone.user_id, ROLE_ADMIN, ROLE_SUPERADMIN)
 
         assert gone.user.can(Permission.SYSTEM_UPDATE) is False
+
+    def test_the_change_is_audited_as_a_diff(self, client):
+        from aeronautics_members.db_models import AuditLog
+
+        boss = _user("auditboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        target = make_member(email="audited@example.com")
+        _login(client, boss.id)
+
+        self._set(client, target.user_id, ROLE_ADMIN)
+
+        entry = db.session.execute(
+            db.select(AuditLog).filter_by(event_type="account_roles_changed")
+        ).scalar_one()
+        assert entry.event_metadata["granted_roles"] == [ROLE_ADMIN]
+        assert entry.event_metadata["revoked_roles"] == []
+        assert Permission.ADMIN_ACCESS in entry.event_metadata["permissions_gained"]
 
 
 class TestTheUiHidesWhatItDoesNotOffer:
@@ -474,36 +534,29 @@ class TestAddingARoleNeedsNoOtherChange:
         assert 'value="role:moderator"' in body
 
 
-class TestTheAccountListOffersOnlyUsableActions:
-    def test_an_admin_is_not_shown_role_buttons_that_would_bounce_them(self, client):
-        admin = _user("listadmin@example.com", ROLE_ADMIN)
-        make_member(email="listed@example.com")
-        _login(client, admin.id)
+class TestTheAccountListIsReadOnly:
+    """Role changes belong on the account, where the consequences are visible.
 
-        body = client.get("/admin/accounts").get_data(as_text=True)
+    Deciding from a list means deciding without knowing what else the account
+    holds, or whether anybody else could still do the job.
+    """
 
-        assert "grant-admin" not in body
-        assert "revoke-admin" not in body
-        assert "/admin/accounts/" in body  # the View link is still there
-
-    def test_a_superadmin_keeps_them(self, client):
+    def test_no_role_controls_appear_for_anyone(self, client):
         boss = _user("listboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        make_member(email="listed2@example.com")
+        make_member(email="listed@example.com")
         _login(client, boss.id)
 
         body = client.get("/admin/accounts").get_data(as_text=True)
 
-        assert "grant-admin" in body
+        assert "/roles" not in body
+        assert "Grant Admin" not in body
+        assert "Revoke Admin" not in body
 
-    def test_an_erased_account_is_offered_no_role_change(self, client, monkeypatch):
-        monkeypatch.setattr(privacy, "cancel_member_subscription", lambda m, reason=None: False)
-        monkeypatch.setattr(privacy, "anonymise_forum_account", lambda u: (False, False))
+    def test_the_view_link_is_still_there(self, client):
         boss = _user("listboss2@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        gone = make_member(email="erasedlisted@example.com")
-        privacy.erase_account(gone.user, initiated_by=privacy.INITIATED_BY_MEMBER)
-        db.session.commit()
+        target = make_member(email="listed2@example.com")
         _login(client, boss.id)
 
         body = client.get("/admin/accounts").get_data(as_text=True)
 
-        assert f"/admin/accounts/{gone.user_id}/grant-admin" not in body
+        assert f"/admin/accounts/{target.user_id}" in body

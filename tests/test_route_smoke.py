@@ -164,8 +164,8 @@ def test_all_routes_no_server_error(client, seeded):
         hit("GET", p, uid=a)
     hit("POST", f"/admin/accounts/{mu}/billing-sync", uid=a)
     hit("POST", f"/admin/accounts/{mu}/forum-resync", uid=a)
-    hit("POST", f"/admin/accounts/{mu}/grant-admin", uid=a)
-    hit("POST", f"/admin/accounts/{mu}/revoke-admin", uid=a)
+    hit("POST", f"/admin/accounts/{mu}/roles", uid=a, data={"roles": ["admin"]})
+    hit("POST", f"/admin/accounts/{mu}/roles", uid=a, data={})
     hit("POST", f"/admin/forum/submissions/{ids['sub_id']}/approve", uid=a, data={"review_note": "ok"})
     hit("POST", f"/admin/forum/submissions/{ids['sub_id']}/reject", uid=a, data={"review_note": "no"})
     hit("POST", f"/admin/profile-requests/{ids['pcr_id']}/approve", uid=a, data={"admin_note": "ok"})
@@ -187,10 +187,15 @@ def test_signup_creates_user_and_member(client, seeded):
     assert user is not None and user.member is not None
 
 
-def test_grant_admin_grants_role(client, seeded):
+def test_setting_roles_grants_and_revokes(client, seeded):
     _login(client, seeded["admin_id"])
-    client.post(f"/admin/accounts/{seeded['member_uid']}/grant-admin")
-    assert db.session.get(User, seeded["member_uid"]).has_role("admin")
+    uid = seeded["member_uid"]
+
+    client.post(f"/admin/accounts/{uid}/roles", data={"roles": ["admin"]})
+    assert db.session.get(User, uid).has_role("admin")
+
+    client.post(f"/admin/accounts/{uid}/roles", data={})
+    assert db.session.get(User, uid).has_role("admin") is False
 
 
 def test_profile_save_persists(client, seeded):
