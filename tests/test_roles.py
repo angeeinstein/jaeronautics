@@ -492,6 +492,43 @@ class TestAddingARoleNeedsNoOtherChange:
                 continue
             assert "moderator" not in path.read_text(), f"{path} names the role"
 
+    def test_it_receives_the_admin_digests_if_its_entry_says_so(self, app, monkeypatch):
+        """The non-route surfaces have to honour the table too.
+
+        Admin recipients were selected with Role.slug == "admin", so an account
+        holding any other privileged role silently stopped being told about
+        errors and review tasks -- a failure that announces itself by nothing
+        arriving.
+        """
+        from datetime import datetime, timezone
+        from aeronautics_members.notification_service import NotificationService
+
+        monkeypatch.setitem(
+            ROLE_PERMISSIONS, "reporter",
+            frozenset({Permission.ADMIN_ACCESS, Permission.NOTIFICATIONS_RECEIVE}),
+        )
+        monkeypatch.setitem(
+            ROLE_PERMISSIONS, "quiet",
+            frozenset({Permission.ADMIN_ACCESS, Permission.FORUM_MODERATE}),
+        )
+        app_module.seed_default_roles()
+        db.session.commit()
+        for email, role in (("gets@example.com", "reporter"), ("silent@example.com", "quiet")):
+            user = _user(email, role)
+            user.email_verified_at = datetime.now(timezone.utc)
+        db.session.commit()
+
+        recipients = NotificationService(app).get_admin_recipient_emails()
+
+        assert "gets@example.com" in recipients
+        assert "silent@example.com" not in recipients
+
+    def test_its_holder_lands_on_the_admin_dashboard_after_signing_in(self, app, moderator_role):
+        """Another role-name check that a moderator would have failed."""
+        mod = _user("landing@example.com", "moderator")
+
+        assert app_module.get_member_portal_target(mod) == "admin.admin_dashboard"
+
     def test_the_navigation_offers_only_what_it_can_reach(self, client, moderator_role):
         """A link that bounces you is worse than no link."""
         mod = _user("mod4@example.com", "moderator")

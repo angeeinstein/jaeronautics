@@ -666,13 +666,6 @@ def seed_default_roles():
 
 
 
-def count_users_with_role(role_slug):
-    """How many accounts hold this role. About the grant, not about access."""
-    return db.session.scalar(
-        db.select(func.count()).select_from(User).where(User.roles.any(Role.slug == role_slug))
-    ) or 0
-
-
 def count_users_with_permission(permission, active_only=True):
     """How many accounts could still do this, whatever role gives it to them.
 
@@ -748,7 +741,9 @@ def can_resume_payment(member):
 
 
 def get_member_portal_target(user):
-    if user.has_role("admin"):
+    # Where signing in lands you. A capability, not a role name: an account
+    # holding only super admin was being sent to the member page.
+    if user.can(Permission.ADMIN_ACCESS):
         return "admin.admin_dashboard"
     return "account.account"
 

@@ -8,6 +8,8 @@ from flask import current_app
 from flask_babel import _
 from sqlalchemy import func
 
+from .permissions import Permission, roles_with
+
 try:
     from .db_models import (
         MailAccount,
@@ -666,9 +668,26 @@ class NotificationService:
             state.next_allowed_at = state.failure_backoff_until
 
     def get_admin_recipient_emails(self):
+        """Who the admin digests go to.
+
+        Asked as a capability, not as ``Role.slug == "admin"``. That literal was
+        wrong the moment an account could hold super admin without the admin row
+        beside it: it silently stopped being told about errors and review tasks,
+        which is a failure that announces itself by nothing happening.
+
+        Erased accounts are excluded; their address is a placeholder on a domain
+        that cannot resolve, so every digest to one would bounce.
+        """
+        slugs = roles_with(Permission.NOTIFICATIONS_RECEIVE)
+        if not slugs:
+            return []
         return db.session.execute(
             db.select(User.email)
-            .where(User.email_verified_at.is_not(None), User.roles.any(Role.slug == "admin"))
+            .where(
+                User.email_verified_at.is_not(None),
+                User.deleted_at.is_(None),
+                User.roles.any(Role.slug.in_(slugs)),
+            )
             .order_by(User.email.asc())
         ).scalars().all()
 

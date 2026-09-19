@@ -39,6 +39,10 @@ class Permission:
     FORUM_MODERATE = "forum.moderate"
     LOGS_VIEW = "logs.view"
     NOTIFICATIONS_MANAGE = "notifications.manage"
+    # Being emailed the admin digests. Separate from managing them on purpose:
+    # a future role may well need to act on review tasks without every error
+    # report landing in its holders' inboxes, and the reverse.
+    NOTIFICATIONS_RECEIVE = "notifications.receive"
 
     # Configuration. The split is "settings anyone administering the site may
     # change" against "settings that hand over the association's credentials".
@@ -65,6 +69,7 @@ ROLE_PERMISSIONS = {
         Permission.FORUM_MODERATE,
         Permission.LOGS_VIEW,
         Permission.NOTIFICATIONS_MANAGE,
+        Permission.NOTIFICATIONS_RECEIVE,
         Permission.SETTINGS_GENERAL,
     }),
     "superadmin": frozenset({
@@ -76,6 +81,7 @@ ROLE_PERMISSIONS = {
         Permission.FORUM_MODERATE,
         Permission.LOGS_VIEW,
         Permission.NOTIFICATIONS_MANAGE,
+        Permission.NOTIFICATIONS_RECEIVE,
         Permission.SETTINGS_GENERAL,
         Permission.SETTINGS_CREDENTIALS,
         Permission.SYSTEM_UPDATE,
@@ -112,6 +118,7 @@ PERMISSION_LABELS = {
     Permission.FORUM_MODERATE: "Moderate the forum and avatars",
     Permission.LOGS_VIEW: "Read the audit log",
     Permission.NOTIFICATIONS_MANAGE: "Send test email and resolve undelivered email",
+    Permission.NOTIFICATIONS_RECEIVE: "Receive the admin notification emails",
     Permission.SETTINGS_GENERAL: "Change general and notification settings",
     Permission.SETTINGS_CREDENTIALS: "Read and change the Stripe, Discourse and SMTP credentials",
     Permission.SYSTEM_UPDATE: "Install a new version and roll one back",

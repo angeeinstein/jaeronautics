@@ -291,6 +291,23 @@ arrives:
   the change, ignoring erased accounts, which cannot sign in to do anything.
 - **Not an erased account.**
 
+### Two surfaces that are not routes
+
+Most access is decided by `@requires(...)`, but two places choose by capability
+without being a route, and both were missed in the first pass:
+
+- **Who receives the admin digests.** `get_admin_recipient_emails()` selected
+  `Role.slug == "admin"`, so an account holding super admin without the admin
+  row beside it silently stopped being told about errors and review tasks. It
+  now asks for `NOTIFICATIONS_RECEIVE`, which is deliberately separate from
+  `NOTIFICATIONS_MANAGE`: a future role may need to act on review tasks without
+  every error report reaching its holders' inboxes, or the reverse.
+- **Where signing in lands you.** `get_member_portal_target()` asked the same
+  literal, sending a super-admin-only account to the member page.
+
+Both are covered by tests that use a role which is not called "admin", since a
+test with an admin in it would have passed against the old code.
+
 ### Adding a role
 
 Add an entry to `ROLE_PERMISSIONS`, grant it, done — no route, template or
