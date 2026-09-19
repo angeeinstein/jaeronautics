@@ -442,3 +442,68 @@ class TestAddingARoleNeedsNoOtherChange:
         assert "/admin/forum" in body
         assert "/admin/settings" not in body
         assert "/admin/logs" not in body
+
+    def test_the_account_filter_understands_a_role_it_never_heard_of(self, client, moderator_role):
+        """The filter asks about the capability, not about Role.slug == "admin".
+
+        Hard-coding the slug filed a moderator under "member only" and meant the
+        dropdown had to be edited for every new role -- the exact coupling this
+        arrangement is meant to remove.
+        """
+        boss = _user("filterboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        _user("filtermod@example.com", "moderator")
+        _login(client, boss.id)
+
+        staff = client.get("/admin/accounts?role=staff").get_data(as_text=True)
+        assert "filtermod@example.com" in staff
+
+        # And it must not be mistaken for an ordinary member.
+        members_only = client.get("/admin/accounts?role=member").get_data(as_text=True)
+        assert "filtermod@example.com" not in members_only
+
+        by_role = client.get("/admin/accounts?role=role:moderator").get_data(as_text=True)
+        assert "filtermod@example.com" in by_role
+        assert "filterboss@example.com" not in by_role
+
+    def test_the_filter_dropdown_lists_it(self, client, moderator_role):
+        boss = _user("dropdownboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        _login(client, boss.id)
+
+        body = client.get("/admin/accounts").get_data(as_text=True)
+
+        assert 'value="role:moderator"' in body
+
+
+class TestTheAccountListOffersOnlyUsableActions:
+    def test_an_admin_is_not_shown_role_buttons_that_would_bounce_them(self, client):
+        admin = _user("listadmin@example.com", ROLE_ADMIN)
+        make_member(email="listed@example.com")
+        _login(client, admin.id)
+
+        body = client.get("/admin/accounts").get_data(as_text=True)
+
+        assert "grant-admin" not in body
+        assert "revoke-admin" not in body
+        assert "/admin/accounts/" in body  # the View link is still there
+
+    def test_a_superadmin_keeps_them(self, client):
+        boss = _user("listboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        make_member(email="listed2@example.com")
+        _login(client, boss.id)
+
+        body = client.get("/admin/accounts").get_data(as_text=True)
+
+        assert "grant-admin" in body
+
+    def test_an_erased_account_is_offered_no_role_change(self, client, monkeypatch):
+        monkeypatch.setattr(privacy, "cancel_member_subscription", lambda m, reason=None: False)
+        monkeypatch.setattr(privacy, "anonymise_forum_account", lambda u: (False, False))
+        boss = _user("listboss2@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        gone = make_member(email="erasedlisted@example.com")
+        privacy.erase_account(gone.user, initiated_by=privacy.INITIATED_BY_MEMBER)
+        db.session.commit()
+        _login(client, boss.id)
+
+        body = client.get("/admin/accounts").get_data(as_text=True)
+
+        assert f"/admin/accounts/{gone.user_id}/grant-admin" not in body

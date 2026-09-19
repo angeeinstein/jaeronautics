@@ -7,7 +7,7 @@ from the app module, which is fully initialized before this is imported.
 
 from flask import Blueprint, current_app, jsonify
 
-from ..permissions import Permission
+from ..permissions import Permission, ROLE_PERMISSIONS, role_label
 from ..config import (
     RATELIMIT_ADMIN_EMAIL,
     STRIPE_SETTING_KEYS,
@@ -196,6 +196,10 @@ def admin_accounts():
         pagination=pagination,
         search_term=search_term,
         role_filter=role_filter,
+        # Built from the permission table, so a role added there is filterable
+        # without this dropdown being edited.
+        role_choices=[(slug, role_label(slug)) for slug in sorted(ROLE_PERMISSIONS)],
+        can_manage_roles=current_user.can(Permission.ROLES_MANAGE),
         membership_filter=membership_filter,
         active_filter=active_filter,
     )

@@ -252,9 +252,15 @@ reaches `/admin/forum`, is bounced from settings, logs and updates, counts
 towards the capabilities it carries, is offered only the navigation it can use —
 and no file outside `permissions.py` mentions the role at all.
 
-Navigation and settings tabs are keyed on the same capability the page behind
-them requires, so a partial role sees a coherent interface instead of links that
-bounce it. Hiding is a convenience; `requires(...)` is what decides.
+Navigation, dashboard cards, settings tabs and the account-list buttons are
+keyed on the same capability the page behind them requires, so a partial role
+sees a coherent interface instead of links that bounce it. Hiding is a
+convenience; `requires(...)` is what decides.
+
+The account directory's role filter asks the same question. Filtering on
+`Role.slug == "admin"` would file an account holding only a newer role under
+"Member Only" and would need editing for every role added, so it filters on
+`roles_with(Permission.ADMIN_ACCESS)` and builds its dropdown from the table.
 
 ### Where the first super admin comes from
 

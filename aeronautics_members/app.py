@@ -991,12 +991,17 @@ def build_account_directory_query(search_term, role_filter, membership_filter, a
             )
         )
 
-    if role_filter == "admin":
-        query = query.where(User.roles.any(Role.slug == "admin"))
+    # "Who can administer" is a capability question, not a role-name one. Asking
+    # for Role.slug == "admin" would file an account holding only a future role
+    # under "member only", and would have to be edited every time a role is
+    # added -- which is the thing permissions.py exists to avoid.
+    staff_roles = roles_with(Permission.ADMIN_ACCESS)
+    if role_filter == "staff":
+        query = query.where(User.roles.any(Role.slug.in_(staff_roles)))
+    elif role_filter.startswith("role:"):
+        query = query.where(User.roles.any(Role.slug == role_filter.split(":", 1)[1]))
     elif role_filter == "member":
-        query = query.where(User.member.has(), ~User.roles.any(Role.slug == "admin"))
-    elif role_filter == "admin_member":
-        query = query.where(User.roles.any(Role.slug == "admin"), User.member.has())
+        query = query.where(User.member.has(), ~User.roles.any(Role.slug.in_(staff_roles)))
     elif role_filter == "no_membership":
         query = query.where(~User.member.has())
 
