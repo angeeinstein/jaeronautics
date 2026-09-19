@@ -215,3 +215,28 @@ def test_expired_member_is_not_counted_as_covered(app):
 
     assert membership["currently_covered"] == 0
     assert membership["covered_without_evidence"] == 0
+
+
+def test_the_dashboard_counts_agree_with_the_health_report(app, monkeypatch):
+    """They disagreed by the number of erasures, which is the worst kind of
+    disagreement: both plausible, neither obviously wrong.
+
+    It also matters ahead of any import of non-member accounts, which would
+    widen the same gap until neither number meant anything.
+    """
+    from aeronautics_members.services import privacy
+
+    monkeypatch.setattr(privacy, "cancel_member_subscription", lambda m, reason=None: False)
+    monkeypatch.setattr(privacy, "anonymise_forum_account", lambda u: (False, False))
+    staying = make_member(email="staying@example.com")
+    leaving = make_member(email="leaving@example.com")
+    privacy.erase_account(leaving.user, initiated_by=privacy.INITIATED_BY_MEMBER)
+    db.session.commit()
+
+    metrics = app_module.get_admin_dashboard_metrics()
+    health = diagnostics.collect_system_health()
+
+    assert metrics["linked_members"] == health["membership"]["members"] == 1
+    assert metrics["total_accounts"] == 1
+    assert health["membership"]["erased_members"] == 1
+    assert staying.deleted_at is None

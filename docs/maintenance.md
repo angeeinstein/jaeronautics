@@ -370,6 +370,89 @@ account that can install an update cannot be erased (`last_superadmin` blocker),
 and revoking *admin* from a super admin removes both roles, since removing one
 row would otherwise leave the access untouched.
 
+## Planned: Archival Forum Accounts (not built)
+
+Roughly 500–600 people have used the forum over the last decade. The intention
+is to bring them into this system as a record of who posted what, showing name,
+year group and avatar — not as members. **Decisions taken, so the design is not
+re-argued from scratch:**
+
+- **The posts stay in Discourse.** Content is migrated with Discourse's own
+  tooling into the new instance; this database gains a person record per old
+  user, linked through `ForumAccount`. No post ever lands in these tables.
+- **An account is claimable.** If a former student returns they take over their
+  existing record rather than getting a second one, so their old posts stay
+  attributed to them. Expected to be rare; the point is not to foreclose it.
+
+### It is not a role
+
+Roles here are capability bundles, and an archival account has no capabilities.
+An `"alumni"` entry in `ROLE_PERMISSIONS` would be an empty set that shows up as
+a grantable checkbox in the role editor and says nothing true. This is a
+*status* — the same axis as `deleted_at`, a fact about the person's relationship
+to the association rather than about what they may do. Keep it off the
+permission table.
+
+### What is already safe
+
+- No roles means `can()` is false for everything, so no route, tab or button
+  opens.
+- `get_admin_recipient_emails()` selects on `NOTIFICATIONS_RECEIVE`, so archival
+  accounts are never mailed a digest.
+- `check_password` returns `False` when `password_hash` is `NULL`, so a
+  passwordless row cannot be signed into directly.
+
+### What would have to change
+
+- **Every count.** `get_admin_dashboard_metrics()` and `get_membership_summary()`
+  now exclude erased rows through a `present` filter; archival rows need the same
+  treatment or *Linked Members* reads 613 beside *Active Memberships* 9. The
+  filter is the pattern to copy — one marker column, excluded everywhere.
+- **The account directory.** 50 per page becomes 13 pages, and "Member Only"
+  fills with people who are not members. Needs its own filter value and probably
+  a default that hides them.
+- **`cleanup-pending-signups`** deletes stale `pending_checkout` members after
+  14 days. An import that sets that status by accident would quietly delete the
+  archive a fortnight later. Give archival rows a status of their own.
+
+### Email addresses are history, never identity
+
+The old accounts used university addresses, which are disabled when a student
+leaves. Worse, it is not known whether the university reissues an address to a
+later student with the same name. If it does, a *current* student could hold the
+address of someone who graduated a decade ago.
+
+So an archival account must never be reachable by its recorded address:
+
+- No password reset and no registration may match against one. The front door is
+  already shut (`check_password` returns `False` with a `NULL` hash); this is the
+  side door.
+- **Claiming is administrator-driven.** A returning student is matched to their
+  old record by a person who recognises them, from the name, year group and
+  forum username. An automatic match on email address *is* the vulnerability,
+  not a convenience feature.
+- Import the addresses as a historical field or not at all, but do not put them
+  in `users.email` where the authentication paths will find them.
+
+Designing it this way makes the reissue question moot, which is the point: the
+answer is unknown and does not have to be found out.
+
+### Data protection: a recorded decision
+
+The association considers this forum a shared record of a course community
+spanning more than a decade, and treats the alumni listing as part of that.
+Nobody has objected in twelve years of the old forum doing the same thing, and
+anyone who does object is removed by hand on request — the administrator-side
+erasure needs no email confirmation, so it works for an address that stopped
+working years ago.
+
+Noted for whoever revisits this: the retention basis is *not* the members' one.
+§ 132 BAO covers people who paid, and these people did not. This rests on the
+association's own interest in its history plus a standing offer to remove
+anyone who asks, which is a weaker footing and worth re-examining if the
+archive is ever made public outside the forum, or if photographs are shown
+somewhere the subjects would not expect.
+
 ## Data Export and Account Deletion
 
 `aeronautics_members/services/privacy.py` implements the two data-protection

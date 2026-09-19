@@ -951,13 +951,25 @@ def render_account_dashboard(profile_form=None, identity_form=None):
 
 
 def get_admin_dashboard_metrics():
+    # Erased rows stay -- they are the payment record -- but they are not people
+    # the association has any more, so they are excluded here exactly as they
+    # are in the health report. Counting them made the dashboard disagree with
+    # the Maintenance panel by the number of erasures, and any future import of
+    # non-member accounts would widen that gap until neither number meant
+    # anything.
+    present_user = User.deleted_at.is_(None)
+    present_member = Member.deleted_at.is_(None)
     return {
-        "total_accounts": db.session.scalar(db.select(func.count()).select_from(User)) or 0,
-        "linked_members": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.user_id.is_not(None))) or 0,
-        "active_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.is_active.is_(True))) or 0,
-        "pending_checkouts": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.payment_status == "pending_checkout")) or 0,
+        "total_accounts": db.session.scalar(
+            db.select(func.count()).select_from(User).where(present_user)
+        ) or 0,
+        "linked_members": db.session.scalar(
+            db.select(func.count()).select_from(Member).where(present_member, Member.user_id.is_not(None))
+        ) or 0,
+        "active_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.is_active.is_(True))) or 0,
+        "pending_checkouts": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.payment_status == "pending_checkout")) or 0,
         "pending_identity_requests": db.session.scalar(db.select(func.count()).select_from(MemberProfileChangeRequest).where(MemberProfileChangeRequest.status == "pending")) or 0,
-        "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.cancel_at_period_end.is_(True))) or 0,
+        "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.cancel_at_period_end.is_(True))) or 0,
         "forum_onboarding_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ONBOARDING)) or 0,
         "forum_active_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ACTIVE)) or 0,
         "forum_sync_errors": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_SYNC_ERROR)) or 0,
