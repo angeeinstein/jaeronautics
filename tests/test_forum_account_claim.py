@@ -17,7 +17,14 @@ from datetime import datetime
 import pytest
 
 from conftest import db, make_member
-from aeronautics_members.db_models import ImportedForumProfile, Member, User
+from aeronautics_members.db_models import (
+    AuditLog,
+    EmailDeliveryJob,
+    ImportedForumProfile,
+    Member,
+    User,
+)
+from aeronautics_members.services.clock import get_now_utc
 from aeronautics_members.services.forum_import import (
     claim_archived_account,
     find_claimable_profile,
@@ -50,6 +57,36 @@ def _returning(email=OLD_EMAIL, verified=True):
         member.user.email_verified_at = datetime.utcnow()
     db.session.commit()
     return member
+
+
+def _queued_verification_mail(user_id):
+    """The job signup leaves behind, pointing at the account it just made."""
+    return EmailDeliveryJob(
+        email_type="verify_email",
+        recipient_email=OLD_EMAIL,
+        target_user_id=user_id,
+        status="pending",
+        retry_count=0,
+        next_attempt_at=get_now_utc(),
+    )
+
+
+@pytest.fixture
+def enforce_foreign_keys(app):
+    """Make SQLite behave like the MariaDB this actually runs on.
+
+    Off by default in SQLite, always on in InnoDB -- so without this a claim
+    that strands a row passes here and fails there.
+    """
+    from sqlalchemy import event, text
+
+    def _turn_on(dbapi_connection, _record):
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+    event.listen(db.engine, "connect", _turn_on)
+    db.session.execute(text("PRAGMA foreign_keys=ON"))  # the connection already open
+    yield
+    event.remove(db.engine, "connect", _turn_on)
 
 
 class TestFindingTheArchivedAccount:
@@ -157,8 +194,14 @@ class TestClaiming:
         assert member.user.imported_forum_profile is profile
         assert profile.post_count == 7
 
-    def test_only_one_account_is_left_usable(self, app):
-        """The retired row is emptied, not deleted: audit entries point at it."""
+    def test_the_signup_row_is_gone_entirely(self, app):
+        """Not emptied and kept -- gone. One person, one row.
+
+        A tombstone would follow every returning student around for years:
+        counted or not counted, filtered in or out, forever needing a special
+        case. The signup row has served its purpose once its evidence has
+        moved across.
+        """
         _archived()
         member = _returning()
         retired_id = member.user_id
@@ -166,11 +209,82 @@ class TestClaiming:
         claim_archived_account(member.user)
         db.session.commit()
 
-        retired = db.session.get(User, retired_id)
-        assert retired.deleted_at is not None
-        assert retired.forum_username is None
-        assert retired.email != OLD_EMAIL
-        assert retired.member is None
+        assert db.session.get(User, retired_id) is None
+
+    def test_the_membership_stays_attached_to_the_account(self, app):
+        """Deleting the signup row must not take the membership with it.
+
+        SQLAlchemy de-associates children of a deleted parent, so moving only
+        the foreign key would set member.user_id back to NULL on flush and
+        leave every reconnected member without an account.
+        """
+        profile = _archived()
+        member = _returning()
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert member.user_id == profile.user_id
+        assert member.user is not None
+        assert member.user.member is member
+
+    def test_the_audit_trail_survives_the_claim(self, app):
+        """Signup wrote entries against the row that is about to go."""
+        profile = _archived()
+        member = _returning()
+        db.session.add(
+            AuditLog(
+                actor_user_id=member.user_id,
+                target_user_id=member.user_id,
+                category="account",
+                event_type="signed_up",
+            )
+        )
+        db.session.flush()
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        entry = db.session.execute(
+            db.select(AuditLog).filter_by(event_type="signed_up")
+        ).scalars().one()
+        assert entry.actor_user_id == profile.user_id
+        assert entry.target_user_id == profile.user_id
+
+    def test_the_queued_verification_mail_moves_too(self, app):
+        """The mail that led here points at the row the claim deletes.
+
+        Signup queues the verification email against the new account, the
+        student clicks the link in it, and that is what runs the claim -- so
+        this row is not an edge case, every returning student has one.
+        """
+        profile = _archived()
+        member = _returning()
+        db.session.add(_queued_verification_mail(member.user_id))
+        db.session.flush()
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        job = db.session.execute(db.select(EmailDeliveryJob)).scalars().one()
+        assert job.target_user_id == profile.user_id
+
+    def test_nothing_is_left_pointing_at_the_deleted_row(self, app, enforce_foreign_keys):
+        """With foreign keys enforced, a missed table refuses the delete.
+
+        This is the test that matters, because the suite runs on SQLite, which
+        does not check foreign keys unless asked, while production runs on
+        MariaDB, which always does. Without the fixture this passes whatever
+        the claim leaves behind -- and the failure lands in October, on the
+        real students, not here.
+        """
+        _archived()
+        member = _returning()
+        db.session.add(_queued_verification_mail(member.user_id))
+        db.session.commit()
+
+        claim_archived_account(member.user)
+        db.session.commit()  # the delete: raises IntegrityError if anything dangles
 
     def test_the_address_is_free_of_the_retired_row(self, app):
         """Otherwise the unique column would block the claim outright."""
@@ -540,9 +654,14 @@ class TestSeeingTheArchiveInTheAdmin:
         claim_archived_account(member.user)
         db.session.commit()
 
-        listing = admin_client.get("/admin/accounts?kind=archived").get_data(as_text=True)
-        # Scoped to the badge: the filter dropdown names the category too.
-        assert ">Old forum</span>" not in listing
+        # "Old forum" is what is left of a person who never came back, so the
+        # filter must not offer them up as one any more.
+        archives = admin_client.get("/admin/accounts?kind=archived").get_data(as_text=True)
+        assert ">Old forum</span>" not in archives  # scoped: the dropdown names it too
+        assert "PopovicA_L23" not in archives
+
+        # They read as an ordinary member, with the history still on show.
+        listing = admin_client.get("/admin/accounts").get_data(as_text=True)
         assert "Reconnected" in listing, "but it is still visible that they came back"
 
         detail = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
@@ -568,6 +687,30 @@ class TestSeeingTheArchiveInTheAdmin:
         assert metrics["total_accounts"] == 2, "the member and the admin, not the archive"
         assert metrics["archived_forum_accounts"] == 1
         assert metrics["archived_forum_claimed"] == 0
+
+    def test_reconnecting_counts_as_an_account_from_then_on(self, app, admin_client):
+        """The archive stops being one of the unclaimed and becomes a member.
+
+        Before the claim they are history; after it they are someone the
+        association can write to and take money from, so the count that says
+        how many accounts are administered here has to move with them.
+        """
+        from aeronautics_members.app import get_admin_dashboard_metrics
+
+        _archived()
+        member = _returning()
+        db.session.commit()
+
+        before = get_admin_dashboard_metrics()
+        assert before["total_accounts"] == 2, "the admin and the person who just signed up"
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        after = get_admin_dashboard_metrics()
+        assert after["total_accounts"] == 2, "the two rows became one account, not none"
+        assert after["archived_forum_accounts"] == 1
+        assert after["archived_forum_claimed"] == 1
 
 
 class TestTheArchivedAvatar:

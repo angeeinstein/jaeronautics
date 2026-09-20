@@ -987,12 +987,20 @@ def get_admin_dashboard_metrics():
     present_user = User.deleted_at.is_(None)
     present_member = Member.deleted_at.is_(None)
     return {
-        # Portal accounts only. Counting the forum archive here would say the
-        # association has 760 accounts when it has twenty, and the number is
+        # Portal accounts only. Counting the archive here would say the
+        # association has 760 accounts when it has twenty, and this number is
         # read as "how many people use this".
+        #
+        # Somebody who has reconnected counts, though: they signed up, they
+        # pay, they are here. Excluding them on the grounds that they were once
+        # imported would leave this figure hundreds short after an intake, and
+        # permanently.
         "total_accounts": db.session.scalar(
             db.select(func.count()).select_from(User).where(
-                present_user, ~User.imported_forum_profile.has()
+                present_user,
+                ~User.imported_forum_profile.has(
+                    ImportedForumProfile.claimed_at.is_(None)
+                ),
             )
         ) or 0,
         "archived_forum_accounts": db.session.scalar(
@@ -1054,10 +1062,17 @@ def build_account_directory_query(
     # Former forum people live in this same list -- a former member is a member
     # the association still has a record of, and reconnecting one is the same
     # action as anything else done from an account page. This only narrows it.
+    #
+    # "Archived" means still only an archive: a profile nobody has claimed.
+    # Once somebody comes back they are an ordinary account that happens to
+    # carry its history, and filing them under "from the old forum" for the
+    # next decade would be describing where they came from rather than what
+    # they are.
+    unclaimed = User.imported_forum_profile.has(ImportedForumProfile.claimed_at.is_(None))
     if kind_filter == "archived":
-        query = query.where(User.imported_forum_profile.has())
+        query = query.where(unclaimed)
     elif kind_filter == "portal":
-        query = query.where(~User.imported_forum_profile.has())
+        query = query.where(~unclaimed)
 
     # "Who can administer" is a capability question, not a role-name one. Asking
     # for Role.slug == "admin" would file an account holding only a future role

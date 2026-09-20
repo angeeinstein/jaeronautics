@@ -214,15 +214,17 @@ def find_claimable_profile_for_user(user):
     return None
 
 
-# What a brand-new member's account may own at the moment it is verified. The
-# claim moves the membership onto the archived row, so anything else pointing
-# at the row being retired would be left dangling -- and rather than repoint
-# tables nobody expected, the claim refuses and says so.
-CLAIMABLE_NEW_ACCOUNT_RELATIONSHIPS = ("member",)
-
-
 def _blocking_relationships(user):
-    """Anything on the new account the claim is not prepared to carry across."""
+    """Anything on the new account the claim is not prepared to carry across.
+
+    Rows that merely name the account are repointed at the archived row below,
+    which handles the ordinary case. These are the ones where that is not
+    enough: either both accounts already have one and the column is unique, or
+    deciding what the merged account should end up with is a judgement rather
+    than a move. A brand-new member being verified has none of them, so hitting
+    one means something unexpected has happened and the claim declines instead
+    of guessing.
+    """
     blocking = []
     if user.roles:
         blocking.append("roles")
@@ -235,6 +237,31 @@ def _blocking_relationships(user):
     if user.requested_profile_changes or user.reviewed_profile_changes:
         blocking.append("profile change requests")
     return blocking
+
+
+# Moved onto the archived row by the ORM in the claim itself, so the sweep
+# below must leave them alone. Both are unique columns: writing them twice
+# would collide with the archive's own profile row.
+CLAIM_HANDLED_FOREIGN_KEYS = frozenset({
+    ("member", "user_id"),
+    ("imported_forum_profiles", "user_id"),
+})
+
+
+def _user_foreign_key_columns():
+    """Every column in the schema that points at ``users.id``.
+
+    Read out of the metadata rather than listed by hand. The list has to be
+    complete -- the claim deletes a user row, and a table left pointing at it
+    makes the database refuse the delete -- and a hand-written one goes stale
+    the first time somebody adds a table, silently and in the worst place:
+    MariaDB enforces foreign keys, SQLite under the tests does not, so the
+    breakage would show up only in production.
+    """
+    for table in db.metadata.sorted_tables:
+        for foreign_key in table.foreign_keys:
+            if foreign_key.column.table.name == User.__tablename__:
+                yield table, foreign_key.parent
 
 
 def claim_archived_account(user):
@@ -288,15 +315,37 @@ def claim_archived_account(user):
     archived.password_reset_nonce = None  # links issued for the retired row die here
 
     if member is not None:
-        member.user_id = archived.id
+        # Both sides, not just the foreign key. The row being retired still
+        # holds this membership through User.member, and deleting it below
+        # would de-associate the child -- setting member.user_id straight back
+        # to NULL and orphaning the membership that was just moved.
+        user.member = None
+        archived.member = member
 
     profile.claimed_at = get_now_utc()
     db.session.flush()
 
-    # The retired row is emptied rather than deleted: audit entries written
-    # during signup point at it, and the record of what happened is worth more
-    # than the row.
-    user.deleted_at = get_now_utc()
+    # Everything else in the schema that names the row about to go. It is the
+    # same person on either side of the claim, so it all moves across: the
+    # audit entries written during signup, and -- the one that actually bites
+    # -- the verification email queued minutes ago, because queueing it is what
+    # led here. Every returning student has one.
+    for table, column in _user_foreign_key_columns():
+        if (table.name, column.name) in CLAIM_HANDLED_FOREIGN_KEYS:
+            continue
+        db.session.execute(
+            db.update(table).where(column == user.id).values({column.name: archived.id})
+        )
+    db.session.expire_all()  # the sweep went round the session; loaded rows are stale
+    db.session.flush()
+
+    # And then it goes, rather than being kept as an emptied husk. Leaving one
+    # behind would mean a tombstone account per returning student -- around 250
+    # of them in one October -- each showing up in the directory as an erased
+    # account with a placeholder address, for ever. Somebody who comes back
+    # should end up with exactly what a first-time member has: one account, one
+    # membership, and the old forum hanging off it as history.
+    db.session.delete(user)
     db.session.flush()
 
     current_app.logger.info(
