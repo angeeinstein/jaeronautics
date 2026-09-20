@@ -384,37 +384,41 @@ account that can install an update cannot be erased (`last_superadmin` blocker),
 and revoking *admin* from a super admin removes both roles, since removing one
 row would otherwise leave the access untouched.
 
-## What an imported person is, exactly
+## What a `member` row means
 
-They are **members.** They joined the association years ago, nobody ever
-formally ended it, and technically they still are — which is why the website
-says roughly seven hundred members and is not lying.
+**A membership this system administers.** Somebody who pays, can be reached,
+and renews. That is the definition the whole schema hangs off, and it is
+narrower than "member of the association".
 
-What is missing is not the membership, it is the record of it. The old forum
-kept a username, a university address and a year group; it never kept a name,
-a postal address or a phone number. So of the ten fields `member` requires,
-that import supplies none.
+The people carried over from the old forum *are* association members. They
+joined years ago, nobody formally ended it, and technically they still are —
+which is why the website says roughly seven hundred members and is not lying.
+They have no `member` row all the same, and not because they are not members:
 
-That is why they have a `users` row and an `imported_forum_profiles` row and no
-`member` row — not because they are not members, but because a membership
-record is the association's register of who joined and on what terms, and
-filling it with 739 blanks would say the register holds details it does not.
+* There is no live relationship to administer. Nobody collects from them,
+  nothing renews, and **they cannot be contacted at all** — no private address
+  was ever kept, so a general assembly invitation cannot reach them. Their
+  university addresses are dead except for the ones still studying, which is
+  exactly the group the forum claim reconnects.
+* The record does not exist to write down. The old forum kept a username, a
+  university address and a year group; never a name, a postal address or a
+  phone number. Of the ten fields `member` requires, the import supplies none.
 
-Screens therefore avoid claiming either way. An imported row reads *Old forum*,
-and the account page says the membership is **not recorded** rather than
-absent. The dashboard's *People On Record* adds both together, because that
-combined figure is the number the association actually quotes.
+So the counts on the dashboard are deliberately **software counts, not
+association counts**, and the archive is shown beside them rather than added
+to them. Every number an admin acts on — how many are active, how many are
+overdue, who to email — should mean "relationships this system manages", and a
+combined figure would be quotable in public and useless for every decision
+made from that page.
 
-Two consequences worth knowing:
+Screens avoid claiming either way about the rest. An imported row reads *Old
+forum*, and the account page says the membership is **not recorded** rather
+than absent, because "no membership" would be false about people the
+association still counts.
 
-* **Every membership count excludes them**, because none of them has a
-  membership row. If somebody eventually decides those memberships should be
-  ended or reconstructed, that is a board decision and a data-entry job, not a
-  schema change.
-* **They cannot be contacted.** No private address was ever kept, so a general
-  assembly invitation cannot reach them. Their university addresses are dead
-  except for the ones still studying, which is precisely the group the forum
-  claim reconnects.
+If somebody eventually decides those memberships should be formally ended, or
+reconstructed by asking people for their details, that is a board decision and
+a data-entry job — not a schema change. The rows are ready for either.
 
 ## Account status vs membership status
 
