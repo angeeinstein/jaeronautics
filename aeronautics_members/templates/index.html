@@ -86,7 +86,6 @@
         <div class="grid grid-cols-1">
             <label for="email_private" class="block text-sm font-medium text-gray-700">{{ _(form.email_private.label.text) }}<span class="text-red-500">*</span></label>
             {{ form.email_private(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", autocomplete="email") }}
-            <small class="text-muted d-block mt-2">{{ _('This email address becomes your login, and is how we reach you after you finish studying. Use a private address, not your university one.') }}</small>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -97,29 +96,19 @@
             <div>
                 <label for="email_work" class="block text-sm font-medium text-gray-700">{{ _(form.email_work.label.text) }}<span class="text-red-500">*</span></label>
                 {{ form.email_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", autocomplete="email", placeholder="e.g. name@edu.fh-joanneum.at") }}
-                <small class="text-muted d-block mt-2">{{ _('Students: please use your university address. We send a confirmation link to it, and if you were on the old forum this is what reconnects your account there.') }}</small>
                 {% for error in form.email_work.errors %}<span class="text-red-500 text-sm">{{ error }}</span>{% endfor %}
             </div>
         </div>
 
-        <div class="grid grid-cols-1" data-member-kind
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6" data-member-kind
              data-year-group-categories="{{ year_group_categories }}"
              data-year-group-required="{{ year_group_required_categories }}">
-            <label class="block text-sm font-medium text-gray-700">{{ _(form.member_category.label.text) }}<span class="text-red-500">*</span></label>
-            <div class="mt-2 space-y-2">
-                {% for subfield in form.member_category %}
-                    <div class="form-check">
-                        {{ subfield(class="form-check-input") }}
-                        <label class="form-check-label" for="{{ subfield.id }}">
-                            {{ subfield.label.text }}
-                            <small class="text-muted d-block">{{ member_category_description(subfield.data) }}</small>
-                        </label>
-                    </div>
-                {% endfor %}
+            <div>
+                <label for="member_category" class="block text-sm font-medium text-gray-700">{{ _(form.member_category.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.member_category(class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white shadow-sm sm:text-sm") }}
+                {% for error in form.member_category.errors %}<span class="text-red-500 text-sm">{{ error }}</span>{% endfor %}
             </div>
-            {% for error in form.member_category.errors %}<span class="text-red-500 text-sm">{{ error }}</span>{% endfor %}
-
-            <div class="mt-3" data-year-group-field>
+            <div data-year-group-field>
                 <label for="year_group" class="block text-sm font-medium text-gray-700">{{ _(form.year_group.label.text) }}<span class="text-red-500">*</span></label>
                 {{ form.year_group(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", placeholder="e.g. LAV25", oninput="this.value = this.value.toUpperCase()", pattern="[A-Z]+[0-9]{2}", title=_("Invalid format. Please use uppercase letters followed by two numbers, like LAV25.")) }}
                 {% for error in form.year_group.errors %}<span class="text-red-500 text-sm">{{ error }}</span>{% endfor %}

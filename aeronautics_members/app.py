@@ -170,7 +170,6 @@ from .services.institutional_email import (  # noqa: E402
 from .member_categories import (  # noqa: E402
     CATEGORY_ORDER,
     categories_showing_year_group,
-    category_description,
     category_label,
     requires_year_group,
 )
@@ -1302,7 +1301,6 @@ def create_app(config_overrides=None):
                 category for category in CATEGORY_ORDER if requires_year_group(category)
             ),
             member_category_label=category_label,
-            member_category_description=category_description,
         )
 
     @app.template_filter("redact_audit_payload")

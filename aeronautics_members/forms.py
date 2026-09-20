@@ -124,10 +124,13 @@ def resolve_member_category(form):
     if field is not None and hasattr(field, "data"):
         return field.data
     return getattr(form, "member_category_value", None)
+
+
 YEAR_GROUP_VALIDATOR = Regexp(
     r"^[A-Z]+[0-9]{2}$",
     message=_l("Invalid format. Please use uppercase letters followed by two numbers, like LAV25."),
 )
+
 
 class YearGroupRequirement:
     """Applies the year group rules for whichever member category was chosen.
@@ -218,12 +221,14 @@ class MembershipForm(FlaskForm):
     city = StringField(_l("City"), validators=[DataRequired()])
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
-    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    email_private = StringField(
+        _l("Private Email (your login)"), validators=[DataRequired(), Email()]
+    )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
-    member_category = RadioField(
+    member_category = SelectField(
         _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
@@ -254,12 +259,14 @@ class CreateMembershipProfileForm(FlaskForm):
     city = StringField(_l("City"), validators=[DataRequired()])
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
-    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    email_private = StringField(
+        _l("Private Email (your login)"), validators=[DataRequired(), Email()]
+    )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
-    member_category = RadioField(
+    member_category = SelectField(
         _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
@@ -315,7 +322,9 @@ class MemberProfileForm(FlaskForm):
     city = StringField(_l("City"), validators=[DataRequired()])
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
-    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    email_private = StringField(
+        _l("Private Email (your login)"), validators=[DataRequired(), Email()]
+    )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
@@ -328,7 +337,7 @@ class IdentityChangeRequestForm(FlaskForm):
     title = StringField(_l("Title"), validators=[Optional()])
     first_name = StringField(_l("First Name"), validators=[DataRequired()])
     last_name = StringField(_l("Last Name"), validators=[DataRequired()])
-    member_category = RadioField(
+    member_category = SelectField(
         _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )

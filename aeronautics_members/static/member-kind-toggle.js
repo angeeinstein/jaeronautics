@@ -14,8 +14,8 @@
 
     function wire(container) {
         var field = container.querySelector("[data-year-group-field]");
-        var radios = container.querySelectorAll('input[name="member_category"]');
-        if (!field || !radios.length) {
+        var chooser = container.querySelector('select[name="member_category"]');
+        if (!field || !chooser) {
             return;
         }
 
@@ -27,17 +27,8 @@
             .filter(Boolean);
         var input = field.querySelector("input");
 
-        function selected() {
-            for (var i = 0; i < radios.length; i += 1) {
-                if (radios[i].checked) {
-                    return radios[i].value;
-                }
-            }
-            return null;
-        }
-
         function apply() {
-            var category = selected();
+            var category = chooser.value;
             var isShown = shown.indexOf(category) !== -1;
 
             field.hidden = !isShown;
@@ -58,9 +49,7 @@
             }
         }
 
-        radios.forEach(function (radio) {
-            radio.addEventListener("change", apply);
-        });
+        chooser.addEventListener("change", apply);
         apply();
     }
 
