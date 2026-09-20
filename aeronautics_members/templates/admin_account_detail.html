@@ -120,6 +120,71 @@
         </div>
     </div>
     <div class="col-lg-7">
+        <div class="card mb-4">
+            <div class="card-header"><h4 class="mb-0">{{ _('Account Status') }}</h4></div>
+            <div class="card-body">
+                {#
+                  Two statuses, deliberately side by side. They answer different
+                  questions and are allowed to disagree: somebody paid up for the
+                  year can be barred from signing in, and a perfectly good account
+                  can sit here with no membership yet.
+                #}
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">{{ _('Account') }}</dt>
+                    <dd class="col-sm-8">
+                        {% if user_record.deleted_at %}
+                            <span class="badge text-bg-dark">{{ _('Erased') }}</span>
+                        {% elif user_record.is_disabled %}
+                            <span class="badge text-bg-danger">{{ _('Deactivated') }}</span>
+                        {% elif not user_record.password_hash %}
+                            <span class="badge text-bg-secondary">{{ _('No sign-in yet') }}</span>
+                        {% else %}
+                            <span class="badge text-bg-success">{{ _('Active') }}</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-4">{{ _('Membership') }}</dt>
+                    <dd class="col-sm-8">
+                        {% if not member %}
+                            <span class="text-muted">{{ _('None') }}</span>
+                        {% elif member.is_active %}
+                            <span class="badge text-bg-success">{{ _('Active') }}</span>
+                        {% else %}
+                            <span class="badge text-bg-warning">{{ _('Not active') }}</span>
+                        {% endif %}
+                    </dd>
+                    {% if user_record.is_disabled %}
+                        <dt class="col-sm-4">{{ _('Deactivated On') }}</dt>
+                        <dd class="col-sm-8">{{ user_record.disabled_at.strftime('%Y-%m-%d') }}</dd>
+                        <dt class="col-sm-4">{{ _('Reason') }}</dt>
+                        <dd class="col-sm-8">{{ user_record.disabled_reason or _('None recorded') }}</dd>
+                    {% endif %}
+                </dl>
+
+                {% if can_manage_roles and not user_record.deleted_at %}
+                    {% if user_record.is_disabled %}
+                        <form method="POST" action="{{ url_for('admin.update_account_disabled', user_id=user_record.id) }}" class="mt-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="disable" value="0">
+                            <button type="submit" class="btn btn-primary">{{ _('Reactivate Account') }}</button>
+                        </form>
+                    {% elif disable_blockers %}
+                        {% for _code, message in disable_blockers %}
+                            <div class="alert alert-secondary mt-3 mb-0">{{ message }}</div>
+                        {% endfor %}
+                    {% else %}
+                        <form method="POST" action="{{ url_for('admin.update_account_disabled', user_id=user_record.id) }}" class="mt-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="disable" value="1">
+                            <label class="form-label" for="disable-reason">{{ _('Reason') }}</label>
+                            <input type="text" class="form-control mb-2" id="disable-reason" name="reason" maxlength="255"
+                                   placeholder="{{ _('Why is this account being deactivated?') }}">
+                            <button type="submit" class="btn btn-danger">{{ _('Deactivate Account') }}</button>
+                            <div class="form-text">{{ _('Stops them signing in and removes their forum access. The membership, including anything they have paid, is left exactly as it is.') }}</div>
+                        </form>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
         {% set archive = user_record.imported_forum_profile %}
         {% if archive %}
         <div class="card mb-4">

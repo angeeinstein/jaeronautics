@@ -45,7 +45,16 @@
                 </select>
             </div>
             <div class="col-md-4 col-lg-2">
-                <label class="form-label" for="account-active">{{ _('Active') }}</label>
+                <label class="form-label" for="account-status">{{ _('Account') }}</label>
+                <select class="form-select" id="account-status" name="account">
+                    <option value="all" {% if account_filter == 'all' %}selected{% endif %}>{{ _('All') }}</option>
+                    <option value="active" {% if account_filter == 'active' %}selected{% endif %}>{{ _('Active') }}</option>
+                    <option value="disabled" {% if account_filter == 'disabled' %}selected{% endif %}>{{ _('Deactivated') }}</option>
+                    <option value="no_sign_in" {% if account_filter == 'no_sign_in' %}selected{% endif %}>{{ _('No sign-in yet') }}</option>
+                </select>
+            </div>
+            <div class="col-md-4 col-lg-2">
+                <label class="form-label" for="account-active">{{ _('Membership Active') }}</label>
                 <select class="form-select" id="account-active" name="active">
                     <option value="all" {% if active_filter == 'all' %}selected{% endif %}>{{ _('All') }}</option>
                     <option value="active" {% if active_filter == 'active' %}selected{% endif %}>{{ _('Active') }}</option>
@@ -73,10 +82,11 @@
                         <tr>
                             <th>{{ _('Email') }}</th>
                             <th>{{ _('Member') }}</th>
+                            <th>{{ _('Account') }}</th>
                             <th>{{ _('Forum Username') }}</th>
                             <th>{{ _('Roles') }}</th>
                             <th>{{ _('Subscription') }}</th>
-                            <th>{{ _('Active') }}</th>
+                            <th>{{ _('Membership Active') }}</th>
                             <th class="text-end">{{ _('Actions') }}</th>
                         </tr>
                     </thead>
@@ -102,6 +112,17 @@
                                         {% if archive.year_group %}<span class="text-muted">({{ archive.year_group }})</span>{% endif %}
                                     {% else %}
                                         <span class="text-muted">{{ _('No membership') }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user_record.deleted_at %}
+                                        <span class="badge text-bg-dark">{{ _('Erased') }}</span>
+                                    {% elif user_record.is_disabled %}
+                                        <span class="badge text-bg-danger" title="{{ user_record.disabled_reason or '' }}">{{ _('Deactivated') }}</span>
+                                    {% elif not user_record.password_hash %}
+                                        <span class="text-muted">{{ _('No sign-in yet') }}</span>
+                                    {% else %}
+                                        <span class="badge text-bg-success">{{ _('Active') }}</span>
                                     {% endif %}
                                 </td>
                                 <td>{{ user_record.forum_username or '-' }}</td>

@@ -55,6 +55,18 @@ class User(UserMixin, db.Model):
     # Rotated whenever the address changes or a verification link is used, so a
     # verification token issued for an older address cannot be replayed.
     email_verification_nonce = db.Column(db.String(255), nullable=True)
+    # Switched off by an administrator. Separate from the membership on
+    # purpose: the two answer different questions and genuinely disagree. A
+    # member can be paid up for the year and barred from signing in, and a
+    # perfectly good account can sit here with no membership yet or a lapsed
+    # one. Folding them together would mean suspending somebody by cancelling
+    # what they paid for, or letting a subscription decide who is barred.
+    #
+    # Reversible, which is what separates it from deleted_at: the record is
+    # untouched, only access stops.
+    disabled_at = db.Column(db.DateTime, nullable=True)
+    disabled_reason = db.Column(db.String(255), nullable=True)
+    disabled_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     # Set when the person's data was erased. The row survives because the
     # membership ledger and the audit trail reference it and must stay readable;
     # what made it a person is gone. See services/privacy.py.
@@ -111,6 +123,43 @@ class User(UserMixin, db.Model):
     @property
     def email_is_verified(self):
         return self.email_verified_at is not None
+
+    @property
+    def is_disabled(self):
+        return self.disabled_at is not None
+
+    @property
+    def can_sign_in(self):
+        """Whether this account may be used at all, ignoring the membership.
+
+        A membership decides what a signed-in member may reach, not whether
+        they may sign in -- somebody between subscriptions still has an
+        account.
+        """
+        return (
+            self.deleted_at is None
+            and self.disabled_at is None
+            and bool(self.password_hash)
+        )
+
+    @property
+    def account_status(self):
+        """One word for the state of the account itself, for screens and filters.
+
+        Deliberately answers a different question from the membership status
+        beside it. The order is by finality: erased cannot be undone, disabled
+        is a decision, and the rest describe an account nobody has switched
+        off and nobody can yet use.
+        """
+        if self.deleted_at is not None:
+            return "erased"
+        if self.disabled_at is not None:
+            return "disabled"
+        if self.imported_forum_profile is not None and not self.password_hash:
+            return "archived"
+        if not self.password_hash:
+            return "no_password"
+        return "active"
 
     @property
     def permissions(self):

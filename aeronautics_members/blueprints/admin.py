@@ -47,7 +47,13 @@ from ..services.members import (
 from ..services.membership import (
     member_has_active_access,
 )
-from ..services.access import assignable_roles, describe_role_change, set_account_roles
+from ..services.access import (
+    assignable_roles,
+    describe_account_disable,
+    describe_role_change,
+    set_account_disabled,
+    set_account_roles,
+)
 from ..services.privacy import (
     INITIATED_BY_ADMIN,
     describe_deletion_impact,
@@ -205,11 +211,13 @@ def admin_accounts():
     membership_filter = request.args.get("membership_status", "all")
     active_filter = request.args.get("active", "all")
     kind_filter = request.args.get("kind", "all")
+    account_filter = request.args.get("account", "all")
     page = request.args.get("page", 1, type=int)
 
     pagination = db.paginate(
         build_account_directory_query(
-            search_term, role_filter, membership_filter, active_filter, kind_filter
+            search_term, role_filter, membership_filter, active_filter,
+            kind_filter, account_filter,
         ),
         page=page,
         per_page=ADMIN_DIRECTORY_PAGE_SIZE,
@@ -228,6 +236,7 @@ def admin_accounts():
         membership_filter=membership_filter,
         active_filter=active_filter,
         kind_filter=kind_filter,
+        account_filter=account_filter,
     )
 
 
@@ -294,6 +303,12 @@ def admin_account_detail(user_id):
         # and what refusing would say -- worked out server-side so the form and
         # the guard cannot disagree about what is possible.
         can_manage_roles=current_user.can(Permission.ROLES_MANAGE),
+        # Why the switch is missing matters more than the switch: "you cannot
+        # do this to yourself" and "nobody else could install an update" lead
+        # somewhere different.
+        disable_blockers=describe_account_disable(
+            user, actor_user=current_user, disable=True
+        )["blockers"],
         role_options=[
             {
                 "slug": slug,
@@ -613,6 +628,69 @@ def test_forum_connection():
     db.session.commit()
     flash(message, "success" if success else "danger")
     return redirect(f"{url_for('admin.admin_settings')}#settings-forum")
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/disabled", methods=["POST"])
+@login_required
+@requires(Permission.ROLES_MANAGE)
+def update_account_disabled(user_id):
+    """Switch an account off, or back on. Never touches the membership.
+
+    Behind ROLES_MANAGE because this decides who may use the site, which is
+    the same kind of decision as granting a role and wants the same people
+    making it.
+    """
+    user = db.session.get(User, user_id)
+    if user is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+
+    disable = request.form.get("disable") == "1"
+    before_user = snapshot_user_for_audit(user)
+    try:
+        change = set_account_disabled(
+            user,
+            disable=disable,
+            actor_user=current_user,
+            reason=request.form.get("reason"),
+        )
+    except ServiceError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(url_for("admin.admin_account_detail", user_id=user_id))
+
+    if not change["changed"]:
+        flash(_("No change was made."), "info")
+        return redirect(url_for("admin.admin_account_detail", user_id=user_id))
+
+    # The forum is a separate system holding its own group memberships, so
+    # barring somebody here means nothing there until this runs.
+    if user.member is not None:
+        try:
+            sync_member_forum_state(user.member)
+        except Exception as exc:  # noqa: BLE001 -- the decision stands either way
+            current_app.logger.warning(
+                "Could not sync forum state after disabling user_id=%s: %s", user.id, exc
+            )
+
+    log_audit_event(
+        category="access",
+        event_type="account_disabled" if disable else "account_enabled",
+        actor_user=current_user,
+        target_user=user,
+        target_member=user.member,
+        before=before_user,
+        after=snapshot_user_for_audit(user),
+        metadata={"reason": user.disabled_reason},
+    )
+    db.session.commit()
+    flash(
+        _("The account has been deactivated. Their membership is unchanged.")
+        if disable
+        else _("The account has been reactivated."),
+        "success",
+    )
+    return redirect(url_for("admin.admin_account_detail", user_id=user_id))
 
 
 @admin_bp.route("/admin/accounts/<int:user_id>/roles", methods=["POST"])

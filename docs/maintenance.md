@@ -384,6 +384,51 @@ account that can install an update cannot be erased (`last_superadmin` blocker),
 and revoking *admin* from a super admin removes both roles, since removing one
 row would otherwise leave the access untouched.
 
+## Account status vs membership status
+
+Two states, deliberately separate, because they answer different questions and
+are allowed to disagree:
+
+| | Question | Where | Reversible |
+| --- | --- | --- | --- |
+| **Membership** | Have they paid, are they covered? | `Member.is_active`, the period ledger | by paying |
+| **Account** | May they sign in and use the forum? | `User.disabled_at` | by an admin |
+| **Erased** | Is the person gone from the record? | `User.deleted_at` | **no** |
+
+Both directions occur. Somebody paid up for the year can be barred from signing
+in. An account in good standing can sit here with no membership yet, or a
+lapsed one. Until this existed the only way to stop somebody was to erase them,
+which is irreversible and destroys the record you would want to keep if you
+were suspending rather than deleting.
+
+**Disabling never touches the membership.** Not the subscription, not the
+ledger, not the end date — barring somebody is not a refund, and suspending a
+person by cancelling what they paid for would be a different act with different
+consequences. `User.account_status` and `Member.is_active` are shown as two
+rows on the account page and two columns in the directory so they can never be
+read as one thing.
+
+What it does do:
+
+* `load_user` returns None, so **open sessions end at the next request**. An
+  account is usually switched off because somebody should stop using it now.
+* Login is refused with a message that says so, rather than "invalid email or
+  password" — the credentials were right, and sending them into a password
+  reset that cannot help is worse than useless.
+* `get_desired_state` returns inactive, so the **forum syncs them out**.
+  Discourse holds its own group memberships; barring somebody here would
+  otherwise mean nothing there and they would carry on posting.
+
+The guards match the role editor's, because switching an account off removes
+its access as surely as taking the role away: not your own account, and not the
+last holder of a protected capability. `_active_holders_excluding` ignores
+disabled accounts for the same reason — a switched-off admin is not cover, and
+counting them would let the last working one be disabled after them.
+
+The reason and who did it are recorded. "Disabled, and nobody remembers why" is
+the state to avoid, and reactivating clears both rather than leaving a stale
+reason attached to a working account.
+
 ## Member categories
 
 Membership is not only for students, and never was — the statutes allow it.

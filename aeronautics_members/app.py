@@ -347,6 +347,12 @@ def load_user(user_id):
     # every one of them at the next request.
     if user is not None and user.deleted_at is not None:
         return None
+    # Same reasoning for a switched-off account, and the same urgency: an
+    # account is usually disabled *because* somebody should stop using it now,
+    # and leaving their open sessions alive would mean waiting for a logout
+    # that may never come.
+    if user is not None and user.is_disabled:
+        return None
     return user
 
 
@@ -1014,7 +1020,8 @@ def get_admin_dashboard_metrics():
 
 
 def build_account_directory_query(
-    search_term, role_filter, membership_filter, active_filter, kind_filter="all"
+    search_term, role_filter, membership_filter, active_filter,
+    kind_filter="all", account_filter="all",
 ):
     query = (
         db.select(User)
@@ -1077,6 +1084,19 @@ def build_account_directory_query(
         query = query.where(User.member.has(Member.is_active.is_(True)))
     elif active_filter == "inactive":
         query = query.where(User.member.has(Member.is_active.is_(False)))
+
+    # The account's own state, which is a different question from the
+    # membership's and filtered separately for that reason.
+    if account_filter == "active":
+        query = query.where(
+            User.disabled_at.is_(None),
+            User.deleted_at.is_(None),
+            User.password_hash.is_not(None),
+        )
+    elif account_filter == "disabled":
+        query = query.where(User.disabled_at.is_not(None))
+    elif account_filter == "no_sign_in":
+        query = query.where(User.password_hash.is_(None), User.deleted_at.is_(None))
 
     return query.order_by(User.email.asc()).distinct()
 
@@ -1174,6 +1194,13 @@ def build_forum_context(member):
     elif not service.is_enabled():
         status_key = "disabled"
         status_message = _("The forum integration is not enabled yet.")
+    elif member.user.is_disabled:
+        # Checked before the membership, because it is the stronger statement:
+        # a switched-off account stays out whether or not the subscription is
+        # paid up, and saying "your membership is not active" to somebody who
+        # has paid for the year would simply be untrue.
+        status_key = "account_disabled"
+        status_message = _("Your account has been deactivated, so forum access is not available.")
     elif not member_has_active_access(member):
         status_key = "inactive_membership"
         status_message = _("Your forum access is currently unavailable because your membership is not active.")

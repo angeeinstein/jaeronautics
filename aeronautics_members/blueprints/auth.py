@@ -263,6 +263,17 @@ def login():
     )
     if form.validate_on_submit():
         user = db.session.execute(db.select(User).filter_by(email=form.email.data.strip().lower())).scalar_one_or_none()
+        if user and user.is_disabled and user.check_password(form.password.data):
+            # Told apart from a wrong password on purpose. The credentials were
+            # right, so "invalid email or password" would send somebody into
+            # password resets that cannot help them; this is a thing to ask an
+            # admin about.
+            flash(
+                _("This account has been deactivated. Please contact the "
+                  "association if you think this is a mistake."),
+                "warning",
+            )
+            return redirect(url_for("auth.login"))
         if user and user.check_password(form.password.data):
             login_user(user)
             destination = session.pop("login_next", None)

@@ -32,6 +32,7 @@ from ..permissions import (
     roles_with,
 )
 from . import ConflictError, ValidationError
+from .clock import get_now_utc
 
 
 def assignable_roles():
@@ -50,6 +51,9 @@ def _active_holders_excluding(permission, user_id):
         .where(
             User.roles.any(Role.slug.in_(slugs)),
             User.deleted_at.is_(None),
+            # A switched-off admin cannot administer anything, so counting them
+            # as cover would let the last working one be disabled or stripped.
+            User.disabled_at.is_(None),
             User.id != user_id,
         )
     ) or 0
@@ -133,3 +137,71 @@ def set_account_roles(user, requested_slugs, *, actor_user):
         user.grant_role(get_role(slug))
 
     return change
+
+
+def describe_account_disable(user, *, actor_user, disable=True):
+    """What switching this account off (or back on) would do, and what forbids it.
+
+    Deliberately says nothing about the membership. The two states answer
+    different questions and are allowed to disagree: somebody paid up for the
+    year can be barred from signing in, and an account in good standing can sit
+    here with no membership at all. Suspending a person by cancelling what they
+    paid for would be a different act with a different meaning, and a refund
+    attached to it.
+
+    The same guards as a role change, for the same reasons -- switching an
+    account off removes its access just as surely as taking the role away.
+    """
+    blockers = []
+
+    if user.deleted_at is not None:
+        blockers.append(("erased", "This account was erased. There is nothing to switch off."))
+        return {"blockers": blockers, "changed": False}
+
+    if disable and user.is_disabled:
+        return {"blockers": [], "changed": False}
+    if not disable and not user.is_disabled:
+        return {"blockers": [], "changed": False}
+
+    if disable:
+        if actor_user is not None and actor_user.id == user.id:
+            blockers.append((
+                "self",
+                "You cannot switch off your own account. Somebody else has to do it.",
+            ))
+
+        for permission, consequence in PROTECTED_PERMISSIONS.items():
+            if permission not in user.permissions:
+                continue
+            if _active_holders_excluding(permission, user.id) == 0:
+                blockers.append((
+                    "last_holder",
+                    f"This is the only account that can do this -- {consequence}. "
+                    "Give another account the role first.",
+                ))
+
+    return {"blockers": blockers, "changed": True}
+
+
+def set_account_disabled(user, *, disable, actor_user, reason=None):
+    """Switch an account off or back on. Returns what happened.
+
+    Leaves the membership exactly as it is, including an active subscription
+    that keeps renewing: barring somebody is not a refund.
+    """
+    outcome = describe_account_disable(user, actor_user=actor_user, disable=disable)
+    if outcome["blockers"]:
+        raise ConflictError(outcome["blockers"][0][1])
+    if not outcome["changed"]:
+        return outcome
+
+    if disable:
+        user.disabled_at = get_now_utc()
+        user.disabled_reason = (reason or "").strip() or None
+        user.disabled_by_user_id = actor_user.id if actor_user is not None else None
+    else:
+        user.disabled_at = None
+        user.disabled_reason = None
+        user.disabled_by_user_id = None
+
+    return outcome

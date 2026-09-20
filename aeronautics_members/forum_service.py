@@ -703,6 +703,12 @@ class ForumService:
     def get_desired_state(self, member):
         if member is None or member.user is None or not member_has_active_membership(member):
             return FORUM_STATE_INACTIVE
+        # A switched-off account leaves the forum too, and this is where that
+        # actually happens: Discourse is a separate system holding its own
+        # group memberships, so barring somebody here without syncing would
+        # stop them reaching the portal while they carried on posting.
+        if member.user.is_disabled:
+            return FORUM_STATE_INACTIVE
         if self.get_current_approved_submission(member) is not None:
             return FORUM_STATE_ACTIVE
         return FORUM_STATE_ONBOARDING
