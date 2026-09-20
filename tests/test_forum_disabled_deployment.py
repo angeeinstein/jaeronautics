@@ -92,6 +92,8 @@ class TestTheMemberJourney:
                     "street": "Alte Poststrasse", "house_number": "149",
                     "postal_code": "8020", "city": "Vienna", "country": "Austria",
                     "phone_private": "+43660000000", "email_private": member.email_private,
+                    # A student's profile now carries a university address.
+                    "email_work": "profile@edu.fh-joanneum.at",
                 }.items()
             },
         )

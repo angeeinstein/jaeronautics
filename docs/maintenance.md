@@ -428,6 +428,46 @@ request-and-approve flow rather than being self-service: `member_category` is
 in `IDENTITY_MEMBER_FIELDS`, which is what puts it in the audit snapshot and
 the approval screen.
 
+## The two email addresses
+
+Members give two, and they do different jobs. Confusing them is easy and was
+the cause of a real bug, so:
+
+| | `email_private` | `email_work` |
+| --- | --- | --- |
+| Login | yes (`users.email` mirrors it) | never |
+| Portal mail | all of it | only its own confirmation |
+| Confirmed | `users.email_verified_at` | `member.email_work_verified_at` |
+| Required | always | students only |
+| Domain checked | no | students only |
+
+**`email_private` outlives the membership.** It is how the association reaches
+somebody after they graduate, which is exactly when the other address stops
+working — so it must not be a university one, and the signup form says so.
+
+**`email_work` is evidence, not a contact.** For a student, a live address on
+an allowed domain is the only thing here that says they study here *now*. It
+gets its own confirmation link, sent to that address, because an unconfirmed
+address proves nothing at all — anyone can type one.
+
+The allowed domains are an admin setting (`institutional_email_domains`,
+Settings → General), read through `services/institutional_email.py`. Subdomains
+count; the boundary is checked on a dot so `notfh-joanneum.at` cannot pass as
+`fh-joanneum.at`. An empty setting falls back to the built-in list rather than
+refusing everybody, because a cleared box must not stop signups.
+
+Which categories must give one, and whose domain is checked, lives in
+`member_categories.py` beside the year group rules. Only students, for the same
+reason: a partner gives a company address no list could anticipate, and an
+alumnus's university address has usually already stopped working.
+
+**A confirmation belongs to the address, never to the member.** Changing
+`email_work` withdraws it and clears the nonce, in `apply_member_profile`. That
+is not tidiness — the forum claim is decided on this flag, so carrying a
+confirmation across a change would let somebody confirm an address they can
+read, edit the field to another student's, and claim that student's archived
+forum account and posts.
+
 ## Planned: Archival Forum Accounts (not built)
 
 Roughly 500–600 people have used the forum over the last decade. The intention

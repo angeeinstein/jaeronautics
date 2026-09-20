@@ -46,6 +46,7 @@ def _signup_data(**overrides):
         "country": "Austria",
         "phone_private": "+43000000000",
         "email_private": "jonas@example.com",
+        "email_work": "jonas.huber@edu.fh-joanneum.at",
         "member_category": MemberCategory.STUDENT,
         "year_group": "LAV25",
         "password": "a-long-enough-password",

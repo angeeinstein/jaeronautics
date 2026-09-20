@@ -322,3 +322,124 @@ class TestThroughTheVerificationLink:
         assert response.status_code < 400
         db.session.expire_all()
         assert db.session.get(User, user_id).email_is_verified is True
+
+
+class TestClaimingOnTheUniversityAddress:
+    """The path that actually matters in October.
+
+    A returning student signs up with a private address as their login -- it is
+    labelled "Private Email" and it has to outlive their studies -- and gives
+    their university address separately. The archive knows them by the
+    university one, so that is what the claim has to match, and the claim can
+    only be trusted once that address has been confirmed.
+    """
+
+    def _member_with_work_email(self, work_email=OLD_EMAIL, work_verified=False):
+        member = make_member(email="anna.private@gmail.com", year_group="LAV23")
+        member.user.email_verified_at = datetime.utcnow()
+        member.email_work = work_email
+        if work_verified:
+            member.email_work_verified_at = datetime.utcnow()
+        db.session.commit()
+        return member
+
+    def test_an_unconfirmed_university_address_claims_nothing(self, app):
+        """Typing it is not evidence. Reading mail sent to it is."""
+        _archived()
+        member = self._member_with_work_email(work_verified=False)
+
+        assert claim_archived_account(member.user) is None
+        assert member.user.imported_forum_profile is None
+
+    def test_a_confirmed_university_address_claims_the_archive(self, app):
+        profile = _archived()
+        archived_id = profile.user_id
+        member = self._member_with_work_email(work_verified=True)
+
+        claimed = claim_archived_account(member.user)
+        db.session.commit()
+
+        assert claimed is profile
+        assert member.user_id == archived_id
+        assert member.user.forum_username == "PopovicA_L23"
+
+    def test_the_private_address_stays_the_login(self, app):
+        """It is the one that still works after they graduate."""
+        _archived()
+        member = self._member_with_work_email(work_verified=True)
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert member.user.email == "anna.private@gmail.com"
+        assert member.email_work == OLD_EMAIL
+
+    def test_the_confirmation_travels_with_the_membership(self, app):
+        """The claim moves the member onto another row; the flag must come too."""
+        _archived()
+        member = self._member_with_work_email(work_verified=True)
+
+        claim_archived_account(member.user)
+        db.session.commit()
+        db.session.expire_all()
+
+        moved = db.session.execute(db.select(Member)).scalars().one()
+        assert moved.email_work_is_verified is True
+
+    def test_a_confirmed_address_nobody_archived_claims_nothing(self, app):
+        _archived()
+        member = self._member_with_work_email(
+            work_email="newcomer@edu.fh-joanneum.at", work_verified=True
+        )
+
+        assert claim_archived_account(member.user) is None
+
+    def test_it_still_works_for_somebody_who_used_the_university_address_to_log_in(self, app):
+        """A few will do that, and they should not be worse off for it."""
+        profile = _archived()
+        member = make_member(email=OLD_EMAIL, year_group="LAV23")
+        member.user.email_verified_at = datetime.utcnow()
+        db.session.commit()
+
+        assert claim_archived_account(member.user) is profile
+
+
+class TestThroughTheUniversityLink:
+    def _verify_work(self, client, member):
+        from aeronautics_members.services.identity import (
+            build_work_email_verification_claims,
+            generate_token,
+        )
+
+        claims = build_work_email_verification_claims(member)
+        db.session.commit()
+        token = generate_token("verify-work-email", **claims)
+        return client.get(f"/verify-work-email/{token}", follow_redirects=True)
+
+    def test_following_it_confirms_the_address_and_reconnects_the_account(self, app, client):
+        profile = _archived()
+        archived_id = profile.user_id
+        member = make_member(email="anna.private@gmail.com", year_group="LAV23")
+        member.user.email_verified_at = datetime.utcnow()
+        member.email_work = OLD_EMAIL
+        db.session.commit()
+
+        response = self._verify_work(client, member)
+
+        assert response.status_code < 400
+        body = response.get_data(as_text=True)
+        assert "PopovicA_L23" in body
+        db.session.expire_all()
+        moved = db.session.execute(db.select(Member)).scalars().one()
+        assert moved.email_work_is_verified is True
+        assert moved.user_id == archived_id
+
+    def test_a_tampered_link_confirms_nothing(self, app, client):
+        member = make_member(email="anna.private@gmail.com", year_group="LAV23")
+        member.email_work = OLD_EMAIL
+        db.session.commit()
+
+        response = client.get("/verify-work-email/not-a-real-token", follow_redirects=True)
+
+        assert response.status_code < 400
+        assert member.email_work_is_verified is False

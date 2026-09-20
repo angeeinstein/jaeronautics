@@ -50,11 +50,23 @@ def normalize_optional_member_value(field_name, value):
 
 
 def apply_member_profile(member, form_data, fields=MEMBER_PROFILE_FIELDS):
+    previous_email_work = (member.email_work or "").strip().lower()
+
     for field_name in fields:
         value = normalize_optional_member_value(field_name, form_data.get(field_name))
         setattr(member, field_name, value)
     if "terms_accepted" in form_data:
         member.terms_accepted = bool(form_data.get("terms_accepted"))
+
+    # A confirmation belongs to the address that was confirmed, never to the
+    # member. Carrying it across a change would be a way in: confirm an address
+    # you can read, then edit the field to somebody else's and keep the tick --
+    # which, since the forum claim is decided on this, would hand you their
+    # archived account and their posts.
+    if "email_work" in fields:
+        if (member.email_work or "").strip().lower() != previous_email_work:
+            member.email_work_verified_at = None
+            member.email_work_verification_nonce = None
 
 
 def build_member_payload(member):

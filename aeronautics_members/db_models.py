@@ -177,7 +177,15 @@ class Member(db.Model):
     phone_private = db.Column(db.String(50), nullable=False)
     email_private = db.Column(db.String(255), nullable=False, unique=True)
     phone_work = db.Column(db.String(50), nullable=True)
+    # The university or company address. Not a login and never mail from the
+    # portal's own workflows: it proves current affiliation, and for a student
+    # that is what says they are one. It outlives nothing -- when they graduate
+    # it stops working, which is exactly why email_private exists as well.
     email_work = db.Column(db.String(255), nullable=True)
+    email_work_verified_at = db.Column(db.DateTime, nullable=True)
+    # Rotated when email_work changes, so a link issued for the previous
+    # address cannot verify a new one.
+    email_work_verification_nonce = db.Column(db.String(255), nullable=True)
     # What kind of member this is: student, alumni, staff, partner, honorary.
     # The rules about who is asked for a year group, and what each kind is
     # called, live in member_categories.py rather than here.
@@ -231,6 +239,10 @@ class Member(db.Model):
         order_by="desc(MembershipPeriod.ends_on)",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def email_work_is_verified(self):
+        return self.email_work_verified_at is not None
 
     @property
     def is_student(self):

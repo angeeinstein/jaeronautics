@@ -126,6 +126,85 @@ def send_email_verification_email(app, user):
     )
 
 
+def rotate_work_email_verification_nonce(member):
+    member.email_work_verification_nonce = secrets.token_urlsafe(24)
+    return member.email_work_verification_nonce
+
+
+def build_work_email_verification_claims(member):
+    """Claims binding a link to one institutional address on one membership.
+
+    Same reasoning as the account address: a token carrying only ``member_id``
+    would stay valid after the address changed, so an old link could mark a
+    newly typed and unproven address as verified.
+    """
+    nonce = (
+        member.email_work_verification_nonce
+        or rotate_work_email_verification_nonce(member)
+    )
+    return {
+        "member_id": member.id,
+        "email": (member.email_work or "").strip().lower(),
+        "nonce": nonce,
+    }
+
+
+def work_email_verification_claims_match(token_data, member):
+    if member is None or not isinstance(token_data, dict):
+        return False
+
+    token_email = (token_data.get("email") or "").strip().lower()
+    current_email = (member.email_work or "").strip().lower()
+    if not token_email or token_email != current_email:
+        return False
+
+    expected_nonce = member.email_work_verification_nonce
+    return bool(expected_nonce) and token_data.get("nonce") == expected_nonce
+
+
+def mark_work_email_verified_from_token(token_data, member):
+    """True when the institutional address was newly marked verified."""
+    if not work_email_verification_claims_match(token_data, member):
+        return False
+    if member.email_work_is_verified:
+        return False
+    member.email_work_verified_at = get_now_utc()
+    return True
+
+
+def send_work_email_verification_email(app, member):
+    """Sent to the institutional address, which is the whole point.
+
+    It goes to ``email_work`` and never to the account address: what is being
+    established is that this person can read mail at the university or company,
+    and sending it anywhere else would establish nothing.
+    """
+    if not (member.email_work or "").strip():
+        return None
+    token = generate_token(
+        "verify-work-email", **build_work_email_verification_claims(member)
+    )
+    verify_url = build_public_url("auth.verify_work_email", token=token)
+    return send_account_action_email(
+        app,
+        to_email=member.email_work,
+        subject=_("Confirm your university or company email"),
+        preview_text=_("Confirm this address for your Joanneum Aeronautics membership."),
+        action_url=verify_url,
+        action_label=_("Confirm Address"),
+        heading=_("Confirm your university or company address"),
+        body_lines=[
+            _("Please confirm this address for your Joanneum Aeronautics membership."),
+            _("We use it to confirm that you currently study or work here. Your "
+              "private address stays your login and is how we reach you later."),
+        ],
+        failure_event_type="work_verification_email_failed",
+        failure_summary=_("A university email confirmation could not be sent."),
+        failure_payload={"email_type": "work_verification"},
+        target_user=member.user,
+    )
+
+
 def send_password_reset_email(app, user):
     token = build_password_reset_token(user)
     reset_url = build_public_url("auth.reset_password", token=token)

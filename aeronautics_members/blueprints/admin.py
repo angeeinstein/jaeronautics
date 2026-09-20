@@ -32,6 +32,7 @@ from ..services.audit import (
 from ..services.clock import (
     get_now_utc,
 )
+from ..services.institutional_email import SETTING_KEY as INSTITUTIONAL_EMAIL_SETTING_KEY
 from ..services.forum import (
     build_forum_username_base,
     generate_unique_forum_username,
@@ -716,6 +717,7 @@ def admin_settings():
             "automatic_emails_enabled",
             "welcome_email_sender",
             "automatic_email_template",
+            INSTITUTIONAL_EMAIL_SETTING_KEY,
             *STRIPE_SETTING_KEYS,
             *FORUM_SETTING_KEYS,
             *NOTIFICATION_SETTING_KEYS,
@@ -741,6 +743,7 @@ def admin_settings():
         settings_redirect = f"{url_for('admin.admin_settings')}#settings-{settings_section}"
         welcome_sender = request.form.get("welcome_email_sender")
         auto_email_template = request.form.get("automatic_email_template")
+        institutional_domains = request.form.get(INSTITUTIONAL_EMAIL_SETTING_KEY)
         notification_sender = request.form.get("notification_sender")
         stripe_publishable_key = ((request.form.get("stripe_publishable_key") if settings_section == "billing" else before_settings.get("stripe_publishable_key")) or "").strip()
         stripe_price_id = ((request.form.get("stripe_price_id") if settings_section == "billing" else before_settings.get("stripe_price_id")) or "").strip()
@@ -788,6 +791,13 @@ def admin_settings():
         set_setting_value("automatic_emails_enabled", str(emails_enabled))
         set_setting_value("welcome_email_sender", welcome_sender if settings_section == "general" else before_settings.get("welcome_email_sender"))
         set_setting_value("automatic_email_template", auto_email_template if settings_section == "general" else before_settings.get("automatic_email_template"))
+        set_setting_value(
+            INSTITUTIONAL_EMAIL_SETTING_KEY,
+            # Stored as the admin typed it; institutional_email.py is what
+            # makes sense of commas, newlines and stray @ signs.
+            institutional_domains if settings_section == "general"
+            else before_settings.get(INSTITUTIONAL_EMAIL_SETTING_KEY),
+        )
         set_setting_value("notification_admin_general_enabled", str(notification_admin_general_enabled))
         set_setting_value("notification_admin_error_enabled", str(notification_admin_error_enabled))
         set_setting_value("notification_user_status_enabled", str(notification_user_status_enabled))

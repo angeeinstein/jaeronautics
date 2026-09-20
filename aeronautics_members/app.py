@@ -163,6 +163,10 @@ except ImportError:
 
 # Configuration lives in config.py, a leaf module the service layer can import
 # without depending on this one. Re-exported here so existing imports keep working.
+from .services.institutional_email import (  # noqa: E402
+    SETTING_KEY as INSTITUTIONAL_EMAIL_SETTING_KEY,
+    get_institutional_domains,
+)
 from .member_categories import (  # noqa: E402
     CATEGORY_ORDER,
     categories_showing_year_group,
@@ -934,6 +938,7 @@ def render_account_dashboard(profile_form=None, identity_form=None):
 
     pending_request = member.open_identity_change_request
     profile_form = profile_form or MemberProfileForm(prefix="profile")
+    profile_form.member_category_value = member.member_category
     identity_form = identity_form or IdentityChangeRequestForm(prefix="identity")
 
     if not profile_form.is_submitted():
@@ -1054,6 +1059,7 @@ def build_settings_page_context(edit_mail_account_id=None):
         "automatic_emails_enabled",
         "welcome_email_sender",
         "automatic_email_template",
+        INSTITUTIONAL_EMAIL_SETTING_KEY,
     ])
     notification_settings = normalize_notification_settings(get_notification_settings_map())
     forum_settings = normalize_forum_settings(get_forum_settings_map())
@@ -1093,6 +1099,9 @@ def build_settings_page_context(edit_mail_account_id=None):
         "sender_choices": sender_choices,
         "template_choices": template_choices,
         "general_settings": general_settings,
+        # The list actually in force, which is not the same as the stored text
+        # when the box is empty and the built-in default applies.
+        "institutional_email_domains": get_institutional_domains(),
         "notification_settings": notification_settings,
         "notification_health": notification_service.get_health_snapshot(),
         "forum_settings": forum_settings,

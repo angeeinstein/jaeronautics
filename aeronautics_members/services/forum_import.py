@@ -181,6 +181,39 @@ def find_claimable_profile(email):
     return matches[0] if len(matches) == 1 else None
 
 
+def verified_addresses_for(user):
+    """Every address this person has actually proved they can read.
+
+    The university address is the one that matters here -- it is what the old
+    forum registered them under -- and it lives on the membership, not the
+    account, because it is not a login. The account address is included too,
+    for the few who signed up using their university address as their login.
+
+    Unverified addresses are deliberately absent. The proof is the whole basis
+    of the claim: without it, typing somebody else's university address at
+    signup would be enough to take their posts.
+    """
+    addresses = []
+    if user is None:
+        return addresses
+    if user.email_is_verified and user.email:
+        addresses.append(user.email)
+
+    member = user.member
+    if member is not None and member.email_work_is_verified and member.email_work:
+        addresses.append(member.email_work)
+    return addresses
+
+
+def find_claimable_profile_for_user(user):
+    """The archived account this person can claim, from their verified addresses."""
+    for address in verified_addresses_for(user):
+        profile = find_claimable_profile(address)
+        if profile is not None:
+            return profile
+    return None
+
+
 # What a brand-new member's account may own at the moment it is verified. The
 # claim moves the membership onto the archived row, so anything else pointing
 # at the row being retired would be left dangling -- and rather than repoint
@@ -219,12 +252,12 @@ def claim_archived_account(user):
 
     Returns None when there is nothing to claim, which is the ordinary case.
     """
-    if user is None or user.deleted_at is not None or not user.email_is_verified:
+    if user is None or user.deleted_at is not None:
         return None
     if user.imported_forum_profile is not None:
         return None  # already an archived account
 
-    profile = find_claimable_profile(user.email)
+    profile = find_claimable_profile_for_user(user)
     if profile is None:
         return None
 

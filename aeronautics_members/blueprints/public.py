@@ -30,6 +30,7 @@ from ..services.forum import (
 )
 from ..services.identity import (
     send_email_verification_email,
+    send_work_email_verification_email,
 )
 from ..services.members import (
     apply_member_profile,
@@ -167,6 +168,20 @@ def process_membership():
                 send_email_verification_email(current_app._get_current_object(), user)
             except Exception as email_exc:
                 current_app.logger.warning("Could not send verification email for user_id=%s: %s", user.id, email_exc)
+
+            # The second link goes to the university or company address, which
+            # is what confirms they study or work here -- and, for somebody who
+            # was on the old forum, what reconnects their archived account.
+            if member.email_work:
+                try:
+                    send_work_email_verification_email(current_app._get_current_object(), member)
+                    db.session.commit()
+                except Exception as email_exc:
+                    db.session.rollback()
+                    current_app.logger.warning(
+                        "Could not send university email confirmation for member_id=%s: %s",
+                        member.id, email_exc,
+                    )
 
             if payment_method == "checkout":
                 session, _cycle = create_checkout_session_for_member(member)

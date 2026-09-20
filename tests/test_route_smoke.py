@@ -107,9 +107,13 @@ def seeded(mocked):
                 member_id=member.id, pcr_id=pcr.id, sub_id=sub.id, mail_id=mail.id)
 
 
+# A student must give a university address now, so every payload that posts a
+# student's profile carries one -- the signup form and the profile form alike.
 PROFILE = {"street": "Main", "house_number": "1", "postal_code": "8010", "city": "Graz",
-           "country": "Austria", "phone_private": "+43123", "email_private": "m@t.co"}
-MEMBERSHIP = {"salutation": "Mr", "first_name": "A", "last_name": "B", "year_group": "LAV25", **PROFILE}
+           "country": "Austria", "phone_private": "+43123", "email_private": "m@t.co",
+           "email_work": "a.b@edu.fh-joanneum.at"}
+MEMBERSHIP = {"salutation": "Mr", "first_name": "A", "last_name": "B", "year_group": "LAV25",
+              "member_category": "student", **PROFILE}
 
 
 def _login(client, uid):

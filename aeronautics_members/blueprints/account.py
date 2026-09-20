@@ -251,6 +251,7 @@ def save_member_profile():
         return redirect(url_for("public.index"))
 
     profile_form = MemberProfileForm(prefix="profile")
+    profile_form.member_category_value = member.member_category
     identity_form = IdentityChangeRequestForm(prefix="identity")
     if profile_form.validate_on_submit():
         before_user = snapshot_user_for_audit(current_user)
@@ -307,6 +308,7 @@ def submit_identity_change_request():
 
     identity_form = IdentityChangeRequestForm(prefix="identity")
     profile_form = MemberProfileForm(prefix="profile")
+    profile_form.member_category_value = member.member_category
     if identity_form.validate_on_submit():
         form_data = identity_form.data
         form_data.pop("csrf_token", None)

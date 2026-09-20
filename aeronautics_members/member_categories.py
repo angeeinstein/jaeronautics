@@ -71,8 +71,35 @@ YEAR_GROUP_RULES = {
 }
 
 
+# Who has to give an institutional address, and whose is checked against the
+# allowed domains.
+#
+# Only students, and for one reason: a live @edu.fh-joanneum.at address is what
+# says somebody is a student right now. A partner gives a company address that
+# no list here could anticipate, and an alumnus's university address has
+# usually stopped working -- which is the whole reason a private address is
+# collected as well.
+INSTITUTIONAL_EMAIL_RULES = {
+    MemberCategory.STUDENT: {"required": True, "domain_checked": True},
+    MemberCategory.ALUMNI: {"required": False, "domain_checked": False},
+    MemberCategory.STAFF: {"required": False, "domain_checked": False},
+    MemberCategory.PARTNER: {"required": False, "domain_checked": False},
+    MemberCategory.HONORARY: {"required": False, "domain_checked": False},
+}
+
+
 def is_valid(category):
     return category in CATEGORY_LABELS
+
+
+def requires_institutional_email(category):
+    """Whether this category cannot be saved without a university/company address."""
+    return INSTITUTIONAL_EMAIL_RULES.get(category, {}).get("required", False)
+
+
+def checks_institutional_domain(category):
+    """Whether that address must be on the allowed-domain list."""
+    return INSTITUTIONAL_EMAIL_RULES.get(category, {}).get("domain_checked", False)
 
 
 def category_label(category):

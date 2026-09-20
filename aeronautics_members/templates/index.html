@@ -86,7 +86,7 @@
         <div class="grid grid-cols-1">
             <label for="email_private" class="block text-sm font-medium text-gray-700">{{ _(form.email_private.label.text) }}<span class="text-red-500">*</span></label>
             {{ form.email_private(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", autocomplete="email") }}
-            <small class="text-muted d-block mt-2">{{ _('This email address becomes your login for the member portal.') }}</small>
+            <small class="text-muted d-block mt-2">{{ _('This email address becomes your login, and is how we reach you after you finish studying. Use a private address, not your university one.') }}</small>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -95,8 +95,10 @@
                 {{ form.phone_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm") }}
             </div>
             <div>
-                <label for="email_work" class="block text-sm font-medium text-gray-700">{{ _(form.email_work.label.text) }}</label>
-                {{ form.email_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", autocomplete="email") }}
+                <label for="email_work" class="block text-sm font-medium text-gray-700">{{ _(form.email_work.label.text) }}<span class="text-red-500">*</span></label>
+                {{ form.email_work(class="mt-1 block w-full py-2 px-3 border border-gray-300 shadow-sm sm:text-sm", autocomplete="email", placeholder="e.g. name@edu.fh-joanneum.at") }}
+                <small class="text-muted d-block mt-2">{{ _('Students: please use your university address. We send a confirmation link to it, and if you were on the old forum this is what reconnects your account there.') }}</small>
+                {% for error in form.email_work.errors %}<span class="text-red-500 text-sm">{{ error }}</span>{% endfor %}
             </div>
         </div>
 

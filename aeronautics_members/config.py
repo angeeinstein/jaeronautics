@@ -79,5 +79,13 @@ RATELIMIT_DATA_EXPORT = os.getenv("RATELIMIT_DATA_EXPORT", "10 per hour")
 RATELIMIT_ACCOUNT_DELETION = os.getenv("RATELIMIT_ACCOUNT_DELETION", "5 per hour")
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
 
+# Domains that prove somebody is currently a student or staff. An admin can
+# edit the list at runtime; this is only the fallback for a fresh install, and
+# the reason it is a list at all is that a renamed domain or a partner company
+# must not need a code change.
+DEFAULT_INSTITUTIONAL_EMAIL_DOMAINS = os.getenv(
+    "INSTITUTIONAL_EMAIL_DOMAINS", "edu.fh-joanneum.at,fh-joanneum.at"
+)
+
 SENSITIVE_SETTING_KEYS = {"stripe_secret_key", "stripe_webhook_secret", "discourse_api_key", "discourse_connect_secret"}
 SENSITIVE_AUDIT_FIELD_NAMES = SENSITIVE_SETTING_KEYS | {"password", "pass", "secret", "smtp_password", "export_password"}

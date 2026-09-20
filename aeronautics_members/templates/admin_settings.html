@@ -72,6 +72,19 @@
                                         {% endfor %}
                                     </select>
                                 </div>
+                                <div class="col-12">
+                                    <label for="institutional_email_domains" class="form-label">{{ _('University and company email domains:') }}</label>
+                                    <input type="text" class="form-control" id="institutional_email_domains"
+                                           name="institutional_email_domains"
+                                           value="{{ general_settings.get('institutional_email_domains', '') }}"
+                                           placeholder="edu.fh-joanneum.at, fh-joanneum.at">
+                                    <small class="text-muted d-block mt-2">
+                                        {{ _('A student signing up must use an address on one of these domains, which is how the portal confirms they currently study here. Separate them with commas; subdomains count. Leaving this empty keeps the built-in list rather than blocking everyone.') }}
+                                    </small>
+                                    <small class="text-muted d-block mt-1">
+                                        {{ _('In use now:') }} {{ ', '.join(institutional_email_domains) }}
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -21,6 +21,8 @@ from ..services.identity import (
     TOKEN_MAX_AGE_VERIFY_EMAIL,
     email_verification_claims_match,
     mark_email_verified_from_token,
+    mark_work_email_verified_from_token,
+    work_email_verification_claims_match,
     read_token,
     rotate_password_reset_nonce,
     send_password_reset_email,
@@ -173,6 +175,57 @@ def verify_email(token):
             "success",
         )
     if current_user.is_authenticated and current_user.id == user.id:
+        return redirect(url_for(get_member_portal_target(current_user)))
+    return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/verify-work-email/<token>")
+def verify_work_email(token):
+    """Confirms the university or company address on a membership.
+
+    This is the link that matters for a returning student: the archived forum
+    account was registered under their university address, so confirming they
+    can read it is what reconnects the two.
+    """
+    from ..db_models import Member
+
+    try:
+        token_data = read_token(token, "verify-work-email", TOKEN_MAX_AGE_VERIFY_EMAIL)
+        member = db.session.get(Member, int(token_data.get("member_id")))
+    except (BadSignature, SignatureExpired, ValueError, TypeError):
+        token_data = None
+        member = None
+
+    if member is not None and not work_email_verification_claims_match(token_data, member):
+        member = None
+
+    if member is None:
+        flash(_("This confirmation link is invalid or has expired."), "danger")
+        return redirect(url_for("auth.login"))
+
+    claimed = None
+    if mark_work_email_verified_from_token(token_data, member):
+        try:
+            # Same savepoint reasoning as the account address: a fault in the
+            # claim must not cost somebody the confirmation recorded a line ago.
+            with db.session.begin_nested():
+                claimed = claim_archived_account(member.user)
+        except Exception:  # noqa: BLE001 -- never block a confirmation
+            claimed = None
+            current_app.logger.exception(
+                "Forum account claim failed for member %s", member.id
+            )
+        db.session.commit()
+
+    flash(_("Your university or company email address has been confirmed."), "success")
+    if claimed is not None:
+        flash(
+            _("Welcome back \u2014 your old forum account %(username)s has been "
+              "reconnected, so your posts and profile picture are yours again.",
+              username=claimed.source_username),
+            "success",
+        )
+    if current_user.is_authenticated and member.user_id == current_user.id:
         return redirect(url_for(get_member_portal_target(current_user)))
     return redirect(url_for("auth.login"))
 
