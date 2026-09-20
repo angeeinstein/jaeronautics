@@ -299,3 +299,91 @@ class TestTheAdminSetting:
         assert get_institutional_domains() == ("partner.example", "other.example")
         assert is_institutional_email("someone@partner.example") is True
         assert is_institutional_email("someone@edu.fh-joanneum.at") is False
+
+
+class TestTheLoginAddressCannotBeInstitutional:
+    """The mistake the form could not otherwise catch.
+
+    A university address in the private field is perfectly well-formed and
+    completely wrong: it is the login, and it stops working the day the person
+    graduates. Rejecting it is what lets the form carry no hint text -- the
+    explanation reaches the one person who needs it, when they need it.
+    """
+
+    def test_a_university_address_is_refused_as_the_login(self, app):
+        form = MembershipForm(formdata=_signup(email_private=UNI), meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "email_private" in form.errors
+
+    def test_the_error_says_what_to_do_instead(self, app):
+        """It is the hint, shown only to somebody who needs it."""
+        form = MembershipForm(formdata=_signup(email_private=UNI), meta={"csrf": False})
+        form.validate()
+
+        message = " ".join(form.errors["email_private"])
+        assert "private" in message.lower()
+
+    def test_any_of_the_allowed_domains_is_refused(self, app):
+        """The rule is about who owns the address, not about one domain."""
+        form = MembershipForm(formdata=_signup(email_private="someone@fh-joanneum.at"),
+                              meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "email_private" in form.errors
+
+    def test_a_subdomain_is_refused_too(self, app):
+        form = MembershipForm(
+            formdata=_signup(email_private="someone@campus.fh-joanneum.at"),
+            meta={"csrf": False},
+        )
+
+        assert form.validate() is False
+
+    def test_a_private_address_is_accepted(self, app):
+        form = MembershipForm(formdata=_signup(), meta={"csrf": False})
+
+        assert form.validate() is True, form.errors
+
+    def test_it_follows_the_admin_setting(self, app):
+        """Whatever counts as institutional counts here too, by definition."""
+        db.session.add(Setting(key=SETTING_KEY, value="partner.example"))
+        db.session.commit()
+
+        refused = MembershipForm(
+            formdata=_signup(email_private="rep@partner.example",
+                             email_work="rep@partner.example"),
+            meta={"csrf": False},
+        )
+        assert refused.validate() is False
+        assert "email_private" in refused.errors
+
+        # ...and the previous list no longer applies to either field.
+        allowed = MembershipForm(
+            formdata=_signup(email_private="anna@edu.fh-joanneum.at",
+                             email_work="anna@partner.example"),
+            meta={"csrf": False},
+        )
+        assert allowed.validate() is True, allowed.errors
+
+    def test_an_empty_address_is_left_to_the_required_check(self, app):
+        """One error about one problem, not two."""
+        form = MembershipForm(formdata=_signup(email_private=""), meta={"csrf": False})
+
+        form.validate()
+        message = " ".join(form.errors["email_private"])
+        assert "university or company address" not in message
+
+    def test_the_profile_page_cannot_be_used_to_switch_to_one(self, app):
+        """Otherwise the check applies at signup and nowhere afterwards."""
+        from aeronautics_members.forms import MemberProfileForm
+
+        form = MemberProfileForm(formdata=MultiDict({
+            "street": "Main", "house_number": "1", "postal_code": "8010",
+            "city": "Graz", "country": "Austria", "phone_private": "+43000",
+            "email_private": UNI, "email_work": UNI,
+        }), meta={"csrf": False})
+        form.member_category_value = MemberCategory.STUDENT
+
+        assert form.validate() is False
+        assert "email_private" in form.errors

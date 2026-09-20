@@ -204,6 +204,34 @@ class InstitutionalEmailRequirement:
             )
 
 
+class PrivateEmailRequirement:
+    """The login must not be an address one of our institutions owns.
+
+    A university or company address is tied to a role that ends. The whole
+    reason two addresses are collected is that the association still needs to
+    reach somebody after theirs stops working -- so using one as the login is
+    the single mistake on this form that locks a member out of their own
+    account, and it is the one the form cannot otherwise notice: a university
+    address here is perfectly well-formed, just wrong.
+
+    This exists so the explanation can be an error rather than a hint. Nothing
+    is printed under the field for the many people who get it right; the one
+    who does not gets told exactly what is wrong, at the moment it matters.
+    """
+
+    def __call__(self, form, field):
+        if not normalize_email(field.data):
+            return  # DataRequired has already said what to do about empty
+        if is_institutional_email(field.data):
+            raise ValidationError(
+                _("This looks like a university or company address. Please use a "
+                  "private one here: it is your login, and it has to keep working "
+                  "after you leave. The university address goes in the field below.")
+            )
+
+
+PRIVATE_EMAIL_FIELD_VALIDATORS = [DataRequired(), Email(), PrivateEmailRequirement()]
+
 INSTITUTIONAL_EMAIL_FIELD_VALIDATORS = [
     InstitutionalEmailRequirement(), Email(), Length(max=255),
 ]
@@ -222,7 +250,7 @@ class MembershipForm(FlaskForm):
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
     email_private = StringField(
-        _l("Private Email (your login)"), validators=[DataRequired(), Email()]
+        _l("Private Email"), validators=PRIVATE_EMAIL_FIELD_VALIDATORS
     )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(
@@ -260,7 +288,7 @@ class CreateMembershipProfileForm(FlaskForm):
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
     email_private = StringField(
-        _l("Private Email (your login)"), validators=[DataRequired(), Email()]
+        _l("Private Email"), validators=PRIVATE_EMAIL_FIELD_VALIDATORS
     )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(
@@ -323,7 +351,7 @@ class MemberProfileForm(FlaskForm):
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
     email_private = StringField(
-        _l("Private Email (your login)"), validators=[DataRequired(), Email()]
+        _l("Private Email"), validators=PRIVATE_EMAIL_FIELD_VALIDATORS
     )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
     email_work = StringField(

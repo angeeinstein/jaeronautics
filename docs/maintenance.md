@@ -461,6 +461,14 @@ Which categories must give one, and whose domain is checked, lives in
 reason: a partner gives a company address no list could anticipate, and an
 alumnus's university address has usually already stopped working.
 
+**The login cannot be an institutional address either.** The same domain list
+rejects one in `email_private`, on every form that edits it. That is the one
+mistake this form could not otherwise notice — a university address there is
+well-formed and simply wrong, and the member finds out the day they graduate
+and cannot log in. Rejecting it is also why the signup page carries no hint
+text under the email fields: the explanation is the error message, so it
+reaches the person who got it wrong instead of the many who did not.
+
 **A confirmation belongs to the address, never to the member.** Changing
 `email_work` withdraws it and clears the nonce, in `apply_member_profile`. That
 is not tidiness — the forum claim is decided on this flag, so carrying a
