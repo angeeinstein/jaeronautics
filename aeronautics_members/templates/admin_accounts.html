@@ -41,7 +41,7 @@
                 <select class="form-select" id="account-kind" name="kind">
                     <option value="all" {% if kind_filter == 'all' %}selected{% endif %}>{{ _('All') }}</option>
                     <option value="portal" {% if kind_filter == 'portal' %}selected{% endif %}>{{ _('Portal accounts') }}</option>
-                    <option value="archived" {% if kind_filter == 'archived' %}selected{% endif %}>{{ _('Former forum members') }}</option>
+                    <option value="archived" {% if kind_filter == 'archived' %}selected{% endif %}>{{ _('From the old forum') }}</option>
                 </select>
             </div>
             <div class="col-md-4 col-lg-2">
@@ -99,7 +99,7 @@
                                 <td>
                                     {% if unclaimed_archive %}
                                         {{ archive.source_email or archive.source_username }}
-                                        <span class="badge text-bg-light border ms-1">{{ _('Former forum member') }}</span>
+                                        <span class="badge text-bg-light border ms-1">{{ _('Old forum') }}</span>
                                     {% else %}
                                         {{ user_record.email }}
                                     {% endif %}

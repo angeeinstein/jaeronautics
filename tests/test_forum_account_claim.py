@@ -489,7 +489,7 @@ class TestSeeingTheArchiveInTheAdmin:
 
         assert OLD_EMAIL in body
         assert "imported.invalid" not in body
-        assert ">Former forum member</span>" in body
+        assert ">Old forum</span>" in body
 
     def test_the_filter_narrows_to_them(self, app, admin_client):
         _archived()
@@ -542,7 +542,7 @@ class TestSeeingTheArchiveInTheAdmin:
 
         listing = admin_client.get("/admin/accounts?kind=archived").get_data(as_text=True)
         # Scoped to the badge: the filter dropdown names the category too.
-        assert ">Former forum member</span>" not in listing
+        assert ">Old forum</span>" not in listing
         assert "Reconnected" in listing, "but it is still visible that they came back"
 
         detail = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)

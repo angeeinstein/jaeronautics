@@ -384,6 +384,38 @@ account that can install an update cannot be erased (`last_superadmin` blocker),
 and revoking *admin* from a super admin removes both roles, since removing one
 row would otherwise leave the access untouched.
 
+## What an imported person is, exactly
+
+They are **members.** They joined the association years ago, nobody ever
+formally ended it, and technically they still are — which is why the website
+says roughly seven hundred members and is not lying.
+
+What is missing is not the membership, it is the record of it. The old forum
+kept a username, a university address and a year group; it never kept a name,
+a postal address or a phone number. So of the ten fields `member` requires,
+that import supplies none.
+
+That is why they have a `users` row and an `imported_forum_profiles` row and no
+`member` row — not because they are not members, but because a membership
+record is the association's register of who joined and on what terms, and
+filling it with 739 blanks would say the register holds details it does not.
+
+Screens therefore avoid claiming either way. An imported row reads *Old forum*,
+and the account page says the membership is **not recorded** rather than
+absent. The dashboard's *People On Record* adds both together, because that
+combined figure is the number the association actually quotes.
+
+Two consequences worth knowing:
+
+* **Every membership count excludes them**, because none of them has a
+  membership row. If somebody eventually decides those memberships should be
+  ended or reconstructed, that is a board decision and a data-entry job, not a
+  schema change.
+* **They cannot be contacted.** No private address was ever kept, so a general
+  assembly invitation cannot reach them. Their university addresses are dead
+  except for the ones still studying, which is precisely the group the forum
+  claim reconnects.
+
 ## Account status vs membership status
 
 Two states, deliberately separate, because they answer different questions and

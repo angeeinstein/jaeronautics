@@ -144,7 +144,16 @@
                     </dd>
                     <dt class="col-sm-4">{{ _('Membership') }}</dt>
                     <dd class="col-sm-8">
-                        {% if not member %}
+                        {#
+                          "None" would be wrong for somebody carried over from
+                          the old forum. They joined the association, nobody
+                          ever formally ended it, and what is actually missing
+                          is the record -- their name, address and contact
+                          details were never kept.
+                        #}
+                        {% if not member and user_record.imported_forum_profile %}
+                            <span class="text-muted">{{ _('Not recorded — joined before the portal existed') }}</span>
+                        {% elif not member %}
                             <span class="text-muted">{{ _('None') }}</span>
                         {% elif member.is_active %}
                             <span class="badge text-bg-success">{{ _('Active') }}</span>
