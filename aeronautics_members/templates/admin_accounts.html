@@ -37,6 +37,14 @@
                 </select>
             </div>
             <div class="col-md-4 col-lg-2">
+                <label class="form-label" for="account-kind">{{ _('Account Type') }}</label>
+                <select class="form-select" id="account-kind" name="kind">
+                    <option value="all" {% if kind_filter == 'all' %}selected{% endif %}>{{ _('All') }}</option>
+                    <option value="portal" {% if kind_filter == 'portal' %}selected{% endif %}>{{ _('Portal accounts') }}</option>
+                    <option value="archived" {% if kind_filter == 'archived' %}selected{% endif %}>{{ _('Former forum members') }}</option>
+                </select>
+            </div>
+            <div class="col-md-4 col-lg-2">
                 <label class="form-label" for="account-active">{{ _('Active') }}</label>
                 <select class="form-select" id="account-active" name="active">
                     <option value="all" {% if active_filter == 'all' %}selected{% endif %}>{{ _('All') }}</option>
@@ -76,8 +84,26 @@
                         {% for user_record in pagination.items %}
                             {% set member = user_record.member %}
                             <tr>
-                                <td>{{ user_record.email }}</td>
-                                <td>{% if member %}{{ member.first_name }} {{ member.last_name }}{% else %}<span class="text-muted">{{ _('No membership') }}</span>{% endif %}</td>
+                                {% set archive = user_record.imported_forum_profile %}
+                                {% set unclaimed_archive = archive and not member %}
+                                <td>
+                                    {% if unclaimed_archive %}
+                                        {{ archive.source_email or archive.source_username }}
+                                        <span class="badge text-bg-light border ms-1">{{ _('Former forum member') }}</span>
+                                    {% else %}
+                                        {{ user_record.email }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if member %}
+                                        {{ member.first_name }} {{ member.last_name }}
+                                    {% elif unclaimed_archive %}
+                                        {{ archive.display_name }}
+                                        {% if archive.year_group %}<span class="text-muted">({{ archive.year_group }})</span>{% endif %}
+                                    {% else %}
+                                        <span class="text-muted">{{ _('No membership') }}</span>
+                                    {% endif %}
+                                </td>
                                 <td>{{ user_record.forum_username or '-' }}</td>
                                 <td>
                                     {% if user_record.roles %}
@@ -88,8 +114,25 @@
                                         <span class="text-muted">{{ _('None') }}</span>
                                     {% endif %}
                                 </td>
-                                <td>{% if member %}{{ member.payment_status|replace('_', ' ')|title }}{% else %}<span class="text-muted">-</span>{% endif %}</td>
-                                <td>{% if member %}{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}{% else %}<span class="text-muted">-</span>{% endif %}</td>
+                                <td>
+                                    {% if member %}
+                                        {{ member.payment_status|replace('_', ' ')|title }}
+                                    {% elif unclaimed_archive %}
+                                        <span class="text-muted">{{ _('Archived from the old forum') }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if member %}
+                                        {% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}
+                                        {% if archive %}<span class="badge text-bg-light border ms-1" title="{{ _('Reconnected their old forum account') }}">{{ _('Reconnected') }}</span>{% endif %}
+                                    {% elif archive %}
+                                        <span class="text-muted">{{ _('Unclaimed') }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-end text-nowrap">
                                     {#
                                       Just the link. Changing roles from a list means

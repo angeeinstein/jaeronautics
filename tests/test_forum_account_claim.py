@@ -443,3 +443,190 @@ class TestThroughTheUniversityLink:
 
         assert response.status_code < 400
         assert member.email_work_is_verified is False
+
+
+class TestSeeingTheArchiveInTheAdmin:
+    """Former members live in the same directory as everybody else.
+
+    A former member is a member the association still has a record of, and
+    reconnecting one is the same action as anything else done from an account
+    page -- so they belong in the one list, narrowed by a filter rather than
+    hidden behind a second page.
+
+    What they must not be is unreadable. Their account row carries a
+    placeholder address and no name, so without help an archived person reads
+    as a broken account rather than somebody who used to post here.
+    """
+
+    @pytest.fixture
+    def admin_client(self, app, client):
+        from conftest import app_module
+
+        admin = User(email="admin-archive@example.com")
+        admin.set_password("x")
+        admin.grant_role(app_module.get_role("admin"))
+        db.session.add(admin)
+        db.session.commit()
+        with client.session_transaction() as session:
+            session["_user_id"] = str(admin.id)
+        return client
+
+    def _rows(self, response):
+        return response.get_data(as_text=True).count('class="btn btn-secondary btn-sm"')
+
+    def test_they_appear_in_the_ordinary_account_list(self, app, admin_client):
+        _archived()
+
+        body = admin_client.get("/admin/accounts").get_data(as_text=True)
+
+        assert "PopovicA_L23" in body
+
+    def test_a_row_shows_who_it_was_not_a_placeholder_address(self, app, admin_client):
+        """forum-mybb-645@imported.invalid tells an admin nothing."""
+        _archived()
+
+        body = admin_client.get("/admin/accounts").get_data(as_text=True)
+
+        assert OLD_EMAIL in body
+        assert "imported.invalid" not in body
+        assert ">Former forum member</span>" in body
+
+    def test_the_filter_narrows_to_them(self, app, admin_client):
+        _archived()
+        make_member(email="current@example.com")
+        db.session.commit()
+
+        # The admin doing the looking is an account too.
+        assert self._rows(admin_client.get("/admin/accounts")) == 3
+        assert self._rows(admin_client.get("/admin/accounts?kind=archived")) == 1
+        assert self._rows(admin_client.get("/admin/accounts?kind=portal")) == 2
+
+    def test_asking_for_active_members_leaves_them_out(self, app, admin_client):
+        """The filter that was already there, which is why this fits the page."""
+        _archived()
+
+        assert self._rows(admin_client.get("/admin/accounts?active=active")) == 0
+
+    def test_they_can_be_searched_by_their_forum_name(self, app, admin_client):
+        _archived()
+
+        assert self._rows(admin_client.get("/admin/accounts?q=PopovicA")) == 1
+
+    def test_they_can_be_searched_by_the_address_the_forum_held(self, app, admin_client):
+        """An admin who is asked "is my old account in there" has an address."""
+        _archived()
+
+        assert self._rows(admin_client.get("/admin/accounts?q=a.popovic")) == 1
+
+    def test_the_account_page_shows_what_the_archive_recorded(self, app, admin_client):
+        profile = _archived()
+
+        body = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
+
+        assert "Old Forum Account" in body
+        assert "PopovicA_L23" in body
+        assert "LAV23" in body
+        assert "Unclaimed" in body
+
+    def test_a_reconnected_person_reads_as_a_member_not_an_archive(self, app, admin_client):
+        """Claiming makes them a member. The row should say so.
+
+        The archive row and the membership are the same account afterwards, so
+        showing the old placeholder treatment would file a current member under
+        "former forum member" for ever.
+        """
+        profile = _archived()
+        member = _returning()
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        listing = admin_client.get("/admin/accounts?kind=archived").get_data(as_text=True)
+        # Scoped to the badge: the filter dropdown names the category too.
+        assert ">Former forum member</span>" not in listing
+        assert "Reconnected" in listing, "but it is still visible that they came back"
+
+        detail = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
+        assert "Claimed" in detail
+
+    def test_an_ordinary_account_grows_no_archive_panel(self, app, admin_client):
+        member = make_member(email="current@example.com")
+
+        body = admin_client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+
+        assert "Old Forum Account" not in body
+
+    def test_the_dashboard_counts_them_apart_from_real_accounts(self, app, admin_client):
+        """760 accounts when the association has twenty would be a lie."""
+        from aeronautics_members.app import get_admin_dashboard_metrics
+
+        _archived()
+        make_member(email="current@example.com")
+        db.session.commit()
+
+        metrics = get_admin_dashboard_metrics()
+
+        assert metrics["total_accounts"] == 2, "the member and the admin, not the archive"
+        assert metrics["archived_forum_accounts"] == 1
+        assert metrics["archived_forum_claimed"] == 0
+
+
+class TestTheArchivedAvatar:
+    @pytest.fixture
+    def admin_client(self, app, client):
+        from conftest import app_module
+
+        admin = User(email="admin-avatar@example.com")
+        admin.set_password("x")
+        admin.grant_role(app_module.get_role("admin"))
+        db.session.add(admin)
+        db.session.commit()
+        with client.session_transaction() as session:
+            session["_user_id"] = str(admin.id)
+        return client
+
+    def _with_avatar(self, app, tmp_path):
+        from PIL import Image
+
+        source = tmp_path / "avatars"
+        source.mkdir()
+        Image.new("RGB", (48, 48), (90, 120, 200)).save(source / "avatar_645.jpg")
+        import_forum_people(
+            [{"source_user_id": "645", "source_username": "PopovicA_L23",
+              "source_email": OLD_EMAIL, "avatar_file": "avatar_645.jpg"}],
+            avatar_dir=str(source),
+        )
+        db.session.commit()
+        return db.session.execute(db.select(ImportedForumProfile)).scalar_one()
+
+    def test_the_face_is_actually_served(self, app, admin_client, tmp_path):
+        """It was stored by the import and read by nothing at all."""
+        profile = self._with_avatar(app, tmp_path)
+
+        response = admin_client.get(f"/admin/accounts/{profile.user_id}/archived-avatar")
+
+        assert response.status_code == 200
+        assert response.get_data()[:3] == b"\xff\xd8\xff", "a JPEG, not an error page"
+
+    def test_the_account_page_shows_it(self, app, admin_client, tmp_path):
+        profile = self._with_avatar(app, tmp_path)
+
+        body = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
+
+        assert f"/admin/accounts/{profile.user_id}/archived-avatar" in body
+
+    def test_somebody_without_one_is_not_a_broken_image(self, app, admin_client):
+        profile = _archived()
+
+        assert admin_client.get(
+            f"/admin/accounts/{profile.user_id}/archived-avatar"
+        ).status_code == 404
+        body = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
+        assert "archived-avatar" not in body
+
+    def test_it_is_not_public(self, app, client, tmp_path):
+        """The staging directory also holds avatars awaiting review."""
+        profile = self._with_avatar(app, tmp_path)
+
+        response = client.get(f"/admin/accounts/{profile.user_id}/archived-avatar")
+
+        assert response.status_code in (302, 401, 403)

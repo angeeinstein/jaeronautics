@@ -5,6 +5,8 @@ Route handlers moved verbatim out of app.py (dedented; @app.route ->
 from the app module, which is fully initialized before this is imported.
 """
 
+from pathlib import Path
+
 from flask import Blueprint, current_app, jsonify
 
 from ..permissions import (
@@ -81,10 +83,12 @@ from datetime import (
     timezone,
 )
 from flask import (
+    abort,
     flash,
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from flask_babel import (
@@ -109,6 +113,7 @@ from ..db_models import (
     EmailDeliveryJob,
     ForumAccount,
     ForumAvatarSubmission,
+    ImportedForumProfile,
     MailAccount,
     Member,
     MemberProfileChangeRequest,
@@ -199,10 +204,13 @@ def admin_accounts():
     role_filter = request.args.get("role", "all")
     membership_filter = request.args.get("membership_status", "all")
     active_filter = request.args.get("active", "all")
+    kind_filter = request.args.get("kind", "all")
     page = request.args.get("page", 1, type=int)
 
     pagination = db.paginate(
-        build_account_directory_query(search_term, role_filter, membership_filter, active_filter),
+        build_account_directory_query(
+            search_term, role_filter, membership_filter, active_filter, kind_filter
+        ),
         page=page,
         per_page=ADMIN_DIRECTORY_PAGE_SIZE,
         error_out=False,
@@ -219,7 +227,29 @@ def admin_accounts():
         can_manage_roles=current_user.can(Permission.ROLES_MANAGE),
         membership_filter=membership_filter,
         active_filter=active_filter,
+        kind_filter=kind_filter,
     )
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/archived-avatar", methods=["GET"])
+@requires(Permission.ACCOUNTS_VIEW)
+def admin_archived_avatar(user_id):
+    """Serves the avatar an imported person had on the old forum.
+
+    Admin-only and served through the application rather than from a static
+    directory: the staging directory holds files for pending avatar reviews as
+    well, and nothing there should be reachable by guessing a filename.
+    """
+    profile = db.session.execute(
+        db.select(ImportedForumProfile).filter_by(user_id=user_id)
+    ).scalar_one_or_none()
+    if profile is None or not profile.avatar_path:
+        abort(404)
+
+    path = Path(profile.avatar_path)
+    if not path.exists():
+        abort(404)
+    return send_file(path, conditional=True)
 
 
 @admin_bp.route("/admin/accounts/<int:user_id>", methods=["GET"])

@@ -120,6 +120,53 @@
         </div>
     </div>
     <div class="col-lg-7">
+        {% set archive = user_record.imported_forum_profile %}
+        {% if archive %}
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Old Forum Account') }}</h4>
+                {% if archive.claimed_at %}
+                    <span class="badge text-bg-success">{{ _('Claimed') }}</span>
+                {% else %}
+                    <span class="badge text-bg-secondary">{{ _('Unclaimed') }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-3 align-items-start">
+                    {% if archive.avatar_path %}
+                        <img src="{{ url_for('admin.admin_archived_avatar', user_id=user_record.id) }}"
+                             alt="{{ archive.display_name }}" width="72" height="72"
+                             class="rounded border flex-shrink-0" style="object-fit: cover;">
+                    {% endif %}
+                    <dl class="row mb-0 flex-grow-1">
+                        <dt class="col-sm-5">{{ _('Name on the forum') }}</dt>
+                        <dd class="col-sm-7">{{ archive.display_name }}</dd>
+                        <dt class="col-sm-5">{{ _('Forum Username') }}</dt>
+                        <dd class="col-sm-7">{{ archive.source_username }}</dd>
+                        <dt class="col-sm-5">{{ _('Year Group') }}</dt>
+                        <dd class="col-sm-7">{{ archive.year_group or _('None') }}</dd>
+                        <dt class="col-sm-5">{{ _('Address it was registered under') }}</dt>
+                        <dd class="col-sm-7">{{ archive.source_email or _('None') }}</dd>
+                        <dt class="col-sm-5">{{ _('Posts') }}</dt>
+                        <dd class="col-sm-7">{{ archive.post_count if archive.post_count is not none else '-' }}</dd>
+                        <dt class="col-sm-5">{{ _('Joined') }}</dt>
+                        <dd class="col-sm-7">{{ archive.joined_on.strftime('%Y-%m-%d') if archive.joined_on else '-' }}</dd>
+                        <dt class="col-sm-5">{{ _('Last Posted') }}</dt>
+                        <dd class="col-sm-7">{{ archive.last_posted_on.strftime('%Y-%m-%d') if archive.last_posted_on else _('Never') }}</dd>
+                        {% if archive.claimed_at %}
+                            <dt class="col-sm-5">{{ _('Reconnected On') }}</dt>
+                            <dd class="col-sm-7">{{ archive.claimed_at.strftime('%Y-%m-%d') }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+                {% if not archive.claimed_at %}
+                    <p class="text-muted small mb-0 mt-3">
+                        {{ _('This account is reconnected automatically when somebody signs up and confirms the address above. Until then it exists so the old posts keep a name and a face.') }}
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
         <div class="card h-100">
             <div class="card-header"><h4 class="mb-0">{{ _('Membership') }}</h4></div>
             <div class="card-body">

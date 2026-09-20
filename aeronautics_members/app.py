@@ -48,6 +48,7 @@ try:
         EmailDeliveryJob,
         ForumAccount,
         ForumAvatarSubmission,
+        ImportedForumProfile,
         MailAccount,
         Member,
         MemberProfileChangeRequest,
@@ -107,6 +108,7 @@ except ImportError:
         EmailDeliveryJob,
         ForumAccount,
         ForumAvatarSubmission,
+        ImportedForumProfile,
         MailAccount,
         Member,
         MemberProfileChangeRequest,
@@ -979,8 +981,21 @@ def get_admin_dashboard_metrics():
     present_user = User.deleted_at.is_(None)
     present_member = Member.deleted_at.is_(None)
     return {
+        # Portal accounts only. Counting the forum archive here would say the
+        # association has 760 accounts when it has twenty, and the number is
+        # read as "how many people use this".
         "total_accounts": db.session.scalar(
-            db.select(func.count()).select_from(User).where(present_user)
+            db.select(func.count()).select_from(User).where(
+                present_user, ~User.imported_forum_profile.has()
+            )
+        ) or 0,
+        "archived_forum_accounts": db.session.scalar(
+            db.select(func.count()).select_from(ImportedForumProfile)
+        ) or 0,
+        "archived_forum_claimed": db.session.scalar(
+            db.select(func.count()).select_from(ImportedForumProfile).where(
+                ImportedForumProfile.claimed_at.is_not(None)
+            )
         ) or 0,
         "linked_members": db.session.scalar(
             db.select(func.count()).select_from(Member).where(present_member, Member.user_id.is_not(None))
@@ -998,11 +1013,18 @@ def get_admin_dashboard_metrics():
 
 
 
-def build_account_directory_query(search_term, role_filter, membership_filter, active_filter):
+def build_account_directory_query(
+    search_term, role_filter, membership_filter, active_filter, kind_filter="all"
+):
     query = (
         db.select(User)
-        .options(selectinload(User.member), selectinload(User.roles))
+        .options(
+            selectinload(User.member),
+            selectinload(User.roles),
+            selectinload(User.imported_forum_profile),
+        )
         .outerjoin(Member, Member.user_id == User.id)
+        .outerjoin(ImportedForumProfile, ImportedForumProfile.user_id == User.id)
     )
 
     if search_term:
@@ -1014,8 +1036,21 @@ def build_account_directory_query(search_term, role_filter, membership_filter, a
                 Member.email_private.ilike(pattern),
                 Member.first_name.ilike(pattern),
                 Member.last_name.ilike(pattern),
+                # A person carried over from the old forum has no name and a
+                # placeholder address, so the only things worth searching them
+                # by are what the archive recorded.
+                ImportedForumProfile.display_name.ilike(pattern),
+                ImportedForumProfile.source_email.ilike(pattern),
             )
         )
+
+    # Former forum people live in this same list -- a former member is a member
+    # the association still has a record of, and reconnecting one is the same
+    # action as anything else done from an account page. This only narrows it.
+    if kind_filter == "archived":
+        query = query.where(User.imported_forum_profile.has())
+    elif kind_filter == "portal":
+        query = query.where(~User.imported_forum_profile.has())
 
     # "Who can administer" is a capability question, not a role-name one. Asking
     # for Role.slug == "admin" would file an account holding only a future role

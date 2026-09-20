@@ -364,3 +364,33 @@ which is what the plan requires, since the Discourse content migration has to
 be finished first. Without it, the ordering would matter a great deal: an
 import that ran first would hold every returning student's username, and the
 portal would hand them `PopovicA_L23-2` on signup.
+
+## 7. Where the imported people show up
+
+In the ordinary account directory, with everybody else. A former member is a
+member the association still has a record of, and reconnecting one is the same
+action as anything else done from an account page — so they are one list
+narrowed by a filter, not a second page.
+
+* **Account Type** filter: *All* / *Portal accounts* / *Former forum members*.
+* The **Active** filter already excludes them, since they have no membership.
+* Their rows show the address the old forum held and the name and year group
+  it recorded, not the `@imported.invalid` placeholder, which would tell an
+  admin nothing. Search covers both.
+* Sorting is by email, so `forum-mybb-…` addresses land in the middle of the
+  alphabet rather than burying the first page.
+
+**A reconnected person stops looking like an archive.** Claiming attaches the
+membership to that same row, so it becomes an ordinary member row with a
+*Reconnected* marker beside its status — filing a current member under "former
+forum member" for ever would be wrong.
+
+The account page grows an **Old Forum Account** panel: the avatar, the forum
+username, year group, post count, join and last-post dates, the address it was
+registered under, and whether it has been claimed. The avatar is served by
+`admin_archived_avatar`, admin-only and through the application rather than
+from a static path — the staging directory also holds avatars awaiting review,
+and none of it should be reachable by guessing a filename.
+
+The dashboard counts them separately. Folding them into *Total Accounts* would
+report 760 accounts for an association with twenty.

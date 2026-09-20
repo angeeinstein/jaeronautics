@@ -4,6 +4,15 @@
 {% block admin_content %}
 <div class="row g-4">
     <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Total Accounts') }}</div><div class="display-6 mt-2">{{ metrics.total_accounts }}</div></div></div></div>
+    {% if metrics.archived_forum_accounts %}
+    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body">
+        <div class="text-muted small text-uppercase">{{ _('Former Forum Members') }}</div>
+        <div class="display-6 mt-2">{{ metrics.archived_forum_accounts }}</div>
+        <a class="small text-decoration-none" href="{{ url_for('admin.admin_accounts', kind='archived') }}">
+            {{ _('%(count)s reconnected', count=metrics.archived_forum_claimed) }}
+        </a>
+    </div></div></div>
+    {% endif %}
     <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Linked Members') }}</div><div class="display-6 mt-2">{{ metrics.linked_members }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Active Memberships') }}</div><div class="display-6 mt-2">{{ metrics.active_memberships }}</div></div></div></div>
     <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Checkouts') }}</div><div class="display-6 mt-2">{{ metrics.pending_checkouts }}</div></div></div></div>
