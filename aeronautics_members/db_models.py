@@ -450,6 +450,22 @@ class ImportedForumProfile(db.Model):
     joined_on = db.Column(db.Date, nullable=True)
     last_posted_on = db.Column(db.Date, nullable=True)
 
+    # What the old forum said about them, kept as history and nothing more.
+    #
+    # "Banned" there did not mean misconduct: the reasons in its ban log read
+    # "non active student", "Not active student/exchange semester", "Is now a
+    # Lecturer". It was how a member who stopped studying was deactivated, and
+    # this is the only surviving record of who left and why.
+    #
+    # Deliberately NOT mapped onto users.disabled_at. That column means an
+    # administrator here made a decision, with a person and a date attached;
+    # a MyBB group is a fact about a system that is being switched off.
+    # Writing one into the other would invent an admin action that never
+    # happened -- and a returning student claiming such an account would
+    # inherit a dead one.
+    source_group = db.Column(db.String(64), nullable=True)
+    source_group_reason = db.Column(db.String(255), nullable=True)
+
     imported_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     # Set when a returning student takes the account over, by an administrator
     # who recognises them. Never by matching an email address: that match is

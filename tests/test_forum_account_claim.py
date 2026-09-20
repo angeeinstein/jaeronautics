@@ -630,3 +630,122 @@ class TestTheArchivedAvatar:
         response = client.get(f"/admin/accounts/{profile.user_id}/archived-avatar")
 
         assert response.status_code in (302, 401, 403)
+
+
+class TestWhatTheOldForumSaidAboutThem:
+    """The group they were in, kept as history rather than acted on.
+
+    "Banned" on that board was not misconduct. The ban log reads "non active
+    student", "Not active student/exchange semester", "Is now a Lecturer" --
+    it was how somebody who stopped studying was deactivated, and it is the
+    only surviving record of who left and why. The converter exported it and
+    the importer dropped it, so it reached people.json and went no further.
+    """
+
+    def _imported(self, **fields):
+        person = {
+            "source_user_id": "645",
+            "source_username": "PopovicA_L23",
+            "source_email": OLD_EMAIL,
+        }
+        person.update(fields)
+        import_forum_people([person])
+        db.session.commit()
+        return db.session.execute(db.select(ImportedForumProfile)).scalar_one()
+
+    def test_the_group_is_kept(self, app):
+        profile = self._imported(source_group="Banned",
+                                 source_group_reason="non active student")
+
+        assert profile.source_group == "Banned"
+        assert profile.source_group_reason == "non active student"
+
+    def test_a_missing_reason_is_none_rather_than_empty(self, app):
+        """Most of the 230 have no reason written down."""
+        profile = self._imported(source_group="Banned", source_group_reason="")
+
+        assert profile.source_group == "Banned"
+        assert profile.source_group_reason is None
+
+    def test_an_export_without_the_field_still_imports(self, app):
+        """An older people.json predates the converter carrying it."""
+        profile = self._imported()
+
+        assert profile.source_group is None
+        assert profile.source_username == "PopovicA_L23"
+
+    def test_it_does_not_disable_the_account(self, app):
+        """The decisive point.
+
+        users.disabled_at means an administrator here decided something, with
+        a person and a date attached. A MyBB group is a fact about a system
+        being switched off. Writing one into the other would invent an admin
+        action that never happened -- and a returning student claiming such an
+        account would inherit a dead one.
+        """
+        profile = self._imported(source_group="Banned",
+                                 source_group_reason="non active student")
+
+        assert profile.user.is_disabled is False
+        assert profile.user.disabled_at is None
+        assert profile.user.account_status == "archived"
+
+    def test_a_banned_person_can_still_come_back(self, app):
+        """Only two of the 258 likely returners were banned, but not zero."""
+        profile = self._imported(source_group="Banned",
+                                 source_group_reason="non active student")
+        archived_id = profile.user_id
+        member = _returning()
+
+        claimed = claim_archived_account(member.user)
+        db.session.commit()
+
+        assert claimed is profile
+        assert member.user_id == archived_id
+        assert member.user.is_disabled is False, "their old status is not a punishment here"
+        assert member.user.can_sign_in is True
+
+    def test_the_history_survives_the_claim(self, app):
+        """Still worth knowing they had left, even once they are back."""
+        profile = self._imported(source_group="Banned",
+                                 source_group_reason="Is now a Lecturer")
+        member = _returning()
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert profile.source_group == "Banned"
+        assert profile.source_group_reason == "Is now a Lecturer"
+
+    def test_a_second_run_updates_it(self, app):
+        """The status may have changed on the forum between exports."""
+        self._imported(source_group="Registered")
+
+        import_forum_people([{
+            "source_user_id": "645", "source_username": "PopovicA_L23",
+            "source_email": OLD_EMAIL, "source_group": "Banned",
+            "source_group_reason": "non active student",
+        }])
+        db.session.commit()
+
+        profile = db.session.execute(db.select(ImportedForumProfile)).scalar_one()
+        assert profile.source_group == "Banned"
+
+    def test_the_account_page_shows_it(self, app, client):
+        from conftest import app_module
+
+        admin = User(email="admin-group@example.com")
+        admin.set_password("x")
+        admin.grant_role(app_module.get_role("admin"))
+        db.session.add(admin)
+        db.session.commit()
+        profile = self._imported(source_group="Banned",
+                                 source_group_reason="non active student")
+        with client.session_transaction() as session:
+            session["_user_id"] = str(admin.id)
+
+        body = client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
+
+        assert "Group on the old forum" in body
+        assert "Banned" in body
+        assert "non active student" in body

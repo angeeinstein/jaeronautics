@@ -416,6 +416,8 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
         profile.source_email = (entry.get("source_email") or "").strip() or None
         profile.display_name = display_name
         profile.year_group = year_group
+        profile.source_group = (entry.get("source_group") or "").strip() or None
+        profile.source_group_reason = (entry.get("source_group_reason") or "").strip() or None
         profile.post_count = _as_int(entry.get("post_count"))
         profile.joined_on = _as_date(entry.get("joined_on"))
         profile.last_posted_on = _as_date(entry.get("last_posted_on"))

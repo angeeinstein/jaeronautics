@@ -162,9 +162,9 @@ A JSON array, one object per person. Only `source_user_id` and
 
 ### `source_group` — who had already left
 
-`source_group` and `source_group_reason` are carried across but **nothing acts
-on them yet**. They are here because the old forum is the only place this
-information exists, and switching it off destroys it.
+`source_group` and `source_group_reason` are stored on the imported profile as
+history, and **nothing acts on them**. They are kept because the old forum is
+the only place this information exists, and switching it off destroys it.
 
 On this board, MyBB's *Banned* group is not punishment. It is how a member who
 stopped being a student was deactivated — the reasons in the ban log read
@@ -180,6 +180,12 @@ Two things follow, and both are decisions rather than defaults:
   reason for the import. Nothing about an imported account grants access
   anyway — no password, no membership, no permission — so importing a closed
   account is not reopening it.
+* **The group is not mapped onto `users.disabled_at`.** That column means an
+  administrator *here* decided something, with a person and a date attached; a
+  MyBB group is a fact about a system being switched off. Writing one into the
+  other would invent an admin action that never happened — and since a banned
+  person can still come back (two of the 258 likely returners are banned), they
+  would claim a dead account and be locked out with no way to tell why.
 * **Not every row is a person.** `LAVBoard_System` is the board's own account
   (group Administrators, no posts) and `Test_User` is a test account. Decide
   whether to drop them from `people.json` before importing; the importer has no

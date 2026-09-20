@@ -212,6 +212,13 @@
                         <dd class="col-sm-7">{{ archive.year_group or _('None') }}</dd>
                         <dt class="col-sm-5">{{ _('Address it was registered under') }}</dt>
                         <dd class="col-sm-7">{{ archive.source_email or _('None') }}</dd>
+                        <dt class="col-sm-5">{{ _('Group on the old forum') }}</dt>
+                        <dd class="col-sm-7">
+                            {{ archive.source_group or _('Unknown') }}
+                            {% if archive.source_group_reason %}
+                                <small class="text-muted d-block">{{ archive.source_group_reason }}</small>
+                            {% endif %}
+                        </dd>
                         <dt class="col-sm-5">{{ _('Posts') }}</dt>
                         <dd class="col-sm-7">{{ archive.post_count if archive.post_count is not none else '-' }}</dd>
                         <dt class="col-sm-5">{{ _('Joined') }}</dt>
