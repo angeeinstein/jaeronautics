@@ -154,6 +154,125 @@ def _store_avatar(user_id, avatar_dir, avatar_file, *, dry_run=False):
     return str(destination), None
 
 
+def find_claimable_profile(email):
+    """The archived forum account belonging to this address, if exactly one does.
+
+    Matching is on the address the old forum held, not on a name: every one of
+    the students who will come back is still studying, so their university
+    address still works, and proving they can read it is the whole of the
+    evidence. A name match would only ever be a guess.
+
+    Returns None when nothing matches, when the profile was already claimed,
+    and -- deliberately -- when *two* profiles share the address. One archived
+    address is shared by two accounts, and picking either of them silently
+    would be handing somebody an identity on a coin flip.
+    """
+    normalized = (email or "").strip().lower()
+    if not normalized or normalized.endswith(f"@{IMPORTED_EMAIL_DOMAIN}"):
+        return None
+
+    matches = db.session.execute(
+        db.select(ImportedForumProfile).filter(
+            db.func.lower(ImportedForumProfile.source_email) == normalized,
+            ImportedForumProfile.claimed_at.is_(None),
+        )
+    ).scalars().all()
+
+    return matches[0] if len(matches) == 1 else None
+
+
+# What a brand-new member's account may own at the moment it is verified. The
+# claim moves the membership onto the archived row, so anything else pointing
+# at the row being retired would be left dangling -- and rather than repoint
+# tables nobody expected, the claim refuses and says so.
+CLAIMABLE_NEW_ACCOUNT_RELATIONSHIPS = ("member",)
+
+
+def _blocking_relationships(user):
+    """Anything on the new account the claim is not prepared to carry across."""
+    blocking = []
+    if user.roles:
+        blocking.append("roles")
+    if user.forum_account is not None:
+        blocking.append("a forum account")
+    if user.imported_forum_profile is not None:
+        blocking.append("an imported forum profile")
+    if user.forum_avatar_submissions:
+        blocking.append("avatar submissions")
+    if user.requested_profile_changes or user.reviewed_profile_changes:
+        blocking.append("profile change requests")
+    return blocking
+
+
+def claim_archived_account(user):
+    """Give a returning student their old forum identity back. Returns the profile.
+
+    Called once the address is verified, because the verification is the proof:
+    the archived account named this address, and only somebody who can read it
+    could have got here.
+
+    The membership moves onto the *archived* row rather than the archive moving
+    onto the new one. Discourse knows people by ``external_id = str(user.id)``,
+    so the old posts are attached to that id -- keeping it is the difference
+    between a returning student finding their history and finding an empty
+    profile beside it.
+
+    Returns None when there is nothing to claim, which is the ordinary case.
+    """
+    if user is None or user.deleted_at is not None or not user.email_is_verified:
+        return None
+    if user.imported_forum_profile is not None:
+        return None  # already an archived account
+
+    profile = find_claimable_profile(user.email)
+    if profile is None:
+        return None
+
+    archived = profile.user
+    if archived is None or archived.id == user.id or archived.deleted_at is not None:
+        return None
+
+    blocking = _blocking_relationships(user)
+    if blocking:
+        current_app.logger.warning(
+            "Forum claim skipped for user %s: the new account has %s",
+            user.id, ", ".join(blocking),
+        )
+        return None
+
+    member = user.member
+
+    # Free the unique columns on the row being retired before reusing them.
+    retired_email = user.email
+    user.forum_username = None
+    user.email = imported_email_for("retired", f"{user.id}-{secrets.token_hex(4)}")
+    db.session.flush()
+
+    archived.email = retired_email
+    archived.password_hash = user.password_hash
+    archived.email_verified_at = user.email_verified_at
+    archived.email_verification_nonce = user.email_verification_nonce
+    archived.password_reset_nonce = None  # links issued for the retired row die here
+
+    if member is not None:
+        member.user_id = archived.id
+
+    profile.claimed_at = get_now_utc()
+    db.session.flush()
+
+    # The retired row is emptied rather than deleted: audit entries written
+    # during signup point at it, and the record of what happened is worth more
+    # than the row.
+    user.deleted_at = get_now_utc()
+    db.session.flush()
+
+    current_app.logger.info(
+        "Forum account %s claimed by member account %s (archived user %s)",
+        profile.source_username, archived.id, archived.id,
+    )
+    return profile
+
+
 def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, dry_run=False):
     """Create or update an account per exported person. Returns a report.
 

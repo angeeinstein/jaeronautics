@@ -319,3 +319,48 @@ almost certainly the same person coming back, which makes it useful signal
 rather than an error. It stays a small check, not a subsystem, and the claim
 itself is still made by a person who recognises them — never by matching an
 email address, since those are dead and possibly reissued.
+
+## 6. Returning students reclaim their old account
+
+Around 250 of the archived people are still studying and will sign up on the
+new portal. They get their old forum identity back automatically, and the
+evidence is the **verified email address**.
+
+That works because of who they are: still students, so their
+`@edu.fh-joanneum.at` address still receives mail, and the archived account
+names it. Every one of the 258 people from cohort 2021 onwards has such an
+address. Being able to read that inbox is the proof — and it is the only proof
+available, since the usernames are derived from names and would be a guess.
+
+The claim happens when the verification link is followed, in
+`claim_archived_account()`:
+
+* **The membership moves onto the archived `users` row**, not the other way
+  round. Discourse knows people by `external_id = str(user.id)`, so the old
+  posts hang off that id — keeping it is the difference between finding your
+  history and finding an empty profile next to it. The row the signup created
+  is emptied and marked `deleted_at`, not deleted, because audit entries
+  written during signup point at it.
+* **Nothing happens before verification.** Otherwise typing somebody else's
+  university address at signup would be enough to take their posts.
+* **A failure never costs a verification.** The claim runs inside a savepoint
+  and any exception is logged and swallowed: the member ends up verified with
+  an unclaimed archive, which is fixable by hand, rather than holding a
+  verification link that does not work.
+
+It refuses, rather than guessing, when two archived accounts share one address
+(the real export has exactly one such pair), when the profile was already
+claimed, and when the signup account holds a role, a forum account or avatar
+submissions — anything the claim is not prepared to carry across.
+
+**Tell students to sign up with their university address.** Somebody who uses
+a private address gets a working new account and no claim, which then needs
+linking by hand.
+
+### Ordering
+
+Because the claim is automatic, the import can run **before** the intake —
+which is what the plan requires, since the Discourse content migration has to
+be finished first. Without it, the ordering would matter a great deal: an
+import that ran first would hold every returning student's username, and the
+portal would hand them `PopovicA_L23-2` on signup.

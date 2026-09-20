@@ -12,6 +12,7 @@ from ..config import (
     RATELIMIT_PASSWORD_CHANGE,
     RATELIMIT_REGISTER,
 )
+from ..services.forum_import import claim_archived_account
 from ..services.forum import (
     log_out_forum_session_if_possible,
 )
@@ -142,9 +143,35 @@ def verify_email(token):
         flash(_("This verification link is invalid or has expired."), "danger")
         return redirect(url_for("auth.login"))
 
+    claimed = None
     if mark_email_verified_from_token(token_data, user):
+        # A returning student gets their old forum identity back here, because
+        # here is where they have just proved they can read the address the
+        # archived account was registered under.
+        #
+        # Wrapped, and deliberately after the verification is decided: a fault
+        # in the claim must not cost somebody a verified address. They end up
+        # with a working new account and an unclaimed archive, which an admin
+        # can link -- not with a link they cannot use.
+        try:
+            # A savepoint, not a plain rollback: the verification was recorded
+            # a line ago and is not committed yet, so undoing the whole session
+            # would throw it away along with the half-done claim.
+            with db.session.begin_nested():
+                claimed = claim_archived_account(user)
+        except Exception:  # noqa: BLE001 -- never block a verification
+            claimed = None
+            current_app.logger.exception("Forum account claim failed for user %s", user.id)
         db.session.commit()
+
     flash(_("Your email address has been verified."), "success")
+    if claimed is not None:
+        flash(
+            _("Welcome back — your old forum account %(username)s has been "
+              "reconnected, so your posts and profile picture are yours again.",
+              username=claimed.source_username),
+            "success",
+        )
     if current_user.is_authenticated and current_user.id == user.id:
         return redirect(url_for(get_member_portal_target(current_user)))
     return redirect(url_for("auth.login"))
