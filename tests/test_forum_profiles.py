@@ -380,3 +380,23 @@ class TestFindingTheUserFieldEndpoint:
             provider.find_user_field("Year group")
 
         assert "discourse_api_username" in str(raised.value)
+
+
+class TestTheTokenItself:
+    def test_it_survives_being_pasted_into_a_shell(self, app, tmp_path):
+        """token_urlsafe can begin with "-", which curl then reads as a flag.
+
+        Which is exactly how the first real run was misdiagnosed: the avatar
+        route was fine and the manual check 404'd because the paste had lost
+        the leading hyphen.
+        """
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+
+        publish_imported_profiles(FakeProvider())
+        db.session.commit()
+
+        token = profile.avatar_public_token
+        assert not token.startswith("-")
+        assert token.isalnum(), "no characters that a shell or a URL parser argues about"

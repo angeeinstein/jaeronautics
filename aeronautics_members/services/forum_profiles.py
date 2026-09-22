@@ -57,7 +57,12 @@ def _avatar_url_for(profile, *, dry_run=False):
             # Reported, not stored: a rehearsal that wrote tokens would leave
             # them behind when the transaction it ran in was rolled back.
             return "(a token would be minted)"
-        profile.avatar_public_token = secrets.token_urlsafe(32)
+        # Hex rather than token_urlsafe: that alphabet contains "-", so about
+        # one token in thirty-two begins with one and is then swallowed as an
+        # option flag the first time somebody pastes the URL into curl to find
+        # out why an avatar is not showing. A token that cannot be pasted
+        # wastes an afternoon looking for a fault that is not there.
+        profile.avatar_public_token = secrets.token_hex(32)
         db.session.flush()
     return build_public_url(
         "forum.forum_imported_avatar_public_file", token=profile.avatar_public_token
