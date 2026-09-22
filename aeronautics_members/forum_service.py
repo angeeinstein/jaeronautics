@@ -470,6 +470,88 @@ class DiscourseConnectProvider(ForumProvider):
         forum_account.remote_user_id = remote_user.get("id") or forum_account.remote_user_id
         return remote_user
 
+    def sync_imported_profile(self, payload):
+        """Create or update the forum profile of one imported person.
+
+        The same endpoint the member sync uses, given a payload built for
+        somebody who has no membership here. Discourse keys on external_id, so
+        running this twice updates rather than duplicates.
+        """
+        encoded, signature = self._sign_sso_payload(payload)
+        return self._request(
+            "POST", "/admin/users/sync_sso", data={"sso": encoded, "sig": signature}
+        )
+
+    def ensure_group(self, name):
+        """A Discourse group by that name, made if it is not there yet.
+
+        Looked up before creating rather than created and the error ignored: a
+        failure to create is worth hearing about, and "it already exists" and
+        "the API key cannot do this" are otherwise the same 422.
+        """
+        try:
+            existing = self._request("GET", f"/groups/{quote(str(name))}.json")
+        except ForumProviderError:
+            # Discourse answers 404 for a group that is not there, which is the
+            # ordinary case on a first run and not a failure. A real problem --
+            # a bad key, an unreachable host -- surfaces on the create below,
+            # where the message describes what was actually being attempted.
+            existing = None
+        if isinstance(existing, dict) and existing.get("group"):
+            return existing["group"], False
+
+        created = self._request(
+            "POST", "/admin/groups.json",
+            json_body={"group": {
+                "name": name,
+                # Visible so people can browse it, and joinable by nobody: it
+                # describes who was in a cohort, which is not a thing to opt
+                # into.
+                "visibility_level": 0,
+                "members_visibility_level": 0,
+                "public_admission": False,
+                "public_exit": False,
+            }},
+        )
+        group = created.get("basic_group") if isinstance(created, dict) else None
+        return group or {}, True
+
+    def find_user_field(self, name):
+        """The id of a custom user field by name, or None.
+
+        Returned as ``user_field_N`` because that is how DiscourseConnect names
+        it in a payload, which is the only reason this is being looked up.
+        """
+        response = self._request("GET", "/admin/customize/user_fields.json")
+        fields = response.get("user_fields") if isinstance(response, dict) else None
+        for field in fields or []:
+            if str(field.get("name", "")).strip().lower() == name.strip().lower():
+                return f"user_field_{field.get('id')}"
+        return None
+
+    def ensure_user_field(self, name, description=""):
+        existing = self.find_user_field(name)
+        if existing:
+            return existing, False
+
+        created = self._request(
+            "POST", "/admin/customize/user_fields.json",
+            json_body={"user_field": {
+                "name": name,
+                "description": description or name,
+                "field_type": "text",
+                "editable": False,       # it comes from the portal, not the person
+                "required": False,       # most members are not from the old forum
+                "show_on_profile": True,
+                "show_on_user_card": True,
+                "searchable": True,
+            }},
+        )
+        field = created.get("user_field") if isinstance(created, dict) else None
+        if not field:
+            return None, False
+        return f"user_field_{field.get('id')}", True
+
     def get_remote_user_by_external_id(self, external_id):
         response = self._request("GET", f"/u/by-external/{quote(str(external_id))}.json")
         if isinstance(response, dict) and isinstance(response.get("user"), dict):

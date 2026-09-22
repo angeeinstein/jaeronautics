@@ -228,6 +228,10 @@ from .services.forum_import import (  # noqa: E402
     import_forum_people,
     load_people,
 )
+from .services.forum_profiles import (  # noqa: E402
+    YEAR_GROUP_FIELD_NAME,
+    publish_imported_profiles,
+)
 from .services.workflows import (  # noqa: E402
     process_email_delivery_jobs,
     refresh_member_billing_state,
@@ -1726,6 +1730,108 @@ def create_app(config_overrides=None):
                 f"{avatar_dir} is empty. Point --avatar-dir at the directory that "
                 f"holds the avatar files themselves."
             )
+
+    @app.cli.command("publish-forum-profiles")
+    @click.option("--dry-run", is_flag=True,
+                  help="Report what would be published and send nothing.")
+    @click.option("--limit", type=int, default=0, metavar="N",
+                  help="Publish at most N people, for a first careful run.")
+    @click.option("--only-new", is_flag=True,
+                  help="Skip people already published, to resume an interrupted run.")
+    @click.option("--sample", type=int, default=0, metavar="N",
+                  help="Show N of them in full.")
+    @with_appcontext
+    def publish_forum_profiles_command(dry_run, limit, only_new, sample):
+        """Publishes imported people to the forum so they can be found there.
+
+        The old board is the association's register of everyone who was ever a
+        member, and people use it to find somebody from an earlier cohort. This
+        recreates that: a profile per imported person, with their name, year
+        group and the face they had, grouped by cohort.
+
+        These are not usable accounts. Nobody can sign in to one.
+        """
+        service = get_forum_service()
+        if not service.is_enabled():
+            raise click.ClickException(
+                "The forum integration is switched off, so there is nowhere to "
+                "publish to. Turn it on in the admin settings first."
+            )
+        # config_errors is empty for a disabled integration, so it is not on its
+        # own enough to know the settings are usable.
+        if service.config_errors:
+            raise click.ClickException(
+                "The forum integration is not fully configured: "
+                + "; ".join(service.config_errors)
+            )
+        provider = service.provider
+        if provider is None:
+            raise click.ClickException("No forum provider is configured.")
+
+        year_group_field = None
+        if dry_run:
+            # Read-only: says whether the field is there without making one.
+            year_group_field = provider.find_user_field(YEAR_GROUP_FIELD_NAME)
+            click.echo(
+                f"Year group field: {year_group_field or 'not present, would be created'}"
+            )
+        else:
+            year_group_field, created = provider.ensure_user_field(
+                YEAR_GROUP_FIELD_NAME, "Which year group they studied with."
+            )
+            click.echo(
+                f"Year group field: {year_group_field}"
+                f"{' (created)' if created else ''}"
+            )
+
+        report = publish_imported_profiles(
+            provider,
+            dry_run=dry_run,
+            limit=limit or None,
+            only_unsynced=only_new,
+            year_group_field=year_group_field,
+        )
+
+        if not dry_run:
+            # After the people, so a group is only made for a cohort that has
+            # somebody in it.
+            for group in sorted(report["groups"]):
+                try:
+                    _info, created = provider.ensure_group(group)
+                    if created:
+                        click.echo(f"  created group {group}")
+                except Exception as exc:  # noqa: BLE001 -- one group must not end the run
+                    click.echo(click.style(f"  ! group {group}: {exc}", fg="yellow"), err=True)
+            db.session.commit()
+
+        click.echo(
+            f"seen={report['seen']} published={report['published']} "
+            f"failed={report['failed']} with_avatar={report['with_avatar']}"
+        )
+        click.echo(f"{len(report['groups'])} groups: "
+                   + ", ".join(f"{name} ({count})"
+                               for name, count in sorted(report["groups"].items()))[:400])
+        if sample:
+            _echo_profile_sample(report, sample)
+        for problem in report["problems"][:20]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        if dry_run:
+            click.echo(click.style("Dry run: nothing was sent.", fg="cyan"))
+
+    def _echo_profile_sample(report, wanted):
+        people = report.get("people") or []
+        if not people:
+            return
+        wanted = max(1, min(wanted, len(people)))
+        step = len(people) / wanted
+        click.echo(f"\nA sample of {wanted}, spread across the run:")
+        for index in range(wanted):
+            person = people[int(index * step)]
+            click.echo(f"  {person['username']}  ({person['result']})")
+            click.echo(f"      shown as   : {person['name']}")
+            click.echo(f"      year group : {person['year_group'] or '-'}")
+            click.echo(f"      groups     : {person['groups']}")
+            click.echo(f"      avatar     : {person['avatar']}")
 
     def _echo_reclaim_outlook(report):
         """How many can get their old account back without asking anybody.

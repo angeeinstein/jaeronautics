@@ -446,6 +446,16 @@ class ImportedForumProfile(db.Model):
     display_name = db.Column(db.String(200), nullable=False)
     year_group = db.Column(db.String(50), nullable=True)
     avatar_path = db.Column(db.String(255), nullable=True)
+    # Lets the forum fetch this avatar. Discourse pulls the image itself, as an
+    # unauthenticated server somewhere else, so the admin-only route cannot
+    # serve it -- and the staging directory also holds avatars waiting for
+    # review, so nothing there may be reachable by guessing a filename. An
+    # unguessable token per profile is the same answer ForumAvatarSubmission
+    # already uses, and is only minted for profiles actually being published.
+    avatar_public_token = db.Column(db.String(64), unique=True, nullable=True)
+    # When this person was last published to the forum, so a re-run can tell
+    # what it already did from what it has yet to do.
+    forum_synced_at = db.Column(db.DateTime, nullable=True)
     post_count = db.Column(db.Integer, nullable=True)
     joined_on = db.Column(db.Date, nullable=True)
     last_posted_on = db.Column(db.Date, nullable=True)

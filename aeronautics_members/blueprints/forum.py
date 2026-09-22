@@ -60,6 +60,7 @@ from pathlib import (
 )
 from ..db_models import (
     ForumAvatarSubmission,
+    ImportedForumProfile,
     User,
     db,
 )
@@ -237,6 +238,33 @@ def forum_avatar_public_file(token):
         abort(404)
 
     return send_file(storage_path, mimetype=submission.content_type or "application/octet-stream", conditional=True)
+
+
+@forum_bp.route("/forum/avatar/imported/<token>", methods=["GET"])
+def forum_imported_avatar_public_file(token):
+    """Serves an imported person's old avatar to the forum.
+
+    Public because Discourse fetches the image itself, from its own server and
+    without any of our cookies, so the admin-only route these files are
+    otherwise served through would hand it a login page.
+
+    Guarded by an unguessable token rather than by the filename: the staging
+    directory also holds avatars waiting for admin review, and a public route
+    that took a path would make those reachable by guessing. A token is minted
+    only for profiles actually being published.
+    """
+    profile = db.session.execute(
+        db.select(ImportedForumProfile).where(
+            ImportedForumProfile.avatar_public_token == token
+        )
+    ).scalar_one_or_none()
+    if profile is None or not profile.avatar_path:
+        abort(404)
+
+    path = Path(profile.avatar_path)
+    if not path.exists():
+        abort(404)
+    return send_file(path, conditional=True)
 
 
 @forum_bp.route("/forum/discourse/connect", methods=["GET"])
