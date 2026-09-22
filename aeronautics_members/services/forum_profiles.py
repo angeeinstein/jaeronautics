@@ -169,6 +169,22 @@ def publish_imported_profiles(
 
         try:
             provider.sync_imported_profile(payload)
+            if avatar_url:
+                # Sent again, because Discourse does not take the avatar on the
+                # call that creates the account. Verified on the real forum: a
+                # profile created in one call shows a letter, and the identical
+                # payload sent a second time puts the photograph on it -- the
+                # account exists by then, so the second call is an update.
+                #
+                # Unconditional rather than only on creation: the sync endpoint
+                # does not say whether it made the account or found it, and an
+                # extra call for somebody who already has their picture costs
+                # far less than a register of seven hundred blank faces.
+                provider.sync_imported_profile(
+                    build_profile_payload(
+                        profile, avatar_url=avatar_url, year_group_field=year_group_field
+                    )
+                )
         except ForumProviderError as exc:
             # One unhappy profile out of 740 must not end the run; the rest are
             # still worth publishing and this one is named so it can be retried.

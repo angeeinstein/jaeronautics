@@ -400,3 +400,57 @@ class TestTheTokenItself:
         token = profile.avatar_public_token
         assert not token.startswith("-")
         assert token.isalnum(), "no characters that a shell or a URL parser argues about"
+
+
+class TestTheAvatarNeedsASecondCall:
+    """Discourse ignores avatar_url on the call that creates the account.
+
+    Found on the real forum: twenty profiles published in one pass all showed
+    letter avatars, and the one re-sent afterwards came back with its
+    photograph. The account has to exist before the picture will stick.
+    """
+
+    def test_somebody_with_an_avatar_is_sent_twice(self, app, tmp_path):
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert len(provider.sent) == 2, "create, then update to carry the avatar"
+        assert provider.sent[0]["username"] == provider.sent[1]["username"]
+        assert all(payload.get("avatar_url") for payload in provider.sent)
+
+    def test_somebody_without_one_is_sent_once(self, app):
+        """Sixty-three of them have no picture; a second call would buy nothing."""
+        _imported()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert len(provider.sent) == 1
+
+    def test_the_second_call_carries_a_fresh_nonce(self, app, tmp_path):
+        """A nonce is meant to be used once, even where it is not checked."""
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert provider.sent[0]["nonce"] != provider.sent[1]["nonce"]
+
+    def test_a_rehearsal_still_sends_neither(self, app, tmp_path):
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider, dry_run=True)
+
+        assert provider.sent == []
