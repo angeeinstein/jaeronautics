@@ -237,6 +237,45 @@ the username never changes, the field does. **The exported field always wins.**
 There were 20 of these. A run that suddenly reports hundreds means the export
 lined up the wrong column, and is worth stopping for.
 
+## 4a. Looking at a few people in full
+
+The counts say the import ran. They do not say it did the right thing to any
+particular person, and 740 rows is far too many to read. `--sample N` prints N
+people in full, spread evenly across the export rather than taken from the
+front — the file is ordered by the old forum's user id, so the first rows are
+all from 2014 and would say nothing about the recent cohorts. The same people
+come up on the rehearsal and on the real run, so the two can be compared.
+
+```
+$ ... import-forum-people people.json --dry-run --sample 3 --avatar-dir ./avatars
+
+738 of 740 can reclaim their account from their university address alone.
+       2  2 accounts share this address
+    These need linking by hand if they come back.
+
+A sample of 3, spread across the import:
+  HoferT_M13  (create)
+      year group : MAV13 (from the username)
+      address    : Thomas.Hofer@edu.fh-joanneum.at
+      avatar     : yes
+      posts      : 85    old group: Banned
+      can reclaim: yes
+  LuisH_M21  (create)
+      year group : MAV21 (from the export)
+      address    : luis.hernaezmarroquin@edu.fh-joanneum.at
+      avatar     : problem: avatar file not found: avatar_542.jpg
+      ...
+```
+
+The line about reclaiming is printed whether or not a sample was asked for, and
+is the one worth reading. Everybody it counts as *not* able to reclaim is
+somebody who will write in during the first week of term and have to be linked
+up by hand — better known now than then. Two people share one address, which
+claiming deliberately refuses to guess between; see [the claim rules](#6-returning-students-reclaim-their-old-account).
+
+Note that a sample names real students and prints their university addresses.
+It goes to the terminal on purpose and is never written to a log.
+
 ## 4b. Running the import
 
 On a deployed server this runs as the application user, out of the virtualenv —

@@ -607,3 +607,97 @@ class TestPointingAtTheAvatars:
 
         assert result.exit_code == 0, result.output
         assert "avatars=1" in result.output
+
+
+class TestTheReviewReport:
+    """One row per person, so the rehearsal can be read rather than trusted.
+
+    The counts say the import ran. They do not say it did the right thing to
+    any particular person, and 740 rows is far too many to check by eye -- so
+    the report carries enough per person to spot a rule misfiring from a
+    handful of them.
+    """
+
+    def test_every_person_gets_a_row(self, app):
+        report = import_forum_people(
+            [_person(uid="1", username="A_L23"), _person(uid="2", username="B_L24")],
+            dry_run=True,
+        )
+
+        assert len(report["people"]) == 2
+        assert {row["source_username"] for row in report["people"]} == {"A_L23", "B_L24"}
+
+    def test_a_row_says_what_would_happen_to_them(self, app):
+        first = import_forum_people([_person()], dry_run=False)
+        db.session.commit()
+        second = import_forum_people([_person()], dry_run=True)
+
+        assert first["people"][0]["action"] == "create"
+        assert second["people"][0]["action"] == "update", "the same person, seen again"
+
+    def test_it_says_where_the_year_group_came_from(self, app):
+        """A derived one is a guess from a name; an exported one is recorded fact."""
+        report = import_forum_people(
+            [
+                _person(uid="1", username="A_L23", year_group="LAV23"),
+                _person(uid="2", username="B_L19", year_group=None),
+            ],
+            dry_run=True,
+        )
+        rows = {row["source_username"]: row for row in report["people"]}
+
+        assert rows["A_L23"]["year_group_from"] == "export"
+        assert rows["B_L19"]["year_group_from"] == "username"
+        assert rows["B_L19"]["year_group"] == "LAV19"
+
+
+class TestWhoCanGetTheirAccountBack:
+    """Knowing in advance who the automatic path cannot help.
+
+    Everyone it cannot help is somebody who writes in during the first week of
+    term and has to be linked up by hand. That is a number worth seeing while
+    there is still time to do something about it, not in October.
+    """
+
+    def test_an_ordinary_person_can(self, app):
+        report = import_forum_people([_person()], dry_run=True)
+
+        assert report["people"][0]["can_reclaim"] == "yes"
+        assert report["people"][0]["note"] == ""
+
+    def test_two_accounts_on_one_address_cannot(self, app):
+        """Claiming refuses a shared address rather than guessing between them."""
+        shared = "shared@edu.fh-joanneum.at"
+        report = import_forum_people(
+            [
+                _person(uid="1", username="A_L23", source_email=shared),
+                _person(uid="2", username="B_L19", source_email=shared),
+            ],
+            dry_run=True,
+        )
+
+        assert [row["can_reclaim"] for row in report["people"]] == ["no", "no"]
+        assert "2 accounts share this address" in report["people"][0]["note"]
+
+    def test_somebody_with_no_address_cannot(self, app):
+        report = import_forum_people(
+            [_person(source_email="")], dry_run=True
+        )
+
+        assert report["people"][0]["can_reclaim"] == "no"
+        assert "no address" in report["people"][0]["note"]
+
+    def test_the_outlook_is_worked_out_before_anything_is_written(self, app):
+        """A dry run has to report exactly what the real run will do."""
+        shared = "shared@edu.fh-joanneum.at"
+        people = [
+            _person(uid="1", username="A_L23", source_email=shared),
+            _person(uid="2", username="B_L19", source_email=shared),
+        ]
+
+        rehearsal = import_forum_people(people, dry_run=True)
+        real = import_forum_people(people, dry_run=False)
+        db.session.commit()
+
+        assert [row["can_reclaim"] for row in rehearsal["people"]] \
+            == [row["can_reclaim"] for row in real["people"]]

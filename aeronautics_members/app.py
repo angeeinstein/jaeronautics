@@ -1626,8 +1626,11 @@ def create_app(config_overrides=None):
                   help="Report what would happen and write nothing.")
     @click.option("--year-groups", is_flag=True,
                   help="List every year group found, and everyone left without one.")
+    @click.option("--sample", type=int, default=0, metavar="N",
+                  help="Show N people in full, spread across the import, to check "
+                       "the result looks right before running it for real.")
     @with_appcontext
-    def import_forum_people_command(export_file, avatar_dir, dry_run, year_groups):
+    def import_forum_people_command(export_file, avatar_dir, dry_run, year_groups, sample):
         """Imports people from the old forum's export. See docs/forum-import.md.
 
         Safe to run more than once: people are matched on the old forum's own
@@ -1665,6 +1668,10 @@ def create_app(config_overrides=None):
                 f"{len(report['year_group_counts'])} distinct year groups; "
                 f"{unplaced} people without one. Re-run with --year-groups to list them."
             )
+
+        _echo_reclaim_outlook(report)
+        if sample:
+            _echo_sample(report, sample)
 
         for problem in report["problems"]:
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
@@ -1719,6 +1726,64 @@ def create_app(config_overrides=None):
                 f"{avatar_dir} is empty. Point --avatar-dir at the directory that "
                 f"holds the avatar files themselves."
             )
+
+    def _echo_reclaim_outlook(report):
+        """How many can get their old account back without asking anybody.
+
+        Worth knowing before the import rather than in October: everyone in the
+        second number is somebody who will have to be linked up by hand, and
+        that is a size worth seeing while there is still time to do something
+        about it.
+        """
+        people = report.get("people") or []
+        if not people:
+            return
+        blocked = [person for person in people if person["can_reclaim"] != "yes"]
+        click.echo(
+            f"{len(people) - len(blocked)} of {len(people)} can reclaim their account "
+            f"from their university address alone."
+        )
+        if not blocked:
+            return
+        reasons = {}
+        for person in blocked:
+            reasons[person["note"]] = reasons.get(person["note"], 0) + 1
+        for reason, count in sorted(reasons.items(), key=lambda item: -item[1]):
+            click.echo(f"    {count:4}  {reason}")
+        click.echo("    These need linking by hand if they come back.")
+
+    def _echo_sample(report, wanted):
+        """A few people in full, spread across the import.
+
+        Spread rather than random, and rather than the first N: the export is
+        ordered by the old forum's user id, so the first rows are all from 2014
+        and would show nothing about how the recent cohorts turn out. Spreading
+        it also makes the rehearsal and the real run show the same people, which
+        is what makes them comparable.
+        """
+        people = report.get("people") or []
+        if not people:
+            return
+        wanted = max(1, min(wanted, len(people)))
+        step = len(people) / wanted
+        chosen = [people[int(index * step)] for index in range(wanted)]
+
+        click.echo(f"\nA sample of {len(chosen)}, spread across the import:")
+        for person in chosen:
+            year_group = person["year_group"] or "-"
+            if person["year_group"] and person["year_group_from"]:
+                year_group += f" (from the {person['year_group_from']})"
+            reclaim = person["can_reclaim"]
+            if person["note"]:
+                reclaim += f"  -- {person['note']}"
+
+            click.echo(f"  {person['source_username']}  ({person['action'] or 'no change'})")
+            click.echo(f"      year group : {year_group}")
+            click.echo(f"      address    : {person['source_email'] or '-'}")
+            click.echo(f"      avatar     : {person['avatar']}")
+            click.echo(f"      posts      : {person['post_count']}"
+                       f"    old group: {person['source_group'] or '-'}")
+            click.echo(f"      can reclaim: {reclaim}")
 
     def _echo_year_groups(report):
         """The year groups as a table, then everyone the rules could not place.

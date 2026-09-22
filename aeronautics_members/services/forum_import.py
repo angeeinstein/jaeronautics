@@ -378,15 +378,58 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
         # hand, which is the point of listing them rather than counting them.
         "unknown_year_group": [],
         "problems": [],
+        # One row per person, for review before the real run. Counts tell you
+        # the import worked; this tells you it did the right thing.
+        "people": [],
     }
     now = get_now_utc()
 
+    # Who will be able to get their old account back on their own, worked out
+    # before anything is written.
+    #
+    # Reclaiming matches on the address the old forum held, and deliberately
+    # refuses when two accounts share one -- so the people this cannot help are
+    # knowable in advance rather than in October, one confused email at a time.
+    address_counts = {}
+    for entry in people:
+        address = (entry.get("source_email") or "").strip().lower()
+        if address:
+            address_counts[address] = address_counts.get(address, 0) + 1
+
+    def _claim_outlook(entry):
+        address = (entry.get("source_email") or "").strip().lower()
+        if not address:
+            return "no", "the old forum holds no address for them"
+        if address.endswith(f"@{IMPORTED_EMAIL_DOMAIN}"):
+            return "no", "placeholder address"
+        if address_counts.get(address, 0) > 1:
+            return "no", f"{address_counts[address]} accounts share this address"
+        return "yes", ""
+
     for entry in people:
         report["seen"] += 1
+        claim_outlook, claim_reason = _claim_outlook(entry)
+        record = {
+            "source_user_id": str(entry.get("source_user_id") or "").strip(),
+            "source_username": (entry.get("source_username") or "").strip(),
+            "source_email": (entry.get("source_email") or "").strip(),
+            "year_group": "",
+            "year_group_from": "",
+            "source_group": (entry.get("source_group") or "").strip(),
+            "post_count": entry.get("post_count") or 0,
+            "avatar": "none",
+            "action": "",
+            "can_reclaim": claim_outlook,
+            "note": claim_reason,
+        }
+        report["people"].append(record)
         source_user_id = str(entry.get("source_user_id") or "").strip()
         source_username = (entry.get("source_username") or "").strip()
         if not source_user_id or not source_username:
             report["skipped"] += 1
+            record["action"] = "skip"
+            record["note"] = "missing source_user_id or source_username"
+            record["can_reclaim"] = "no"
             report["problems"].append(f"entry {report['seen']}: missing source_user_id or source_username")
             continue
 
@@ -410,6 +453,13 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
             from_username = derive_year_group(source_username)
             if from_username and from_username.upper() != year_group.upper():
                 report["year_groups_disagreeing"] += 1
+
+        record["year_group"] = year_group or ""
+        record["year_group_from"] = (
+            "" if not year_group
+            else "export" if (entry.get("year_group") or "").strip()
+            else "username"
+        )
 
         if year_group:
             report["year_group_counts"][year_group] = (
@@ -436,6 +486,8 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
             ).scalar_one_or_none()
             if clash is not None:
                 report["skipped"] += 1
+                record["action"] = "skip"
+                record["note"] = f"forum username already belongs to account {clash.id}"
                 report["problems"].append(
                     f"{source_username}: forum username already belongs to account "
                     f"{clash.id}; link them by hand if this is the same person"
@@ -458,8 +510,10 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
             )
             db.session.add(profile)
             report["created"] += 1
+            record["action"] = "create"
         else:
             report["updated"] += 1
+            record["action"] = "update"
 
         profile.source_username = source_username
         profile.source_email = (entry.get("source_email") or "").strip() or None
@@ -478,13 +532,17 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
                 profile.user_id, avatar_dir, avatar_file, dry_run=dry_run
             )
             if problem:
+                record["avatar"] = f"problem: {problem}"
                 report["problems"].append(f"{source_username}: {problem}")
             else:
                 # Counted either way, so the rehearsal reports the same number
                 # the real run will store.
                 report["avatars_stored"] += 1
+                record["avatar"] = "yes"
                 if stored:
                     profile.avatar_path = stored
+        elif profile.avatar_path:
+            record["avatar"] = "already stored"
 
     if dry_run:
         db.session.rollback()
