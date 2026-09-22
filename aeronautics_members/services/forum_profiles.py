@@ -90,6 +90,11 @@ def build_profile_payload(profile, avatar_url=None, year_group_field=None):
         groups.append(cohort_group)
 
     payload = {
+        # Carried for parity with the member sync, which is the path known to
+        # work. The admin sync endpoint does not check it, but there is no
+        # reason for this payload to differ from that one in any way that is
+        # not deliberate.
+        "nonce": f"import-{profile.user_id}-{secrets.token_hex(8)}",
         "external_id": str(profile.user_id),
         "email": profile.user.email,
         "username": profile.source_username,
