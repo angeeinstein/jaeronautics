@@ -429,7 +429,12 @@ parse_args() {
                 exit 0
                 ;;
             *)
-                die "Unknown argument: $1"
+                # A mistyped argument is a usage error, not a failed install:
+                # going through die() here tripped the ERR trap and buried the
+                # one line that matters under a page of service diagnostics.
+                error "Unknown argument: $1"
+                usage >&2
+                exit 2
                 ;;
         esac
     done
