@@ -74,6 +74,22 @@ PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
 USE_LOCAL_DB="1"
 
+# Set when the database is moving and the data is to follow it. The SOURCE_
+# values are the configuration as it was before this run, captured before the
+# prompts overwrite it, because by the time the new values are known the old
+# ones are the only way back to the data.
+MIGRATE_DB_DATA="0"
+MIGRATION_DUMP_FILE=""
+MIGRATION_SOURCE_COUNTS=""
+MIGRATION_OVERWRITE_DEST="0"
+MIGRATION_TEMP_FILES=()
+DB_CONN_ARGS=()
+SOURCE_DB_HOST=""
+SOURCE_DB_PORT=""
+SOURCE_DB_NAME=""
+SOURCE_DB_USER=""
+SOURCE_DB_PASSWORD=""
+
 if [[ -t 1 ]]; then
     COLOR_RED=$'\033[0;31m'
     COLOR_GREEN=$'\033[0;32m'
@@ -211,6 +227,9 @@ on_error() {
     exit "$(( failed_status == 0 ? 1 : failed_status ))"
 }
 trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
+# The database credential files live only as long as the run that needs them,
+# however that run ends.
+trap 'cleanup_migration_temp_files' EXIT
 
 usage() {
     cat <<'EOF'
@@ -529,10 +548,13 @@ bootstrap_packages() {
 base_packages() {
     case "${PACKAGE_MANAGER}" in
         apt)
-            printf '%s\n' ca-certificates curl git nginx mariadb-client mariadb-server openssl python3 python3-pip python3-venv redis-server
+            # mariadb-client always: the data has to be readable whether the
+            # database is on this box or elsewhere. mariadb-server only once
+            # the local/external answer is known, from install_or_update.
+            printf '%s\n' ca-certificates curl git nginx mariadb-client openssl python3 python3-pip python3-venv redis-server
             ;;
         dnf|yum)
-            printf '%s\n' ca-certificates curl git nginx mariadb-server openssl python3 python3-pip redis
+            printf '%s\n' ca-certificates curl git nginx mariadb openssl python3 python3-pip redis
             ;;
     esac
 }
@@ -896,7 +918,10 @@ choose_existing_install_action() {
             1) MODE="update"; return ;;
             2) MODE="repair"; return ;;
             3) MODE="uninstall"; return ;;
-            4) die "Cancelled." ;;
+            # Not a failure: going through die() here tripped the ERR trap, so
+            # choosing "cancel" printed "Installer failed", a stack line and a
+            # page of diagnostics for what was a deliberate answer.
+            4) info "Cancelled."; exit 0 ;;
             *) warn "Please choose 1, 2, 3, or 4." ;;
         esac
     done
@@ -964,13 +989,19 @@ backup_runtime_state() {
         cp -a "${NGINX_CONF_PATH}" "${BACKUP_DIR}/${APP_NAME}-nginx-${backup_stamp}.conf"
     fi
 
-    if [[ "${USE_LOCAL_DB:-1}" == "1" && ( "${DB_HOST:-127.0.0.1}" == "127.0.0.1" || "${DB_HOST:-localhost}" == "localhost" ) && -n "${DB_NAME:-}" ]]; then
+    # Whether the database is on this box or elsewhere. The guard here used to
+    # require a local one, which meant the installations most in need of a
+    # backup -- the ones whose database this script cannot snapshot along with
+    # the filesystem -- were the ones silently running without it.
+    if [[ -n "${DB_NAME:-}" ]]; then
         # This dump is the only way back from a migration, because a rollback
         # restores code and deliberately leaves the schema alone. Failing to take
         # it is therefore a reason to stop, not a warning to scroll past.
         if dump_client="$(db_dump_client 2>/dev/null)"; then
             dump_file="${BACKUP_DIR}/${APP_NAME}-db-${backup_stamp}.sql.gz"
-            if "${dump_client}" --protocol=socket -u root --single-transaction --quick --skip-lock-tables "${DB_NAME}" | gzip -c > "${dump_file}"; then
+            set_db_conn_args "${DB_HOST:-127.0.0.1}" "${DB_PORT:-3306}" "${DB_USER:-}" "${DB_PASSWORD:-}"
+            if "${dump_client}" "${DB_CONN_ARGS[@]}" --single-transaction --quick \
+               --skip-lock-tables --default-character-set=utf8mb4 "${DB_NAME}" | gzip -c > "${dump_file}"; then
                 info "Backed up MariaDB database to ${dump_file}"
                 LAST_DB_BACKUP_FILE="${dump_file}"
             else
@@ -1373,6 +1404,15 @@ collect_configuration() {
         CLOUDFLARE_ORIGIN_HOST=""
     fi
 
+    # Snapshot the database this installation is using right now, before the
+    # prompts below overwrite it. If the answers move the database, these are
+    # the only remaining directions to where the data actually lives.
+    SOURCE_DB_HOST="${DB_HOST:-}"
+    SOURCE_DB_PORT="${DB_PORT:-3306}"
+    SOURCE_DB_NAME="${DB_NAME:-}"
+    SOURCE_DB_USER="${DB_USER:-}"
+    SOURCE_DB_PASSWORD="${DB_PASSWORD:-}"
+
     if [[ "${reconfigure_all}" == "1" || -z "${DB_HOST:-}" ]]; then
         prompt_yes_no USE_LOCAL_DB "Use a locally managed MariaDB database?" "${USE_LOCAL_DB}"
     fi
@@ -1393,6 +1433,9 @@ collect_configuration() {
         if [[ "${reconfigure_all}" == "1" || -z "${DB_HOST:-}" ]]; then
             prompt_value DB_HOST "Database host" "${DB_HOST:-}" 0 1
         fi
+        if [[ "${reconfigure_all}" == "1" || -z "${DB_PORT:-}" ]]; then
+            prompt_value DB_PORT "Database port" "${DB_PORT:-3306}" 0 1
+        fi
         if [[ "${reconfigure_all}" == "1" || -z "${DB_NAME:-}" ]]; then
             prompt_value DB_NAME "Database name" "${DB_NAME}" 0 1
         fi
@@ -1403,6 +1446,8 @@ collect_configuration() {
             prompt_value DB_PASSWORD "Database password" "${DB_PASSWORD:-}" 1 1
         fi
     fi
+
+    offer_database_migration
 
     if is_placeholder "${STRIPE_SECRET_KEY:-}"; then
         STRIPE_SECRET_KEY=""
@@ -1524,6 +1569,221 @@ ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${password_sql}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;"
+}
+
+# ---------------------------------------------------------------------------
+# Carrying the data across when the database moves
+#
+# Switching between a locally managed MariaDB and an external server is a
+# configuration change, but the data does not follow by itself -- so without
+# this the app comes back up against an empty database and looks, convincingly,
+# like every member has vanished. The move works in both directions: out to a
+# managed server when this outgrows one box, and back in when a single box is
+# easier to snapshot.
+#
+# The ordering is the safety property. The dump is taken and verified while the
+# old configuration is still the live one, so anything that fails leaves a
+# working installation pointed at the database that still holds the data.
+# ---------------------------------------------------------------------------
+
+# Has the database actually moved, and if so, does the data follow?
+#
+# Only asked when there was a database before and it is not the one now
+# configured -- on a first install there is nothing to carry, and answering a
+# question about moving data that does not exist yet is just confusing.
+offer_database_migration() {
+    MIGRATE_DB_DATA="0"
+
+    [[ -n "${SOURCE_DB_HOST}" && -n "${SOURCE_DB_NAME}" ]] || return 0
+    if [[ "${SOURCE_DB_HOST}" == "${DB_HOST}" && "${SOURCE_DB_NAME}" == "${DB_NAME}" \
+          && "${SOURCE_DB_PORT}" == "${DB_PORT}" ]]; then
+        return 0
+    fi
+
+    local moving_to="an external server at ${DB_HOST}"
+    db_host_is_local "${DB_HOST}" && moving_to="a locally managed MariaDB"
+
+    tty_print "\n${COLOR_BOLD}The database is moving.${COLOR_RESET}\n"
+    tty_print "  from  ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST}\n"
+    tty_print "  to    ${DB_NAME} on ${moving_to}\n"
+    tty_print "Without copying the data across, the site comes back up empty.\n"
+    prompt_yes_no MIGRATE_DB_DATA "Copy the existing data to the new database?" "1"
+
+    if [[ "${MIGRATE_DB_DATA}" != "1" ]]; then
+        warn "Starting with an empty database. The old one at ${SOURCE_DB_HOST} is left as it is."
+    fi
+}
+
+db_host_is_local() {
+    case "${1:-}" in
+        ""|127.0.0.1|localhost|::1) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Connection arguments for a database, returned in DB_CONN_ARGS.
+#
+# A password is never passed as an argument: ps(1) shows every argument of every
+# process to every user on the box, so it goes into a 0600 defaults file that is
+# removed when the installer exits. --defaults-extra-file has to come first or
+# the client ignores it.
+set_db_conn_args() {
+    local host="$1" port="$2" user="$3" password="$4"
+    DB_CONN_ARGS=()
+
+    if db_host_is_local "${host}"; then
+        # The local server is administered over the unix socket as root, the
+        # same way ensure_database provisions it.
+        DB_CONN_ARGS=(--protocol=socket -u root)
+        return
+    fi
+
+    local creds
+    creds="$(mktemp "${TMPDIR:-/tmp}/jaeronautics-db.XXXXXX.cnf")"
+    chmod 600 "${creds}"
+    printf '[client]\nuser=%s\npassword=%s\n' "${user}" "${password}" > "${creds}"
+    MIGRATION_TEMP_FILES+=("${creds}")
+    DB_CONN_ARGS=(--defaults-extra-file="${creds}" -h "${host}" -P "${port:-3306}" --protocol=TCP)
+}
+
+cleanup_migration_temp_files() {
+    local file=""
+    for file in "${MIGRATION_TEMP_FILES[@]:-}"; do
+        [[ -n "${file}" ]] && rm -f "${file}"
+    done
+    MIGRATION_TEMP_FILES=()
+}
+
+# table<TAB>rowcount for every base table, which is what the import is checked
+# against. Comparing row counts rather than just "did mysql exit 0" is the
+# difference between knowing the data arrived and hoping it did.
+db_table_row_counts() {
+    local database="$1"
+    local client table
+    client="$(db_client)"
+    while IFS= read -r table; do
+        [[ -z "${table}" ]] && continue
+        printf '%s\t%s\n' "${table}" "$("${client}" "${DB_CONN_ARGS[@]}" -N -B \
+            -e "SELECT COUNT(*) FROM \`${database}\`.\`${table}\`" 2>/dev/null || printf 'ERR')"
+    done < <("${client}" "${DB_CONN_ARGS[@]}" -N -B -e "
+        SELECT table_name FROM information_schema.tables
+         WHERE table_schema = '$(sql_escape "${database}")'
+           AND table_type = 'BASE TABLE'
+         ORDER BY table_name" 2>/dev/null)
+}
+
+# A dump that was cut off part way -- a full disk, a dropped connection, a
+# server that went away -- looks exactly like a good one until you restore it.
+# mysqldump writes its trailer last, so the trailer is the proof it finished.
+verify_sql_dump() {
+    local file="$1"
+    local tables=0
+
+    [[ -s "${file}" ]] || { error "The dump file is empty or missing: ${file}"; return 1; }
+    if ! tail -5 "${file}" | grep -q "Dump completed"; then
+        error "The dump has no completion marker, so it was cut short: ${file}"
+        return 1
+    fi
+    tables="$(grep -c "^CREATE TABLE" "${file}" || true)"
+    if [[ "${tables}" -lt 1 ]]; then
+        error "The dump contains no tables, so it is not a usable copy: ${file}"
+        return 1
+    fi
+    info "Dump verified: ${tables} tables, $(du -h "${file}" | cut -f1)."
+    return 0
+}
+
+dump_source_database() {
+    step "Copying the existing data out of ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST}"
+
+    local dump_client
+    dump_client="$(db_dump_client)" || die "Neither mariadb-dump nor mysqldump is installed, so the data cannot be carried across."
+
+    mkdir -p "${BACKUP_DIR}"
+    MIGRATION_DUMP_FILE="${BACKUP_DIR}/${APP_NAME}-migration-$(date +%Y%m%d%H%M%S).sql"
+
+    set_db_conn_args "${SOURCE_DB_HOST}" "${SOURCE_DB_PORT}" "${SOURCE_DB_USER}" "${SOURCE_DB_PASSWORD}"
+    MIGRATION_SOURCE_COUNTS="$(db_table_row_counts "${SOURCE_DB_NAME}")"
+    if [[ -z "${MIGRATION_SOURCE_COUNTS}" ]]; then
+        die "Could not read ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST}. Check the host, user and password before retrying; nothing has been changed."
+    fi
+
+    # --single-transaction so the other databases on a shared server keep
+    # working; --routines and --triggers because a schema is not only tables.
+    if ! "${dump_client}" "${DB_CONN_ARGS[@]}" --single-transaction --quick \
+         --skip-lock-tables --routines --triggers --default-character-set=utf8mb4 \
+         "${SOURCE_DB_NAME}" > "${MIGRATION_DUMP_FILE}" 2>"${MIGRATION_DUMP_FILE}.err"; then
+        error "Reading the existing database failed:"
+        sed 's/^/    /' "${MIGRATION_DUMP_FILE}.err" >&2 || true
+        rm -f "${MIGRATION_DUMP_FILE}" "${MIGRATION_DUMP_FILE}.err"
+        die "Nothing has been changed; the installation still points at ${SOURCE_DB_HOST}."
+    fi
+    rm -f "${MIGRATION_DUMP_FILE}.err"
+    chmod 600 "${MIGRATION_DUMP_FILE}"
+
+    verify_sql_dump "${MIGRATION_DUMP_FILE}" \
+        || die "Nothing has been changed; the installation still points at ${SOURCE_DB_HOST}."
+    success "Saved a verified copy to ${MIGRATION_DUMP_FILE}"
+}
+
+import_migrated_database() {
+    step "Loading the data into ${DB_NAME} on ${DB_HOST}"
+
+    local client
+    client="$(db_client)"
+    set_db_conn_args "${DB_HOST}" "${DB_PORT}" "${DB_USER}" "${DB_PASSWORD}"
+
+    # An external destination is not created by this installer, so it has to
+    # exist already -- and it has to be empty, or loading into it would write
+    # over whatever is there.
+    if ! db_host_is_local "${DB_HOST}"; then
+        # Reachability and emptiness are separate questions. An empty
+        # destination is the normal case for a move onto a managed server, and
+        # reading "no tables" as "no database" would refuse every one of them.
+        if ! "${client}" "${DB_CONN_ARGS[@]}" "${DB_NAME}" -N -B -e "SELECT 1" >/dev/null 2>&1; then
+            die "Cannot reach database ${DB_NAME} on ${DB_HOST} as ${DB_USER}. Create it (CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci), grant access, and check the host, port and password. Nothing has been changed."
+        fi
+        local existing table_count
+        existing="$(db_table_row_counts "${DB_NAME}")"
+        table_count="$(printf '%s' "${existing}" | grep -c . || true)"
+        if [[ "${table_count}" -gt 0 && "${MIGRATION_OVERWRITE_DEST}" != "1" ]]; then
+            warn "${DB_NAME} on ${DB_HOST} already contains ${table_count} tables."
+            prompt_yes_no MIGRATION_OVERWRITE_DEST "Overwrite what is already in ${DB_NAME} on ${DB_HOST}?" "0"
+            [[ "${MIGRATION_OVERWRITE_DEST}" == "1" ]] \
+                || die "Left the destination alone. The copied data is at ${MIGRATION_DUMP_FILE}; nothing else has been changed."
+        fi
+    fi
+
+    if ! "${client}" "${DB_CONN_ARGS[@]}" --default-character-set=utf8mb4 \
+         "${DB_NAME}" < "${MIGRATION_DUMP_FILE}" 2>"${MIGRATION_DUMP_FILE}.err"; then
+        error "Loading the data failed:"
+        sed 's/^/    /' "${MIGRATION_DUMP_FILE}.err" >&2 || true
+        rm -f "${MIGRATION_DUMP_FILE}.err"
+        die "The copy is still at ${MIGRATION_DUMP_FILE} and ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST} is untouched, so nothing has been lost."
+    fi
+    rm -f "${MIGRATION_DUMP_FILE}.err"
+
+    verify_migrated_database
+}
+
+# Every table, every row count, both sides. Anything less can miss a table that
+# failed to load, and a member list that is quietly short by one is worse than
+# one that is obviously empty.
+verify_migrated_database() {
+    local destination_counts differences
+    set_db_conn_args "${DB_HOST}" "${DB_PORT}" "${DB_USER}" "${DB_PASSWORD}"
+    destination_counts="$(db_table_row_counts "${DB_NAME}")"
+
+    differences="$(diff <(printf '%s\n' "${MIGRATION_SOURCE_COUNTS}") \
+                        <(printf '%s\n' "${destination_counts}") || true)"
+    if [[ -n "${differences}" ]]; then
+        error "What arrived does not match what was read. Differences (< source, > destination):"
+        printf '%s\n' "${differences}" | sed 's/^/    /' >&2
+        die "The copy is still at ${MIGRATION_DUMP_FILE} and ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST} is untouched. Put ${ENV_FILE} back to the old database, or investigate, before using this installation."
+    fi
+
+    success "Verified: $(printf '%s' "${destination_counts}" | grep -c .) tables, row counts identical on both sides."
+    info "The old database at ${SOURCE_DB_HOST} has not been touched. Keep it until you are satisfied, then remove it yourself."
 }
 
 initialize_database_schema() {
@@ -2479,15 +2739,29 @@ install_or_update() {
     collect_configuration
 
     if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        # Deferred until the answer is known: an installation pointed at an
+        # external server has no use for a local database daemon.
+        install_packages mariadb-server
         detect_db_service_name
         ensure_systemd_service "${DB_SERVICE_NAME}"
     else
         DB_SERVICE_NAME=""
     fi
 
+    # Before write_env_file on purpose. Everything up to here is reversible by
+    # doing nothing, so a database that cannot be read or a dump that cannot be
+    # verified stops the run with the installation still pointing at the
+    # database that holds the data.
+    if [[ "${MIGRATE_DB_DATA}" == "1" ]]; then
+        dump_source_database
+    fi
+
     write_env_file
     ensure_virtualenv
     ensure_database
+    if [[ "${MIGRATE_DB_DATA}" == "1" ]]; then
+        import_migrated_database
+    fi
     initialize_database_schema
     ensure_admin_account
     render_service_file
