@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import secrets
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
@@ -61,6 +62,12 @@ FORUM_SETTING_DEFAULTS = {
     "forum_avatar_allowed_types": "jpg,jpeg,png,webp",
 }
 FORUM_SETTING_KEYS = tuple(FORUM_SETTING_DEFAULTS.keys())
+
+# How often bulk work waits out a rate limit before giving up on one call.
+# Discourse allows roughly sixty admin calls a minute and publishing the old
+# forum's register is around fourteen hundred, so being told to wait is the
+# normal course of that job rather than a fault.
+BULK_RATE_LIMIT_RETRIES = 10
 
 _ALLOWED_IMAGE_TYPE_TO_EXTENSION = {
     "jpeg": "jpg",
@@ -353,7 +360,15 @@ class DiscourseConnectProvider(ForumProvider):
             "User-Agent": "JoanneumAeronauticsForumSync/1.0 (+https://testmembers.joanneum-aeronautics.at)",
         }
 
-    def _request(self, method, path, data=None, json_body=None):
+    def _request(self, method, path, data=None, json_body=None, rate_limit_retries=0):
+        """One call to Discourse.
+
+        ``rate_limit_retries`` waits out a 429 and tries again, and defaults to
+        off on purpose: every caller on a web request is serving somebody who
+        is waiting, and sleeping fifty seconds inside a page load would be far
+        worse than the error. Only bulk work, run from the command line, asks
+        for it.
+        """
         url = f"{self.settings['forum_base_url'].rstrip('/')}{path}"
         headers = self._api_headers()
         body = None
@@ -379,6 +394,25 @@ class DiscourseConnectProvider(ForumProvider):
                 error_body = exc.read().decode("utf-8")
             except Exception:
                 error_body = str(exc)
+            if exc.code == 429 and rate_limit_retries > 0:
+                # Discourse says how long to wait, so wait that long rather than
+                # guessing. Bulk work runs into this by design: the admin API
+                # allows about sixty calls a minute, and publishing seven
+                # hundred profiles is fourteen hundred of them.
+                wait_seconds = 30
+                try:
+                    wait_seconds = int(
+                        json.loads(error_body)["extras"]["wait_seconds"]
+                    )
+                except Exception:  # noqa: BLE001 -- a 429 without the detail
+                    pass
+                # A second past what it asked for, because the window is
+                # measured on Discourse's clock and not on ours.
+                time.sleep(min(wait_seconds, 120) + 1)
+                return self._request(
+                    method, path, data=data, json_body=json_body,
+                    rate_limit_retries=rate_limit_retries - 1,
+                )
             raise ForumProviderError(f"Discourse API request failed ({exc.code}): {error_body}") from exc
         except URLError as exc:
             raise ForumProviderError(f"Could not reach Discourse: {exc}") from exc
@@ -479,7 +513,8 @@ class DiscourseConnectProvider(ForumProvider):
         """
         encoded, signature = self._sign_sso_payload(payload)
         return self._request(
-            "POST", "/admin/users/sync_sso", data={"sso": encoded, "sig": signature}
+            "POST", "/admin/users/sync_sso", data={"sso": encoded, "sig": signature},
+            rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
         )
 
     def ensure_group(self, name):
@@ -490,7 +525,10 @@ class DiscourseConnectProvider(ForumProvider):
         "the API key cannot do this" are otherwise the same 422.
         """
         try:
-            existing = self._request("GET", f"/groups/{quote(str(name))}.json")
+            existing = self._request(
+                "GET", f"/groups/{quote(str(name))}.json",
+                rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
+            )
         except ForumProviderError:
             # Discourse answers 404 for a group that is not there, which is the
             # ordinary case on a first run and not a failure. A real problem --
@@ -502,6 +540,7 @@ class DiscourseConnectProvider(ForumProvider):
 
         created = self._request(
             "POST", "/admin/groups.json",
+            rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
             json_body={"group": {
                 "name": name,
                 # Visible so people can browse it, and joinable by nobody: it
@@ -532,7 +571,9 @@ class DiscourseConnectProvider(ForumProvider):
         last_error = None
         for path in self.USER_FIELD_PATHS:
             try:
-                response = self._request("GET", path)
+                response = self._request(
+                    "GET", path, rate_limit_retries=BULK_RATE_LIMIT_RETRIES
+                )
             except ForumProviderError as exc:
                 last_error = exc
                 continue
@@ -565,6 +606,7 @@ class DiscourseConnectProvider(ForumProvider):
 
         created = self._request(
             "POST", path,
+            rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
             json_body={"user_field": {
                 "name": name,
                 "description": description or name,

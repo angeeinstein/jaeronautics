@@ -9,6 +9,8 @@ What matters here is mostly what must NOT happen: these are not accounts, they
 must not be named after a placeholder address, and they must not cause 740
 activation emails to a domain that cannot resolve.
 """
+import json
+
 import pytest
 
 from conftest import db
@@ -282,7 +284,7 @@ class TestMakingTheGroups:
         })
         calls = []
 
-        def fake_request(method, path, data=None, json_body=None):
+        def fake_request(method, path, data=None, json_body=None, rate_limit_retries=0):
             calls.append((method, path))
             if method == "GET" and path.startswith("/groups/"):
                 if lookup_fails:
@@ -336,7 +338,7 @@ class TestFindingTheUserFieldEndpoint:
         })
         tried = []
 
-        def fake_request(method, path, data=None, json_body=None):
+        def fake_request(method, path, data=None, json_body=None, rate_limit_retries=0):
             tried.append((method, path))
             if method == "GET":
                 if path == working_path:
@@ -454,3 +456,98 @@ class TestTheAvatarNeedsASecondCall:
         publish_imported_profiles(provider, dry_run=True)
 
         assert provider.sent == []
+
+
+class TestWaitingOutARateLimit:
+    """Discourse allows about sixty admin calls a minute.
+
+    Publishing the register is around fourteen hundred, so the first real run
+    got sixty through and then failed 654 times in a row. Being told to wait is
+    the normal course of this job, not a fault -- and Discourse says exactly
+    how long, so there is nothing to guess.
+    """
+
+    def _provider(self, monkeypatch, fail_times, wait_seconds=44):
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+        from urllib.error import HTTPError
+        import io
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "http://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+        state = {"calls": 0}
+        slept = []
+
+        body = json.dumps({
+            "errors": ["You've performed this action too many times."],
+            "error_type": "rate_limit",
+            "extras": {"wait_seconds": wait_seconds},
+        }).encode()
+
+        def fake_urlopen(request, timeout=None):
+            state["calls"] += 1
+            if state["calls"] <= fail_times:
+                raise HTTPError(
+                    "http://forum.test", 429, "Too Many Requests", {}, io.BytesIO(body)
+                )
+            return io.BytesIO(b'{"ok": true}')
+
+        class _Reader:
+            def __init__(self, stream): self._stream = stream
+            def read(self): return self._stream.read()
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def wrapped(request, timeout=None):
+            result = fake_urlopen(request, timeout=timeout)
+            return _Reader(result)
+
+        monkeypatch.setattr("aeronautics_members.forum_service.urlopen", wrapped)
+        monkeypatch.setattr(
+            "aeronautics_members.forum_service.time.sleep", lambda s: slept.append(s)
+        )
+        return provider, state, slept
+
+    def test_a_bulk_call_waits_the_time_it_was_told_and_retries(self, app, monkeypatch):
+        provider, state, slept = self._provider(monkeypatch, fail_times=2)
+
+        result = provider._request("POST", "/x", rate_limit_retries=5)
+
+        assert result == {"ok": True}
+        assert state["calls"] == 3, "two refusals, then through"
+        assert slept == [45, 45], "the 44 it asked for, plus a second of margin"
+
+    def test_a_web_request_does_not_sleep(self, app, monkeypatch):
+        """Somebody is waiting on the other end of that page load."""
+        from aeronautics_members.forum_service import ForumProviderError
+
+        provider, state, slept = self._provider(monkeypatch, fail_times=1)
+
+        with pytest.raises(ForumProviderError):
+            provider._request("POST", "/x")          # the default: no retries
+
+        assert slept == []
+        assert state["calls"] == 1
+
+    def test_it_gives_up_rather_than_waiting_for_ever(self, app, monkeypatch):
+        from aeronautics_members.forum_service import ForumProviderError
+
+        provider, state, slept = self._provider(monkeypatch, fail_times=99)
+
+        with pytest.raises(ForumProviderError):
+            provider._request("POST", "/x", rate_limit_retries=3)
+
+        assert len(slept) == 3
+
+    def test_an_absurd_wait_is_capped(self, app, monkeypatch):
+        """A misreported window should not park the run for an hour."""
+        provider, _state, slept = self._provider(
+            monkeypatch, fail_times=1, wait_seconds=9999
+        )
+
+        provider._request("POST", "/x", rate_limit_retries=2)
+
+        assert slept == [121]
