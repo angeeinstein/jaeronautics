@@ -311,3 +311,72 @@ class TestMakingTheGroups:
         assert created is False
         assert group["id"] == 7
         assert ("POST", "/admin/groups.json") not in calls
+
+
+class TestFindingTheUserFieldEndpoint:
+    """Discourse has moved this admin route between versions.
+
+    And an admin route answers 404 rather than 403 when the API user is not
+    staff, so one guessed path cannot tell a wrong URL from wrong credentials.
+    Guessing one and dying on it meant a 404 aborted the whole publish before a
+    single profile went across -- which is what happened on the first real run.
+    """
+
+    def _provider(self, monkeypatch, working_path=None):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider,
+            ForumProviderError,
+        )
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "http://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+        tried = []
+
+        def fake_request(method, path, data=None, json_body=None):
+            tried.append((method, path))
+            if method == "GET":
+                if path == working_path:
+                    return {"user_fields": [{"id": 4, "name": "Year group"}]}
+                raise ForumProviderError("Discourse API request failed (404)")
+            return {"user_field": {"id": 9, "name": "Year group"}}
+
+        monkeypatch.setattr(provider, "_request", fake_request)
+        return provider, tried
+
+    @pytest.mark.parametrize("working_path", [
+        "/admin/customize/user_fields.json",
+        "/admin/config/user_fields.json",
+        "/admin/user_fields.json",
+    ])
+    def test_it_finds_whichever_path_this_version_answers_on(
+        self, app, monkeypatch, working_path
+    ):
+        provider, _tried = self._provider(monkeypatch, working_path)
+
+        assert provider.find_user_field("Year group") == "user_field_4"
+
+    def test_it_creates_on_the_path_that_answered(self, app, monkeypatch):
+        """Not on the first candidate, which may be the one that 404s."""
+        provider, tried = self._provider(
+            monkeypatch, "/admin/config/user_fields.json"
+        )
+
+        field, created = provider.ensure_user_field("Something else")
+
+        assert created is True
+        assert ("POST", "/admin/config/user_fields.json") in tried
+
+    def test_when_no_path_works_it_says_what_to_check(self, app, monkeypatch):
+        """404 on every admin route usually means the API user is not staff."""
+        from aeronautics_members.forum_service import ForumProviderError
+
+        provider, _tried = self._provider(monkeypatch, working_path=None)
+
+        with pytest.raises(ForumProviderError) as raised:
+            provider.find_user_field("Year group")
+
+        assert "discourse_api_username" in str(raised.value)

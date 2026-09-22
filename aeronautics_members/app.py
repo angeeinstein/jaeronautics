@@ -1768,20 +1768,31 @@ def create_app(config_overrides=None):
         if provider is None:
             raise click.ClickException("No forum provider is configured.")
 
+        # The profile field is a nicety: it puts the year group on the profile
+        # page. The cohort groups are the mechanism, and they do not depend on
+        # it -- so a forum that will not hand over its user fields is a reason
+        # to say so and carry on, not to publish nobody.
         year_group_field = None
-        if dry_run:
-            # Read-only: says whether the field is there without making one.
-            year_group_field = provider.find_user_field(YEAR_GROUP_FIELD_NAME)
+        try:
+            if dry_run:
+                # Read-only: says whether the field is there without making one.
+                year_group_field = provider.find_user_field(YEAR_GROUP_FIELD_NAME)
+                click.echo(
+                    f"Year group field: {year_group_field or 'not present, would be created'}"
+                )
+            else:
+                year_group_field, created = provider.ensure_user_field(
+                    YEAR_GROUP_FIELD_NAME, "Which year group they studied with."
+                )
+                click.echo(
+                    f"Year group field: {year_group_field}"
+                    f"{' (created)' if created else ''}"
+                )
+        except ForumProviderError as exc:
+            click.echo(click.style(f"Year group field: unavailable -- {exc}", fg="yellow"))
             click.echo(
-                f"Year group field: {year_group_field or 'not present, would be created'}"
-            )
-        else:
-            year_group_field, created = provider.ensure_user_field(
-                YEAR_GROUP_FIELD_NAME, "Which year group they studied with."
-            )
-            click.echo(
-                f"Year group field: {year_group_field}"
-                f"{' (created)' if created else ''}"
+                "Publishing without it. Names, avatars and cohort groups are "
+                "unaffected, and re-running later fills the field in."
             )
 
         report = publish_imported_profiles(

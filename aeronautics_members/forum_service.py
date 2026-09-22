@@ -516,26 +516,55 @@ class DiscourseConnectProvider(ForumProvider):
         group = created.get("basic_group") if isinstance(created, dict) else None
         return group or {}, True
 
+    # Discourse has moved its user-field admin route between versions, and an
+    # admin route also answers 404 -- rather than 403 -- when the API user is
+    # not staff, so a single guessed path cannot tell "wrong URL" from "wrong
+    # credentials". Try the known ones and let the caller decide what a total
+    # failure means.
+    USER_FIELD_PATHS = (
+        "/admin/customize/user_fields.json",
+        "/admin/config/user_fields.json",
+        "/admin/user_fields.json",
+    )
+
+    def _user_fields_path(self):
+        """The path this Discourse answers on, with the fields it returned."""
+        last_error = None
+        for path in self.USER_FIELD_PATHS:
+            try:
+                response = self._request("GET", path)
+            except ForumProviderError as exc:
+                last_error = exc
+                continue
+            if isinstance(response, dict) and "user_fields" in response:
+                return path, response["user_fields"]
+        raise ForumProviderError(
+            "Could not read the custom user fields from any known admin path "
+            f"({', '.join(self.USER_FIELD_PATHS)}). Discourse answers 404 on "
+            "admin routes when the API user is not staff, so check that "
+            f"discourse_api_username is an administrator. Last error: {last_error}"
+        )
+
     def find_user_field(self, name):
         """The id of a custom user field by name, or None.
 
         Returned as ``user_field_N`` because that is how DiscourseConnect names
         it in a payload, which is the only reason this is being looked up.
         """
-        response = self._request("GET", "/admin/customize/user_fields.json")
-        fields = response.get("user_fields") if isinstance(response, dict) else None
+        _path, fields = self._user_fields_path()
         for field in fields or []:
             if str(field.get("name", "")).strip().lower() == name.strip().lower():
                 return f"user_field_{field.get('id')}"
         return None
 
     def ensure_user_field(self, name, description=""):
-        existing = self.find_user_field(name)
-        if existing:
-            return existing, False
+        path, fields = self._user_fields_path()
+        for field in fields or []:
+            if str(field.get("name", "")).strip().lower() == name.strip().lower():
+                return f"user_field_{field.get('id')}", False
 
         created = self._request(
-            "POST", "/admin/customize/user_fields.json",
+            "POST", path,
             json_body={"user_field": {
                 "name": name,
                 "description": description or name,
