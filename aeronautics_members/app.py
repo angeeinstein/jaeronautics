@@ -234,8 +234,10 @@ from .services.forum_profiles import (  # noqa: E402
 )
 from .services.forum_content import (  # noqa: E402
     ContentPoster,
+    check_site_settings,
     dates_survived,
     migrate_thread,
+    plan_site_settings,
 )
 from .services.workflows import (  # noqa: E402
     process_email_delivery_jobs,
@@ -1759,6 +1761,107 @@ def create_app(config_overrides=None):
                 f"holds the avatar files themselves."
             )
 
+    def _load_mybb_dump(dump_file):
+        """The old board's tables, read once, with the prefix resolved."""
+        import sys
+        from pathlib import Path as _Path
+
+        sys.path.insert(0, str(_Path(app.root_path).parent / "scripts"))
+        from mybb_export import find_prefix, find_table, read_dump, rows_of  # noqa: E402
+
+        dump = read_dump(dump_file)
+        # With the prefix, so "users" cannot match mybb_tapatalk_users -- a
+        # plugin table with no uid column, which silently made every post
+        # anonymous rather than failing.
+        prefix, _rejected = find_prefix(dump)
+        return {
+            name: list(rows_of(dump, find_table(dump, name, prefix)))
+            for name in ("posts", "threads", "attachments", "users")
+        }
+
+    def _report_site_settings(rows):
+        """Print the settings check. Returns True when the forum is ready."""
+        blocking = [row for row in rows if row["ok"] is False]
+        unreadable = [row for row in rows if row["ok"] is None]
+
+        click.echo(f"\n{'setting':<30} {'now':<22} {'needs to be':<22} ")
+        for row in rows:
+            mark = {True: "ok", False: "CHANGE", None: "?"}[row["ok"]]
+            needed = row["needed"]
+            if row["compare"] == "at_most":
+                needed = f"{needed} or less"
+            elif row["compare"] == "at_least":
+                needed = f"{needed} or more"
+            elif row["compare"] == "includes":
+                needed = f"also allow {needed}"
+            colour = {True: "green", False: "red", None: "yellow"}[row["ok"]]
+            click.echo(
+                click.style(
+                    f"{row['setting']:<30} {str(row['now'])[:20]:<22} {str(needed)[:20]:<22} {mark}",
+                    fg=colour,
+                )
+            )
+
+        if not blocking and not unreadable:
+            click.echo(click.style("\nThe forum will accept this archive.", fg="green"))
+            return True
+
+        click.echo("")
+        for row in blocking + unreadable:
+            click.echo(f"  {row['setting']}: {row['why']}")
+        click.echo(
+            "\nChange these in Admin -> Settings (the search box takes the name "
+            "verbatim), run the import, then put the 'now' column back. They are "
+            "loosened for the import only: leaving min_post_length at 2 or "
+            "duplicate titles allowed for ever is not what this forum wants."
+        )
+        return False
+
+    @app.cli.command("check-forum-settings")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="Reads DISCOURSE_MIGRATION_API_KEY if not given.")
+    @with_appcontext
+    def check_forum_settings_command(dump_file, api_key):
+        """Will the forum accept the old board? Asks it before anything is posted.
+
+        Discourse's defaults are written for somebody typing into a box today:
+        a title has to be 15 characters, a post 20, and two threads may not
+        share a name. The archive does not look like that -- half its subjects
+        are shorter than 15 characters and ninety-one of them are called
+        "Klausuren" -- so the import would be refused post by post, hours in.
+
+        This measures the archive, asks the forum what it currently allows, and
+        prints what to change. The 'now' column is what to put back afterwards.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        tables = _load_mybb_dump(dump_file)
+        requirements = plan_site_settings(
+            tables["threads"], tables["posts"], tables["attachments"]
+        )
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+
+        total_bytes = sum(int(row.get("filesize") or 0) for row in tables["attachments"])
+        click.echo(
+            f"{len(tables['threads'])} threads, {len(tables['posts'])} posts, "
+            f"{len(tables['attachments'])} attachments "
+            f"({total_bytes / 1024 ** 3:.1f} GB -- the forum needs room for that "
+            f"on top of what it already holds)."
+        )
+        try:
+            rows = check_site_settings(ContentPoster(settings), requirements)
+        except ForumProviderError as exc:
+            raise click.ClickException(
+                f"Could not read the forum's settings: {exc}"
+            ) from exc
+        if not _report_site_settings(rows):
+            raise SystemExit(1)
+
     @app.cli.command("migrate-forum-thread")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
     @click.option("--thread", required=True, help="The old forum's thread id (tid).")
@@ -1782,40 +1885,28 @@ def create_app(config_overrides=None):
 
         Not idempotent. Running it twice posts the thread twice.
         """
-        import sys
-        from pathlib import Path as _Path
-
-        sys.path.insert(0, str(_Path(app.root_path).parent / "scripts"))
-        from mybb_export import find_prefix, find_table, read_dump, rows_of  # noqa: E402
-
         service = get_forum_service()
         if not service.is_enabled() or service.config_errors:
             raise click.ClickException("The forum integration is not configured.")
         if not dry_run and not category:
             raise click.ClickException("--category is required for a real run.")
 
-        dump = read_dump(dump_file)
-        # With the prefix, so "users" cannot match mybb_tapatalk_users -- a
-        # plugin table with no uid column, which silently made every post
-        # anonymous rather than failing.
-        prefix, _rejected = find_prefix(dump)
-        posts = [
-            row for row in rows_of(dump, find_table(dump, "posts", prefix))
-            if row.get("tid") == str(thread)
-        ]
+        tables = _load_mybb_dump(dump_file)
+        posts = [row for row in tables["posts"] if row.get("tid") == str(thread)]
         if not posts:
             raise click.ClickException(f"No posts found for thread {thread}.")
         posts.sort(key=lambda row: int(row.get("dateline") or 0))
 
-        threads = {row["tid"]: row for row in rows_of(dump, find_table(dump, "threads", prefix))}
+        threads = {row["tid"]: row for row in tables["threads"]}
+        this_thread = threads.get(str(thread), {"tid": thread})
+        pids = {row.get("pid") for row in posts}
         attachments_by_post = {}
-        for row in rows_of(dump, find_table(dump, "attachments", prefix)):
+        for row in tables["attachments"]:
             attachments_by_post.setdefault(row.get("pid"), []).append(row)
         # The name the old forum knew each author by is the name they have here,
         # because that is exactly what the profile import published.
         usernames_by_uid = {
-            row.get("uid"): row.get("username")
-            for row in rows_of(dump, find_table(dump, "users", prefix))
+            row.get("uid"): row.get("username") for row in tables["users"]
         }
 
         # Posting as each author needs a key Discourse will let act as anybody.
@@ -1827,8 +1918,30 @@ def create_app(config_overrides=None):
         if api_key:
             settings["discourse_api_key"] = api_key
         poster = ContentPoster(settings)
+
+        # Ask the forum whether it will take this thread before posting any of
+        # it. A run that gets three posts in and is then refused for a title
+        # two characters too short leaves half a thread behind, and this spike
+        # is not idempotent.
+        requirements = plan_site_settings(
+            [this_thread], posts,
+            [row for pid in pids for row in attachments_by_post.get(pid, [])],
+        )
+        try:
+            ready = _report_site_settings(check_site_settings(poster, requirements))
+        except ForumProviderError as exc:
+            # Not every key can read the settings. Worth saying, not worth
+            # refusing over: the run itself will still report what happened.
+            click.echo(click.style(f"Could not read the site settings: {exc}", fg="yellow"))
+            ready = True
+        if not ready:
+            raise click.ClickException(
+                "The forum would refuse part of this thread. Change the "
+                "settings above first."
+            )
+
         report = migrate_thread(
-            poster, threads.get(str(thread), {"tid": thread}), posts,
+            poster, this_thread, posts,
             attachments_by_post, usernames_by_uid, uploads, category,
             dry_run=dry_run,
             fallback_username=service.settings["discourse_api_username"],

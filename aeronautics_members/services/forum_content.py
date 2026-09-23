@@ -24,6 +24,7 @@ import json
 import mimetypes
 import re
 import secrets
+from collections import Counter, namedtuple
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -236,6 +237,213 @@ class ContentPoster:
     def read_post(self, post_id):
         return self._call("GET", f"/posts/{quote(str(post_id))}.json")
 
+    def site_settings(self):
+        """Every site setting and its current value, as {name: value}."""
+        payload = self._call("GET", "/admin/site_settings.json")
+        return {
+            row.get("setting"): row.get("value")
+            for row in payload.get("site_settings", [])
+            if row.get("setting")
+        }
+
+
+# ---------------------------------------------------------------------------
+# What the forum has to allow before any of this can land
+# ---------------------------------------------------------------------------
+#
+# Discourse's defaults are written for people typing into a box today. They
+# reject a good deal of what a decade-old board actually contains, and they do
+# it one post at a time, hours into a run, which is the worst possible moment
+# to find out. So the archive is measured first and the forum is asked what it
+# currently allows, and the two are compared before anything is posted.
+#
+# Every one of these is a migration-window setting: loosened for the import and
+# put back afterwards, exactly like disable_emails. The check prints the
+# current value next to the needed one so there is a record of what to restore.
+
+Requirement = namedtuple("Requirement", "setting needed compare why")
+
+#: ``compare`` says what the live value has to be, relative to ``needed``.
+AT_MOST = "at_most"      # a floor Discourse enforces: it must not be higher
+AT_LEAST = "at_least"    # a ceiling: it must not be lower
+EQUALS = "equals"        # a switch
+INCLUDES = "includes"    # a comma-separated list that must contain these
+
+
+def _post_bodies(posts):
+    return {post.get("pid"): bbcode_to_markdown(post.get("message")) for post in posts}
+
+
+def plan_site_settings(threads, posts, attachments=()):
+    """What this archive needs the forum to allow, measured from the archive.
+
+    Nothing here is a guess about Discourse's defaults: each requirement says
+    what the content needs, and the live value is read from the site and
+    compared against it.
+    """
+    threads = list(threads)
+    posts = list(posts)
+    attachments = list(attachments)
+    bodies = _post_bodies(posts)
+
+    requirements = []
+
+    titles = [(thread.get("subject") or "").strip() for thread in threads]
+    titles = [title for title in titles if title]
+    if titles:
+        shortest = min(len(title) for title in titles)
+        requirements.append(Requirement(
+            "min_topic_title_length", shortest, AT_MOST,
+            f"the shortest thread subject on the board is {shortest} characters",
+        ))
+
+        repeated = Counter(titles)
+        clashing = sum(count for count in repeated.values() if count > 1)
+        if clashing:
+            worst, count = repeated.most_common(1)[0]
+            requirements.append(Requirement(
+                "allow_duplicate_topic_titles", "true", EQUALS,
+                f"{clashing} threads share a subject with another thread "
+                f"({worst!r} is used {count} times); with this off, only the "
+                f"first of each name is accepted and the rest are refused",
+            ))
+
+        requirements.append(Requirement(
+            "title_prettify", "false", EQUALS,
+            "left on, Discourse rewrites the titles it is given -- capitalising "
+            "them and stripping punctuation -- so the archive would not read as "
+            "it did",
+        ))
+
+    lengths = [len(body) for body in bodies.values()]
+    if lengths:
+        requirements.append(Requirement(
+            "min_post_length", min(lengths), AT_MOST,
+            f"the shortest post on the board is {min(lengths)} characters "
+            f"after conversion",
+        ))
+
+    opening_pids = {thread.get("firstpost") for thread in threads}
+    opening = [len(body) for pid, body in bodies.items() if pid in opening_pids]
+    if opening:
+        requirements.append(Requirement(
+            "min_first_post_length", min(opening), AT_MOST,
+            f"the shortest thread-opening post is {min(opening)} characters",
+        ))
+
+    repeats = Counter(
+        (post.get("uid"), bodies.get(post.get("pid"), "")) for post in posts
+    )
+    duplicated = sum(count - 1 for count in repeats.values() if count > 1)
+    if duplicated:
+        requirements.append(Requirement(
+            "unique_posts_mins", 0, AT_MOST,
+            f"{duplicated} posts repeat something their own author had already "
+            f"written; during an import they all arrive within minutes of each "
+            f"other, so Discourse reads them as accidental double-posts",
+        ))
+
+    if attachments:
+        per_post = Counter(row.get("pid") for row in attachments)
+        most = max(per_post.values())
+        requirements.append(Requirement(
+            "newuser_max_attachments", most, AT_LEAST,
+            f"one post carries {most} attachments, and everybody posting here "
+            f"is a brand new account at trust level 0",
+        ))
+
+        extensions = sorted({
+            Path(row.get("filename") or "").suffix.lstrip(".").lower()
+            for row in attachments
+            if Path(row.get("filename") or "").suffix
+        })
+        if extensions:
+            requirements.append(Requirement(
+                "authorized_extensions", extensions, INCLUDES,
+                "these are the file types people actually attached",
+            ))
+
+        sizes = [int(row.get("filesize") or 0) for row in attachments]
+        biggest_kb = (max(sizes) + 1023) // 1024
+        if biggest_kb:
+            why = f"the largest attachment is {biggest_kb / 1024:.1f} MB"
+            if biggest_kb > 10 * 1024:
+                # The setting is only half of it: the webserver in front of
+                # Discourse has its own limit, and it is the one that answers
+                # first. A file over that comes back as 413, not as anything
+                # Discourse said.
+                why += (
+                    "; above 10 MB the webserver's own client_max_body_size "
+                    "matters too, or the upload is refused before Discourse "
+                    "ever sees it"
+                )
+            requirements.append(Requirement(
+                "max_attachment_size_kb", biggest_kb, AT_LEAST, why,
+            ))
+
+    return requirements
+
+
+def _as_number(value):
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _listed(value):
+    """A Discourse list setting as a set. It stores them pipe-separated."""
+    return {
+        item.strip().lstrip(".").lower()
+        for item in str(value or "").replace("|", ",").split(",")
+        if item.strip()
+    }
+
+
+def _satisfied(requirement, actual):
+    """Is the live value acceptable? None when it cannot be read."""
+    if actual is None:
+        return None
+    if requirement.compare == EQUALS:
+        return str(actual).strip().lower() == str(requirement.needed).lower()
+    if requirement.compare == INCLUDES:
+        have = _listed(actual)
+        # "*" is Discourse's "anything at all".
+        return "*" in have or not [item for item in requirement.needed if item not in have]
+    number = _as_number(actual)
+    if number is None:
+        return None
+    if requirement.compare == AT_MOST:
+        return number <= requirement.needed
+    return number >= requirement.needed
+
+
+def check_site_settings(poster, requirements):
+    """Compare what the archive needs against what the forum currently allows.
+
+    Returns a row per requirement: the setting, what it is now, what it has to
+    be, and whether it is already there. The current value is part of the
+    answer on purpose -- it is what gets put back when the import is done.
+    """
+    live = poster.site_settings()
+    rows = []
+    for requirement in requirements:
+        actual = live.get(requirement.setting)
+        ok = _satisfied(requirement, actual)
+        needed = requirement.needed
+        if requirement.compare == INCLUDES:
+            missing = [item for item in needed if item not in _listed(actual)]
+            needed = ", ".join(missing or needed)
+        rows.append({
+            "setting": requirement.setting,
+            "now": actual,
+            "needed": needed,
+            "compare": requirement.compare,
+            "ok": ok,
+            "why": requirement.why,
+        })
+    return rows
+
 
 # ---------------------------------------------------------------------------
 # Moving one thread
@@ -282,7 +490,14 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             "for their author and will be attributed to the fallback."
         )
 
-    for index, post in enumerate(posts):
+    # Set when the opening post could not be created. Everything after it
+    # belongs to a topic that does not exist, and must not be attempted: the
+    # first run of this turned one real failure -- a title Discourse thought
+    # too short -- into twelve, because each reply then tried to open a topic
+    # of its own with no title and no category.
+    no_topic = False
+
+    for post in posts:
         author = usernames_by_uid.get(post.get("uid")) or fallback_username
         asked_for = _as_iso(post["dateline"])
         record = {
@@ -294,6 +509,10 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             "result": "",
         }
         report["posts"].append(record)
+
+        if no_topic:
+            record["result"] = "not attempted: the thread has no topic to go in"
+            continue
 
         if not author:
             record["result"] = "skipped: no forum account for this author"
@@ -339,8 +558,11 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             record["result"] = "would post"
             continue
 
+        # Whoever gets here first opens the topic -- not whoever is first in
+        # the list, who may have been skipped for having no account.
+        opening = report["topic_id"] is None
         try:
-            if index == 0:
+            if opening:
                 created = poster.create_post(
                     raw=body, as_username=author, created_at=asked_for,
                     title=thread.get("subject") or "(no subject)", category=category_id,
@@ -354,6 +576,13 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
         except ForumProviderError as exc:
             record["result"] = f"failed: {exc}"
             report["problems"].append(f"pid={post.get('pid')}: {exc}")
+            if opening:
+                no_topic = True
+                report["problems"].append(
+                    "The opening post was refused, so this thread has no topic. "
+                    "The rest of it was not attempted -- fix the reason above and "
+                    "run the thread again."
+                )
             continue
 
         record["result"] = "posted"
