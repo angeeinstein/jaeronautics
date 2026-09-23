@@ -708,3 +708,17 @@ class TestWhenDiscourseSaysTheAdminRouteIsNotThere:
             poster.site_settings()
 
         assert "no API key" in str(raised.value)
+
+
+class TestAKeyReadOutOfAFile:
+    def test_a_trailing_newline_is_not_part_of_the_key(self):
+        """cat and every editor add one. A header with it in is broken."""
+        poster = ContentPoster({
+            "forum_base_url": "https://forum.example.at/",
+            "discourse_api_key": "b" * 64 + "\n",
+            "discourse_api_username": " system \n",
+        })
+
+        assert poster.api_key == "b" * 64
+        assert poster.admin_username == "system"
+        assert poster._key_complaint() is None

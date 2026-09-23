@@ -149,8 +149,12 @@ class ContentPoster:
 
     def __init__(self, settings):
         self.base_url = settings["forum_base_url"].rstrip("/")
-        self.api_key = settings["discourse_api_key"]
-        self.admin_username = settings["discourse_api_username"]
+        # Stripped, because these come out of a file often enough. A trailing
+        # newline in an HTTP header value is not a small mistake: it either
+        # raises somewhere far from here or changes the request, and neither
+        # says anything about a stray character at the end of a key.
+        self.api_key = (settings["discourse_api_key"] or "").strip()
+        self.admin_username = (settings["discourse_api_username"] or "").strip()
         self._settings_base = None
 
     def _key_complaint(self):

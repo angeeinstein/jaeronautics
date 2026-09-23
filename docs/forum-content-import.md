@@ -86,36 +86,36 @@ that user — and fails the moment it is asked to act as somebody else, which is
 the whole of this job. The failure reads `invalid_access`, which sounds like a
 permissions problem and is not.
 
-Put it in a file without it ever appearing on screen. `read -rs` does not echo
-what is typed, and `printf` is a shell builtin, so the key never reaches any
-process's arguments either:
+Put it in a file, on one line, where you can see what actually arrived:
 
 ```bash
-read -rs KEY
-printf '%s' "$KEY" > /var/tmp/forum-migration/api-key
-unset KEY
+printf '%s' 'PASTE-THE-KEY-HERE' > /var/tmp/forum-migration/api-key
+wc -c < /var/tmp/forum-migration/api-key
 chown jaeronautics: /var/tmp/forum-migration/api-key
 chmod 600 /var/tmp/forum-migration/api-key
 ```
 
-**Check that the whole key arrived.** Discourse's keys are 64 hexadecimal
-characters:
+**That `wc` has to say 64.** Discourse's keys are 64 hexadecimal characters,
+and terminals lose the tail of a long paste more often than you would think.
 
-```bash
-wc -c < /var/tmp/forum-migration/api-key
-```
+Reading it back is the point of doing it this way. A prompt that does not echo
+— `read -rs` and the like — keeps the key off the screen, and also keeps a
+truncated key off the screen, which is worse: the failure it causes points
+somewhere else entirely. Discourse treats a key it does not recognise as
+**anonymous** rather than refusing it, and hides admin routes from anonymous
+requests behind a 404. So a half-pasted key reads as
 
-If that is not 64, the key was truncated on the way in — terminals lose the
-tail of a long paste more often than you would think. The failure it causes is
-misleading: Discourse treats a key it does not recognise as **anonymous**
-rather than refusing it, and hides admin routes from anonymous requests behind
-a 404. So a half-pasted key reads as `GET /admin/site_settings.json failed
-(404)`, which looks like a missing feature or a Discourse version problem and
-is neither.
+    GET /admin/site_settings.json failed (404): not_found
 
-**Do not paste the key at a prompt that echoes it.** If a command fails and you
-type the key at the shell instead, it is in your scrollback and in your
-history.
+which looks like a missing feature, or a Discourse version that moved the
+route, and is neither. `check-forum-settings` now says so before it gets that
+far, but only because it counts the characters — which you can do yourself in
+one command.
+
+The key is in your shell history this way. On a test box that is a fair trade
+for being able to see it; for a production run, clear the history line
+afterwards or use a method that does not echo, now that you know what a
+truncated key looks like.
 
 **Revoke it when you are done** in any case. A key that can post as any member
 of the forum should not outlive the afternoon it was made for.
