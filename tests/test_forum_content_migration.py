@@ -20,6 +20,9 @@ import pytest
 
 from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_content import (
+    LOOSEN,
+    PROCEED,
+    REFUSE,
     ContentPoster,
     check_site_settings,
     loosen_site_settings,
@@ -28,6 +31,7 @@ from aeronautics_members.services.forum_content import (
     read_settings_journal,
     rehearsal_threads,
     restore_site_settings,
+    what_to_do_about_settings,
 )
 
 
@@ -774,3 +778,35 @@ class TestASettingDiscourseHasRenamed:
         )}
 
         assert rows["newuser_max_images"]["ok"] is None
+
+
+class TestWhetherARunCanGoAhead:
+    """A dry run sends nothing, so nothing the forum allows can stop it."""
+
+    def decide(self, **kwargs):
+        defaults = {"ready": False, "anything": True,
+                    "adjust_settings": False, "dry_run": False}
+        return what_to_do_about_settings(**{**defaults, **kwargs})
+
+    def test_a_dry_run_is_never_refused(self):
+        """It is how you find out what is missing before changing anything."""
+        assert self.decide(dry_run=True) == PROCEED
+
+    def test_a_dry_run_changes_nothing_either(self):
+        assert self.decide(dry_run=True, adjust_settings=True) == PROCEED
+
+    def test_a_real_run_that_would_be_refused_is_refused(self):
+        assert self.decide() == REFUSE
+
+    def test_unless_it_was_told_to_change_them(self):
+        assert self.decide(adjust_settings=True) == LOOSEN
+
+    def test_a_forum_already_wide_enough_just_runs(self):
+        assert self.decide(ready=True, anything=False) == PROCEED
+
+    def test_something_worth_changing_that_blocks_nothing_still_gets_changed(self):
+        """disable_emails does not cause a refusal, but nobody wants the mail."""
+        assert self.decide(ready=True, anything=True, adjust_settings=True) == LOOSEN
+
+    def test_and_does_not_stop_a_run_that_was_not_told_to(self):
+        assert self.decide(ready=True, anything=True) == PROCEED

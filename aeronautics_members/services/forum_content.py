@@ -588,6 +588,33 @@ def plan_site_settings(threads, posts, attachments=()):
     return requirements
 
 
+#: What to do once the forum has been asked what it allows.
+PROCEED = "proceed"    # go ahead as things stand
+LOOSEN = "loosen"      # change the settings first, and put them back after
+REFUSE = "refuse"      # the forum would reject part of this
+
+
+def what_to_do_about_settings(*, ready, anything, adjust_settings, dry_run):
+    """Whether a run can go ahead, given what the forum currently allows.
+
+    ``ready`` is that nothing would be refused; ``anything`` is that something
+    is nonetheless worth changing.
+
+    A dry run is never refused. It sends nothing, so no setting can stop it --
+    and it is how you find out which attachments are missing, which is exactly
+    what you want to know *before* changing anything on the forum. Refusing it
+    for a title minimum turns the safe step into the one that needs the unsafe
+    step done first.
+    """
+    if dry_run:
+        return PROCEED
+    if anything and adjust_settings:
+        return LOOSEN
+    if not ready:
+        return REFUSE
+    return PROCEED
+
+
 def rehearsal_threads(threads, posts, attachments=(), limit=5):
     """Threads worth trying the spike on, hardest first.
 

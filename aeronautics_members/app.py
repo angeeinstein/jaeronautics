@@ -233,6 +233,8 @@ from .services.forum_profiles import (  # noqa: E402
     publish_imported_profiles,
 )
 from .services.forum_content import (  # noqa: E402
+    LOOSEN,
+    REFUSE,
     ContentPoster,
     check_site_settings,
     dates_survived,
@@ -242,6 +244,7 @@ from .services.forum_content import (  # noqa: E402
     read_settings_journal,
     rehearsal_threads,
     restore_site_settings,
+    what_to_do_about_settings,
 )
 from .services.workflows import (  # noqa: E402
     process_email_delivery_jobs,
@@ -2071,7 +2074,16 @@ def create_app(config_overrides=None):
 
         changes = []
         journal = None
-        if anything and adjust_settings and not dry_run:
+        decision = what_to_do_about_settings(
+            ready=ready, anything=anything,
+            adjust_settings=adjust_settings, dry_run=dry_run,
+        )
+        if dry_run and anything:
+            click.echo(click.style(
+                "Nothing is sent by a dry run, so none of the above stops it. "
+                "It is what the real run will need.", fg="cyan",
+            ))
+        if decision == LOOSEN:
             journal = _settings_journal_path(settings_file)
             # Said before anything is touched rather than after, because the
             # run that most needs this printed is the one that never gets as
@@ -2085,7 +2097,7 @@ def create_app(config_overrides=None):
             ))
             changes = loosen_site_settings(poster, requirements, journal)
             click.echo(f"Changed {len(changes)} settings.")
-        elif not ready:
+        elif decision == REFUSE:
             raise click.ClickException(
                 "The forum would refuse part of this thread. Run it again with "
                 "--adjust-settings to have it change these itself and put them "

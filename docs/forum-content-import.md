@@ -161,13 +161,22 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics sh -c '
        --thread 336 --uploads /var/tmp/forum-migration/uploads --dry-run'
 ```
 
-Nothing is posted. What it tells you:
+Nothing is posted, and no setting can stop a dry run — it sends nothing, and
+finding out what is missing is exactly what you want to do *before* changing
+anything on the forum. It still prints the settings table, because that is what
+the real run will need.
+
+What it tells you:
 
 - the date each post would be given and who it would be posted as. **If every
   author comes out as `system`, stop** — the author lookup has missed, and the
   run would anonymise the whole thread;
 - every attachment it cannot find, **by full path**. That is the list of files
-  to copy across; you do not need the other 9 GB to rehearse.
+  to copy across; you do not need the other 9 GB to rehearse. Point `--uploads`
+  at a directory that does not exist yet and it will name all of them.
+
+After copying files in, `chown -R jaeronautics: /var/tmp/forum-migration`
+again, and run the dry run until it stops reporting missing files.
 
 ## 5. The real run
 
