@@ -228,8 +228,11 @@ def _blocking_relationships(user):
     blocking = []
     if user.roles:
         blocking.append("roles")
-    if user.forum_account is not None:
-        blocking.append("a forum account")
+    # A forum account is deliberately NOT listed. Signing up creates one before
+    # the university address has been verified, so every real returning student
+    # arrives here holding one -- and while this refused them, the claim could
+    # not fire for anybody who came in through the site. It is carried across
+    # below instead.
     if user.imported_forum_profile is not None:
         blocking.append("an imported forum profile")
     if user.forum_avatar_submissions:
@@ -321,6 +324,22 @@ def claim_archived_account(user):
         # to NULL and orphaning the membership that was just moved.
         user.member = None
         archived.member = member
+
+    forum_account = user.forum_account
+    if forum_account is not None:
+        user.forum_account = None
+        archived.forum_account = forum_account
+        if member is not None:
+            forum_account.member = member
+        # Discourse knows people by external_id, and the person's identity has
+        # just moved to the archived row -- which is the id their old avatar,
+        # their cohort groups and, later, their posts all hang off.
+        forum_account.external_id = str(archived.id)
+        # Cleared rather than kept: it names the forum profile made for the
+        # account being retired. Left alone, the next sync would put a
+        # returning student back on that throwaway profile instead of the one
+        # carrying their history.
+        forum_account.remote_user_id = None
 
     profile.claimed_at = get_now_utc()
     db.session.flush()

@@ -892,3 +892,78 @@ class TestWhatTheOldForumSaidAboutThem:
         assert "Group on the old forum" in body
         assert "Banned" in body
         assert "non active student" in body
+
+
+class TestWhenTheySignedUpTheNormalWay:
+    """A real signup already has a forum account by the time it is verified.
+
+    Which the claim used to refuse. Every unit test above builds a member with
+    nothing attached, so all of them passed while the only path that matters --
+    somebody signing up through the site -- could never reconnect. Found on the
+    real server: a matching address, a verified university email, and the
+    archive still reading "Unclaimed".
+    """
+
+    def _returning_with_forum_account(self):
+        from aeronautics_members.db_models import ForumAccount
+
+        member = _returning()
+        db.session.add(ForumAccount(
+            user=member.user,
+            member=member,
+            provider="discourse",
+            external_id=str(member.user_id),
+            state="inactive",
+        ))
+        db.session.commit()
+        return member
+
+    def test_the_claim_still_happens(self, app):
+        profile = _archived()
+        member = self._returning_with_forum_account()
+
+        assert claim_archived_account(member.user) is profile
+        db.session.commit()
+
+        assert profile.claimed_at is not None
+
+    def test_the_forum_account_moves_across(self, app):
+        """Deleting the signup row would otherwise take it with them."""
+        profile = _archived()
+        member = self._returning_with_forum_account()
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert profile.user.forum_account is not None
+        assert profile.user.forum_account.member is member
+
+    def test_it_points_at_the_account_that_holds_the_old_posts(self, app):
+        """external_id is how Discourse knows people, and it has just changed."""
+        profile = _archived()
+        member = self._returning_with_forum_account()
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert profile.user.forum_account.external_id == str(profile.user_id)
+
+    def test_the_forum_profile_is_looked_up_again(self, app):
+        """remote_user_id names the profile made for the row being retired.
+
+        Left alone, the returning student would be synced onto the throwaway
+        account rather than the one carrying their avatar, their cohort groups
+        and, later, their posts.
+        """
+        from aeronautics_members.db_models import ForumAccount
+
+        profile = _archived()
+        member = self._returning_with_forum_account()
+        account = db.session.execute(db.select(ForumAccount)).scalar_one()
+        account.remote_user_id = 4242
+        db.session.commit()
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert profile.user.forum_account.remote_user_id is None
