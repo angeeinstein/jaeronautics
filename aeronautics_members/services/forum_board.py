@@ -278,7 +278,8 @@ def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
 # ---------------------------------------------------------------------------
 
 def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
-                  limit=0, fallback_username=None, on_thread=None):
+                  limit=0, fallback_username=None, on_thread=None,
+                  require_attachments=True):
     """Move every thread. Returns a summary; the detail goes to on_thread.
 
     Ordered oldest first, so that a run stopped halfway leaves a forum whose
@@ -299,7 +300,7 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
     plan = category_plan(tables["forums"], tables["threads"])
     summary = {
         "categories": len(plan), "threads": 0, "posted": 0,
-        "already_there": 0, "failed": 0, "problems": [],
+        "already_there": 0, "waiting": 0, "failed": 0, "problems": [],
     }
     categories = ensure_categories(
         poster, plan, ledger, dry_run=dry_run, problems=summary["problems"]
@@ -333,6 +334,7 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
                 poster, thread, posts, attachments_by_post, usernames_by_uid,
                 uploads_dir, category_id, dry_run=dry_run,
                 fallback_username=fallback_username, ledger=ledger,
+                require_attachments=require_attachments,
             )
         except (ForumProviderError, ValueError) as exc:
             # One thread that cannot be started is not a reason to abandon the
@@ -342,10 +344,14 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
             continue
 
         for record in report["posts"]:
-            if record["result"] == "posted" or record["result"] == "would post":
+            if record["result"] in ("posted", "would post"):
                 summary["posted"] += 1
             elif record["result"] == "already there":
                 summary["already_there"] += 1
+            elif record["result"].startswith(("waiting", "not attempted")):
+                # Not a failure. Its files are not here yet, and the same
+                # command run again once they are will pick it up.
+                summary["waiting"] += 1
             else:
                 summary["failed"] += 1
         summary["problems"].extend(report["problems"])

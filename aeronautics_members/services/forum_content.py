@@ -1003,7 +1003,7 @@ def _attachment_markdown(upload, original_name):
 
 def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
                    uploads_dir, category_id, *, dry_run=False, fallback_username=None,
-                   ledger=None):
+                   ledger=None, require_attachments=True):
     """Post one old thread onto the forum. Returns a report.
 
     Every post is sent as its own author with its own date, and the report says
@@ -1013,6 +1013,13 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
     With a ``ledger``, what is already on the forum is left alone and the
     thread carries on from where a previous run stopped. Without one, running
     this twice posts the thread twice.
+
+    ``require_attachments`` makes a post whose files are not on this machine
+    wait for a later run rather than arrive without them. It is the default
+    because the alternative loses them silently: a post written down as done
+    is never revisited, and the one thing nobody thinks to check is a post
+    that looks complete. Turning it off is for a run where the files are known
+    to be gone for good and the words are worth having anyway.
     """
     report = {"thread": thread.get("subject"), "posts": [], "problems": [], "topic_id": None}
     uploads_dir = Path(uploads_dir)
@@ -1072,11 +1079,45 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             continue
 
         body = bbcode_to_markdown(post.get("message"))
+        attachments = attachments_by_post.get(post.get("pid"), [])
+
+        # Whether every file this post carries is actually on this machine.
+        #
+        # This decides the post, not just the attachment. Posting the words
+        # without the PDF and writing it down as done would lose that PDF for
+        # good: the ledger would skip the post on every later run, and the one
+        # thing nobody would think to check is a post that arrived looking
+        # complete. So the post waits for its files instead.
+        absent = [
+            row for row in attachments
+            if not (uploads_dir / (row.get("attachname") or "")).exists()
+        ]
+        if absent and require_attachments:
+            record["result"] = (
+                f"waiting: {len(absent)} of {len(attachments)} files are not on "
+                f"this machine yet"
+            )
+            for row in absent:
+                report["problems"].append(
+                    f"pid={post.get('pid')}: "
+                    f"{uploads_dir / (row.get('attachname') or '')} is not there"
+                )
+            if report["topic_id"] is None:
+                # It would have opened the topic. Letting the next post open it
+                # instead would put the thread under the wrong name and date,
+                # and this one could then never be first.
+                no_topic = True
+                report["problems"].append(
+                    "The thread's opening post is waiting for its files, so the "
+                    "thread was left for a later run rather than started "
+                    "without it."
+                )
+            continue
 
         # Attachments first: a post referring to an upload has to be written
         # after the upload exists.
         links = []
-        for attachment in attachments_by_post.get(post.get("pid"), []):
+        for attachment in attachments:
             source = uploads_dir / (attachment.get("attachname") or "")
             # Stripped: one real filename on the board begins with two spaces,
             # which is a thing a 2017 upload dialog allowed and a filename is

@@ -403,6 +403,43 @@ somewhere sensible instead of one with holes through it.
   `screen`, or a dropped SSH session ends it — recoverable, but slower than
   not needing to recover.
 
+### When nine gigabytes will not fit
+
+The portal needs room for the whole `uploads` folder, and the forum needs room
+for it again — Discourse keeps optimised copies of images beside the originals.
+On Proxmox that is a resize and nothing more:
+
+```bash
+pct resize <ctid> rootfs +12G
+```
+
+ZFS reports a full dataset as `Disk quota exceeded` rather than "no space left
+on device", so a full container looks like a permissions problem — even `chown`
+fails, because it cannot write the inode.
+
+**If growing the disk is not an option, do it in batches.** This is safe, and
+only because of one rule: a post whose files are not on this machine is *not*
+posted. It waits. Posting the words without the PDF and writing the post down
+as done would lose that PDF for good — the ledger skips it on every later run,
+and a post that arrived looking complete is the last thing anybody would think
+to check.
+
+So the loop is:
+
+1. `check-forum-uploads --missing-to still-needed.txt`
+2. fetch as many as will fit: `head -300 still-needed.txt` through the copy loop
+3. run `import-forum-content` — the threads whose files are here land, the
+   rest are reported as **waiting**, and nothing about them is written down
+4. delete the files that have now been posted
+5. back to 1
+
+The summary line counts waiting separately from failed, because they are not
+the same thing: waiting needs a file, failed needs a look.
+
+`--allow-missing-attachments` turns the rule off, for files that are gone for
+good and words worth having anyway. It is not a way to save disk: those files
+can never be added afterwards.
+
 ## 10. Checking a file the new forum shows oddly
 
 Every upload is on disk as `post_<pid>_<time>_<hash>.attach`: the original

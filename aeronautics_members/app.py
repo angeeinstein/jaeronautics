@@ -2284,6 +2284,10 @@ def create_app(config_overrides=None):
     @click.option("--dry-run", is_flag=True, help="Report and send nothing.")
     @click.option("--limit", type=int, default=0, metavar="N",
                   help="Stop after N threads, for a first careful run.")
+    @click.option("--allow-missing-attachments", is_flag=True,
+                  help="Post even where a file is not on this machine. Those "
+                       "files are then lost: the post is written down as done "
+                       "and never revisited.")
     @click.option("--adjust-settings", is_flag=True,
                   help="Loosen the settings this needs, and put them back after.")
     @click.option("--settings-file", type=click.Path(dir_okay=False),
@@ -2292,7 +2296,8 @@ def create_app(config_overrides=None):
                   help="An 'All Users' Discourse API key.")
     @with_appcontext
     def import_forum_content_command(dump_file, uploads, ledger, dry_run, limit,
-                                     adjust_settings, settings_file, api_key):
+                                     allow_missing_attachments, adjust_settings,
+                                     settings_file, api_key):
         """Moves the whole old board across, keeping the categories it had.
 
         The old structure is recreated rather than reorganised. That is a
@@ -2373,7 +2378,8 @@ def create_app(config_overrides=None):
             done = summary["posted"] + summary["already_there"]
             click.echo(
                 f"  [{summary['threads']:>4}] {str(thread.get('subject'))[:48]:<50} "
-                f"{done:>5} posts, {summary['failed']:>3} failed"
+                f"{done:>5} posts, {summary['waiting']:>4} waiting, "
+            f"{summary['failed']:>3} failed"
             )
 
         try:
@@ -2382,6 +2388,7 @@ def create_app(config_overrides=None):
                 dry_run=dry_run, limit=limit,
                 fallback_username=service.settings["discourse_api_username"],
                 on_thread=say,
+                require_attachments=not allow_missing_attachments,
             )
         finally:
             record.close()
@@ -2403,8 +2410,15 @@ def create_app(config_overrides=None):
 
         click.echo(
             f"\n{summary['threads']} threads: {summary['posted']} posted, "
-            f"{summary['already_there']} already there, {summary['failed']} failed."
+            f"{summary['already_there']} already there, "
+            f"{summary['waiting']} waiting for files, {summary['failed']} failed."
         )
+        if summary["waiting"]:
+            click.echo(
+                f"{summary['waiting']} posts were left alone because files they "
+                f"carry are not on this machine. Nothing is lost -- fetch them "
+                f"and run the same command again."
+            )
         if summary["problems"]:
             click.echo(click.style(
                 f"\n{len(summary['problems'])} problems:", fg="yellow"), err=True)

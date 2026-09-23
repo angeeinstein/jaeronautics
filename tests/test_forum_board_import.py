@@ -514,3 +514,96 @@ class TestKnowingWhichFilesAreHere:
 
         assert report["present"] == 1
         assert report["wrong_size"] == []
+
+
+class TestAPostWhoseFilesAreNotHereYet:
+    """Nine gigabytes will not be on the machine all at once."""
+
+    def a_board_with_attachments(self):
+        board = a_board()
+        board["attachments"] = [
+            {"pid": "100", "attachname": "201703/a.attach",
+             "filename": "Angabe.pdf", "filesize": "10"},
+        ]
+        return board
+
+    def test_it_waits_rather_than_posting_without_them(self, app, tmp_path):
+        """Otherwise the PDF is lost: the post is done and never revisited."""
+        poster = BoardPoster()
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, self.a_board_with_attachments(), tmp_path / "empty",
+                Ledger(tmp_path / "l.jsonl"),
+            )
+
+        assert poster.calls == [], "not one post was sent"
+        assert summary["waiting"] == 2
+        assert summary["failed"] == 0, "waiting is not failing"
+
+    def test_the_whole_thread_waits_if_its_first_post_does(self, app, tmp_path):
+        """A reply must not become the topic under its own name and date."""
+        poster = BoardPoster()
+
+        with app.app_context():
+            report_problems = migrate_board(
+                poster, self.a_board_with_attachments(), tmp_path / "empty",
+                Ledger(tmp_path / "l.jsonl"),
+            )["problems"]
+
+        assert any("left for a later run" in problem for problem in report_problems)
+
+    def test_nothing_is_written_down_so_a_later_run_picks_it_up(self, app, tmp_path):
+        path = tmp_path / "l.jsonl"
+        board = self.a_board_with_attachments()
+
+        with app.app_context():
+            migrate_board(BoardPoster(), board, tmp_path / "empty", Ledger(path))
+
+            # The file arrives.
+            uploads = tmp_path / "uploads" / "201703"
+            uploads.mkdir(parents=True)
+            (uploads / "a.attach").write_bytes(b"x" * 10)
+
+            poster = BoardPoster()
+            summary = migrate_board(
+                poster, board, tmp_path / "uploads", Ledger(path),
+            )
+
+        assert summary["posted"] == 2
+        assert summary["waiting"] == 0
+        assert poster.uploads == [("Angabe.pdf", None)]
+
+    def test_a_thread_whose_files_are_here_still_goes(self, app, tmp_path):
+        """One thread waiting must not hold up the ones that can go."""
+        board = self.a_board_with_attachments()
+        board["threads"].append({
+            "tid": "11", "fid": "4", "subject": "Ohne Anhang",
+            "firstpost": "200", "dateline": "1490000000",
+        })
+        board["posts"].append({
+            "pid": "200", "tid": "11", "uid": "7", "dateline": "1490000000",
+            "message": "Braucht keine Datei.",
+        })
+        poster = BoardPoster()
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, board, tmp_path / "empty", Ledger(tmp_path / "l.jsonl"),
+            )
+
+        assert summary["posted"] == 1
+        assert summary["waiting"] == 2
+
+    def test_it_can_be_told_to_post_anyway(self, app, tmp_path):
+        """For files that are gone for good and words worth having."""
+        poster = BoardPoster()
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, self.a_board_with_attachments(), tmp_path / "empty",
+                Ledger(tmp_path / "l.jsonl"), require_attachments=False,
+            )
+
+        assert summary["posted"] == 2
+        assert summary["waiting"] == 0
