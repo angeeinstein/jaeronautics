@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# The connection variables below look unused to shellcheck: the functions that
+# read them live in install.sh, which is sourced at runtime rather than parsed.
+# shellcheck disable=SC2034
 # Moving the database, in both directions, with the data following it.
 #
 # Not part of the pytest suite: this needs a live MariaDB, because the whole
@@ -35,8 +38,21 @@ check() {
 }
 
 # A host that is not spelled "localhost", so the external code path is taken
-# even though the server answering is this one.
-grep -q ' db-external$' /etc/hosts || echo "127.0.0.1 db-external" >> /etc/hosts
+# even though the server answering is this one. Removed again on the way out:
+# a test that edits /etc/hosts and leaves the entry there has changed the
+# machine it ran on, which is not something a test may do.
+ADDED_HOSTS_ENTRY=0
+if ! grep -q ' db-external$' /etc/hosts; then
+    echo "127.0.0.1 db-external" >> /etc/hosts
+    ADDED_HOSTS_ENTRY=1
+fi
+cleanup() {
+    rm -rf "${WORK}"
+    if [[ "${ADDED_HOSTS_ENTRY}" == "1" ]]; then
+        sed -i '/^127\.0\.0\.1 db-external$/d' /etc/hosts
+    fi
+}
+trap cleanup EXIT
 
 mariadb -e "
 DROP DATABASE IF EXISTS mig_source_test; DROP DATABASE IF EXISTS mig_dest_test;

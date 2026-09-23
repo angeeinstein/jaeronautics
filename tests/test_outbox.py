@@ -225,7 +225,7 @@ class TestRemovingTheAccountAReconnectionLeftBehind:
         class FakeProvider:
             def delete_remote_user(self, remote_user_id):
                 deleted.append(remote_user_id)
-                return True
+                return True, None
 
         class FakeService:
             provider = FakeProvider()
@@ -288,3 +288,107 @@ class TestRemovingTheAccountAReconnectionLeftBehind:
         from aeronautics_members.services import ExternalServiceError
         with pytest.raises(ExternalServiceError):
             self._handler()(self._item())
+
+
+class TestItNeverDeletesSomebodysPosts:
+    """The leftover account is usually empty. Usually is not always.
+
+    Forum access needs an active membership and an avatar -- NOT a confirmed
+    university address -- so somebody can sign up, get into the forum and post
+    for weeks before the confirmation that moves them onto their old account.
+    Deleting their posts to resolve an email conflict would destroy exactly
+    what this migration exists to preserve.
+    """
+
+    def _provider(self, monkeypatch, remote_user):
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "http://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+        calls = []
+
+        def fake_request(method, path, data=None, json_body=None, rate_limit_retries=0):
+            calls.append((method, path))
+            if method == "GET":
+                return remote_user
+            return {}
+
+        monkeypatch.setattr(provider, "_request", fake_request)
+        return provider, calls
+
+    def test_an_empty_account_is_deleted(self, app, monkeypatch):
+        provider, calls = self._provider(monkeypatch, {
+            "post_count": 0, "topic_count": 0, "likes_given": 0, "likes_received": 0,
+        })
+
+        deleted, reason = provider.delete_remote_user(8801)
+
+        assert deleted is True
+        assert reason is None
+        assert ("DELETE", "/admin/users/8801.json") in calls
+
+    @pytest.mark.parametrize("field", [
+        "post_count", "topic_count", "likes_given", "likes_received",
+    ])
+    def test_an_account_with_anything_in_it_is_left_alone(self, app, monkeypatch, field):
+        provider, calls = self._provider(monkeypatch, {field: 3})
+
+        deleted, reason = provider.delete_remote_user(8801)
+
+        assert deleted is False
+        assert "left alone" in reason
+        assert not any(method == "DELETE" for method, _path in calls), \
+            "it must not have been deleted"
+
+    def test_an_account_already_gone_counts_as_done(self, app, monkeypatch):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider, ForumProviderError,
+        )
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "http://forum.test", "discourse_api_key": "k",
+            "discourse_api_username": "system", "discourse_connect_secret": "s",
+        })
+
+        def fake_request(method, path, data=None, json_body=None, rate_limit_retries=0):
+            raise ForumProviderError("Discourse API request failed (404): gone")
+
+        monkeypatch.setattr(provider, "_request", fake_request)
+
+        assert provider.delete_remote_user(8801) == (True, None)
+
+    def test_the_worker_stops_and_asks_for_a_person(self, app, monkeypatch):
+        """Retrying cannot empty the account, so it must not retry for ever."""
+        from aeronautics_members.db_models import ExternalWorkItem, db as _db
+        from aeronautics_members.services.workflows import (
+            _handle_forum_discard_replaced_work,
+        )
+
+        class FakeProvider:
+            def delete_remote_user(self, remote_user_id):
+                return False, "the account has 3 posts, topics or likes and was left alone"
+
+        class FakeService:
+            provider = FakeProvider()
+
+            def is_ready(self):
+                return True
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.workflows.get_forum_service",
+            lambda: FakeService(),
+        )
+        item = ExternalWorkItem(
+            kind=ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED,
+            payload={"remote_user_id": 8801},
+            status=ExternalWorkItem.STATUS_PENDING,
+        )
+        _db.session.add(item)
+        _db.session.flush()
+
+        # Returns rather than raising: raising would queue it again for ever.
+        _handle_forum_discard_replaced_work(item)

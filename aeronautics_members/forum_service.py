@@ -696,28 +696,55 @@ class DiscourseConnectProvider(ForumProvider):
         return True
 
     def delete_remote_user(self, remote_user_id):
-        """Remove a Discourse account by its remote id. True if it is gone.
+        """Remove an empty Discourse account. Returns (deleted, reason).
 
-        Used for the throwaway account a returning student had before they
-        reconnected: made at signup, never posted in, and left holding the
-        address their real account needs. Deleted rather than anonymised
-        because there is nothing in it worth keeping and an anonymised husk
-        would still sit in the register of everyone who was ever a member.
+        For the throwaway account a returning student had before they
+        reconnected: made at signup and left holding the address their real
+        account needs. Deleted rather than anonymised because there is nothing
+        in it worth keeping and an anonymised husk would still sit in the
+        register of everyone who was ever a member.
 
-        A 404 counts as success -- something else already removed it, and the
-        point was for it not to be there.
+        Only when it really is empty. Forum access needs an active membership
+        and an avatar -- not a confirmed university address -- so somebody can
+        post from that account for weeks before the confirmation that moves
+        them onto their old one. Deleting their posts to tidy up an email
+        conflict would be destroying the thing this whole migration exists to
+        preserve, so an account with anything in it is left alone and reported.
+
+        A 404 counts as deleted: something else removed it, and the point was
+        for it not to be there.
         """
         try:
-            self._request(
-                "DELETE", f"/admin/users/{quote(str(remote_user_id))}.json",
-                json_body={"delete_posts": True, "block_email": False},
+            remote_user = self._request(
+                "GET", f"/admin/users/{quote(str(remote_user_id))}.json",
                 rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
             )
         except ForumProviderError as exc:
             if "failed (404)" in str(exc):
-                return True
+                return True, None
             raise
-        return True
+
+        # Any of these means a person did something in that account.
+        written = sum(
+            int(remote_user.get(field) or 0)
+            for field in ("post_count", "topic_count", "likes_given", "likes_received")
+        )
+        if written:
+            return False, (
+                f"the account has {written} posts, topics or likes and was left alone"
+            )
+
+        try:
+            self._request(
+                "DELETE", f"/admin/users/{quote(str(remote_user_id))}.json",
+                json_body={"delete_posts": False, "block_email": False},
+                rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
+            )
+        except ForumProviderError as exc:
+            if "failed (404)" in str(exc):
+                return True, None
+            raise
+        return True, None
 
     def _resolve_remote_user_id(self, forum_account):
         """Fill in the remote id from the external id, tolerating a missing user."""

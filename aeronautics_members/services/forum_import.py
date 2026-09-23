@@ -33,6 +33,7 @@ from ..db_models import ImportedForumProfile, User, db
 from ..forum_service import get_forum_storage_dir, normalize_avatar_image
 from . import ValidationError
 from .clock import get_now_utc
+from .outbox import enqueue_forum_discard_replaced
 
 SOURCE_MYBB = "mybb"
 
@@ -349,8 +350,6 @@ def claim_archived_account(user):
         # runs while a returning student is clicking a link in an email, and a
         # slow forum must not be able to fail that.
         if replaced_remote_user_id:
-            from .outbox import enqueue_forum_discard_replaced
-
             enqueue_forum_discard_replaced(
                 archived, replaced_remote_user_id, reason="forum_account_reclaimed"
             )

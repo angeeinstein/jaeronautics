@@ -368,11 +368,38 @@ def _handle_forum_discard_replaced_work(item):
             f"{remote_user_id} cannot be removed yet."
         )
     try:
-        service.provider.delete_remote_user(remote_user_id)
+        deleted, reason = service.provider.delete_remote_user(remote_user_id)
     except ForumProviderError as exc:
         raise ExternalServiceError(
             f"Could not remove the replaced forum account {remote_user_id}: {exc}"
         ) from exc
+
+    if not deleted:
+        # Somebody wrote something from that account before they reconnected.
+        # Retrying will not change that, and deleting it would take their posts
+        # with it, so this stops here and asks for a person to look.
+        current_app.logger.warning(
+            "The forum account %s left behind by a reconnection was not removed: %s",
+            remote_user_id, reason,
+        )
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "forum_replaced_account_kept",
+            _("A reconnected member left a forum account behind that still has content in it."),
+            payload={
+                "remote_user_id": remote_user_id,
+                "reason": reason,
+                "what_to_do": (
+                    "Move the posts to the member's reclaimed account or delete "
+                    "the leftover one by hand. Until then its email address "
+                    "cannot be given to the account they actually use."
+                ),
+            },
+            target_user=item.user,
+            commit=False,
+        )
+        return
+
     current_app.logger.info(
         "Removed the forum account left behind by a reconnection: %s", remote_user_id
     )
