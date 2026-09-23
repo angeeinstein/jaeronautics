@@ -32,7 +32,7 @@ from urllib.error import HTTPError, URLError
 
 from flask import current_app
 
-from ..forum_service import ForumProviderError
+from ..forum_service import DISCOURSE_USER_AGENT, ForumProviderError
 
 # Vienna, like the exporter: MyBB stored UTC and displayed local, so reading
 # these as UTC would move every late-evening post a day earlier than the board
@@ -147,6 +147,9 @@ class ContentPoster:
             "Api-Key": self.api_key,
             "Api-Username": as_username or self.admin_username,
             "Accept": "application/json",
+            # Without this Cloudflare refuses the request outright, and the
+            # error looks like Discourse saying no.
+            "User-Agent": DISCOURSE_USER_AGENT,
         }
         data = body
         if json_body is not None:

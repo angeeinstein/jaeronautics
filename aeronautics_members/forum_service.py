@@ -69,6 +69,17 @@ FORUM_SETTING_KEYS = tuple(FORUM_SETTING_DEFAULTS.keys())
 # normal course of that job rather than a fault.
 BULK_RATE_LIMIT_RETRIES = 10
 
+# Every request to Discourse identifies itself with this, and it is shared
+# rather than written out per client on purpose: the forum sits behind
+# Cloudflare, which blocks the default urllib signature outright (error 1010,
+# "browser signature banned"). A second HTTP client that forgot to send it
+# failed every call while the first one worked, which reads like a Discourse
+# problem and is not one. Kept verbatim, because Cloudflare is configured to
+# let this exact string through.
+DISCOURSE_USER_AGENT = (
+    "JoanneumAeronauticsForumSync/1.0 (+https://testmembers.joanneum-aeronautics.at)"
+)
+
 _ALLOWED_IMAGE_TYPE_TO_EXTENSION = {
     "jpeg": "jpg",
     "png": "png",
@@ -357,7 +368,7 @@ class DiscourseConnectProvider(ForumProvider):
             "Api-Key": self.settings["discourse_api_key"],
             "Api-Username": self.settings["discourse_api_username"],
             "Accept": "application/json",
-            "User-Agent": "JoanneumAeronauticsForumSync/1.0 (+https://testmembers.joanneum-aeronautics.at)",
+            "User-Agent": DISCOURSE_USER_AGENT,
         }
 
     def _request(self, method, path, data=None, json_body=None, rate_limit_retries=0):
