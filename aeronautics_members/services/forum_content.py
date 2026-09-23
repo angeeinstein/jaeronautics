@@ -250,6 +250,22 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
     report = {"thread": thread.get("subject"), "posts": [], "problems": [], "topic_id": None}
     uploads_dir = Path(uploads_dir)
 
+    # Posting the whole thread under one name is not a migration, it is a
+    # mistake wearing one. It already happened once: "users" matched a plugin's
+    # table, every lookup missed, and the fallback quietly took the lot.
+    resolved = sum(1 for post in posts if usernames_by_uid.get(post.get("uid")))
+    if not resolved:
+        raise ValueError(
+            "Not one of these posts could be matched to a forum account. "
+            "The author lookup is empty or reading the wrong table -- "
+            "check that the users table was found, rather than a plugin's."
+        )
+    if resolved < len(posts):
+        report["problems"].append(
+            f"{len(posts) - resolved} of {len(posts)} posts have no forum account "
+            "for their author and will be attributed to the fallback."
+        )
+
     for index, post in enumerate(posts):
         author = usernames_by_uid.get(post.get("uid")) or fallback_username
         asked_for = _as_iso(post["dateline"])

@@ -155,3 +155,64 @@ class TestWhatTheRealExportActuallyContains:
         people wrote, which is worse than leaving a stray tag.
         """
         assert bbcode_to_markdown(source) == source
+
+
+class TestItRefusesToPostEverythingAsOnePerson:
+    """A whole thread under one name is not a migration.
+
+    It happened: find_table("users") matched mybb_tapatalk_users, a plugin
+    table with no uid column, so every author lookup missed and the fallback
+    quietly took all twelve posts. The run reported success.
+    """
+
+    def _thread(self):
+        posts = [
+            {"pid": "1", "uid": "396", "dateline": "1570267782", "message": "erste"},
+            {"pid": "2", "uid": "378", "dateline": "1574785409", "message": "zweite"},
+        ]
+        return {"tid": "348", "subject": "Klausuren"}, posts
+
+    def test_it_stops_when_no_author_can_be_matched(self):
+        from aeronautics_members.services.forum_content import migrate_thread
+
+        thread, posts = self._thread()
+
+        with pytest.raises(ValueError) as raised:
+            migrate_thread(
+                poster=None, thread=thread, posts=posts, attachments_by_post={},
+                usernames_by_uid={},           # the bug, exactly
+                uploads_dir=".", category_id=1, dry_run=True,
+                fallback_username="system",
+            )
+
+        assert "not one of these posts" in str(raised.value).lower()
+
+    def test_it_says_so_when_only_some_are_missing(self, app):
+        """One unknown author is a note, not a reason to stop."""
+        from aeronautics_members.services.forum_content import migrate_thread
+
+        thread, posts = self._thread()
+
+        report = migrate_thread(
+            poster=None, thread=thread, posts=posts, attachments_by_post={},
+            usernames_by_uid={"396": "SpaniolA_L18"},
+            uploads_dir=".", category_id=1, dry_run=True,
+            fallback_username="system",
+        )
+
+        assert any("1 of 2" in problem for problem in report["problems"])
+
+    def test_a_fully_matched_thread_is_quiet(self, app):
+        from aeronautics_members.services.forum_content import migrate_thread
+
+        thread, posts = self._thread()
+
+        report = migrate_thread(
+            poster=None, thread=thread, posts=posts, attachments_by_post={},
+            usernames_by_uid={"396": "SpaniolA_L18", "378": "KappelL_L18"},
+            uploads_dir=".", category_id=1, dry_run=True,
+            fallback_username="system",
+        )
+
+        assert report["problems"] == []
+        assert [p["author"] for p in report["posts"]] == ["SpaniolA_L18", "KappelL_L18"]

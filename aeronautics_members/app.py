@@ -1782,7 +1782,7 @@ def create_app(config_overrides=None):
         from pathlib import Path as _Path
 
         sys.path.insert(0, str(_Path(app.root_path).parent / "scripts"))
-        from mybb_export import find_table, read_dump, rows_of  # noqa: E402
+        from mybb_export import find_prefix, find_table, read_dump, rows_of  # noqa: E402
 
         service = get_forum_service()
         if not service.is_enabled() or service.config_errors:
@@ -1791,23 +1791,27 @@ def create_app(config_overrides=None):
             raise click.ClickException("--category is required for a real run.")
 
         dump = read_dump(dump_file)
+        # With the prefix, so "users" cannot match mybb_tapatalk_users -- a
+        # plugin table with no uid column, which silently made every post
+        # anonymous rather than failing.
+        prefix, _rejected = find_prefix(dump)
         posts = [
-            row for row in rows_of(dump, find_table(dump, "posts"))
+            row for row in rows_of(dump, find_table(dump, "posts", prefix))
             if row.get("tid") == str(thread)
         ]
         if not posts:
             raise click.ClickException(f"No posts found for thread {thread}.")
         posts.sort(key=lambda row: int(row.get("dateline") or 0))
 
-        threads = {row["tid"]: row for row in rows_of(dump, find_table(dump, "threads"))}
+        threads = {row["tid"]: row for row in rows_of(dump, find_table(dump, "threads", prefix))}
         attachments_by_post = {}
-        for row in rows_of(dump, find_table(dump, "attachments")):
+        for row in rows_of(dump, find_table(dump, "attachments", prefix)):
             attachments_by_post.setdefault(row.get("pid"), []).append(row)
         # The name the old forum knew each author by is the name they have here,
         # because that is exactly what the profile import published.
         usernames_by_uid = {
             row.get("uid"): row.get("username")
-            for row in rows_of(dump, find_table(dump, "users"))
+            for row in rows_of(dump, find_table(dump, "users", prefix))
         }
 
         poster = ContentPoster(service.settings)
