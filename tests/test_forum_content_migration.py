@@ -25,6 +25,7 @@ from aeronautics_members.services.forum_content import (
     migrate_thread,
     plan_site_settings,
     read_settings_journal,
+    rehearsal_threads,
     restore_site_settings,
 )
 
@@ -570,3 +571,50 @@ class TestTheShapesDiscourseActuallyReturns:
             )
 
         assert "title_prettify" not in {change["setting"] for change in changes}
+
+
+class TestPickingAThreadToRehearseWith:
+    """720 threads, and no way to pick a useful one by eye."""
+
+    def a_board(self):
+        threads = [
+            {"tid": "1", "subject": "Einer allein", "firstpost": "1"},
+            {"tid": "2", "subject": "Zwei Leute", "firstpost": "3"},
+            {"tid": "3", "subject": "Zwei Leute mit Anhang", "firstpost": "5"},
+        ]
+        posts = [
+            {"pid": "1", "tid": "1", "uid": "7", "dateline": "1", "message": "allein"},
+            {"pid": "2", "tid": "1", "uid": "7", "dateline": "2", "message": "immer noch"},
+            {"pid": "3", "tid": "2", "uid": "7", "dateline": "3", "message": "frage"},
+            {"pid": "4", "tid": "2", "uid": "8", "dateline": "4", "message": "antwort"},
+            {"pid": "5", "tid": "3", "uid": "7", "dateline": "5", "message": "angabe"},
+            {"pid": "6", "tid": "3", "uid": "8", "dateline": "6", "message": "danke"},
+        ]
+        attachments = [{"pid": "5", "filename": "Angabe.pdf", "filesize": "10"}]
+        return threads, posts, attachments
+
+    def test_a_thread_with_attachments_comes_first(self):
+        picked = rehearsal_threads(*self.a_board())
+
+        assert picked[0]["tid"] == "3"
+        assert picked[0]["attachments"] == 1
+
+    def test_one_person_talking_to_themselves_is_no_rehearsal(self):
+        """Impersonation is the thing being tested. One author tests nothing."""
+        picked = rehearsal_threads(*self.a_board())
+
+        assert "1" not in {row["tid"] for row in picked}
+
+    def test_a_single_post_is_no_rehearsal_either(self):
+        """Replies landing in the topic the first post opened is half the job."""
+        threads = [{"tid": "9", "subject": "Nur einer", "firstpost": "20"}]
+        posts = [{"pid": "20", "tid": "9", "uid": "7", "dateline": "1", "message": "hallo"}]
+
+        assert rehearsal_threads(threads, posts) == []
+
+    def test_it_counts_what_it_shows(self):
+        picked = {row["tid"]: row for row in rehearsal_threads(*self.a_board())}
+
+        assert picked["2"]["posts"] == 2
+        assert picked["2"]["authors"] == 2
+        assert picked["2"]["attachments"] == 0

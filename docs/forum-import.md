@@ -439,3 +439,9 @@ and none of it should be reachable by guessing a filename.
 
 The dashboard counts them separately. Folding them into *Total Accounts* would
 report 760 accounts for an association with twenty.
+
+## 8. And then the posts
+
+The people are the prerequisite, not the whole job. Moving the threads
+themselves — with their authors, their dates and their attachments — is
+[forum-content-import.md](forum-content-import.md).

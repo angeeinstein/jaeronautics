@@ -240,6 +240,7 @@ from .services.forum_content import (  # noqa: E402
     migrate_thread,
     plan_site_settings,
     read_settings_journal,
+    rehearsal_threads,
     restore_site_settings,
 )
 from .services.workflows import (  # noqa: E402
@@ -1955,6 +1956,21 @@ def create_app(config_overrides=None):
                 f"Could not read the forum's settings: {exc}"
             ) from exc
         ready, _anything = _report_site_settings(rows)
+
+        # A rehearsal is only worth running on a thread that exercises the
+        # things that break, and there is no way to pick one by eye out of 720.
+        candidates = rehearsal_threads(
+            tables["threads"], tables["posts"], tables["attachments"]
+        )
+        if candidates:
+            click.echo("\nThreads worth rehearsing with (--thread), hardest first:")
+            click.echo(f"  {'tid':<8} {'posts':>5} {'people':>7} {'files':>6}  subject")
+            for row in candidates:
+                click.echo(
+                    f"  {row['tid']:<8} {row['posts']:>5} {row['authors']:>7} "
+                    f"{row['attachments']:>6}  {row['subject'][:44]}"
+                )
+
         if not ready:
             raise SystemExit(1)
 

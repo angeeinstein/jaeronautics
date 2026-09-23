@@ -503,6 +503,51 @@ def plan_site_settings(threads, posts, attachments=()):
     return requirements
 
 
+def rehearsal_threads(threads, posts, attachments=(), limit=5):
+    """Threads worth trying the spike on, hardest first.
+
+    A rehearsal only tells you something if it exercises the things that break:
+    several different authors, so impersonation is actually tested; more than
+    one post, so replies land in the topic the first post opened; and
+    attachments, since uploading is where the file types, the size limits and
+    the .attach renaming all show up at once. A thread of one post by one
+    person with nothing attached proves almost nothing.
+    """
+    posts_by_thread = {}
+    for post in posts:
+        posts_by_thread.setdefault(post.get("tid"), []).append(post)
+
+    attached = Counter()
+    pid_to_tid = {post.get("pid"): post.get("tid") for post in posts}
+    for row in attachments:
+        tid = pid_to_tid.get(row.get("pid"))
+        if tid is not None:
+            attached[tid] += 1
+
+    candidates = []
+    for thread in threads:
+        tid = thread.get("tid")
+        in_thread = posts_by_thread.get(tid, [])
+        if len(in_thread) < 2:
+            continue
+        authors = len({post.get("uid") for post in in_thread})
+        if authors < 2:
+            continue
+        candidates.append({
+            "tid": tid,
+            "subject": thread.get("subject") or "",
+            "posts": len(in_thread),
+            "authors": authors,
+            "attachments": attached[tid],
+        })
+
+    candidates.sort(
+        key=lambda row: (row["attachments"] > 0, row["authors"], row["posts"]),
+        reverse=True,
+    )
+    return candidates[:limit]
+
+
 def _as_number(value):
     try:
         return int(str(value).strip())
