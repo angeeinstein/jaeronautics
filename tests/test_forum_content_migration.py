@@ -618,3 +618,22 @@ class TestPickingAThreadToRehearseWith:
         assert picked["2"]["posts"] == 2
         assert picked["2"]["authors"] == 2
         assert picked["2"]["attachments"] == 0
+
+
+class TestTheRecordIsNotOverwritten:
+    def test_a_second_run_will_not_write_over_the_first(self, app, tmp_path):
+        """Otherwise the loosened values get recorded as the originals."""
+        journal = tmp_path / "settings.json"
+        threads = [{"tid": "1", "subject": "Klausuren", "firstpost": "1"}]
+
+        with app.app_context():
+            first = FakePoster(settings={"min_topic_title_length": "15"})
+            loosen_site_settings(first, plan_site_settings(threads, []), journal)
+            recorded = read_settings_journal(journal)
+
+            second = FakePoster(settings={"min_topic_title_length": "9"})
+            with pytest.raises(FileExistsError):
+                loosen_site_settings(second, plan_site_settings(threads, []), journal)
+
+        assert read_settings_journal(journal) == recorded
+        assert second.settings_written == [], "and nothing was changed either"

@@ -31,11 +31,15 @@ the `.attach` files in it.
 
 Neither belongs in `/var/www/jaeronautics`. That directory is the application,
 it is replaced by updates, and the dump holds seven hundred real email
-addresses. Somewhere like `/var/tmp/forum-migration` is right:
+addresses. Somewhere like `/var/tmp/forum-migration` is right.
+
+Download as yourself and hand the whole directory over afterwards, rather than
+downloading as `jaeronautics` into a directory it cannot write to. The order
+matters, and getting it wrong reads as `curl: (23) Failure writing output`,
+which sounds like a network problem and is a permissions one:
 
 ```bash
-sudo mkdir -p /var/tmp/forum-migration
-sudo chown jaeronautics: /var/tmp/forum-migration
+mkdir -p /var/tmp/forum-migration
 cd /var/tmp/forum-migration
 ```
 
@@ -43,7 +47,25 @@ From your own machine, with `python3 -m http.server` running **in the folder
 that contains `uploads`**, not inside `uploads` itself:
 
 ```bash
-sudo -u jaeronautics curl -O http://YOUR-PC:8000/backup__20260919_210211.sql.gz
+curl -O http://YOUR-PC:8000/backup__20260919_210211_Xwyis10ESUeobhvu.sql.gz
+mv backup__*.sql.gz dump.sql.gz
+```
+
+The rename is worth it. Every command below names the dump, the real filename
+has a random suffix, and a typo in it comes back as "File does not exist" after
+you have already got the rest of a long command right.
+
+Then, once everything is downloaded — and again after copying any attachments
+across:
+
+```bash
+chown -R jaeronautics: /var/tmp/forum-migration
+```
+
+Check it took, rather than assuming:
+
+```bash
+sudo -u jaeronautics ls -l /var/tmp/forum-migration
 ```
 
 The uploads folder is around 9 GB in total. For the rehearsal you do not need
@@ -64,16 +86,25 @@ that user — and fails the moment it is asked to act as somebody else, which is
 the whole of this job. The failure reads `invalid_access`, which sounds like a
 permissions problem and is not.
 
-Keep the key out of your shell history and out of `ps`:
+Put it in a file without it ever appearing on screen. `read -rs` does not echo
+what is typed, and `printf` is a shell builtin, so the key never reaches any
+process's arguments either:
 
 ```bash
-umask 077
-sudo -u jaeronautics tee /var/tmp/forum-migration/api-key >/dev/null
-# paste the key, then Ctrl-D
+read -rs KEY
+printf '%s' "$KEY" > /var/tmp/forum-migration/api-key
+unset KEY
+chown jaeronautics: /var/tmp/forum-migration/api-key
+chmod 600 /var/tmp/forum-migration/api-key
 ```
 
-**Revoke it when you are done.** A key that can post as any member of the forum
-should not outlive the afternoon it was made for.
+**Do not paste the key at a prompt that echoes it.** If a command fails and you
+type the key at the shell instead, it is in your scrollback and in your history
+— revoke that key and make another one. It is a minute's work and there is no
+way to un-see it.
+
+**Revoke it when you are done** in any case. A key that can post as any member
+of the forum should not outlive the afternoon it was made for.
 
 ## 3. Ask the forum whether it will take the archive
 
@@ -85,7 +116,7 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics sh -c '
   DISCOURSE_MIGRATION_API_KEY=$(cat /var/tmp/forum-migration/api-key) \
   exec /var/www/jaeronautics/.venv/bin/flask \
        --app aeronautics_members.app:create_app \
-       check-forum-settings /var/tmp/forum-migration/backup__20260919_210211.sql.gz'
+       check-forum-settings /var/tmp/forum-migration/dump.sql.gz'
 ```
 
 (The `sh -c` is not decoration. `env KEY=value` puts the key in a process's
@@ -112,7 +143,7 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics sh -c '
   DISCOURSE_MIGRATION_API_KEY=$(cat /var/tmp/forum-migration/api-key) \
   exec /var/www/jaeronautics/.venv/bin/flask \
        --app aeronautics_members.app:create_app \
-       migrate-forum-thread /var/tmp/forum-migration/backup__20260919_210211.sql.gz \
+       migrate-forum-thread /var/tmp/forum-migration/dump.sql.gz \
        --thread 336 --uploads /var/tmp/forum-migration/uploads --dry-run'
 ```
 
@@ -131,9 +162,10 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics sh -c '
   DISCOURSE_MIGRATION_API_KEY=$(cat /var/tmp/forum-migration/api-key) \
   exec /var/www/jaeronautics/.venv/bin/flask \
        --app aeronautics_members.app:create_app \
-       migrate-forum-thread /var/tmp/forum-migration/backup__20260919_210211.sql.gz \
+       migrate-forum-thread /var/tmp/forum-migration/dump.sql.gz \
        --thread 336 --uploads /var/tmp/forum-migration/uploads \
-       --category 12 --adjust-settings'
+       --category 12 --adjust-settings \
+       --settings-file /var/tmp/forum-migration/settings-before.json'
 ```
 
 `--category` is the Discourse category id, the number in its URL: `/c/archiv/12`
@@ -141,9 +173,17 @@ is `12`. Make one for the rehearsal rather than posting into somewhere people
 are reading.
 
 `--adjust-settings` makes it loosen what has to be loosened, run, and put it
-back. It prints the path of the file recording what everything was **before it
-changes anything**, because the run that most needs that file is the one that
-never reaches its own ending.
+back. It writes what everything was into `--settings-file` **before it changes
+anything**, because the run that most needs that file is the one that never
+reaches its own ending. Name the file rather than letting it default: the
+default lands in the working directory, which the application user may not be
+able to write to.
+
+**It will not write over a file that is already there.** A record still on disk
+means an earlier run loosened these settings and may never have put them back;
+overwriting it would record the loosened values as the originals and the way
+back would be gone. Restore from it first, or move it aside if that is already
+done.
 
 ## 6. If it does not finish
 
@@ -155,7 +195,7 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics sh -c '
   DISCOURSE_MIGRATION_API_KEY=$(cat /var/tmp/forum-migration/api-key) \
   exec /var/www/jaeronautics/.venv/bin/flask \
        --app aeronautics_members.app:create_app \
-       restore-forum-settings /var/tmp/forum-migration/forum-settings-20260923-141500.json'
+       restore-forum-settings /var/tmp/forum-migration/settings-before.json'
 ```
 
 A setting that no longer holds the value the import gave it was changed by

@@ -630,6 +630,18 @@ def loosen_site_settings(poster, requirements, journal_path):
     Returns the list of changes, which is also what the journal holds.
     """
     journal_path = Path(journal_path)
+    # A record already there means a previous run loosened these settings and
+    # may never have put them back. Writing over it would record the loosened
+    # values as the originals, and the way back would be gone -- so this is
+    # refused rather than resolved. Restore from that file, or move it aside
+    # if it has already been dealt with.
+    if journal_path.exists():
+        raise FileExistsError(
+            f"{journal_path} already exists. It holds what the settings were "
+            f"before an earlier run; writing over it would lose them. Restore "
+            f"from it first, or move it aside if that has already been done."
+        )
+
     changes = []
     for row in check_site_settings(poster, requirements):
         if row["ok"] is not False:
