@@ -2137,7 +2137,12 @@ def create_app(config_overrides=None):
 
         kept, explanation = dates_survived(report)
         click.echo("")
-        if kept is True:
+        if dry_run:
+            click.echo(
+                "Whether Discourse keeps these dates is what the real run "
+                "answers; a dry run cannot."
+            )
+        elif kept is True:
             click.echo(click.style(f"Dates survived: {explanation}", fg="green"))
         elif kept is False:
             click.echo(click.style(f"Dates did NOT survive: {explanation}", fg="red"))
@@ -2145,7 +2150,13 @@ def create_app(config_overrides=None):
         else:
             click.echo(click.style(f"Undetermined: {explanation}", fg="yellow"))
 
-        for problem in report["problems"][:20]:
+        # Every one of them. On a dry run this list *is* the output -- it is
+        # the set of files to copy across -- and a truncated list of files to
+        # copy is worse than no list, because it looks complete.
+        if report["problems"]:
+            click.echo(click.style(
+                f"\n{len(report['problems'])} problems:", fg="yellow"), err=True)
+        for problem in report["problems"]:
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if report.get("topic_id"):
             click.echo(f"\nTopic {report['topic_id']} — go and look at it.")

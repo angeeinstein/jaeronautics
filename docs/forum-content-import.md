@@ -178,6 +178,40 @@ What it tells you:
 After copying files in, `chown -R jaeronautics: /var/tmp/forum-migration`
 again, and run the dry run until it stops reporting missing files.
 
+### Fetching just the files one thread needs
+
+The problems go to standard error, and every path in them is under the
+`--uploads` directory, so the list can drive the copying. With
+`python3 -m http.server` still running in the folder that contains `uploads`:
+
+```bash
+# ...the dry run as above, keeping what it complained about
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics sh -c '
+  DISCOURSE_MIGRATION_API_KEY=$(cat /var/tmp/forum-migration/api-key) \
+  exec /var/www/jaeronautics/.venv/bin/flask \
+       --app aeronautics_members.app:create_app \
+       migrate-forum-thread /var/tmp/forum-migration/dump.sql.gz \
+       --thread 258 --uploads /var/tmp/forum-migration/uploads --dry-run' \
+  2> /tmp/missing.txt
+
+UP=/var/tmp/forum-migration/uploads
+grep -o "${UP}/[^ ]*\.attach" /tmp/missing.txt | sort -u | while read -r path; do
+    rel=${path#"${UP}/"}
+    mkdir -p "${UP}/$(dirname "${rel}")"
+    curl -fsS -o "${path}" "http://YOUR-PC:8000/uploads/${rel}" \
+        || echo "could not fetch ${rel}"
+done
+chown -R jaeronautics: /var/tmp/forum-migration
+```
+
+Then run the dry run again. It should report no problems at all, and the
+`files` column should show a count against the posts that carry attachments.
+
+The MyBB names are not an accident to be corrected: every upload is stored as
+`post_<pid>_<time>_<hash>.attach` — the original bytes, renamed so the
+webserver cannot serve or execute them. The name somebody actually chose, and
+its type, are columns in the database, and those are what get sent to Discourse.
+
 ## 5. The real run
 
 ```bash
