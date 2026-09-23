@@ -98,10 +98,24 @@ chown jaeronautics: /var/tmp/forum-migration/api-key
 chmod 600 /var/tmp/forum-migration/api-key
 ```
 
+**Check that the whole key arrived.** Discourse's keys are 64 hexadecimal
+characters:
+
+```bash
+wc -c < /var/tmp/forum-migration/api-key
+```
+
+If that is not 64, the key was truncated on the way in — terminals lose the
+tail of a long paste more often than you would think. The failure it causes is
+misleading: Discourse treats a key it does not recognise as **anonymous**
+rather than refusing it, and hides admin routes from anonymous requests behind
+a 404. So a half-pasted key reads as `GET /admin/site_settings.json failed
+(404)`, which looks like a missing feature or a Discourse version problem and
+is neither.
+
 **Do not paste the key at a prompt that echoes it.** If a command fails and you
-type the key at the shell instead, it is in your scrollback and in your history
-— revoke that key and make another one. It is a minute's work and there is no
-way to un-see it.
+type the key at the shell instead, it is in your scrollback and in your
+history.
 
 **Revoke it when you are done** in any case. A key that can post as any member
 of the forum should not outlive the afternoon it was made for.

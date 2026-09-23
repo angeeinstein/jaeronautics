@@ -138,10 +138,41 @@ def bbcode_to_markdown(text):
 class ContentPoster:
     """The few API calls this needs, as the person who wrote each post."""
 
+    #: Where this Discourse keeps the site settings. The admin JSON routes have
+    #: moved between versions -- reading the custom user fields already needs
+    #: three candidates -- so the path is found rather than assumed.
+    SITE_SETTINGS_PATHS = (
+        "/admin/site_settings.json",
+        "/admin/config/site_settings.json",
+        "/admin/site_settings/category/all_results.json",
+    )
+
     def __init__(self, settings):
         self.base_url = settings["forum_base_url"].rstrip("/")
         self.api_key = settings["discourse_api_key"]
         self.admin_username = settings["discourse_api_username"]
+        self._settings_base = None
+
+    def _key_complaint(self):
+        """Whether the key is the wrong shape, said plainly. None if it is fine.
+
+        Worth checking before blaming anything else. A Discourse API key is 64
+        hexadecimal characters, and a key Discourse does not recognise makes the
+        request anonymous rather than refused -- after which every admin route
+        answers 404, because Discourse hides them from people who are not staff
+        rather than admitting they exist. A truncated key therefore looks
+        exactly like a missing feature.
+        """
+        key = (self.api_key or "").strip()
+        if not key:
+            return "no API key was given at all"
+        if len(key) != 64 or not all(c in "0123456789abcdefABCDEF" for c in key):
+            return (
+                f"the API key is {len(key)} characters and Discourse's are 64 "
+                f"hexadecimal ones, so this one looks truncated or mistyped -- "
+                f"a partly-pasted key is the usual cause"
+            )
+        return None
 
     def _call(self, method, path, *, as_username=None, json_body=None, body=None, content_type=None):
         headers = {
@@ -180,6 +211,7 @@ class ContentPoster:
                     "key that can act as anybody should not outlive the job."
                 ) from exc
             raise ForumProviderError(f"{method} {path} failed ({exc.code}): {detail}") from exc
+
         except URLError as exc:
             raise ForumProviderError(f"Could not reach Discourse: {exc}") from exc
 
@@ -238,18 +270,54 @@ class ContentPoster:
         return self._call("GET", f"/posts/{quote(str(post_id))}.json")
 
     def site_settings(self):
-        """Every site setting and its current value, as {name: value}."""
-        payload = self._call("GET", "/admin/site_settings.json")
-        return {
-            row.get("setting"): row.get("value")
-            for row in payload.get("site_settings", [])
-            if row.get("setting")
-        }
+        """Every site setting and its current value, as {name: value}.
+
+        Tries the paths this has been known to live at, and keeps the one that
+        answers so that writing a setting back goes to the same place.
+        """
+        attempts = []
+        for path in self.SITE_SETTINGS_PATHS:
+            try:
+                payload = self._call("GET", path)
+            except ForumProviderError as exc:
+                attempts.append(f"{path}: {exc}")
+                continue
+            rows = payload.get("site_settings") if isinstance(payload, dict) else None
+            if rows is None:
+                attempts.append(f"{path}: answered, but with no site settings in it")
+                continue
+            self._settings_base = path[: -len(".json")]
+            return {
+                row.get("setting"): row.get("value")
+                for row in rows
+                if row.get("setting")
+            }
+
+        complaint = self._key_complaint()
+        if complaint:
+            raise ForumProviderError(
+                f"Could not read the forum's settings, and {complaint}. "
+                f"Discourse makes a request with a key it does not recognise "
+                f"an anonymous one, and answers 404 on every admin route to "
+                f"anybody who is not staff -- so a bad key looks exactly like "
+                f"a missing page. Check the key before anything else."
+            )
+        raise ForumProviderError(
+            "Could not read the forum's settings from any known admin path "
+            f"({', '.join(self.SITE_SETTINGS_PATHS)}). A 404 here usually means "
+            f"{self.admin_username} is not an administrator on the forum, since "
+            f"Discourse hides admin routes rather than refusing them. Tried:\n  "
+            + "\n  ".join(attempts)
+        )
 
     def set_site_setting(self, setting, value):
         """Change one site setting. Discourse names the field after itself."""
+        if self._settings_base is None:
+            # Reading first is how the path is discovered, and nothing changes
+            # a setting without having read it anyway.
+            self.site_settings()
         self._call(
-            "PUT", f"/admin/site_settings/{quote(str(setting))}.json",
+            "PUT", f"{self._settings_base}/{quote(str(setting))}.json",
             json_body={setting: str(value)},
         )
 

@@ -1839,6 +1839,18 @@ def create_app(config_overrides=None):
             return True, True
         return False, True
 
+    def _warn_about_the_key(poster):
+        """Say so early if the key is the wrong shape.
+
+        Otherwise this surfaces much later as a 404 on an admin route, which
+        is what Discourse answers when it does not recognise a key -- the
+        request becomes anonymous, and admin routes are hidden rather than
+        refused. It reads as a missing feature.
+        """
+        complaint = poster._key_complaint()
+        if complaint:
+            click.echo(click.style(f"Warning: {complaint}.", fg="yellow"), err=True)
+
     def _settings_journal_path(given=None):
         """Where the record of what was changed goes."""
         from datetime import datetime as _datetime
@@ -1949,8 +1961,10 @@ def create_app(config_overrides=None):
             f"({total_bytes / 1024 ** 3:.1f} GB -- the forum needs room for that "
             f"on top of what it already holds)."
         )
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
         try:
-            rows = check_site_settings(ContentPoster(settings), requirements)
+            rows = check_site_settings(poster, requirements)
         except ForumProviderError as exc:
             raise click.ClickException(
                 f"Could not read the forum's settings: {exc}"
@@ -2035,6 +2049,7 @@ def create_app(config_overrides=None):
         if api_key:
             settings["discourse_api_key"] = api_key
         poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
 
         # Ask the forum whether it will take this thread before posting any of
         # it. A run that gets three posts in and is then refused for a title

@@ -20,6 +20,7 @@ import pytest
 
 from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_content import (
+    ContentPoster,
     check_site_settings,
     loosen_site_settings,
     migrate_thread,
@@ -637,3 +638,73 @@ class TestTheRecordIsNotOverwritten:
 
         assert read_settings_journal(journal) == recorded
         assert second.settings_written == [], "and nothing was changed either"
+
+
+class TestWhenDiscourseSaysTheAdminRouteIsNotThere:
+    """404 on an admin route means "not staff", not "not implemented"."""
+
+    class Poster(ContentPoster):
+        def __init__(self, key, answers):
+            super().__init__({
+                "forum_base_url": "https://forum.example.at",
+                "discourse_api_key": key,
+                "discourse_api_username": "system",
+            })
+            self.answers = answers
+            self.asked = []
+
+        def _call(self, method, path, **kwargs):
+            self.asked.append((method, path))
+            answer = self.answers.get(path)
+            if answer is None:
+                raise ForumProviderError(f"{method} {path} failed (404)")
+            return answer
+
+    A_REAL_KEY = "a" * 64
+
+    def test_it_tries_the_other_paths_it_has_been_known_to_live_at(self):
+        poster = self.Poster(self.A_REAL_KEY, {
+            "/admin/config/site_settings.json": {
+                "site_settings": [{"setting": "min_post_length", "value": "20"}]
+            },
+        })
+
+        assert poster.site_settings() == {"min_post_length": "20"}
+        assert ("GET", "/admin/site_settings.json") in poster.asked
+
+    def test_writing_goes_back_to_the_path_that_answered(self):
+        poster = self.Poster(self.A_REAL_KEY, {
+            "/admin/config/site_settings.json": {"site_settings": []},
+            "/admin/config/site_settings/min_post_length.json": {},
+        })
+
+        poster.set_site_setting("min_post_length", 2)
+
+        assert ("PUT", "/admin/config/site_settings/min_post_length.json") in poster.asked
+
+    def test_a_truncated_key_is_blamed_before_the_forum_is(self):
+        """The usual cause, and it looks like a missing page."""
+        poster = self.Poster("faa7e2993d99a10bd006ba18e6b716b7c8729594e5", {})
+
+        with pytest.raises(ForumProviderError) as raised:
+            poster.site_settings()
+
+        assert "42 characters" in str(raised.value)
+        assert "truncated" in str(raised.value)
+
+    def test_with_a_good_key_the_forum_is_blamed_instead(self):
+        poster = self.Poster(self.A_REAL_KEY, {})
+
+        with pytest.raises(ForumProviderError) as raised:
+            poster.site_settings()
+
+        assert "not an administrator" in str(raised.value)
+        assert "/admin/site_settings.json" in str(raised.value)
+
+    def test_an_empty_key_says_so(self):
+        poster = self.Poster("", {})
+
+        with pytest.raises(ForumProviderError) as raised:
+            poster.site_settings()
+
+        assert "no API key" in str(raised.value)
