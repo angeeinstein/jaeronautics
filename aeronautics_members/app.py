@@ -233,6 +233,7 @@ from .services.forum_profiles import (  # noqa: E402
     publish_imported_profiles,
 )
 from .services.forum_board import (  # noqa: E402
+    audit_uploads,
     Ledger,
     category_nesting_requirement,
     category_plan,
@@ -245,6 +246,7 @@ from .services.forum_content import (  # noqa: E402
     check_site_settings,
     dates_survived,
     loosen_site_settings,
+    mark_journal_restored,
     migrate_thread,
     plan_site_settings,
     read_settings_journal,
@@ -1923,6 +1925,7 @@ def create_app(config_overrides=None):
         except ForumProviderError as exc:
             raise click.ClickException(f"Could not restore: {exc}") from exc
         _report_restore(results)
+        mark_journal_restored(journal, results)
 
         stuck = [row for row in results if row["outcome"].startswith("left alone")]
         if stuck:
@@ -2164,7 +2167,11 @@ def create_app(config_overrides=None):
             if changes:
                 click.echo("\nPutting the settings back:")
                 try:
-                    _report_restore(restore_site_settings(poster, changes))
+                    results = restore_site_settings(poster, changes)
+                    _report_restore(results)
+                    # So the next run is not blocked by a journal whose whole
+                    # purpose has already been served.
+                    mark_journal_restored(journal, results)
                 except ForumProviderError as exc:
                     # Never swallowed: a forum left wide open has to be said
                     # out loud, with the one command that fixes it.
@@ -2209,6 +2216,62 @@ def create_app(config_overrides=None):
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if report.get("topic_id"):
             click.echo(f"\nTopic {report['topic_id']} — go and look at it.")
+
+    @app.cli.command("check-forum-uploads")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--uploads", required=True, type=click.Path(file_okay=False),
+                  help="Where the .attach files have been put so far.")
+    @click.option("--missing-to", type=click.Path(dir_okay=False),
+                  help="Write the paths still needed to this file, one per "
+                       "line, ready to drive a copy.")
+    @with_appcontext
+    def check_forum_uploads_command(dump_file, uploads, missing_to):
+        """Which of the old board's files are here, and which are still to come.
+
+        Nine gigabytes fetched a directory at a time over several sittings is
+        not something anybody can hold in their head, and the import reports a
+        missing file per post -- the right shape for one thread and the wrong
+        one for 2,347.
+
+        Size is checked as well as presence. The usual way a file goes wrong
+        here is not absence: a web server asked for something it has not got
+        answers with a page saying so, and a fetch that does not check writes
+        that page to disk under the name of the file it wanted.
+        """
+        tables = _load_mybb_dump(dump_file)
+        report = audit_uploads(tables["attachments"], uploads)
+
+        click.echo(
+            f"{report['expected']} attachments on the old board.\n"
+            f"  here:    {report['present']:>5}  "
+            f"({report['bytes_present'] / 1024 ** 3:.2f} GB)\n"
+            f"  missing: {len(report['missing']):>5}  "
+            f"({report['bytes_missing'] / 1024 ** 3:.2f} GB still to fetch)"
+        )
+
+        if report["wrong_size"]:
+            click.echo(click.style(
+                f"\n{len(report['wrong_size'])} files are here but the wrong "
+                f"size. Fetch these again -- a file of the wrong size is "
+                f"usually an error page wearing its name:", fg="red",
+            ))
+            for row in report["wrong_size"][:20]:
+                click.echo(
+                    f"  {row['name']}  {row['on_disk']} bytes, "
+                    f"should be {row['recorded']}"
+                )
+            if len(report["wrong_size"]) > 20:
+                click.echo(f"  ... and {len(report['wrong_size']) - 20} more")
+
+        if missing_to:
+            wanted = report["missing"] + [row["name"] for row in report["wrong_size"]]
+            Path(missing_to).write_text("\n".join(wanted) + "\n", encoding="utf-8")
+            click.echo(f"\n{len(wanted)} paths written to {missing_to}.")
+
+        if not report["missing"] and not report["wrong_size"]:
+            click.echo(click.style("\nEverything is here.", fg="green"))
+        else:
+            raise SystemExit(1)
 
     @app.cli.command("import-forum-content")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
@@ -2325,7 +2388,11 @@ def create_app(config_overrides=None):
             if changes:
                 click.echo("\nPutting the settings back:")
                 try:
-                    _report_restore(restore_site_settings(poster, changes))
+                    results = restore_site_settings(poster, changes)
+                    _report_restore(results)
+                    # So the next run is not blocked by a journal whose whole
+                    # purpose has already been served.
+                    mark_journal_restored(journal, results)
                 except ForumProviderError as exc:
                     click.echo(click.style(
                         f"COULD NOT RESTORE THE SETTINGS: {exc}\n"

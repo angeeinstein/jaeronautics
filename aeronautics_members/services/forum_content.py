@@ -851,16 +851,19 @@ def loosen_site_settings(poster, requirements, journal_path):
     Returns the list of changes, which is also what the journal holds.
     """
     journal_path = Path(journal_path)
-    # A record already there means a previous run loosened these settings and
-    # may never have put them back. Writing over it would record the loosened
-    # values as the originals, and the way back would be gone -- so this is
-    # refused rather than resolved. Restore from that file, or move it aside
-    # if it has already been dealt with.
-    if journal_path.exists():
+    # A record already there means a previous run loosened these settings, and
+    # writing over it would record the loosened values as the originals -- the
+    # way back would be gone, silently, at the moment it was most needed.
+    #
+    # Unless that run put them back. A journal whose settings have been
+    # restored has done its job and holds nothing worth keeping, and refusing
+    # over it would mean every successful run blocked the next one.
+    if journal_path.exists() and not journal_is_spent(journal_path):
         raise FileExistsError(
-            f"{journal_path} already exists. It holds what the settings were "
-            f"before an earlier run; writing over it would lose them. Restore "
-            f"from it first, or move it aside if that has already been done."
+            f"{journal_path} already exists and its settings were never put "
+            f"back. It holds what they were before an earlier run; writing "
+            f"over it would lose them. Restore from it first:\n"
+            f"  flask restore-forum-settings {journal_path}"
         )
 
     changes = []
@@ -942,6 +945,42 @@ def read_settings_journal(journal_path):
     if not isinstance(changes, list) or not changes:
         raise ValueError(f"{journal_path} does not hold any recorded changes.")
     return payload
+
+
+def journal_is_spent(journal_path):
+    """Has the run that wrote this already put the settings back?
+
+    A journal exists to get the forum back to how it was. Once that has
+    happened it is a receipt rather than a plan, and standing in the way of
+    the next run is the one thing it should not do.
+    """
+    try:
+        payload = json.loads(Path(journal_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        # Unreadable is not the same as dealt with. Err towards refusing.
+        return False
+    return bool(payload.get("restored_at"))
+
+
+def mark_journal_restored(journal_path, results):
+    """Write on the journal that its settings went back, if they all did.
+
+    One setting left alone -- because somebody else changed it in the meantime
+    -- means the forum is not as it was, so the journal stays live and the next
+    run still stops on it.
+    """
+    stuck = [row for row in results if row["outcome"].startswith("left alone")]
+    if stuck:
+        return False
+    path = Path(journal_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    payload["restored_at"] = datetime.now(tz=timezone.utc).isoformat()
+    payload["outcomes"] = results
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1039,7 +1078,10 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
         links = []
         for attachment in attachments_by_post.get(post.get("pid"), []):
             source = uploads_dir / (attachment.get("attachname") or "")
-            original = attachment.get("filename") or source.name
+            # Stripped: one real filename on the board begins with two spaces,
+            # which is a thing a 2017 upload dialog allowed and a filename is
+            # better off without.
+            original = (attachment.get("filename") or "").strip() or source.name
             if not source.exists():
                 record["result"] = "missing file"
                 report["problems"].append(f"pid={post.get('pid')}: {source} is not there")

@@ -12,6 +12,7 @@ import pytest
 from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_board import (
     Ledger,
+    audit_uploads,
     category_nesting_requirement,
     category_plan,
     ensure_categories,
@@ -379,3 +380,137 @@ class TestTheWholeBoard:
             )
 
         assert summary["threads"] == expected
+
+
+class TestACategoryTheForumWillNotMake:
+    """275 categories, and the whole run already changed every setting."""
+
+    def a_refusing_forum(self, refuse):
+        poster = BoardPoster()
+        original = poster.create_category
+
+        def create_category(name, parent_id=None):
+            if name in refuse:
+                raise ForumProviderError(
+                    'POST /categories.json failed (422): '
+                    '{"errors":["Categories cannot be nested that deeply"]}'
+                )
+            return original(name, parent_id=parent_id)
+
+        poster.create_category = create_category
+        return poster
+
+    def test_one_refusal_does_not_take_the_run_down(self, app, tmp_path):
+        poster = self.a_refusing_forum({"3. Semester / Technisches Programmieren"})
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, a_board(), "/nowhere", Ledger(tmp_path / "l.jsonl"),
+            )
+
+        assert any("Technisches Programmieren" in problem
+                   for problem in summary["problems"])
+        assert summary["posted"] == 0, "its threads have nowhere to go"
+
+    def test_the_threads_of_other_categories_still_land(self, app, tmp_path):
+        board = a_board()
+        board["forums"].append({"fid": "5", "pid": "2", "name": "Andere"})
+        board["threads"].append({
+            "tid": "11", "fid": "5", "subject": "Ein anderer Thread",
+            "firstpost": "200", "dateline": "1490000000",
+        })
+        board["posts"].append({
+            "pid": "200", "tid": "11", "uid": "7", "dateline": "1490000000",
+            "message": "In einer Kategorie, die geht.",
+        })
+        poster = self.a_refusing_forum({"3. Semester / Technisches Programmieren"})
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, board, "/nowhere", Ledger(tmp_path / "l.jsonl"),
+            )
+
+        assert summary["posted"] == 1
+
+    def test_a_child_of_a_refused_parent_is_not_tried_on_its_own(self, app, tmp_path):
+        """It would land under the wrong parent, or at the top of the forum."""
+        poster = self.a_refusing_forum({"Bachelor"})
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, a_board(), "/nowhere", Ledger(tmp_path / "l.jsonl"),
+            )
+
+        made = [name for name, _parent in poster.created_categories]
+        assert made == ["Studium"]
+        # One complaint about the category, not one per level below it.
+        assert len([p for p in summary["problems"]
+                    if p.startswith("category ")]) == 1
+        # And the threads that have nowhere to go say so themselves.
+        assert any("no category" in p for p in summary["problems"])
+
+
+class TestKnowingWhichFilesAreHere:
+    """Nine gigabytes fetched by hand over several sittings."""
+
+    def attachments(self):
+        return [
+            {"pid": "1", "attachname": "201703/a.attach", "filesize": "100"},
+            {"pid": "1", "attachname": "201705/b.attach", "filesize": "200"},
+            {"pid": "2", "attachname": "201906/c.attach", "filesize": "300"},
+        ]
+
+    def a_folder(self, tmp_path, files):
+        for name, size in files.items():
+            path = tmp_path / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"x" * size)
+        return tmp_path
+
+    def test_it_says_what_is_still_to_come(self, tmp_path):
+        folder = self.a_folder(tmp_path, {"201703/a.attach": 100})
+
+        report = audit_uploads(self.attachments(), folder)
+
+        assert report["present"] == 1
+        assert report["missing"] == ["201705/b.attach", "201906/c.attach"]
+        assert report["bytes_missing"] == 500
+
+    def test_a_file_of_the_wrong_size_is_not_counted_as_here(self, tmp_path):
+        """An error page written under the name of the file somebody wanted."""
+        folder = self.a_folder(tmp_path, {
+            "201703/a.attach": 100, "201705/b.attach": 17, "201906/c.attach": 300,
+        })
+
+        report = audit_uploads(self.attachments(), folder)
+
+        assert report["missing"] == []
+        assert [row["name"] for row in report["wrong_size"]] == ["201705/b.attach"]
+        assert report["wrong_size"][0]["on_disk"] == 17
+
+    def test_a_complete_folder_says_so(self, tmp_path):
+        folder = self.a_folder(tmp_path, {
+            "201703/a.attach": 100, "201705/b.attach": 200, "201906/c.attach": 300,
+        })
+
+        report = audit_uploads(self.attachments(), folder)
+
+        assert not report["missing"] and not report["wrong_size"]
+        assert report["bytes_present"] == 600
+
+    def test_a_folder_that_is_not_there_is_not_an_error(self, tmp_path):
+        """It is the first run, and nothing has been copied yet."""
+        report = audit_uploads(self.attachments(), tmp_path / "nothing-here")
+
+        assert report["present"] == 0
+        assert len(report["missing"]) == 3
+
+    def test_a_board_that_records_no_size_is_only_checked_for_presence(self, tmp_path):
+        folder = self.a_folder(tmp_path, {"201703/a.attach": 999})
+
+        report = audit_uploads(
+            [{"pid": "1", "attachname": "201703/a.attach", "filesize": "0"}], folder
+        )
+
+        assert report["present"] == 1
+        assert report["wrong_size"] == []

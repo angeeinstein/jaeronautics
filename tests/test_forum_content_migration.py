@@ -28,7 +28,9 @@ from aeronautics_members.services.forum_content import (
     REFUSE,
     ContentPoster,
     check_site_settings,
+    journal_is_spent,
     loosen_site_settings,
+    mark_journal_restored,
     migrate_thread,
     plan_site_settings,
     read_settings_journal,
@@ -944,3 +946,80 @@ class TestBeingToldToWait:
 
     def test_a_refusal_with_no_number_in_it_still_waits(self, app):
         assert ContentPoster._wait_seconds("not json at all") == 30
+
+
+class TestAJournalThatHasDoneItsJob:
+    """A successful run must not block the next one."""
+
+    def a_forum(self):
+        return FakePoster(settings={
+            "disable_emails": "no", "min_topic_title_length": "15",
+            "title_prettify": "true", "title_min_entropy": "10",
+        })
+
+    def threads(self):
+        return [{"tid": "1", "subject": "Klausuren", "firstpost": "1"}]
+
+    def test_a_journal_still_live_stops_a_second_run(self, app, tmp_path):
+        journal = tmp_path / "settings.json"
+        poster = self.a_forum()
+
+        with app.app_context():
+            loosen_site_settings(poster, plan_site_settings(self.threads(), []), journal)
+            with pytest.raises(FileExistsError):
+                loosen_site_settings(
+                    poster, plan_site_settings(self.threads(), []), journal
+                )
+
+    def test_a_journal_whose_settings_went_back_does_not(self, app, tmp_path):
+        journal = tmp_path / "settings.json"
+        poster = self.a_forum()
+
+        with app.app_context():
+            changes = loosen_site_settings(
+                poster, plan_site_settings(self.threads(), []), journal
+            )
+            mark_journal_restored(journal, restore_site_settings(poster, changes))
+            again = loosen_site_settings(
+                poster, plan_site_settings(self.threads(), []), journal
+            )
+
+        assert again, "the second run got to change the settings"
+        assert read_settings_journal(journal)["changes"] == again
+
+    def test_a_restore_that_left_something_alone_keeps_it_live(self, app, tmp_path):
+        """The forum is not as it was, so the way back still matters."""
+        journal = tmp_path / "settings.json"
+        poster = self.a_forum()
+
+        with app.app_context():
+            changes = loosen_site_settings(
+                poster, plan_site_settings(self.threads(), []), journal
+            )
+            poster._settings["title_prettify"] = "somebody else's value"
+            results = restore_site_settings(poster, changes)
+
+            assert mark_journal_restored(journal, results) is False
+            with pytest.raises(FileExistsError):
+                loosen_site_settings(
+                    poster, plan_site_settings(self.threads(), []), journal
+                )
+
+    def test_an_unreadable_journal_is_not_assumed_dealt_with(self, tmp_path):
+        journal = tmp_path / "settings.json"
+        journal.write_text("this is not json", encoding="utf-8")
+
+        assert journal_is_spent(journal) is False
+
+    def test_the_refusal_says_how_to_undo_it(self, app, tmp_path):
+        journal = tmp_path / "settings.json"
+        poster = self.a_forum()
+
+        with app.app_context():
+            loosen_site_settings(poster, plan_site_settings(self.threads(), []), journal)
+            with pytest.raises(FileExistsError) as raised:
+                loosen_site_settings(
+                    poster, plan_site_settings(self.threads(), []), journal
+                )
+
+        assert "restore-forum-settings" in str(raised.value)

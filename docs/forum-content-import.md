@@ -311,6 +311,44 @@ Only then is it worth talking about the other 719 threads.
 - Check that the settings went back: run `check-forum-settings` again and read
   the `now` column.
 
+## 8a. Knowing which files are already on the server
+
+Nine gigabytes fetched a directory at a time over several sittings is not
+something anybody can hold in their head, and the import reports a missing file
+per post — the right shape for one thread and the wrong one for 2,347. So ask:
+
+```bash
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+  /var/www/jaeronautics/.venv/bin/flask \
+  --app aeronautics_members.app:create_app \
+  check-forum-uploads /var/tmp/forum-migration/dump.sql.gz \
+  --uploads /var/tmp/forum-migration/uploads \
+  --missing-to /var/tmp/forum-migration/still-needed.txt
+```
+
+It counts what is there, what is not, and how many gigabytes that still is. It
+also checks **sizes**, which matters more than it sounds: the usual way a file
+goes wrong here is not absence. A web server asked for something it has not got
+answers with a page saying so, and a fetch that does not check writes that page
+to disk under the name of the file it wanted — present, readable, and 200 bytes
+of HTML where a PDF should be. Those are listed separately and included in the
+paths to fetch again.
+
+With `--missing-to`, the paths land in a file that drives the copying:
+
+```bash
+UP=/var/tmp/forum-migration/uploads
+while read -r rel; do
+    mkdir -p "${UP}/$(dirname "${rel}")"
+    curl -fsS -o "${UP}/${rel}" "http://YOUR-PC:8000/uploads/${rel}" \
+        || echo "could not fetch ${rel}"
+done < /var/tmp/forum-migration/still-needed.txt
+chown -R jaeronautics: /var/tmp/forum-migration
+```
+
+Run the check again afterwards. It exits non-zero while anything is outstanding,
+so it can go in front of the import in a script.
+
 ## 9. The whole board, keeping the categories it had
 
 Rehearsing one thread answers whether it works. Moving all 720 answers whether

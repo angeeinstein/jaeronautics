@@ -177,12 +177,60 @@ def category_nesting_requirement(plan):
     )
 
 
-def ensure_categories(poster, plan, ledger, *, dry_run=False):
+def audit_uploads(attachments, uploads_dir):
+    """Which of the old board's files are on this machine, and which are not.
+
+    Nine gigabytes fetched a directory at a time, over several sittings, is not
+    something anybody can hold in their head, and the import reports a missing
+    file per post rather than as a list -- which is the right shape for one
+    thread and the wrong one for 2,347.
+
+    Size is checked as well as presence, because the usual way a file goes
+    wrong here is not absence. A web server asked for something it does not
+    have answers with a page saying so, and a fetch that does not check will
+    write that page to disk under the name of the file it wanted: present,
+    readable, and 200 bytes of HTML where a PDF should be.
+    """
+    uploads_dir = Path(uploads_dir)
+    report = {"expected": 0, "present": 0, "missing": [], "wrong_size": [],
+              "bytes_missing": 0, "bytes_present": 0}
+
+    for row in attachments:
+        name = row.get("attachname") or ""
+        if not name:
+            continue
+        report["expected"] += 1
+        recorded = int(row.get("filesize") or 0)
+        path = uploads_dir / name
+
+        try:
+            on_disk = path.stat().st_size
+        except OSError:
+            report["missing"].append(name)
+            report["bytes_missing"] += recorded
+            continue
+
+        report["present"] += 1
+        report["bytes_present"] += on_disk
+        if recorded and on_disk != recorded:
+            report["wrong_size"].append({
+                "name": name, "recorded": recorded, "on_disk": on_disk,
+            })
+    return report
+
+
+def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
     """Make the categories the old board had. Returns {fid: category id}.
 
     Already-made ones are found rather than remade, by name under the same
     parent, so a second run after an interruption does not end up with two of
     everything.
+
+    One category the forum will not make is one forum's worth of threads with
+    nowhere to go, reported and skipped. It is not a reason to abandon the
+    other 274 -- and the commonest cause, a forum too deeply nested for this
+    Discourse to accept, would otherwise take the whole run down at the point
+    where it has already changed every setting.
     """
     existing = {}
     if not dry_run:
@@ -198,13 +246,28 @@ def ensure_categories(poster, plan, ledger, *, dry_run=False):
             continue
 
         parent_id = made.get(row["parent_fid"]) if row["parent_fid"] else None
+        if row["parent_fid"] and parent_id is None:
+            # Its parent could not be made either. Saying so once per level is
+            # noise; the parent's failure is already reported.
+            continue
+
         if dry_run:
             made[row["fid"]] = f"would-create:{'/'.join(row['path'])}"
             continue
 
         category_id = existing.get((parent_id, row["name"]))
         if category_id is None:
-            category_id = poster.create_category(row["name"], parent_id=parent_id)
+            try:
+                category_id = poster.create_category(row["name"], parent_id=parent_id)
+            except ForumProviderError as exc:
+                if problems is not None:
+                    problems.append(
+                        f"category {' / '.join(row['path'])}: {exc}"
+                    )
+                current_app.logger.warning(
+                    "Could not make category %s: %s", row["name"], exc
+                )
+                continue
         made[row["fid"]] = category_id
         ledger.record_category(row["fid"], category_id)
     return made
@@ -234,15 +297,17 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
     }
 
     plan = category_plan(tables["forums"], tables["threads"])
-    categories = ensure_categories(poster, plan, ledger, dry_run=dry_run)
-
-    threads = sorted(
-        tables["threads"], key=lambda row: int(row.get("dateline") or 0)
-    )
     summary = {
         "categories": len(plan), "threads": 0, "posted": 0,
         "already_there": 0, "failed": 0, "problems": [],
     }
+    categories = ensure_categories(
+        poster, plan, ledger, dry_run=dry_run, problems=summary["problems"]
+    )
+
+    threads = sorted(
+        tables["threads"], key=lambda row: int(row.get("dateline") or 0)
+    )
 
     for thread in threads:
         if limit and summary["threads"] >= limit:
