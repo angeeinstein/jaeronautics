@@ -340,7 +340,7 @@ class ContentPoster:
 # put back afterwards, exactly like disable_emails. The check prints the
 # current value next to the needed one so there is a record of what to restore.
 
-class Requirement(namedtuple("Requirement", "setting needed compare why restore blocks")):
+class Requirement(namedtuple("Requirement", "setting needed compare why restore blocks aliases")):
     """One thing the forum has to allow, and what to do about it.
 
     ``restore`` is false for the few settings that describe what this forum is
@@ -354,12 +354,21 @@ class Requirement(namedtuple("Requirement", "setting needed compare why restore 
     too short is refused; title_prettify quietly rewrites what it is given, and
     mail goes out to addresses that stopped existing years ago. Both are worth
     changing; only the first is worth stopping for.
+
+    ``aliases`` are the other names Discourse has called this setting. It
+    renames them between versions, and a setting looked up under a name this
+    forum has never heard of reads as unknown rather than as renamed --
+    reported with a "?" and then quietly not changed, which is the worst of
+    both. Whichever name the site actually reports is the one used.
     """
 
     __slots__ = ()
 
-    def __new__(cls, setting, needed, compare, why, restore=True, blocks=True):
-        return super().__new__(cls, setting, needed, compare, why, restore, blocks)
+    def __new__(cls, setting, needed, compare, why, restore=True, blocks=True,
+                aliases=()):
+        return super().__new__(
+            cls, setting, needed, compare, why, restore, blocks, tuple(aliases)
+        )
 
 
 #: ``compare`` says what the live value has to be, relative to ``needed``.
@@ -527,6 +536,10 @@ def plan_site_settings(threads, posts, attachments=()):
             requirements.append(Requirement(
                 "newuser_max_images", most_images, AT_LEAST,
                 f"one post carries {most_images} images",
+                # Renamed in Discourse 2.7, and a forum that has never heard of
+                # the old name reports the setting as unknown rather than as
+                # renamed -- after which it is quietly not changed.
+                aliases=("newuser_max_embedded_media",),
             ))
 
     if attachments:
@@ -664,14 +677,21 @@ def check_site_settings(poster, requirements):
     live = poster.site_settings()
     rows = []
     for requirement in requirements:
-        actual = live.get(requirement.setting)
+        # The name this forum knows it by, which may not be the one asked for.
+        name = requirement.setting
+        if name not in live:
+            name = next(
+                (alias for alias in requirement.aliases if alias in live),
+                requirement.setting,
+            )
+        actual = live.get(name)
         ok = _satisfied(requirement, actual)
         needed = requirement.needed
         if requirement.compare == INCLUDES:
             missing = [item for item in needed if item not in _listed(actual)]
             needed = ", ".join(missing or needed)
         rows.append({
-            "setting": requirement.setting,
+            "setting": name,
             "now": actual,
             "needed": needed,
             "compare": requirement.compare,
@@ -720,7 +740,10 @@ def loosen_site_settings(poster, requirements, journal_path):
             continue
         requirement = row["requirement"]
         changes.append({
-            "setting": requirement.setting,
+            # The name this forum knows it by, not the one asked for: writing
+            # it back under a name the site does not have would be a 404 at
+            # restore time, when there is least appetite for one.
+            "setting": row["setting"],
             "was": row["now"],
             "set_to": _value_for(requirement, row["now"]),
             "restore": bool(requirement.restore),

@@ -722,3 +722,55 @@ class TestAKeyReadOutOfAFile:
         assert poster.api_key == "b" * 64
         assert poster.admin_username == "system"
         assert poster._key_complaint() is None
+
+
+class TestASettingDiscourseHasRenamed:
+    """Unknown and renamed look the same, and one of them is not a problem."""
+
+    def a_post_with_images(self):
+        return [a_post("1", message="[img]a.png[/img][img]b.png[/img][img]c.png[/img]")]
+
+    def test_the_name_this_forum_uses_is_the_one_checked(self):
+        poster = FakePoster(settings={"newuser_max_embedded_media": "1"})
+
+        rows = {row["setting"]: row for row in check_site_settings(
+            poster, plan_site_settings([], self.a_post_with_images())
+        )}
+
+        assert "newuser_max_embedded_media" in rows
+        assert rows["newuser_max_embedded_media"]["ok"] is False
+        assert rows["newuser_max_embedded_media"]["now"] == "1"
+
+    def test_the_old_name_still_works_where_it_is_the_one_there(self):
+        poster = FakePoster(settings={"newuser_max_images": "1"})
+
+        rows = {row["setting"]: row for row in check_site_settings(
+            poster, plan_site_settings([], self.a_post_with_images())
+        )}
+
+        assert rows["newuser_max_images"]["ok"] is False
+
+    def test_it_is_written_back_under_the_name_that_exists(self, app, tmp_path):
+        """Restoring under a name the site does not have is a 404 later on."""
+        poster = FakePoster(settings={"newuser_max_embedded_media": "1"})
+
+        with app.app_context():
+            changes = loosen_site_settings(
+                poster, plan_site_settings([], self.a_post_with_images()),
+                tmp_path / "settings.json",
+            )
+            restore_site_settings(poster, changes)
+
+        assert [name for name, _ in poster.settings_written] == [
+            "newuser_max_embedded_media", "newuser_max_embedded_media"
+        ]
+        assert poster.site_settings()["newuser_max_embedded_media"] == "1"
+
+    def test_a_setting_under_no_known_name_is_still_reported_unknown(self):
+        poster = FakePoster(settings={})
+
+        rows = {row["setting"]: row for row in check_site_settings(
+            poster, plan_site_settings([], self.a_post_with_images())
+        )}
+
+        assert rows["newuser_max_images"]["ok"] is None
