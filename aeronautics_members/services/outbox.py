@@ -121,6 +121,29 @@ def enqueue_forum_anonymise(user, reason=None):
     )
 
 
+def enqueue_forum_discard_replaced(user, remote_user_id, reason=None):
+    """Queue removal of the forum account a returning student has just left.
+
+    The remote id goes in the payload rather than being looked up later,
+    because the local row that knew it is deleted by the time this runs -- the
+    claim keeps the archived account and discards the one signup made.
+
+    Keyed on the remote id so re-running a claim cannot queue the same deletion
+    twice.
+    """
+    if not remote_user_id:
+        return None
+    return enqueue(
+        ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED,
+        user=user,
+        payload={"remote_user_id": remote_user_id},
+        dedupe_key=(
+            f"{ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED}:remote:{remote_user_id}"
+        ),
+        reason=reason,
+    )
+
+
 def claim_next(kinds=None, now=None):
     """Claim one due item, or return None.
 

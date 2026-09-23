@@ -686,6 +686,13 @@ class ExternalWorkItem(db.Model):
     # Queued when an erasure could not reach Discourse. The local data is already
     # gone at that point, so this has to keep retrying on its own.
     KIND_FORUM_ANONYMISE = "forum_anonymise"
+    # Queued when a returning student reclaims their old forum account. Signing
+    # up made them a Discourse user before they reconnected, and the claim
+    # moves them onto the archived one -- leaving that first account behind,
+    # still holding their real address, which then blocks the address from
+    # reaching the account they actually use. It carries the remote id in its
+    # payload because the local row it belonged to is deleted by then.
+    KIND_FORUM_DISCARD_REPLACED = "forum_discard_replaced"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"

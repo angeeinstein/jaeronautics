@@ -33,6 +33,7 @@ from ..services import (
 from ..services.identity import (
     read_token,
     send_email_verification_email,
+    send_work_email_verification_email,
 )
 from ..services.privacy import (
     INITIATED_BY_MEMBER,
@@ -448,6 +449,42 @@ def resend_verification_email():
     except Exception as exc:
         current_app.logger.warning("Could not resend verification email for user_id=%s: %s", current_user.id, exc)
         flash(_("We could not send a verification email right now."), "danger")
+    return redirect(url_for("account.account"))
+
+
+@account_bp.route("/account/resend-work-verification", methods=["POST"])
+@login_required
+def resend_work_email_verification():
+    """Send the university-address confirmation again.
+
+    There was no way to ask for this. Somebody who lost the mail, or who only
+    confirmed the private address and stopped, had no route back -- and for a
+    returning student the university address is the *only* evidence that can
+    give them their old forum account, so there is nothing else they can try.
+    """
+    member = current_user.member
+    if member is None or not (member.email_work or "").strip():
+        flash(_("No university or company email address is on file."), "info")
+        return redirect(url_for("account.account"))
+    if member.email_work_is_verified:
+        flash(_("Your university or company email address is already confirmed."), "info")
+        return redirect(url_for("account.account"))
+
+    try:
+        if send_work_email_verification_email(current_app._get_current_object(), member):
+            db.session.commit()
+            flash(
+                _("We sent a new confirmation email to %(address)s.", address=member.email_work),
+                "success",
+            )
+        else:
+            flash(_("We could not send a confirmation email because no sender account is configured yet."), "warning")
+    except Exception as exc:  # noqa: BLE001 -- the reason belongs in the log, not the page
+        db.session.rollback()
+        current_app.logger.warning(
+            "Could not resend the work email verification for member_id=%s: %s", member.id, exc
+        )
+        flash(_("We could not send a confirmation email right now."), "danger")
     return redirect(url_for("account.account"))
 
 

@@ -11,12 +11,6 @@
                         <p class="text-muted mb-0">{{ current_user.email }}</p>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
-                        {% if not current_user.email_is_verified %}
-                            <form method="POST" action="{{ url_for('account.resend_verification_email') }}" class="mb-0">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-secondary">{{ _('Resend Verification Email') }}</button>
-                            </form>
-                        {% endif %}
                         <a href="{{ url_for('auth.change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
                         {% if forum_context.can_enter_forum %}
                             <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
@@ -34,8 +28,66 @@
                         {% endif %}
                     </div>
                 </div>
-                {% if not current_user.email_is_verified %}
-                    <div class="alert alert-warning mt-4 mb-0">{{ _('Your email address is not verified yet.') }}</div>
+                {#
+                    Both addresses, always, with what is outstanding on each.
+                    There are two, they are confirmed separately, and one
+                    generic "verify your email" left people confirming the
+                    private one and stopping -- with nothing to say the
+                    university one still mattered. For a returning student it
+                    matters most of all: it is the only evidence that can give
+                    them their old forum account back.
+                #}
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center gap-2">
+                            <div>
+                                <div class="text-muted small">{{ _('Private Email') }}</div>
+                                <div>{{ current_user.email }}</div>
+                            </div>
+                            {% if current_user.email_is_verified %}
+                                <span class="badge bg-success">{{ _('Confirmed') }}</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">{{ _('Not confirmed') }}</span>
+                            {% endif %}
+                        </div>
+                        {% if not current_user.email_is_verified %}
+                            <form method="POST" action="{{ url_for('account.resend_verification_email') }}" class="mt-2 mb-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-secondary">{{ _('Send confirmation email again') }}</button>
+                            </form>
+                        {% endif %}
+                    </div>
+
+                    {% if member and member.email_work %}
+                        <div class="col-md-6">
+                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                <div>
+                                    <div class="text-muted small">{{ _('University or Company Email') }}</div>
+                                    <div>{{ member.email_work }}</div>
+                                </div>
+                                {% if member.email_work_is_verified %}
+                                    <span class="badge bg-success">{{ _('Confirmed') }}</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">{{ _('Not confirmed') }}</span>
+                                {% endif %}
+                            </div>
+                            {% if not member.email_work_is_verified %}
+                                <form method="POST" action="{{ url_for('account.resend_work_email_verification') }}" class="mt-2 mb-0">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-secondary">{{ _('Send confirmation email again') }}</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if not current_user.email_is_verified or (member and member.email_work and not member.email_work_is_verified) %}
+                    <div class="alert alert-warning mt-3 mb-0">
+                        {{ _('Both email addresses need confirming. We send a separate email to each.') }}
+                        {% if member and member.email_work and not member.email_work_is_verified %}
+                            {{ _('Confirming your university or company address is what restores your account from the old forum, if you had one.') }}
+                        {% endif %}
+                    </div>
                 {% endif %}
             </div>
         </div>

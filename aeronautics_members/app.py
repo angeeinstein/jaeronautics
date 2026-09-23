@@ -1201,6 +1201,20 @@ def build_forum_context(member):
     pending_submission = service.get_pending_submission(member) if member else None
     approved_submission = service.get_current_approved_submission(member) if member else None
     latest_submission = service.get_latest_submission(member) if member else None
+    # The avatar a returning student already has: imported from the old forum,
+    # published to their profile, and theirs since long before they signed up
+    # here. It is not a ForumAvatarSubmission -- nobody submitted it for review
+    # -- so nothing else in this function would notice it.
+    reclaimed_profile = (
+        member.user.imported_forum_profile
+        if member and member.user is not None
+        else None
+    )
+    reclaimed_avatar = (
+        reclaimed_profile.avatar_path
+        if reclaimed_profile is not None and reclaimed_profile.claimed_at is not None
+        else None
+    )
 
     status_key = "disabled"
     status_message = _("The forum integration is not enabled yet.")
@@ -1227,6 +1241,15 @@ def build_forum_context(member):
         status_key = "active"
         status_message = _("Your forum access is ready.")
         can_enter_forum = service.is_ready()
+    elif reclaimed_avatar is not None:
+        # They came back to an account that already has a face on it -- the one
+        # they uploaded to the old forum, which is live on their profile right
+        # now. Asking them to upload a picture would be asking them to redo
+        # something already done, as the first thing they are told.
+        status_key = "active"
+        status_message = _("Your forum access is ready, with the profile picture from the old forum.")
+        can_enter_forum = service.is_ready()
+        can_upload_avatar = True  # still free to replace it
     elif pending_submission is not None:
         status_key = "pending_avatar"
         status_message = _("Your profile picture is under review. You will get full forum access as soon as it is approved.")

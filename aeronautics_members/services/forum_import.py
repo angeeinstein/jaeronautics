@@ -339,7 +339,21 @@ def claim_archived_account(user):
         # account being retired. Left alone, the next sync would put a
         # returning student back on that throwaway profile instead of the one
         # carrying their history.
+        replaced_remote_user_id = forum_account.remote_user_id
         forum_account.remote_user_id = None
+
+        # And the forum is told to get rid of it. Nobody ever posted in it, and
+        # it holds this person's real address -- which Discourse will then
+        # refuse to give to the account they actually use, because an address
+        # can only belong to one account. Queued rather than called here: this
+        # runs while a returning student is clicking a link in an email, and a
+        # slow forum must not be able to fail that.
+        if replaced_remote_user_id:
+            from .outbox import enqueue_forum_discard_replaced
+
+            enqueue_forum_discard_replaced(
+                archived, replaced_remote_user_id, reason="forum_account_reclaimed"
+            )
 
     profile.claimed_at = get_now_utc()
     db.session.flush()

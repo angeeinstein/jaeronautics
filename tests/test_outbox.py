@@ -196,3 +196,95 @@ def test_worker_cli_reports_what_it_did(app, handler_calls):
 
     assert result.exit_code == 0, result.output
     assert "1 completed" in result.output
+
+
+class TestRemovingTheAccountAReconnectionLeftBehind:
+    """The worker side of the orphan a returning student leaves on the forum."""
+
+    def _item(self, remote_user_id=8801):
+        from aeronautics_members.db_models import ExternalWorkItem, db as _db
+
+        item = ExternalWorkItem(
+            kind=ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED,
+            payload={"remote_user_id": remote_user_id},
+            status=ExternalWorkItem.STATUS_PENDING,
+        )
+        _db.session.add(item)
+        _db.session.flush()
+        return item
+
+    def _handler(self):
+        from aeronautics_members.services.workflows import (
+            _handle_forum_discard_replaced_work,
+        )
+        return _handle_forum_discard_replaced_work
+
+    def test_it_asks_the_forum_to_delete_that_account(self, app, monkeypatch):
+        deleted = []
+
+        class FakeProvider:
+            def delete_remote_user(self, remote_user_id):
+                deleted.append(remote_user_id)
+                return True
+
+        class FakeService:
+            provider = FakeProvider()
+
+            def is_ready(self):
+                return True
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.workflows.get_forum_service",
+            lambda: FakeService(),
+        )
+
+        self._handler()(self._item(8801))
+
+        assert deleted == [8801]
+
+    def test_an_item_without_a_remote_id_is_simply_done(self, app):
+        """Nothing to delete, nothing to retry for ever."""
+        self._handler()(self._item(remote_user_id=None))
+
+    def test_it_retries_while_the_forum_is_unreachable(self, app, monkeypatch):
+        """Raising is what puts it back in the queue with backoff.
+
+        Marking it done would lose the orphan silently, and the orphan is
+        holding somebody's email address.
+        """
+        from aeronautics_members.services import ExternalServiceError
+        from aeronautics_members.forum_service import ForumProviderError
+
+        class FakeProvider:
+            def delete_remote_user(self, remote_user_id):
+                raise ForumProviderError("Could not reach Discourse")
+
+        class FakeService:
+            provider = FakeProvider()
+
+            def is_ready(self):
+                return True
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.workflows.get_forum_service",
+            lambda: FakeService(),
+        )
+
+        with pytest.raises(ExternalServiceError):
+            self._handler()(self._item())
+
+    def test_it_waits_rather_than_forgetting_when_the_forum_is_off(self, app, monkeypatch):
+        class FakeService:
+            provider = None
+
+            def is_ready(self):
+                return False
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.workflows.get_forum_service",
+            lambda: FakeService(),
+        )
+
+        from aeronautics_members.services import ExternalServiceError
+        with pytest.raises(ExternalServiceError):
+            self._handler()(self._item())

@@ -59,6 +59,17 @@ def _returning(email=OLD_EMAIL, verified=True):
     return member
 
 
+def _make_paid(member):
+    """Past the membership gate, so the avatar question is what is being tested."""
+    from datetime import date
+
+    member.payment_status = "paid"
+    member.is_active = True
+    member.membership_ends_on = date(date.today().year, 12, 31)
+    db.session.commit()
+    return member
+
+
 def _queued_verification_mail(user_id):
     """The job signup leaves behind, pointing at the account it just made."""
     return EmailDeliveryJob(
@@ -967,3 +978,175 @@ class TestWhenTheySignedUpTheNormalWay:
         db.session.commit()
 
         assert profile.user.forum_account.remote_user_id is None
+
+
+class TestTheAccountTheyLeaveBehindOnTheForum:
+    """Signing up makes a Discourse account before they have reconnected.
+
+    Reclaiming moves them onto the archived one, and that first account is then
+    an orphan: no posts, but still holding their real email address -- which
+    Discourse will not then give to the account they actually use, because an
+    address belongs to one account. Found on the real server: enabling
+    auth_overrides_email made every login fail with "The change you wanted was
+    rejected", because a ghost held the address.
+    """
+
+    def _returning_on_the_forum(self, remote_user_id=8801):
+        from aeronautics_members.db_models import ForumAccount
+
+        member = _returning()
+        db.session.add(ForumAccount(
+            user=member.user,
+            member=member,
+            provider="discourse",
+            external_id=str(member.user_id),
+            remote_user_id=remote_user_id,
+            state="onboarding",
+        ))
+        db.session.commit()
+        return member
+
+    def _queued(self):
+        from aeronautics_members.db_models import ExternalWorkItem
+
+        return db.session.execute(
+            db.select(ExternalWorkItem).filter_by(
+                kind=ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED
+            )
+        ).scalars().all()
+
+    def test_its_removal_is_queued(self, app):
+        _archived()
+        member = self._returning_on_the_forum(remote_user_id=8801)
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        queued = self._queued()
+        assert len(queued) == 1
+        assert queued[0].payload["remote_user_id"] == 8801
+
+    def test_the_remote_id_is_carried_in_the_payload(self, app):
+        """The row that knew it is deleted by the time the worker runs."""
+        _archived()
+        member = self._returning_on_the_forum(remote_user_id=8801)
+        retired_id = member.user_id
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert db.session.get(User, retired_id) is None, "the row is gone"
+        assert self._queued()[0].payload["remote_user_id"] == 8801, "the id is not"
+
+    def test_nothing_is_queued_when_they_were_never_on_the_forum(self, app):
+        """Most people verify before they ever reach it. No orphan, no work."""
+        _archived()
+        member = self._returning_on_the_forum(remote_user_id=None)
+
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert self._queued() == []
+
+    def test_the_claim_does_not_talk_to_the_forum_itself(self, app):
+        """This runs while a student is clicking a link in an email.
+
+        A slow or unreachable forum must not be able to fail their
+        reconnection, so the call is queued rather than made here.
+        """
+        profile = _archived()
+        member = self._returning_on_the_forum()
+
+        def explode(*args, **kwargs):  # pragma: no cover - must never run
+            raise AssertionError("the claim called the forum synchronously")
+
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+        original = DiscourseConnectProvider._request
+        DiscourseConnectProvider._request = explode
+        try:
+            assert claim_archived_account(member.user) is profile
+            db.session.commit()
+        finally:
+            DiscourseConnectProvider._request = original
+
+    def test_running_a_claim_twice_queues_one_deletion(self, app):
+        """The dedupe key is the remote id, so a retry cannot double up."""
+        _archived()
+        member = self._returning_on_the_forum(remote_user_id=8801)
+
+        claim_archived_account(member.user)
+        db.session.commit()
+        # A second claim finds nothing to do, but must not queue again either.
+        claim_archived_account(member.user)
+        db.session.commit()
+
+        assert len(self._queued()) == 1
+
+
+class TestWhatAReconnectedMemberIsAskedToDo:
+    """They already have a profile picture. Do not ask for another one.
+
+    The old forum's avatar is imported, published to Discourse and visible on
+    their profile before they ever sign in -- but it is not a
+    ForumAvatarSubmission, so the onboarding gate could not see it and told
+    them to upload a picture as the very first thing after reconnecting.
+    """
+
+    def _reconnected_with_an_avatar(self, tmp_path, with_avatar=True):
+        profile = _archived()
+        if with_avatar:
+            profile.avatar_path = str(tmp_path / "face.jpg")
+        member = _returning()
+        _make_paid(member)
+        claim_archived_account(member.user)
+        db.session.commit()
+        return member
+
+    def _context(self, member):
+        from flask import current_app
+        from aeronautics_members.app import build_forum_context
+        from aeronautics_members.db_models import Setting
+
+        # With the integration off, "the forum is not set up" is the honest
+        # answer and comes first, which is not what these are about.
+        for key, value in (
+            ("forum_integration_enabled", "True"),
+            ("forum_base_url", "https://forum.example"),
+            ("discourse_connect_secret", "x" * 16),
+        ):
+            db.session.merge(Setting(key=key, value=value))
+        db.session.commit()
+
+        # A request context: the builder makes URLs for the forum links.
+        with current_app.test_request_context("/account"):
+            return build_forum_context(member)
+
+    def test_the_old_avatar_counts(self, app, tmp_path):
+        member = self._reconnected_with_an_avatar(tmp_path)
+
+        assert self._context(member)["status_key"] == "active"
+
+    def test_they_may_still_replace_it(self, app, tmp_path):
+        """Keeping a decade-old photograph should be a choice, not a sentence."""
+        member = self._reconnected_with_an_avatar(tmp_path)
+
+        assert self._context(member)["can_upload_avatar"] is True
+
+    def test_somebody_reconnecting_without_one_is_still_asked(self, app, tmp_path):
+        """63 of the imported people have no picture at all."""
+        member = self._reconnected_with_an_avatar(tmp_path, with_avatar=False)
+
+        assert self._context(member)["status_key"] == "needs_avatar"
+
+    def test_an_ordinary_new_member_is_still_asked(self, app):
+        member = _make_paid(make_member(email="brand.new@edu.fh-joanneum.at"))
+
+        assert self._context(member)["status_key"] == "needs_avatar"
+
+    def test_an_unclaimed_archive_does_not_count(self, app, tmp_path):
+        """The avatar only becomes theirs when the account does."""
+        profile = _archived()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        member = _make_paid(_returning())
+
+        assert self._context(member)["status_key"] == "needs_avatar"

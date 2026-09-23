@@ -276,6 +276,7 @@ def login():
             return redirect(url_for("auth.login"))
         if user and user.check_password(form.password.data):
             login_user(user)
+            _reconnect_on_sign_in(user)
             destination = session.pop("login_next", None)
             session.pop("login_source", None)
             destination = destination if is_safe_next_url(destination) else None
@@ -288,6 +289,43 @@ def login():
         forum_login_hint=forum_login_hint,
         forum_login_source=session.get("login_source"),
     )
+
+
+def _reconnect_on_sign_in(user):
+    """Give somebody their old forum account back if verifying did not.
+
+    The claim normally happens the moment a university address is confirmed.
+    That is a single instant, and if anything goes wrong in it -- a slow
+    forum, a guard that should not have fired, a link clicked twice -- there is
+    no second chance and nothing tells the student anything is outstanding.
+
+    Around 250 people walk that path in one October, so it cannot be a
+    one-shot. Signing in is the natural place to try again: the evidence is
+    already on file, and somebody who was missed simply reconnects the next
+    time they log in rather than writing in to ask why their account is gone.
+
+    Deliberately quiet on failure. A returning student getting into their
+    account matters more than the reconnection, so nothing here may keep them
+    out.
+    """
+    try:
+        profile = claim_archived_account(user)
+        if profile is not None:
+            db.session.commit()
+            current_app.logger.info(
+                "Reconnected %s at sign-in; the claim had not happened at verification.",
+                profile.source_username,
+            )
+            flash(
+                _("Welcome back. Your old forum account %(username)s is yours again.",
+                  username=profile.source_username),
+                "success",
+            )
+    except Exception as exc:  # noqa: BLE001 -- never block a sign-in
+        db.session.rollback()
+        current_app.logger.warning(
+            "Reconnection attempt at sign-in failed for user_id=%s: %s", user.id, exc
+        )
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])

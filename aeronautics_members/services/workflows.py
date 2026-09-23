@@ -26,6 +26,7 @@ from .billing import (
     get_latest_stripe_subscription_for_member,
     sync_member_subscription_state_from_subscription,
 )
+from ..forum_service import ForumProviderError
 from .clock import get_now_utc
 from .forum import (
     build_forum_entry_url,
@@ -341,5 +342,44 @@ def _handle_forum_anonymise_work(item):
         )
 
 
+def _handle_forum_discard_replaced_work(item):
+    """Outbox handler: remove the forum account a reconnection left behind.
+
+    Signing up gives somebody a Discourse account before they have proved which
+    archived one is theirs. Reclaiming moves them onto the archived account and
+    that first one becomes an orphan -- with zero posts, and holding the real
+    email address, which Discourse will then refuse to give to the account they
+    actually use.
+
+    Done here rather than in the claim itself because the claim runs while a
+    returning student is clicking a link in an email. A slow or unreachable
+    forum must not be able to fail that.
+    """
+    remote_user_id = (item.payload or {}).get("remote_user_id")
+    if not remote_user_id:
+        return
+
+    service = get_forum_service()
+    if not service.is_ready():
+        # Nothing to delete it with. Left to retry rather than marked done, so
+        # the orphan is not forgotten while the integration is switched off.
+        raise ExternalServiceError(
+            "The forum integration is not ready, so the replaced account "
+            f"{remote_user_id} cannot be removed yet."
+        )
+    try:
+        service.provider.delete_remote_user(remote_user_id)
+    except ForumProviderError as exc:
+        raise ExternalServiceError(
+            f"Could not remove the replaced forum account {remote_user_id}: {exc}"
+        ) from exc
+    current_app.logger.info(
+        "Removed the forum account left behind by a reconnection: %s", remote_user_id
+    )
+
+
 register_handler(ExternalWorkItem.KIND_FORUM_SYNC, _handle_forum_sync_work)
 register_handler(ExternalWorkItem.KIND_FORUM_ANONYMISE, _handle_forum_anonymise_work)
+register_handler(
+    ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED, _handle_forum_discard_replaced_work
+)
