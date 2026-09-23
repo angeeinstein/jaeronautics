@@ -14,7 +14,10 @@ archive is a decade of "Klausuren", "Exams" and "Danke!", and finding that out
 one refused post at a time, hours into an import that cannot be re-run, is the
 expensive way to learn it.
 """
+import contextlib
+import io
 import json
+from urllib.error import HTTPError
 
 import pytest
 
@@ -810,3 +813,134 @@ class TestWhetherARunCanGoAhead:
 
     def test_and_does_not_stop_a_run_that_was_not_told_to(self):
         assert self.decide(ready=True, anything=True) == PROCEED
+
+
+class TestWhatAPostCarriesOnceItsAttachmentsAreOnIt:
+    """The body that gets posted is not the body somebody typed in 2017.
+
+    Each attachment is appended as markdown: a picture inline, anything else
+    as a link. Counting only the old text said a post carried nothing, and
+    Discourse refused it for carrying four.
+    """
+
+    def test_attachments_count_as_links(self):
+        posts = [a_post("1", message="Hier die Angaben.")]
+        attachments = [
+            {"pid": "1", "filename": f"Angabe{n}.pdf", "filesize": "10"}
+            for n in range(3)
+        ]
+        requirements = {r.setting: r for r in plan_site_settings([], posts, attachments)}
+
+        assert requirements["newuser_max_links"].needed == 3
+
+    def test_pictures_count_as_embedded_media_instead(self):
+        posts = [a_post("1", message="Screenshots vom Beispiel.")]
+        attachments = [
+            {"pid": "1", "filename": f"bild{n}.png", "filesize": "10"}
+            for n in range(4)
+        ]
+        requirements = {r.setting: r for r in plan_site_settings([], posts, attachments)}
+
+        assert requirements["newuser_max_images"].needed == 4
+
+    def test_links_in_the_text_are_added_to_the_attachments(self):
+        posts = [a_post("1", message="Siehe https://example.at und https://fh.at")]
+        attachments = [{"pid": "1", "filename": "Angabe.pdf", "filesize": "10"}]
+        requirements = {r.setting: r for r in plan_site_settings([], posts, attachments)}
+
+        assert requirements["newuser_max_links"].needed == 3
+
+    def test_another_post_s_attachments_are_not_counted_against_this_one(self):
+        posts = [a_post("1", message="eins"), a_post("2", message="zwei")]
+        attachments = [
+            {"pid": "1", "filename": "a.pdf", "filesize": "10"},
+            {"pid": "2", "filename": "b.pdf", "filesize": "10"},
+        ]
+        requirements = {r.setting: r for r in plan_site_settings([], posts, attachments)}
+
+        assert requirements["newuser_max_links"].needed == 1
+
+    def test_the_waiting_between_posts_is_asked_for_too(self):
+        """Hit on the second post anybody makes, every time."""
+        requirements = {r.setting: r for r in plan_site_settings([], [a_post("1")])}
+
+        for setting in ("rate_limit_create_post", "rate_limit_new_user_create_post",
+                        "rate_limit_create_topic", "rate_limit_new_user_create_topic"):
+            assert requirements[setting].needed == 0
+            assert requirements[setting].compare == "at_most"
+
+
+class TestBeingToldToWait:
+    """A dropped post is lost. The settings go back at the end of the run."""
+
+    def too_quickly(self, wait_seconds=29):
+        detail = json.dumps({
+            "errors": ["You're replying a bit too quickly."],
+            "error_type": "rate_limit",
+            "extras": {"wait_seconds": wait_seconds},
+        }).encode()
+        return HTTPError("https://forum.example.at/posts.json", 429, "Too Many",
+                         {}, io.BytesIO(detail))
+
+    def test_it_waits_as_long_as_it_was_asked_to_and_tries_again(self, app, monkeypatch):
+        slept = []
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.time.sleep", slept.append
+        )
+        answers = [self.too_quickly(29), None]
+
+        def urlopen(request, timeout=None):
+            answer = answers.pop(0)
+            if answer is not None:
+                raise answer
+            return contextlib.closing(io.BytesIO(b'{"id": 7, "topic_id": 3}'))
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.urlopen", urlopen
+        )
+        poster = ContentPoster({
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+        })
+
+        with app.app_context():
+            result = poster.create_post(
+                raw="Danke!", as_username="LutzB_L21",
+                created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+            )
+
+        assert result["id"] == 7
+        assert slept == [29]
+
+    def test_it_gives_up_rather_than_waiting_for_ever(self, app, monkeypatch):
+        slept = []
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.time.sleep", slept.append
+        )
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.urlopen",
+            lambda request, timeout=None: (_ for _ in ()).throw(self.too_quickly(5)),
+        )
+        poster = ContentPoster({
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+        })
+
+        with app.app_context():
+            with pytest.raises(ForumProviderError):
+                poster.create_post(
+                    raw="Danke!", as_username="LutzB_L21",
+                    created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+                )
+
+        assert len(slept) == 5, "five tries, then the problem is somebody else's"
+
+    def test_an_hour_is_not_a_wait_it_honours(self, app):
+        assert ContentPoster._wait_seconds(
+            json.dumps({"extras": {"wait_seconds": 3600}})
+        ) == 300
+
+    def test_a_refusal_with_no_number_in_it_still_waits(self, app):
+        assert ContentPoster._wait_seconds("not json at all") == 30

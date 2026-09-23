@@ -24,6 +24,7 @@ import json
 import mimetypes
 import re
 import secrets
+import time
 from collections import Counter, namedtuple
 from datetime import datetime, timezone
 from pathlib import Path
@@ -39,6 +40,20 @@ from ..forum_service import DISCOURSE_USER_AGENT, ForumProviderError
 # these as UTC would move every late-evening post a day earlier than the board
 # has shown for a decade.
 BOARD_TIMEZONE = "Europe/Vienna"
+
+# Discourse's own rate limits are loosened for the import window, but not all
+# of them are settings and none of them can be relied on to be off. When it
+# says to wait, waiting is the fix: dropping the post instead loses it, since
+# the settings go back at the end of the run and there is no way to ask for a
+# re-run of only what failed.
+RATE_LIMIT_RETRIES = 5
+RATE_LIMIT_FALLBACK_WAIT = 30   # when Discourse does not say how long
+RATE_LIMIT_MAX_WAIT = 300       # past which something else is wrong
+
+#: Attachments Discourse renders inline rather than as a link. It counts those
+#: against newuser_max_embedded_media and the rest against newuser_max_links,
+#: so what an attachment becomes decides which limit it is measured by.
+IMAGE_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "gif", "webp"})
 
 # The vocabulary that counts as markup. Anything else in square brackets is
 # somebody's words.
@@ -178,7 +193,8 @@ class ContentPoster:
             )
         return None
 
-    def _call(self, method, path, *, as_username=None, json_body=None, body=None, content_type=None):
+    def _call(self, method, path, *, as_username=None, json_body=None, body=None,
+              content_type=None, rate_limit_retries=RATE_LIMIT_RETRIES):
         headers = {
             "Api-Key": self.api_key,
             "Api-Username": as_username or self.admin_username,
@@ -214,10 +230,34 @@ class ContentPoster:
                     "DISCOURSE_MIGRATION_API_KEY, and revoke it afterwards -- a "
                     "key that can act as anybody should not outlive the job."
                 ) from exc
+            if exc.code == 429 and rate_limit_retries > 0:
+                # Discourse says exactly how long to wait, so waiting is the
+                # whole fix. Dropping the post instead loses it: the settings
+                # go back at the end of the run, and the person re-running it
+                # has no way to ask for only the posts that failed.
+                wait = self._wait_seconds(detail)
+                current_app.logger.info(
+                    "Discourse rate limit on %s, waiting %ss", path, wait
+                )
+                time.sleep(wait)
+                return self._call(
+                    method, path, as_username=as_username, json_body=json_body,
+                    body=body, content_type=content_type,
+                    rate_limit_retries=rate_limit_retries - 1,
+                )
             raise ForumProviderError(f"{method} {path} failed ({exc.code}): {detail}") from exc
 
         except URLError as exc:
             raise ForumProviderError(f"Could not reach Discourse: {exc}") from exc
+
+    @staticmethod
+    def _wait_seconds(detail):
+        """How long Discourse asked to be left alone for, within reason."""
+        try:
+            asked = json.loads(detail).get("extras", {}).get("wait_seconds")
+        except (ValueError, AttributeError):
+            asked = None
+        return min(max(int(asked or RATE_LIMIT_FALLBACK_WAIT), 1), RATE_LIMIT_MAX_WAIT)
 
     def upload(self, path, as_username, filename=None, content_type=None):
         """Upload one file as that person. Returns Discourse's upload record.
@@ -525,21 +565,65 @@ def plan_site_settings(threads, posts, attachments=()):
                 f"one person wrote {max(replied.values())} replies",
             ))
 
-        most_links = max(len(re.findall(r"https?://", body)) for body in bodies.values())
+        # What a post carries is not what its author typed. Each attachment is
+        # appended to the body as markdown -- an image inline, anything else as
+        # a link -- so a post with four screenshots and no URLs in it arrives
+        # at Discourse carrying four embedded media items, and one with three
+        # PDFs arrives carrying three links. Counting only the old text missed
+        # both, and the run found out one refused post at a time.
+        by_post = {}
+        for row in attachments:
+            by_post.setdefault(row.get("pid"), []).append(row)
+
+        def carried(post):
+            body = bodies.get(post.get("pid"), "")
+            files = by_post.get(post.get("pid"), [])
+            images = sum(
+                1 for row in files
+                if Path(row.get("filename") or "").suffix.lstrip(".").lower()
+                in IMAGE_EXTENSIONS
+            )
+            return (
+                len(re.findall(r"https?://", body)) + len(files),
+                len(re.findall(r"!\[", body)) + images,
+            )
+
+        counted = [carried(post) for post in posts]
+        most_links = max(links for links, _media in counted)
         if most_links:
             requirements.append(Requirement(
                 "newuser_max_links", most_links, AT_LEAST,
-                f"one post carries {most_links} links",
+                f"one post carries {most_links} links, counting each attachment "
+                f"-- they are appended to the post as markdown links",
             ))
-        most_images = max(len(re.findall(r"!\[", body)) for body in bodies.values())
-        if most_images:
+        most_media = max(media for _links, media in counted)
+        if most_media:
             requirements.append(Requirement(
-                "newuser_max_images", most_images, AT_LEAST,
-                f"one post carries {most_images} images",
+                "newuser_max_images", most_media, AT_LEAST,
+                f"one post carries {most_media} embedded media items, counting "
+                f"attachments that are pictures -- those go inline, not as links",
                 # Renamed in Discourse 2.7, and a forum that has never heard of
                 # the old name reports the setting as unknown rather than as
                 # renamed -- after which it is quietly not changed.
                 aliases=("newuser_max_embedded_media",),
+            ))
+
+        # Posting is not the same as waiting. Discourse makes a new account
+        # pause between posts, and during an import a person's whole history
+        # arrives in seconds -- so this is hit on the second post somebody
+        # makes in a thread, every time. The run waits it out when it has to,
+        # but 30 seconds a post across 1,500 posts is twelve hours of waiting
+        # to avoid.
+        for setting in (
+            "rate_limit_create_post",
+            "rate_limit_new_user_create_post",
+            "rate_limit_create_topic",
+            "rate_limit_new_user_create_topic",
+        ):
+            requirements.append(Requirement(
+                setting, 0, AT_MOST,
+                "the seconds Discourse makes somebody wait between posts, "
+                "which an import spends doing nothing",
             ))
 
     if attachments:
@@ -854,7 +938,7 @@ def _as_iso(dateline):
 def _attachment_markdown(upload, original_name):
     """How Discourse refers to an upload from inside a post."""
     short_url = upload.get("short_url") or upload.get("url")
-    if (upload.get("extension") or "").lower() in {"png", "jpg", "jpeg", "gif", "webp"}:
+    if (upload.get("extension") or "").lower() in IMAGE_EXTENSIONS:
         return f"![{original_name}]({short_url})"
     size = upload.get("human_filesize") or ""
     return f"[{original_name}|attachment]({short_url}) {size}".strip()

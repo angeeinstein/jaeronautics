@@ -267,12 +267,34 @@ Two settings are deliberately **not** restored:
   of Discourse has its own `client_max_body_size` and it answers first. A file
   over that comes back as `413`, which is not Discourse saying anything.
 
+## 6a. Answered: the dates survive
+
+A run of one real thread on 2026-09-23 posted 2017-03-22 and Discourse
+recorded 2017-03-22, for every post that landed. That is the question the
+spike existed for, and it is settled: posting on somebody's behalf with a
+`created_at` works, and the archive can keep its own history.
+
+The same run found three things that nothing short of a real run would have:
+
+- **"You're replying a bit too quickly. Please wait 29 seconds."** Discourse
+  makes a new account pause between posts, and during an import the second
+  post somebody makes arrives a second after their first. It is now waited
+  out when it happens, and the four `rate_limit_*_create_post` and
+  `..._create_topic` settings are loosened for the window, because waiting
+  thirty seconds a post across 1,500 posts is twelve hours of doing nothing.
+- **"new users can only put one embedded media item in a post"** and
+  **"only put 2 links in a post"**. Both were a mistake in the check rather
+  than in the forum: it measured the post as its author typed it in 2017, but
+  what gets sent is that text *plus* every attachment appended as markdown —
+  a picture inline, anything else as a link. A post with four screenshots and
+  no URLs in it arrives carrying four embedded media items. Attachments are
+  counted now.
+
 ## 7. Then go and look at it
 
 The report says what Discourse recorded against what was asked for, which is
 the point of the whole exercise — but the report is written by the same code
 that did the posting, so read the topic itself:
-
 - are the dates the old ones, or today?
 - is each post under the right name, with the right avatar?
 - do the attachments open, and are they named what they were named?
