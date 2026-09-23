@@ -232,6 +232,11 @@ from .services.forum_profiles import (  # noqa: E402
     YEAR_GROUP_FIELD_NAME,
     publish_imported_profiles,
 )
+from .services.forum_content import (  # noqa: E402
+    ContentPoster,
+    dates_survived,
+    migrate_thread,
+)
 from .services.workflows import (  # noqa: E402
     process_email_delivery_jobs,
     refresh_member_billing_state,
@@ -1753,6 +1758,89 @@ def create_app(config_overrides=None):
                 f"{avatar_dir} is empty. Point --avatar-dir at the directory that "
                 f"holds the avatar files themselves."
             )
+
+    @app.cli.command("migrate-forum-thread")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--thread", required=True, help="The old forum's thread id (tid).")
+    @click.option("--uploads", required=True, type=click.Path(file_okay=False),
+                  help="The old forum's uploads folder, holding the .attach files.")
+    @click.option("--category", type=int, help="Discourse category id to post into.")
+    @click.option("--dry-run", is_flag=True, help="Show what would be posted and send nothing.")
+    @with_appcontext
+    def migrate_forum_thread_command(dump_file, thread, uploads, category, dry_run):
+        """Moves ONE old thread onto the forum, to find out whether it can be.
+
+        A rehearsal for the content migration, not the migration. It answers
+        the two questions the real importer depends on and cannot be reasoned
+        out: whether Discourse keeps the dates it is given when posting on
+        somebody else's behalf, and whether an imported person -- never signed
+        in, trust level 0, unreachable address -- is allowed to post at all.
+
+        Not idempotent. Running it twice posts the thread twice.
+        """
+        import sys
+        from pathlib import Path as _Path
+
+        sys.path.insert(0, str(_Path(app.root_path).parent / "scripts"))
+        from mybb_export import find_table, read_dump, rows_of  # noqa: E402
+
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+        if not dry_run and not category:
+            raise click.ClickException("--category is required for a real run.")
+
+        dump = read_dump(dump_file)
+        posts = [
+            row for row in rows_of(dump, find_table(dump, "posts"))
+            if row.get("tid") == str(thread)
+        ]
+        if not posts:
+            raise click.ClickException(f"No posts found for thread {thread}.")
+        posts.sort(key=lambda row: int(row.get("dateline") or 0))
+
+        threads = {row["tid"]: row for row in rows_of(dump, find_table(dump, "threads"))}
+        attachments_by_post = {}
+        for row in rows_of(dump, find_table(dump, "attachments")):
+            attachments_by_post.setdefault(row.get("pid"), []).append(row)
+        # The name the old forum knew each author by is the name they have here,
+        # because that is exactly what the profile import published.
+        usernames_by_uid = {
+            row.get("uid"): row.get("username")
+            for row in rows_of(dump, find_table(dump, "users"))
+        }
+
+        poster = ContentPoster(service.settings)
+        report = migrate_thread(
+            poster, threads.get(str(thread), {"tid": thread}), posts,
+            attachments_by_post, usernames_by_uid, uploads, category,
+            dry_run=dry_run,
+            fallback_username=service.settings["discourse_api_username"],
+        )
+
+        click.echo(f"\n{report['thread']}")
+        click.echo(f"{'date asked for':<12} {'recorded':<12} {'author':<22} files  result")
+        for person in report["posts"]:
+            click.echo(
+                f"{(person['asked_for'] or '')[:10]:<12} "
+                f"{(person['recorded'] or '-')[:10]:<12} "
+                f"{(person['author'] or '?'):<22} {person['attachments']:>5}  {person['result']}"
+            )
+
+        kept, explanation = dates_survived(report)
+        click.echo("")
+        if kept is True:
+            click.echo(click.style(f"Dates survived: {explanation}", fg="green"))
+        elif kept is False:
+            click.echo(click.style(f"Dates did NOT survive: {explanation}", fg="red"))
+            click.echo("The importer needs a different shape; nothing else here matters yet.")
+        else:
+            click.echo(click.style(f"Undetermined: {explanation}", fg="yellow"))
+
+        for problem in report["problems"][:20]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        if report.get("topic_id"):
+            click.echo(f"\nTopic {report['topic_id']} — go and look at it.")
 
     @app.cli.command("publish-forum-profiles")
     @click.option("--dry-run", is_flag=True,
