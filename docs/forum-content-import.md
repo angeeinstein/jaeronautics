@@ -310,3 +310,83 @@ Only then is it worth talking about the other 719 threads.
   when it is no longer needed.
 - Check that the settings went back: run `check-forum-settings` again and read
   the `now` column.
+
+## 9. The whole board, keeping the categories it had
+
+Rehearsing one thread answers whether it works. Moving all 720 answers whether
+it works at scale, and the honest way to find that out is to do it — into the
+old structure rather than a new one. Recreating the old shape is a deliberately
+dull choice for a first full run: it makes the result comparable with the old
+board post for post, and rearranging categories afterwards is something
+Discourse does well and a migration script does badly.
+
+```bash
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics sh -c '
+  DISCOURSE_MIGRATION_API_KEY=$(cat /var/tmp/forum-migration/api-key) \
+  exec /var/www/jaeronautics/.venv/bin/flask \
+       --app aeronautics_members.app:create_app \
+       import-forum-content /var/tmp/forum-migration/dump.sql.gz \
+       --uploads /var/tmp/forum-migration/uploads \
+       --ledger /var/tmp/forum-migration/ledger.jsonl \
+       --adjust-settings \
+       --settings-file /var/tmp/forum-migration/settings-before.json \
+       --limit 20'
+```
+
+**Start with `--limit 20`.** Twenty threads is enough to see whether the
+categories come out right and whether anything degrades at volume, and it is
+small enough to delete and start again. Drop the limit once it looks right.
+
+**Keep the ledger file.** It is what makes the run repeatable. Every post that
+lands is written to it before the next is attempted, so a run that stops — and
+one this long will stop — carries on rather than posting everything twice.
+Running the same command again is the recovery procedure; there is no other
+one. Delete the ledger only when deleting what it refers to.
+
+### What it does to the categories
+
+The old board is a heading, then a degree, then a semester, then a lecture.
+Discourse nests three deep, so the last two names are joined: *Bachelor → 3.
+Semester / Technisches Programmieren*. Nothing is dropped, and the run asks for
+`max_category_nesting` along with the rest.
+
+Forums nobody ever posted in are not recreated — that would be recreating the
+filing rather than the archive — but a forum that holds threads keeps its
+parents, since a subcategory needs something to be under.
+
+Threads go oldest first, so a run stopped halfway leaves an archive that ends
+somewhere sensible instead of one with holes through it.
+
+### Before the unlimited run
+
+- **All 9 GB of uploads** have to be on the portal, and room for them again on
+  the forum. Discourse keeps optimised copies of images beside the originals.
+- The whole thing is one long sequence of API calls. Run it under `tmux` or
+  `screen`, or a dropped SSH session ends it — recoverable, but slower than
+  not needing to recover.
+
+## 10. Checking a file the new forum shows oddly
+
+Every upload is on disk as `post_<pid>_<time>_<hash>.attach`: the original
+bytes under a name that says nothing. The name somebody chose is in the
+database, so the uploads folder cannot be searched for it. Look it up:
+
+```bash
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+  /var/www/jaeronautics/.venv/bin/flask \
+  --app aeronautics_members.app:create_app \
+  inspect-forum-attachments /var/tmp/forum-migration/dump.sql.gz --thread 258
+```
+
+It prints, per attachment, the on-disk name, the name the old board recorded
+and the type it recorded. `--name <fragment>` searches the whole board instead.
+
+Then, because the `.attach` file is the original bytes whatever it is called:
+
+```bash
+file /var/tmp/forum-migration/uploads/201705/post_280_1493750319_....attach
+```
+
+That settles what a file actually is. A name ending `.JPG` on something `file`
+calls a PDF is not a fault in the import — Discourse appends the extension
+that matches the contents, and the contents win.

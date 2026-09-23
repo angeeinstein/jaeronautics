@@ -313,6 +313,24 @@ class ContentPoster:
     def read_post(self, post_id):
         return self._call("GET", f"/posts/{quote(str(post_id))}.json")
 
+    def categories(self):
+        """Every category the forum has, with its parent. Flat list.
+
+        Read from /site.json rather than /categories.json because that one
+        answers with the whole tree in one go and does not need paging through
+        -- and a category missed by paging is a category made twice.
+        """
+        payload = self._call("GET", "/site.json")
+        return payload.get("categories") or []
+
+    def create_category(self, name, parent_id=None):
+        """Make one category. Returns its id."""
+        payload = {"name": name, "color": "0088CC", "text_color": "FFFFFF"}
+        if parent_id:
+            payload["parent_category_id"] = parent_id
+        answer = self._call("POST", "/categories.json", json_body=payload)
+        return (answer.get("category") or {}).get("id")
+
     def site_settings(self):
         """Every site setting and its current value, as {name: value}.
 
@@ -945,15 +963,22 @@ def _attachment_markdown(upload, original_name):
 
 
 def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
-                   uploads_dir, category_id, *, dry_run=False, fallback_username=None):
+                   uploads_dir, category_id, *, dry_run=False, fallback_username=None,
+                   ledger=None):
     """Post one old thread onto the forum. Returns a report.
 
     Every post is sent as its own author with its own date, and the report says
     what Discourse recorded against what was asked for -- which is the entire
     reason this exists.
+
+    With a ``ledger``, what is already on the forum is left alone and the
+    thread carries on from where a previous run stopped. Without one, running
+    this twice posts the thread twice.
     """
     report = {"thread": thread.get("subject"), "posts": [], "problems": [], "topic_id": None}
     uploads_dir = Path(uploads_dir)
+    if ledger is not None:
+        report["topic_id"] = ledger.topic_for(thread.get("tid"))
 
     # Posting the whole thread under one name is not a migration, it is a
     # mistake wearing one. It already happened once: "users" matched a plugin's
@@ -993,6 +1018,13 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
 
         if no_topic:
             record["result"] = "not attempted: the thread has no topic to go in"
+            continue
+
+        if ledger is not None and ledger.post_for(post.get("pid")):
+            # Already on the forum from an earlier run. Posting it again would
+            # be the one mistake a resumed run must not make.
+            record["result"] = "already there"
+            record["post_id"] = ledger.post_for(post.get("pid"))
             continue
 
         if not author:
@@ -1070,6 +1102,12 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
         record["post_id"] = created.get("id")
         # What Discourse actually stored, read back rather than assumed.
         record["recorded"] = created.get("created_at")
+        if ledger is not None:
+            # Written down before the next post is attempted, because a record
+            # of what landed is only useful if it is never behind what landed.
+            if opening and report["topic_id"]:
+                ledger.record_topic(thread.get("tid"), report["topic_id"])
+            ledger.record_post(post.get("pid"), created.get("id"))
 
     current_app.logger.info("Spike: moved thread %s", thread.get("tid"))
     return report

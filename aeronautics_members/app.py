@@ -232,6 +232,12 @@ from .services.forum_profiles import (  # noqa: E402
     YEAR_GROUP_FIELD_NAME,
     publish_imported_profiles,
 )
+from .services.forum_board import (  # noqa: E402
+    Ledger,
+    category_nesting_requirement,
+    category_plan,
+    migrate_board,
+)
 from .services.forum_content import (  # noqa: E402
     LOOSEN,
     REFUSE,
@@ -1783,7 +1789,7 @@ def create_app(config_overrides=None):
         prefix, _rejected = find_prefix(dump)
         return {
             name: list(rows_of(dump, find_table(dump, name, prefix)))
-            for name in ("posts", "threads", "attachments", "users")
+            for name in ("posts", "threads", "attachments", "users", "forums")
         }
 
     def _report_site_settings(rows):
@@ -1927,6 +1933,49 @@ def create_app(config_overrides=None):
             ))
         else:
             click.echo(click.style("\nThe forum is back as it was.", fg="green"))
+
+    @app.cli.command("inspect-forum-attachments")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--thread", help="Only this thread's attachments (tid).")
+    @click.option("--name", help="Only files whose stored name contains this.")
+    @with_appcontext
+    def inspect_forum_attachments_command(dump_file, thread, name):
+        """What the old board recorded about each uploaded file.
+
+        Every upload is on disk as post_<pid>_<time>_<hash>.attach -- the
+        original bytes under a name that says nothing -- and the name somebody
+        chose, with its type, is in the database. So a file that arrives on the
+        new forum looking wrong cannot be checked by looking in the uploads
+        folder; this is how to look it up.
+
+        The on-disk file is the original bytes, so `file` on the path in the
+        left column says what it really is, whatever the name claims.
+        """
+        tables = _load_mybb_dump(dump_file)
+        wanted = None
+        if thread:
+            wanted = {
+                row.get("pid") for row in tables["posts"]
+                if row.get("tid") == str(thread)
+            }
+
+        rows = [
+            row for row in tables["attachments"]
+            if (wanted is None or row.get("pid") in wanted)
+            and (not name or name.lower() in (row.get("filename") or "").lower())
+        ]
+        if not rows:
+            raise click.ClickException("No attachments match that.")
+
+        for row in sorted(rows, key=lambda row: int(row.get("pid") or 0)):
+            size = int(row.get("filesize") or 0)
+            click.echo(
+                f"\npid {row.get('pid')}  {size / 1024:.1f} KB  "
+                f"type={row.get('filetype') or '?'}"
+            )
+            click.echo(f"  on disk:  {row.get('attachname')}")
+            click.echo(f"  name:     {row.get('filename')}")
+        click.echo(f"\n{len(rows)} attachments.")
 
     @app.cli.command("check-forum-settings")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
@@ -2160,6 +2209,144 @@ def create_app(config_overrides=None):
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if report.get("topic_id"):
             click.echo(f"\nTopic {report['topic_id']} — go and look at it.")
+
+    @app.cli.command("import-forum-content")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--uploads", required=True, type=click.Path(file_okay=False),
+                  help="The old forum's uploads folder.")
+    @click.option("--ledger", type=click.Path(dir_okay=False),
+                  default="forum-import-ledger.jsonl", show_default=True,
+                  help="What has already been posted. Keep it; it is how a "
+                       "stopped run carries on instead of starting again.")
+    @click.option("--dry-run", is_flag=True, help="Report and send nothing.")
+    @click.option("--limit", type=int, default=0, metavar="N",
+                  help="Stop after N threads, for a first careful run.")
+    @click.option("--adjust-settings", is_flag=True,
+                  help="Loosen the settings this needs, and put them back after.")
+    @click.option("--settings-file", type=click.Path(dir_okay=False),
+                  help="Where to write the record of what was changed.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="An 'All Users' Discourse API key.")
+    @with_appcontext
+    def import_forum_content_command(dump_file, uploads, ledger, dry_run, limit,
+                                     adjust_settings, settings_file, api_key):
+        """Moves the whole old board across, keeping the categories it had.
+
+        The old structure is recreated rather than reorganised. That is a
+        deliberately dull choice for a first full run: it makes the result
+        comparable with the old board post for post, and rearranging it
+        afterwards is something Discourse does well and a migration script
+        does badly.
+
+        Safe to run again. Every post that lands is written to the ledger
+        before the next is attempted, so a run that stops -- and one this long
+        will stop -- carries on rather than posting everything twice.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        tables = _load_mybb_dump(dump_file)
+        if not tables.get("forums"):
+            raise click.ClickException(
+                "No forums table in that dump, so there is nothing to make the "
+                "categories from."
+            )
+
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
+
+        plan = category_plan(tables["forums"], tables["threads"])
+        requirements = plan_site_settings(
+            tables["threads"], tables["posts"], tables["attachments"]
+        ) + [category_nesting_requirement(plan)]
+
+        click.echo(
+            f"{len(tables['threads'])} threads, {len(tables['posts'])} posts, "
+            f"{len(tables['attachments'])} attachments, into {len(plan)} categories."
+        )
+        try:
+            ready, anything = _report_site_settings(
+                check_site_settings(poster, requirements)
+            )
+        except ForumProviderError as exc:
+            click.echo(click.style(f"Could not read the site settings: {exc}", fg="yellow"))
+            ready, anything = True, False
+
+        changes = []
+        journal = None
+        decision = what_to_do_about_settings(
+            ready=ready, anything=anything,
+            adjust_settings=adjust_settings, dry_run=dry_run,
+        )
+        if decision == LOOSEN:
+            journal = _settings_journal_path(settings_file)
+            click.echo(click.style(
+                f"\nLoosening the settings above. What they were goes in\n"
+                f"  {journal}\n"
+                f"If this run does not finish, put them back with:\n"
+                f"  flask restore-forum-settings {journal}",
+                fg="cyan",
+            ))
+            changes = loosen_site_settings(poster, requirements, journal)
+            click.echo(f"Changed {len(changes)} settings.")
+        elif decision == REFUSE:
+            raise click.ClickException(
+                "The forum would refuse part of this archive. Run it again "
+                "with --adjust-settings, or change them by hand first."
+            )
+
+        record = Ledger(ledger)
+        if record.posts:
+            click.echo(click.style(
+                f"Carrying on: {len(record.posts)} posts are already on the "
+                f"forum according to {ledger}.", fg="cyan",
+            ))
+
+        def say(thread, report, summary):
+            done = summary["posted"] + summary["already_there"]
+            click.echo(
+                f"  [{summary['threads']:>4}] {str(thread.get('subject'))[:48]:<50} "
+                f"{done:>5} posts, {summary['failed']:>3} failed"
+            )
+
+        try:
+            summary = migrate_board(
+                poster, tables, uploads, record,
+                dry_run=dry_run, limit=limit,
+                fallback_username=service.settings["discourse_api_username"],
+                on_thread=say,
+            )
+        finally:
+            record.close()
+            if changes:
+                click.echo("\nPutting the settings back:")
+                try:
+                    _report_restore(restore_site_settings(poster, changes))
+                except ForumProviderError as exc:
+                    click.echo(click.style(
+                        f"COULD NOT RESTORE THE SETTINGS: {exc}\n"
+                        f"The forum is still loosened. Run:\n"
+                        f"  flask restore-forum-settings {journal}",
+                        fg="red",
+                    ), err=True)
+
+        click.echo(
+            f"\n{summary['threads']} threads: {summary['posted']} posted, "
+            f"{summary['already_there']} already there, {summary['failed']} failed."
+        )
+        if summary["problems"]:
+            click.echo(click.style(
+                f"\n{len(summary['problems'])} problems:", fg="yellow"), err=True)
+            for problem in summary["problems"]:
+                click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+            click.echo(
+                f"\nFix what they say and run the same command again. What has "
+                f"landed is in {ledger} and will not be posted twice."
+            )
 
     @app.cli.command("publish-forum-profiles")
     @click.option("--dry-run", is_flag=True,
