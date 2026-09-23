@@ -14,13 +14,18 @@ archive is a decade of "Klausuren", "Exams" and "Danke!", and finding that out
 one refused post at a time, hours into an import that cannot be re-run, is the
 expensive way to learn it.
 """
+import json
+
 import pytest
 
 from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_content import (
     check_site_settings,
+    loosen_site_settings,
     migrate_thread,
     plan_site_settings,
+    read_settings_journal,
+    restore_site_settings,
 )
 
 
@@ -31,8 +36,11 @@ class FakePoster:
         self.refuse_titles_shorter_than = refuse_titles_shorter_than
         self.calls = []
         self.uploads = []
-        self._settings = settings or {}
+        self._settings = dict(settings or {})
         self._next_topic = 100
+        self.base_url = "https://forum.example.at"
+        self.settings_written = []
+        self.refuse_to_write = set()
 
     def create_post(self, *, raw, as_username, created_at, category=None,
                     title=None, topic_id=None):
@@ -56,7 +64,13 @@ class FakePoster:
         return {"short_url": "upload://abc", "extension": "pdf"}
 
     def site_settings(self):
-        return self._settings
+        return dict(self._settings)
+
+    def set_site_setting(self, setting, value):
+        if setting in self.refuse_to_write:
+            raise ForumProviderError(f"PUT /admin/site_settings/{setting}.json failed (403)")
+        self.settings_written.append((setting, value))
+        self._settings[setting] = value
 
 
 def a_post(pid, uid="7", dateline="1394119460", message="Hier die Angabe von 2014."):
@@ -327,3 +341,232 @@ class TestAskingTheForumWhatItAllows:
         )}
 
         assert rows["min_topic_title_length"]["ok"] is None
+
+
+class TestLooseningAndPuttingBack:
+    """The import changes the settings itself, and undoes it."""
+
+    @pytest.fixture
+    def journal(self, tmp_path):
+        return tmp_path / "forum-settings.json"
+
+    @pytest.fixture
+    def board(self):
+        return (
+            [{"tid": "1", "subject": "Klausuren", "firstpost": "1"},
+             {"tid": "2", "subject": "Klausuren", "firstpost": "2"}],
+            [a_post("1", message="Danke"), a_post("2", message="Bitte")],
+        )
+
+    def a_forum(self):
+        return FakePoster(settings={
+            "disable_emails": "no",
+            "min_topic_title_length": "15",
+            "allow_duplicate_topic_titles": "false",
+            "title_prettify": "true",
+            "title_min_entropy": "10",
+            "min_post_length": "20",
+            "min_first_post_length": "20",
+            "body_min_entropy": "7",
+            "max_topics_in_first_day": "5",
+            "max_topics_per_day": "20",
+        })
+
+    def test_it_changes_what_needs_changing(self, app, board, journal):
+        poster = self.a_forum()
+
+        with app.app_context():
+            changes = loosen_site_settings(poster, plan_site_settings(*board), journal)
+
+        written = dict(poster.settings_written)
+        assert written["min_topic_title_length"] == "9"
+        assert written["allow_duplicate_topic_titles"] == "true"
+        assert written["disable_emails"] == "non-staff"
+        assert {change["setting"] for change in changes} == set(written)
+
+    def test_it_leaves_alone_what_is_already_wide_enough(self, app, board, journal):
+        poster = self.a_forum()
+        poster._settings["max_topics_per_day"] = "1000"
+
+        with app.app_context():
+            loosen_site_settings(poster, plan_site_settings(*board), journal)
+
+        assert "max_topics_per_day" not in dict(poster.settings_written)
+
+    def test_the_record_is_on_disk_before_anything_is_touched(self, app, board, journal):
+        """A run that dies halfway has to be undoable by somebody else."""
+        poster = self.a_forum()
+        poster.refuse_to_write = {"title_prettify"}
+
+        with app.app_context():
+            with pytest.raises(ForumProviderError):
+                loosen_site_settings(poster, plan_site_settings(*board), journal)
+
+        payload = read_settings_journal(journal)
+        assert payload["forum"] == poster.base_url
+        recorded = {row["setting"]: row["was"] for row in payload["changes"]}
+        assert recorded["min_topic_title_length"] == "15"
+        assert "title_prettify" in recorded, "the one that failed is recorded too"
+
+    def test_restoring_puts_every_value_back(self, app, board, journal):
+        poster = self.a_forum()
+        before = poster.site_settings()
+
+        with app.app_context():
+            changes = loosen_site_settings(poster, plan_site_settings(*board), journal)
+            restore_site_settings(poster, changes)
+
+        assert poster.site_settings() == before
+
+    def test_a_setting_marked_to_keep_is_not_put_back(self, app, journal):
+        """The forum has to go on accepting PDFs after the import."""
+        poster = FakePoster(settings={"authorized_extensions": "jpg|png"})
+        attachments = [{"pid": "1", "filename": "Angabe.pdf", "filesize": "10"}]
+
+        with app.app_context():
+            changes = loosen_site_settings(
+                poster, plan_site_settings([], [a_post("1")], attachments), journal
+            )
+            results = {row["setting"]: row for row in restore_site_settings(poster, changes)}
+
+        assert "pdf" in poster.site_settings()["authorized_extensions"]
+        assert results["authorized_extensions"]["outcome"] == "left as it is, on purpose"
+
+    def test_widening_a_list_keeps_what_was_there(self, app, journal):
+        poster = FakePoster(settings={"authorized_extensions": "jpg|png"})
+        attachments = [{"pid": "1", "filename": "Angabe.pdf", "filesize": "10"}]
+
+        with app.app_context():
+            loosen_site_settings(
+                poster, plan_site_settings([], [a_post("1")], attachments), journal
+            )
+
+        allowed = poster.site_settings()["authorized_extensions"].split("|")
+        assert set(allowed) == {"jpg", "png", "pdf"}
+
+    def test_a_setting_somebody_else_changed_is_left_alone(self, app, board, journal):
+        poster = self.a_forum()
+
+        with app.app_context():
+            changes = loosen_site_settings(poster, plan_site_settings(*board), journal)
+            # Somebody decides mid-import that duplicate titles are a bad idea.
+            poster._settings["allow_duplicate_topic_titles"] = "false"
+            results = {row["setting"]: row for row in restore_site_settings(poster, changes)}
+
+        assert results["allow_duplicate_topic_titles"]["outcome"].startswith("left alone")
+        assert results["min_topic_title_length"]["outcome"] == "restored"
+
+    def test_force_overrides_that(self, app, board, journal):
+        poster = self.a_forum()
+
+        with app.app_context():
+            changes = loosen_site_settings(poster, plan_site_settings(*board), journal)
+            poster._settings["allow_duplicate_topic_titles"] = "false"
+            results = {row["setting"]: row
+                       for row in restore_site_settings(poster, changes, force=True)}
+
+        assert results["allow_duplicate_topic_titles"]["outcome"] == "restored"
+
+    def test_a_forum_that_needs_nothing_writes_no_record(self, app, journal):
+        poster = FakePoster(settings={
+            "disable_emails": "non-staff", "min_topic_title_length": "1",
+            "title_prettify": "false", "title_min_entropy": "0",
+        })
+        threads = [{"tid": "1", "subject": "Klausuren", "firstpost": "1"}]
+
+        with app.app_context():
+            changes = loosen_site_settings(poster, plan_site_settings(threads, []), journal)
+
+        assert changes == []
+        assert not journal.exists()
+
+    def test_an_empty_record_is_refused(self, journal):
+        journal.write_text(json.dumps({"changes": []}), encoding="utf-8")
+
+        with pytest.raises(ValueError):
+            read_settings_journal(journal)
+
+
+class TestTheGuardsAimedAtBrandNewAccounts:
+    """Every author is an account created minutes ago at trust level 0."""
+
+    def test_a_long_exchange_needs_the_per_topic_cap_raised(self):
+        posts = [a_post(str(n), uid="7") for n in range(1, 14)]
+        for post in posts:
+            post["tid"] = "5"
+        requirements = {r.setting: r for r in plan_site_settings([], posts)}
+
+        assert requirements["newuser_max_replies_per_topic"].needed == 12
+
+    def test_somebody_prolific_needs_the_daily_caps_raised(self):
+        threads = [{"tid": str(n), "subject": f"Klausur {n}", "firstpost": str(n)}
+                   for n in range(1, 8)]
+        posts = [a_post(str(n), uid="7") for n in range(1, 8)]
+        requirements = {r.setting: r for r in plan_site_settings(threads, posts)}
+
+        assert requirements["max_topics_in_first_day"].needed == 7
+        assert requirements["max_topics_per_day"].needed == 7
+
+    def test_links_and_images_are_counted(self):
+        posts = [a_post("1", message="Siehe https://a.at und https://b.at und https://c.at")]
+        requirements = {r.setting: r for r in plan_site_settings([], posts)}
+
+        assert requirements["newuser_max_links"].needed == 3
+
+    def test_the_plainest_title_sets_the_entropy_floor(self):
+        """"AM" is two distinct characters against a default of ten."""
+        threads = [{"tid": "1", "subject": "AM", "firstpost": "1"}]
+        requirements = {r.setting: r for r in plan_site_settings(threads, [])}
+
+        assert requirements["title_min_entropy"].needed == 2
+
+    def test_mail_is_turned_off_but_is_not_a_reason_to_stop(self):
+        requirements = {r.setting: r for r in plan_site_settings([], [])}
+
+        assert requirements["disable_emails"].needed == "non-staff"
+        assert requirements["disable_emails"].blocks is False
+
+    def test_a_title_too_short_is_a_reason_to_stop(self):
+        threads = [{"tid": "1", "subject": "AM", "firstpost": "1"}]
+        requirements = {r.setting: r for r in plan_site_settings(threads, [])}
+
+        assert requirements["min_topic_title_length"].blocks is True
+
+
+class TestTheShapesDiscourseActuallyReturns:
+    """The API answers with JSON types, not with the strings it was sent."""
+
+    def test_a_switch_that_comes_back_as_a_json_boolean_still_restores(self, app, tmp_path):
+        """Set "true", read back True. Comparing those literally strands it."""
+        class BooleanForum(FakePoster):
+            def set_site_setting(self, setting, value):
+                self.settings_written.append((setting, value))
+                if str(value).lower() in {"true", "false"}:
+                    value = str(value).lower() == "true"
+                self._settings[setting] = value
+
+        poster = BooleanForum(settings={
+            "allow_duplicate_topic_titles": False, "title_prettify": True,
+        })
+        threads = [{"tid": "1", "subject": "Klausuren Aerodynamik", "firstpost": "1"},
+                   {"tid": "2", "subject": "Klausuren Aerodynamik", "firstpost": "2"}]
+        journal = tmp_path / "settings.json"
+
+        with app.app_context():
+            changes = loosen_site_settings(poster, plan_site_settings(threads, []), journal)
+            results = {row["setting"]: row for row in restore_site_settings(poster, changes)}
+
+        assert results["allow_duplicate_topic_titles"]["outcome"] == "restored"
+        assert poster.site_settings()["allow_duplicate_topic_titles"] is False
+
+    def test_a_boolean_already_correct_is_not_changed(self, app, tmp_path):
+        poster = FakePoster(settings={"title_prettify": False, "disable_emails": "non-staff"})
+
+        with app.app_context():
+            changes = loosen_site_settings(
+                poster,
+                plan_site_settings([{"tid": "1", "subject": "Klausuren", "firstpost": "1"}], []),
+                tmp_path / "settings.json",
+            )
+
+        assert "title_prettify" not in {change["setting"] for change in changes}

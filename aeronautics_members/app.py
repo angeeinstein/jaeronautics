@@ -236,8 +236,11 @@ from .services.forum_content import (  # noqa: E402
     ContentPoster,
     check_site_settings,
     dates_survived,
+    loosen_site_settings,
     migrate_thread,
     plan_site_settings,
+    read_settings_journal,
+    restore_site_settings,
 )
 from .services.workflows import (  # noqa: E402
     process_email_delivery_jobs,
@@ -1780,13 +1783,22 @@ def create_app(config_overrides=None):
         }
 
     def _report_site_settings(rows):
-        """Print the settings check. Returns True when the forum is ready."""
-        blocking = [row for row in rows if row["ok"] is False]
+        """Print the settings check.
+
+        Returns (nothing_would_be_refused, there_is_something_to_change). A
+        setting that is merely unwanted -- mail going out, titles being
+        rewritten -- is reported and changed, but is not a reason to stop. Only
+        the ones that make Discourse refuse a post are.
+        """
+        wrong = [row for row in rows if row["ok"] is False]
+        blocking = [row for row in wrong if row.get("blocks", True)]
         unreadable = [row for row in rows if row["ok"] is None]
 
         click.echo(f"\n{'setting':<30} {'now':<22} {'needs to be':<22} ")
         for row in rows:
             mark = {True: "ok", False: "CHANGE", None: "?"}[row["ok"]]
+            if row["ok"] is False and not row.get("blocks", True):
+                mark = "change (not fatal)"
             needed = row["needed"]
             if row["compare"] == "at_most":
                 needed = f"{needed} or less"
@@ -1802,20 +1814,103 @@ def create_app(config_overrides=None):
                 )
             )
 
-        if not blocking and not unreadable:
+        if not wrong and not unreadable:
             click.echo(click.style("\nThe forum will accept this archive.", fg="green"))
-            return True
+            return True, False
 
         click.echo("")
-        for row in blocking + unreadable:
+        for row in wrong + unreadable:
             click.echo(f"  {row['setting']}: {row['why']}")
         click.echo(
-            "\nChange these in Admin -> Settings (the search box takes the name "
-            "verbatim), run the import, then put the 'now' column back. They are "
-            "loosened for the import only: leaving min_post_length at 2 or "
-            "duplicate titles allowed for ever is not what this forum wants."
+            "\nRun the import with --adjust-settings and it will change these "
+            "itself and put them back when it is done. By hand it is Admin -> "
+            "Settings, where the search box takes the name verbatim, and then "
+            "remembering the 'now' column afterwards: these are loosened for "
+            "the import only, and leaving min_post_length at 2 or duplicate "
+            "titles allowed for ever is not what this forum wants."
         )
-        return False
+        if not blocking and not unreadable:
+            click.echo(click.style(
+                "\nNone of these would make the forum refuse a post, so the "
+                "import can run without them. It would go better with them.",
+                fg="yellow",
+            ))
+            return True, True
+        return False, True
+
+    def _settings_journal_path(given=None):
+        """Where the record of what was changed goes."""
+        from datetime import datetime as _datetime
+
+        if given:
+            return Path(given)
+        stamp = _datetime.now().strftime("%Y%m%d-%H%M%S")
+        return Path.cwd() / f"forum-settings-{stamp}.json"
+
+    def _report_restore(results):
+        for row in results:
+            colour = "green" if row["outcome"] == "restored" else "yellow"
+            click.echo(click.style(
+                f"  {row['setting']:<30} {str(row['set_to'])[:18]:<20} -> "
+                f"{str(row['was'])[:18]:<20} {row['outcome']}",
+                fg=colour,
+            ))
+
+    @app.cli.command("restore-forum-settings")
+    @click.argument("journal", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--force", is_flag=True,
+                  help="Restore even settings somebody has changed since.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="Reads DISCOURSE_MIGRATION_API_KEY if not given.")
+    @with_appcontext
+    def restore_forum_settings_command(journal, force, api_key):
+        """Puts the forum's settings back after an import.
+
+        The import does this itself when it finishes. This is for when it did
+        not finish: a dropped connection, a full disk, somebody's Ctrl-C. The
+        file it takes is the one the import wrote before it changed anything,
+        so the forum can be put right by somebody who was not there.
+
+        A setting that no longer holds the value the import gave it was changed
+        by somebody else since, and is left alone unless you pass --force.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        try:
+            payload = read_settings_journal(journal)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise click.ClickException(f"{journal}: {exc}") from exc
+
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+
+        if payload.get("forum") and payload["forum"] != poster.base_url:
+            raise click.ClickException(
+                f"That file was written for {payload['forum']}, and this is "
+                f"{poster.base_url}. Restoring one forum's settings onto "
+                f"another would be a mess to unpick."
+            )
+
+        click.echo(f"Written {payload.get('written_at', 'at an unknown time')}.")
+        try:
+            results = restore_site_settings(poster, payload["changes"], force=force)
+        except ForumProviderError as exc:
+            raise click.ClickException(f"Could not restore: {exc}") from exc
+        _report_restore(results)
+
+        stuck = [row for row in results if row["outcome"].startswith("left alone")]
+        if stuck:
+            click.echo(click.style(
+                f"\n{len(stuck)} settings were left alone. Look at them, and "
+                f"use --force if the import's value is the one to undo.",
+                fg="yellow",
+            ))
+        else:
+            click.echo(click.style("\nThe forum is back as it was.", fg="green"))
 
     @app.cli.command("check-forum-settings")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
@@ -1859,7 +1954,8 @@ def create_app(config_overrides=None):
             raise click.ClickException(
                 f"Could not read the forum's settings: {exc}"
             ) from exc
-        if not _report_site_settings(rows):
+        ready, _anything = _report_site_settings(rows)
+        if not ready:
             raise SystemExit(1)
 
     @app.cli.command("migrate-forum-thread")
@@ -1869,12 +1965,17 @@ def create_app(config_overrides=None):
                   help="The old forum's uploads folder, holding the .attach files.")
     @click.option("--category", type=int, help="Discourse category id to post into.")
     @click.option("--dry-run", is_flag=True, help="Show what would be posted and send nothing.")
+    @click.option("--adjust-settings", is_flag=True,
+                  help="Loosen the settings this needs, and put them back after.")
+    @click.option("--settings-file", type=click.Path(dir_okay=False),
+                  help="Where to write the record of what was changed.")
     @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
                   help="An 'All Users' Discourse API key. Reads "
                        "DISCOURSE_MIGRATION_API_KEY if not given, which keeps it "
                        "out of the shell history and out of ps.")
     @with_appcontext
-    def migrate_forum_thread_command(dump_file, thread, uploads, category, dry_run, api_key):
+    def migrate_forum_thread_command(dump_file, thread, uploads, category, dry_run,
+                                     adjust_settings, settings_file, api_key):
         """Moves ONE old thread onto the forum, to find out whether it can be.
 
         A rehearsal for the content migration, not the migration. It answers
@@ -1928,24 +2029,59 @@ def create_app(config_overrides=None):
             [row for pid in pids for row in attachments_by_post.get(pid, [])],
         )
         try:
-            ready = _report_site_settings(check_site_settings(poster, requirements))
+            ready, anything = _report_site_settings(
+                check_site_settings(poster, requirements)
+            )
         except ForumProviderError as exc:
             # Not every key can read the settings. Worth saying, not worth
             # refusing over: the run itself will still report what happened.
             click.echo(click.style(f"Could not read the site settings: {exc}", fg="yellow"))
-            ready = True
-        if not ready:
+            ready, anything = True, False
+
+        changes = []
+        journal = None
+        if anything and adjust_settings and not dry_run:
+            journal = _settings_journal_path(settings_file)
+            # Said before anything is touched rather than after, because the
+            # run that most needs this printed is the one that never gets as
+            # far as printing anything else.
+            click.echo(click.style(
+                f"\nLoosening the settings above. What they were goes in\n"
+                f"  {journal}\n"
+                f"If this run does not finish, put them back with:\n"
+                f"  flask restore-forum-settings {journal}",
+                fg="cyan",
+            ))
+            changes = loosen_site_settings(poster, requirements, journal)
+            click.echo(f"Changed {len(changes)} settings.")
+        elif not ready:
             raise click.ClickException(
-                "The forum would refuse part of this thread. Change the "
-                "settings above first."
+                "The forum would refuse part of this thread. Run it again with "
+                "--adjust-settings to have it change these itself and put them "
+                "back, or change them by hand first."
             )
 
-        report = migrate_thread(
-            poster, this_thread, posts,
-            attachments_by_post, usernames_by_uid, uploads, category,
-            dry_run=dry_run,
-            fallback_username=service.settings["discourse_api_username"],
-        )
+        try:
+            report = migrate_thread(
+                poster, this_thread, posts,
+                attachments_by_post, usernames_by_uid, uploads, category,
+                dry_run=dry_run,
+                fallback_username=service.settings["discourse_api_username"],
+            )
+        finally:
+            if changes:
+                click.echo("\nPutting the settings back:")
+                try:
+                    _report_restore(restore_site_settings(poster, changes))
+                except ForumProviderError as exc:
+                    # Never swallowed: a forum left wide open has to be said
+                    # out loud, with the one command that fixes it.
+                    click.echo(click.style(
+                        f"COULD NOT RESTORE THE SETTINGS: {exc}\n"
+                        f"The forum is still loosened. Run:\n"
+                        f"  flask restore-forum-settings {journal}",
+                        fg="red",
+                    ), err=True)
 
         click.echo(f"\n{report['thread']}")
         click.echo(f"{'date asked for':<12} {'recorded':<12} {'author':<22} files  result")

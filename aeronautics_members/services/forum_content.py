@@ -246,6 +246,13 @@ class ContentPoster:
             if row.get("setting")
         }
 
+    def set_site_setting(self, setting, value):
+        """Change one site setting. Discourse names the field after itself."""
+        self._call(
+            "PUT", f"/admin/site_settings/{quote(str(setting))}.json",
+            json_body={setting: str(value)},
+        )
+
 
 # ---------------------------------------------------------------------------
 # What the forum has to allow before any of this can land
@@ -261,7 +268,27 @@ class ContentPoster:
 # put back afterwards, exactly like disable_emails. The check prints the
 # current value next to the needed one so there is a record of what to restore.
 
-Requirement = namedtuple("Requirement", "setting needed compare why")
+class Requirement(namedtuple("Requirement", "setting needed compare why restore blocks")):
+    """One thing the forum has to allow, and what to do about it.
+
+    ``restore`` is false for the few settings that describe what this forum is
+    for rather than what the import needs. A board whose purpose is sharing
+    exam papers has to accept PDFs on the Monday after the import as much as
+    during it, so narrowing the extensions again would break the new forum to
+    tidy up after the old one.
+
+    ``blocks`` separates the settings that make Discourse refuse a post from
+    the ones that merely have an effect nobody wants. A title two characters
+    too short is refused; title_prettify quietly rewrites what it is given, and
+    mail goes out to addresses that stopped existing years ago. Both are worth
+    changing; only the first is worth stopping for.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, setting, needed, compare, why, restore=True, blocks=True):
+        return super().__new__(cls, setting, needed, compare, why, restore, blocks)
+
 
 #: ``compare`` says what the live value has to be, relative to ``needed``.
 AT_MOST = "at_most"      # a floor Discourse enforces: it must not be higher
@@ -272,6 +299,17 @@ INCLUDES = "includes"    # a comma-separated list that must contain these
 
 def _post_bodies(posts):
     return {post.get("pid"): bbcode_to_markdown(post.get("message")) for post in posts}
+
+
+def _entropy(text):
+    """Discourse's measure of whether something is meaningful.
+
+    TextSentinel counts the distinct characters and compares that against
+    title_min_entropy or body_min_entropy. "Klausuren" scores 8 against a
+    default of 10, so this is not academic: it refuses a good part of a real
+    board for looking like noise.
+    """
+    return len(set(text or ""))
 
 
 def plan_site_settings(threads, posts, attachments=()):
@@ -286,7 +324,20 @@ def plan_site_settings(threads, posts, attachments=()):
     attachments = list(attachments)
     bodies = _post_bodies(posts)
 
-    requirements = []
+    requirements = [
+        # Not measured from anything -- it is true of every bulk import. The
+        # imported people have addresses on a domain that no longer receives,
+        # so a run with mail on means hundreds of bounces against this domain's
+        # reputation, and everybody watching a category gets a decade of
+        # notifications in one afternoon. Staff mail is left on so that whoever
+        # is running this can still get a password reset.
+        Requirement(
+            "disable_emails", "non-staff", EQUALS,
+            "otherwise the import sends notification mail for every post, to "
+            "addresses that stopped existing years ago",
+            blocks=False,
+        ),
+    ]
 
     titles = [(thread.get("subject") or "").strip() for thread in threads]
     titles = [title for title in titles if title]
@@ -313,6 +364,15 @@ def plan_site_settings(threads, posts, attachments=()):
             "left on, Discourse rewrites the titles it is given -- capitalising "
             "them and stripping punctuation -- so the archive would not read as "
             "it did",
+            blocks=False,
+        ))
+
+        plainest = min(_entropy(title) for title in titles)
+        requirements.append(Requirement(
+            "title_min_entropy", plainest, AT_MOST,
+            f"the plainest subject uses only {plainest} distinct characters, "
+            f"which is what Discourse measures to decide a title is not "
+            f"meaningful",
         ))
 
     lengths = [len(body) for body in bodies.values()]
@@ -321,6 +381,12 @@ def plan_site_settings(threads, posts, attachments=()):
             "min_post_length", min(lengths), AT_MOST,
             f"the shortest post on the board is {min(lengths)} characters "
             f"after conversion",
+        ))
+
+        plainest = min(_entropy(body) for body in bodies.values())
+        requirements.append(Requirement(
+            "body_min_entropy", plainest, AT_MOST,
+            f"the plainest post uses only {plainest} distinct characters",
         ))
 
     opening_pids = {thread.get("firstpost") for thread in threads}
@@ -343,6 +409,54 @@ def plan_site_settings(threads, posts, attachments=()):
             f"other, so Discourse reads them as accidental double-posts",
         ))
 
+    # Everybody posting is a brand new account, created minutes ago, at trust
+    # level 0 -- exactly the shape Discourse's anti-spam guards are aimed at.
+    # A decade of somebody's posting arrives in one afternoon.
+    if posts:
+        in_thread = Counter((post.get("uid"), post.get("tid")) for post in posts)
+        most_in_one = max(in_thread.values())
+        if most_in_one > 1:
+            requirements.append(Requirement(
+                "newuser_max_replies_per_topic", most_in_one - 1, AT_LEAST,
+                f"one person replied {most_in_one - 1} times in a single thread",
+            ))
+
+        opened = Counter(
+            post.get("uid") for post in posts if post.get("pid") in opening_pids
+        )
+        if opened:
+            requirements.append(Requirement(
+                "max_topics_in_first_day", max(opened.values()), AT_LEAST,
+                f"one person started {max(opened.values())} of these threads, and "
+                f"their account will be a few minutes old when it does so again",
+            ))
+            requirements.append(Requirement(
+                "max_topics_per_day", max(opened.values()), AT_LEAST,
+                "the whole of one person's thirteen years lands on one day",
+            ))
+
+        replied = Counter(
+            post.get("uid") for post in posts if post.get("pid") not in opening_pids
+        )
+        if replied:
+            requirements.append(Requirement(
+                "max_replies_in_first_day", max(replied.values()), AT_LEAST,
+                f"one person wrote {max(replied.values())} replies",
+            ))
+
+        most_links = max(len(re.findall(r"https?://", body)) for body in bodies.values())
+        if most_links:
+            requirements.append(Requirement(
+                "newuser_max_links", most_links, AT_LEAST,
+                f"one post carries {most_links} links",
+            ))
+        most_images = max(len(re.findall(r"!\[", body)) for body in bodies.values())
+        if most_images:
+            requirements.append(Requirement(
+                "newuser_max_images", most_images, AT_LEAST,
+                f"one post carries {most_images} images",
+            ))
+
     if attachments:
         per_post = Counter(row.get("pid") for row in attachments)
         most = max(per_post.values())
@@ -361,6 +475,11 @@ def plan_site_settings(threads, posts, attachments=()):
             requirements.append(Requirement(
                 "authorized_extensions", extensions, INCLUDES,
                 "these are the file types people actually attached",
+                # Kept afterwards. This forum exists so that people can share
+                # exam papers and summaries; a board that accepts a PDF during
+                # the import and refuses one the next morning would be a
+                # strange thing to have built.
+                restore=False,
             ))
 
         sizes = [int(row.get("filesize") or 0) for row in attachments]
@@ -441,8 +560,107 @@ def check_site_settings(poster, requirements):
             "compare": requirement.compare,
             "ok": ok,
             "why": requirement.why,
+            "blocks": requirement.blocks,
+            "requirement": requirement,
         })
     return rows
+
+
+def _value_for(requirement, now):
+    """What to write, given what is there. Only lists need the old value."""
+    if requirement.compare == INCLUDES:
+        return "|".join(sorted(_listed(now) | set(requirement.needed)))
+    return str(requirement.needed)
+
+
+def loosen_site_settings(poster, requirements, journal_path):
+    """Change what has to change, having first written down what it was.
+
+    The journal is written to disk *before* the first setting is touched, and
+    that ordering is the whole point. A run that is interrupted -- a dropped
+    connection, a full disk, somebody's Ctrl-C -- leaves a forum with its
+    guards down and no memory of what they were. With the journal on disk the
+    damage is one command to undo, by somebody who was not there.
+
+    Returns the list of changes, which is also what the journal holds.
+    """
+    journal_path = Path(journal_path)
+    changes = []
+    for row in check_site_settings(poster, requirements):
+        if row["ok"] is not False:
+            continue
+        requirement = row["requirement"]
+        changes.append({
+            "setting": requirement.setting,
+            "was": row["now"],
+            "set_to": _value_for(requirement, row["now"]),
+            "restore": bool(requirement.restore),
+        })
+
+    if not changes:
+        return changes
+
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    journal_path.write_text(json.dumps({
+        "written_at": datetime.now(tz=timezone.utc).isoformat(),
+        "forum": poster.base_url,
+        "changes": changes,
+    }, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    for change in changes:
+        poster.set_site_setting(change["setting"], change["set_to"])
+        current_app.logger.info(
+            "Migration: %s %s -> %s", change["setting"], change["was"], change["set_to"]
+        )
+    return changes
+
+
+def _same_value(one, other):
+    """Two site-setting values, compared the way Discourse means them.
+
+    A boolean comes back from the API as JSON true, not as the string "true"
+    that was sent, so comparing the two literally would decide that every
+    switch had been changed by somebody else and refuse to put any of them
+    back -- which is the one failure this whole mechanism exists to avoid.
+    """
+    return str(one).strip().lower() == str(other).strip().lower()
+
+
+def restore_site_settings(poster, changes, force=False):
+    """Put the settings back. Returns a row per setting saying what happened.
+
+    A setting that no longer holds the value the import gave it was changed by
+    somebody else in the meantime, and is left alone: restoring it would throw
+    their change away. ``force`` overrides that, for the case where the person
+    doing it knows better.
+    """
+    live = poster.site_settings()
+    results = []
+    for change in changes:
+        setting = change["setting"]
+        result = {"setting": setting, "was": change["was"], "set_to": change["set_to"]}
+
+        if not change.get("restore", True):
+            result["outcome"] = "left as it is, on purpose"
+        elif not _same_value(live.get(setting), change["set_to"]) and not force:
+            result["outcome"] = (
+                f"left alone: it now reads {live.get(setting)!r}, which is not "
+                f"what the import set it to, so somebody else has changed it"
+            )
+        else:
+            poster.set_site_setting(setting, change["was"])
+            result["outcome"] = "restored"
+        results.append(result)
+    return results
+
+
+def read_settings_journal(journal_path):
+    """The changes a previous run wrote down, for restoring after a crash."""
+    payload = json.loads(Path(journal_path).read_text(encoding="utf-8"))
+    changes = payload.get("changes")
+    if not isinstance(changes, list) or not changes:
+        raise ValueError(f"{journal_path} does not hold any recorded changes.")
+    return payload
 
 
 # ---------------------------------------------------------------------------
