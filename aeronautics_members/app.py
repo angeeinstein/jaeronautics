@@ -1766,8 +1766,12 @@ def create_app(config_overrides=None):
                   help="The old forum's uploads folder, holding the .attach files.")
     @click.option("--category", type=int, help="Discourse category id to post into.")
     @click.option("--dry-run", is_flag=True, help="Show what would be posted and send nothing.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="An 'All Users' Discourse API key. Reads "
+                       "DISCOURSE_MIGRATION_API_KEY if not given, which keeps it "
+                       "out of the shell history and out of ps.")
     @with_appcontext
-    def migrate_forum_thread_command(dump_file, thread, uploads, category, dry_run):
+    def migrate_forum_thread_command(dump_file, thread, uploads, category, dry_run, api_key):
         """Moves ONE old thread onto the forum, to find out whether it can be.
 
         A rehearsal for the content migration, not the migration. It answers
@@ -1814,7 +1818,15 @@ def create_app(config_overrides=None):
             for row in rows_of(dump, find_table(dump, "users", prefix))
         }
 
-        poster = ContentPoster(service.settings)
+        # Posting as each author needs a key Discourse will let act as anybody.
+        # The portal's own key is deliberately not that: it only ever acts as
+        # one user, and widening it would leave something able to impersonate
+        # every member of the forum running all year for the sake of an
+        # afternoon's migration.
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
         report = migrate_thread(
             poster, threads.get(str(thread), {"tid": thread}), posts,
             attachments_by_post, usernames_by_uid, uploads, category,

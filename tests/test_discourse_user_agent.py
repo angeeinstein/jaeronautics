@@ -81,3 +81,49 @@ def test_nobody_writes_their_own():
                 assert "DISCOURSE_USER_AGENT" in line, (
                     f"{module.__name__} sets a User-Agent of its own: {line.strip()}"
                 )
+
+
+class TestWhenTheKeyMayNotActAsSomebodyElse:
+    """Discourse API keys carry a user level.
+
+    One bound to a single user works for every admin call -- they all act as
+    that user -- and fails the instant it is asked to act as somebody else,
+    which is the whole of the content migration. The raw error says only "The
+    API username or key is invalid", which sounds like a wrong key.
+    """
+
+    def _poster_that_gets(self, monkeypatch, code, body):
+        import io
+        from urllib.error import HTTPError
+
+        def fake_urlopen(request, timeout=None):
+            raise HTTPError("https://forum.test/posts.json", code, "Forbidden", {},
+                            io.BytesIO(body.encode()))
+
+        monkeypatch.setattr(forum_content, "urlopen", fake_urlopen)
+        return ContentPoster(SETTINGS)
+
+    def test_it_explains_what_to_change(self, monkeypatch):
+        poster = self._poster_that_gets(
+            monkeypatch, 403,
+            '{"errors":["The API username or key is invalid."],'
+            '"error_type":"invalid_access"}',
+        )
+
+        with pytest.raises(Exception) as raised:
+            poster._call("POST", "/posts.json", as_username="SpaniolA_L18")
+
+        message = str(raised.value)
+        assert "SpaniolA_L18" in message
+        assert "All Users" in message
+        assert "revoke" in message, "a key that can act as anybody should not linger"
+
+    def test_an_ordinary_failure_is_still_reported_plainly(self, monkeypatch):
+        """Only the impersonation case gets the explanation."""
+        poster = self._poster_that_gets(monkeypatch, 422, '{"errors":["Title too short"]}')
+
+        with pytest.raises(Exception) as raised:
+            poster._call("POST", "/posts.json", as_username="SpaniolA_L18")
+
+        assert "Title too short" in str(raised.value)
+        assert "All Users" not in str(raised.value)

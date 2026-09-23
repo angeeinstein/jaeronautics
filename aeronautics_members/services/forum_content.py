@@ -165,6 +165,19 @@ class ContentPoster:
                 return json.loads(raw) if raw else {}
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")
+            if exc.code == 403 and "invalid_access" in detail and as_username:
+                # Discourse keys carry a user level. One bound to a single user
+                # works perfectly for every admin call -- they all act as that
+                # user -- and fails the moment it is asked to act as somebody
+                # else, which is the whole of this job.
+                raise ForumProviderError(
+                    f"Discourse will not let this API key act as {as_username}. "
+                    "Posting on people's behalf needs a key whose user level is "
+                    "'All Users' (Admin -> API -> Keys). Make one for the "
+                    "migration, pass it as --api-key or in "
+                    "DISCOURSE_MIGRATION_API_KEY, and revoke it afterwards -- a "
+                    "key that can act as anybody should not outlive the job."
+                ) from exc
             raise ForumProviderError(f"{method} {path} failed ({exc.code}): {detail}") from exc
         except URLError as exc:
             raise ForumProviderError(f"Could not reach Discourse: {exc}") from exc
