@@ -281,7 +281,45 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics sh -c '
 ```
 
 A setting that no longer holds the value the import gave it was changed by
-somebody else since, and is left alone. `--force` overrides that.
+somebody else since, and is left alone. `--force` overrides that. One that is
+already at its original value reports **already back** — which is what a
+Ctrl-C leaves behind, since the interrupt puts the settings back on its way
+out and then tells you to run this.
+
+### Making it faster than sixty calls a minute
+
+The whole run is one API key, and Discourse caps an admin key at about sixty
+requests a minute. For the remaining board that is some 4,600 calls — an hour
+and a quarter of waiting before a single attachment is counted. The client
+handles the 429s correctly, so nothing is lost; it is purely wall clock.
+
+Three **global** settings govern it, which is why the import cannot change them
+itself: they live in the container's environment, not in Admin → Settings. Ask
+the container what they are called on your version rather than trusting this
+page:
+
+```bash
+docker exec app grep -n "reqs_per" /var/www/discourse/config/discourse_defaults.conf
+```
+
+On Discourse 3.5 that answers `max_admin_api_reqs_per_minute = 60`,
+`max_reqs_per_ip_per_minute = 200`, `max_reqs_per_ip_per_10_seconds = 50`. The
+`app.yml` spelling is `DISCOURSE_` plus the uppercased name, in the `env:`
+block:
+
+```yaml
+  ## Raised for the forum import only -- put these back afterwards.
+  DISCOURSE_MAX_ADMIN_API_REQS_PER_MINUTE: 1200
+  DISCOURSE_MAX_REQS_PER_IP_PER_MINUTE: 6000
+  DISCOURSE_MAX_REQS_PER_IP_PER_10_SECONDS: 1000
+```
+
+Then `./launcher rebuild app`. **Put them back when the import is done** —
+they are what stops somebody hammering the forum, and the comment is there so
+that whoever rebuilds next sees why they exist.
+
+This removes the throttle, not the work: nine gigabytes still has to cross the
+wire and Discourse still makes its optimised copy of every image.
 
 Two settings are deliberately **not** restored:
 

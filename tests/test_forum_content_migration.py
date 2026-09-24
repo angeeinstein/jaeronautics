@@ -460,23 +460,45 @@ class TestLooseningAndPuttingBack:
 
         with app.app_context():
             changes = loosen_site_settings(poster, plan_site_settings(*board), journal)
-            # Somebody decides mid-import that duplicate titles are a bad idea.
-            poster._settings["allow_duplicate_topic_titles"] = "false"
+            # Somebody picks a third value: not what the import set (2) and not
+            # what it was before (15), so putting 15 back would discard a real
+            # decision somebody made.
+            poster._settings["min_topic_title_length"] = "7"
             results = {row["setting"]: row for row in restore_site_settings(poster, changes)}
 
-        assert results["allow_duplicate_topic_titles"]["outcome"].startswith("left alone")
-        assert results["min_topic_title_length"]["outcome"] == "restored"
+        assert results["min_topic_title_length"]["outcome"].startswith("left alone")
+        assert results["title_min_entropy"]["outcome"] == "restored"
+
+    def test_settings_that_are_already_back_say_so(self, app, board, journal):
+        """The commonest case of all, and it used to accuse a passer-by.
+
+        Ctrl-C puts the settings back on its way out -- and then tells you to
+        run the restore, which is what somebody sensible does. Finding them
+        already back was reported as "somebody else has changed it", which
+        reads like an intruder and is only the run's own tidying up.
+        """
+        poster = self.a_forum()
+
+        with app.app_context():
+            changes = loosen_site_settings(poster, plan_site_settings(*board), journal)
+            restore_site_settings(poster, changes)
+            again = {row["setting"]: row for row in restore_site_settings(poster, changes)}
+
+        assert {row["outcome"] for row in again.values()} <= {
+            "already back", "left as it is, on purpose",
+        }
+        assert not any("somebody else" in row["outcome"] for row in again.values())
 
     def test_force_overrides_that(self, app, board, journal):
         poster = self.a_forum()
 
         with app.app_context():
             changes = loosen_site_settings(poster, plan_site_settings(*board), journal)
-            poster._settings["allow_duplicate_topic_titles"] = "false"
+            poster._settings["min_topic_title_length"] = "7"
             results = {row["setting"]: row
                        for row in restore_site_settings(poster, changes, force=True)}
 
-        assert results["allow_duplicate_topic_titles"]["outcome"] == "restored"
+        assert results["min_topic_title_length"]["outcome"] == "restored"
 
     def test_a_forum_that_needs_nothing_writes_no_record(self, app, journal):
         poster = FakePoster(settings={

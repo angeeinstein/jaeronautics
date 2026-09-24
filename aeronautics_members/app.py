@@ -1886,7 +1886,10 @@ def create_app(config_overrides=None):
 
     def _report_restore(results):
         for row in results:
-            colour = "green" if row["outcome"] == "restored" else "yellow"
+            colour = (
+                "green" if row["outcome"] in ("restored", "already back")
+                else "yellow"
+            )
             click.echo(click.style(
                 f"  {row['setting']:<30} {str(row['set_to'])[:18]:<20} -> "
                 f"{str(row['was'])[:18]:<20} {row['outcome']}",

@@ -1040,6 +1040,14 @@ def restore_site_settings(poster, changes, force=False):
 
         if not change.get("restore", True):
             result["outcome"] = "left as it is, on purpose"
+        elif _same_value(live.get(setting), change["was"]):
+            # Checked before the "somebody changed it" case, and it is the
+            # commonest outcome of all: a run that was interrupted puts the
+            # settings back on its way out, so running the restore afterwards --
+            # which is exactly what the interrupt tells you to do -- finds them
+            # already back. Reporting that as an unknown third party having
+            # moved them is alarming, and wrong.
+            result["outcome"] = "already back"
         elif not _same_value(live.get(setting), change["set_to"]) and not force:
             result["outcome"] = (
                 f"left alone: it now reads {live.get(setting)!r}, which is not "
