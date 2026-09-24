@@ -26,7 +26,7 @@ import secrets
 from flask import current_app
 
 from ..db_models import ImportedForumProfile, db
-from ..forum_service import ForumProviderError
+from ..forum_service import AVATAR_OVERRIDE_SETTINGS, ForumProviderError
 from ..security_utils import build_public_url
 from .clock import get_now_utc
 
@@ -117,20 +117,9 @@ def profiles_to_publish(only_unsynced=False):
     return db.session.execute(query).scalars().all()
 
 
-# Whether Discourse uses an avatar that arrives over Connect at all. With this
-# off it takes the URL, fetches the picture -- the request really is made -- and
-# then keeps the letter it generated, saying nothing. Older versions of
-# Discourse call the same setting sso_overrides_avatar.
-AVATAR_SETTINGS = ("discourse_connect_overrides_avatar", "sso_overrides_avatar")
-
-
-def _as_setting_value(value):
-    """What Discourse wants written back: "true"/"false", not "True"/"None"."""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if value is None:
-        return "false"
-    return str(value)
+# Named in forum_service, because the member sync depends on it exactly as this
+# does: an approved avatar is pushed to the same endpoint in the same field.
+AVATAR_SETTINGS = AVATAR_OVERRIDE_SETTINGS
 
 
 def avatar_setting_state(client):
@@ -149,29 +138,25 @@ def avatar_setting_state(client):
 
 
 def let_avatars_through(client):
-    """Turn that setting on for the run. Returns what to put back, or None.
+    """Turn that setting on, and leave it on. Returns the name, or None.
 
-    Deliberately temporary. Left on permanently it means the portal overwrites
-    a member's forum avatar every time they sign in, which is a decision about
-    whose picture it is, not a migration detail -- and not one to make silently
-    while importing an archive.
+    Left on deliberately, and it is a decision rather than a convenience: the
+    portal is where a photograph is uploaded and where it is approved before
+    anybody else sees it, so the portal is what the forum should show. The cost
+    is that a member cannot set a different avatar inside Discourse -- the next
+    sync would overwrite it -- which is the same thing said the other way round.
+
+    It governs members exactly as it governs the archive: an approved avatar is
+    pushed to the same endpoint with the same field, so a forum with this off
+    quietly ignores those too.
     """
     state = avatar_setting_state(client)
     if state is None:
         return None
-    name, value, in_use = state
+    name, _value, in_use = state
     if in_use:
         return None
     client.set_site_setting(name, "true")
-    return name, value
-
-
-def restore_avatar_setting(client, change):
-    """Put back what ``let_avatars_through`` changed."""
-    if not change:
-        return None
-    name, value = change
-    client.set_site_setting(name, _as_setting_value(value))
     return name
 
 

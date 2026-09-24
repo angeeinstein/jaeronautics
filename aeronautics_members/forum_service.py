@@ -80,6 +80,23 @@ DISCOURSE_USER_AGENT = (
     "JoanneumAeronauticsForumSync/1.0 (+https://testmembers.joanneum-aeronautics.at)"
 )
 
+# Where Discourse keeps its settings; the path has moved between versions, so
+# the one that answers is the one used.
+SITE_SETTINGS_PATHS = (
+    "/admin/site_settings.json",
+    "/admin/config/site_settings.json",
+    "/admin/site_settings/category/all_results.json",
+)
+
+# The setting that decides whether an avatar sent over Connect is used at all.
+# With it off, Discourse fetches the picture from the portal and then shows the
+# letter it drew instead, and says nothing about having done so -- which is
+# equally true of an approved member avatar and of the imported archive.
+AVATAR_OVERRIDE_SETTINGS = (
+    "discourse_connect_overrides_avatar",
+    "sso_overrides_avatar",
+)
+
 _ALLOWED_IMAGE_TYPE_TO_EXTENSION = {
     "jpeg": "jpg",
     "png": "png",
@@ -666,12 +683,50 @@ class DiscourseConnectProvider(ForumProvider):
             return response["user"]
         return response if isinstance(response, dict) else {}
 
+    def avatar_override_state(self):
+        """``(setting, on)`` for whether this forum uses the avatars we send.
+
+        ``None`` if the forum will not say -- an older version that calls it
+        something else again, or a key that cannot read settings. Not knowing is
+        reported as not knowing; the caller must not read it as "fine".
+        """
+        for path in SITE_SETTINGS_PATHS:
+            try:
+                payload = self._request("GET", path)
+            except ForumProviderError:
+                continue
+            rows = payload.get("site_settings") if isinstance(payload, dict) else None
+            if not rows:
+                continue
+            values = {row.get("setting"): row.get("value") for row in rows}
+            for name in AVATAR_OVERRIDE_SETTINGS:
+                if name in values:
+                    return name, str(values[name]).lower() == "true"
+            return None
+        return None
+
     def test_connection(self):
         response = self._request("GET", "/site.json")
         site_name = response.get("site_name") if isinstance(response, dict) else None
-        if site_name:
-            return True, f"Connected to Discourse site '{site_name}'."
-        return True, "Connected to Discourse successfully."
+        message = (
+            f"Connected to Discourse site '{site_name}'." if site_name
+            else "Connected to Discourse successfully."
+        )
+        # Asked here because this is the button somebody presses when something
+        # about the forum looks wrong, and a blank avatar is the one fault with
+        # no other symptom: the picture is uploaded, approved, fetched by the
+        # forum and then quietly dropped.
+        try:
+            avatars = self.avatar_override_state()
+        except ForumProviderError:
+            avatars = None
+        if avatars and not avatars[1]:
+            message += (
+                f" Avatars uploaded here will not be shown there: {avatars[0]} "
+                f"is off in the forum's settings, so it fetches each picture and "
+                f"keeps its own letter. Turn it on in Admin -> Settings."
+            )
+        return True, message
 
     def build_avatar_url(self, submission):
         if submission is None or not submission.public_token:

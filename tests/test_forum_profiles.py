@@ -21,7 +21,6 @@ from aeronautics_members.services.forum_profiles import (
     avatar_setting_state,
     build_profile_payload,
     let_avatars_through,
-    restore_avatar_setting,
     group_name_for_year_group,
     groups_for_profiles,
     profiles_to_publish,
@@ -357,13 +356,25 @@ class TestTheSettingThatDecidesWhetherAvatarsAreUsed:
     def test_a_forum_without_the_setting_is_not_an_error(self, app):
         assert avatar_setting_state(self.SettingsClient(title="LAVBoard")) is None
 
-    def test_it_is_turned_on_and_what_it_was_comes_back(self, app):
+    def test_it_is_turned_on_and_named(self, app):
         client = self.SettingsClient(discourse_connect_overrides_avatar=False)
 
-        change = let_avatars_through(client)
-
-        assert change == ("discourse_connect_overrides_avatar", False)
+        assert let_avatars_through(client) == "discourse_connect_overrides_avatar"
         assert client.written == [("discourse_connect_overrides_avatar", "true")]
+
+    def test_it_stays_on_afterwards(self, app):
+        """A decision, not a convenience.
+
+        The portal is where a photograph is uploaded and where it is approved
+        before anybody sees it, and the same setting governs members: turning it
+        back off would mean an approved avatar is ignored there too.
+        """
+        client = self.SettingsClient(discourse_connect_overrides_avatar=False)
+
+        let_avatars_through(client)
+
+        assert client.settings["discourse_connect_overrides_avatar"] == "true"
+        assert len(client.written) == 1, "nothing puts it back"
 
     def test_a_forum_that_already_allows_it_is_left_alone(self, app):
         client = self.SettingsClient(discourse_connect_overrides_avatar=True)
@@ -371,19 +382,65 @@ class TestTheSettingThatDecidesWhetherAvatarsAreUsed:
         assert let_avatars_through(client) is None
         assert client.written == []
 
-    def test_putting_it_back_writes_a_value_discourse_accepts(self, app):
-        """Not "False", which is Python's spelling and not Discourse's."""
-        client = self.SettingsClient(discourse_connect_overrides_avatar=False)
 
-        restore_avatar_setting(client, let_avatars_through(client))
+class TestTheConnectionTestMentionsIt:
+    """Because a dropped avatar has no other symptom.
 
-        assert client.written[-1] == ("discourse_connect_overrides_avatar", "false")
+    The picture is uploaded here, approved here, fetched by the forum -- every
+    step reports success -- and then the forum shows a letter. Nothing in the
+    portal knows, so the button an admin presses when the forum looks wrong is
+    where this belongs.
+    """
 
-    def test_nothing_is_put_back_when_nothing_was_changed(self, app):
-        client = self.SettingsClient(discourse_connect_overrides_avatar=True)
+    def _provider(self, rows, settings_fail=False):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider, ForumProviderError,
+        )
 
-        assert restore_avatar_setting(client, let_avatars_through(client)) is None
-        assert client.written == []
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "https://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+
+        def fake_request(method, path, **kwargs):
+            if path == "/site.json":
+                return {"site_name": "LAVBoard"}
+            if settings_fail:
+                raise ForumProviderError("Discourse API request failed (403)")
+            return {"site_settings": rows}
+
+        provider._request = fake_request
+        return provider
+
+    def test_it_says_so_when_the_forum_will_ignore_our_avatars(self):
+        provider = self._provider(
+            [{"setting": "discourse_connect_overrides_avatar", "value": "false"}]
+        )
+
+        ok, message = provider.test_connection()
+
+        assert ok, "the connection itself is fine, which is the confusing part"
+        assert "discourse_connect_overrides_avatar" in message
+        assert "will not be shown" in message
+
+    def test_a_forum_that_is_set_up_right_gets_no_lecture(self):
+        provider = self._provider(
+            [{"setting": "discourse_connect_overrides_avatar", "value": "true"}]
+        )
+
+        _ok, message = provider.test_connection()
+
+        assert message == "Connected to Discourse site 'LAVBoard'."
+
+    def test_a_forum_that_will_not_say_is_not_called_fine(self):
+        """A key that cannot read settings must not become a clean bill."""
+        provider = self._provider([], settings_fail=True)
+
+        _ok, message = provider.test_connection()
+
+        assert "avatar" not in message.lower()
 
 
 class TestTheAvatarTheForumFetches:

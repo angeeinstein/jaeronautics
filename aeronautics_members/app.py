@@ -235,7 +235,6 @@ from .services.forum_profiles import (  # noqa: E402
     avatar_setting_state,
     groups_for_profiles,
     let_avatars_through,
-    restore_avatar_setting,
     profiles_to_publish,
     publish_imported_profiles,
     sync_profile_groups,
@@ -2730,34 +2729,20 @@ def create_app(config_overrides=None):
 
         report = {"seen": 0, "published": 0, "failed": 0, "with_avatar": 0,
                   "groups": plan, "problems": [], "people": []}
-        avatar_change = None
-        settings_client = None if groups_only else _forum_settings_client(service)
-        if settings_client is not None:
-            avatar_change = _mind_the_avatar_setting(settings_client, dry_run=dry_run)
-        try:
-            if not groups_only:
-                report = publish_imported_profiles(
-                    provider,
-                    dry_run=dry_run,
-                    limit=limit or None,
-                    only_unsynced=only_new,
-                    year_group_field=year_group_field,
-                    # A dry run sends nothing and is over in seconds, so thirty
-                    # progress lines would be thirty lines of noise.
-                    on_progress=None if dry_run else _profile_progress_reporter(),
-                )
-        finally:
-            # In a finally because a run that stops halfway must not leave the
-            # forum overwriting people's avatars from the portal for ever.
-            if avatar_change:
-                try:
-                    name = restore_avatar_setting(settings_client, avatar_change)
-                    click.echo(f"Avatars: {name} put back to {avatar_change[1]}.")
-                except ForumProviderError as exc:
-                    click.echo(click.style(
-                        f"  ! {avatar_change[0]} could not be put back to "
-                        f"{avatar_change[1]} -- {exc}. Change it in Admin -> "
-                        f"Settings.", fg="yellow"), err=True)
+        if not groups_only:
+            settings_client = _forum_settings_client(service)
+            if settings_client is not None:
+                _mind_the_avatar_setting(settings_client, dry_run=dry_run)
+            report = publish_imported_profiles(
+                provider,
+                dry_run=dry_run,
+                limit=limit or None,
+                only_unsynced=only_new,
+                year_group_field=year_group_field,
+                # A dry run sends nothing and is over in seconds, so thirty
+                # progress lines would be thirty lines of noise.
+                on_progress=None if dry_run else _profile_progress_reporter(),
+            )
 
         if not dry_run:
             # Membership is set here as well as in the SSO payload, because the
@@ -2807,6 +2792,10 @@ def create_app(config_overrides=None):
         ``discourse_connect_overrides_avatar`` is on. Nothing fails, nothing is
         logged, and the run reports ``with_avatar=676`` either way -- which is
         how 739 profiles came out blank on a run that said it had sent them all.
+
+        Turned on and left on, because the portal is where a photograph is
+        uploaded and approved, and the same setting governs members: with it
+        off, an approved avatar is ignored there too.
         """
         try:
             state = avatar_setting_state(client)
@@ -2829,17 +2818,21 @@ def create_app(config_overrides=None):
             click.echo(click.style(
                 f"Avatars: {name} is {value}, so the forum would fetch every "
                 f"picture and then show a letter instead. The real run turns it "
-                f"on and puts it back afterwards.", fg="cyan"))
+                f"on and leaves it on.", fg="cyan"))
             return None
         try:
-            change = let_avatars_through(client)
+            changed = let_avatars_through(client)
         except ForumProviderError as exc:
             click.echo(click.style(
                 f"Avatars: {name} is {value} and could not be changed -- {exc}. "
                 f"The profiles will come out with letters on them.", fg="yellow"))
             return None
-        click.echo(f"Avatars: {name} was {value}, on for this run and back afterwards.")
-        return change
+        click.echo(
+            f"Avatars: {changed} was {value}, turned on and left on -- the "
+            f"portal is where avatars are uploaded and approved, so it is what "
+            f"the forum shows. Members are governed by the same setting."
+        )
+        return changed
 
     def _report_group_problems(report):
         for problem in report["problems"]:

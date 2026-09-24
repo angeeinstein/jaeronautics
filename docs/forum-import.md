@@ -491,11 +491,23 @@ answered with the JPEG — and then discarded it, because
 logged, and the summary said `with_avatar=676` either way, because a summary
 counts what was sent.
 
-The command now reads that setting, turns it on for the run and puts it back
-afterwards, and the dry run says which way it is set before anything is sent.
-It is deliberately not left on: permanently, it means the portal overwrites a
-member's forum avatar every time they sign in, which is a decision about whose
-picture it is and not a migration detail.
+**The same setting governs members**, and that is the important part. An
+approved avatar goes to the same endpoint in the same field (`set_avatar` in
+`forum_service.py`), so a forum with this off ignores those too — a member
+uploads a photograph, an admin approves it, the forum fetches it and shows a
+letter, and nothing anywhere says so.
+
+So the decision is made and written down here: **the portal owns avatars.** It
+is where a picture is uploaded and where it is approved before anybody else
+sees it, which is the part that matters when the pictures are students' faces.
+The setting is therefore turned on and *left* on. The cost, stated plainly: a
+member cannot set a different avatar inside Discourse, because the next sync
+overwrites it.
+
+The publisher turns it on if it is off, says so, and leaves it. A dry run
+reports which way it is set before anything is sent. And the **Test forum
+connection** button in Admin → Settings now says it too, because that is what
+somebody presses when the forum looks wrong.
 
 If the profiles are already published with letters on them, re-running the
 command is the repair — it is one call per person again, so half an hour, and
