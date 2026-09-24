@@ -1222,7 +1222,8 @@ def _attachment_markdown(upload, original_name):
 
 def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
                    uploads_dir, category_id, *, dry_run=False, fallback_username=None,
-                   ledger=None, require_attachments=True, title=None):
+                   ledger=None, require_attachments=True, title=None,
+                   author_lookup_verified=False):
     """Post one old thread onto the forum. Returns a report.
 
     Every post is sent as its own author with its own date, and the report says
@@ -1254,12 +1255,23 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
     # Posting the whole thread under one name is not a migration, it is a
     # mistake wearing one. It already happened once: "users" matched a plugin's
     # table, every lookup missed, and the fallback quietly took the lot.
+    #
+    # But a thread whose every author has since been deleted from the board is
+    # an ordinary thing -- this board has three -- and refusing those as though
+    # the lookup were broken loses real posts to a guard against a different
+    # fault. So the caller checks the whole board once, and says so here.
     resolved = sum(1 for post in posts if usernames_by_uid.get(post.get("uid")))
-    if not resolved:
+    if not resolved and not author_lookup_verified:
         raise ValueError(
             "Not one of these posts could be matched to a forum account. "
             "The author lookup is empty or reading the wrong table -- "
             "check that the users table was found, rather than a plugin's."
+        )
+    if not resolved:
+        report["problems"].append(
+            f"None of this thread's {len(posts)} posts has an author still in "
+            f"the old board's user table; all are attributed to "
+            f"{fallback_username or 'the fallback'}."
         )
     if resolved < len(posts):
         report["problems"].append(

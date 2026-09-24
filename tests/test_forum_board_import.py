@@ -357,8 +357,13 @@ class TestTheWholeBoard:
         opening = [call for call in poster.calls if call["title"]]
         assert opening[0]["category"] == poster._categories[-1]["id"]
 
-    def test_a_thread_that_cannot_start_does_not_stop_the_others(self, app, tmp_path):
-        """719 threads are not forfeit because one has no usable author."""
+    def test_a_thread_whose_authors_are_all_gone_is_still_posted(self, app, tmp_path):
+        """Three of this board's threads are exactly that, and they are real.
+
+        Somebody deleted from the old board's user table is not a broken
+        lookup, and refusing their thread loses posts to a guard against a
+        different fault entirely. It is attributed to the fallback and said.
+        """
         board = a_board()
         board["threads"].append({
             "tid": "11", "fid": "4", "subject": "Ein zweiter Thread",
@@ -373,12 +378,30 @@ class TestTheWholeBoard:
         with app.app_context():
             summary = migrate_board(
                 poster, board, "/nowhere", Ledger(tmp_path / "l.jsonl"),
-                fallback_username=None,
+                fallback_username="system",
             )
 
-        assert summary["posted"] == 2
-        assert summary["failed"] == 1
-        assert any("thread 11" in problem for problem in summary["problems"])
+        assert summary["posted"] == 3
+        assert summary["failed"] == 0
+        assert any("attributed to system" in problem for problem in summary["problems"])
+
+    def test_a_board_where_nobody_matches_is_refused_outright(self, app, tmp_path):
+        """The fault this guards against, which is a whole board at once.
+
+        "users" matched a plugin's table once, every lookup missed, and the
+        fallback quietly took a decade of other people's posts under one name.
+        Checked here, where it shows, rather than per thread, where an ordinary
+        deleted account looks the same.
+        """
+        board = a_board()
+        board["users"] = [{"uid": "404", "username": "NobodyHere"}]
+
+        with app.app_context():
+            with pytest.raises(ValueError, match="plugin"):
+                migrate_board(
+                    BoardPoster(), board, "/nowhere", Ledger(tmp_path / "l.jsonl"),
+                    fallback_username="system",
+                )
 
     def test_running_it_again_posts_nothing(self, app, tmp_path):
         """The property the whole ledger exists for."""

@@ -610,6 +610,22 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
         row.get("uid"): row.get("username") for row in tables["users"]
     }
 
+    # Checked once for the whole board rather than thread by thread. The fault
+    # this guards against -- "users" matching a plugin's table, every lookup
+    # missing, the fallback quietly taking a decade of posts under one name --
+    # shows up here, in the total. A single thread whose authors have all since
+    # been deleted is an ordinary thing, and three of this board's threads are
+    # exactly that; failing them as though the lookup were broken loses real
+    # posts to a guard against a different problem.
+    if tables["posts"] and not any(
+        usernames_by_uid.get(post.get("uid")) for post in tables["posts"]
+    ):
+        raise ValueError(
+            "Not one post on this board could be matched to a forum account. "
+            "The author lookup is empty or reading the wrong table -- check "
+            "that the users table was found, rather than a plugin's."
+        )
+
     plan = category_plan(tables["forums"], tables["threads"], max_depth)
     titles = (
         {} if keep_duplicate_titles
@@ -659,6 +675,7 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
                 fallback_username=fallback_username, ledger=ledger,
                 require_attachments=require_attachments,
                 title=titles.get(thread.get("tid")),
+                author_lookup_verified=True,
             )
         except (ForumProviderError, ValueError) as exc:
             # One thread that cannot be started is not a reason to abandon the
