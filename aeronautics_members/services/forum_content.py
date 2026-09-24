@@ -691,6 +691,25 @@ def plan_site_settings(threads, posts, attachments=()):
                 "max_attachment_size_kb", biggest_kb, AT_LEAST, why,
             ))
 
+        # Discourse sizes pictures separately from everything else, and the
+        # two settings have different defaults. An upload that is an image is
+        # measured against max_image_size_kb and never against the other one,
+        # so raising only the attachment limit lets a 4 MB photograph through
+        # everything except the check that actually applies to it.
+        image_sizes = [
+            int(row.get("filesize") or 0) for row in attachments
+            if Path(row.get("filename") or "").suffix.lstrip(".").lower()
+            in IMAGE_EXTENSIONS
+        ]
+        if image_sizes:
+            biggest_image_kb = (max(image_sizes) + 1023) // 1024
+            requirements.append(Requirement(
+                "max_image_size_kb", biggest_image_kb, AT_LEAST,
+                f"the largest picture is {biggest_image_kb / 1024:.1f} MB, and "
+                f"pictures are measured against this rather than against "
+                f"max_attachment_size_kb",
+            ))
+
     return requirements
 
 

@@ -2272,8 +2272,10 @@ def create_app(config_overrides=None):
         else:
             Path(out).write_text(
                 render_worksheet(
-                    rows, get_forum_service().settings.get("forum_base_url", ""),
-                                ),
+                    rows,
+                    get_forum_service().settings.get("forum_base_url", ""),
+                    _sortable,
+                ),
                 encoding="utf-8",
             )
 

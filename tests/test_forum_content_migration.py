@@ -1023,3 +1023,43 @@ class TestAJournalThatHasDoneItsJob:
                 )
 
         assert "restore-forum-settings" in str(raised.value)
+
+
+class TestPicturesAreSizedByADifferentRule:
+    """Discourse measures an image against max_image_size_kb and nothing else."""
+
+    def attachments(self):
+        return [
+            {"pid": "1", "filename": "Angabe.pdf", "filesize": str(9 * 1024 * 1024)},
+            {"pid": "1", "filename": "IMG_2020.jpg", "filesize": str(4400 * 1024)},
+        ]
+
+    def test_the_picture_limit_comes_from_the_biggest_picture(self):
+        requirements = {
+            r.setting: r for r in
+            plan_site_settings([], [a_post("1")], self.attachments())
+        }
+
+        assert requirements["max_image_size_kb"].needed == 4400
+        assert requirements["max_image_size_kb"].compare == "at_least"
+
+    def test_it_is_not_the_biggest_attachment(self):
+        """Raising only the attachment limit lets the photograph through
+        everything except the check that applies to it."""
+        requirements = {
+            r.setting: r for r in
+            plan_site_settings([], [a_post("1")], self.attachments())
+        }
+
+        assert requirements["max_attachment_size_kb"].needed == 9 * 1024
+        assert requirements["max_image_size_kb"].needed < 9 * 1024
+
+    def test_a_board_with_no_pictures_is_not_asked_about_them(self):
+        requirements = {
+            r.setting: r for r in plan_site_settings(
+                [], [a_post("1")],
+                [{"pid": "1", "filename": "Angabe.pdf", "filesize": "1024"}],
+            )
+        }
+
+        assert "max_image_size_kb" not in requirements

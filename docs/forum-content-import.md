@@ -467,6 +467,42 @@ can never be added afterwards.
 
 ### The webserver in front of Discourse
 
+On the standard Docker install the limit lives inside the container, at
+`/etc/nginx/conf.d/discourse.conf`, and editing it there is undone by the next
+rebuild. Check what it says first:
+
+```bash
+docker exec app grep -rn client_max_body_size /etc/nginx/
+```
+
+Then make it stick, in `/var/discourse/containers/app.yml`, **appended to the
+`run:` section that is already there** rather than as a second `run:` key:
+
+```yaml
+run:
+  - exec: echo "Beginning of custom commands"
+  - replace:
+      filename: "/etc/nginx/conf.d/discourse.conf"
+      from: /client_max_body_size 10m;/
+      to: "client_max_body_size 200m;"
+  - exec: echo "End of custom commands"
+```
+
+```bash
+cp /var/discourse/containers/app.yml /var/discourse/containers/app.yml.bak
+cd /var/discourse && ./launcher rebuild app
+```
+
+The rebuild takes ten minutes or so and the forum is down for it. Afterwards,
+the same grep should say 200m.
+
+**Cloudflare caps it again, further out.** On the free and Pro plans a request
+body over 100 MB is refused whatever nginx allows, and no setting changes
+that. A handful of the largest attachments are over it. The ways round are to
+send the import straight to the origin — a hosts entry on the portal LXC for
+the forum's name — or to accept that those few files stay behind.
+
+
 `max_attachment_size_kb` is only half the limit. The webserver answers first,
 and its refusal looks nothing like Discourse's:
 
