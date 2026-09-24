@@ -18,7 +18,10 @@ from aeronautics_members.db_models import ImportedForumProfile, User
 from aeronautics_members.services.forum_import import import_forum_people
 from aeronautics_members.services.forum_profiles import (
     ARCHIVE_GROUP,
+    avatar_setting_state,
     build_profile_payload,
+    let_avatars_through,
+    restore_avatar_setting,
     group_name_for_year_group,
     groups_for_profiles,
     profiles_to_publish,
@@ -322,6 +325,65 @@ class TestTheGroupsThemselves:
 
         assert report["members"] == 0
         assert len(report["problems"]) == 2
+
+
+class TestTheSettingThatDecidesWhetherAvatarsAreUsed:
+    """676 avatars were sent, fetched, and thrown away.
+
+    Discourse really does download the picture -- the request arrives at the
+    portal and is answered with the JPEG -- and then keeps the letter it drew,
+    because ``discourse_connect_overrides_avatar`` was off. Nothing fails and
+    nothing is logged; the run reports ``with_avatar=676`` either way.
+    """
+
+    class SettingsClient:
+        def __init__(self, **settings):
+            self.settings = settings
+            self.written = []
+
+        def site_settings(self):
+            return dict(self.settings)
+
+        def set_site_setting(self, name, value):
+            self.written.append((name, value))
+            self.settings[name] = value
+
+    def test_it_finds_the_setting_this_forum_calls_it(self, app):
+        """Older Discourse versions call it sso_overrides_avatar."""
+        old = self.SettingsClient(sso_overrides_avatar=False)
+
+        assert avatar_setting_state(old) == ("sso_overrides_avatar", False, False)
+
+    def test_a_forum_without_the_setting_is_not_an_error(self, app):
+        assert avatar_setting_state(self.SettingsClient(title="LAVBoard")) is None
+
+    def test_it_is_turned_on_and_what_it_was_comes_back(self, app):
+        client = self.SettingsClient(discourse_connect_overrides_avatar=False)
+
+        change = let_avatars_through(client)
+
+        assert change == ("discourse_connect_overrides_avatar", False)
+        assert client.written == [("discourse_connect_overrides_avatar", "true")]
+
+    def test_a_forum_that_already_allows_it_is_left_alone(self, app):
+        client = self.SettingsClient(discourse_connect_overrides_avatar=True)
+
+        assert let_avatars_through(client) is None
+        assert client.written == []
+
+    def test_putting_it_back_writes_a_value_discourse_accepts(self, app):
+        """Not "False", which is Python's spelling and not Discourse's."""
+        client = self.SettingsClient(discourse_connect_overrides_avatar=False)
+
+        restore_avatar_setting(client, let_avatars_through(client))
+
+        assert client.written[-1] == ("discourse_connect_overrides_avatar", "false")
+
+    def test_nothing_is_put_back_when_nothing_was_changed(self, app):
+        client = self.SettingsClient(discourse_connect_overrides_avatar=True)
+
+        assert restore_avatar_setting(client, let_avatars_through(client)) is None
+        assert client.written == []
 
 
 class TestTheAvatarTheForumFetches:

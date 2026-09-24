@@ -117,6 +117,64 @@ def profiles_to_publish(only_unsynced=False):
     return db.session.execute(query).scalars().all()
 
 
+# Whether Discourse uses an avatar that arrives over Connect at all. With this
+# off it takes the URL, fetches the picture -- the request really is made -- and
+# then keeps the letter it generated, saying nothing. Older versions of
+# Discourse call the same setting sso_overrides_avatar.
+AVATAR_SETTINGS = ("discourse_connect_overrides_avatar", "sso_overrides_avatar")
+
+
+def _as_setting_value(value):
+    """What Discourse wants written back: "true"/"false", not "True"/"None"."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "false"
+    return str(value)
+
+
+def avatar_setting_state(client):
+    """``(name, value, will_be_used)`` for the avatar setting this forum has.
+
+    ``None`` when the forum reports no such setting, which is not a failure --
+    it is a version that does not have it, and the caller says so rather than
+    guessing.
+    """
+    current = client.site_settings()
+    for name in AVATAR_SETTINGS:
+        if name in current:
+            value = current[name]
+            return name, value, str(value).lower() == "true"
+    return None
+
+
+def let_avatars_through(client):
+    """Turn that setting on for the run. Returns what to put back, or None.
+
+    Deliberately temporary. Left on permanently it means the portal overwrites
+    a member's forum avatar every time they sign in, which is a decision about
+    whose picture it is, not a migration detail -- and not one to make silently
+    while importing an archive.
+    """
+    state = avatar_setting_state(client)
+    if state is None:
+        return None
+    name, value, in_use = state
+    if in_use:
+        return None
+    client.set_site_setting(name, "true")
+    return name, value
+
+
+def restore_avatar_setting(client, change):
+    """Put back what ``let_avatars_through`` changed."""
+    if not change:
+        return None
+    name, value = change
+    client.set_site_setting(name, _as_setting_value(value))
+    return name
+
+
 def groups_for_profiles(profiles):
     """Which group holds whom: ``{group name: [username, ...]}``.
 

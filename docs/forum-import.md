@@ -482,6 +482,27 @@ Check it on the forum rather than in the summary: `…/g/old_forum` should say
 normally — a `curl` with the migration key competes with the run for the same
 sixty-calls-a-minute budget.
 
+### The avatars have a setting of their own
+
+676 of the 739 have a photograph, and the first run put a letter on every one
+of them. Discourse fetched each picture — the request reaches the portal and is
+answered with the JPEG — and then discarded it, because
+**`discourse_connect_overrides_avatar`** was off. Nothing failed, nothing was
+logged, and the summary said `with_avatar=676` either way, because a summary
+counts what was sent.
+
+The command now reads that setting, turns it on for the run and puts it back
+afterwards, and the dry run says which way it is set before anything is sent.
+It is deliberately not left on: permanently, it means the portal overwrites a
+member's forum avatar every time they sign in, which is a decision about whose
+picture it is and not a migration detail.
+
+If the profiles are already published with letters on them, re-running the
+command is the repair — it is one call per person again, so half an hour, and
+it updates rather than duplicating. Check `uploaded_avatars_allowed_groups`
+while you are there: it names the groups allowed an uploaded avatar at all, and
+these accounts are all trust level 0 (group `10`).
+
 ## 8. And then the posts
 
 The people are the prerequisite, not the whole job. Moving the threads

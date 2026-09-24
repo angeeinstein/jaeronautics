@@ -232,7 +232,10 @@ from .services.forum_import import (  # noqa: E402
 )
 from .services.forum_profiles import (  # noqa: E402
     YEAR_GROUP_FIELD_NAME,
+    avatar_setting_state,
     groups_for_profiles,
+    let_avatars_through,
+    restore_avatar_setting,
     profiles_to_publish,
     publish_imported_profiles,
     sync_profile_groups,
@@ -2727,17 +2730,34 @@ def create_app(config_overrides=None):
 
         report = {"seen": 0, "published": 0, "failed": 0, "with_avatar": 0,
                   "groups": plan, "problems": [], "people": []}
-        if not groups_only:
-            report = publish_imported_profiles(
-                provider,
-                dry_run=dry_run,
-                limit=limit or None,
-                only_unsynced=only_new,
-                year_group_field=year_group_field,
-                # A dry run sends nothing and is over in seconds, so thirty
-                # progress lines would be thirty lines of noise.
-                on_progress=None if dry_run else _profile_progress_reporter(),
-            )
+        avatar_change = None
+        settings_client = None if groups_only else _forum_settings_client(service)
+        if settings_client is not None:
+            avatar_change = _mind_the_avatar_setting(settings_client, dry_run=dry_run)
+        try:
+            if not groups_only:
+                report = publish_imported_profiles(
+                    provider,
+                    dry_run=dry_run,
+                    limit=limit or None,
+                    only_unsynced=only_new,
+                    year_group_field=year_group_field,
+                    # A dry run sends nothing and is over in seconds, so thirty
+                    # progress lines would be thirty lines of noise.
+                    on_progress=None if dry_run else _profile_progress_reporter(),
+                )
+        finally:
+            # In a finally because a run that stops halfway must not leave the
+            # forum overwriting people's avatars from the portal for ever.
+            if avatar_change:
+                try:
+                    name = restore_avatar_setting(settings_client, avatar_change)
+                    click.echo(f"Avatars: {name} put back to {avatar_change[1]}.")
+                except ForumProviderError as exc:
+                    click.echo(click.style(
+                        f"  ! {avatar_change[0]} could not be put back to "
+                        f"{avatar_change[1]} -- {exc}. Change it in Admin -> "
+                        f"Settings.", fg="yellow"), err=True)
 
         if not dry_run:
             # Membership is set here as well as in the SSO payload, because the
@@ -2763,6 +2783,63 @@ def create_app(config_overrides=None):
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if dry_run:
             click.echo(click.style("Dry run: nothing was sent.", fg="cyan"))
+
+    def _forum_settings_client(service):
+        """Something that can read and write the forum's own settings.
+
+        The provider talks Connect and nothing else, and this needs the admin
+        settings API, so it borrows the same credentials the provider uses.
+        Returns None rather than raising: not being able to read a setting is a
+        reason to say so and publish anyway.
+        """
+        settings = getattr(service, "settings", None)
+        if not settings:
+            click.echo(click.style(
+                "Avatars: this forum integration does not expose its settings, "
+                "so the setting that governs them cannot be checked.", fg="yellow"))
+            return None
+        return ContentPoster(dict(settings))
+
+    def _mind_the_avatar_setting(client, *, dry_run):
+        """Make sure the avatars we send are the avatars people see.
+
+        Discourse will fetch the picture and then keep its letter unless
+        ``discourse_connect_overrides_avatar`` is on. Nothing fails, nothing is
+        logged, and the run reports ``with_avatar=676`` either way -- which is
+        how 739 profiles came out blank on a run that said it had sent them all.
+        """
+        try:
+            state = avatar_setting_state(client)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Avatars: could not read the setting that governs them -- {exc}. "
+                f"If the profiles come out with letters on them, that is why.",
+                fg="yellow"))
+            return None
+
+        if state is None:
+            click.echo("Avatars: this forum has no setting for them; sending them as they are.")
+            return None
+
+        name, value, in_use = state
+        if in_use:
+            click.echo(f"Avatars: {name} is on, so the pictures will be used.")
+            return None
+        if dry_run:
+            click.echo(click.style(
+                f"Avatars: {name} is {value}, so the forum would fetch every "
+                f"picture and then show a letter instead. The real run turns it "
+                f"on and puts it back afterwards.", fg="cyan"))
+            return None
+        try:
+            change = let_avatars_through(client)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Avatars: {name} is {value} and could not be changed -- {exc}. "
+                f"The profiles will come out with letters on them.", fg="yellow"))
+            return None
+        click.echo(f"Avatars: {name} was {value}, on for this run and back afterwards.")
+        return change
 
     def _report_group_problems(report):
         for problem in report["problems"]:
