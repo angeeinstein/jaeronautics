@@ -25,6 +25,7 @@ from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_content import (
     EMPTY_POST,
     LOOSEN,
+    SMILEY_ONLY_POST,
     PROCEED,
     REFUSE,
     ContentPoster,
@@ -37,6 +38,7 @@ from aeronautics_members.services.forum_content import (
     read_settings_journal,
     rehearsal_threads,
     restore_site_settings,
+    what_discourse_counts,
     what_to_do_about_settings,
 )
 
@@ -313,6 +315,54 @@ class TestAPostWithNothingInIt:
         assert [post["result"] for post in report["posts"]] == [
             "posted", "posted: empty on the old board",
         ]
+
+
+class TestAPostDiscourseCountsAsEmptyThoughItIsNot:
+    """``:f16:`` -- the old board's F-16 smiley, and a real refused post.
+
+    Discourse removes emoji shortcodes before it measures a post, so five
+    characters here are none there, and no value of min_post_length makes it
+    acceptable: the refusal quotes a minimum the post appears to meet. Two
+    earlier explanations of this failure were wrong, which is what the
+    inspect-forum-post command now exists to prevent.
+    """
+
+    def test_what_discourse_counts_leaves_out_the_smiley(self):
+        assert what_discourse_counts(":f16:") == ""
+        assert what_discourse_counts("Danke! :f16:") == "Danke!"
+
+    def test_a_time_of_day_is_not_mistaken_for_a_smiley(self):
+        """Over-stripping only matters when it empties a post that is not."""
+        assert what_discourse_counts("Treffpunkt 12:30:45 Uhr")
+
+    def test_the_smiley_is_kept_and_the_post_is_accepted(self, app):
+        poster = FakePoster()
+        thread = {"tid": "1", "subject": "New LAVBoard Design", "firstpost": "1"}
+        posts = [
+            {"pid": "1", "tid": "1", "uid": "7", "dateline": "1490000000",
+             "message": "Was haltet ihr davon?"},
+            {"pid": "2", "tid": "1", "uid": "8", "dateline": "1490000100",
+             "message": ":f16:"},
+        ]
+
+        with app.app_context():
+            report = migrate_thread(
+                poster, thread, posts, {}, {"7": "A_L23", "8": "B_L19"},
+                "/nowhere", 12,
+            )
+
+        assert ":f16:" in poster.calls[1]["raw"], "the smiley is not thrown away"
+        assert SMILEY_ONLY_POST in poster.calls[1]["raw"]
+        assert report["posts"][1]["result"] == "posted: only a smiley on the old board"
+
+    def test_the_planned_minimum_is_what_discourse_will_count(self, app):
+        posts = [{"pid": "1", "tid": "1", "uid": "7", "message": ":f16:"}]
+        threads = [{"tid": "1", "subject": "Klausuren", "firstpost": "1"}]
+
+        requirements = {r.setting: r for r in plan_site_settings(threads, posts)}
+
+        assert requirements["min_post_length"].needed == 1, "and never zero"
+        assert requirements["min_post_length"].why.endswith("0 characters after conversion")
 
 
 class TestAskingTheForumWhatItAllows:

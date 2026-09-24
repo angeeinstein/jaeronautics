@@ -528,6 +528,32 @@ the same thing: waiting needs a file, failed needs a look.
 good and words worth having anyway. It is not a way to save disk: those files
 can never be added afterwards.
 
+### A post the forum counts as empty although it is not
+
+`:f16:` is five characters, and Discourse counted none of them: it removes
+emoji shortcodes before measuring a post's length, so the old board's F-16
+smiley is nothing at all to it and **no value of `min_post_length` makes that
+post acceptable**. The refusal quotes a minimum the post plainly meets:
+
+    Body is too short (minimum is 2 characters)
+
+The smiley is kept and a line is added beneath it saying what the post was, so
+it keeps its author, its date and its place in the thread. A post that is
+genuinely empty — whitespace, or BBCode that converts to nothing — is marked
+the same way.
+
+I explained this failure wrongly twice before looking at the post. **Look at
+the post:**
+
+```bash
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     inspect-forum-post /var/tmp/forum-migration/dump.sql.gz --pid 597
+```
+
+It prints the message as the board holds it, the message as it would be sent,
+and every length either end could be counting.
+
 ### Cloudflare's 100 MB, which nginx cannot help with
 
 Eight of this board's attachments come back as `413 Payload Too Large` with

@@ -53,6 +53,27 @@ RATE_LIMIT_RETRIES = 5
 # and its place in the conversation with it -- a reply to it would then answer
 # nothing. Said plainly, in the archive's own terms.
 EMPTY_POST = "*(This post was empty on the old forum.)*"
+
+# And what is added to a post Discourse counts as empty although it is not.
+# It strips emoji shortcodes before measuring length, so ":f16:" -- the old
+# board's F-16 smiley, five characters of it -- is nothing at all to Discourse,
+# and no value of min_post_length will make it acceptable. The smiley is kept
+# and this is added beneath it, rather than the post being rewritten.
+SMILEY_ONLY_POST = "*(This post was only a smiley on the old forum.)*"
+
+# Discourse's emoji shortcodes, which it removes before it measures a post.
+SHORTCODE = re.compile(r":[a-z0-9_+-]{1,40}:", re.I)
+
+
+def what_discourse_counts(body):
+    """What is left of a post once Discourse has taken out what it ignores.
+
+    Emoji shortcodes and whitespace. A post of nothing else is refused as too
+    short whatever the minimum is set to, and the refusal quotes a minimum the
+    post appears to meet -- "Body is too short (minimum is 2 characters)"
+    against five characters of ``:f16:``.
+    """
+    return SHORTCODE.sub("", body or "").strip()
 RATE_LIMIT_FALLBACK_WAIT = 30   # when Discourse does not say how long
 RATE_LIMIT_MAX_WAIT = 300       # past which something else is wrong
 
@@ -650,11 +671,13 @@ def plan_site_settings(threads, posts, attachments=()):
             f"meaningful",
         ))
 
-    # Stripped, because Discourse strips before it measures. A post whose
-    # converted body is two newlines is two characters here and none there,
-    # which is how a run with min_post_length set to 2 was still told "Body is
-    # too short (minimum is 2 characters)".
-    lengths = [len(body.strip()) for body in bodies.values()]
+    # Measured the way Discourse measures: it strips whitespace, and it removes
+    # emoji shortcodes, so the board's ":f16:" smiley is five characters here
+    # and none there. Both of those produced the same contradictory refusal --
+    # "Body is too short (minimum is 2 characters)" about a post with more than
+    # two in it. Anything that counts as nothing is sent with a marker, so the
+    # floor of one below is a floor these posts really do meet.
+    lengths = [len(what_discourse_counts(body)) for body in bodies.values()]
     if lengths:
         requirements.append(Requirement(
             "max_post_length", max(len(body) for body in bodies.values()), AT_LEAST,
@@ -680,7 +703,7 @@ def plan_site_settings(threads, posts, attachments=()):
         ))
 
     opening_pids = {thread.get("firstpost") for thread in threads}
-    opening = [len(body.strip()) for pid, body in bodies.items()
+    opening = [len(what_discourse_counts(body)) for pid, body in bodies.items()
                if pid in opening_pids]
     if opening:
         requirements.append(Requirement(
@@ -1371,14 +1394,19 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             # MyBB simply listed them under the post.
             body = f"{body}\n\n{chr(10).join(links)}" if body else "\n".join(links)
 
+        # Dropping either of these would take the post's date and its place in
+        # the thread with it, so they are marked rather than lost, and the
+        # marker says which of the two it was.
         was_empty = not body.strip()
+        uncounted = bool(body.strip()) and not what_discourse_counts(body)
         if was_empty:
-            # Discourse will not store a post with nothing in it, and the old
-            # board did: a handful are whitespace, or BBCode that converts to
-            # nothing at all. Dropping them would take their date and their
-            # place in the thread with them, so they are marked rather than
-            # lost, and the marker says what it is.
+            # Whitespace, or BBCode that converts to nothing at all. Discourse
+            # will not store a post with nothing in it, and the old board did.
             body = EMPTY_POST
+        elif uncounted:
+            # There is something there and Discourse does not count it: the
+            # board's smilies. The smiley stays and this goes beneath it.
+            body = f"{body}\n\n{SMILEY_ONLY_POST}"
 
         # An inline [attachment=N] is rare (145 across the whole board) and is
         # left as-is rather than guessed at, so it shows up when read.
@@ -1413,7 +1441,11 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
                 )
             continue
 
-        record["result"] = "posted: empty on the old board" if was_empty else "posted"
+        record["result"] = "posted"
+        if was_empty:
+            record["result"] = "posted: empty on the old board"
+        elif uncounted:
+            record["result"] = "posted: only a smiley on the old board"
         record["post_id"] = created.get("id")
         # What Discourse actually stored, read back rather than assumed.
         record["recorded"] = created.get("created_at")
