@@ -20,7 +20,10 @@ from aeronautics_members.services.forum_profiles import (
     ARCHIVE_GROUP,
     build_profile_payload,
     group_name_for_year_group,
+    groups_for_profiles,
+    profiles_to_publish,
     publish_imported_profiles,
+    sync_profile_groups,
 )
 
 
@@ -217,6 +220,108 @@ class TestPublishing:
 
         profile = db.session.execute(db.select(ImportedForumProfile)).scalar_one()
         assert profile.forum_synced_at is None, "or the retry would skip it"
+
+
+class TestTheGroupsThemselves:
+    """The register is only useful if the groups actually hold people.
+
+    They did not. The first real run published 739 profiles, every payload
+    naming the groups to put them in, and left thirty-four empty groups behind:
+    Discourse's SSO ``add_groups`` matches those names against the groups that
+    already exist and drops the rest silently, and the groups were being made
+    afterwards. Nothing reported a problem, because the report counts what was
+    sent.
+    """
+
+    class GroupProvider:
+        def __init__(self, existing=()):
+            self.groups = {name: index + 1 for index, name in enumerate(existing)}
+            self.members = {}
+            self.made = []
+
+        def ensure_group(self, name):
+            if name in self.groups:
+                return {"id": self.groups[name], "name": name}, False
+            self.groups[name] = len(self.groups) + 1
+            self.made.append(name)
+            return {"id": self.groups[name], "name": name}, True
+
+        def add_group_members(self, group_id, usernames):
+            self.members.setdefault(group_id, []).extend(usernames)
+            return len(usernames)
+
+    def test_the_plan_comes_from_the_database_not_from_a_run(self, app):
+        """So the groups can be made before anybody is published."""
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        _imported(uid="2", username="B_L23", year_group="LAV23")
+        _imported(uid="3", username="C_L19", year_group="LAV19")
+
+        plan = groups_for_profiles(profiles_to_publish())
+
+        assert sorted(plan) == ["lav19", "lav23", ARCHIVE_GROUP]
+        assert sorted(plan[ARCHIVE_GROUP]) == ["A_L23", "B_L23", "C_L19"]
+        assert plan["lav19"] == ["C_L19"]
+
+    def test_everybody_is_put_in_their_groups(self, app):
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider()
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["created"] == 2
+        assert report["members"] == 2
+        assert provider.members[provider.groups["lav23"]] == ["A_L23"]
+        assert provider.members[provider.groups[ARCHIVE_GROUP]] == ["A_L23"]
+
+    def test_a_group_that_is_already_there_is_still_filled(self, app):
+        """The repair case: the groups exist, empty, from the broken run."""
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider(existing=[ARCHIVE_GROUP, "lav23"])
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["created"] == 0
+        assert report["members"] == 2, "which is the whole point of running it again"
+
+    def test_making_them_without_filling_them_sends_nobody(self, app):
+        """The step that runs before publishing: the people do not exist yet."""
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider()
+
+        sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()),
+                            add_members=False)
+
+        assert sorted(provider.made) == ["lav23", ARCHIVE_GROUP]
+        assert provider.members == {}
+
+    def test_one_bad_group_does_not_cost_the_others(self, app):
+        from aeronautics_members.forum_service import ForumProviderError
+
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider()
+        good = provider.ensure_group
+
+        def refuse_one(name):
+            if name == "lav23":
+                raise ForumProviderError("Discourse said no")
+            return good(name)
+
+        provider.ensure_group = refuse_one
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["members"] == 1
+        assert any("lav23" in problem for problem in report["problems"])
+
+    def test_a_group_the_forum_gives_no_id_for_is_a_reported_problem(self, app):
+        """Rather than a traceback, or worse, silence."""
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider()
+        provider.ensure_group = lambda name: ({"name": name}, False)
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["members"] == 0
+        assert len(report["problems"]) == 2
 
 
 class TestTheAvatarTheForumFetches:

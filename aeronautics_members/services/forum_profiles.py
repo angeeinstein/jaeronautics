@@ -117,6 +117,60 @@ def profiles_to_publish(only_unsynced=False):
     return db.session.execute(query).scalars().all()
 
 
+def groups_for_profiles(profiles):
+    """Which group holds whom: ``{group name: [username, ...]}``.
+
+    Worked out from the database rather than from what a run reported, so the
+    groups can be made *before* anybody is published. That order matters:
+    Discourse's SSO ``add_groups`` matches the names it is given against the
+    groups that already exist and drops the others without a word, so a profile
+    published before its cohort group existed lands in no group at all -- and
+    the report says otherwise, because it counts what was sent.
+    """
+    plan = {}
+    for profile in profiles:
+        names = [ARCHIVE_GROUP]
+        cohort = group_name_for_year_group(profile.year_group)
+        if cohort:
+            names.append(cohort)
+        for name in names:
+            plan.setdefault(name, []).append(profile.source_username)
+    return plan
+
+
+def sync_profile_groups(provider, plan, *, add_members=True, on_group=None):
+    """Make each group and, unless told otherwise, put its people in it.
+
+    Adding the members here rather than leaving it to the SSO payload is both
+    the repair for a run that published into groups that did not exist yet and
+    the check that the payload did what it claimed: it is one call per hundred
+    people, against fourteen hundred for publishing everybody again.
+    """
+    report = {"groups": 0, "created": 0, "members": 0, "problems": []}
+    for name in sorted(plan):
+        usernames = plan[name]
+        created = False
+        try:
+            group, created = provider.ensure_group(name)
+            report["groups"] += 1
+            if created:
+                report["created"] += 1
+            if add_members:
+                group_id = (group or {}).get("id")
+                if not group_id:
+                    raise ForumProviderError(
+                        "the forum did not say which group that is, so nobody "
+                        "can be added to it"
+                    )
+                report["members"] += provider.add_group_members(group_id, usernames)
+        except ForumProviderError as exc:
+            # One group out of thirty-four must not cost the other thirty-three.
+            report["problems"].append(f"{name}: {exc}")
+        if on_group is not None:
+            on_group(name, len(usernames), created)
+    return report
+
+
 def publish_imported_profiles(
     provider,
     *,

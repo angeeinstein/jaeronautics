@@ -440,6 +440,48 @@ and none of it should be reachable by guessing a filename.
 The dashboard counts them separately. Folding them into *Total Accounts* would
 report 760 accounts for an association with twenty.
 
+## 7a. Publishing them to the forum, and the group trap
+
+`publish-forum-profiles` sends each imported person to Discourse and puts them
+in two groups: `old_forum`, which is everybody, and their cohort — `lav23`,
+`mav17`. That is what makes "who was in LAV18" answerable.
+
+```bash
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     publish-forum-profiles --dry-run --sample 3
+
+# The real thing. Half an hour; it reports every twenty-five people.
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     publish-forum-profiles
+```
+
+**The groups have to exist before anybody is published.** The SSO payload's
+`add_groups` is not a way to create a group or to make somebody a member of one
+that is not there: Discourse matches the names against the groups it already
+has and drops the rest without a word. This command used to make them
+afterwards, "only for a cohort that has somebody in it", which on a forum that
+had just been rolled back meant 739 profiles published into nothing and
+thirty-four empty groups created at the end. Nothing failed, and the summary
+said `34 groups`, because a summary counts what was sent.
+
+It now makes the groups first and sets the membership directly afterwards, and
+the second half can be run on its own:
+
+```bash
+# Repairs empty groups without publishing anybody again: minutes, not half an
+# hour. Safe to repeat -- somebody already in a group stays in it once.
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     publish-forum-profiles --groups-only
+```
+
+Check it on the forum rather than in the summary: `…/g/old_forum` should say
+739 members, and `…/g/lav23` the size of that cohort. In a browser, signed in
+normally — a `curl` with the migration key competes with the run for the same
+sixty-calls-a-minute budget.
+
 ## 8. And then the posts
 
 The people are the prerequisite, not the whole job. Moving the threads

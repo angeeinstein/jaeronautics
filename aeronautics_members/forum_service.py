@@ -566,6 +566,32 @@ class DiscourseConnectProvider(ForumProvider):
         group = created.get("basic_group") if isinstance(created, dict) else None
         return group or {}, True
 
+    # Discourse takes a comma-separated list here, and there is no documented
+    # ceiling, but seven hundred names in one URL-encoded body is a request
+    # nothing in the chain has any reason to accept. A hundred at a time is
+    # eight calls for the whole register and small enough to be uncontroversial.
+    GROUP_MEMBER_BATCH = 100
+
+    def add_group_members(self, group_id, usernames):
+        """Put people into a group directly, without going through SSO.
+
+        Necessary because the SSO payload's ``add_groups`` is not a way to
+        *make* somebody a member: Discourse matches those names against the
+        groups that already exist and quietly ignores the rest. A profile
+        published before its cohort group existed is therefore in no group at
+        all, and no amount of re-sending the same payload changes that unless
+        the group is there first.
+        """
+        names = [name for name in usernames if name]
+        for start in range(0, len(names), self.GROUP_MEMBER_BATCH):
+            batch = names[start:start + self.GROUP_MEMBER_BATCH]
+            self._request(
+                "PUT", f"/groups/{int(group_id)}/members.json",
+                data={"usernames": ",".join(batch)},
+                rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
+            )
+        return len(names)
+
     # Discourse has moved its user-field admin route between versions, and an
     # admin route also answers 404 -- rather than 403 -- when the API user is
     # not staff, so a single guessed path cannot tell "wrong URL" from "wrong

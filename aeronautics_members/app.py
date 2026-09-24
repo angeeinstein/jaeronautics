@@ -232,7 +232,10 @@ from .services.forum_import import (  # noqa: E402
 )
 from .services.forum_profiles import (  # noqa: E402
     YEAR_GROUP_FIELD_NAME,
+    groups_for_profiles,
+    profiles_to_publish,
     publish_imported_profiles,
+    sync_profile_groups,
 )
 from .services.forum_board import (  # noqa: E402
     DEEPEST_CATEGORY_NESTING,
@@ -2635,8 +2638,11 @@ def create_app(config_overrides=None):
                   help="Skip people already published, to resume an interrupted run.")
     @click.option("--sample", type=int, default=0, metavar="N",
                   help="Show N of them in full.")
+    @click.option("--groups-only", is_flag=True,
+                  help="Publish nobody; only make the groups and put people in "
+                       "them. Repairs a run whose groups came out empty.")
     @with_appcontext
-    def publish_forum_profiles_command(dry_run, limit, only_new, sample):
+    def publish_forum_profiles_command(dry_run, limit, only_new, sample, groups_only):
         """Publishes imported people to the forum so they can be found there.
 
         The old board is the association's register of everyone who was ever a
@@ -2669,7 +2675,10 @@ def create_app(config_overrides=None):
         # to say so and carry on, not to publish nobody.
         year_group_field = None
         try:
-            if dry_run:
+            if groups_only:
+                # Nothing is published, so no profile field is written.
+                pass
+            elif dry_run:
                 # Read-only: says whether the field is there without making one.
                 year_group_field = provider.find_user_field(YEAR_GROUP_FIELD_NAME)
                 click.echo(
@@ -2690,40 +2699,72 @@ def create_app(config_overrides=None):
                 "unaffected, and re-running later fills the field in."
             )
 
-        report = publish_imported_profiles(
-            provider,
-            dry_run=dry_run,
-            limit=limit or None,
-            only_unsynced=only_new,
-            year_group_field=year_group_field,
-            on_progress=_profile_progress_reporter(dry_run=dry_run),
+        # The groups are made before anybody is published, and were not always:
+        # Discourse's SSO add_groups matches the names it is given against the
+        # groups that already exist and ignores the rest without complaining, so
+        # making them afterwards -- "only for a cohort that has somebody in it"
+        # -- produced a register of thirty-four empty groups and a report that
+        # said otherwise, because a report counts what was sent.
+        profiles = profiles_to_publish(only_unsynced=only_new)
+        if limit:
+            profiles = profiles[:limit]
+        plan = groups_for_profiles(profiles)
+        click.echo(
+            f"{len(plan)} groups: "
+            + ", ".join(f"{name} ({len(members)})"
+                        for name, members in sorted(plan.items()))[:400]
         )
 
+        def say_group(name, size, created):
+            if created:
+                click.echo(f"  created group {name} ({size})")
+
+        if not dry_run and not groups_only:
+            _report_group_problems(
+                sync_profile_groups(provider, plan, add_members=False,
+                                    on_group=say_group)
+            )
+
+        report = {"seen": 0, "published": 0, "failed": 0, "with_avatar": 0,
+                  "groups": plan, "problems": [], "people": []}
+        if not groups_only:
+            report = publish_imported_profiles(
+                provider,
+                dry_run=dry_run,
+                limit=limit or None,
+                only_unsynced=only_new,
+                year_group_field=year_group_field,
+                on_progress=_profile_progress_reporter(dry_run=dry_run),
+            )
+
         if not dry_run:
-            # After the people, so a group is only made for a cohort that has
-            # somebody in it.
-            for group in sorted(report["groups"]):
-                try:
-                    _info, created = provider.ensure_group(group)
-                    if created:
-                        click.echo(f"  created group {group}")
-                except Exception as exc:  # noqa: BLE001 -- one group must not end the run
-                    click.echo(click.style(f"  ! group {group}: {exc}", fg="yellow"), err=True)
+            # Membership is set here as well as in the SSO payload, because the
+            # payload is not a way to make somebody a member -- it only works
+            # for a group that was already there -- and this is the one step
+            # that can be run on its own to repair a register that came out
+            # empty. Eight calls per hundred people, against two per person.
+            filled = sync_profile_groups(provider, plan, add_members=True)
+            click.echo(
+                f"groups: {filled['groups']} there, {filled['created']} made, "
+                f"{filled['members']} memberships set"
+            )
+            _report_group_problems(filled)
             db.session.commit()
 
         click.echo(
             f"seen={report['seen']} published={report['published']} "
             f"failed={report['failed']} with_avatar={report['with_avatar']}"
         )
-        click.echo(f"{len(report['groups'])} groups: "
-                   + ", ".join(f"{name} ({count})"
-                               for name, count in sorted(report["groups"].items()))[:400])
         if sample:
             _echo_profile_sample(report, sample)
         for problem in report["problems"][:20]:
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if dry_run:
             click.echo(click.style("Dry run: nothing was sent.", fg="cyan"))
+
+    def _report_group_problems(report):
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! group {problem}", fg="yellow"), err=True)
 
     def _profile_progress_reporter(*, dry_run, every=25):
         """A line every ``every`` people, and a commit with it.
