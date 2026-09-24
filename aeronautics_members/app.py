@@ -233,8 +233,10 @@ from .services.forum_profiles import (  # noqa: E402
     publish_imported_profiles,
 )
 from .services.forum_board import (  # noqa: E402
-    audit_uploads,
+    DEEPEST_CATEGORY_NESTING,
+    MAX_CATEGORY_NESTING,
     Ledger,
+    audit_uploads,
     category_nesting_requirement,
     category_plan,
     migrate_board,
@@ -2327,14 +2329,30 @@ def create_app(config_overrides=None):
         poster = ContentPoster(settings)
         _warn_about_the_key(poster)
 
-        plan = category_plan(tables["forums"], tables["threads"])
+        # Three levels only where the forum says it can do three. Where it
+        # cannot, the setting is absent rather than false, and the refusal
+        # arrives one category at a time long after every setting has been
+        # changed -- so the shape is decided here instead.
+        try:
+            live = poster.site_settings()
+        except ForumProviderError:
+            live = {}
+        max_depth = (
+            DEEPEST_CATEGORY_NESTING if "max_category_nesting" in live
+            else MAX_CATEGORY_NESTING
+        )
+
+        plan = category_plan(tables["forums"], tables["threads"], max_depth)
         requirements = plan_site_settings(
             tables["threads"], tables["posts"], tables["attachments"]
-        ) + [category_nesting_requirement(plan)]
+        )
+        if "max_category_nesting" in live:
+            requirements.append(category_nesting_requirement(plan))
 
         click.echo(
             f"{len(tables['threads'])} threads, {len(tables['posts'])} posts, "
-            f"{len(tables['attachments'])} attachments, into {len(plan)} categories."
+            f"{len(tables['attachments'])} attachments, into {len(plan)} "
+            f"categories {max_depth} levels deep."
         )
         try:
             ready, anything = _report_site_settings(
@@ -2389,6 +2407,7 @@ def create_app(config_overrides=None):
                 fallback_username=service.settings["discourse_api_username"],
                 on_thread=say,
                 require_attachments=not allow_missing_attachments,
+                max_depth=max_depth,
             )
         finally:
             record.close()

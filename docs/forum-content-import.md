@@ -383,14 +383,33 @@ one. Delete the ledger only when deleting what it refers to.
 
 ### What it does to the categories
 
-The old board is a heading, then a degree, then a semester, then a lecture.
-Discourse nests three deep, so the last two names are joined: *Bachelor → 3.
-Semester / Technisches Programmieren*. Nothing is dropped, and the run asks for
-`max_category_nesting` along with the rest.
+**Two levels, not three.** Discourse nests three deep only where the site
+reports `max_category_nesting` and allows it to be set; a forum that does not
+refuses the third level with *"You can't nest a subcategory under another"* —
+one category at a time, after every setting has already been changed. So the
+depth is decided before anything is sent, from what the site actually reports,
+and two is the default.
 
-Forums nobody ever posted in are not recreated — that would be recreating the
-filing rather than the archive — but a forum that holds threads keeps its
-parents, since a subcategory needs something to be under.
+The old board is a heading, then a degree, then a semester, then a lecture.
+The lecture keeps its own level, because it is the thing anybody is looking
+for, and everything above it becomes one name:
+
+    Bachelor Luftfahrt / Aviation / 01 Semester
+      └── 01-02 Luftfahrtrecht
+
+Category names stop at 50 characters, and the board has lecture names past
+seventy. Where a joined name is too long the **outermost** level is dropped
+first: cutting the end would take the semester number, which is what anybody
+navigates by, and keep "Studium", which nobody does. A lecture name that is
+still too long is cut at the end, since the course code at the front is what
+identifies it. Two lectures that would end up with the same name under the
+same parent are kept apart rather than merged — otherwise one of them loses
+its threads into the other.
+
+Forums nobody ever posted in get no category of their own; their names still
+appear in their descendants' parent, which is where they were doing any work.
+
+
 
 Threads go oldest first, so a run stopped halfway leaves an archive that ends
 somewhere sensible instead of one with holes through it.

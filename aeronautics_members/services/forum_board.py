@@ -18,6 +18,7 @@ open it in an editor rather than needing the application to still exist.
 """
 
 import json
+from collections import Counter
 from pathlib import Path
 
 from flask import current_app
@@ -25,8 +26,17 @@ from flask import current_app
 from ..forum_service import ForumProviderError
 from .forum_content import AT_LEAST, Requirement, migrate_thread
 
-#: Discourse will not nest categories deeper than this even when asked.
-MAX_CATEGORY_NESTING = 3
+#: How deep Discourse nests categories. Three is possible, but only where the
+#: site reports max_category_nesting and lets it be set to three -- on a forum
+#: that does not, the third level is refused with "You can't nest a
+#: subcategory under another", one category at a time, after every setting has
+#: already been changed. Two is what every Discourse allows, so two is the
+#: default and three is asked for only when the site says it is available.
+MAX_CATEGORY_NESTING = 2
+DEEPEST_CATEGORY_NESTING = 3
+
+#: Discourse refuses a category name longer than this.
+CATEGORY_NAME_LIMIT = 50
 
 
 class Ledger:
@@ -108,14 +118,7 @@ class Ledger:
 # ---------------------------------------------------------------------------
 
 def forum_tree(forums):
-    """The old board's forums, each with its ancestors, deepest last.
-
-    MyBB nests without limit: the board is degree, then semester, then lecture,
-    and a category above all of it. Discourse stops at three levels, so a path
-    longer than that has its tail folded into one name rather than being
-    dropped -- "Bachelor / 3. Semester / Technisches Programmieren" survives as
-    a name even where it cannot survive as a shape.
-    """
+    """The old board's forums, each with its ancestors, deepest last."""
     by_id = {row.get("fid"): row for row in forums}
     tree = {}
     for fid, row in by_id.items():
@@ -129,51 +132,120 @@ def forum_tree(forums):
     return tree
 
 
-def category_plan(forums, threads):
-    """One row per forum that actually holds threads, in the order to make them.
+def _fit(name, limit=CATEGORY_NAME_LIMIT):
+    """A category name Discourse will accept. It stops at fifty characters."""
+    name = " ".join((name or "").split())
+    if len(name) <= limit:
+        return name
+    return name[: limit - 1].rstrip() + "\u2026"
 
-    A board that has been running for a decade has forums nobody ever posted
-    in, and recreating those would be recreating the filing rather than the
-    archive. Parents are kept even when empty, because a child needs one.
+
+def _join_to_fit(names, limit=CATEGORY_NAME_LIMIT):
+    """Several levels as one name, dropping from the outside in to make it fit.
+
+    "Studium / Bachelor Luftfahrt / Aviation / 01 Semester" is 53 characters
+    and Discourse takes 50, so something has to go. Cutting the end would take
+    the semester number -- the one part anybody navigates by -- and leave the
+    board heading, which nobody does. So the outermost level goes first.
+    """
+    kept = list(names)
+    while len(kept) > 1 and len(" / ".join(kept)) > limit:
+        kept.pop(0)
+    return _fit(" / ".join(kept), limit)
+
+
+def _compress(ancestors, max_depth):
+    """The ancestors of a forum, in as many levels as the forum allows.
+
+    The leaf keeps its own level -- it is the lecture, the thing anybody is
+    actually looking for -- and the levels above it are joined from the top
+    down until they fit. "Studium / Bachelor / 3. Semester" is a worse name
+    than three categories would be, and a much better one than losing the
+    distinction between a Bachelor and a Master semester of the same number.
+    """
+    keep = max_depth - 1
+    if keep <= 0 or not ancestors:
+        return []
+    if len(ancestors) <= keep:
+        return list(ancestors)
+    fold = len(ancestors) - keep + 1
+    return [_join_to_fit(ancestors[:fold])] + list(ancestors[fold:])
+
+
+def category_plan(forums, threads, max_depth=MAX_CATEGORY_NESTING):
+    """The categories to make, shallowest first, and which forum goes in which.
+
+    Keyed by the name path rather than by a MyBB forum id, because once the
+    tree is compressed several forums can share one category and some
+    categories belong to no forum at all.
+
+    A forum nobody ever posted in gets no category of its own. Recreating
+    those would be recreating the filing rather than the archive -- though its
+    name still shows up in its descendants' parent, which is where it was
+    doing any work.
     """
     used = {row.get("fid") for row in threads}
     tree = forum_tree(forums)
+    counts = Counter(row.get("fid") for row in threads)
 
-    needed = set()
+    rows = {}
+    taken = {}
+
+    def place(names, fid=None, threads_here=0):
+        """One category, and every category above it. Returns its key."""
+        parent_key = place(names[:-1]) if len(names) > 1 else None
+        wanted = _fit(names[-1])
+
+        # Two lectures whose names differ past the fiftieth character would
+        # otherwise become one category, and one of them would lose its
+        # threads into the other.
+        clash = taken.get((parent_key, wanted))
+        if clash is not None and clash != tuple(names):
+            suffix = f" ({fid})" if fid else f" ({len(taken)})"
+            wanted = _fit(names[-1], CATEGORY_NAME_LIMIT - len(suffix)) + suffix
+
+        key = "path:" + "/".join(names)
+        row = rows.get(key)
+        if row is None:
+            row = rows[key] = {
+                "key": key, "name": wanted, "path": list(names),
+                "depth": len(names), "parent_key": parent_key,
+                "fids": [], "threads": 0,
+            }
+            taken[(parent_key, wanted)] = tuple(names)
+        if fid is not None and fid not in row["fids"]:
+            row["fids"].append(fid)
+        row["threads"] += threads_here
+        return key
+
     for fid in used:
-        for forum in tree.get(fid, []):
-            needed.add(forum.get("fid"))
-
-    rows = []
-    for fid in needed:
         path = tree.get(fid, [])
         if not path:
             continue
         names = [(forum.get("name") or f"forum {forum.get('fid')}").strip()
                  for forum in path]
-        if len(names) > MAX_CATEGORY_NESTING:
-            # Everything past the limit becomes part of the last name.
-            kept = names[: MAX_CATEGORY_NESTING - 1]
-            names = kept + [" / ".join(names[MAX_CATEGORY_NESTING - 1:])]
-        rows.append({
-            "fid": fid,
-            "name": names[-1],
-            "path": names,
-            "depth": len(names),
-            "parent_fid": path[-2].get("fid") if len(path) > 1 else None,
-            "threads": sum(1 for row in threads if row.get("fid") == fid),
-        })
+        place(_compress(names[:-1], max_depth) + [names[-1]],
+              fid=fid, threads_here=counts[fid])
+
     # Shallowest first, so a parent exists before anything asks to go under it.
-    rows.sort(key=lambda row: (row["depth"], row["name"]))
-    return rows
+    return sorted(rows.values(), key=lambda row: (row["depth"], row["name"]))
+
+
+def categories_by_forum(plan, made):
+    """Which Discourse category each old forum's threads belong in."""
+    return {
+        fid: made[row["key"]]
+        for row in plan if row["key"] in made
+        for fid in row["fids"]
+    }
 
 
 def category_nesting_requirement(plan):
     """How deep the forum has to let categories go for this board to fit."""
     deepest = max((row["depth"] for row in plan), default=1)
     return Requirement(
-        "max_category_nesting", min(deepest, MAX_CATEGORY_NESTING), AT_LEAST,
-        f"the old board is {deepest} levels deep where it is deepest",
+        "max_category_nesting", deepest, AT_LEAST,
+        f"the categories this makes are {deepest} levels deep",
     )
 
 
@@ -235,24 +307,24 @@ def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
     existing = {}
     if not dry_run:
         for category in poster.categories():
-            key = (category.get("parent_category_id"), (category.get("name") or "").strip())
-            existing[key] = category.get("id")
+            name = (category.get("name") or "").strip()
+            existing[(category.get("parent_category_id"), name)] = category.get("id")
 
     made = {}
     for row in plan:
-        known = ledger.category_for(row["fid"])
+        known = ledger.category_for(row["key"])
         if known:
-            made[row["fid"]] = known
+            made[row["key"]] = known
             continue
 
-        parent_id = made.get(row["parent_fid"]) if row["parent_fid"] else None
-        if row["parent_fid"] and parent_id is None:
+        parent_id = made.get(row["parent_key"]) if row["parent_key"] else None
+        if row["parent_key"] and parent_id is None:
             # Its parent could not be made either. Saying so once per level is
             # noise; the parent's failure is already reported.
             continue
 
         if dry_run:
-            made[row["fid"]] = f"would-create:{'/'.join(row['path'])}"
+            made[row["key"]] = f"would-create:{'/'.join(row['path'])}"
             continue
 
         category_id = existing.get((parent_id, row["name"]))
@@ -261,15 +333,17 @@ def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
                 category_id = poster.create_category(row["name"], parent_id=parent_id)
             except ForumProviderError as exc:
                 if problems is not None:
-                    problems.append(
-                        f"category {' / '.join(row['path'])}: {exc}"
-                    )
+                    problems.append(f"category {' / '.join(row['path'])}: {exc}")
                 current_app.logger.warning(
                     "Could not make category %s: %s", row["name"], exc
                 )
                 continue
-        made[row["fid"]] = category_id
-        ledger.record_category(row["fid"], category_id)
+            # Remembered, so a name that appears twice in the plan -- a forum
+            # that is both a lecture and the parent of one -- resolves to the
+            # category just made rather than being made again.
+            existing[(parent_id, row["name"])] = category_id
+        made[row["key"]] = category_id
+        ledger.record_category(row["key"], category_id)
     return made
 
 
@@ -279,7 +353,7 @@ def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
 
 def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
                   limit=0, fallback_username=None, on_thread=None,
-                  require_attachments=True):
+                  require_attachments=True, max_depth=MAX_CATEGORY_NESTING):
     """Move every thread. Returns a summary; the detail goes to on_thread.
 
     Ordered oldest first, so that a run stopped halfway leaves a forum whose
@@ -297,14 +371,14 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
         row.get("uid"): row.get("username") for row in tables["users"]
     }
 
-    plan = category_plan(tables["forums"], tables["threads"])
+    plan = category_plan(tables["forums"], tables["threads"], max_depth)
     summary = {
         "categories": len(plan), "threads": 0, "posted": 0,
         "already_there": 0, "waiting": 0, "failed": 0, "problems": [],
     }
-    categories = ensure_categories(
+    categories = categories_by_forum(plan, ensure_categories(
         poster, plan, ledger, dry_run=dry_run, problems=summary["problems"]
-    )
+    ))
 
     threads = sorted(
         tables["threads"], key=lambda row: int(row.get("dateline") or 0)

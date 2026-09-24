@@ -13,6 +13,7 @@ from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_board import (
     Ledger,
     audit_uploads,
+    categories_by_forum,
     category_nesting_requirement,
     category_plan,
     ensure_categories,
@@ -87,45 +88,89 @@ class TestTheOldBoardsShape:
 
         assert len(forum_tree(forums)["1"]) == 2
 
-    def test_a_forum_nobody_posted_in_is_not_recreated(self):
-        plan = {row["fid"]: row for row in category_plan(*[
-            a_board()["forums"], a_board()["threads"]
-        ])}
+    def plan(self, max_depth=2, board=None):
+        board = board or a_board()
+        return category_plan(board["forums"], board["threads"], max_depth)
 
-        assert "9" not in plan, "nobody ever posted in it"
-        assert "4" in plan
+    def test_two_levels_is_what_every_discourse_allows(self):
+        """The third is refused by name, one category at a time, far too late."""
+        plan = self.plan()
 
-    def test_the_parents_of_a_used_forum_are_kept(self):
-        """A subcategory needs something to be under."""
-        plan = {row["fid"]: row for row in category_plan(
-            a_board()["forums"], a_board()["threads"]
-        )}
+        assert max(row["depth"] for row in plan) == 2
 
-        assert set(plan) == {"1", "2", "3", "4"}
+    def test_the_lecture_keeps_its_own_level(self):
+        """It is the thing anybody is looking for."""
+        plan = {row["name"]: row for row in self.plan()}
 
-    def test_parents_come_before_their_children(self):
-        plan = category_plan(a_board()["forums"], a_board()["threads"])
-        made = []
-        for row in plan:
-            if row["parent_fid"]:
-                assert row["parent_fid"] in made, f"{row['name']} has no parent yet"
-            made.append(row["fid"])
-
-    def test_a_board_deeper_than_discourse_allows_is_folded_not_dropped(self):
-        """Four levels of MyBB into three of Discourse, keeping every name."""
-        plan = {row["fid"]: row for row in category_plan(
-            a_board()["forums"], a_board()["threads"]
-        )}
-
-        assert plan["4"]["depth"] == 3
-        assert plan["4"]["path"] == [
-            "Studium", "Bachelor", "3. Semester / Technisches Programmieren"
+        assert plan["Technisches Programmieren"]["depth"] == 2
+        assert plan["Technisches Programmieren"]["path"] == [
+            "Studium / Bachelor / 3. Semester", "Technisches Programmieren"
         ]
 
-    def test_the_nesting_setting_is_asked_for(self):
-        requirement = category_nesting_requirement(
-            category_plan(a_board()["forums"], a_board()["threads"])
+    def test_the_levels_above_it_are_joined_rather_than_dropped(self):
+        """Losing "Bachelor" would merge a Bachelor and a Master semester."""
+        names = {row["name"] for row in self.plan()}
+
+        assert "Studium / Bachelor / 3. Semester" in names
+
+    def test_three_levels_are_used_where_they_are_available(self):
+        plan = {row["name"]: row for row in self.plan(max_depth=3)}
+
+        assert plan["Technisches Programmieren"]["path"] == [
+            "Studium / Bachelor", "3. Semester", "Technisches Programmieren"
+        ]
+
+    def test_a_forum_nobody_posted_in_gets_no_category(self):
+        names = {row["name"] for row in self.plan()}
+
+        assert "Nie benutzt" not in names
+
+    def test_parents_come_before_their_children(self):
+        made = []
+        for row in self.plan():
+            if row["parent_key"]:
+                assert row["parent_key"] in made, f"{row['name']} has no parent yet"
+            made.append(row["key"])
+
+    def test_a_name_too_long_for_discourse_is_cut_to_fit(self):
+        """Fifty characters, and the board has lecture names past seventy."""
+        board = a_board()
+        board["forums"][3]["name"] = (
+            "01-02 Einfuehrung in die Luftfahrt und internationale "
+            "Luftfahrtorganisationen"
         )
+        names = [row["name"] for row in self.plan(board=board)]
+
+        assert all(len(name) <= 50 for name in names)
+        assert any(name.startswith("01-02 Einfuehrung") for name in names)
+
+    def test_two_lectures_alike_past_the_limit_stay_apart(self):
+        """Otherwise one of them loses its threads into the other."""
+        board = a_board()
+        stem = "05-05 Thermische Turbomaschinen und Strahlantriebe"
+        board["forums"] += [
+            {"fid": "20", "pid": "3", "name": stem + " (Vorlesung)"},
+            {"fid": "21", "pid": "3", "name": stem + " (Labor)"},
+        ]
+        board["threads"] += [
+            {"tid": "20", "fid": "20", "subject": "A", "firstpost": "900",
+             "dateline": "1"},
+            {"tid": "21", "fid": "21", "subject": "B", "firstpost": "901",
+             "dateline": "1"},
+        ]
+        plan = self.plan(board=board)
+
+        under = [row["name"] for row in plan if row["depth"] == 2]
+        assert len(set(under)) == len(under), "no two share a name"
+
+    def test_every_used_forum_can_be_found_again(self):
+        plan = self.plan()
+        made = {row["key"]: 100 + n for n, row in enumerate(plan)}
+
+        assert categories_by_forum(plan, made)["4"] is not None
+
+    def test_the_nesting_setting_asks_for_what_the_plan_needs(self):
+        requirement = category_nesting_requirement(self.plan(max_depth=3))
 
         assert requirement.setting == "max_category_nesting"
         assert requirement.needed == 3
@@ -251,32 +296,34 @@ class TestMakingTheCategories:
             made = ensure_categories(poster, plan, Ledger(tmp_path / "l.jsonl"))
 
         names = [name for name, _parent in poster.created_categories]
-        assert names[0] == "Studium"
-        assert len(made) == 4
+        assert names[0] == "Studium / Bachelor / 3. Semester"
+        assert len(made) == 2
 
     def test_a_category_already_there_is_not_made_twice(self, app, tmp_path):
         """A second run after an interruption must not double the tree."""
+        top = "Studium / Bachelor / 3. Semester"
         poster = BoardPoster(categories=[
-            {"id": 300, "name": "Studium", "parent_category_id": None},
+            {"id": 300, "name": top, "parent_category_id": None},
         ])
         plan = category_plan(a_board()["forums"], a_board()["threads"])
 
         with app.app_context():
             made = ensure_categories(poster, plan, Ledger(tmp_path / "l.jsonl"))
 
-        assert made["1"] == 300
-        assert "Studium" not in [name for name, _ in poster.created_categories]
+        assert made["path:" + top] == 300
+        assert top not in [name for name, _ in poster.created_categories]
 
     def test_the_ledger_is_believed_before_the_forum_is_asked(self, app, tmp_path):
         poster = BoardPoster()
         ledger = Ledger(tmp_path / "l.jsonl")
-        ledger.record_category("1", 42)
+        key = "path:Studium / Bachelor / 3. Semester"
+        ledger.record_category(key, 42)
         plan = category_plan(a_board()["forums"], a_board()["threads"])
 
         with app.app_context():
             made = ensure_categories(poster, plan, ledger)
 
-        assert made["1"] == 42
+        assert made[key] == 42
 
     def test_a_dry_run_makes_nothing(self, app, tmp_path):
         poster = BoardPoster()
@@ -401,7 +448,7 @@ class TestACategoryTheForumWillNotMake:
         return poster
 
     def test_one_refusal_does_not_take_the_run_down(self, app, tmp_path):
-        poster = self.a_refusing_forum({"3. Semester / Technisches Programmieren"})
+        poster = self.a_refusing_forum({"Technisches Programmieren"})
 
         with app.app_context():
             summary = migrate_board(
@@ -423,7 +470,7 @@ class TestACategoryTheForumWillNotMake:
             "pid": "200", "tid": "11", "uid": "7", "dateline": "1490000000",
             "message": "In einer Kategorie, die geht.",
         })
-        poster = self.a_refusing_forum({"3. Semester / Technisches Programmieren"})
+        poster = self.a_refusing_forum({"Technisches Programmieren"})
 
         with app.app_context():
             summary = migrate_board(
@@ -434,7 +481,7 @@ class TestACategoryTheForumWillNotMake:
 
     def test_a_child_of_a_refused_parent_is_not_tried_on_its_own(self, app, tmp_path):
         """It would land under the wrong parent, or at the top of the forum."""
-        poster = self.a_refusing_forum({"Bachelor"})
+        poster = self.a_refusing_forum({"Studium / Bachelor / 3. Semester"})
 
         with app.app_context():
             summary = migrate_board(
@@ -442,7 +489,7 @@ class TestACategoryTheForumWillNotMake:
             )
 
         made = [name for name, _parent in poster.created_categories]
-        assert made == ["Studium"]
+        assert made == []
         # One complaint about the category, not one per level below it.
         assert len([p for p in summary["problems"]
                     if p.startswith("category ")]) == 1
@@ -607,3 +654,68 @@ class TestAPostWhoseFilesAreNotHereYet:
 
         assert summary["posted"] == 2
         assert summary["waiting"] == 0
+
+
+class TestNamesThatDoNotFit:
+    """Discourse takes fifty characters and the board has names past seventy."""
+
+    def a_deep_board(self, top="Studium", degree="Bachelor Luftfahrt / Aviation"):
+        forums = [
+            {"fid": "1", "pid": "0", "name": top},
+            {"fid": "2", "pid": "1", "name": degree},
+            {"fid": "3", "pid": "2", "name": "01 Semester"},
+            {"fid": "4", "pid": "2", "name": "02 Semester"},
+            {"fid": "5", "pid": "3", "name": "01-02 Luftfahrtrecht"},
+            {"fid": "6", "pid": "4", "name": "02-05 Festigkeitslehre"},
+        ]
+        threads = [
+            {"tid": "1", "fid": "5", "subject": "A", "firstpost": "1", "dateline": "1"},
+            {"tid": "2", "fid": "6", "subject": "B", "firstpost": "2", "dateline": "1"},
+        ]
+        return forums, threads
+
+    def test_the_outermost_level_goes_before_the_innermost_does(self):
+        """Cutting the end would take the semester number and keep "Studium"."""
+        plan = category_plan(*self.a_deep_board(), 2)
+        tops = sorted(row["name"] for row in plan if row["depth"] == 1)
+
+        assert tops == [
+            "Bachelor Luftfahrt / Aviation / 01 Semester",
+            "Bachelor Luftfahrt / Aviation / 02 Semester",
+        ]
+
+    def test_it_keeps_what_fits_whole(self):
+        plan = category_plan(*self.a_deep_board(degree="Master"), 2)
+        tops = sorted(row["name"] for row in plan if row["depth"] == 1)
+
+        assert tops == ["Studium / Master / 01 Semester",
+                        "Studium / Master / 02 Semester"]
+
+    def test_semesters_of_the_same_number_stay_apart(self):
+        """The reason the degree is worth keeping in the name at all."""
+        forums, threads = self.a_deep_board()
+        forums += [
+            {"fid": "7", "pid": "1", "name": "Master"},
+            {"fid": "8", "pid": "7", "name": "01 Semester"},
+            {"fid": "9", "pid": "8", "name": "01-02 Luftfahrtrecht"},
+        ]
+        threads.append(
+            {"tid": "3", "fid": "9", "subject": "C", "firstpost": "3", "dateline": "1"}
+        )
+        plan = category_plan(forums, threads, 2)
+
+        tops = {row["name"] for row in plan if row["depth"] == 1}
+        assert len(tops) == 3
+        # Both degrees keep a Luftfahrtrecht, under their own semester.
+        rechte = [row for row in plan if row["name"] == "01-02 Luftfahrtrecht"]
+        assert len(rechte) == 2
+        assert rechte[0]["parent_key"] != rechte[1]["parent_key"]
+
+    def test_a_name_with_nothing_above_it_is_left_alone(self):
+        forums = [{"fid": "1", "pid": "0", "name": "Allgemeines"}]
+        threads = [{"tid": "1", "fid": "1", "subject": "A",
+                    "firstpost": "1", "dateline": "1"}]
+        plan = category_plan(forums, threads, 2)
+
+        assert [row["name"] for row in plan] == ["Allgemeines"]
+        assert plan[0]["parent_key"] is None
