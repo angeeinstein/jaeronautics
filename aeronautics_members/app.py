@@ -4,6 +4,7 @@ import json
 import os
 import secrets
 import sys
+import time
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
@@ -2695,6 +2696,7 @@ def create_app(config_overrides=None):
             limit=limit or None,
             only_unsynced=only_new,
             year_group_field=year_group_field,
+            on_progress=_profile_progress_reporter(dry_run=dry_run),
         )
 
         if not dry_run:
@@ -2722,6 +2724,42 @@ def create_app(config_overrides=None):
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if dry_run:
             click.echo(click.style("Dry run: nothing was sent.", fg="cyan"))
+
+    def _profile_progress_reporter(*, dry_run, every=25):
+        """A line every ``every`` people, and a commit with it.
+
+        Seven hundred profiles against the forum's rate limit is half an hour.
+        The first real run printed one line and then nothing until it finished,
+        which reads exactly like a command that has hung -- and the obvious way
+        to find out, asking the forum how full the group is, spends the same
+        admin rate limit the run is spending and so slows down the thing it is
+        checking on.
+
+        The commit is here rather than only at the end for the same reason the
+        run is resumable at all: an interrupted run that never wrote down who it
+        had already published has to start over, and ``--only-new`` would have
+        nothing to skip.
+        """
+        started = time.monotonic()
+        state = {"reported": 0}
+
+        def report_progress(done, total, running):
+            if done < total and done - state["reported"] < every:
+                return
+            state["reported"] = done
+            if not dry_run:
+                db.session.commit()
+            elapsed = time.monotonic() - started
+            left = ""
+            if done and done < total:
+                remaining = elapsed / done * (total - done)
+                left = f", about {round(remaining / 60)} min left"
+            click.echo(
+                f"  {done}/{total} -- published {running['published']}, "
+                f"failed {running['failed']}{left}"
+            )
+
+        return report_progress
 
     def _echo_profile_sample(report, wanted):
         people = report.get("people") or []

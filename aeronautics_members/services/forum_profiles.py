@@ -118,7 +118,13 @@ def profiles_to_publish(only_unsynced=False):
 
 
 def publish_imported_profiles(
-    provider, *, dry_run=False, limit=None, only_unsynced=False, year_group_field=None
+    provider,
+    *,
+    dry_run=False,
+    limit=None,
+    only_unsynced=False,
+    year_group_field=None,
+    on_progress=None,
 ):
     """Push every imported person to the forum. Returns a report.
 
@@ -126,6 +132,12 @@ def publish_imported_profiles(
     updates the same profile rather than making another. That matters because
     this is one API call per person and something will go wrong partway through
     740 of them -- a run that cannot be resumed is one that has to start over.
+
+    ``on_progress(done, total, report)`` is called after each person, whether
+    they were published or not. Seven hundred people at the forum's rate limit
+    is half an hour, and a command that prints nothing for half an hour is
+    indistinguishable from one that has hung -- which is exactly how it was
+    read the first time this was run for real.
     """
     report = {
         "seen": 0,
@@ -141,61 +153,74 @@ def publish_imported_profiles(
     profiles = profiles_to_publish(only_unsynced=only_unsynced)
     if limit:
         profiles = profiles[:limit]
+    total = len(profiles)
 
     for profile in profiles:
         report["seen"] += 1
-        avatar_url = _avatar_url_for(profile, dry_run=dry_run)
-        payload = build_profile_payload(
-            profile, avatar_url=avatar_url, year_group_field=year_group_field
-        )
-        record = {
-            "username": profile.source_username,
-            "name": payload["name"],
-            "year_group": profile.year_group or "",
-            "groups": payload["add_groups"],
-            "avatar": "yes" if avatar_url else "none",
-            "result": "",
-        }
-        report["people"].append(record)
-        if avatar_url:
-            report["with_avatar"] += 1
-        for group in payload["add_groups"].split(","):
-            report["groups"][group] = report["groups"].get(group, 0) + 1
-
-        if dry_run:
-            record["result"] = "would publish"
-            report["published"] += 1
-            continue
-
+        # try/finally rather than a call at the end of the body: the body leaves
+        # by three different routes, and progress that stops being reported the
+        # moment something goes wrong reports it least when it matters most.
         try:
-            provider.sync_imported_profile(payload)
+            avatar_url = _avatar_url_for(profile, dry_run=dry_run)
+            payload = build_profile_payload(
+                profile, avatar_url=avatar_url, year_group_field=year_group_field
+            )
+            record = {
+                "username": profile.source_username,
+                "name": payload["name"],
+                "year_group": profile.year_group or "",
+                "groups": payload["add_groups"],
+                "avatar": "yes" if avatar_url else "none",
+                "result": "",
+            }
+            report["people"].append(record)
             if avatar_url:
-                # Sent again, because Discourse does not take the avatar on the
-                # call that creates the account. Verified on the real forum: a
-                # profile created in one call shows a letter, and the identical
-                # payload sent a second time puts the photograph on it -- the
-                # account exists by then, so the second call is an update.
-                #
-                # Unconditional rather than only on creation: the sync endpoint
-                # does not say whether it made the account or found it, and an
-                # extra call for somebody who already has their picture costs
-                # far less than a register of seven hundred blank faces.
-                provider.sync_imported_profile(
-                    build_profile_payload(
-                        profile, avatar_url=avatar_url, year_group_field=year_group_field
-                    )
-                )
-        except ForumProviderError as exc:
-            # One unhappy profile out of 740 must not end the run; the rest are
-            # still worth publishing and this one is named so it can be retried.
-            report["failed"] += 1
-            record["result"] = f"failed: {exc}"
-            report["problems"].append(f"{profile.source_username}: {exc}")
-            continue
+                report["with_avatar"] += 1
+            for group in payload["add_groups"].split(","):
+                report["groups"][group] = report["groups"].get(group, 0) + 1
 
-        profile.forum_synced_at = get_now_utc()
-        report["published"] += 1
-        record["result"] = "published"
+            if dry_run:
+                record["result"] = "would publish"
+                report["published"] += 1
+                continue
+
+            try:
+                provider.sync_imported_profile(payload)
+                if avatar_url:
+                    # Sent again, because Discourse does not take the avatar on
+                    # the call that creates the account. Verified on the real
+                    # forum: a profile created in one call shows a letter, and
+                    # the identical payload sent a second time puts the
+                    # photograph on it -- the account exists by then, so the
+                    # second call is an update.
+                    #
+                    # Unconditional rather than only on creation: the sync
+                    # endpoint does not say whether it made the account or found
+                    # it, and an extra call for somebody who already has their
+                    # picture costs far less than a register of seven hundred
+                    # blank faces.
+                    provider.sync_imported_profile(
+                        build_profile_payload(
+                            profile,
+                            avatar_url=avatar_url,
+                            year_group_field=year_group_field,
+                        )
+                    )
+            except ForumProviderError as exc:
+                # One unhappy profile out of 740 must not end the run; the rest
+                # are still worth publishing and this one is named so it can be
+                # retried.
+                report["failed"] += 1
+                record["result"] = f"failed: {exc}"
+                report["problems"].append(f"{profile.source_username}: {exc}")
+                continue
+
+            profile.forum_synced_at = get_now_utc()
+            report["published"] += 1
+            record["result"] = "published"
+        finally:
+            if on_progress is not None:
+                on_progress(report["seen"], total, report)
 
     if dry_run:
         db.session.rollback()

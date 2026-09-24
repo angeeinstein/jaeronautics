@@ -179,6 +179,36 @@ class TestPublishing:
 
         assert [payload["username"] for payload in resumed.sent] == ["B_L19"]
 
+    def test_it_says_where_it_is_while_it_runs(self, app):
+        """Half an hour of silence and a hung command look the same."""
+        _imported(uid="1", username="A_L23")
+        _imported(uid="2", username="B_L19")
+        seen = []
+
+        publish_imported_profiles(
+            FakeProvider(),
+            on_progress=lambda done, total, report: seen.append((done, total)),
+        )
+        db.session.commit()
+
+        assert seen == [(1, 2), (2, 2)]
+
+    def test_progress_is_still_reported_for_somebody_who_failed(self, app):
+        """Or it goes quiet exactly when there is most to say."""
+        _imported(uid="1", username="A_L23")
+        _imported(uid="2", username="B_L19")
+        seen = []
+
+        publish_imported_profiles(
+            FakeProvider(fail_on=["A_L23"]),
+            on_progress=lambda done, total, report: seen.append(
+                (done, report["published"], report["failed"])
+            ),
+        )
+        db.session.commit()
+
+        assert seen == [(1, 0, 1), (2, 1, 1)]
+
     def test_a_failure_is_not_recorded_as_published(self, app):
         _imported(uid="1", username="A_L23")
 

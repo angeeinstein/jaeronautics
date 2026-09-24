@@ -242,6 +242,31 @@ overwriting it would record the loosened values as the originals and the way
 back would be gone. Restore from it first, or move it aside if that is already
 done.
 
+## 5a. Watching a long run without slowing it down
+
+Do not ask the forum how it is going **with the migration API key**. Discourse
+rate-limits an admin key to about sixty calls a minute across everything using
+it, so a `curl` against `/g/old_forum.json` while a run is going takes a slot
+the run wanted and hands you this:
+
+```
+HTTP/2 429
+discourse-rate-limit-error-code: admin_api_key_rate_limit
+retry-after: 25
+```
+
+That is not a fault. It is the proof the run is alive — nothing else is
+spending that key's budget. Nothing is lost either: the client waits out a 429
+and tries again. The run just takes 25 seconds longer for each time you looked.
+
+Look in a browser instead, signed in as your own admin user. `…/g/old_forum`
+counts the profiles published so far, and a normal session is a different
+budget, so it costs the run nothing.
+
+The commands themselves also say where they are: `publish-forum-profiles`
+prints a line every twenty-five people with a rough time remaining, and commits
+as it goes, so a run stopped halfway can be picked up with `--only-new`.
+
 ## 6. If it does not finish
 
 A dropped connection, a full disk, Ctrl-C — the forum is left with its guards
