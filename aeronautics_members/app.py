@@ -2734,7 +2734,9 @@ def create_app(config_overrides=None):
                 limit=limit or None,
                 only_unsynced=only_new,
                 year_group_field=year_group_field,
-                on_progress=_profile_progress_reporter(dry_run=dry_run),
+                # A dry run sends nothing and is over in seconds, so thirty
+                # progress lines would be thirty lines of noise.
+                on_progress=None if dry_run else _profile_progress_reporter(),
             )
 
         if not dry_run:
@@ -2766,7 +2768,7 @@ def create_app(config_overrides=None):
         for problem in report["problems"]:
             click.echo(click.style(f"  ! group {problem}", fg="yellow"), err=True)
 
-    def _profile_progress_reporter(*, dry_run, every=25):
+    def _profile_progress_reporter(every=25):
         """A line every ``every`` people, and a commit with it.
 
         Seven hundred profiles against the forum's rate limit is half an hour.
@@ -2788,11 +2790,12 @@ def create_app(config_overrides=None):
             if done < total and done - state["reported"] < every:
                 return
             state["reported"] = done
-            if not dry_run:
-                db.session.commit()
+            db.session.commit()
             elapsed = time.monotonic() - started
             left = ""
-            if done and done < total:
+            # Not in the first minute: an estimate drawn from the first few of
+            # seven hundred calls is a guess dressed up as a number.
+            if done and done < total and elapsed >= 60:
                 remaining = elapsed / done * (total - done)
                 left = f", about {round(remaining / 60)} min left"
             click.echo(
