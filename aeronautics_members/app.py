@@ -2497,11 +2497,24 @@ def create_app(config_overrides=None):
         if "max_category_nesting" in live:
             requirements.append(category_nesting_requirement(plan))
 
+        # Posts whose author is not in the users table -- people deleted from
+        # the old board over thirteen years. They are attributed to the
+        # fallback, which is worth knowing the size of before a run rather
+        # than a thread at a time during one.
+        known = {row.get("uid") for row in tables["users"]}
+        orphaned = sum(1 for row in tables["posts"] if row.get("uid") not in known)
+
         click.echo(
             f"{len(tables['threads'])} threads, {len(tables['posts'])} posts, "
             f"{len(tables['attachments'])} attachments, into {len(plan)} "
             f"categories {max_depth} levels deep."
         )
+        if orphaned:
+            click.echo(
+                f"{orphaned} of those posts were written by somebody no longer "
+                f"in the old board's user table, and will be attributed to "
+                f"{service.settings['discourse_api_username']}."
+            )
         try:
             ready, anything = _report_site_settings(
                 check_site_settings(poster, requirements)
@@ -2585,9 +2598,10 @@ def create_app(config_overrides=None):
         )
         if summary.get("renamed"):
             click.echo(
-                f"{summary['renamed']} threads share a subject with another and "
-                f"had the lecture added to their title, because Discourse will "
-                f"not take two topics with the same name."
+                f"{summary['renamed']} of the board's threads share a subject "
+                f"with another, so their titles carry the lecture as well -- "
+                f"Discourse will not take two topics with the same name. That "
+                f"count is for the whole board, not only what this run posted."
             )
         if summary["waiting"]:
             click.echo(
