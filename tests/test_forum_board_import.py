@@ -6,6 +6,7 @@ cannot and somebody is left reconciling half an archive by hand. Everything
 here is about the first one.
 """
 import json
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -25,6 +26,7 @@ from aeronautics_members.services.forum_board import (
     settings_inventory,
 )
 from aeronautics_members.services.forum_content import migrate_thread
+from aeronautics_members.services.forum_worksheet import render_worksheet
 
 from test_forum_content_migration import FakePoster
 
@@ -935,3 +937,56 @@ class TestAFileTheForumWillNotTake:
             )
 
         assert summary["posted"] == 2
+
+
+class TestThePageForDecidingTheStructure:
+    """A spreadsheet is the wrong shape for "is this the same course"."""
+
+    def rows(self):
+        forums = [
+            {"fid": "1", "pid": "0", "name": "Studium"},
+            {"fid": "2", "pid": "1", "name": "01 Semester"},
+            {"fid": "10", "pid": "2", "name": "01-06 Technisches Programmieren"},
+        ]
+        threads = [{"tid": "1", "fid": "10", "subject": "Klausuren",
+                    "firstpost": "1", "dateline": "1"}]
+        posts = [{"pid": "1", "tid": "1", "uid": "7",
+                  "dateline": "1490000000", "message": "x"}]
+        attachments = [{"pid": "1", "filename": "Klausur_LAV16_Loesung.pdf",
+                        "filesize": "10"}]
+        return category_worksheet(forums, threads, posts, attachments)
+
+    def data_in(self, html):
+        found = re.search(r"const DATA = (.*?);\nconst KEY", html, re.S)
+        return json.loads(found.group(1).replace("<\\/", "</"))
+
+    def test_what_is_in_a_forum_travels_with_it(self):
+        """Filenames say more about whether two lectures match than titles do."""
+        row = self.rows()[0]
+
+        assert row["subjects"] == ["Klausuren"]
+        assert row["files"] == ["Klausur_LAV16_Loesung.pdf"]
+
+    def test_the_page_carries_the_board_rather_than_fetching_it(self):
+        """It opens from a file, and nothing on it leaves the machine."""
+        html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
+
+        assert "http://" not in html.split("const DATA")[0], "nothing is fetched"
+        assert self.data_in(html)["rows"][0]["old_fid"] == "10"
+
+    def test_versions_of_a_course_are_grouped_by_the_same_rule_as_the_sort(self):
+        html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
+
+        assert self.data_in(html)["rows"][0]["course"] == "technisches programmieren"
+
+    def test_a_subject_that_closes_the_script_tag_does_not_end_the_page(self):
+        """Somebody wrote all sorts of things into that board over thirteen years."""
+        rows = self.rows()
+        rows[0]["subjects"] = ["</script><h1>oh dear</h1>"]
+        html = render_worksheet(rows, "https://forum.example.at", _sortable)
+
+        data = html.split("const DATA = ")[1].split(";\nconst KEY")[0]
+        assert "</script>" not in data
+        assert self.data_in(html)["rows"][0]["subjects"] == [
+            "</script><h1>oh dear</h1>"
+        ]

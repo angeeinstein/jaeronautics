@@ -316,7 +316,7 @@ def _sortable(name):
     return re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
 
 
-def category_worksheet(forums, threads, posts):
+def category_worksheet(forums, threads, posts, attachments=(), samples=8):
     """One row per old forum that holds threads, for deciding where it goes.
 
     The new forum is not the old one rearranged: it is a place students look
@@ -332,6 +332,21 @@ def category_worksheet(forums, threads, posts):
     threads_by_forum = {}
     for row in threads:
         threads_by_forum.setdefault(row.get("fid"), []).append(row)
+
+    # Which thread each attachment hangs off, so a forum can show what is
+    # actually in it. A filename like "Klausur_LAV16_Musterloesung_27.01.2017"
+    # says more about whether two lectures are the same course than any amount
+    # of comparing their titles does.
+    thread_of_post = {}
+    for post in posts:
+        thread_of_post[post.get("pid")] = post.get("tid")
+    files_by_thread = {}
+    for row in attachments:
+        tid = thread_of_post.get(row.get("pid"))
+        if tid is not None:
+            name = (row.get("filename") or "").strip()
+            if name:
+                files_by_thread.setdefault(tid, []).append(name)
 
     dates_by_thread = {}
     counts_by_thread = Counter()
@@ -351,6 +366,13 @@ def category_worksheet(forums, threads, posts):
                  for forum in path]
         spans = [dates_by_thread[row.get("tid")] for row in in_forum
                  if row.get("tid") in dates_by_thread]
+        newest = sorted(
+            in_forum,
+            key=lambda row: dates_by_thread.get(row.get("tid"), (0, 0))[1],
+            reverse=True,
+        )
+        files = [name for row in newest
+                 for name in files_by_thread.get(row.get("tid"), [])]
         rows.append({
             "old_fid": fid,
             "old_path": " / ".join(names),
@@ -359,6 +381,9 @@ def category_worksheet(forums, threads, posts):
             "posts": sum(counts_by_thread[row.get("tid")] for row in in_forum),
             "first_post": _as_day(min(span[0] for span in spans)) if spans else "",
             "last_post": _as_day(max(span[1] for span in spans)) if spans else "",
+            "subjects": [(row.get("subject") or "").strip()
+                         for row in newest[:samples]],
+            "files": files[:samples],
             "target": "",
             "access": "",
         })

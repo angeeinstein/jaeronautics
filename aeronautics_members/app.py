@@ -237,13 +237,15 @@ from .services.forum_board import (  # noqa: E402
     DEEPEST_CATEGORY_NESTING,
     MAX_CATEGORY_NESTING,
     Ledger,
+    _sortable,
     audit_uploads,
-    category_worksheet,
-    settings_inventory,
     category_nesting_requirement,
     category_plan,
+    category_worksheet,
     migrate_board,
+    settings_inventory,
 )
+from .services.forum_worksheet import render_worksheet  # noqa: E402
 from .services.forum_content import (  # noqa: E402
     LOOSEN,
     REFUSE,
@@ -2225,10 +2227,12 @@ def create_app(config_overrides=None):
     @app.cli.command("forum-category-worksheet")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
     @click.option("--out", type=click.Path(dir_okay=False),
-                  default="forum-categories.csv", show_default=True,
+                  default="forum-categories.html", show_default=True,
                   help="Where to write the worksheet.")
+    @click.option("--csv", "as_csv", is_flag=True,
+                  help="Write a plain CSV instead of the page.")
     @with_appcontext
-    def forum_category_worksheet_command(dump_file, out):
+    def forum_category_worksheet_command(dump_file, out, as_csv):
         """Where each of the old board's forums should end up, for you to decide.
 
         The new forum is not the old one rearranged. It is somewhere students
@@ -2250,17 +2254,28 @@ def create_app(config_overrides=None):
         """
         tables = _load_mybb_dump(dump_file)
         rows = category_worksheet(
-            tables["forums"], tables["threads"], tables["posts"]
+            tables["forums"], tables["threads"], tables["posts"],
+            tables["attachments"],
         )
         if not rows:
             raise click.ClickException("No forum in that dump holds any threads.")
 
-        fields = ["old_fid", "old_path", "lecture", "threads", "posts",
-                  "first_post", "last_post", "target", "access"]
-        with open(out, "w", encoding="utf-8-sig", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=fields)
-            writer.writeheader()
-            writer.writerows(rows)
+        if as_csv:
+            fields = ["old_fid", "old_path", "lecture", "threads", "posts",
+                      "first_post", "last_post", "target", "access"]
+            with open(out, "w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle, fieldnames=fields, extrasaction="ignore"
+                )
+                writer.writeheader()
+                writer.writerows(rows)
+        else:
+            Path(out).write_text(
+                render_worksheet(
+                    rows, get_forum_service().settings.get("forum_base_url", ""),
+                                ),
+                encoding="utf-8",
+            )
 
         quiet_since = sorted(row["last_post"] for row in rows)
         click.echo(
@@ -2274,11 +2289,21 @@ def create_app(config_overrides=None):
                 f"{len(stale)} of them have had nothing posted since 2021, "
                 f"which is where I would start reading."
             )
-        click.echo(
-            "Open it in a spreadsheet. Same-named courses are on adjacent "
-            "lines; fill in 'target' where a forum belongs to a lecture that "
-            "still runs, and leave it empty for everything that is archive."
-        )
+        if as_csv:
+            click.echo(
+                "Open it in a spreadsheet. Same-named courses are on adjacent "
+                "lines; fill in 'target' where a forum belongs to a lecture "
+                "that still runs, and leave it empty for what is archive."
+            )
+        else:
+            click.echo(
+                "Copy it to your own machine and open it in a browser. Write "
+                "the curriculum down the left, then work through the old "
+                "forums: each one shows what is in it, and every version of a "
+                "course sits together so they can be assigned at once. What "
+                "you decide is kept in the browser as you go; Export JSON when "
+                "it is done."
+            )
 
     @app.cli.command("dump-forum-settings")
     @click.option("--out", type=click.Path(dir_okay=False),
