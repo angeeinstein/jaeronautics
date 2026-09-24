@@ -507,7 +507,9 @@ class TestTheGuardsAimedAtBrandNewAccounts:
             post["tid"] = "5"
         requirements = {r.setting: r for r in plan_site_settings([], posts)}
 
-        assert requirements["newuser_max_replies_per_topic"].needed == 12
+        # Every post they made in it, not every one after their first:
+        # Discourse refused the thirteenth saying "limited to 12 replies".
+        assert requirements["newuser_max_replies_per_topic"].needed == 13
 
     def test_somebody_prolific_needs_the_daily_caps_raised(self):
         threads = [{"tid": str(n), "subject": f"Klausur {n}", "firstpost": str(n)}
@@ -1123,8 +1125,8 @@ class TestLimitsThatWereInTheListAllAlong:
         requirements = {r.setting: r for r in plan_site_settings([], posts)}
 
         assert requirements["max_consecutive_replies"].needed == 4
-        # Seven posted five times altogether, but only four in a row.
-        assert requirements["newuser_max_replies_per_topic"].needed == 4
+        # Five posts in the thread altogether, four of them in a row.
+        assert requirements["newuser_max_replies_per_topic"].needed == 5
 
     def test_a_run_does_not_carry_across_threads(self):
         posts = self.a_thread(["7", "7"]) + [

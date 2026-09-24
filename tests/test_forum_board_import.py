@@ -17,6 +17,7 @@ from aeronautics_members.services.forum_board import (
     _sortable,
     audit_uploads,
     category_worksheet,
+    unique_titles,
     categories_by_forum,
     category_nesting_requirement,
     category_plan,
@@ -591,7 +592,9 @@ class TestAPostWhoseFilesAreNotHereYet:
             )
 
         assert poster.calls == [], "not one post was sent"
-        assert summary["waiting"] == 2
+        # The first waits for its file; the second has no topic to go in.
+        assert summary["waiting"] == 1
+        assert summary["not_attempted"] == 1
         assert summary["failed"] == 0, "waiting is not failing"
 
     def test_the_whole_thread_waits_if_its_first_post_does(self, app, tmp_path):
@@ -646,7 +649,8 @@ class TestAPostWhoseFilesAreNotHereYet:
             )
 
         assert summary["posted"] == 1
-        assert summary["waiting"] == 2
+        assert summary["waiting"] == 1
+        assert summary["not_attempted"] == 1
 
     def test_it_can_be_told_to_post_anyway(self, app, tmp_path):
         """For files that are gone for good and words worth having."""
@@ -895,7 +899,8 @@ class TestAFileTheForumWillNotTake:
             )
 
         assert poster.calls == []
-        assert summary["waiting"] == 2
+        assert summary["waiting"] == 1
+        assert summary["not_attempted"] == 1
         assert summary["posted"] == 0
 
     def test_nothing_is_written_down_about_it(self, app, tmp_path):
@@ -989,4 +994,99 @@ class TestThePageForDecidingTheStructure:
         assert "</script>" not in data
         assert self.data_in(html)["rows"][0]["subjects"] == [
             "</script><h1>oh dear</h1>"
+        ]
+
+
+class TestTitlesThatCannotBothBeKlausuren:
+    """Discourse refuses a second topic with a title it already has."""
+
+    def board(self):
+        forums = [
+            {"fid": "1", "pid": "0", "name": "Studium"},
+            {"fid": "2", "pid": "1", "name": "01-02 Luftfahrtrecht"},
+            {"fid": "3", "pid": "1", "name": "02-05 Festigkeitslehre"},
+        ]
+        threads = [
+            {"tid": "1", "fid": "2", "subject": "Klausuren", "firstpost": "1",
+             "dateline": str(int(datetime(2017, 6, 1, tzinfo=timezone.utc).timestamp()))},
+            {"tid": "2", "fid": "3", "subject": "Klausuren", "firstpost": "2",
+             "dateline": str(int(datetime(2019, 6, 1, tzinfo=timezone.utc).timestamp()))},
+            {"tid": "3", "fid": "2", "subject": "Zusammenfassung Aerodynamik",
+             "firstpost": "3", "dateline": "1490000000"},
+        ]
+        return forums, threads
+
+    def test_a_subject_nobody_else_uses_is_left_alone(self):
+        titles = unique_titles(*self.board())
+
+        assert titles["3"] == "Zusammenfassung Aerodynamik"
+
+    def test_a_shared_subject_gets_the_lecture_added(self):
+        """Which is what told the old board's readers which Klausuren it was."""
+        titles = unique_titles(*self.board())
+
+        assert titles["1"] == "Klausuren (01-02 Luftfahrtrecht)"
+        assert titles["2"] == "Klausuren (02-05 Festigkeitslehre)"
+
+    def test_two_of_the_same_lecture_fall_back_to_the_year(self):
+        forums, threads = self.board()
+        threads[1]["fid"] = "2"
+        titles = unique_titles(forums, threads)
+
+        assert titles["1"] == "Klausuren (01-02 Luftfahrtrecht 2017)"
+        assert titles["2"] == "Klausuren (01-02 Luftfahrtrecht 2019)"
+
+    def test_and_after_that_to_the_thread_id(self):
+        forums, threads = self.board()
+        threads[1]["fid"] = "2"
+        threads[1]["dateline"] = threads[0]["dateline"]
+        titles = unique_titles(forums, threads)
+
+        assert len(set(titles.values())) == 3
+        assert titles["2"].endswith("#2")
+
+    def test_no_two_threads_on_the_board_end_up_alike(self):
+        titles = unique_titles(*self.board())
+
+        assert len(set(titles.values())) == len(titles)
+
+    def test_a_title_stays_within_what_discourse_accepts(self):
+        forums, threads = self.board()
+        for thread in threads[:2]:
+            thread["subject"] = "K" * 250
+        titles = unique_titles(forums, threads)
+
+        assert all(len(title) <= 255 for title in titles.values())
+
+    def test_the_import_uses_them(self, app, tmp_path):
+        board = a_board()
+        board["threads"].append({
+            "tid": "11", "fid": "4", "subject": "Klausuren Aerodynamik",
+            "firstpost": "200", "dateline": "1490000000",
+        })
+        board["posts"].append({
+            "pid": "200", "tid": "11", "uid": "7", "dateline": "1490000000",
+            "message": "Noch eine Angabe.",
+        })
+        poster = BoardPoster()
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, board, "/nowhere", Ledger(tmp_path / "l.jsonl"),
+            )
+
+        opened = [call["title"] for call in poster.calls if call["title"]]
+        assert len(set(opened)) == len(opened), "no two topics asked for one name"
+        assert summary["renamed"] == 2
+
+    def test_it_can_be_told_not_to(self, app, tmp_path):
+        board = a_board()
+        poster = BoardPoster()
+
+        with app.app_context():
+            migrate_board(poster, board, "/nowhere", Ledger(tmp_path / "l.jsonl"),
+                          keep_duplicate_titles=True)
+
+        assert [c["title"] for c in poster.calls if c["title"]] == [
+            "Klausuren Aerodynamik"
         ]

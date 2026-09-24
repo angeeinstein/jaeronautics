@@ -2429,6 +2429,10 @@ def create_app(config_overrides=None):
     @click.option("--dry-run", is_flag=True, help="Report and send nothing.")
     @click.option("--limit", type=int, default=0, metavar="N",
                   help="Stop after N threads, for a first careful run.")
+    @click.option("--keep-duplicate-titles", is_flag=True,
+                  help="Post the old subjects unchanged. Discourse refuses a "
+                       "second topic with a title it already has, so this "
+                       "loses every thread after the first of each name.")
     @click.option("--allow-missing-attachments", is_flag=True,
                   help="Post even where a file is not on this machine. Those "
                        "files are then lost: the post is written down as done "
@@ -2441,6 +2445,7 @@ def create_app(config_overrides=None):
                   help="An 'All Users' Discourse API key.")
     @with_appcontext
     def import_forum_content_command(dump_file, uploads, ledger, dry_run, limit,
+                                     keep_duplicate_titles,
                                      allow_missing_attachments, adjust_settings,
                                      settings_file, api_key):
         """Moves the whole old board across, keeping the categories it had.
@@ -2551,6 +2556,7 @@ def create_app(config_overrides=None):
                 on_thread=say,
                 require_attachments=not allow_missing_attachments,
                 max_depth=max_depth,
+                keep_duplicate_titles=keep_duplicate_titles,
             )
         finally:
             record.close()
@@ -2573,13 +2579,27 @@ def create_app(config_overrides=None):
         click.echo(
             f"\n{summary['threads']} threads: {summary['posted']} posted, "
             f"{summary['already_there']} already there, "
-            f"{summary['waiting']} waiting for files, {summary['failed']} failed."
+            f"{summary['waiting']} waiting, "
+            f"{summary['not_attempted']} not attempted, "
+            f"{summary['failed']} failed."
         )
+        if summary.get("renamed"):
+            click.echo(
+                f"{summary['renamed']} threads share a subject with another and "
+                f"had the lecture added to their title, because Discourse will "
+                f"not take two topics with the same name."
+            )
         if summary["waiting"]:
             click.echo(
-                f"{summary['waiting']} posts were left alone because files they "
-                f"carry are not on this machine. Nothing is lost -- fetch them "
-                f"and run the same command again."
+                f"{summary['waiting']} posts were left alone because a file they "
+                f"carry is not on this machine or the forum would not take it. "
+                f"Nothing is lost -- fix that and run the same command again."
+            )
+        if summary["not_attempted"]:
+            click.echo(
+                f"{summary['not_attempted']} posts are in threads whose opening "
+                f"post was refused, so there was no topic to put them in. The "
+                f"reason is against the post that failed."
             )
         if summary["problems"]:
             click.echo(click.style(

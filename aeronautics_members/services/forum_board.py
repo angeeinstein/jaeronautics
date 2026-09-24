@@ -41,6 +41,9 @@ DEEPEST_CATEGORY_NESTING = 3
 #: Discourse refuses a category name longer than this.
 CATEGORY_NAME_LIMIT = 50
 
+#: And a topic title longer than this.
+TITLE_LENGTH_LIMIT = 255
+
 
 class Ledger:
     """What has already been posted, written down as it happens.
@@ -441,6 +444,70 @@ def audit_uploads(attachments, uploads_dir):
     return report
 
 
+def unique_titles(forums, threads, limit=TITLE_LENGTH_LIMIT):
+    """A title per thread that no other thread on the board shares.
+
+    Discourse refuses a second topic with a title it already has -- "This
+    title has already been used by another topic" -- and 323 of these 720
+    threads share a subject with another. Ninety-one are called "Klausuren".
+    The setting that used to turn this off is not in the site's settings any
+    more, so the titles have to do the work instead.
+
+    What gets added is the lecture the thread was filed under, which is the
+    thing that told the old board's readers which "Klausuren" they were
+    looking at. Where that is still not enough, the year; and after that the
+    thread's own id, which is ugly and unique and only reached by threads that
+    were already indistinguishable.
+    """
+    tree = forum_tree(forums)
+    subjects = {}
+    for thread in threads:
+        subject = (thread.get("subject") or "").strip() or "(no subject)"
+        subjects.setdefault(subject, []).append(thread)
+
+    def fit(text):
+        return text if len(text) <= limit else text[: limit - 1].rstrip() + "\u2026"
+
+    def lecture_of(thread):
+        path = tree.get(thread.get("fid"), [])
+        return (path[-1].get("name") or "").strip() if path else ""
+
+    def year_of(thread):
+        return datetime.fromtimestamp(
+            int(thread.get("dateline") or 0), tz=timezone.utc
+        ).year
+
+    # Tried in turn, and the first that tells every thread in the group apart
+    # is used for all of them. Picking per thread instead would leave one
+    # "Klausuren (Luftfahrtrecht)" beside a "Klausuren (Luftfahrtrecht 2019)",
+    # where the first is from 2017 and does not say so.
+    schemes = (
+        lambda subject, thread: subject,
+        lambda subject, thread: (
+            f"{subject} ({lecture_of(thread)})" if lecture_of(thread) else None
+        ),
+        lambda subject, thread: (
+            f"{subject} ({lecture_of(thread)} {year_of(thread)})"
+            if lecture_of(thread) else f"{subject} ({year_of(thread)})"
+        ),
+        lambda subject, thread: f"{subject} #{thread.get('tid')}",
+    )
+
+    titles, taken = {}, set()
+    for subject, sharing in subjects.items():
+        for scheme in schemes:
+            names = [scheme(subject, thread) for thread in sharing]
+            if any(name is None for name in names):
+                continue
+            names = [fit(name) for name in names]
+            if len(set(names)) == len(names) and not (set(names) & taken):
+                break
+        for thread, name in zip(sharing, names):
+            titles[thread.get("tid")] = name
+            taken.add(name)
+    return titles
+
+
 def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
     """Make the categories the old board had. Returns {fid: category id}.
 
@@ -503,7 +570,8 @@ def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
 
 def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
                   limit=0, fallback_username=None, on_thread=None,
-                  require_attachments=True, max_depth=MAX_CATEGORY_NESTING):
+                  require_attachments=True, max_depth=MAX_CATEGORY_NESTING,
+                  keep_duplicate_titles=False):
     """Move every thread. Returns a summary; the detail goes to on_thread.
 
     Ordered oldest first, so that a run stopped halfway leaves a forum whose
@@ -522,9 +590,19 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
     }
 
     plan = category_plan(tables["forums"], tables["threads"], max_depth)
+    titles = (
+        {} if keep_duplicate_titles
+        else unique_titles(tables["forums"], tables["threads"])
+    )
+    renamed = sum(
+        1 for thread in tables["threads"]
+        if titles.get(thread.get("tid"), "") != (thread.get("subject") or "").strip()
+        and thread.get("tid") in titles
+    )
     summary = {
-        "categories": len(plan), "threads": 0, "posted": 0,
-        "already_there": 0, "waiting": 0, "failed": 0, "problems": [],
+        "categories": len(plan), "threads": 0, "posted": 0, "renamed": renamed,
+        "already_there": 0, "waiting": 0, "not_attempted": 0, "failed": 0,
+        "problems": [],
     }
     categories = categories_by_forum(plan, ensure_categories(
         poster, plan, ledger, dry_run=dry_run, problems=summary["problems"]
@@ -559,6 +637,7 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
                 uploads_dir, category_id, dry_run=dry_run,
                 fallback_username=fallback_username, ledger=ledger,
                 require_attachments=require_attachments,
+                title=titles.get(thread.get("tid")),
             )
         except (ForumProviderError, ValueError) as exc:
             # One thread that cannot be started is not a reason to abandon the
@@ -572,10 +651,15 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
                 summary["posted"] += 1
             elif record["result"] == "already there":
                 summary["already_there"] += 1
-            elif record["result"].startswith(("waiting", "not attempted")):
-                # Not a failure. Its files are not here yet, and the same
-                # command run again once they are will pick it up.
+            elif record["result"].startswith("waiting"):
+                # Not a failure. Its files are not here yet, or the forum
+                # would not take one of them, and the same command run again
+                # once that is fixed will pick it up.
                 summary["waiting"] += 1
+            elif record["result"].startswith("not attempted"):
+                # Its thread never got a topic. The reason is reported against
+                # the post that failed, not against this one.
+                summary["not_attempted"] += 1
             else:
                 summary["failed"] += 1
         summary["problems"].extend(report["problems"])

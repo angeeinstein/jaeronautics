@@ -566,6 +566,19 @@ def plan_site_settings(threads, posts, attachments=()):
                 f"characters, which German subjects reach without trying",
             ))
 
+        # A subject in capitals is refused as "did you mean to enter it in
+        # ALL CAPS?", and a board this old has several.
+        shouting = [
+            title for title in titles
+            if title.upper() == title and any(c.isalpha() for c in title)
+        ]
+        if shouting:
+            requirements.append(Requirement(
+                "allow_uppercase_posts", "true", EQUALS,
+                f"{len(shouting)} subjects are written in capitals, such as "
+                f"{shouting[0]!r}, and Discourse refuses those as shouting",
+            ))
+
         plainest = min(_entropy(title) for title in titles)
         requirements.append(Requirement(
             "title_min_entropy", plainest, AT_MOST,
@@ -620,9 +633,13 @@ def plan_site_settings(threads, posts, attachments=()):
         in_thread = Counter((post.get("uid"), post.get("tid")) for post in posts)
         most_in_one = max(in_thread.values())
         if most_in_one > 1:
+            # Every post they make in the topic, not every post after their
+            # first. Discourse counted thirteen where this counted twelve, and
+            # refused the thirteenth with "temporarily limited to 12 replies".
             requirements.append(Requirement(
-                "newuser_max_replies_per_topic", most_in_one - 1, AT_LEAST,
-                f"one person replied {most_in_one - 1} times in a single thread",
+                "newuser_max_replies_per_topic", most_in_one, AT_LEAST,
+                f"one person posted {most_in_one} times in a single thread, and "
+                f"Discourse counts all of them against this",
             ))
 
         # Replies in a row, which is a different count from replies in total
@@ -1100,7 +1117,7 @@ def _attachment_markdown(upload, original_name):
 
 def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
                    uploads_dir, category_id, *, dry_run=False, fallback_username=None,
-                   ledger=None, require_attachments=True):
+                   ledger=None, require_attachments=True, title=None):
     """Post one old thread onto the forum. Returns a report.
 
     Every post is sent as its own author with its own date, and the report says
@@ -1119,7 +1136,12 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
     that looks complete. Turning it off is for a run where the files are known
     to be gone for good and the words are worth having anyway.
     """
-    report = {"thread": thread.get("subject"), "posts": [], "problems": [], "topic_id": None}
+    report = {"thread": thread.get("subject"), "posts": [], "problems": [],
+              "topic_id": None}
+    # The title may differ from the old subject: Discourse will not take two
+    # topics with the same name, and this board has ninety-one called
+    # "Klausuren".
+    title = title or thread.get("subject") or "(no subject)"
     uploads_dir = Path(uploads_dir)
     if ledger is not None:
         report["topic_id"] = ledger.topic_for(thread.get("tid"))
@@ -1280,7 +1302,7 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             if opening:
                 created = poster.create_post(
                     raw=body, as_username=author, created_at=asked_for,
-                    title=thread.get("subject") or "(no subject)", category=category_id,
+                    title=title, category=category_id,
                 )
                 report["topic_id"] = created.get("topic_id")
             else:
