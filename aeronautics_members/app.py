@@ -1863,6 +1863,25 @@ def create_app(config_overrides=None):
             return True, True
         return False, True
 
+    def _author_finder(poster):
+        """Given the old board's name for somebody, this forum's name for them.
+
+        Discourse caps a username at twenty characters and adjusts anything
+        longer as it creates the account, so four of this board's names -- the
+        Niedergrottenthalers and Tschurtschenthalers -- exist there under names
+        nobody wrote down. The portal's own user id is the handle that survived:
+        every imported profile was published with it as its external id.
+        """
+        def find(username):
+            profile = db.session.execute(
+                db.select(ImportedForumProfile).filter_by(source_username=username)
+            ).scalars().first()
+            if profile is None:
+                return None
+            return poster.username_for_external_id(profile.user_id)
+
+        return find
+
     def _warn_about_the_key(poster):
         """Say so early if the key is the wrong shape.
 
@@ -2121,6 +2140,7 @@ def create_app(config_overrides=None):
             settings["discourse_api_key"] = api_key
         poster = ContentPoster(settings)
         _warn_about_the_key(poster)
+        poster.find_author = _author_finder(poster)
 
         # Ask the forum whether it will take this thread before posting any of
         # it. A run that gets three posts in and is then refused for a title
@@ -2485,6 +2505,9 @@ def create_app(config_overrides=None):
             settings["discourse_api_key"] = api_key
         poster = ContentPoster(settings)
         _warn_about_the_key(poster)
+        # So that a post whose author's name was too long for Discourse is
+        # retried under the name Discourse gave them, rather than lost.
+        poster.find_author = _author_finder(poster)
 
         # Three levels only where the forum says it can do three. Where it
         # cannot, the setting is absent rather than false, and the refusal

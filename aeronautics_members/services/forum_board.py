@@ -444,6 +444,19 @@ def audit_uploads(attachments, uploads_dir):
     return report
 
 
+def _subject_of(thread):
+    return (thread.get("subject") or "").strip() or "(no subject)"
+
+
+def _title_key(name):
+    """Two titles Discourse would call the same come out equal here.
+
+    It compares case-insensitively and does not care how many spaces are
+    between the words, so neither does this.
+    """
+    return " ".join(str(name or "").split()).casefold()
+
+
 def unique_titles(forums, threads, limit=TITLE_LENGTH_LIMIT):
     """A title per thread that no other thread on the board shares.
 
@@ -462,8 +475,12 @@ def unique_titles(forums, threads, limit=TITLE_LENGTH_LIMIT):
     tree = forum_tree(forums)
     subjects = {}
     for thread in threads:
-        subject = (thread.get("subject") or "").strip() or "(no subject)"
-        subjects.setdefault(subject, []).append(thread)
+        # Grouped by what Discourse considers the same title, not by what
+        # Python does. "english meeting" and "English Meeting" are two subjects
+        # here and one title there, so keyed exactly they were never compared
+        # with each other, both kept their subject, and the second was refused
+        # on the real run -- taking its thread's eleven posts with it.
+        subjects.setdefault(_title_key(thread.get("subject")), []).append(thread)
 
     def fit(text):
         return text if len(text) <= limit else text[: limit - 1].rstrip() + "\u2026"
@@ -494,17 +511,21 @@ def unique_titles(forums, threads, limit=TITLE_LENGTH_LIMIT):
     )
 
     titles, taken = {}, set()
-    for subject, sharing in subjects.items():
+    for sharing in subjects.values():
         for scheme in schemes:
-            names = [scheme(subject, thread) for thread in sharing]
+            # Each thread's own subject, not the group's: grouping is on a
+            # flattened key now, and building every title in the group from one
+            # spelling would quietly recase somebody's thread.
+            names = [scheme(_subject_of(thread), thread) for thread in sharing]
             if any(name is None for name in names):
                 continue
             names = [fit(name) for name in names]
-            if len(set(names)) == len(names) and not (set(names) & taken):
+            keys = [_title_key(name) for name in names]
+            if len(set(keys)) == len(keys) and not (set(keys) & taken):
                 break
         for thread, name in zip(sharing, names):
             titles[thread.get("tid")] = name
-            taken.add(name)
+            taken.add(_title_key(name))
     return titles
 
 
@@ -647,7 +668,7 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
             continue
 
         for record in report["posts"]:
-            if record["result"] in ("posted", "would post"):
+            if record["result"].startswith(("posted", "would post")):
                 summary["posted"] += 1
             elif record["result"] == "already there":
                 summary["already_there"] += 1

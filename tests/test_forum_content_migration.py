@@ -23,6 +23,7 @@ import pytest
 
 from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_content import (
+    EMPTY_POST,
     LOOSEN,
     PROCEED,
     REFUSE,
@@ -261,6 +262,57 @@ class TestWhatTheArchiveNeedsTheForumToAllow:
         requirements = {r.setting: r for r in plan_site_settings(threads, [])}
 
         assert requirements["title_prettify"].needed == "false"
+
+
+class TestAPostWithNothingInIt:
+    """Discourse measures a stripped body; this used to measure the raw one.
+
+    A post whose converted body is two newlines is two characters here and
+    none there, so the run set min_post_length to 2, sent it, and was told
+    "Body is too short (minimum is 2 characters)" -- a refusal that reads like
+    a contradiction.
+    """
+
+    def test_the_length_that_counts_is_the_stripped_one(self):
+        posts = [{"pid": "1", "tid": "1", "uid": "7", "message": "  \n\n  "}]
+        threads = [{"tid": "1", "subject": "Klausuren", "firstpost": "1"}]
+
+        requirements = {r.setting: r for r in plan_site_settings(threads, posts)}
+
+        assert requirements["min_post_length"].why.endswith("0 characters after conversion")
+
+    def test_but_it_never_asks_for_a_minimum_of_nothing(self):
+        """Nothing is sent empty, so nothing needs a minimum of zero."""
+        posts = [{"pid": "1", "tid": "1", "uid": "7", "message": "  "}]
+        threads = [{"tid": "1", "subject": "Klausuren", "firstpost": "1"}]
+
+        requirements = {r.setting: r for r in plan_site_settings(threads, posts)}
+
+        assert requirements["min_post_length"].needed == 1
+        assert requirements["min_first_post_length"].needed == 1
+
+    def test_it_is_posted_as_a_marked_empty_post(self, app):
+        """Dropping it would take its date and its place in the thread too."""
+        poster = FakePoster()
+        thread = {"tid": "1", "subject": "Klausuren", "firstpost": "1"}
+        posts = [
+            {"pid": "1", "tid": "1", "uid": "7", "dateline": "1490000000",
+             "message": "Hier die Angabe."},
+            {"pid": "2", "tid": "1", "uid": "8", "dateline": "1490000100",
+             "message": "   "},
+        ]
+
+        with app.app_context():
+            report = migrate_thread(
+                poster, thread, posts, {}, {"7": "A_L23", "8": "B_L19"},
+                "/nowhere", 12,
+            )
+
+        assert report["posts"][1]["result"] == "posted: empty on the old board"
+        assert poster.calls[1]["raw"] == EMPTY_POST
+        assert [post["result"] for post in report["posts"]] == [
+            "posted", "posted: empty on the old board",
+        ]
 
 
 class TestAskingTheForumWhatItAllows:
@@ -970,6 +1022,117 @@ class TestBeingToldToWait:
 
     def test_a_refusal_with_no_number_in_it_still_waits(self, app):
         assert ContentPoster._wait_seconds("not json at all") == 30
+
+
+class TestAnAuthorTheForumCallsSomethingElse:
+    """Discourse caps a username at twenty characters and shortens the rest.
+
+    So NiedergrottenthalerR_L12 is not a user on the forum, and posting as them
+    comes back 403 invalid_access -- the same answer a key bound to one user
+    gives, which is what it was read as on the real run. Four files and a post
+    were lost to it.
+    """
+
+    def _forbidden(self):
+        return HTTPError(
+            "https://forum.example.at/posts.json", 403, "Forbidden", {},
+            io.BytesIO(b'{"errors":["invalid_access"],"error_type":"invalid_access"}'),
+        )
+
+    def _poster(self, monkeypatch, answers):
+        def urlopen(request, timeout=None):
+            answer = answers.pop(0)
+            answer_as = request.get_header("Api-username")
+            if isinstance(answer, Exception):
+                raise answer
+            return contextlib.closing(io.BytesIO(
+                json.dumps({**answer, "acted_as": answer_as}).encode()
+            ))
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.urlopen", urlopen
+        )
+        return ContentPoster({
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+        })
+
+    def test_the_post_goes_again_under_the_name_the_forum_has(self, app, monkeypatch):
+        poster = self._poster(monkeypatch, [
+            self._forbidden(), {"id": 7, "topic_id": 3},
+        ])
+        poster.find_author = lambda name: "NiedergrottenthalerR_L"
+
+        with app.app_context():
+            result = poster.create_post(
+                raw="Danke!", as_username="NiedergrottenthalerR_L12",
+                created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+            )
+
+        assert result["id"] == 7
+        assert result["acted_as"] == "NiedergrottenthalerR_L"
+
+    def test_the_forum_is_asked_once_however_many_posts_they_wrote(self, app, monkeypatch):
+        poster = self._poster(monkeypatch, [
+            self._forbidden(), {"id": 7}, self._forbidden(), {"id": 8},
+        ])
+        asked = []
+
+        def find(name):
+            asked.append(name)
+            return "NiedergrottenthalerR_L"
+
+        poster.find_author = find
+        with app.app_context():
+            for _ in range(2):
+                poster.create_post(
+                    raw="Danke!", as_username="NiedergrottenthalerR_L12",
+                    created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+                )
+
+        assert asked == ["NiedergrottenthalerR_L12"]
+
+    def test_a_key_bound_to_one_user_is_still_reported(self, app, monkeypatch):
+        """The other cause of the same 403, and the message must name both."""
+        poster = self._poster(monkeypatch, [self._forbidden()])
+        poster.find_author = lambda name: None
+
+        with app.app_context():
+            with pytest.raises(ForumProviderError) as raised:
+                poster.create_post(
+                    raw="Danke!", as_username="LutzB_L21",
+                    created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+                )
+
+        assert "All Users" in str(raised.value)
+        assert "twenty-character" in str(raised.value)
+
+    def test_a_lookup_that_answers_the_same_name_does_not_loop(self, app, monkeypatch):
+        poster = self._poster(monkeypatch, [self._forbidden()])
+        poster.find_author = lambda name: name
+
+        with app.app_context():
+            with pytest.raises(ForumProviderError):
+                poster.create_post(
+                    raw="Danke!", as_username="LutzB_L21",
+                    created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+                )
+
+    def test_a_lookup_that_breaks_does_not_end_the_run(self, app, monkeypatch):
+        """It is a diagnosis, not the job. Its failure must read as the 403."""
+        poster = self._poster(monkeypatch, [self._forbidden()])
+
+        def explode(name):
+            raise RuntimeError("the database is asleep")
+
+        poster.find_author = explode
+        with app.app_context():
+            with pytest.raises(ForumProviderError):
+                poster.create_post(
+                    raw="Danke!", as_username="LutzB_L21",
+                    created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+                )
 
 
 class TestAJournalThatHasDoneItsJob:

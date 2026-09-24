@@ -1050,6 +1050,42 @@ class TestTitlesThatCannotBothBeKlausuren:
 
         assert len(set(titles.values())) == len(titles)
 
+    def test_two_subjects_that_differ_only_in_case_are_told_apart(self):
+        """Discourse compares titles without regard to case. This did not.
+
+        "english meeting" and "English Meeting" were two groups here and one
+        title there, so neither was ever disambiguated, and the second thread
+        was refused on the real run -- taking its posts with it.
+        """
+        forums, threads = self.board()
+        threads[0]["subject"] = "english meeting"
+        threads[1]["subject"] = "English Meeting"
+
+        titles = unique_titles(forums, threads)
+
+        assert titles["1"] != titles["2"]
+        assert titles["1"].lower() != titles["2"].lower()
+
+    def test_neither_of_them_is_recased(self):
+        """The archive keeps what people typed, lower case included."""
+        forums, threads = self.board()
+        threads[0]["subject"] = "english meeting"
+        threads[1]["subject"] = "English Meeting"
+
+        titles = unique_titles(forums, threads)
+
+        assert titles["1"].startswith("english meeting")
+        assert titles["2"].startswith("English Meeting")
+
+    def test_spacing_alone_does_not_make_a_title_distinct(self):
+        forums, threads = self.board()
+        threads[0]["subject"] = "Klausuren  LAV16"
+        threads[1]["subject"] = "Klausuren LAV16"
+
+        titles = unique_titles(forums, threads)
+
+        assert " ".join(titles["1"].split()).lower() != " ".join(titles["2"].split()).lower()
+
     def test_a_title_stays_within_what_discourse_accepts(self):
         forums, threads = self.board()
         for thread in threads[:2]:

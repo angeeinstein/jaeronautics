@@ -528,6 +528,35 @@ the same thing: waiting needs a file, failed needs a look.
 good and words worth having anyway. It is not a way to save disk: those files
 can never be added afterwards.
 
+### Cloudflare's 100 MB, which nginx cannot help with
+
+Eight of this board's attachments come back as `413 Payload Too Large` with
+`<center>cloudflare</center>` in the body. That is not Discourse and not the
+container's nginx: **Cloudflare's free and Pro plans cap a request body at
+100 MB**, and they answer before anything of ours is reached. Raising
+`client_max_body_size` and `max_attachment_size_kb` changes nothing, because
+neither of them ever sees the request.
+
+The files are zipped CAD models, a scanned Maschinenbau reference and similar —
+the largest is 166 MB. Three ways out, in the order I would try them:
+
+1. **Send those few by hand, through the browser.** Discourse's own uploader
+   goes through Cloudflare too, so this only helps if the browser is inside the
+   network and talks to the origin directly.
+2. **Take Cloudflare out of the path for the import.** Set the DNS record for
+   the forum to *DNS only* (grey cloud) for the duration, or point the portal at
+   the origin with a `hosts` entry. Both need the origin to serve a certificate
+   the portal will trust on its own — check before relying on it, because a
+   Cloudflare Origin certificate is not publicly trusted and the portal will
+   refuse it.
+3. **Accept the loss and say so.** Eight files out of 2,347, none of them exam
+   papers. The import names each one, so the list is the record of what is not
+   there.
+
+Whichever it is, decide it deliberately: the run reports these as `waiting`,
+which means it will try them again on the next run and fail again in exactly
+the same way.
+
 ### The webserver in front of Discourse
 
 On the standard Docker install the limit lives inside the container, at

@@ -47,6 +47,12 @@ BOARD_TIMEZONE = "Europe/Vienna"
 # the settings go back at the end of the run and there is no way to ask for a
 # re-run of only what failed.
 RATE_LIMIT_RETRIES = 5
+
+# What stands in for a post that had nothing in it on the old board. Discourse
+# will not store an empty body, and leaving the post out would take its date
+# and its place in the conversation with it -- a reply to it would then answer
+# nothing. Said plainly, in the archive's own terms.
+EMPTY_POST = "*(This post was empty on the old forum.)*"
 RATE_LIMIT_FALLBACK_WAIT = 30   # when Discourse does not say how long
 RATE_LIMIT_MAX_WAIT = 300       # past which something else is wrong
 
@@ -175,6 +181,48 @@ class ContentPoster:
         #: What this forum will and will not accept is described in there, and
         #: guessing at it instead has now cost two runs.
         self.last_settings_rows = []
+        #: Given the name the old board used, what this forum calls that person
+        #: -- or None. Set by the caller, which is the part that knows how the
+        #: two are tied together. Left unset, a name the forum does not have is
+        #: simply reported, as it was before.
+        self.find_author = None
+        self._known_names = {}
+
+    def _known_by(self, username):
+        """What this forum calls the person the old board called ``username``.
+
+        Asked only when a post has already been refused, so it costs nothing on
+        a board whose names all fit -- and on this one it is four lookups
+        against fourteen hundred posts.
+        """
+        if username in self._known_names:
+            return self._known_names[username]
+        found = None
+        if self.find_author is not None:
+            try:
+                found = self.find_author(username)
+            except Exception as exc:  # noqa: BLE001 -- a lookup must not end a run
+                current_app.logger.warning(
+                    "Could not look up %s on the forum: %s", username, exc
+                )
+        self._known_names[username] = found
+        if found and found != username:
+            current_app.logger.info(
+                "The forum knows %s as %s", username, found
+            )
+        return found
+
+    def username_for_external_id(self, external_id):
+        """The forum's own name for the account carrying this external id.
+
+        The portal's user id is what every imported profile was published under,
+        so it is the one handle that survives Discourse rewriting a username.
+        """
+        payload = self._call(
+            "GET", f"/u/by-external/{quote(str(external_id))}.json"
+        )
+        user = payload.get("user") if isinstance(payload, dict) else None
+        return (user or {}).get("username")
 
     def _key_complaint(self):
         """Whether the key is the wrong shape, said plainly. None if it is fine.
@@ -222,17 +270,32 @@ class ContentPoster:
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")
             if exc.code == 403 and "invalid_access" in detail and as_username:
-                # Discourse keys carry a user level. One bound to a single user
-                # works perfectly for every admin call -- they all act as that
-                # user -- and fails the moment it is asked to act as somebody
-                # else, which is the whole of this job.
+                # Two very different things arrive here as the same 403.
+                #
+                # The key may be bound to a single user, in which case every
+                # admin call works -- they all act as that user -- and the first
+                # attempt to act as somebody else fails.
+                #
+                # Or the name may simply not be a user on this forum. Discourse
+                # caps a username at twenty characters and adjusts anything
+                # longer when it creates the account, so the board's
+                # NiedergrottenthalerR_L12 is somebody else there, and asking to
+                # post as the old name is asking for a stranger.
+                fixed = self._known_by(as_username)
+                if fixed and fixed != as_username:
+                    return self._call(
+                        method, path, as_username=fixed, json_body=json_body,
+                        body=body, content_type=content_type,
+                        rate_limit_retries=rate_limit_retries,
+                    )
                 raise ForumProviderError(
                     f"Discourse will not let this API key act as {as_username}. "
-                    "Posting on people's behalf needs a key whose user level is "
-                    "'All Users' (Admin -> API -> Keys). Make one for the "
-                    "migration, pass it as --api-key or in "
-                    "DISCOURSE_MIGRATION_API_KEY, and revoke it afterwards -- a "
-                    "key that can act as anybody should not outlive the job."
+                    f"Either the key is bound to one user -- posting on people's "
+                    f"behalf needs one whose user level is 'All Users' (Admin -> "
+                    f"API -> Keys), and revoke it afterwards -- or there is "
+                    f"nobody of that name on the forum, which is what happens to "
+                    f"a username past Discourse's twenty-character limit: the "
+                    f"account exists under a name it shortened."
                 ) from exc
             if exc.code == 429 and rate_limit_retries > 0:
                 # Discourse says exactly how long to wait, so waiting is the
@@ -587,15 +650,25 @@ def plan_site_settings(threads, posts, attachments=()):
             f"meaningful",
         ))
 
-    lengths = [len(body) for body in bodies.values()]
+    # Stripped, because Discourse strips before it measures. A post whose
+    # converted body is two newlines is two characters here and none there,
+    # which is how a run with min_post_length set to 2 was still told "Body is
+    # too short (minimum is 2 characters)".
+    lengths = [len(body.strip()) for body in bodies.values()]
     if lengths:
         requirements.append(Requirement(
-            "max_post_length", max(lengths), AT_LEAST,
-            f"the longest post on the board is {max(lengths)} characters "
+            "max_post_length", max(len(body) for body in bodies.values()), AT_LEAST,
+            f"the longest post on the board is "
+            f"{max(len(body) for body in bodies.values())} characters "
             f"after conversion",
         ))
+        # Floored at one: a post with nothing in it is sent as EMPTY_POST
+        # rather than as nothing, so the forum is never asked to accept an
+        # empty body -- and asking Discourse for a minimum of zero is asking
+        # for something it does not offer.
+        shortest = max(min(lengths), 1)
         requirements.append(Requirement(
-            "min_post_length", min(lengths), AT_MOST,
+            "min_post_length", shortest, AT_MOST,
             f"the shortest post on the board is {min(lengths)} characters "
             f"after conversion",
         ))
@@ -607,10 +680,11 @@ def plan_site_settings(threads, posts, attachments=()):
         ))
 
     opening_pids = {thread.get("firstpost") for thread in threads}
-    opening = [len(body) for pid, body in bodies.items() if pid in opening_pids]
+    opening = [len(body.strip()) for pid, body in bodies.items()
+               if pid in opening_pids]
     if opening:
         requirements.append(Requirement(
-            "min_first_post_length", min(opening), AT_MOST,
+            "min_first_post_length", max(min(opening), 1), AT_MOST,
             f"the shortest thread-opening post is {min(opening)} characters",
         ))
 
@@ -1297,6 +1371,15 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             # MyBB simply listed them under the post.
             body = f"{body}\n\n{chr(10).join(links)}" if body else "\n".join(links)
 
+        was_empty = not body.strip()
+        if was_empty:
+            # Discourse will not store a post with nothing in it, and the old
+            # board did: a handful are whitespace, or BBCode that converts to
+            # nothing at all. Dropping them would take their date and their
+            # place in the thread with them, so they are marked rather than
+            # lost, and the marker says what it is.
+            body = EMPTY_POST
+
         # An inline [attachment=N] is rare (145 across the whole board) and is
         # left as-is rather than guessed at, so it shows up when read.
         if dry_run:
@@ -1330,7 +1413,7 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
                 )
             continue
 
-        record["result"] = "posted"
+        record["result"] = "posted: empty on the old board" if was_empty else "posted"
         record["post_id"] = created.get("id")
         # What Discourse actually stored, read back rather than assumed.
         record["recorded"] = created.get("created_at")
