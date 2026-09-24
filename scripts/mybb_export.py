@@ -37,16 +37,69 @@ from zoneinfo import ZoneInfo
 DEFAULT_TIMEZONE = "Europe/Vienna"
 
 
-def read_dump(path):
+# What mysqldump says the dump is in, near the top of every file it writes:
+#     /*!40101 SET NAMES utf8mb4 */;
+# Worth reading rather than guessing at. MySQL's "latin1" is really cp1252 --
+# it has the curly quotes and the dashes at 0x80-0x9F that ISO-8859-1 leaves
+# undefined, and a board full of pasted Word text is full of exactly those.
+CHARSET_DECLARATION = re.compile(rb"SET NAMES\s+([A-Za-z0-9_]+)")
+MYSQL_CHARSETS = {
+    "utf8": "utf-8", "utf8mb3": "utf-8", "utf8mb4": "utf-8",
+    "latin1": "cp1252", "cp1252": "cp1252", "ascii": "utf-8",
+}
+
+
+def decode_dump(raw):
+    """``(text, how it was read)``, never silently damaged.
+
+    Reading a dump with errors="replace" is how every umlaut on a German board
+    becomes U+FFFD without anything saying so: Prüfungen arrives as Pr�fungen,
+    in 1,500 posts, and the import reports success. So the declared charset is
+    tried first, then the two that a MyBB board is ever actually in, and only
+    if none of them can read the file is anything replaced -- loudly, with a
+    count.
+    """
+    declared = CHARSET_DECLARATION.search(raw[:4096])
+    candidates = []
+    if declared:
+        named = declared.group(1).decode("ascii", "replace").lower()
+        candidates.append((MYSQL_CHARSETS.get(named, named), f"{named} (as the dump declares)"))
+    candidates.extend([("utf-8", "UTF-8"), ("cp1252", "cp1252, which MySQL calls latin1")])
+
+    for encoding, description in candidates:
+        try:
+            text = raw.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+        # cp1252 has an opinion about almost every byte, so it would happily
+        # turn a UTF-16 dump into mojibake and report success. No mysqldump
+        # contains a NUL; a decoding that produces them is the wrong one.
+        if "\x00" in text:
+            continue
+        return text, description
+
+    text = raw.decode("utf-8", errors="replace")
+    return text, (
+        f"UTF-8 with {text.count(chr(0xFFFD))} characters it could not read "
+        f"replaced -- the dump is in some other encoding and this will have "
+        f"damaged it"
+    )
+
+
+def read_dump(path, on_note=None):
     path = Path(path)
     if not path.exists():
         raise SystemExit(f"No such file: {path}")
     opener = gzip.open if path.suffix == ".gz" else open
     try:
-        with opener(path, "rt", encoding="utf-8", errors="replace") as handle:
-            return handle.read()
+        with opener(path, "rb") as handle:
+            raw = handle.read()
     except gzip.BadGzipFile:
         raise SystemExit(f"{path} is named .gz but is not gzipped.") from None
+    text, description = decode_dump(raw)
+    if on_note is not None:
+        on_note(description)
+    return text
 
 
 # Tables MyBB itself always has. A plugin can add its own `..._users` table --

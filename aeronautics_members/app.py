@@ -1802,7 +1802,10 @@ def create_app(config_overrides=None):
         sys.path.insert(0, str(_Path(app.root_path).parent / "scripts"))
         from mybb_export import find_prefix, find_table, read_dump, rows_of  # noqa: E402
 
-        dump = read_dump(dump_file)
+        # How it was read is printed, because reading it wrongly is silent and
+        # ruinous: a latin1 board read as UTF-8 loses every umlaut in every
+        # post, and the import then reports a clean run.
+        dump = read_dump(dump_file, on_note=lambda note: click.echo(f"Dump read as {note}."))
         # With the prefix, so "users" cannot match mybb_tapatalk_users -- a
         # plugin table with no uid column, which silently made every post
         # anonymous rather than failing.

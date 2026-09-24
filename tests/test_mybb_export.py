@@ -423,3 +423,55 @@ def test_a_file_only_named_gz_says_so(tmp_path):
         mybb_export.read_dump(path)
 
     assert "not gzipped" in str(excinfo.value)
+
+
+class TestReadingTheDumpInTheEncodingItIsActuallyIn:
+    """A German board read as the wrong thing loses every umlaut, silently.
+
+    The reader used errors="replace", so "Prüfungen" arrived as "Pr�fungen"
+    -- in every post, in every title -- and every count still added up. Nothing
+    in a clean-looking run would ever have said so.
+    """
+
+    def test_it_believes_what_the_dump_declares(self):
+        raw = "/*!40101 SET NAMES latin1 */;\n'Übungsbeispiele'".encode("cp1252")
+
+        text, how = mybb_export.decode_dump(raw)
+
+        assert "Übungsbeispiele" in text
+        assert "latin1" in how
+
+    def test_utf8_is_read_as_utf8(self):
+        raw = "/*!40101 SET NAMES utf8mb4 */;\n'Prüfungen'".encode("utf-8")
+
+        text, how = mybb_export.decode_dump(raw)
+
+        assert "Prüfungen" in text
+        assert "utf8mb4" in how
+
+    def test_a_dump_that_declares_nothing_is_still_read(self):
+        """MySQL's latin1 is cp1252: the curly quotes matter on a board."""
+        raw = "Prüfungen „Zitat“".encode("cp1252")
+
+        text, how = mybb_export.decode_dump(raw)
+
+        assert text == "Prüfungen „Zitat“"
+        assert "cp1252" in how
+
+    def test_something_unreadable_says_how_much_it_lost(self):
+        """cp1252 would read UTF-16 as mojibake and call it a success."""
+        raw = "SET NAMES utf8; 'Prüfungen'".encode("utf-16")
+
+        text, how = mybb_export.decode_dump(raw)
+
+        assert "damaged" in how
+        assert "�" in text
+
+    def test_how_it_was_read_is_reported_to_the_caller(self, tmp_path):
+        dump = tmp_path / "backup.sql"
+        dump.write_bytes("/*!40101 SET NAMES utf8mb4 */;\n".encode("utf-8"))
+        said = []
+
+        mybb_export.read_dump(dump, on_note=said.append)
+
+        assert said and "utf8mb4" in said[0]

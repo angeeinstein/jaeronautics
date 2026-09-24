@@ -371,7 +371,14 @@ class ContentPoster:
         )
 
         parts = []
-        for name, value in (("type", "composer"), ("synchronous", "true")):
+        # Both names for the same thing. Discourse deprecated "type" in 3.4 and
+        # removes it in 3.5 -- its own log says so on every upload this makes --
+        # and versions before 3.4 do not know "upload_type". Sending both means
+        # the import does not stop working on an upgrade, and does not need a
+        # version check to decide.
+        for name, value in (("type", "composer"),
+                            ("upload_type", "composer"),
+                            ("synchronous", "true")):
             parts.append(
                 f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'
                 .encode()

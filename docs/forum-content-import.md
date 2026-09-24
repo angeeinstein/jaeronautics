@@ -528,6 +528,27 @@ the same thing: waiting needs a file, failed needs a look.
 good and words worth having anyway. It is not a way to save disk: those files
 can never be added afterwards.
 
+### Check the umlauts, early
+
+Every command that reads the dump now prints how it read it:
+
+    Dump read as utf8mb4 (as the dump declares).
+
+The reader used to decode as UTF-8 with `errors="replace"`, which on a latin1
+board turns every `ü` into `U+FFFD` — in every post and every title — while
+every count still adds up and the run reports success. A German board is the
+worst possible place for that to be silent.
+
+It now believes the charset mysqldump writes at the top of the file
+(`SET NAMES utf8mb4`), falls back to UTF-8 and then to cp1252 (which is what
+MySQL means by "latin1", curly quotes included), and only replaces characters
+if none of those can read the file — saying how many it lost when it does.
+
+**Look at a topic on the new forum before trusting a run**: one with an umlaut
+in the title. `Übungsbeispiele` is right; `�bungsbeispiele` means the archive
+needs importing again. The terminal is not evidence either way — a console that
+cannot draw `ü` prints something else for it regardless.
+
 ### A post the forum counts as empty although it is not
 
 `:f16:` is five characters, and Discourse counted none of them: it removes
