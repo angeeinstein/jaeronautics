@@ -1063,3 +1063,45 @@ class TestPicturesAreSizedByADifferentRule:
         }
 
         assert "max_image_size_kb" not in requirements
+
+
+class TestWhenTheForumIsSimplyNotRunning:
+    """A 502 is not a permissions problem, and should not read like one."""
+
+    def a_poster(self, code, key="d" * 64):
+        class Poster(ContentPoster):
+            def _call(self, method, path, **kwargs):
+                raise ForumProviderError(f"{method} {path} failed ({code}): down")
+
+        return Poster({
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": key,
+            "discourse_api_username": "system",
+        })
+
+    def test_it_blames_the_forum_rather_than_the_api_user(self):
+        with pytest.raises(ForumProviderError) as raised:
+            self.a_poster(502).site_settings()
+
+        said = str(raised.value)
+        assert "not running" in said
+        assert "not an administrator" not in said
+
+    def test_it_mentions_the_rebuild_that_asks_to_be_run_twice(self):
+        """Which is what a Discourse upgrade leaves behind, mid-flight."""
+        with pytest.raises(ForumProviderError) as raised:
+            self.a_poster(503).site_settings()
+
+        assert "second time" in str(raised.value)
+
+    def test_a_truncated_key_is_still_blamed_on_a_404(self):
+        with pytest.raises(ForumProviderError) as raised:
+            self.a_poster(404, key="short").site_settings()
+
+        assert "truncated" in str(raised.value)
+
+    def test_and_a_good_key_on_a_404_still_points_at_admin_rights(self):
+        with pytest.raises(ForumProviderError) as raised:
+            self.a_poster(404).site_settings()
+
+        assert "not an administrator" in str(raised.value)

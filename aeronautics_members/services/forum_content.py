@@ -360,6 +360,22 @@ class ContentPoster:
             }
 
         complaint = self._key_complaint()
+        codes = {int(found) for found in re.findall(r"failed \((\d{3})\)", " ".join(attempts))}
+
+        # A bad key and a forum that is not running look nothing alike, and
+        # telling somebody their API user is not an administrator when the
+        # forum answered 502 sends them looking in the wrong place. So the
+        # advice follows what actually came back.
+        if codes and not codes & {401, 403, 404}:
+            raise ForumProviderError(
+                f"The forum did not answer properly on any known settings path "
+                f"(HTTP {', '.join(str(code) for code in sorted(codes))}). "
+                f"That is the forum itself rather than this key or its "
+                f"permissions -- a 502 usually means Discourse is not running, "
+                f"which after ./launcher rebuild often means the rebuild asked "
+                f"to be run a second time and has not been. Tried:\n  "
+                + "\n  ".join(attempts)
+            )
         if complaint:
             raise ForumProviderError(
                 f"Could not read the forum's settings, and {complaint}. "
