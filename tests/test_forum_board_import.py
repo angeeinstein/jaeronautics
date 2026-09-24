@@ -856,3 +856,82 @@ class TestDecidingWhereEachOldForumGoes:
     def test_a_numbered_course_is_not_merged_with_its_sequel(self):
         """"Mechanik 1" and "Mechanik 2" are two lectures, not one."""
         assert _sortable("03-06 Mechanik 1") != _sortable("03-09 Mechanik 2")
+
+
+class TestAFileTheForumWillNotTake:
+    """nginx refused three archives as too large, and the posts went anyway."""
+
+    def a_board_with_a_big_file(self, tmp_path):
+        board = a_board()
+        board["attachments"] = [
+            {"pid": "100", "attachname": "201703/big.attach",
+             "filename": "Leichtbau_LAV11.rar", "filesize": "10"},
+        ]
+        here = tmp_path / "uploads" / "201703"
+        here.mkdir(parents=True)
+        (here / "big.attach").write_bytes(b"x" * 10)
+        return board
+
+    def a_forum_that_refuses_uploads(self):
+        poster = BoardPoster()
+
+        def upload(path, as_username, filename=None, content_type=None):
+            raise ForumProviderError(
+                "POST /uploads.json failed (413): 413 Request Entity Too Large"
+            )
+
+        poster.upload = upload
+        return poster
+
+    def test_the_post_waits_rather_than_going_without_the_file(self, app, tmp_path):
+        board = self.a_board_with_a_big_file(tmp_path)
+        poster = self.a_forum_that_refuses_uploads()
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, board, tmp_path / "uploads", Ledger(tmp_path / "l.jsonl"),
+            )
+
+        assert poster.calls == []
+        assert summary["waiting"] == 2
+        assert summary["posted"] == 0
+
+    def test_nothing_is_written_down_about_it(self, app, tmp_path):
+        """So raising the limit and running again picks it up."""
+        path = tmp_path / "l.jsonl"
+        board = self.a_board_with_a_big_file(tmp_path)
+
+        with app.app_context():
+            migrate_board(self.a_forum_that_refuses_uploads(), board,
+                          tmp_path / "uploads", Ledger(path))
+            poster = BoardPoster()
+            summary = migrate_board(poster, board, tmp_path / "uploads",
+                                    Ledger(path))
+
+        assert summary["posted"] == 2
+        assert summary["waiting"] == 0
+
+    def test_the_reason_says_the_forum_refused_it(self, app, tmp_path):
+        """Not the same as a file that is not here, and fixed differently."""
+        board = self.a_board_with_a_big_file(tmp_path)
+
+        with app.app_context():
+            summary = migrate_board(
+                self.a_forum_that_refuses_uploads(), board,
+                tmp_path / "uploads", Ledger(tmp_path / "l.jsonl"),
+            )
+
+        assert any("413" in problem for problem in summary["problems"])
+        assert any("would not take" in problem for problem in summary["problems"])
+
+    def test_it_can_still_be_told_to_post_without_them(self, app, tmp_path):
+        board = self.a_board_with_a_big_file(tmp_path)
+        poster = self.a_forum_that_refuses_uploads()
+
+        with app.app_context():
+            summary = migrate_board(
+                poster, board, tmp_path / "uploads", Ledger(tmp_path / "l.jsonl"),
+                require_attachments=False,
+            )
+
+        assert summary["posted"] == 2

@@ -465,6 +465,29 @@ the same thing: waiting needs a file, failed needs a look.
 good and words worth having anyway. It is not a way to save disk: those files
 can never be added afterwards.
 
+### The webserver in front of Discourse
+
+`max_attachment_size_kb` is only half the limit. The webserver answers first,
+and its refusal looks nothing like Discourse's:
+
+    POST /uploads.json failed (413): 413 Request Entity Too Large
+    ...<center>nginx</center>
+
+**190 of the 2,347 attachments are over 10 MB**, which is nginx's usual
+default, and 32 are over 50 MB. So this is not a handful.
+
+Raise `client_max_body_size` in the nginx in front of Discourse to something
+above the largest file — 200m covers the 166 MB one. Where that setting lives
+depends on how Discourse was installed; on the standard Docker install it is a
+template change followed by a rebuild, not a file you edit in place, because
+the container's nginx config is regenerated.
+
+A post carrying a file the forum refuses **waits**, exactly as one whose file
+is not on the machine does. Nothing about it is written down, so raising the
+limit and running the same command again picks it up. The first time this
+happened the posts went out without their archives and were recorded as done,
+which is how a file stops existing quietly.
+
 ## 10. Checking a file the new forum shows oddly
 
 Every upload is on disk as `post_<pid>_<time>_<hash>.attach`: the original

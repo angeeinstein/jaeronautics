@@ -1018,8 +1018,9 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
     thread carries on from where a previous run stopped. Without one, running
     this twice posts the thread twice.
 
-    ``require_attachments`` makes a post whose files are not on this machine
-    wait for a later run rather than arrive without them. It is the default
+    ``require_attachments`` makes a post whose files are not on this machine,
+    or which the forum will not accept, wait for a later run rather than
+    arrive without them. It is the default
     because the alternative loses them silently: a post written down as done
     is never revisited, and the one thing nobody thinks to check is a post
     that looks complete. Turning it off is for a run where the files are known
@@ -1121,6 +1122,7 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
         # Attachments first: a post referring to an upload has to be written
         # after the upload exists.
         links = []
+        refused = []
         for attachment in attachments:
             source = uploads_dir / (attachment.get("attachname") or "")
             # Stripped: one real filename on the board begins with two spaces,
@@ -1142,10 +1144,30 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
                     content_type=attachment.get("filetype") or None,
                 )
             except ForumProviderError as exc:
+                refused.append(original)
                 report["problems"].append(f"pid={post.get('pid')} {original}: {exc}")
                 continue
             links.append(_attachment_markdown(upload, original))
             record["attachments"] += 1
+
+        # A file the forum would not take is the same loss as a file that was
+        # never here, and it arrives looking less like one. The first time this
+        # happened -- nginx refusing three archives as too large -- the posts
+        # went out without them and were written down as done, which is how a
+        # file stops existing quietly.
+        if refused and require_attachments:
+            record["result"] = (
+                f"waiting: the forum refused {len(refused)} of "
+                f"{len(attachments)} files"
+            )
+            if report["topic_id"] is None:
+                no_topic = True
+                report["problems"].append(
+                    "The thread's opening post carries a file the forum would "
+                    "not take, so the thread was left for a later run rather "
+                    "than started without it."
+                )
+            continue
 
         if links:
             # Appended, because 94% of these were never referenced in the text:
