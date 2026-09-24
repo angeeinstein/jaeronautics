@@ -456,6 +456,27 @@ EQUALS = "equals"        # a switch
 INCLUDES = "includes"    # a comma-separated list that must contain these
 
 
+def _longest_run(posts):
+    """The most posts one person made in a row in any one thread.
+
+    Not the same as the most they made in it altogether, and Discourse counts
+    them separately: max_consecutive_replies stops the fourth in a row at its
+    default of three, however few the author has posted in the thread.
+    """
+    longest = 0
+    by_thread = {}
+    for post in posts:
+        by_thread.setdefault(post.get("tid"), []).append(post)
+    for in_thread in by_thread.values():
+        in_thread.sort(key=lambda row: int(row.get("dateline") or 0))
+        run, previous = 0, object()
+        for post in in_thread:
+            run = run + 1 if post.get("uid") == previous else 1
+            previous = post.get("uid")
+            longest = max(longest, run)
+    return longest
+
+
 def _post_bodies(posts):
     return {post.get("pid"): bbcode_to_markdown(post.get("message")) for post in posts}
 
@@ -526,6 +547,25 @@ def plan_site_settings(threads, posts, attachments=()):
             blocks=False,
         ))
 
+        requirements.append(Requirement(
+            "max_topic_title_length", max(len(title) for title in titles),
+            AT_LEAST,
+            f"the longest thread subject is "
+            f"{max(len(title) for title in titles)} characters",
+        ))
+
+        # German runs words together, and Discourse has a limit on how long
+        # one word in a title may be. "Weisswurstfruehstueck" is ordinary here.
+        longest_word = max(
+            (len(word) for title in titles for word in title.split()), default=0
+        )
+        if longest_word:
+            requirements.append(Requirement(
+                "title_max_word_length", longest_word, AT_LEAST,
+                f"the longest single word in any subject is {longest_word} "
+                f"characters, which German subjects reach without trying",
+            ))
+
         plainest = min(_entropy(title) for title in titles)
         requirements.append(Requirement(
             "title_min_entropy", plainest, AT_MOST,
@@ -536,6 +576,11 @@ def plan_site_settings(threads, posts, attachments=()):
 
     lengths = [len(body) for body in bodies.values()]
     if lengths:
+        requirements.append(Requirement(
+            "max_post_length", max(lengths), AT_LEAST,
+            f"the longest post on the board is {max(lengths)} characters "
+            f"after conversion",
+        ))
         requirements.append(Requirement(
             "min_post_length", min(lengths), AT_MOST,
             f"the shortest post on the board is {min(lengths)} characters "
@@ -578,6 +623,19 @@ def plan_site_settings(threads, posts, attachments=()):
             requirements.append(Requirement(
                 "newuser_max_replies_per_topic", most_in_one - 1, AT_LEAST,
                 f"one person replied {most_in_one - 1} times in a single thread",
+            ))
+
+        # Replies in a row, which is a different count from replies in total
+        # and has its own limit. Somebody posting four exam papers one after
+        # another is the ordinary way this board was used, and at the default
+        # of three the fourth is refused.
+        in_a_row = _longest_run(posts)
+        if in_a_row > 1:
+            requirements.append(Requirement(
+                "max_consecutive_replies", in_a_row, AT_LEAST,
+                f"somebody posted {in_a_row} times in a row in one thread, "
+                f"which is counted separately from how many times they posted "
+                f"in it altogether",
             ))
 
         opened = Counter(

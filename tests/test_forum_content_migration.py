@@ -1105,3 +1105,60 @@ class TestWhenTheForumIsSimplyNotRunning:
             self.a_poster(404).site_settings()
 
         assert "not an administrator" in str(raised.value)
+
+
+class TestLimitsThatWereInTheListAllAlong:
+    """Read off the forum's own settings rather than thought of."""
+
+    def a_thread(self, uids):
+        return [
+            {"pid": str(n), "tid": "5", "uid": uid, "dateline": str(1000 + n),
+             "message": "Angabe"}
+            for n, uid in enumerate(uids)
+        ]
+
+    def test_replies_in_a_row_are_counted_apart_from_replies_in_total(self):
+        """Four exam papers posted one after another is how this board was used."""
+        posts = self.a_thread(["7", "7", "7", "7", "8", "7"])
+        requirements = {r.setting: r for r in plan_site_settings([], posts)}
+
+        assert requirements["max_consecutive_replies"].needed == 4
+        # Seven posted five times altogether, but only four in a row.
+        assert requirements["newuser_max_replies_per_topic"].needed == 4
+
+    def test_a_run_does_not_carry_across_threads(self):
+        posts = self.a_thread(["7", "7"]) + [
+            {"pid": "9", "tid": "6", "uid": "7", "dateline": "1", "message": "x"}
+        ]
+        requirements = {r.setting: r for r in plan_site_settings([], posts)}
+
+        assert requirements["max_consecutive_replies"].needed == 2
+
+    def test_a_conversation_that_alternates_needs_nothing_raised(self):
+        posts = self.a_thread(["7", "8", "7", "8"])
+        requirements = {r.setting: r for r in plan_site_settings([], posts)}
+
+        assert "max_consecutive_replies" not in requirements
+
+    def test_the_longest_post_has_to_fit(self):
+        posts = [a_post("1", message="x" * 40000)]
+        requirements = {r.setting: r for r in plan_site_settings([], posts)}
+
+        assert requirements["max_post_length"].needed == 40000
+        assert requirements["max_post_length"].compare == "at_least"
+
+    def test_a_long_german_word_in_a_title_has_its_own_limit(self):
+        """Discourse caps one word in a title, and German runs words together."""
+        threads = [{"tid": "1", "firstpost": "1",
+                    "subject": "Ueberflieger Weisswurstfruehstueck"}]
+        requirements = {r.setting: r for r in plan_site_settings(threads, [])}
+
+        assert requirements["title_max_word_length"].needed == len(
+            "Weisswurstfruehstueck"
+        )
+
+    def test_the_longest_subject_has_to_fit_too(self):
+        threads = [{"tid": "1", "firstpost": "1", "subject": "K" * 300}]
+        requirements = {r.setting: r for r in plan_site_settings(threads, [])}
+
+        assert requirements["max_topic_title_length"].needed == 300
