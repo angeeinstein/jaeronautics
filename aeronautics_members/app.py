@@ -260,6 +260,7 @@ from .services.forum_content import (  # noqa: E402
     LOOSEN,
     REFUSE,
     ContentPoster,
+    bbcode_to_markdown,
     check_site_settings,
     dates_survived,
     loosen_site_settings,
@@ -2018,6 +2019,52 @@ def create_app(config_overrides=None):
             click.echo(f"  on disk:  {row.get('attachname')}")
             click.echo(f"  name:     {row.get('filename')}")
         click.echo(f"\n{len(rows)} attachments.")
+
+    @app.cli.command("inspect-forum-post")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--pid", required=True, help="The old board's post id.")
+    @with_appcontext
+    def inspect_forum_post_command(dump_file, pid):
+        """One post, as it is on the old board and as it would be sent.
+
+        For when the forum refuses a post and its reason does not match what
+        the archive appears to contain -- "Body is too short (minimum is 2
+        characters)" against a post that plainly has more than two. Guessing at
+        that twice is what this exists to stop: here is the message, its
+        conversion, and every length either end could be counting.
+        """
+        tables = _load_mybb_dump(dump_file)
+        post = next(
+            (row for row in tables["posts"] if str(row.get("pid")) == str(pid)), None
+        )
+        if post is None:
+            raise click.ClickException(f"There is no post {pid} in that dump.")
+
+        raw = post.get("message") or ""
+        body = bbcode_to_markdown(raw)
+        thread = next(
+            (row for row in tables["threads"] if row.get("tid") == post.get("tid")), None
+        )
+        author = next(
+            (row for row in tables["users"] if row.get("uid") == post.get("uid")), None
+        )
+        files = [row for row in tables["attachments"] if row.get("pid") == str(pid)]
+
+        click.echo(f"pid {pid}  tid {post.get('tid')}  uid {post.get('uid')}"
+                   f"  ({(author or {}).get('username') or 'no longer in the users table'})")
+        if thread:
+            click.echo(f"thread: {thread.get('subject')}"
+                       f"{'  (this is its opening post)' if thread.get('firstpost') == str(pid) else ''}")
+        click.echo(f"files:  {len(files)}")
+        click.echo(f"\nAs the old board holds it ({len(raw)} characters):")
+        click.echo(repr(raw))
+        click.echo(f"\nAs it would be sent ({len(body)} characters, "
+                   f"{len(body.strip())} stripped, {len(set(body))} distinct):")
+        click.echo(repr(body))
+        if not body.strip():
+            click.echo(click.style(
+                "\nNothing at all after conversion: this is sent as a marked "
+                "empty post.", fg="cyan"))
 
     @app.cli.command("check-forum-settings")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))

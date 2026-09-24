@@ -163,6 +163,24 @@ class TestTheCommandsCanBeRun:
         assert result.exit_code == 0, result.output
         assert "Everything is here" in result.output
 
+    def test_inspecting_a_post_shows_both_versions_of_it(self, app, dump):
+        """Because "Body is too short" against a post that is not is a guess."""
+        with app.app_context():
+            result = run(app, "inspect-forum-post", [str(dump), "--pid", "1"])
+
+        assert result.exit_code == 0, result.output
+        assert "Hier die Angabe." in result.output
+        assert "HoferT_M13" in result.output
+        assert "opening post" in result.output
+
+    def test_inspecting_a_post_that_is_not_there_says_so(self, app, dump):
+        with app.app_context():
+            result = CliRunner().invoke(
+                app.cli.commands["inspect-forum-post"], [str(dump), "--pid", "9999"]
+            )
+
+        assert result.exit_code != 0
+
     def test_inspecting_attachments_prints_the_recorded_name(self, app, dump):
         with app.app_context():
             result = run(app, "inspect-forum-attachments", [str(dump)])
@@ -224,7 +242,7 @@ class TestTheCommandsCanBeRun:
         "forum-category-worksheet", "check-forum-uploads", "check-forum-settings",
         "inspect-forum-attachments", "import-forum-content", "migrate-forum-thread",
         "restore-forum-settings", "dump-forum-settings", "publish-forum-profiles",
-        "import-forum-people",
+        "import-forum-people", "inspect-forum-post",
     ])
     def test_every_one_of_them_has_help(self, app, name):
         """Which is enough to catch a decorator that does not match its function."""
