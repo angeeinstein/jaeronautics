@@ -98,6 +98,47 @@ AVATAR_OVERRIDE_SETTINGS = (
     "sso_overrides_avatar",
 )
 
+def _record_the_name_the_forum_gave(user, remote_user):
+    """Keep the portal's idea of somebody's forum name equal to the forum's.
+
+    Discourse does not have to accept the username it is handed. It caps them
+    at ``max_username_length`` -- twenty by default -- and adjusts anything
+    longer as it creates the account, and it appends to one that is taken. It
+    says nothing about having done either.
+
+    The portal's scheme is surname, initial, year group, so a student called
+    Niedergrottenthaler needs twenty-four characters. Left alone, the portal
+    shows a username the forum has never heard of, and anything that addresses
+    that person by name -- as the archive import does, to post as them -- fails
+    against a name that does not exist.
+
+    Nothing is changed when the name already matches, which is almost always.
+    """
+    actual = (remote_user or {}).get("username")
+    actual = actual.strip() if isinstance(actual, str) else ""
+    if not actual or user is None or user.forum_username == actual:
+        return False
+
+    taken = db.session.execute(
+        db.select(User.id).filter(User.forum_username == actual, User.id != user.id)
+    ).first()
+    if taken:
+        # Two portal accounts cannot hold one forum name, and guessing which
+        # of them is wrong is not this function's business. Said, not fixed.
+        current_app.logger.warning(
+            "The forum calls user_id=%s %r, which user_id=%s already holds here.",
+            user.id, actual, taken[0],
+        )
+        return False
+
+    current_app.logger.info(
+        "The forum stored user_id=%s as %r rather than %r; following it.",
+        user.id, actual, user.forum_username,
+    )
+    user.forum_username = actual
+    return True
+
+
 def _is_named_in(message, username):
     """Whether Discourse's complaint names this particular person.
 
@@ -543,6 +584,7 @@ class DiscourseConnectProvider(ForumProvider):
         )
         remote_user = self.get_remote_user_by_external_id(forum_account.external_id)
         forum_account.remote_user_id = remote_user.get("id") or forum_account.remote_user_id
+        _record_the_name_the_forum_gave(user, remote_user)
         return remote_user
 
     def sync_imported_profile(self, payload):

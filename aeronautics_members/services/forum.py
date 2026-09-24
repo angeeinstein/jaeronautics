@@ -31,6 +31,15 @@ from .settings import get_settings_map
 
 
 
+# What Discourse will store. Its own default is 20, and it is a site setting
+# there rather than anything this end can read cheaply, so this is the floor
+# the portal builds to: a name that fits here fits any forum whose limit has
+# not been lowered below the default. Raising the forum's max_username_length
+# -- worth doing, since the scheme needs 24 characters for a surname like
+# Niedergrottenthaler -- means raising this to match.
+FORUM_USERNAME_LENGTH_LIMIT = 20
+
+
 def get_forum_settings_map():
     return get_settings_map(FORUM_SETTING_KEYS)
 
@@ -39,7 +48,8 @@ def get_forum_service():
     return ForumService(get_forum_settings_map())
 
 
-def build_forum_username_base(first_name, last_name, year_group):
+def build_forum_username_base(first_name, last_name, year_group,
+                              limit=FORUM_USERNAME_LENGTH_LIMIT):
     last_name_cleaned = "".join(filter(str.isalnum, last_name or "")).capitalize()
     first_name_initial = first_name[0].upper() if first_name else ""
     study_field_initial = year_group[0].upper() if year_group else ""
@@ -48,9 +58,15 @@ def build_forum_username_base(first_name, last_name, year_group):
     # A member who is not a student has no year group, and the separator exists
     # only to introduce one. Keeping it would hand them "HuberA_", which reads
     # as a name with something missing off the end.
-    if not suffix:
-        return f"{last_name_cleaned}{first_name_initial}"
-    return f"{last_name_cleaned}{first_name_initial}_{suffix}"
+    tail = f"{first_name_initial}_{suffix}" if suffix else first_name_initial
+    # The surname gives way, not the year group: Discourse will not store a
+    # username longer than its max_username_length and shortens it without
+    # saying so, and what it cuts is the end -- which here is the cohort, the
+    # part that tells two Hubers apart. Twenty-four characters is a real name
+    # on this board, not a hypothetical one.
+    if limit and len(last_name_cleaned) + len(tail) > limit:
+        last_name_cleaned = last_name_cleaned[: max(limit - len(tail), 1)]
+    return f"{last_name_cleaned}{tail}"
 
 
 def generate_suggested_username(member):

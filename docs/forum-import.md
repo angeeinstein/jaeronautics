@@ -410,6 +410,32 @@ be finished first. Without it, the ordering would matter a great deal: an
 import that ran first would hold every returning student's username, and the
 portal would hand them `PopovicA_L23-2` on signup.
 
+## 6a. Usernames longer than Discourse will store
+
+The scheme is surname, initial, cohort — `HuberA_L25`. Discourse caps a
+username at `max_username_length`, **20 by default**, shortens anything longer
+as it creates the account, and appends a digit to one that is already taken. It
+reports neither.
+
+`Niedergrottenthaler` needs 24 characters, and it is a real name on this board,
+not a hypothetical one. Two things follow:
+
+- **Raise `max_username_length` on the forum to 30** (Admin → Settings). 25 only
+  moves the cliff: double-barrelled surnames like `SchachlLughoferM_L14` already
+  sit exactly on 20. This renames nobody — accounts Discourse already shortened
+  keep the name it gave them — so it is a change for the people signing up next,
+  which is where it matters.
+- The portal builds to `FORUM_USERNAME_LENGTH_LIMIT` in `services/forum.py`,
+  which is 20: the floor that fits any forum whose limit has not been lowered.
+  Raise it to match the forum's, and note that what gives way is the **surname**,
+  never the cohort — cutting the end would take the part that tells two Hubers
+  apart.
+
+Either way the portal now follows the forum: every sync reads back the username
+Discourse actually holds and writes it down if it differs. That is what keeps
+"post this old message as its author" working, and its absence is what cost
+four files and a post on the first full run.
+
 ## 7. Where the imported people show up
 
 In the ordinary account directory, with everybody else. A former member is a

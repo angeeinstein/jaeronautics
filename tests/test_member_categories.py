@@ -26,7 +26,10 @@ from aeronautics_members.member_categories import (
     DEFAULT_CATEGORY,
     MemberCategory,
 )
-from aeronautics_members.services.forum import build_forum_username_base
+from aeronautics_members.services.forum import (
+    FORUM_USERNAME_LENGTH_LIMIT,
+    build_forum_username_base,
+)
 from aeronautics_members.services.members import normalize_optional_member_value
 
 NEEDS_A_YEAR_GROUP = [MemberCategory.STUDENT]
@@ -268,6 +271,28 @@ class TestTheForumUsername:
     def test_without_a_year_group_there_is_no_dangling_separator(self, app, year_group):
         """"HuberA_" reads as a name with something missing off the end."""
         assert build_forum_username_base("Anna", "Huber", year_group) == "HuberA"
+
+    def test_a_long_surname_still_fits_what_the_forum_will_store(self, app):
+        """Discourse caps a username and shortens the rest without saying so.
+
+        The old board has NiedergrottenthalerR_L12, twenty-four characters, so
+        this is not hypothetical: on the forum that person exists under a name
+        Discourse chose, and everything addressing them by the name the portal
+        holds fails against somebody who is not there.
+        """
+        name = build_forum_username_base("Robert", "Niedergrottenthaler", "LAV25")
+
+        assert len(name) <= FORUM_USERNAME_LENGTH_LIMIT
+
+    def test_what_gives_way_is_the_surname_not_the_cohort(self, app):
+        """Cutting the end would take the year group, which tells Hubers apart."""
+        name = build_forum_username_base("Robert", "Niedergrottenthaler", "LAV25")
+
+        assert name.endswith("R_L25")
+        assert name.startswith("Niederg")
+
+    def test_a_name_that_fits_is_left_exactly_as_it_was(self, app):
+        assert build_forum_username_base("Anna", "Huber", "LAV25") == "HuberA_L25"
 
 
 class TestWhatTheScreensShow:
