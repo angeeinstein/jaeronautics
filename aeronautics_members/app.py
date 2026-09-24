@@ -2816,6 +2816,11 @@ def create_app(config_overrides=None):
             click.echo(f"      year group : {person['year_group'] or '-'}")
             click.echo(f"      groups     : {person['groups']}")
             click.echo(f"      avatar     : {person['avatar']}")
+            if person.get("avatar_url"):
+                # The forum fetches this itself, from its own container. When it
+                # cannot, nothing says so and the profile just keeps its letter,
+                # so the URL is printed to make that one curl away.
+                click.echo(f"      the forum fetches it from: {person['avatar_url']}")
 
     def _echo_reclaim_outlook(report):
         """How many can get their old account back without asking anybody.

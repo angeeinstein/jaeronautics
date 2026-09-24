@@ -225,6 +225,13 @@ def publish_imported_profiles(
                 "year_group": profile.year_group or "",
                 "groups": payload["add_groups"],
                 "avatar": "yes" if avatar_url else "none",
+                # Kept so a sample can print it. Discourse fetches this URL
+                # itself, from its own container, and when it cannot -- the
+                # address does not resolve there, or it resolves to something
+                # Discourse refuses to download from -- nothing says so: the
+                # profile is simply created with a letter on it. Having the URL
+                # in front of you turns that into one curl.
+                "avatar_url": avatar_url or "",
                 "result": "",
             }
             report["people"].append(record)
