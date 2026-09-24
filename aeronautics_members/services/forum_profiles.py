@@ -27,6 +27,7 @@ from flask import current_app
 
 from ..db_models import ImportedForumProfile, db
 from ..forum_service import AVATAR_OVERRIDE_SETTINGS, ForumProviderError
+from .forum import FORUM_USERNAME_LENGTH_LIMIT
 from ..security_utils import build_public_url
 from .clock import get_now_utc
 
@@ -120,6 +121,55 @@ def profiles_to_publish(only_unsynced=False):
 # Named in forum_service, because the member sync depends on it exactly as this
 # does: an approved avatar is pushed to the same endpoint in the same field.
 AVATAR_SETTINGS = AVATAR_OVERRIDE_SETTINGS
+
+
+# How long a username this forum will store. Discourse's own default is 20; it
+# shortens anything longer as it creates the account and says nothing, which is
+# how four of the old board's people ended up on the new forum under names
+# nobody wrote down.
+USERNAME_LENGTH_SETTING = "max_username_length"
+
+
+def username_room_needed(profiles, floor=FORUM_USERNAME_LENGTH_LIMIT):
+    """How long a username the forum has to accept before these are published.
+
+    The longest name actually being sent, or what the portal's own scheme needs,
+    whichever is greater -- so a forum set up by this command is one that will
+    also take next October's intake, not only this archive.
+    """
+    return max([floor] + [len(profile.source_username or "") for profile in profiles])
+
+
+def username_length_state(client, needed):
+    """``(setting, value, big_enough)``, or None if this forum has no such limit."""
+    current = client.site_settings()
+    if USERNAME_LENGTH_SETTING not in current:
+        return None
+    value = current[USERNAME_LENGTH_SETTING]
+    try:
+        big_enough = int(value) >= needed
+    except (TypeError, ValueError):
+        big_enough = False
+    return USERNAME_LENGTH_SETTING, value, big_enough
+
+
+def make_room_for_usernames(client, needed):
+    """Raise the limit to ``needed``, and leave it raised. Returns what it was.
+
+    Left raised on purpose, and this is the whole argument for it: a limit put
+    back to twenty is a limit that silently mangles the name of the next
+    student called Niedergrottenthaler. Nothing about this is specific to the
+    import -- it is what the portal's username scheme requires of any forum it
+    talks to.
+    """
+    state = username_length_state(client, needed)
+    if state is None:
+        return None
+    setting, value, big_enough = state
+    if big_enough:
+        return None
+    client.set_site_setting(setting, str(needed))
+    return setting, value, needed
 
 
 def avatar_setting_state(client):

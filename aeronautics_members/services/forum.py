@@ -31,13 +31,16 @@ from .settings import get_settings_map
 
 
 
-# What Discourse will store. Its own default is 20, and it is a site setting
-# there rather than anything this end can read cheaply, so this is the floor
-# the portal builds to: a name that fits here fits any forum whose limit has
-# not been lowered below the default. Raising the forum's max_username_length
-# -- worth doing, since the scheme needs 24 characters for a surname like
-# Niedergrottenthaler -- means raising this to match.
-FORUM_USERNAME_LENGTH_LIMIT = 20
+# What the portal builds to, and what it makes the forum accept: publishing
+# profiles raises Discourse's max_username_length to at least this before it
+# sends anybody, and leaves it raised.
+#
+# Thirty rather than Discourse's own default of twenty, because the scheme is
+# surname, initial, cohort: Niedergrottenthaler needs twenty-four, and
+# double-barrelled surnames such as SchachlLughofer sit on the default exactly.
+# A limit that truncates a student's name is a limit that punishes them for
+# their name, and Discourse truncates silently.
+FORUM_USERNAME_LENGTH_LIMIT = 30
 
 
 def get_forum_settings_map():

@@ -418,18 +418,22 @@ as it creates the account, and appends a digit to one that is already taken. It
 reports neither.
 
 `Niedergrottenthaler` needs 24 characters, and it is a real name on this board,
-not a hypothetical one. Two things follow:
+not a hypothetical one. Double-barrelled surnames like `SchachlLughoferM_L14`
+already sit on 20 exactly.
 
-- **Raise `max_username_length` on the forum to 30** (Admin → Settings). 25 only
-  moves the cliff: double-barrelled surnames like `SchachlLughoferM_L14` already
-  sit exactly on 20. This renames nobody — accounts Discourse already shortened
-  keep the name it gave them — so it is a change for the people signing up next,
-  which is where it matters.
-- The portal builds to `FORUM_USERNAME_LENGTH_LIMIT` in `services/forum.py`,
-  which is 20: the floor that fits any forum whose limit has not been lowered.
-  Raise it to match the forum's, and note that what gives way is the **surname**,
-  never the cohort — cutting the end would take the part that tells two Hubers
-  apart.
+**`publish-forum-profiles` sets this itself**, before it sends anybody: it asks
+for the longest name in the run or `FORUM_USERNAME_LENGTH_LIMIT`
+(`services/forum.py`, 30), whichever is greater, and **leaves it raised**. That
+is deliberate — a forum rebuilt from scratch comes back with Discourse's
+defaults, and a step that has to be remembered is a step that will be forgotten
+at the worst moment. A dry run says which way it is set without changing it.
+
+Raising it renames nobody: accounts Discourse already shortened keep the name it
+gave them. It is for the people signing up next, which is where it matters.
+
+The portal builds to the same constant, and what gives way is the **surname**,
+never the cohort — cutting the end would take the part that tells two Hubers
+apart.
 
 Either way the portal now follows the forum: every sync reads back the username
 Discourse actually holds and writes it down if it differs. That is what keeps
@@ -514,6 +518,28 @@ Check it on the forum rather than in the summary: `…/g/old_forum` should say
 739 members, and `…/g/lav23` the size of that cohort. In a browser, signed in
 normally — a `curl` with the migration key competes with the run for the same
 sixty-calls-a-minute budget.
+
+### What the commands set on the forum, and what they put back
+
+The rule is: **anything the forum must allow is set by a command, not by
+somebody remembering.** Reset the forum, run the commands in order, and it is
+configured. What differs is whether the change is put back afterwards.
+
+| Setting | Set by | Afterwards |
+| --- | --- | --- |
+| `discourse_connect_overrides_avatar` | `publish-forum-profiles` | **left on** — the portal owns avatars, for members too |
+| `max_username_length` | `publish-forum-profiles` | **left raised** — the portal's names need it, permanently |
+| `authorized_extensions` | `import-forum-content` | **left widened** — this forum exists to share exam papers |
+| the 22 posting limits | `import-forum-content` | **restored** — they are what the forum wants day to day |
+
+A setting stays changed when the changed value is the one the forum should
+have from now on, and goes back when it was loosened only so that a decade of
+archive would fit through. `min_post_length` at 2 is not a forum anybody wants;
+a username limit that truncates a student's surname is not one either.
+
+Two things are still by hand, because neither is a site setting:
+`client_max_body_size` in the container's nginx, and the rate limits in
+`app.yml`. Both are in [forum-content-import.md](forum-content-import.md).
 
 ### The avatars have a setting of their own
 

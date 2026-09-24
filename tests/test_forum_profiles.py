@@ -16,16 +16,19 @@ import pytest
 from conftest import db
 from aeronautics_members.db_models import ImportedForumProfile, User
 from aeronautics_members.services.forum_import import import_forum_people
+from aeronautics_members.services.forum import FORUM_USERNAME_LENGTH_LIMIT
 from aeronautics_members.services.forum_profiles import (
     ARCHIVE_GROUP,
     avatar_setting_state,
     build_profile_payload,
-    let_avatars_through,
     group_name_for_year_group,
     groups_for_profiles,
+    let_avatars_through,
+    make_room_for_usernames,
     profiles_to_publish,
     publish_imported_profiles,
     sync_profile_groups,
+    username_room_needed,
 )
 
 
@@ -222,6 +225,72 @@ class TestPublishing:
 
         profile = db.session.execute(db.select(ImportedForumProfile)).scalar_one()
         assert profile.forum_synced_at is None, "or the retry would skip it"
+
+
+class TestTheForumHavingRoomForTheirNames:
+    """A rebuilt forum comes back with Discourse's defaults, every time.
+
+    So the settings the portal needs are applied by the command rather than
+    remembered by a person: max_username_length is 20 by default, the scheme
+    needs 24 for a student called Niedergrottenthaler, and Discourse shortens
+    what it cannot store without reporting it.
+    """
+
+    class SettingsClient:
+        def __init__(self, **settings):
+            self.settings = settings
+            self.written = []
+
+        def site_settings(self):
+            return dict(self.settings)
+
+        def set_site_setting(self, name, value):
+            self.written.append((name, value))
+            self.settings[name] = value
+
+    def test_the_longest_name_being_published_is_what_is_asked_for(self, app):
+        _imported(uid="1", username="NiedergrottenthalerR_L12")
+
+        needed = username_room_needed(profiles_to_publish(), floor=10)
+
+        assert needed == len("NiedergrottenthalerR_L12")
+
+    def test_it_never_asks_for_less_than_the_portal_itself_needs(self, app):
+        """The forum must also take next October's intake, not only this board."""
+        _imported(uid="1", username="dpilz")
+
+        assert username_room_needed(profiles_to_publish()) == FORUM_USERNAME_LENGTH_LIMIT
+
+    def test_a_limit_that_is_too_low_is_raised(self, app):
+        client = self.SettingsClient(max_username_length="20")
+
+        changed = make_room_for_usernames(client, 30)
+
+        assert changed == ("max_username_length", "20", 30)
+        assert client.written == [("max_username_length", "30")]
+
+    def test_and_stays_raised(self, app):
+        """Put back to 20 it would mangle the next such surname."""
+        client = self.SettingsClient(max_username_length="20")
+
+        make_room_for_usernames(client, 30)
+
+        assert client.settings["max_username_length"] == "30"
+        assert len(client.written) == 1
+
+    def test_a_forum_that_already_has_room_is_left_alone(self, app):
+        client = self.SettingsClient(max_username_length="40")
+
+        assert make_room_for_usernames(client, 30) is None
+        assert client.written == []
+
+    def test_a_limit_that_is_not_a_number_is_treated_as_too_small(self, app):
+        client = self.SettingsClient(max_username_length="")
+
+        assert make_room_for_usernames(client, 30) is not None
+
+    def test_a_forum_without_the_setting_is_not_an_error(self, app):
+        assert make_room_for_usernames(self.SettingsClient(title="LAVBoard"), 30) is None
 
 
 class TestTheGroupsThemselves:

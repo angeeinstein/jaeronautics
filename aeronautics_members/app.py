@@ -231,13 +231,17 @@ from .services.forum_import import (  # noqa: E402
     load_people,
 )
 from .services.forum_profiles import (  # noqa: E402
+    USERNAME_LENGTH_SETTING,
     YEAR_GROUP_FIELD_NAME,
     avatar_setting_state,
     groups_for_profiles,
     let_avatars_through,
+    make_room_for_usernames,
     profiles_to_publish,
     publish_imported_profiles,
     sync_profile_groups,
+    username_length_state,
+    username_room_needed,
 )
 from .services.forum_board import (  # noqa: E402
     DEEPEST_CATEGORY_NESTING,
@@ -2758,7 +2762,14 @@ def create_app(config_overrides=None):
         if not groups_only:
             settings_client = _forum_settings_client(service)
             if settings_client is not None:
+                # Everything the forum has to allow before these people can be
+                # published, done here rather than remembered: a forum rebuilt
+                # from scratch comes back with Discourse's defaults, and the
+                # step nobody can forget is the one nobody has to do.
                 _mind_the_avatar_setting(settings_client, dry_run=dry_run)
+                _mind_the_username_length(
+                    settings_client, username_room_needed(profiles), dry_run=dry_run
+                )
             report = publish_imported_profiles(
                 provider,
                 dry_run=dry_run,
@@ -2858,6 +2869,56 @@ def create_app(config_overrides=None):
             f"Avatars: {changed} was {value}, turned on and left on -- the "
             f"portal is where avatars are uploaded and approved, so it is what "
             f"the forum shows. Members are governed by the same setting."
+        )
+        return changed
+
+    def _mind_the_username_length(client, needed, *, dry_run):
+        """Make the forum accept the names these people actually have.
+
+        Discourse stores twenty characters by default and shortens the rest as
+        it creates the account, without a word. Four of this board's people are
+        on the forum under names Discourse chose, and everything that addresses
+        them by name -- posting their old messages as them -- failed.
+
+        Raised and left raised: put back to twenty it would mangle the name of
+        the next student called Niedergrottenthaler, which is a limit that
+        punishes somebody for their surname.
+        """
+        try:
+            state = username_length_state(client, needed)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Usernames: could not read {USERNAME_LENGTH_SETTING} -- {exc}. "
+                f"Names longer than the forum allows will be shortened by it, "
+                f"quietly.", fg="yellow"))
+            return None
+
+        if state is None:
+            click.echo("Usernames: this forum publishes no limit on their length.")
+            return None
+
+        setting, value, big_enough = state
+        if big_enough:
+            click.echo(f"Usernames: {setting} is {value}, and {needed} is needed.")
+            return None
+        if dry_run:
+            click.echo(click.style(
+                f"Usernames: {setting} is {value} and {needed} is needed, so the "
+                f"forum would shorten the longer names without saying so. The "
+                f"real run raises it and leaves it raised.", fg="cyan"))
+            return None
+        try:
+            changed = make_room_for_usernames(client, needed)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Usernames: {setting} is {value}, {needed} is needed, and it "
+                f"could not be changed -- {exc}. The longer names will be "
+                f"shortened by the forum.", fg="yellow"))
+            return None
+        click.echo(
+            f"Usernames: {setting} raised from {value} to {needed} and left "
+            f"there -- the portal's names are surname, initial and cohort, and "
+            f"this board has surnames that need every character of it."
         )
         return changed
 
