@@ -1,3 +1,4 @@
+import csv
 import getpass
 import json
 import os
@@ -237,6 +238,7 @@ from .services.forum_board import (  # noqa: E402
     MAX_CATEGORY_NESTING,
     Ledger,
     audit_uploads,
+    category_worksheet,
     settings_inventory,
     category_nesting_requirement,
     category_plan,
@@ -2219,6 +2221,64 @@ def create_app(config_overrides=None):
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if report.get("topic_id"):
             click.echo(f"\nTopic {report['topic_id']} — go and look at it.")
+
+    @app.cli.command("forum-category-worksheet")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--out", type=click.Path(dir_okay=False),
+                  default="forum-categories.csv", show_default=True,
+                  help="Where to write the worksheet.")
+    @with_appcontext
+    def forum_category_worksheet_command(dump_file, out):
+        """Where each of the old board's forums should end up, for you to decide.
+
+        The new forum is not the old one rearranged. It is somewhere students
+        look things up, and most of a decade-old board is lectures that no
+        longer run in that form. So every old forum needs one of two answers:
+        which current lecture it belongs to, or that it is archive.
+
+        That is a curriculum question and this cannot answer it. What it can do
+        is lay out the evidence -- how much is in each forum, and when it
+        stopped -- and put every year's version of the same course on adjacent
+        lines, so the question takes a minute instead of an afternoon.
+
+        Fill in two columns and keep the file:
+
+        \b
+          target  the category its threads should end up in.
+                  Left empty means archive.
+          access  who should be able to see it, once the groups exist.
+        """
+        tables = _load_mybb_dump(dump_file)
+        rows = category_worksheet(
+            tables["forums"], tables["threads"], tables["posts"]
+        )
+        if not rows:
+            raise click.ClickException("No forum in that dump holds any threads.")
+
+        fields = ["old_fid", "old_path", "lecture", "threads", "posts",
+                  "first_post", "last_post", "target", "access"]
+        with open(out, "w", encoding="utf-8-sig", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        quiet_since = sorted(row["last_post"] for row in rows)
+        click.echo(
+            f"{len(rows)} forums hold threads, written to {out}.\n"
+            f"The oldest stopped in {quiet_since[0][:4]}, the newest is from "
+            f"{quiet_since[-1][:4]}."
+        )
+        stale = [row for row in rows if row["last_post"] < "2022"]
+        if stale:
+            click.echo(
+                f"{len(stale)} of them have had nothing posted since 2021, "
+                f"which is where I would start reading."
+            )
+        click.echo(
+            "Open it in a spreadsheet. Same-named courses are on adjacent "
+            "lines; fill in 'target' where a forum belongs to a lecture that "
+            "still runs, and leave it empty for everything that is archive."
+        )
 
     @app.cli.command("dump-forum-settings")
     @click.option("--out", type=click.Path(dir_okay=False),

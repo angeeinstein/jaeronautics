@@ -351,6 +351,12 @@ so it can go in front of the import in a script.
 
 ## 9. The whole board, keeping the categories it had
 
+**This shape is for testing, not for keeping.** What the new forum should look
+like — live categories per current lecture, an archive for everything else,
+and who can see what — is [forum-structure.md](forum-structure.md). Mirroring
+the old board is chosen here because it makes the result comparable with the
+old one post for post, which is what a test import is for.
+
 Rehearsing one thread answers whether it works. Moving all 720 answers whether
 it works at scale, and the honest way to find that out is to do it — into the
 old structure rather than a new one. Recreating the old shape is a deliberately

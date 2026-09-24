@@ -6,13 +6,16 @@ cannot and somebody is left reconciling half an archive by hand. Everything
 here is about the first one.
 """
 import json
+from datetime import datetime, timezone
 
 import pytest
 
 from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_board import (
     Ledger,
+    _sortable,
     audit_uploads,
+    category_worksheet,
     categories_by_forum,
     category_nesting_requirement,
     category_plan,
@@ -777,3 +780,79 @@ class TestReadingWhatTheForumSaysAboutItself:
         _, interesting = settings_inventory(self.rows())
 
         assert interesting[0]["description"] == "How deep categories go."
+
+
+class TestDecidingWhereEachOldForumGoes:
+    """The new forum is not the old one rearranged."""
+
+    def a_decade(self):
+        forums = [
+            {"fid": "1", "pid": "0", "name": "Studium"},
+            {"fid": "2", "pid": "1", "name": "01 Semester"},
+            {"fid": "3", "pid": "1", "name": "02 Semester"},
+            {"fid": "10", "pid": "2", "name": "01-06 Technisches Programmieren"},
+            {"fid": "11", "pid": "3", "name": "02-07 Technisches Programmieren 1"},
+            {"fid": "12", "pid": "2", "name": "01-02 Luftfahrtrecht"},
+            {"fid": "13", "pid": "2", "name": "Nie benutzt"},
+        ]
+        threads, posts = [], []
+        # fid 10 stopped in 2016; fid 11 is the same course, still running.
+        for tid, fid, year in (("1", "10", 2016), ("2", "11", 2025),
+                               ("3", "12", 2019)):
+            threads.append({"tid": tid, "fid": fid, "subject": f"T{tid}",
+                            "firstpost": tid, "dateline": "1"})
+            stamp = int(datetime(year, 6, 1, tzinfo=timezone.utc).timestamp())
+            posts.append({"pid": tid, "tid": tid, "uid": "7",
+                          "dateline": str(stamp), "message": "x"})
+        return forums, threads, posts
+
+    def rows(self):
+        return {row["old_fid"]: row
+                for row in category_worksheet(*self.a_decade())}
+
+    def test_it_says_when_each_forum_stopped(self):
+        """The one signal for whether a lecture still runs."""
+        rows = self.rows()
+
+        assert rows["10"]["last_post"] == "2016-06-01"
+        assert rows["11"]["last_post"] == "2025-06-01"
+
+    def test_a_forum_nobody_posted_in_is_not_a_decision_to_make(self):
+        assert "13" not in self.rows()
+
+    def test_every_year_of_the_same_course_is_on_adjacent_lines(self):
+        """The merge candidates are proposed, not hunted for."""
+        order = [row["old_fid"] for row in category_worksheet(*self.a_decade())]
+
+        assert abs(order.index("10") - order.index("11")) == 1
+
+    def test_the_columns_to_fill_in_start_empty(self):
+        """Empty target means archive, which is the right default."""
+        rows = self.rows()
+
+        assert rows["10"]["target"] == ""
+        assert rows["10"]["access"] == ""
+
+    def test_it_carries_the_old_path_so_a_row_can_be_placed(self):
+        assert self.rows()["10"]["old_path"] == (
+            "Studium / 01 Semester / 01-06 Technisches Programmieren"
+        )
+
+    def test_it_counts_what_is_at_stake(self):
+        rows = self.rows()
+
+        assert rows["10"]["threads"] == 1
+        assert rows["10"]["posts"] == 1
+
+    @pytest.mark.parametrize("name,expected", [
+        ("01-06 Technisches Programmieren", "technisches programmieren"),
+        ("02-07 Technisches Programmieren", "technisches programmieren"),
+        ("05-05 Strömungslehre", "stromungslehre"),
+    ])
+    def test_the_semester_code_is_not_part_of_the_course(self, name, expected):
+        """It is the slot the course sits in, and it moves between years."""
+        assert _sortable(name) == expected
+
+    def test_a_numbered_course_is_not_merged_with_its_sequel(self):
+        """"Mechanik 1" and "Mechanik 2" are two lectures, not one."""
+        assert _sortable("03-06 Mechanik 1") != _sortable("03-09 Mechanik 2")

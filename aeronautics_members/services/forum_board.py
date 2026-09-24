@@ -18,7 +18,10 @@ open it in an editor rather than needing the application to still exist.
 """
 
 import json
+import re
+import unicodedata
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import current_app
@@ -294,6 +297,81 @@ def settings_inventory(rows):
     everything.sort(key=lambda entry: entry["setting"])
     interesting.sort(key=lambda entry: entry["setting"])
     return everything, interesting
+
+
+def _sortable(name):
+    """A lecture name with the parts that vary between years taken off.
+
+    The board writes the same course as "01-06 Technisches Programmieren" one
+    year and "02-07 Technisches Programmieren 1" the next: the code at the
+    front is the semester slot, which moves, and the name is the course, which
+    mostly does not. Sorting on the name alone puts every version of a course
+    on adjacent lines, which is all that is needed -- the question of whether
+    they really are the same course is a curriculum question, and nobody here
+    should be answering it by string comparison.
+    """
+    name = re.sub(r"^\s*\d+\s*[-.]\s*\d+\s*", "", name or "")
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(c for c in name if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
+
+
+def category_worksheet(forums, threads, posts):
+    """One row per old forum that holds threads, for deciding where it goes.
+
+    The new forum is not the old one rearranged: it is a place students look
+    things up, and most of a decade-old board is lectures that no longer run.
+    So the question for each old forum is which current lecture it belongs to,
+    or whether it is archive -- and that is a curriculum question, answerable
+    only by somebody who knows the curriculum.
+
+    What can be supplied is the evidence: how much is in there, and when it
+    stopped. A forum whose last post is from 2017 is not a live lecture.
+    """
+    tree = forum_tree(forums)
+    threads_by_forum = {}
+    for row in threads:
+        threads_by_forum.setdefault(row.get("fid"), []).append(row)
+
+    dates_by_thread = {}
+    counts_by_thread = Counter()
+    for post in posts:
+        tid = post.get("tid")
+        counts_by_thread[tid] += 1
+        when = int(post.get("dateline") or 0)
+        first, last = dates_by_thread.get(tid, (when, when))
+        dates_by_thread[tid] = (min(first, when), max(last, when))
+
+    rows = []
+    for fid, in_forum in threads_by_forum.items():
+        path = tree.get(fid, [])
+        if not path:
+            continue
+        names = [(forum.get("name") or f"forum {forum.get('fid')}").strip()
+                 for forum in path]
+        spans = [dates_by_thread[row.get("tid")] for row in in_forum
+                 if row.get("tid") in dates_by_thread]
+        rows.append({
+            "old_fid": fid,
+            "old_path": " / ".join(names),
+            "lecture": names[-1],
+            "threads": len(in_forum),
+            "posts": sum(counts_by_thread[row.get("tid")] for row in in_forum),
+            "first_post": _as_day(min(span[0] for span in spans)) if spans else "",
+            "last_post": _as_day(max(span[1] for span in spans)) if spans else "",
+            "target": "",
+            "access": "",
+        })
+
+    # By course name, so every year's version of the same course is adjacent,
+    # and newest first within a course so the live one is the line on top.
+    rows.sort(key=lambda row: (_sortable(row["lecture"]), row["last_post"]),
+              reverse=False)
+    return rows
+
+
+def _as_day(dateline):
+    return datetime.fromtimestamp(int(dateline), tz=timezone.utc).strftime("%Y-%m-%d")
 
 
 def audit_uploads(attachments, uploads_dir):
