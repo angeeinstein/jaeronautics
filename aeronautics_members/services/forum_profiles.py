@@ -189,7 +189,8 @@ def sync_profile_groups(provider, plan, *, add_members=True, on_group=None):
     the check that the payload did what it claimed: it is one call per hundred
     people, against fourteen hundred for publishing everybody again.
     """
-    report = {"groups": 0, "created": 0, "members": 0, "problems": []}
+    report = {"groups": 0, "created": 0, "members": 0, "already_in": 0,
+              "problems": []}
     for name in sorted(plan):
         usernames = plan[name]
         created = False
@@ -205,7 +206,12 @@ def sync_profile_groups(provider, plan, *, add_members=True, on_group=None):
                         "the forum did not say which group that is, so nobody "
                         "can be added to it"
                     )
-                report["members"] += provider.add_group_members(group_id, usernames)
+                added = provider.add_group_members(group_id, usernames)
+                report["members"] += added
+                # Everybody who was not added was already in the group, which is
+                # what a second run looks like and is not a fault. Counted apart
+                # so that "0 memberships set" cannot be read as "nobody is in".
+                report["already_in"] += max(0, len(usernames) - added)
         except ForumProviderError as exc:
             # One group out of thirty-four must not cost the other thirty-three.
             report["problems"].append(f"{name}: {exc}")

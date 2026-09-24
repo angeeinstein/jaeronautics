@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from dataclasses import dataclass
@@ -96,6 +97,18 @@ AVATAR_OVERRIDE_SETTINGS = (
     "discourse_connect_overrides_avatar",
     "sso_overrides_avatar",
 )
+
+def _is_named_in(message, username):
+    """Whether Discourse's complaint names this particular person.
+
+    Word-boundary rather than ``in``: the board has both ``KlampflS_L10`` and
+    ``KlampflL_L12``, and a plain substring test on a message naming one would
+    quietly drop the other from the retry -- leaving somebody out of their
+    cohort for a reason nobody would ever find.
+    """
+    return re.search(rf"(?<![\w.-]){re.escape(username)}(?![\w.-])", message,
+                     re.IGNORECASE) is not None
+
 
 _ALLOWED_IMAGE_TYPE_TO_EXTENSION = {
     "jpeg": "jpg",
@@ -598,16 +611,48 @@ class DiscourseConnectProvider(ForumProvider):
         published before its cohort group existed is therefore in no group at
         all, and no amount of re-sending the same payload changes that unless
         the group is there first.
+
+        Returns how many were newly added; the rest were already in the group.
         """
         names = [name for name in usernames if name]
+        added = 0
         for start in range(0, len(names), self.GROUP_MEMBER_BATCH):
-            batch = names[start:start + self.GROUP_MEMBER_BATCH]
+            added += self._add_some_group_members(
+                group_id, names[start:start + self.GROUP_MEMBER_BATCH]
+            )
+        return added
+
+    def _add_some_group_members(self, group_id, batch):
+        """One call, minus anybody Discourse says is in the group already.
+
+        Discourse refuses the *whole* batch when one name in it is already a
+        member -- 422, "The following users are already members of this group",
+        and not one of the other ninety-nine is added. Running this a second
+        time is the ordinary case, so taken literally it means a group can never
+        be completed once it is partly filled.
+
+        The refusal names them, though, so they are dropped and the rest are
+        sent again.
+        """
+        try:
             self._request(
                 "PUT", f"/groups/{int(group_id)}/members.json",
                 data={"usernames": ",".join(batch)},
                 rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
             )
-        return len(names)
+            return len(batch)
+        except ForumProviderError as exc:
+            message = str(exc)
+            if "already" not in message.lower():
+                raise
+            remaining = [name for name in batch if not _is_named_in(message, name)]
+            if not remaining:
+                return 0
+            if len(remaining) == len(batch):
+                # It complained about somebody, and not about anybody we sent.
+                # Sending the same thing again would loop, so say so instead.
+                raise
+            return self._add_some_group_members(group_id, remaining)
 
     # Discourse has moved its user-field admin route between versions, and an
     # admin route also answers 404 -- rather than 403 -- when the API user is

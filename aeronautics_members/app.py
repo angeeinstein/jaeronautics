@@ -2753,7 +2753,8 @@ def create_app(config_overrides=None):
             filled = sync_profile_groups(provider, plan, add_members=True)
             click.echo(
                 f"groups: {filled['groups']} there, {filled['created']} made, "
-                f"{filled['members']} memberships set"
+                f"{filled['members']} memberships set, "
+                f"{filled['already_in']} already in place"
             )
             _report_group_problems(filled)
             db.session.commit()

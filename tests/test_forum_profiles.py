@@ -383,6 +383,89 @@ class TestTheSettingThatDecidesWhetherAvatarsAreUsed:
         assert client.written == []
 
 
+class TestAddingPeopleToAGroupTwice:
+    """Running it again is the ordinary case, and Discourse treats it as a fault.
+
+    ``PUT /groups/:id/members.json`` refuses the *whole* batch when one name in
+    it is already a member -- so on a real run one duplicate kept ninety-nine
+    new people out of their cohort, and a group that was partly filled could
+    never be completed.
+    """
+
+    def _provider(self, already=()):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider, ForumProviderError,
+        )
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "https://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+        provider.sent = []
+        members = set(already)
+
+        def fake_request(method, path, data=None, **kwargs):
+            asked = (data or {}).get("usernames", "").split(",")
+            provider.sent.append(asked)
+            clash = [name for name in asked if name in members]
+            if clash:
+                raise ForumProviderError(
+                    "Discourse API request failed (422): "
+                    '{"errors":["The following users are already members of '
+                    f'this group: {", ".join(clash)}"]}}'
+                )
+            members.update(asked)
+            return {}
+
+        provider._request = fake_request
+        provider.members = members
+        return provider
+
+    def test_the_people_who_are_not_in_yet_still_get_in(self, app):
+        """The bug: one duplicate and the other ninety-nine were dropped."""
+        provider = self._provider(already={"HoferT_M13"})
+
+        added = provider.add_group_members(3, ["HoferT_M13", "LutzB_L21", "dpilz"])
+
+        assert added == 2
+        assert {"LutzB_L21", "dpilz"} <= provider.members
+        assert len(provider.sent) == 2, "the batch is sent again without them"
+
+    def test_a_group_that_is_already_complete_is_not_an_error(self, app):
+        provider = self._provider(already={"HoferT_M13", "LutzB_L21"})
+
+        assert provider.add_group_members(3, ["HoferT_M13", "LutzB_L21"]) == 0
+
+    def test_a_similar_name_is_not_mistaken_for_the_complaint(self, app):
+        """The board has KlampflS_L10 and KlampflL_L12.
+
+        A substring test on a message naming one would drop the other from the
+        retry, and nobody would ever find out why they are not in their cohort.
+        """
+        provider = self._provider(already={"KlampflS_L10"})
+
+        added = provider.add_group_members(3, ["KlampflS_L10", "KlampflL_L12"])
+
+        assert added == 1
+        assert "KlampflL_L12" in provider.members
+
+    def test_a_refusal_that_is_not_about_membership_is_raised(self, app):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider, ForumProviderError,
+        )
+
+        provider = self._provider()
+
+        def refuse(method, path, data=None, **kwargs):
+            raise ForumProviderError("Discourse API request failed (403): no")
+
+        provider._request = refuse
+        with pytest.raises(ForumProviderError):
+            provider.add_group_members(3, ["HoferT_M13"])
+
+
 class TestTheConnectionTestMentionsIt:
     """Because a dropped avatar has no other symptom.
 

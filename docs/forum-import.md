@@ -477,6 +477,13 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      publish-forum-profiles --groups-only
 ```
 
+A second run reports `0 memberships set, 1473 already in place`, which is the
+right answer and not a failure. Discourse refuses an entire batch when one
+name in it is already a member — 422, *"The following users are already
+members of this group"* — so the refusal is read, the names in it are dropped,
+and the rest are sent again. Without that, one duplicate kept the other
+ninety-nine out and a half-filled group could never be completed.
+
 Check it on the forum rather than in the summary: `…/g/old_forum` should say
 739 members, and `…/g/lav23` the size of that cohort. In a browser, signed in
 normally — a `curl` with the migration key competes with the run for the same
