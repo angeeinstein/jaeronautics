@@ -171,6 +171,10 @@ class ContentPoster:
         self.api_key = (settings["discourse_api_key"] or "").strip()
         self.admin_username = (settings["discourse_api_username"] or "").strip()
         self._settings_base = None
+        #: Everything the last settings read returned, not only name and value.
+        #: What this forum will and will not accept is described in there, and
+        #: guessing at it instead has now cost two runs.
+        self.last_settings_rows = []
 
     def _key_complaint(self):
         """Whether the key is the wrong shape, said plainly. None if it is fine.
@@ -349,10 +353,10 @@ class ContentPoster:
                 attempts.append(f"{path}: answered, but with no site settings in it")
                 continue
             self._settings_base = path[: -len(".json")]
+            self.last_settings_rows = [row for row in rows if row.get("setting")]
             return {
                 row.get("setting"): row.get("value")
-                for row in rows
-                if row.get("setting")
+                for row in self.last_settings_rows
             }
 
         complaint = self._key_complaint()

@@ -249,6 +249,53 @@ def category_nesting_requirement(plan):
     )
 
 
+#: Settings whose value is nobody's business, even on a test box. Discourse
+#: marks most of them itself; the name check is for the ones it does not, and
+#: for plugins that invent their own.
+SECRET_SETTING_WORDS = ("secret", "password", "token", "api_key", "private_key",
+                        "client_id", "credential")
+
+
+def is_secret_setting(row):
+    """Should this setting's value be left out of a file somebody will share?"""
+    if row.get("secret"):
+        return True
+    name = (row.get("setting") or "").lower()
+    return any(word in name for word in SECRET_SETTING_WORDS)
+
+
+#: What a setting's name looks like when it constrains what can be posted.
+#: This is the list that should have been read rather than guessed at: the
+#: third level of categories and the fifty-character name were both in it.
+LIMIT_WORDS = ("max_", "min_", "_max", "_min", "rate_limit", "limit",
+               "length", "nesting", "entropy", "allow_", "unique_")
+
+
+def settings_inventory(rows):
+    """Every setting, with the ones that constrain an import marked.
+
+    Returns (all, interesting). Values of secret settings are left out.
+    """
+    everything, interesting = [], []
+    for row in rows:
+        name = row.get("setting")
+        if not name:
+            continue
+        entry = {
+            "setting": name,
+            "value": "(hidden)" if is_secret_setting(row) else row.get("value"),
+            "default": "(hidden)" if is_secret_setting(row) else row.get("default"),
+            "category": row.get("category"),
+            "description": (row.get("description") or "").strip(),
+        }
+        everything.append(entry)
+        if any(word in name.lower() for word in LIMIT_WORDS):
+            interesting.append(entry)
+    everything.sort(key=lambda entry: entry["setting"])
+    interesting.sort(key=lambda entry: entry["setting"])
+    return everything, interesting
+
+
 def audit_uploads(attachments, uploads_dir):
     """Which of the old board's files are on this machine, and which are not.
 

@@ -19,6 +19,7 @@ from aeronautics_members.services.forum_board import (
     ensure_categories,
     forum_tree,
     migrate_board,
+    settings_inventory,
 )
 from aeronautics_members.services.forum_content import migrate_thread
 
@@ -719,3 +720,60 @@ class TestNamesThatDoNotFit:
 
         assert [row["name"] for row in plan] == ["Allgemeines"]
         assert plan[0]["parent_key"] is None
+
+
+class TestReadingWhatTheForumSaysAboutItself:
+    """Two runs were spent on limits that were in this list the whole time."""
+
+    def rows(self):
+        return [
+            {"setting": "max_category_nesting", "value": "2", "default": "2",
+             "category": "categories", "description": "How deep categories go."},
+            {"setting": "title", "value": "LAVboard", "default": "Discourse",
+             "category": "required", "description": "The name of this site."},
+            {"setting": "min_post_length", "value": "20", "default": "20",
+             "category": "posting", "description": "Shortest allowed post."},
+            {"setting": "s3_secret_access_key", "value": "hunter2",
+             "default": "", "secret": True, "category": "files",
+             "description": "For the object store."},
+            {"setting": "discourse_connect_secret", "value": "abcdef",
+             "default": "", "category": "login", "description": "Shared secret."},
+        ]
+
+    def test_it_keeps_everything_the_forum_reported(self):
+        everything, _ = settings_inventory(self.rows())
+
+        assert [entry["setting"] for entry in everything] == [
+            "discourse_connect_secret", "max_category_nesting",
+            "min_post_length", "s3_secret_access_key", "title",
+        ]
+
+    def test_it_marks_the_ones_that_constrain_an_import(self):
+        _, interesting = settings_inventory(self.rows())
+
+        assert [entry["setting"] for entry in interesting] == [
+            "max_category_nesting", "min_post_length",
+        ]
+        assert "title" not in [entry["setting"] for entry in interesting]
+
+    def test_a_secret_discourse_marks_is_left_out(self):
+        everything = {e["setting"]: e for e in settings_inventory(self.rows())[0]}
+
+        assert everything["s3_secret_access_key"]["value"] == "(hidden)"
+
+    def test_and_one_it_does_not_mark_but_is_named_like_one(self):
+        """The file is meant to be shareable, so the name is checked too."""
+        everything = {e["setting"]: e for e in settings_inventory(self.rows())[0]}
+
+        assert everything["discourse_connect_secret"]["value"] == "(hidden)"
+
+    def test_an_ordinary_setting_keeps_its_value(self):
+        everything = {e["setting"]: e for e in settings_inventory(self.rows())[0]}
+
+        assert everything["title"]["value"] == "LAVboard"
+        assert everything["title"]["description"] == "The name of this site."
+
+    def test_the_description_is_kept_because_that_is_the_point(self):
+        _, interesting = settings_inventory(self.rows())
+
+        assert interesting[0]["description"] == "How deep categories go."

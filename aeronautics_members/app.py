@@ -237,6 +237,7 @@ from .services.forum_board import (  # noqa: E402
     MAX_CATEGORY_NESTING,
     Ledger,
     audit_uploads,
+    settings_inventory,
     category_nesting_requirement,
     category_plan,
     migrate_board,
@@ -2218,6 +2219,61 @@ def create_app(config_overrides=None):
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         if report.get("topic_id"):
             click.echo(f"\nTopic {report['topic_id']} — go and look at it.")
+
+    @app.cli.command("dump-forum-settings")
+    @click.option("--out", type=click.Path(dir_okay=False),
+                  default="forum-settings.json", show_default=True,
+                  help="Where to write every setting the forum reports.")
+    @click.option("--limits", is_flag=True,
+                  help="Print the settings that constrain what can be posted.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="Reads DISCOURSE_MIGRATION_API_KEY if not given.")
+    @with_appcontext
+    def dump_forum_settings_command(out, limits, api_key):
+        """Everything this Discourse will tell you about itself.
+
+        The same call the import already makes, keeping the parts it throws
+        away: each setting's description, its default, and which ones exist at
+        all. Two runs were spent on limits that were in this list the whole
+        time -- a third level of categories the forum would not make, and a
+        fifty-character cap on their names -- so this is the list to read
+        before guessing at the next one.
+
+        Values of settings Discourse marks secret, and of anything whose name
+        mentions a password or a key, are left out. The file is meant to be
+        readable and shareable.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
+
+        try:
+            poster.site_settings()
+        except ForumProviderError as exc:
+            raise click.ClickException(f"Could not read the settings: {exc}") from exc
+
+        everything, interesting = settings_inventory(poster.last_settings_rows)
+        Path(out).write_text(
+            json.dumps({"forum": poster.base_url, "settings": everything},
+                       indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        click.echo(f"{len(everything)} settings written to {out}.")
+        click.echo(
+            f"{len(interesting)} of them constrain what can be posted."
+            + ("" if limits else " Pass --limits to see them.")
+        )
+
+        if limits:
+            click.echo("")
+            for entry in interesting:
+                click.echo(f"{entry['setting']:<42} {str(entry['value'])[:34]}")
 
     @app.cli.command("check-forum-uploads")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
