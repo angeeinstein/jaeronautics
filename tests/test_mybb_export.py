@@ -428,9 +428,10 @@ def test_a_file_only_named_gz_says_so(tmp_path):
 class TestReadingTheDumpInTheEncodingItIsActuallyIn:
     """A German board read as the wrong thing loses every umlaut, silently.
 
-    The reader used errors="replace", so "Prüfungen" arrived as "Pr�fungen"
-    -- in every post, in every title -- and every count still added up. Nothing
-    in a clean-looking run would ever have said so.
+    The reader used errors="replace", so "Prüfungen" arrived as
+    "Pr�fungen" -- in every post, in every title -- and every count still
+    added up. On the real board that was 7,867 characters, and nothing in a
+    clean-looking run would ever have said so.
     """
 
     def test_it_believes_what_the_dump_declares(self):
@@ -453,19 +454,41 @@ class TestReadingTheDumpInTheEncodingItIsActuallyIn:
         """MySQL's latin1 is cp1252: the curly quotes matter on a board."""
         raw = "Prüfungen „Zitat“".encode("cp1252")
 
-        text, how = mybb_export.decode_dump(raw)
+        text, _how = mybb_export.decode_dump(raw)
 
         assert text == "Prüfungen „Zitat“"
-        assert "cp1252" in how
 
-    def test_something_unreadable_says_how_much_it_lost(self):
+    def test_a_mixed_dump_keeps_what_is_already_right(self):
+        """The real case: 7,867 characters of this board are not UTF-8.
+
+        Reading the whole file as cp1252 because of them would turn every
+        correct umlaut into "Ã¼" -- far more damage than the problem
+        it fixes. Only the bytes that are not UTF-8 are read the other way.
+        """
+        raw = ("SET NAMES utf8mb4; Prüfung ".encode("utf-8")
+               + "Übung".encode("cp1252") + b" Ende")
+
+        text, how = mybb_export.decode_dump(raw)
+
+        assert "Prüfung" in text, "the UTF-8 part is untouched"
+        assert "Übung" in text, "and the latin1 byte is recovered"
+        assert "�" not in text
+        assert "mixed" in how
+
+    def test_a_mixed_dump_says_how_many_there_were(self):
+        raw = "Prüfung ".encode("utf-8") + "Übung".encode("cp1252")
+
+        _text, how = mybb_export.decode_dump(raw)
+
+        assert "1 characters" in how
+
+    def test_something_that_is_not_a_dump_at_all_says_so(self):
         """cp1252 would read UTF-16 as mojibake and call it a success."""
         raw = "SET NAMES utf8; 'Prüfungen'".encode("utf-16")
 
-        text, how = mybb_export.decode_dump(raw)
+        _text, how = mybb_export.decode_dump(raw)
 
-        assert "damaged" in how
-        assert "�" in text
+        assert "worth checking" in how
 
     def test_how_it_was_read_is_reported_to_the_caller(self, tmp_path):
         dump = tmp_path / "backup.sql"

@@ -20,6 +20,7 @@ and export the result as JSON, and you can skip this entirely.
 """
 
 import argparse
+import codecs
 import gzip
 import json
 import re
@@ -49,40 +50,71 @@ MYSQL_CHARSETS = {
 }
 
 
+def _not_utf8_is_cp1252(error):
+    """Read the bytes UTF-8 could not as cp1252, and carry on.
+
+    A board this old is mixed: most of it is UTF-8, and some rows were written
+    while the connection was latin1, so a handful of umlauts are single bytes in
+    a file that is otherwise UTF-8. Switching the whole file to cp1252 would
+    wreck everything that is already right; replacing the odd byte loses real
+    text. Only the bytes that are not UTF-8 are read the other way.
+    """
+    chunk = error.object[error.start:error.end]
+    return chunk.decode("cp1252", errors="replace"), error.end
+
+
+codecs.register_error("mybb_mixed_encoding", _not_utf8_is_cp1252)
+
+
 def decode_dump(raw):
     """``(text, how it was read)``, never silently damaged.
 
     Reading a dump with errors="replace" is how every umlaut on a German board
-    becomes U+FFFD without anything saying so: Prüfungen arrives as Pr�fungen,
-    in 1,500 posts, and the import reports success. So the declared charset is
-    tried first, then the two that a MyBB board is ever actually in, and only
-    if none of them can read the file is anything replaced -- loudly, with a
-    count.
+    becomes U+FFFD without anything saying so: Prüfungen arrives as Pr?fungen,
+    in fifteen hundred posts, and the import reports success. This one says
+    what it did, every time, and the caller prints it.
+
+    Three cases, in this order:
+
+    * the dump declares latin1 -- an old board dumped by an old mysqldump, and
+      MySQL's latin1 is really cp1252, curly quotes and all;
+    * it is valid UTF-8, which is the ordinary case;
+    * it is mixed, which is the real one. This board ran for thirteen years
+      through more than one MySQL default, so most of it is UTF-8 and 7,867
+      characters of it are not. Reading the whole file as cp1252 would turn
+      every correct umlaut into "Ã¼"; replacing the odd byte loses real text.
+      So only the bytes that are not UTF-8 are read as cp1252.
     """
     declared = CHARSET_DECLARATION.search(raw[:4096])
-    candidates = []
     if declared:
         named = declared.group(1).decode("ascii", "replace").lower()
-        candidates.append((MYSQL_CHARSETS.get(named, named), f"{named} (as the dump declares)"))
-    candidates.extend([("utf-8", "UTF-8"), ("cp1252", "cp1252, which MySQL calls latin1")])
+        encoding = MYSQL_CHARSETS.get(named, named)
+        if encoding == "cp1252":
+            return raw.decode(encoding, errors="mybb_mixed_encoding"), (
+                f"{named}, which is cp1252 (as the dump declares)"
+            )
 
-    for encoding, description in candidates:
-        try:
-            text = raw.decode(encoding)
-        except (UnicodeDecodeError, LookupError):
-            continue
-        # cp1252 has an opinion about almost every byte, so it would happily
-        # turn a UTF-16 dump into mojibake and report success. No mysqldump
-        # contains a NUL; a decoding that produces them is the wrong one.
-        if "\x00" in text:
-            continue
-        return text, description
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = None
+    if text is not None and "\x00" not in text:
+        if declared:
+            return text, f"{named} (as the dump declares)"
+        return text, "UTF-8"
 
-    text = raw.decode("utf-8", errors="replace")
-    return text, (
-        f"UTF-8 with {text.count(chr(0xFFFD))} characters it could not read "
-        f"replaced -- the dump is in some other encoding and this will have "
-        f"damaged it"
+    mixed = raw.decode("utf-8", errors="mybb_mixed_encoding")
+    if "\x00" in mixed:
+        # No mysqldump contains a NUL. Something else entirely -- UTF-16, or a
+        # file that is not a dump -- and saying so beats reading it as mojibake.
+        return mixed, (
+            "something that is not UTF-8 and not cp1252 either; the text in it "
+            "will be wrong and the file is worth checking before going on"
+        )
+    damaged = raw.decode("utf-8", errors="replace").count(chr(0xFFFD))
+    return mixed, (
+        f"UTF-8, with {damaged} characters that are not UTF-8 read as cp1252 "
+        f"-- this board is old enough to be mixed"
     )
 
 

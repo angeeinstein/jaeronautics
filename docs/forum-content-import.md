@@ -539,10 +539,22 @@ board turns every `ü` into `U+FFFD` — in every post and every title — while
 every count still adds up and the run reports success. A German board is the
 worst possible place for that to be silent.
 
-It now believes the charset mysqldump writes at the top of the file
-(`SET NAMES utf8mb4`), falls back to UTF-8 and then to cp1252 (which is what
-MySQL means by "latin1", curly quotes included), and only replaces characters
-if none of those can read the file — saying how many it lost when it does.
+**This board is mixed**, which is the case worth understanding:
+
+    Dump read as UTF-8, with 7867 characters that are not UTF-8 read as
+    cp1252 -- this board is old enough to be mixed.
+
+Thirteen years of posts through more than one MySQL default: almost all of it
+is UTF-8, and some thousands of characters were written while the connection
+was latin1. Reading the *whole* file as cp1252 because of them would turn every
+correct umlaut into `Ã¼` — far more damage than the problem. So only the bytes
+that are not valid UTF-8 are read as cp1252, and the count is printed so that
+nobody has to wonder.
+
+A dump that declares `latin1` is read as cp1252 throughout; one that is valid
+UTF-8 is read as UTF-8 and says so; anything that is neither — a UTF-16 file,
+or something that is not a dump — is reported as such rather than quietly
+turned into mojibake.
 
 **Look at a topic on the new forum before trusting a run**: one with an umlaut
 in the title. `Übungsbeispiele` is right; `�bungsbeispiele` means the archive
