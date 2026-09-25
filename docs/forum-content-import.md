@@ -26,12 +26,55 @@ sent. This writes to Discourse and cannot be undone from inside it.
 
 ## 1. Put the files where the portal can read them
 
-Two things are needed: the MyBB dump, and the old forum's `uploads` folder with
-the `.attach` files in it.
+Five things are needed, and none of them is in the repository or made on the
+server: the MyBB dump, the old forum's `uploads` folder with the `.attach`
+files in it, the avatar files, `people.json`, and the worksheet's
+`categories.json`.
 
-Neither belongs in `/var/www/jaeronautics`. That directory is the application,
-it is replaced by updates, and the dump holds seven hundred real email
-addresses. Somewhere like `/var/tmp/forum-migration` is right.
+Every reset of the portal means putting all five back, and a full import is
+run more than once. Copying five things by hand each time is how a run gets
+twenty minutes in and imports 739 people without pictures, because the avatar
+folder that was copied was last month's. So they travel as **one archive with
+a manifest**, built on the machine that has them.
+
+### Build it once, on your own machine
+
+`scripts/forum_package.py` needs nothing but Python 3 — no virtualenv, no
+Flask, no database — so it runs where the files are:
+
+```bash
+python3 scripts/forum_package.py pack \
+    --dump backup__20260919_210211_Xwyis10ESUeobhvu.sql.gz \
+    --uploads ./uploads \
+    --avatars ./avatars \
+    --people people.json \
+    --mapping categories.json \
+    --out forum-import.zip
+```
+
+It prints what it packed, and those numbers are the thing to read:
+
+```
+  people       86.0 kB  people 739, with_avatar 412
+  mapping     197.0 kB  forums 246, decided 246, to_lectures 91, lectures 64, archived 155
+  uploads       8.7 GB  files 2347
+  avatars      41.2 MB  files 412
+```
+
+`to_lectures 4` on an export you thought was finished is the whole point of
+printing it. So is the line about avatars: `people.json` names the avatar files
+by name, and any it names that are not in the folder are listed, because those
+people import with no picture and nothing fails while it happens.
+
+Stored, not compressed — the contents are PDFs, JPEGs and a gzip, so deflating
+nine gigabytes would spend an hour to save nothing. It is about as large as the
+uploads folder, and it is a copy: both have to fit.
+
+### Copy it over, and check it *there*
+
+Nothing of this belongs in `/var/www/jaeronautics`. That directory is the
+application, it is replaced by updates, and the dump holds seven hundred real
+email addresses. Somewhere like `/var/tmp/forum-migration` is right.
 
 Download as yourself and hand the whole directory over afterwards, rather than
 downloading as `jaeronautics` into a directory it cannot write to. The order
@@ -41,36 +84,42 @@ which sounds like a network problem and is a permissions one:
 ```bash
 mkdir -p /var/tmp/forum-migration
 cd /var/tmp/forum-migration
+curl -O http://YOUR-PC:8000/forum-import.zip
+python3 /var/www/jaeronautics/scripts/forum_package.py check forum-import.zip
 ```
 
-From your own machine, with `python3 -m http.server` running **in the folder
-that contains `uploads`**, not inside `uploads` itself:
+The check is on this machine on purpose. On the machine that built it
+everything is always fine; what goes wrong is the nine gigabytes in between.
+It reads every file back against the checksum the archive carries for it, and
+compares what is there against what the manifest says was packed — 2,347
+attachments and not 2,300. It exits non-zero if either answer is wrong, so it
+can gate the rest.
+
+Then unpack and hand it over:
 
 ```bash
-curl -O http://YOUR-PC:8000/backup__20260919_210211_Xwyis10ESUeobhvu.sql.gz
-mv backup__*.sql.gz dump.sql.gz
-```
-
-The rename is worth it. Every command below names the dump, the real filename
-has a random suffix, and a typo in it comes back as "File does not exist" after
-you have already got the rest of a long command right.
-
-Then, once everything is downloaded — and again after copying any attachments
-across:
-
-```bash
+unzip -q forum-import.zip -d /var/tmp/forum-migration
+rm forum-import.zip
 chown -R jaeronautics: /var/tmp/forum-migration
 ```
 
-Check it took, rather than assuming:
+Check the ownership took, rather than assuming:
 
 ```bash
 sudo -u jaeronautics ls -l /var/tmp/forum-migration
 ```
 
-The uploads folder is around 9 GB in total. For the rehearsal you do not need
-all of it — see step 4, where the dry run names the handful of files it
-actually wants.
+The layout is what every command below expects: `dump.sql.gz`, `uploads/`,
+`avatars/`, `people.json`, `categories.json`. The dump keeps the name
+`dump.sql.gz` rather than its random suffix because every command names it, and
+a typo in `backup__20260919_210211_Xwyis10ESUeobhvu.sql.gz` comes back as "File
+does not exist" after you have got the rest of a long command right. If the
+dump is not actually gzipped it is packed as `dump.sql` instead — what opens it
+decides by the suffix, so the suffix has to be true.
+
+The uploads folder is around 9 GB. For the rehearsal you do not need all of it
+— see step 4, where the dry run names the handful of files it actually wants,
+and `--uploads` can point at a folder holding only those.
 
 ## 2. Make a migration API key
 

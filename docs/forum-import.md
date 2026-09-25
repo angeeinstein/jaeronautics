@@ -139,6 +139,19 @@ assuming every person has a local file:
 SELECT COUNT(*) FROM mybb_users WHERE avatar LIKE 'http%';
 ```
 
+### Getting them onto the server, with everything else
+
+Once the avatars and `people.json` are on your own machine they do not travel
+to the portal on their own. They go with the dump, the uploads and the
+worksheet's `categories.json` in one archive, built and checked by
+`scripts/forum_package.py` — see
+[forum-content-import.md § 1](forum-content-import.md#1-put-the-files-where-the-portal-can-read-them).
+That is worth doing before the people import rather than after, because the
+portal is reset more than once before the real run and this is the part that is
+put back each time.
+
+The paths below are where that archive unpacks to.
+
 ## 4. What the importer expects
 
 A JSON array, one object per person. Only `source_user_id` and
@@ -287,13 +300,15 @@ cd /var/www/jaeronautics
 # Rehearse. Writes nothing at all, avatars included.
 sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
-     import-forum-people people.json --dry-run --year-groups \
-     --avatar-dir /path/to/avatars
+     import-forum-people /var/tmp/forum-migration/people.json \
+     --dry-run --year-groups \
+     --avatar-dir /var/tmp/forum-migration/avatars
 
 # The real thing.
 sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
-     import-forum-people people.json --avatar-dir /path/to/avatars
+     import-forum-people /var/tmp/forum-migration/people.json \
+     --avatar-dir /var/tmp/forum-migration/avatars
 ```
 
 **As `jaeronautics`, not as `root`.** The import writes normalised avatars into
