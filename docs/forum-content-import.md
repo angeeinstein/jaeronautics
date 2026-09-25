@@ -105,6 +105,12 @@ rm forum-import.zip
 chown -R jaeronautics: /var/tmp/forum-migration
 ```
 
+The files arrive readable by their owner and its group and by nobody else,
+which is a mode the archive carries rather than one the laptop had: Windows has
+no file mode, so an archive built there hands every file 0666 and `unzip`
+reproduces it — a dump of 740 real email addresses, writable by anybody with an
+account on that machine.
+
 Check the ownership took, rather than assuming:
 
 ```bash

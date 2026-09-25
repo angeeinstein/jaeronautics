@@ -150,6 +150,37 @@ class TestPacking:
         assert "cannot be read as JSON" in str(stopped.value)
 
 
+class TestWhatTheFilesAreWhenTheyArriveOnTheServer:
+    """Built on Windows, unpacked on a Linux box that has other accounts on it.
+
+    Windows has no file mode, so every file goes into the archive as 0666 and
+    ``unzip`` reproduces that faithfully: a dump of 740 real email addresses
+    that anybody with an account can read, and write.
+    """
+
+    def test_every_entry_carries_a_mode_of_its_own(self, inputs):
+        inputs["people"].chmod(0o666)
+        (inputs["avatars"] / "avatar_7.png").chmod(0o666)
+        pack(inputs)
+        with zipfile.ZipFile(inputs["out"]) as archive:
+            entries = archive.infolist()
+        assert entries
+        for entry in entries:
+            assert entry.external_attr >> 16 == 0o640, entry.filename
+
+    def test_the_mode_is_marked_as_a_unix_one_or_it_is_ignored(self, inputs):
+        pack(inputs)
+        with zipfile.ZipFile(inputs["out"]) as archive:
+            systems = {entry.create_system for entry in archive.infolist()}
+        assert systems == {3}
+
+    def test_the_manifest_is_not_left_out_of_it(self, inputs):
+        pack(inputs)
+        with zipfile.ZipFile(inputs["out"]) as archive:
+            entry = archive.getinfo(forum_package.MANIFEST)
+        assert entry.external_attr >> 16 == 0o640
+
+
 class TestAvatarsThatPeopleJsonAsksForAndTheFolderDoesNotHave:
     """The quiet one. 739 people import, nobody has a picture, nothing failed."""
 

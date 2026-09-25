@@ -51,6 +51,18 @@ LAYOUT = {
 
 GZIP_MAGIC = b"\x1f\x8b"
 
+#: What each file should be when it is unpacked: the owner and its group, and
+#: nobody else. Windows has no such thing, so a package built there carries
+#: 0666 on every file and ``unzip`` reproduces it faithfully -- leaving a dump
+#: of 740 real email addresses writable by anybody with an account on the
+#: server. The mode is recorded here instead, where it is the same on every
+#: machine the package is built on.
+FILE_MODE = 0o640
+
+#: Unix, so that the mode above is read at all rather than ignored as a set of
+#: MS-DOS attribute bits.
+UNIX = 3
+
 
 def _say(message):
     print(message, flush=True)
@@ -77,6 +89,18 @@ def _dump_name(path):
     with open(path, "rb") as handle:
         gzipped = handle.read(2) == GZIP_MAGIC
     return "dump.sql.gz" if gzipped else "dump.sql"
+
+
+def _set_mode(archive, name):
+    """Say what this entry's permissions should be when it is unpacked.
+
+    Set after the entry is written, which works because permissions live in
+    the central directory rather than in each file's own header, and the
+    central directory is written when the archive is closed.
+    """
+    entry = archive.NameToInfo[name]
+    entry.create_system = UNIX
+    entry.external_attr = FILE_MODE << 16
 
 
 def _read_json(path_or_bytes, what):
@@ -208,8 +232,10 @@ def pack(args):
 
     with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED, allowZip64=True) as archive:
         archive.writestr(MANIFEST, json.dumps(manifest, indent=2, ensure_ascii=False))
+        _set_mode(archive, MANIFEST)
         for index, (path, inside) in enumerate(members, 1):
             archive.write(path, inside)
+            _set_mode(archive, inside)
             if index % 250 == 0 or index == len(members):
                 _say(f"  {index}/{len(members)}")
 
