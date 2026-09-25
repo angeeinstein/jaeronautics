@@ -290,6 +290,7 @@ class TestTheCommandsCanBeRun:
 
         assert result.exit_code == 0, result.output
         assert "Mapping read: 1 lectures" in result.output
+        assert "2 categories on the forum, 2 of them made by this run" in result.output
         assert poster.settings_written == [], (
             "a run that posts nothing has no reason to change a setting"
         )

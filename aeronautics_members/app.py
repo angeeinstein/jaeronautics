@@ -2849,13 +2849,27 @@ def create_app(config_overrides=None):
                         fg="red",
                     ), err=True)
 
+        # Said first, and said even when nothing was posted: a categories-only
+        # run that reports "0 threads: 0 posted" reads as though it did nothing
+        # at all, when making the categories is the whole of what it was for.
         click.echo(
-            f"\n{summary['threads']} threads: {summary['posted']} posted, "
-            f"{summary['already_there']} already there, "
-            f"{summary['waiting']} waiting, "
-            f"{summary['not_attempted']} not attempted, "
-            f"{summary['failed']} failed."
+            f"\n{summary.get('categories_there', 0)} categories on the forum, "
+            f"{summary.get('categories_made', 0)} of them made by this run."
         )
+        if categories_only:
+            click.echo(
+                "Nothing was posted and no setting was changed. Look at the "
+                "categories, and delete them if the shape is not right -- an "
+                "empty category deletes cleanly."
+            )
+        else:
+            click.echo(
+                f"{summary['threads']} threads: {summary['posted']} posted, "
+                f"{summary['already_there']} already there, "
+                f"{summary['waiting']} waiting, "
+                f"{summary['not_attempted']} not attempted, "
+                f"{summary['failed']} failed."
+            )
         if summary.get("renamed"):
             click.echo(
                 f"{summary['renamed']} of the board's threads share a subject "

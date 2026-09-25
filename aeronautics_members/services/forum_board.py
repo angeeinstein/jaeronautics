@@ -702,7 +702,8 @@ def unique_titles(forums, threads, limit=TITLE_LENGTH_LIMIT):
     return titles
 
 
-def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
+def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None,
+                     created=None):
     """Make the categories the old board had. Returns {fid: category id}.
 
     Already-made ones are found rather than remade, by name under the same
@@ -742,6 +743,8 @@ def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
         if category_id is None:
             try:
                 category_id = poster.create_category(row["name"], parent_id=parent_id)
+                if created is not None:
+                    created.append(row["key"])
             except ForumProviderError as exc:
                 if problems is not None:
                     problems.append(f"category {' / '.join(row['path'])}: {exc}")
@@ -828,12 +831,18 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
         "already_there": 0, "waiting": 0, "not_attempted": 0, "failed": 0,
         "problems": [],
     }
-    categories = categories_by_forum(plan, ensure_categories(
-        poster, plan, ledger, dry_run=dry_run, problems=summary["problems"]
-    ))
+    created = []
+    made = ensure_categories(
+        poster, plan, ledger, dry_run=dry_run, problems=summary["problems"],
+        created=created,
+    )
+    categories = categories_by_forum(plan, made)
+    # Counted apart: "107 categories" is the plan, and how many of them this
+    # run had to make is what says whether it did anything.
+    summary["categories_there"] = len(made)
+    summary["categories_made"] = len(created)
 
     if categories_only:
-        summary["categories_made"] = len(categories)
         return summary
 
     threads = sorted(
