@@ -1151,6 +1151,7 @@ roll_back_installation() {
 
     # Reinstall from the rolled-back revision so dependencies, unit files and the
     # nginx configuration all match the code that is about to run.
+    ensure_writable_directories
     ensure_virtualenv
     render_service_file
     render_billing_reconcile_timer_files
@@ -1325,7 +1326,26 @@ detect_existing_installation() {
 
 ensure_repo_present() {
     sync_repo_to_dir "${INSTALL_DIR}" "${REPO_URL}" "${BRANCH}"
+    ensure_writable_directories
     chown -R "${APP_USER}:${APP_GROUP}" "${INSTALL_DIR}"
+}
+
+# The one directory the application writes inside its own tree, and the only
+# one git cannot bring: it is ignored, so a fresh clone has no storage/ at all.
+# Every unit grants it with ReadWritePaths, and systemd will not start a
+# service whose ReadWritePaths names something that does not exist -- so on a
+# genuinely fresh install the service failed at once with
+#
+#   Failed to set up mount namespacing: /var/www/jaeronautics/storage:
+#   No such file or directory
+#   status=226/NAMESPACE
+#
+# which never showed up in testing, because every install until then was an
+# update over a tree where the running application had already made it.
+ensure_writable_directories() {
+    install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${INSTALL_DIR}/storage"
+    install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 \
+        "${INSTALL_DIR}/storage/forum_avatar_staging"
 }
 
 ensure_virtualenv() {
