@@ -6,6 +6,10 @@ cannot and somebody is left reconciling half an archive by hand. Everything
 here is about the first one.
 """
 import json
+import os
+import shutil
+import subprocess
+import tempfile
 import re
 from datetime import datetime, timezone
 
@@ -1074,11 +1078,111 @@ class TestThePageForDecidingTheStructure:
         assert row["names_now"] == []
 
     def test_the_page_carries_the_board_rather_than_fetching_it(self):
-        """It opens from a file, and nothing on it leaves the machine."""
+        """It opens from a file, and nothing on it leaves the machine.
+
+        Stated as what it protects rather than as a ban on the characters
+        "http": the page offers to open the old board's files from an address
+        the person types in and runs themselves, which is not the same thing as
+        the page reaching out on its own.
+        """
+        html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
+        head = html.split("const DATA")[0]
+
+        assert "<script src" not in head
+        assert "<link" not in head
+        assert "@import" not in head
+        assert "fetch(" not in html
+        assert "XMLHttpRequest" not in html
+        for fetched in re.findall(r'(?:src|href)\s*=\s*"([^"]+)"', head):
+            assert not fetched.startswith(("http://", "https://", "//")), fetched
+        assert self.data_in(html)["rows"][0]["old_fid"] == "10"
+
+    def test_the_only_address_on_it_is_one_to_type_over(self):
+        """The placeholder in the uploads box, which fetches nothing by itself."""
         html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
 
-        assert "http://" not in html.split("const DATA")[0], "nothing is fetched"
-        assert self.data_in(html)["rows"][0]["old_fid"] == "10"
+        assert 'placeholder="http://127.0.0.1:8765/"' in html
+
+    def test_the_pages_javascript_parses(self):
+        """The page is JavaScript inside a Python string, and that bites.
+
+        Two real breakages came from exactly that: "\\n" in the Python source
+        became a real newline inside a JavaScript string, and an escaped quote
+        became a bare one that ended the string early. Both produced a page
+        that rendered nothing at all, and neither is visible to a test that
+        checks for substrings.
+        """
+        node = shutil.which("node")
+        if node is None:
+            pytest.skip("node is not installed here")
+        html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
+        script = html.split("<script>")[1].split("</script>")[0]
+        with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8",
+                                         delete=False) as handle:
+            handle.write(script)
+            path = handle.name
+        try:
+            done = subprocess.run([node, "--check", path],
+                                  capture_output=True, text=True)
+        finally:
+            os.unlink(path)
+
+        assert done.returncode == 0, done.stderr
+
+    def test_the_viewer_cannot_swallow_clicks_while_hidden(self):
+        """display:flex beats the hidden attribute, and it did.
+
+        An invisible panel across the bottom of the page ate every click that
+        landed on it.
+        """
+        html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
+
+        assert "#viewer[hidden] { display: none; }" in html
+
+    def test_the_dropdown_is_grouped_by_semester(self):
+        """Eighty lectures in a flat list is a list nobody finds anything in."""
+        html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
+
+        assert "<optgroup" in html
+        assert "function optionsHtml" in html
+
+    def test_decisions_can_be_taken_from_somebody_else_s_export(self):
+        """So the 274 can be split between people who each know a part of it."""
+        html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
+
+        assert 'id="importfile"' in html
+        assert "function importDecisions" in html
+        assert "payload.mapping || payload.rows" in html, "it reads its own export"
+
+    def test_openable_documents_travel_with_each_row(self):
+        """Every file on disk is called post_1234_1490000000_abcdef.attach.
+
+        Deciding whether this year's exam and 2016's are the same course means
+        looking at them, and looking at them cannot mean hunting through nine
+        gigabytes for a name that says nothing.
+        """
+        row = self.rows()[0]
+
+        assert row["documents"] == [{
+            "name": "Klausur_LAV16_Loesung.pdf",
+            "path": "",
+            "type": "",
+            "size": 10,
+            "year": 2017,
+        }]
+
+    def test_a_zip_gets_no_open_button(self):
+        """A browser will not show it, so offering to open it is a lie."""
+        forums = [{"fid": "1", "pid": "0", "name": "02-02 Flugzeugentwurf"}]
+        threads = [{"tid": "1", "fid": "1", "subject": "Projekt", "firstpost": "1"}]
+        posts = [{"pid": "1", "tid": "1", "uid": "7", "dateline": "1490000000"}]
+        attachments = [{"pid": "1", "filename": "Modelle.zip",
+                        "attachname": "201703/a.attach", "filesize": "10"}]
+
+        row = category_worksheet(forums, threads, posts, attachments)[0]
+
+        assert row["documents"] == []
+        assert row["files"] == ["2017  Modelle.zip"], "it is still listed"
 
     def test_versions_of_a_course_are_grouped_by_the_same_rule_as_the_sort(self):
         html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)

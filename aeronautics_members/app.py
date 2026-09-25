@@ -2307,6 +2307,85 @@ def create_app(config_overrides=None):
         if report.get("topic_id"):
             click.echo(f"\nTopic {report['topic_id']} — go and look at it.")
 
+    @app.cli.command("serve-forum-uploads")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--uploads", required=True, type=click.Path(exists=True, file_okay=False),
+                  help="The old board's uploads folder.")
+    @click.option("--port", default=8765, show_default=True)
+    @click.option("--host", default="127.0.0.1", show_default=True,
+                  help="Localhost by default; reach it over an SSH tunnel.")
+    @with_appcontext
+    def serve_forum_uploads_command(dump_file, uploads, port, host):
+        """Serves the old board's files so the worksheet can open them.
+
+        Every upload is on disk as post_<pid>_<time>_<hash>.attach -- the
+        original bytes under a name that says nothing and an extension no
+        browser will render. The name somebody chose and the type it really is
+        are columns in the database, so this reads those and serves each file
+        under its real name and type. The worksheet then has an open button per
+        document, and deciding whether this year's exam and 2016's are the same
+        course is a matter of looking at them side by side.
+
+        Bound to localhost. It serves thirteen years of exam papers with no
+        authentication whatever, so it belongs on a tunnel
+
+            ssh -N -L 8765:127.0.0.1:8765 you@server
+
+        and not on an interface anybody else can reach. Stop it when the
+        curating is done; it is a tool for an afternoon, not a service.
+        """
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from urllib.parse import unquote
+
+        tables = _load_mybb_dump(dump_file)
+        uploads_dir = Path(uploads).resolve()
+        known = {}
+        for row in tables["attachments"]:
+            attachname = (row.get("attachname") or "").strip()
+            if attachname:
+                known[attachname] = (
+                    (row.get("filename") or attachname).strip(),
+                    row.get("filetype") or "application/octet-stream",
+                )
+        click.echo(f"{len(known)} files, from {uploads_dir}.")
+
+        class Uploads(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802 -- http.server's spelling
+                wanted = unquote(self.path.lstrip("/").split("?")[0])
+                entry = known.get(wanted)
+                # Served only if the dump says it exists, which is also what
+                # makes ".." pointless: nothing outside the board is in the
+                # index, so nothing outside it can be asked for.
+                path = (uploads_dir / wanted).resolve() if entry else None
+                if entry is None or not path.is_file() or uploads_dir not in path.parents:
+                    self.send_error(404, "Not one of the old board's files")
+                    return
+                filename, content_type = entry
+                body = path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                # Inline, because the point is to look at it rather than to
+                # collect it, and a viewer that downloads is not a viewer.
+                self.send_header(
+                    "Content-Disposition",
+                    f"inline; filename*=UTF-8''{quote_plus(filename)}",
+                )
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer((host, port), Uploads)
+        click.echo(f"Serving on http://{host}:{port}/ -- Ctrl-C to stop.")
+        click.echo("Put that address in the worksheet's \"Open files from\" box.")
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            click.echo("\nStopped.")
+
     @app.cli.command("forum-category-worksheet")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
     @click.option("--out", type=click.Path(dir_okay=False),

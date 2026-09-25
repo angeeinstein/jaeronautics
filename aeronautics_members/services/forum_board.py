@@ -349,12 +349,29 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8,
     for post in posts:
         thread_of_post[post.get("pid")] = post.get("tid")
     files_by_thread = {}
+    documents_by_thread = {}
     for row in attachments:
         tid = thread_of_post.get(row.get("pid"))
-        if tid is not None:
-            name = (row.get("filename") or "").strip()
-            if name:
-                files_by_thread.setdefault(tid, []).append(name)
+        if tid is None:
+            continue
+        name = (row.get("filename") or "").strip()
+        if not name:
+            continue
+        files_by_thread.setdefault(tid, []).append(name)
+        # Enough to open it: the path it is on disk under, and the type it
+        # really is. Deciding whether this year's exam and 2016's are the same
+        # course means looking at them, and looking at them should not mean
+        # hunting through nine gigabytes for a file called
+        # post_1234_1490000000_abcdef.attach.
+        suffix = Path(name).suffix.lstrip(".").lower()
+        if suffix in OPENABLE:
+            size = int(row.get("filesize") or 0)
+            documents_by_thread.setdefault(tid, []).append({
+                "name": name,
+                "path": (row.get("attachname") or "").strip(),
+                "type": row.get("filetype") or "",
+                "size": size,
+            })
 
     posts_by_thread = {}
     for post in posts:
@@ -396,6 +413,12 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8,
             for row in newest
             for name in files_by_thread.get(row.get("tid"), [])
         ]
+        documents = [
+            dict(document,
+                 year=_year_of(dates_by_thread.get(row.get("tid"), (0, 0))[1]))
+            for row in newest
+            for document in documents_by_thread.get(row.get("tid"), [])
+        ]
         last_year = max((year for year, _ in dated_subjects), default=0)
         # The lecture's own words are not the lecturer's name, and taking them
         # from the name of the forum costs nothing and needs no list: this is
@@ -417,6 +440,11 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8,
                          for year, subject in dated_subjects[:samples]],
             "files": [f"{year or '?'}  {name}"
                       for year, name in dated_files[:samples]],
+            # Not capped at `samples`: this is the list somebody opens things
+            # from, and the one they want is as likely to be the fortieth as
+            # the third. Capped at something, because a page carrying every
+            # attachment on the board is a page that does not open.
+            "documents": documents[:DOCUMENTS_PER_FORUM],
             # The lecturer is in the subjects and the filenames far more often
             # than anywhere else on this board -- "Exam Haselgruber", "1. Termin
             # AVF, Flöhr am 13.1.25" -- so the names that appear early and the
@@ -436,6 +464,14 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8,
     rows.sort(key=lambda row: (_sortable(row["lecture"]), row["last_post"]),
               reverse=False)
     return rows
+
+
+# What is worth offering an "open" button for: things a browser will show.
+# A zip is not one of them, and neither is a 4 MB .doc that would download.
+OPENABLE = frozenset({"pdf", "png", "jpg", "jpeg", "gif", "webp", "txt"})
+
+#: How many of them one old forum carries on the page.
+DOCUMENTS_PER_FORUM = 60
 
 
 def _as_day(dateline):

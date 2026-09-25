@@ -87,6 +87,31 @@ summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
 .samples { margin: 6px 0 0; padding-left: 16px; font-size: 12.5px;
            color: var(--dim); font-family: ui-monospace, monospace;
            word-break: break-all; }
+.names { color: var(--dim); }
+.docs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.doc { font-size: 12px; padding: 2px 7px; border-radius: 99px;
+       border: 1px solid var(--line); background: transparent; color: var(--accent);
+       cursor: pointer; max-width: 26em; overflow: hidden; text-overflow: ellipsis;
+       white-space: nowrap; }
+.doc:hover { border-color: var(--accent); }
+#viewer { position: fixed; inset: auto 0 0 0; height: 62vh; z-index: 30;
+          background: var(--bg); border-top: 2px solid var(--accent);
+          display: flex; flex-direction: column; box-shadow: 0 -8px 30px #0008; }
+/* display:flex beats the hidden attribute, and an invisible panel across the
+   bottom of the page swallows every click landing on it. */
+#viewer[hidden] { display: none; }
+.viewerbar { display: flex; gap: 10px; align-items: center; padding: 8px 12px;
+             border-bottom: 1px solid var(--line); }
+.panes { flex: 1; display: flex; gap: 1px; background: var(--line); min-height: 0; }
+.pane { flex: 1; display: flex; flex-direction: column; background: var(--bg);
+        min-width: 0; }
+.panehead { display: flex; gap: 8px; align-items: center; padding: 5px 9px;
+            font-size: 12px; color: var(--dim); border-bottom: 1px solid var(--line); }
+.panehead b { color: var(--fg); overflow: hidden; text-overflow: ellipsis;
+              white-space: nowrap; }
+.pane iframe, .pane img { flex: 1; width: 100%; border: 0; min-height: 0;
+                          object-fit: contain; background: #fff; }
+body.viewing main { padding-bottom: 64vh; }
 .controls { display: flex; flex-direction: column; gap: 5px; align-items: stretch; }
 .controls select { min-width: 210px; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -102,6 +127,8 @@ summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
   <button id="reset">Start again</button>
   <button class="primary" id="export">Export JSON</button>
   <button id="exportcsv">Export CSV</button>
+  <button id="import">Import JSON</button>
+  <input id="importfile" type="file" accept="application/json,.json" hidden>
 </header>
 
 <main>
@@ -144,9 +171,28 @@ Master 1. Semester / Aerodynamik"></textarea>
       </label>
       <button id="archiveold" type="button">Archive all of those</button>
     </div>
+    <div class="filters">
+      <label class="hint" style="flex:1">
+        Open files from
+        <input id="uploadsbase" placeholder="http://127.0.0.1:8765/"
+               style="width:16em">
+        &mdash; <code>flask serve-forum-uploads</code> on the machine that has
+        them, over an SSH tunnel.
+      </label>
+    </div>
     <div id="rows"></div>
   </section>
 </main>
+
+<div id="viewer" hidden>
+  <div class="viewerbar">
+    <b>Comparing</b>
+    <span class="hint">Open a second document and it lands beside this one.</span>
+    <span class="grow"></span>
+    <button id="closeviewer">Close</button>
+  </div>
+  <div class="panes" id="panes"></div>
+</div>
 
 <script>
 const DATA = __DATA__;
@@ -155,6 +201,8 @@ let decisions = {};
 try { decisions = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
 let curriculum = "";
 try { curriculum = localStorage.getItem(KEY + ":curriculum") || ""; } catch (e) {}
+let uploads = "";
+try { uploads = localStorage.getItem(KEY + ":uploads") || ""; } catch (e) {}
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
@@ -196,6 +244,28 @@ function drawTree() {
   ).join("");
 }
 
+// Grouped by semester, because a flat list of eighty lectures is a list
+// nobody can find anything in. The browser's own optgroup does the work.
+function optionsHtml(chosen) {
+  const bySemester = new Map();
+  for (const one of lectures()) {
+    const key = one.semester || "(no semester)";
+    if (!bySemester.has(key)) bySemester.set(key, []);
+    bySemester.get(key).push(one);
+  }
+  const out = [];
+  for (const [semester, inSemester] of bySemester) {
+    out.push('<optgroup label="' + esc(semester) + '">');
+    for (const one of inSemester) {
+      out.push('<option value="' + esc(one.full) + '"' +
+               (chosen === one.full ? " selected" : "") + ">" +
+               esc(one.lecture) + "</option>");
+    }
+    out.push("</optgroup>");
+  }
+  return out.join("");
+}
+
 function groupsOf(rows) {
   const by = new Map();
   for (const row of rows) {
@@ -224,6 +294,59 @@ function names(row) {
   return '<div class="meta names" title="Names found in the subjects and ' +
          'filenames. A guess, not a record.">names &mdash; ' +
          parts.join(" &middot; ") + "</div>";
+}
+
+// One button per document, because the question "is this the same course as
+// that one" is answered by looking at two exams, and every file on disk is
+// called post_1234_1490000000_abcdef.attach. flask serve-forum-uploads knows
+// the real names and types; this only has to ask it for them.
+function documents(row) {
+  const docs = row.documents || [];
+  // Drawn whether or not an address has been given yet. Drawing them only
+  // once it has meant re-rendering the list the moment the address box lost
+  // focus -- which is the same moment as the first click on a button, so the
+  // button was destroyed between mousedown and mouseup and the click landed on
+  // nothing. The first click always did nothing, and only the first.
+  if (!docs.length) return "";
+  return '<div class="docs">' + docs.map((doc, index) =>
+    '<button class="doc" data-fid="' + esc(row.old_fid) + '" data-doc="' + index +
+    '" title="' + esc(doc.name) + '">' +
+    (doc.year ? esc(doc.year) + "  " : "") + esc(doc.name) + "</button>"
+  ).join("") + "</div>";
+}
+
+function uploadsBase() {
+  const value = ($("uploadsbase").value || "").trim();
+  return value ? value.replace(/\\/+$/, "") + "/" : "";
+}
+
+// Two at a time, the newer one arriving on the right and pushing the older
+// left. Opening this year's exam and then 2016's puts them side by side, which
+// is the whole of what this is for.
+let openPanes = [];
+
+function openDocument(doc) {
+  openPanes = [...openPanes, doc].slice(-2);
+  drawPanes();
+}
+
+function drawPanes() {
+  const viewer = $("viewer");
+  viewer.hidden = openPanes.length === 0;
+  document.body.classList.toggle("viewing", openPanes.length > 0);
+  $("panes").innerHTML = openPanes.map((doc, index) => {
+    const url = uploadsBase() + doc.path;
+    const image = /^image\\//.test(doc.type || "") ||
+                  /\\.(png|jpe?g|gif|webp)$/i.test(doc.name);
+    return '<div class="pane"><div class="panehead"><b>' + esc(doc.name) +
+      "</b><span>" + (doc.year || "") + "</span><span class=\\"grow\\"></span>" +
+      '<a href="' + esc(url) + '" target="_blank" rel="noopener">open alone</a>' +
+      '<button data-pane="' + index + '" class="closepane">&times;</button></div>' +
+      (image
+        ? '<img src="' + esc(url) + '" alt="">'
+        : '<iframe src="' + esc(url) + '" title="' + esc(doc.name) + '"></iframe>') +
+      "</div>";
+  }).join("");
 }
 
 function draw() {
@@ -257,8 +380,7 @@ function draw() {
         ? '<select data-group="' + esc(course) + '" class="bulk">' +
           '<option value="">assign all of them…</option>' +
           '<option value="ARCHIVE">Archive</option>' +
-          options.map((o) => '<option value="' + esc(o.full) + '">' +
-                             esc(o.full) + "</option>").join("") + "</select>"
+          optionsHtml(null) + "</select>"
         : "") +
       "</div>");
 
@@ -275,6 +397,7 @@ function draw() {
             '<span class="' + (quiet ? "stale" : "live") + '">' +
             esc(row.last_post) + "</span></div>" +
           names(row) +
+          documents(row) +
           (row.subjects.length || row.files.length
             ? "<details><summary>What is in it</summary><ul class=\\"samples\\">" +
               row.subjects.map((t) => "<li>" + esc(t) + "</li>").join("") +
@@ -287,9 +410,7 @@ function draw() {
             '<option value="">— not decided —</option>' +
             '<option value="ARCHIVE"' +
               (chosen === "ARCHIVE" ? " selected" : "") + ">Archive</option>" +
-            options.map((o) => '<option value="' + esc(o.full) + '"' +
-              (chosen === o.full ? " selected" : "") + ">" +
-              esc(o.full) + "</option>").join("") +
+            optionsHtml(chosen) +
           "</select>" +
         "</div>" +
       "</div>");
@@ -316,7 +437,7 @@ function archiveEverythingOlderThan(year) {
     alert("Nothing is undecided and older than " + year + ".");
     return;
   }
-  if (!confirm("Put " + caught.length + " old forums into the archive?\n\n" +
+  if (!confirm("Put " + caught.length + " old forums into the archive?\\n\\n" +
                "Only ones you have not decided yet. You can still change any " +
                "of them afterwards.")) return;
   for (const row of caught) decisions[row.old_fid] = "ARCHIVE";
@@ -335,6 +456,94 @@ function download(name, text, type) {
 document.addEventListener("click", (event) => {
   if (event.target.id === "archiveold") {
     archiveEverythingOlderThan(parseInt($("cutoff").value, 10) || 0);
+    return;
+  }
+  const doc = event.target.closest(".doc");
+  if (doc) {
+    if (!uploadsBase()) {
+      alert("Fill in \\"Open files from\\" first -- the address of " +
+            "flask serve-forum-uploads on the machine that has the files.");
+      $("uploadsbase").focus();
+      return;
+    }
+    const row = DATA.rows.find((r) => String(r.old_fid) === doc.dataset.fid);
+    if (row) openDocument(row.documents[Number(doc.dataset.doc)]);
+    return;
+  }
+  const closePane = event.target.closest(".closepane");
+  if (closePane) {
+    openPanes.splice(Number(closePane.dataset.pane), 1);
+    drawPanes();
+    return;
+  }
+  if (event.target.id === "closeviewer") { openPanes = []; drawPanes(); return; }
+  if (event.target.id === "import") { $("importfile").click(); }
+});
+
+// Passing the work along. One person does the lectures they know, exports,
+// and the next imports and carries on -- which is the only way 274 of these
+// get decided by people who each know a part of the curriculum.
+function importDecisions(text) {
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch (e) {
+    alert("That is not a JSON file this page wrote.");
+    return;
+  }
+  const rows = Array.isArray(payload) ? payload : (payload.mapping || payload.rows);
+  if (!Array.isArray(rows)) {
+    alert("That JSON has no rows in it.");
+    return;
+  }
+  let taken = 0, conflicting = 0, unknown = 0;
+  const known = new Set(DATA.rows.map((row) => String(row.old_fid)));
+  const incoming = {};
+  for (const row of rows) {
+    const fid = String(row.old_fid);
+    if (!known.has(fid)) { unknown += 1; continue; }
+    if (!row.decided) continue;
+    const target = row.target || "ARCHIVE";
+    const mine = decisions[fid];
+    if (mine !== undefined && mine !== target) conflicting += 1;
+    incoming[fid] = target;
+    taken += 1;
+  }
+  if (!taken) { alert("Nothing in that file was decided."); return; }
+  const question = taken + " decisions in that file" +
+    (conflicting
+      ? ".\\n\\n" + conflicting + " of them disagree with a decision already " +
+        "here. Theirs would win."
+      : ".") +
+    (unknown ? "\\n\\n" + unknown + " are for forums this board does not have." : "") +
+    "\\n\\nTake them?";
+  if (!confirm(question)) return;
+  Object.assign(decisions, incoming);
+  // The curriculum comes with it, so the next person does not retype it. Only
+  // when they have not written one themselves -- theirs is the one they are
+  // working from.
+  const theirs = payload.curriculum_text ||
+    (Array.isArray(payload.curriculum)
+      ? payload.curriculum.map((l) => l.full).join("\\n")
+      : payload.curriculum);
+  if (theirs && !$("curriculum").value.trim()) {
+    $("curriculum").value = theirs;
+    drawTree();
+  }
+  save(); draw();
+}
+
+document.addEventListener("change", (event) => {
+  if (event.target.id === "importfile" && event.target.files[0]) {
+    const reader = new FileReader();
+    reader.onload = () => importDecisions(String(reader.result));
+    reader.readAsText(event.target.files[0]);
+    event.target.value = "";
+    return;
+  }
+  if (event.target.id === "uploadsbase") {
+    try { localStorage.setItem(KEY + ":uploads", $("uploadsbase").value); } catch (e) {}
+    return;
   }
 });
 
@@ -364,6 +573,7 @@ $("export").addEventListener("click", () => {
     forum: DATA.forum,
     written_at: new Date().toISOString(),
     curriculum: lectures(),
+    curriculum_text: $("curriculum").value,
     mapping: DATA.rows.map((row) => ({
       old_fid: row.old_fid,
       old_path: row.old_path,
@@ -400,6 +610,7 @@ $("theme").addEventListener("click", () => {
 });
 
 $("curriculum").value = curriculum;
+$("uploadsbase").value = uploads;
 drawTree();
 draw();
 </script>

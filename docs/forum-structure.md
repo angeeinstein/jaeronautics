@@ -62,6 +62,47 @@ into "read one line", and where it is unclear the evidence is one click away
 under *What is in it*, every subject and filename now carrying its year,
 newest first.
 
+### Looking at the documents themselves
+
+Where the names line is not enough, the answer is to look at this year's exam
+and the old one together. Every upload is on disk as
+`post_1234_1490000000_abcdef.attach`, which no browser will render and nobody
+can find, so the worksheet cannot simply link to them. Run this next to the
+files:
+
+```bash
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     serve-forum-uploads /var/tmp/forum-migration/dump.sql.gz \
+     --uploads /var/tmp/forum-migration/uploads
+```
+
+It reads the real name and type of every attachment out of the dump and serves
+each file under them. Put its address in the worksheet's **Open files from**
+box and every PDF and image gets a button; open one, then open another, and
+they sit side by side at the bottom of the page.
+
+**It is bound to localhost, and it must stay there.** It serves thirteen years
+of exam papers with no authentication at all, so reach it over a tunnel:
+
+```bash
+ssh -N -L 8765:127.0.0.1:8765 you@server
+```
+
+and stop it when the curating is done. It is a tool for an afternoon, not a
+service.
+
+### Splitting the work between people
+
+**Export JSON**, hand the file to somebody else, and they press **Import JSON**
+and carry on. Only decided rows travel; where their file disagrees with a
+decision already on the page, the page says how many and asks before taking
+theirs. The curriculum travels with it too, so the next person does not retype
+it — unless they have already written one, in which case theirs is kept.
+
+That is how 274 forums get decided by several people who each know part of the
+curriculum, rather than by one person who has to know all of it.
+
 Fill in `target` where a forum belongs to a lecture that still runs. Leave it
 empty for everything that is archive — the safe default, because getting it
 wrong means a thread is filed one click further away rather than lost.
