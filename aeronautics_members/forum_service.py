@@ -27,14 +27,52 @@ except ImportError:  # pragma: no cover - optional until dependencies are instal
 
 try:
     from .db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
+    from .member_categories import CATEGORY_ORDER
     from .permissions import Permission
     from .security_utils import build_public_url
     from .services.membership import member_has_active_access
 except ImportError:
     from db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
+    from member_categories import CATEGORY_ORDER
     from permissions import Permission
     from security_utils import build_public_url
     from services.membership import member_has_active_access
+
+def member_category_groups(settings):
+    """``{member category: forum group}`` from the setting, as ``{}`` when unset.
+
+    Two axes, not one. What somebody has paid for and what kind of person they
+    are are different questions with different answers -- a lecturer is not a
+    student whose membership is in a different state -- and a category that
+    wants only one of them should be able to say so without the other being
+    dragged in. So membership drives one group and the member category drives
+    another, and a category in Discourse grants whichever of them it means.
+
+    Written as lines because the alternative is a setting per kind of member,
+    and adding a kind would then mean adding a setting, a form field and a
+    template row before anybody could use it.
+
+        student = students
+        staff   = lecturers
+        partner = companies
+
+    Anything not named here is simply not sorted: a kind of member with no line
+    is in no group of this sort, which is what "we have not decided about them
+    yet" should look like.
+    """
+    found = {}
+    for line in str(settings.get("forum_category_groups") or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        category, sep, group = line.partition("=")
+        if not sep:
+            continue
+        category, group = category.strip().lower(), group.strip()
+        if category in CATEGORY_ORDER and group:
+            found[category] = group
+    return found
+
 
 FORUM_STATE_INACTIVE = "inactive"
 FORUM_STATE_ONBOARDING = "onboarding"
@@ -64,6 +102,9 @@ FORUM_SETTING_DEFAULTS = {
     # portal's own roles rather than maintained by hand on the forum. Empty
     # means the forum does not have one and nothing is sent about it.
     "forum_staff_group": "",
+    # Which forum group each kind of member belongs to, one "category = group"
+    # per line. Empty means the forum does not sort people by kind at all.
+    "forum_category_groups": "",
     "forum_onboarding_path": "/",
     "forum_avatar_max_bytes": str(5 * 1024 * 1024),
     "forum_avatar_allowed_types": "jpg,jpeg,png,webp",
@@ -517,7 +558,7 @@ class DiscourseConnectProvider(ForumProvider):
         ).hexdigest()
         return encoded, digest
 
-    def _build_group_fields(self, desired_state, user=None):
+    def _build_group_fields(self, desired_state, user=None, member=None):
         """Which forum groups this person should be in, and which not.
 
         Sent on every sync, not only on the ones that change something, because
@@ -536,6 +577,19 @@ class DiscourseConnectProvider(ForumProvider):
 
         add_groups = []
         remove_groups = []
+
+        # What kind of member somebody is, which is a different question from
+        # what they have paid for. Every group in the mapping is named on every
+        # sync -- one to join, the rest to leave -- so a student who becomes an
+        # alumnus moves between them without anybody touching the forum.
+        by_category = member_category_groups(self.settings)
+        if by_category:
+            theirs = by_category.get(
+                getattr(member, "member_category", None) or ""
+            )
+            for group in dict.fromkeys(by_category.values()):
+                (add_groups if group == theirs else remove_groups).append(group)
+
         if staff_group:
             # Who runs the association is a portal role, and this is the same
             # answer the admin pages give -- so somebody who stops being on the
@@ -589,7 +643,7 @@ class DiscourseConnectProvider(ForumProvider):
             payload["avatar_url"] = avatar_url
             if avatar_force_update:
                 payload["avatar_force_update"] = "true"
-        payload.update(self._build_group_fields(desired_state, user))
+        payload.update(self._build_group_fields(desired_state, user, member))
         return payload
 
     def sync_user(self, forum_account, user, member, desired_state, avatar_url=None, avatar_force_update=False):
@@ -1337,6 +1391,7 @@ def normalize_forum_settings(settings_map):
     values["forum_member_group"] = (values.get("forum_member_group") or "").strip()
     values["forum_inactive_group"] = (values.get("forum_inactive_group") or "").strip()
     values["forum_staff_group"] = (values.get("forum_staff_group") or "").strip()
+    values["forum_category_groups"] = (values.get("forum_category_groups") or "").strip()
     values["forum_onboarding_path"] = (values.get("forum_onboarding_path") or "/").strip() or "/"
     values["forum_avatar_max_bytes"] = normalize_int(values.get("forum_avatar_max_bytes"), 5 * 1024 * 1024)
     values["forum_avatar_allowed_types"] = [

@@ -178,16 +178,37 @@ A category with no group permission at all is public. Making one members-only
 is therefore two things: grant the members group, and **take `everyone` away**
 — granting a group does not remove anyone.
 
-**The portal drives these groups**, through Discourse Connect, from what it
-already knows about the person:
+**Three axes, not one.** What somebody has paid for, what kind of person they
+are, and whether they run the place are different questions with different
+answers — a lecturer is not a student whose membership is in another state —
+and a category that wants only one of them should be able to say so. So each
+axis drives its own group, and a category grants whichever it means.
 
-| Group | Who is in it | Decided by |
+| Axis | Group | Decided by |
 |---|---|---|
-| `members` | Active members | membership coverage, by date |
-| `member-onboarding` | Signed up, not yet active | membership state |
-| `forum_inactive_group` | Lapsed, if a group is named for it | membership state |
-| `forum_staff_group` | Whoever administers the forum here | a portal role |
-| `partners` | Companies and university staff | by hand; granted nothing yet |
+| Has paid | `members` | membership coverage, by date |
+| | `member-onboarding` | signed up, not yet active |
+| | `forum_inactive_group` | lapsed, if a group is named |
+| Kind of member | `forum_category_groups` | `Member.member_category` |
+| Runs the place | `forum_staff_group` | a portal role |
+
+The portal already knows what kind of member somebody is — student, alumni,
+staff, partner, honorary — so `forum_category_groups` is a line per kind under
+**Admin → Settings → Forum**:
+
+    student = students
+    staff   = lecturers
+    partner = companies
+
+A kind with no line is in no such group, which is what "we have not decided
+about them yet" should look like. Every group in the mapping is named on every
+sync — one to join, the rest to leave — so a student who becomes an alumnus
+moves between them without anybody touching the forum.
+
+**The division of labour is deliberate.** Who is in which group is decided
+here, because this is where it is known whether somebody has paid and what
+they are. What each group may see is decided in Discourse, per category,
+because that is a judgement about material rather than a fact about a person.
 
 **This is not an import step.** `_build_group_fields` sends both `add_groups`
 and `remove_groups` on *every* sync, and `sync_user` pushes it through
@@ -212,11 +233,17 @@ while it is unanswered is "not the lecture material".
 `import-forum-content --mapping` does the same thing itself once the categories
 exist and **before it posts anything into them**.
 
-| | members | staff |
-|---|---|---|
-| Live lecture | Create — start topics and reply | Create |
-| Archive | See — read and search, nothing more | Create |
-| Everything else | untouched | untouched |
+| | members | staff | the kind-of-member groups |
+|---|---|---|---|
+| Live lecture | Create — start topics and reply | Create | nothing |
+| Archive | See — read and search, nothing more | Create | nothing |
+| Everything else | untouched | untouched | nothing |
+
+The kind-of-member groups are made and filled and granted **nothing**. Access
+to the lecture material is "has paid", which is the members group. Restricting
+something to lecturers, or opening something to companies, is a grant made in
+Discourse on the one category it concerns — not something a command guesses at
+across a hundred and seven of them.
 
 Live lectures are writable because students keep adding exams and summaries; a
 read-only lecture category would make this a museum rather than somewhere
@@ -248,6 +275,39 @@ was public for the two hours of an import has been public.
 Category permissions are also not the same thing as a private forum. With
 `login_required` off, an anonymous visitor still reaches the site and anything
 still public on it.
+
+### Adding a kind of person later
+
+Nothing here has to be redone.
+
+1. The portal gains the member category, if it is genuinely new (that is an
+   edit to `member_categories.py` and a migration — one place, by design).
+2. Add a line to `forum_category_groups`. The group is made on the next run of
+   `forum-permissions` or the next import, and filled on each person's next
+   sync.
+3. In Discourse, grant that group whatever it should see, on the categories it
+   should see. Nothing else changes: the other groups' permissions are
+   untouched, and no post moves.
+
+The one thing that is not free is *narrowing* what an existing group sees,
+because by then they have seen it.
+
+### New categories and new topics
+
+**Topics need nothing.** A topic has no permissions of its own; it inherits
+the category's. So every exam a student posts next March is members-only
+because the category is, with nobody deciding anything.
+
+**Categories are staff-only to create** in Discourse, so this is about what the
+committee does, not what members do. A subcategory made in the UI picks up its
+parent's security settings, but one made any other way starts public — so after
+any structural change, run:
+
+    flask forum-permissions categories.json --dry-run
+
+It reports what every category grants now, including how many are open to
+anybody, and it is safe to run as often as you like: a category already correct
+is not written again.
 
 ## What is still open
 

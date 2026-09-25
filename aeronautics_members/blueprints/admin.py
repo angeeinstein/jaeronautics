@@ -921,6 +921,7 @@ def admin_settings():
         set_setting_value("forum_member_group", ((request.form.get("forum_member_group") if settings_section == "forum" else before_settings.get("forum_member_group")) or "").strip() or None)
         set_setting_value("forum_inactive_group", ((request.form.get("forum_inactive_group") if settings_section == "forum" else before_settings.get("forum_inactive_group")) or "").strip() or None)
         set_setting_value("forum_staff_group", ((request.form.get("forum_staff_group") if settings_section == "forum" else before_settings.get("forum_staff_group")) or "").strip() or None)
+        set_setting_value("forum_category_groups", ((request.form.get("forum_category_groups") if settings_section == "forum" else before_settings.get("forum_category_groups")) or "").strip() or None)
         set_setting_value("forum_onboarding_path", ((request.form.get("forum_onboarding_path") if settings_section == "forum" else before_settings.get("forum_onboarding_path")) or "").strip() or "/")
         set_setting_value("forum_avatar_max_bytes", forum_avatar_max_bytes or None)
         set_setting_value("forum_avatar_allowed_types", forum_avatar_allowed_types or None)

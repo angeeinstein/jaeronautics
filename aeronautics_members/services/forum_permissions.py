@@ -132,7 +132,8 @@ def permission_plan(categories, roots, *, member_group,
     return plan, untouched
 
 
-def groups_wanted(settings, *, staff_group=STAFF_GROUP, guest_group=GUEST_GROUP):
+def groups_wanted(settings, *, staff_group=STAFF_GROUP, guest_group=GUEST_GROUP,
+                  extra=()):
     """Every group that has to exist before any of this works.
 
     ``add_groups`` in a Connect payload is not a way to *make* a group.
@@ -147,7 +148,7 @@ def groups_wanted(settings, *, staff_group=STAFF_GROUP, guest_group=GUEST_GROUP)
         name = (settings.get(key) or "").strip()
         if name and name not in wanted:
             wanted.append(name)
-    for name in (staff_group, guest_group):
+    for name in tuple(extra) + (staff_group, guest_group):
         if name and name not in wanted:
             wanted.append(name)
     return wanted

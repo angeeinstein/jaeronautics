@@ -92,6 +92,7 @@ try:
         ForumService,
         delete_submission_file,
         format_bytes_human,
+        member_category_groups,
         normalize_forum_settings,
     )
     from .mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
@@ -152,6 +153,7 @@ except ImportError:
         ForumService,
         delete_submission_file,
         format_bytes_human,
+        member_category_groups,
         normalize_forum_settings,
     )
     from mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail

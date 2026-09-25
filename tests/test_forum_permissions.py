@@ -9,6 +9,7 @@ a crawler will. Everything here is about that one silence.
 import pytest
 
 from aeronautics_members import app as app_module
+from aeronautics_members.forum_service import member_category_groups
 
 from aeronautics_members.services.forum_permissions import (
     CREATE,
@@ -333,3 +334,100 @@ class TestTheGroupsFollowThePortalForever:
         assert "committee" in groups_wanted({
             "forum_member_group": "members", "forum_staff_group": "committee",
         })
+
+
+class TestSortingPeopleByWhatKindOfMemberTheyAre:
+    """Two axes, not one.
+
+    What somebody has paid for and what kind of person they are are different
+    questions. A lecturer is not a student whose membership is in a different
+    state, and a category that wants only one of the two should be able to say
+    so without dragging in the other. So membership drives one group, the
+    member category drives another, and Discourse grants whichever it means.
+    """
+
+    SETTING = "student = students\nstaff = lecturers\npartner = companies\n"
+
+    def _payload(self, app, category, mapping=None):
+        from conftest import db, make_member
+
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+
+        member = make_member(email=f"{category}@example.com")
+        member.member_category = category
+        db.session.commit()
+        provider = DiscourseConnectProvider(settings={
+            "forum_member_group": "members",
+            "forum_category_groups": self.SETTING if mapping is None else mapping,
+            "discourse_connect_secret": "s",
+        })
+        return provider.build_sso_payload(
+            member.user, member, desired_state="active", nonce="n1"
+        )
+
+    def _groups(self, payload, field):
+        return set(filter(None, payload.get(field, "").split(",")))
+
+    def test_the_mapping_is_read_from_the_setting(self):
+        assert member_category_groups({"forum_category_groups": self.SETTING}) == {
+            "student": "students", "staff": "lecturers", "partner": "companies",
+        }
+
+    def test_blank_lines_comments_and_nonsense_are_skipped(self):
+        assert member_category_groups({"forum_category_groups": (
+            "\n# who gets what\nstudent = students\nnot a line\nalumni =\n"
+        )}) == {"student": "students"}
+
+    def test_a_kind_of_member_this_portal_does_not_have_is_not_invented(self):
+        """A typo in the setting should not make a group nobody is ever in."""
+        assert member_category_groups({
+            "forum_category_groups": "studnet = students"
+        }) == {}
+
+    def test_a_student_is_put_in_the_student_group(self, app):
+        payload = self._payload(app, "student")
+        assert "students" in self._groups(payload, "add_groups")
+
+    def test_and_taken_out_of_the_others(self, app):
+        """A student who graduates moves groups at the next sync, by itself."""
+        payload = self._payload(app, "student")
+        assert self._groups(payload, "remove_groups") >= {"lecturers", "companies"}
+
+    def test_a_lecturer_is_sorted_by_kind_and_not_by_what_they_paid(self, app):
+        payload = self._payload(app, "staff")
+        assert "lecturers" in self._groups(payload, "add_groups")
+        assert "members" in self._groups(payload, "add_groups")
+
+    def test_a_kind_with_no_line_is_in_none_of_them(self, app):
+        """"We have not decided about honorary members yet" is a real answer."""
+        payload = self._payload(app, "honorary")
+        assert self._groups(payload, "add_groups") == {"members"}
+        assert self._groups(payload, "remove_groups") >= {
+            "students", "lecturers", "companies",
+        }
+
+    def test_an_empty_setting_says_nothing_about_kinds_at_all(self, app):
+        payload = self._payload(app, "student", mapping="")
+        assert self._groups(payload, "add_groups") == {"members"}
+        assert "students" not in self._groups(payload, "remove_groups")
+
+    def test_the_groups_are_made_before_anybody_is_put_in_them(self):
+        wanted = groups_wanted(
+            {"forum_member_group": "members"},
+            extra=["students", "lecturers", "companies"],
+        )
+        assert {"students", "lecturers", "companies"} <= set(wanted)
+
+    def test_they_are_granted_nothing_until_somebody_says_so(self, app):
+        """What a kind of member may see is decided on the forum, per category.
+
+        Access to the lecture material is "has paid", which is the members
+        group. Restricting something to lecturers is a grant somebody makes in
+        Discourse, on the one category they mean -- not something this command
+        guesses at across a hundred and seven of them.
+        """
+        made, _ = permission_plan(
+            FakeForum().categories(), owned_roots(WORKSHEET), member_group="members",
+        )
+        for grants in made.values():
+            assert not {"students", "lecturers", "companies"} & set(grants)

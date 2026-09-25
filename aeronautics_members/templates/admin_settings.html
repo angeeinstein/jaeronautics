@@ -361,6 +361,11 @@
                                     <input class="form-control" type="text" id="forum_staff_group" name="forum_staff_group" value="{{ forum_settings.forum_staff_group }}">
                                     <small class="text-muted">{{ _('Forum group for whoever may administer the forum here. Membership follows this portal: it is granted and withdrawn on every sync, so nobody has to maintain it on the forum.') }}</small>
                                 </div>
+                                <div class="col-md-12">
+                                    <label class="form-label" for="forum_category_groups">{{ _('Forum Group Per Kind Of Member (optional)') }}</label>
+                                    <textarea class="form-control font-monospace" id="forum_category_groups" name="forum_category_groups" rows="3" placeholder="student = students&#10;staff = lecturers&#10;partner = companies">{{ forum_settings.forum_category_groups }}</textarea>
+                                    <small class="text-muted">{{ _('One line per kind of member. This portal decides who is in which group; the forum decides what each group may see. A kind with no line here is in no such group.') }}</small>
+                                </div>
                                 <div class="col-md-6">
                                     <label class="form-label" for="forum_onboarding_path">{{ _('Forum Destination Path') }}</label>
                                     <input class="form-control" type="text" id="forum_onboarding_path" name="forum_onboarding_path" value="{{ forum_settings.forum_onboarding_path }}" placeholder="/">
