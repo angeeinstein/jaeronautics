@@ -319,7 +319,8 @@ def _sortable(name):
     return re.sub(r"[^a-z0-9 ]", "", name.lower()).strip()
 
 
-def category_worksheet(forums, threads, posts, attachments=(), samples=8):
+def category_worksheet(forums, threads, posts, attachments=(), samples=8,
+                       users=()):
     """One row per old forum that holds threads, for deciding where it goes.
 
     The new forum is not the old one rearranged: it is a place students look
@@ -332,6 +333,10 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8):
     stopped. A forum whose last post is from 2017 is not a live lecture.
     """
     tree = forum_tree(forums)
+    # The people who posted here, so that their names are not offered as
+    # lecturers. A filename like Transcript_Robert_Niedergrottenthaler.docx is
+    # the student who typed it up, and this board is full of them.
+    members = _surnames_of(users)
     threads_by_forum = {}
     for row in threads:
         threads_by_forum.setdefault(row.get("fid"), []).append(row)
@@ -350,6 +355,10 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8):
             name = (row.get("filename") or "").strip()
             if name:
                 files_by_thread.setdefault(tid, []).append(name)
+
+    posts_by_thread = {}
+    for post in posts:
+        posts_by_thread.setdefault(post.get("tid"), []).append(post)
 
     dates_by_thread = {}
     counts_by_thread = Counter()
@@ -374,8 +383,26 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8):
             key=lambda row: dates_by_thread.get(row.get("tid"), (0, 0))[1],
             reverse=True,
         )
-        files = [name for row in newest
-                 for name in files_by_thread.get(row.get("tid"), [])]
+        # Dated, and newest first. Which year a thing is from is the question
+        # being asked of every one of these lines, and an undated list of
+        # subjects hides exactly the pattern somebody is looking for.
+        dated_subjects = [
+            (_year_of(dates_by_thread.get(row.get("tid"), (0, 0))[1]),
+             (row.get("subject") or "").strip())
+            for row in newest
+        ]
+        dated_files = [
+            (_year_of(dates_by_thread.get(row.get("tid"), (0, 0))[1]), name)
+            for row in newest
+            for name in files_by_thread.get(row.get("tid"), [])
+        ]
+        last_year = max((year for year, _ in dated_subjects), default=0)
+        # The lecture's own words are not the lecturer's name, and taking them
+        # from the name of the forum costs nothing and needs no list: this is
+        # how "Grundlagen" and "Flugzeugentwurfes" stop being candidates.
+        not_a_lecturer = members | {
+            word.lower() for word in LOOKS_LIKE_A_NAME.findall(" ".join(names))
+        }
         rows.append({
             "old_fid": fid,
             "old_path": " / ".join(names),
@@ -384,9 +411,22 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8):
             "posts": sum(counts_by_thread[row.get("tid")] for row in in_forum),
             "first_post": _as_day(min(span[0] for span in spans)) if spans else "",
             "last_post": _as_day(max(span[1] for span in spans)) if spans else "",
-            "subjects": [(row.get("subject") or "").strip()
-                         for row in newest[:samples]],
-            "files": files[:samples],
+            "last_year": last_year,
+            "by_year": _posts_by_year(in_forum, posts_by_thread),
+            "subjects": [f"{year or '?'}  {subject}"
+                         for year, subject in dated_subjects[:samples]],
+            "files": [f"{year or '?'}  {name}"
+                      for year, name in dated_files[:samples]],
+            # The lecturer is in the subjects and the filenames far more often
+            # than anywhere else on this board -- "Exam Haselgruber", "1. Termin
+            # AVF, Flöhr am 13.1.25" -- so the names that appear early and the
+            # names that appear lately are the evidence for whether a course
+            # changed hands. A guess, labelled as one, and far cheaper than
+            # opening every exam to compare them.
+            "names_then": _names_in(dated_subjects + dated_files,
+                                    until=last_year - 3, ignore=not_a_lecturer),
+            "names_now": _names_in(dated_subjects + dated_files,
+                                   since=last_year - 2, ignore=not_a_lecturer),
             "target": "",
             "access": "",
         })
@@ -400,6 +440,103 @@ def category_worksheet(forums, threads, posts, attachments=(), samples=8):
 
 def _as_day(dateline):
     return datetime.fromtimestamp(int(dateline), tz=timezone.utc).strftime("%Y-%m-%d")
+
+
+def _year_of(dateline):
+    if not dateline:
+        return 0
+    return datetime.fromtimestamp(int(dateline), tz=timezone.utc).year
+
+
+def _posts_by_year(in_forum, posts_by_thread):
+    """``{year: posts}`` for one old forum -- when it was alive, and whether."""
+    by_year = Counter()
+    for thread in in_forum:
+        for post in posts_by_thread.get(thread.get("tid"), []):
+            year = _year_of(post.get("dateline"))
+            if year:
+                by_year[year] += 1
+    return dict(sorted(by_year.items()))
+
+
+# Words that look like surnames and are not. German subjects are capitalised
+# throughout, so this needs a list; it is short because it only has to cover
+# what actually appears on this board.
+NOT_A_NAME = frozenset("""
+    klausur klausuren pruefung prüfung prüfungen exam exams termin antritt
+    zusammenfassung zusammenfassungen fragenkatalog fragen unterlagen
+    mitschrift mitschriften skript skriptum beispiele beispielsammlung
+    übungen übung uebung angabe angaben loesung lösung lösungen musterlösung
+    labor laborbericht laborberichte formelsammlung vorlesung semester
+    sitting first second third alle neu alt altprüfungen summary summaries
+    notes exercises exercise material lecture questions answers final teil
+    januar februar märz april mai juni juli august september oktober november
+    dezember montag dienstag mittwoch donnerstag freitag jänner
+    bachelor master lav mav atm pdf docx zip doc xlsx pptx und der die das
+    von für mit aus dem des den ein eine the and for with from
+    transcript transcripts meeting english german deutsch homework hausübung
+    hausübungen report reports project projekt projekte presentation
+    präsentation präsentationen solution solutions aufgabe aufgaben kurztest
+    kurztests test tests wiederholung vorbereitung ausarbeitung ausarbeitungen
+    sammlung folien buch bücher kapitel gruppe group mock moodle online info
+    infos materialien formel formeln anhang versuch versuche protokoll
+    protokolle überprüfung überprüfungen ersttermin beispiel rechnung
+    rechnungen theorie praxis punkte note noten bericht berichte studium
+    luftfahrt aviation engineering technik mathematik informatik physik chemie
+    mechanik konstruktion navigation recht sonstiges diverse fragensammlung
+""".split())
+
+# A capitalised word of at least three letters, umlauts included.
+LOOKS_LIKE_A_NAME = re.compile(r"\b([A-ZÄÖÜ][a-zäöüß]{2,})\b")
+
+
+# The board's usernames are surname, initial, cohort: NiedergrottenthalerR_L12.
+MEMBER_USERNAME = re.compile(r"^([A-Za-zÄÖÜäöüß]+?)[A-Z]?_?[A-Za-z]{0,3}\d{0,2}$")
+
+
+def _surnames_of(users):
+    """The surnames of everybody who was ever on the old board, lowercased.
+
+    A name in a filename is as likely to be the student who wrote the thing up
+    as the person who taught it -- this board has
+    Transcript_Robert_Niedergrottenthaler.docx and
+    English_Meeting_Trinker_Steindl_Niedergrottenthaler.docx, all three of them
+    students -- and offering those as evidence of who teaches a course would be
+    worse than offering nothing. Every one of them is in the users table, so
+    every one of them can be left out.
+    """
+    found = set()
+    for row in users:
+        username = (row.get("username") or "").strip()
+        if not username:
+            continue
+        match = MEMBER_USERNAME.match(username)
+        surname = (match.group(1) if match else username).lower()
+        if len(surname) >= 3:
+            found.add(surname)
+    return found
+
+
+def _names_in(dated_lines, since=None, until=None, ignore=frozenset()):
+    """Surnames that appear in these subjects and filenames, within a period.
+
+    A heuristic, and presented as one. The lecturer's name is in the text far
+    more often than it is anywhere else -- "Exam Haselgruber", "Questionnaire
+    Fallast", "1. Termin AVF, Flöhr am 13.1.25" -- so which names appear early
+    and which appear lately is the cheapest available evidence for whether a
+    course changed hands, and changed hands is what decides whether its old
+    exams are worth keeping in front of anybody.
+    """
+    found = Counter()
+    for year, line in dated_lines:
+        if since is not None and (not year or year < since):
+            continue
+        if until is not None and (not year or year > until):
+            continue
+        for word in LOOKS_LIKE_A_NAME.findall(line.replace("_", " ")):
+            if word.lower() not in NOT_A_NAME and word.lower() not in ignore:
+                found[word] += 1
+    return [name for name, _count in found.most_common(6)]
 
 
 def audit_uploads(attachments, uploads_dir):

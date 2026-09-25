@@ -26,6 +26,42 @@ stopped**. A forum whose last post is from 2017 is not a live lecture. Every
 year's version of the same course sits on adjacent lines, so the merges
 propose themselves.
 
+Two things on the page do most of the work:
+
+**"Archive all of those"**, with a year. Most of a decade-old board is lectures
+that stopped running, and deciding those one at a time is the bulk of the
+effort for none of the judgement. One button clears them — only the ones not
+yet decided, and every one can still be changed afterwards.
+
+**The names line.** The hard cases are courses that still run under a similar
+name but changed hands, because then the old exams are no longer worth putting
+in front of anybody. Checking that by opening exams and comparing them is hours
+of work; the lecturer's name is already in the subjects and the filenames —
+`Exam Haselgruber`, `1. Termin AVF, Flöhr am 13.1.25` — so the page shows which
+names appear lately and which appear only in the older material:
+
+    names — lately: Flöhr · earlier only: Löffler
+
+That is a heuristic on capitalised words, not a record of who taught what, and
+it is labelled as one on the page. Three things are excluded from it, because
+each is a way of being confidently wrong:
+
+- **Everybody who was ever on the board.** A name in a filename is as likely to
+  be the student who typed the thing up as the person who taught it —
+  `Transcript_Robert_Niedergrottenthaler.docx` and
+  `English_Meeting_Trinker_Steindl_Niedergrottenthaler.docx` are three
+  students — and all of them are in the old board's user table, so all of them
+  can be left out.
+- **The lecture's own words**, taken from the name of the forum, so that
+  `Grundlagen` and `Flugzeugentwurfes` are never candidates.
+- **The vocabulary every exam thread uses** in both languages — `Klausur`,
+  `Zusammenfassung`, `Transcript`, `Meeting`.
+
+What is left is right often enough to turn "open every exam in this lecture"
+into "read one line", and where it is unclear the evidence is one click away
+under *What is in it*, every subject and filename now carrying its year,
+newest first.
+
 Fill in `target` where a forum belongs to a lecture that still runs. Leave it
 empty for everything that is archive — the safe default, because getting it
 wrong means a thread is filed one click further away rather than lost.

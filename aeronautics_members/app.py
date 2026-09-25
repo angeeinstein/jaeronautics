@@ -2338,7 +2338,7 @@ def create_app(config_overrides=None):
         tables = _load_mybb_dump(dump_file)
         rows = category_worksheet(
             tables["forums"], tables["threads"], tables["posts"],
-            tables["attachments"],
+            tables["attachments"], users=tables["users"],
         )
         if not rows:
             raise click.ClickException("No forum in that dump holds any threads.")

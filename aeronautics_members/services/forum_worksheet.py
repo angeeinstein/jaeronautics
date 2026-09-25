@@ -135,6 +135,15 @@ Master 1. Semester / Aerodynamik"></textarea>
         <option value="size">Biggest first</option>
       </select>
     </div>
+    <div class="filters">
+      <label class="hint" style="flex:1">
+        Anything last posted in before
+        <input id="cutoff" type="number" value="2021" min="2005" max="2030"
+               style="width:6em">
+        is a lecture that no longer runs.
+      </label>
+      <button id="archiveold" type="button">Archive all of those</button>
+    </div>
     <div id="rows"></div>
   </section>
 </main>
@@ -196,6 +205,27 @@ function groupsOf(rows) {
   return by;
 }
 
+// The lecturer's name is in the subjects and the filenames and nowhere else,
+// so the names that appear early against the names that appear lately are the
+// evidence for whether a course changed hands -- which is what decides whether
+// its old exams are still worth putting in front of anybody. A guess, and
+// labelled as one, but it answers in a glance what otherwise means opening
+// every exam in the lecture and comparing them.
+function names(row) {
+  const then = row.names_then || [], now = row.names_now || [];
+  if (!then.length && !now.length) return "";
+  const left = then.filter((n) => !now.includes(n));
+  const kept = then.filter((n) => now.includes(n));
+  const parts = [];
+  if (now.length) parts.push('lately: <b>' + now.map(esc).join(", ") + "</b>");
+  if (left.length) parts.push('earlier only: <span class="stale">' +
+                              left.map(esc).join(", ") + "</span>");
+  if (kept.length && left.length) parts.push("throughout: " + kept.map(esc).join(", "));
+  return '<div class="meta names" title="Names found in the subjects and ' +
+         'filenames. A guess, not a record.">names &mdash; ' +
+         parts.join(" &middot; ") + "</div>";
+}
+
 function draw() {
   const options = lectures();
   const needle = $("search").value.trim().toLowerCase();
@@ -244,6 +274,7 @@ function draw() {
             " posts &middot; " + esc(row.first_post) + " to " +
             '<span class="' + (quiet ? "stale" : "live") + '">' +
             esc(row.last_post) + "</span></div>" +
+          names(row) +
           (row.subjects.length || row.files.length
             ? "<details><summary>What is in it</summary><ul class=\\"samples\\">" +
               row.subjects.map((t) => "<li>" + esc(t) + "</li>").join("") +
@@ -274,6 +305,24 @@ function draw() {
   $("progress").style.width = (100 * done / DATA.rows.length) + "%";
 }
 
+// Most of a decade-old board is lectures that stopped running, and deciding
+// those one at a time is the bulk of the work for none of the judgement. One
+// button, one number, and what is left is the part that actually needs
+// somebody who knows the curriculum.
+function archiveEverythingOlderThan(year) {
+  const caught = DATA.rows.filter((row) => (row.last_year || 0) < year
+                                           && decisions[row.old_fid] === undefined);
+  if (!caught.length) {
+    alert("Nothing is undecided and older than " + year + ".");
+    return;
+  }
+  if (!confirm("Put " + caught.length + " old forums into the archive?\n\n" +
+               "Only ones you have not decided yet. You can still change any " +
+               "of them afterwards.")) return;
+  for (const row of caught) decisions[row.old_fid] = "ARCHIVE";
+  save(); draw();
+}
+
 function download(name, text, type) {
   const blob = new Blob([text], { type: type });
   const a = document.createElement("a");
@@ -282,6 +331,12 @@ function download(name, text, type) {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+document.addEventListener("click", (event) => {
+  if (event.target.id === "archiveold") {
+    archiveEverythingOlderThan(parseInt($("cutoff").value, 10) || 0);
+  }
+});
 
 document.addEventListener("change", (event) => {
   const pick = event.target.closest(".pick");

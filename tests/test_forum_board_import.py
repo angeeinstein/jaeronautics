@@ -992,8 +992,86 @@ class TestThePageForDecidingTheStructure:
         """Filenames say more about whether two lectures match than titles do."""
         row = self.rows()[0]
 
-        assert row["subjects"] == ["Klausuren"]
-        assert row["files"] == ["Klausur_LAV16_Loesung.pdf"]
+        assert row["subjects"] == ["2017  Klausuren"]
+        assert row["files"] == ["2017  Klausur_LAV16_Loesung.pdf"]
+
+    def test_every_line_carries_its_year(self):
+        """Which year a thing is from is the question being asked of it.
+
+        An undated list of subjects hides exactly the pattern somebody
+        deciding this is looking for: whether the recent material and the old
+        material are the same course.
+        """
+        row = self.rows()[0]
+
+        assert row["last_year"] == 2017
+        assert row["by_year"] == {2017: 1}
+
+    def test_the_names_that_appear_are_split_by_era(self):
+        """The lecturer is in the subjects and filenames, and nowhere else.
+
+        A course whose recent exams say Flöhr and whose old ones say Löffler
+        changed hands, which is what decides whether the old ones are worth
+        keeping in front of students -- and it is answerable without opening a
+        single PDF.
+        """
+        forums = [{"fid": "1", "pid": "0", "name": "01-02 Luftfahrtrecht"}]
+        threads = [
+            {"tid": "1", "fid": "1", "subject": "Exam Löffler", "firstpost": "1"},
+            {"tid": "2", "fid": "1", "subject": "Klausur Flöhr", "firstpost": "2"},
+        ]
+        posts = [
+            {"pid": "1", "tid": "1", "uid": "7", "dateline": "1420070400"},
+            {"pid": "2", "tid": "2", "uid": "7", "dateline": "1760000000"},
+        ]
+
+        row = category_worksheet(forums, threads, posts)[0]
+
+        assert "Löffler" in row["names_then"]
+        assert "Flöhr" in row["names_now"]
+        assert "Löffler" not in row["names_now"]
+
+    def test_a_student_who_wrote_it_up_is_not_offered_as_the_lecturer(self):
+        """The board is full of them, and this was the flaw in the idea.
+
+        Transcript_Robert_Niedergrottenthaler.docx is the student who typed it
+        up, not the person who taught it, and offering that as evidence of who
+        teaches a course would be worse than offering nothing. Every one of
+        them is in the old board's user table, so every one can be left out.
+        """
+        forums = [{"fid": "1", "pid": "0", "name": "02-02 Flugzeugentwurf"}]
+        threads = [{"tid": "1", "fid": "1", "subject": "Exam", "firstpost": "1"}]
+        posts = [{"pid": "1", "tid": "1", "uid": "7", "dateline": "1760000000"}]
+        attachments = [{"pid": "1",
+                        "filename": "Transcript_Niedergrottenthaler_Flöhr.pdf"}]
+        users = [{"uid": "7", "username": "NiedergrottenthalerR_L12"}]
+
+        row = category_worksheet(forums, threads, posts, attachments, users=users)[0]
+
+        assert "Niedergrottenthaler" not in row["names_now"]
+        assert "Flöhr" in row["names_now"], "and the one who is not a member stays"
+
+    def test_the_lectures_own_words_are_not_names(self):
+        """Taken from the forum's name, which needs no list to maintain."""
+        forums = [{"fid": "1", "pid": "0", "name": "02-02 Grundlagen des Flugzeugentwurfes"}]
+        threads = [{"tid": "1", "fid": "1", "subject": "Grundlagen Flugzeugentwurfes",
+                    "firstpost": "1"}]
+        posts = [{"pid": "1", "tid": "1", "uid": "7", "dateline": "1760000000"}]
+
+        row = category_worksheet(forums, threads, posts)[0]
+
+        assert row["names_now"] == []
+
+    def test_the_words_every_german_subject_uses_are_not_names(self):
+        """Or every lecture on the board is taught by Klausur and Termin."""
+        forums = [{"fid": "1", "pid": "0", "name": "01-02 Luftfahrtrecht"}]
+        threads = [{"tid": "1", "fid": "1", "subject": "Klausuren Zusammenfassung",
+                    "firstpost": "1"}]
+        posts = [{"pid": "1", "tid": "1", "uid": "7", "dateline": "1760000000"}]
+
+        row = category_worksheet(forums, threads, posts)[0]
+
+        assert row["names_now"] == []
 
     def test_the_page_carries_the_board_rather_than_fetching_it(self):
         """It opens from a file, and nothing on it leaves the machine."""
