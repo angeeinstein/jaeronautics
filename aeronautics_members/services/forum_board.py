@@ -123,6 +123,52 @@ class Ledger:
 # The old board's own shape
 # ---------------------------------------------------------------------------
 
+#: How many of the ledger's posts are looked for before believing it. A few,
+#: not one: somebody deleting a single imported post on the forum afterwards
+#: is not the same thing as a ledger about a forum that no longer exists.
+LEDGER_SAMPLE = 5
+
+
+def ledger_describes(poster, ledger, sample=LEDGER_SAMPLE):
+    """Is this ledger about the forum in front of us? ``(answer, why)``.
+
+    A ledger records which old post became which Discourse post. Reset the
+    forum and those ids mean nothing, but the file still says "done" -- so an
+    import against a fresh forum would skip all 1,517 posts, report a clean
+    run, and leave an empty archive. Nothing about that looks like a failure
+    until somebody goes and looks at the forum weeks later.
+
+    So the ledger is checked against reality rather than trusted: a handful of
+    the posts it claims are asked for by id. All of them missing means this
+    ledger is about a forum that no longer exists.
+
+    Answers True when there is nothing to check. An empty ledger describes any
+    forum, including this one.
+    """
+    recorded = [post_id for post_id in ledger.posts.values() if post_id]
+    if not recorded:
+        return True, "the ledger is empty"
+
+    # Spread across the file rather than the first few: a run that stopped
+    # early wrote its posts in one part of the board, and the last ones
+    # written are the most likely to have been interrupted mid-write.
+    step = max(1, len(recorded) // sample)
+    looked_for = recorded[::step][:sample]
+    found = 0
+    for post_id in looked_for:
+        try:
+            poster.read_post(post_id)
+            found += 1
+        except ForumProviderError:
+            continue
+    if found:
+        return True, f"{found} of {len(looked_for)} of its posts are still there"
+    return False, (
+        f"none of {len(looked_for)} posts it records are on this forum, so it "
+        f"describes a forum that has since been reset or replaced"
+    )
+
+
 def forum_tree(forums):
     """The old board's forums, each with its ancestors, deepest last."""
     by_id = {row.get("fid"): row for row in forums}

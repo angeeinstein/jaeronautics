@@ -450,6 +450,38 @@ one this long will stop — carries on rather than posting everything twice.
 Running the same command again is the recovery procedure; there is no other
 one. Delete the ledger only when deleting what it refers to.
 
+### A ledger about a forum that no longer exists
+
+The dangerous case is the quiet one. Reset the Discourse LXC, leave the ledger
+where it was, and the next run reads 1,517 posts marked done, skips every one
+of them, and reports a clean finish against an empty forum. Nothing fails. The
+numbers look better than a real run's.
+
+So the ledger is checked rather than trusted: before anything is sent, a handful
+of the post ids it records are looked up on the forum in front of it. If some
+are there, it is the same forum and the run carries on. If **none** of them are,
+the run stops:
+
+```
+ledger.jsonl does not describe this forum: none of 5 posts it records are on
+this forum, so it describes a forum that has since been reset or replaced.
+```
+
+Which is right, because the two ways out are different decisions and only you
+know which one you meant. Either point `--ledger` at a new file — keeping the
+old one, which is the only record of what the previous run did — or:
+
+```
+--reset-ledger
+```
+
+which moves it aside to `ledger.jsonl.stale-20260925-174500` and starts a fresh
+record. Renamed rather than deleted, because the forum it describes may still
+be sitting in a snapshot somewhere.
+
+Deleting a post or two by hand afterwards does not trip this: some of the
+sampled ids are still there, which is the question being asked.
+
 ### What it does to the categories
 
 **Two levels, not three.** Discourse nests three deep only where the site

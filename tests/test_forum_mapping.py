@@ -13,7 +13,12 @@ and reported rather than dropped or guessed at.
 """
 import pytest
 
-from aeronautics_members.services.forum_board import Ledger, migrate_board
+from aeronautics_members.services.forum_board import (
+    Ledger,
+    ledger_describes,
+    migrate_board,
+)
+from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services.forum_mapping import (
     ARCHIVE_ROOT,
     degree_of,
@@ -298,3 +303,89 @@ class TestPostingIntoThem:
         assert poster.created_categories, "and the categories were made"
         assert dict(poster.created_categories)["Angewandte Thermodynamik"] is not None
         assert summary["categories_made"] >= 3
+
+
+class TestALedgerFromABoardThatIsGone:
+    """The one mistake in this whole sequence that looks like success.
+
+    A ledger records which old post became which Discourse post. Reset the
+    forum -- which the plan calls for, several times -- and those ids mean
+    nothing, but the file still says every post is done. The import would then
+    skip all 1,517 of them, report a clean run, and leave an empty archive.
+    Nobody would notice until they opened the forum.
+    """
+
+    class Forum:
+        def __init__(self, knows=()):
+            self.knows = set(knows)
+            self.asked = []
+
+        def read_post(self, post_id):
+            self.asked.append(post_id)
+            if post_id not in self.knows:
+                raise ForumProviderError("GET /posts/1.json failed (404): {}")
+            return {"id": post_id}
+
+    def a_ledger(self, tmp_path, posts):
+        ledger = Ledger(tmp_path / "l.jsonl")
+        for pid, post_id in posts:
+            ledger.record_post(pid, post_id)
+        ledger.close()
+        return ledger
+
+    def test_a_ledger_whose_posts_are_all_gone_is_not_believed(self, app, tmp_path):
+        with app.app_context():
+            ledger = self.a_ledger(tmp_path, [(str(n), 100 + n) for n in range(20)])
+
+            describes, why = ledger_describes(self.Forum(knows=[]), ledger)
+
+        assert describes is False
+        assert "reset or replaced" in why
+
+    def test_a_ledger_about_this_forum_is_believed(self, app, tmp_path):
+        with app.app_context():
+            ledger = self.a_ledger(tmp_path, [(str(n), 100 + n) for n in range(20)])
+            forum = self.Forum(knows=[100 + n for n in range(20)])
+
+            describes, why = ledger_describes(forum, ledger)
+
+        assert describes is True
+        assert "still there" in why
+
+    def test_one_deleted_post_does_not_condemn_the_ledger(self, app, tmp_path):
+        """Somebody deleting one imported post is not a reset forum."""
+        with app.app_context():
+            ledger = self.a_ledger(tmp_path, [(str(n), 100 + n) for n in range(20)])
+            forum = self.Forum(knows=[100 + n for n in range(20)])
+            forum.knows.discard(100)
+
+            describes, _why = ledger_describes(forum, ledger)
+
+        assert describes is True
+
+    def test_an_empty_ledger_describes_any_forum(self, app, tmp_path):
+        with app.app_context():
+            describes, why = ledger_describes(self.Forum(), Ledger(tmp_path / "l.jsonl"))
+
+        assert describes is True
+        assert "empty" in why
+
+    def test_it_asks_about_a_handful_not_all_fifteen_hundred(self, app, tmp_path):
+        """One call per post would be 1,517 of them before anything begins."""
+        with app.app_context():
+            ledger = self.a_ledger(tmp_path, [(str(n), 100 + n) for n in range(1500)])
+            forum = self.Forum(knows=[100])
+
+            ledger_describes(forum, ledger)
+
+        assert len(forum.asked) <= 5
+
+    def test_it_looks_across_the_whole_file(self, app, tmp_path):
+        """A run that stopped early wrote its posts in one part of the board."""
+        with app.app_context():
+            ledger = self.a_ledger(tmp_path, [(str(n), 100 + n) for n in range(100)])
+            forum = self.Forum(knows=[])
+
+            ledger_describes(forum, ledger)
+
+        assert max(forum.asked) - min(forum.asked) > 50

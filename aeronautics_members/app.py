@@ -258,6 +258,7 @@ from .services.forum_board import (  # noqa: E402
     category_nesting_requirement,
     category_plan,
     category_worksheet,
+    ledger_describes,
     migrate_board,
     settings_inventory,
 )
@@ -1800,6 +1801,14 @@ def create_app(config_overrides=None):
                 f"holds the avatar files themselves."
             )
 
+    def _put_the_stale_ledger_aside(path):
+        """Renamed rather than deleted. It is the only record of a run that
+        happened, and the forum it describes may still be somewhere."""
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        moved = path.with_name(f"{path.name}.stale-{stamp}")
+        path.rename(moved)
+        return moved
+
     def _forum_label():
         """What to call this board on the worksheet. Never a reason to fail.
 
@@ -2671,12 +2680,16 @@ def create_app(config_overrides=None):
     @click.option("--categories-only", is_flag=True,
                   help="Make the categories and post nothing, to try a "
                        "structure against a forum that already holds content.")
+    @click.option("--reset-ledger", is_flag=True,
+                  help="If the ledger turns out to describe a forum that has "
+                       "since been reset, move it aside and start again "
+                       "instead of stopping.")
     @with_appcontext
     def import_forum_content_command(dump_file, uploads, ledger, dry_run, limit,
                                      keep_duplicate_titles,
                                      allow_missing_attachments, adjust_settings,
                                      settings_file, api_key, mapping,
-                                     categories_only):
+                                     categories_only, reset_ledger):
         """Moves the whole old board across, keeping the categories it had.
 
         The old structure is recreated rather than reorganised. That is a
@@ -2806,6 +2819,27 @@ def create_app(config_overrides=None):
             )
 
         record = Ledger(ledger)
+        if record.posts:
+            # Checked, not trusted. A ledger from before the forum was reset
+            # still says every post is done, so an import would skip all 1,517
+            # of them and report a clean run against an empty archive.
+            describes, why = ledger_describes(poster, record)
+            if not describes:
+                record.close()
+                if not reset_ledger:
+                    raise click.ClickException(
+                        f"{ledger} does not describe this forum: {why}.\n\n"
+                        f"Left alone it would skip every post it lists and "
+                        f"leave the forum empty, reporting a clean run. Either "
+                        f"point --ledger at a new file, or pass --reset-ledger "
+                        f"to move this one aside and start a fresh record."
+                    )
+                moved = _put_the_stale_ledger_aside(Path(ledger))
+                click.echo(click.style(
+                    f"{ledger} was about a forum that is gone ({why}); moved "
+                    f"to {moved.name} and starting a fresh record.", fg="yellow",
+                ))
+                record = Ledger(ledger)
         if record.posts:
             click.echo(click.style(
                 f"Carrying on: {len(record.posts)} posts are already on the "

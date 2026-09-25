@@ -299,6 +299,72 @@ class TestTheCommandsCanBeRun:
         assert made["Bachelor 1. Semester"] is None, "the semester is the parent"
         assert poster.calls == [], "and nothing was posted"
 
+    def _a_stale_ledger(self, tmp_path):
+        path = tmp_path / "l.jsonl"
+        path.write_text(
+            "\n".join('{"kind": "post", "key": "%d", "id": %d}' % (n, 900 + n)
+                      for n in range(10)) + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def _a_forum_that_knows_nothing(self, monkeypatch):
+        from aeronautics_members.forum_service import ForumProviderError
+        from test_forum_board_import import BoardPoster
+
+        poster = BoardPoster()
+        poster._key_complaint = lambda: None
+        poster.find_author = None
+
+        def gone(post_id):
+            raise ForumProviderError("GET /posts.json failed (404): {}")
+
+        poster.read_post = gone
+        monkeypatch.setattr("aeronautics_members.app.ContentPoster",
+                            lambda settings: poster)
+        monkeypatch.setattr("aeronautics_members.app.get_forum_service",
+                            lambda: FakeForumService(poster))
+        return poster
+
+    def test_a_ledger_from_a_forum_that_was_reset_stops_the_run(
+            self, app, dump, tmp_path, monkeypatch):
+        """Otherwise it skips all 1,517 posts and reports a clean run.
+
+        The forum is reset several times before the real import; the ledger
+        outlives it, and nothing about the resulting empty archive looks like
+        a failure.
+        """
+        self._a_forum_that_knows_nothing(monkeypatch)
+        ledger = self._a_stale_ledger(tmp_path)
+
+        with app.app_context():
+            result = CliRunner().invoke(app.cli.commands["import-forum-content"], [
+                str(dump), "--uploads", str(tmp_path),
+                "--ledger", str(ledger), "--categories-only",
+            ])
+
+        assert result.exit_code != 0
+        assert "does not describe this forum" in result.output
+        assert "--reset-ledger" in result.output
+        assert ledger.exists(), "and it is not thrown away"
+
+    def test_reset_ledger_moves_it_aside_and_carries_on(
+            self, app, dump, tmp_path, monkeypatch):
+        """Renamed, not deleted: it is the only record of a run that happened."""
+        self._a_forum_that_knows_nothing(monkeypatch)
+        ledger = self._a_stale_ledger(tmp_path)
+
+        with app.app_context():
+            result = run(app, "import-forum-content", [
+                str(dump), "--uploads", str(tmp_path),
+                "--ledger", str(ledger), "--categories-only", "--reset-ledger",
+            ])
+
+        assert result.exit_code == 0, result.output
+        assert "starting a fresh record" in result.output
+        kept = list(tmp_path.glob("l.jsonl.stale-*"))
+        assert len(kept) == 1, "the old one is kept under another name"
+
     @pytest.mark.parametrize("name", [
         "forum-category-worksheet", "check-forum-uploads", "check-forum-settings",
         "inspect-forum-attachments", "import-forum-content", "migrate-forum-thread",
