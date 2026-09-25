@@ -214,6 +214,7 @@ from .services.forum import (  # noqa: E402
     get_forum_service,
     get_forum_settings_map,
     log_out_forum_session_if_possible,
+    members_whose_forum_state_has_drifted,
     sync_member_forum_state,
 )
 from .services.notifications import (  # noqa: E402
@@ -3776,11 +3777,52 @@ def create_app(config_overrides=None):
         if result and result.error:
             sys.exit(1)
 
+    def _sync_the_ones_that_drifted():
+        """The daily sweep: only what the forum is now wrong about.
+
+        Everything that changes a membership is an event somebody causes, and
+        each of those syncs the forum where it happens. A membership ending
+        because its last day passed is not an event: nobody does anything, so
+        nothing tells the forum, and the person goes on reading the archive
+        until somebody happens to touch their record.
+        """
+        drifted = members_whose_forum_state_has_drifted()
+        if not drifted:
+            click.echo("Nothing has drifted: the forum agrees with this portal.")
+            return
+
+        click.echo(f"{len(drifted)} members the forum is out of date about:")
+        synced, failed = 0, 0
+        for member, was, should_be in drifted:
+            result, _service = sync_member_forum_state(member)
+            if result is not None and result.error:
+                failed += 1
+                click.echo(click.style(
+                    f"  ! member {member.id}: {was} -> {should_be} failed: "
+                    f"{result.error}", fg="yellow"), err=True)
+                continue
+            synced += 1
+            click.echo(f"  member {member.id}: {was} -> {should_be}")
+        db.session.commit()
+        flush_marked_notification_channels()
+        click.echo(click.style(
+            f"{synced} brought up to date"
+            + (f", {failed} could not be" if failed else ""),
+            fg="green" if not failed else "yellow",
+        ))
+
     @app.cli.command("sync-forum-members")
     @click.option("--only-active", is_flag=True, help="Only synchronize active members.")
+    @click.option("--only-changed", is_flag=True,
+                  help="Only the members whose forum state no longer matches "
+                       "what this portal says it should be. Cheap enough to "
+                       "run daily, which is what catches a membership that "
+                       "ended simply because its last day passed.")
     @with_appcontext
-    def sync_forum_members(only_active):
+    def sync_forum_members(only_active, only_changed):
         """Synchronizes forum state for many linked members."""
+        if only_changed:
+            return _sync_the_ones_that_drifted()
         query = db.select(Member).where(Member.user_id.is_not(None))
         if only_active:
             query = query.where(Member.is_active.is_(True))

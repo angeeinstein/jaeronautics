@@ -185,6 +185,56 @@ been verified end to end against real Stripe. **Decision: left as it is.**
 Revisit only if members actually ask, and test the two points above in the
 sandbox before changing anything.
 
+## Keeping the Forum's Idea of a Membership Current
+
+The forum holds its own copy of who may read what, as group memberships. Every
+way a membership *changes* is an event somebody causes, and each of those syncs
+the forum where it happens: a payment lands, an administrator switches an
+account off, a photograph is approved, an email address changes. Those are
+immediate and need nothing.
+
+One thing is not an event at all. A membership ends because its last day has
+passed — nobody clicks anything, nothing is written, no code runs. The portal
+is never wrong about it, because access is decided by date on every request;
+it is the copy on the forum that goes stale, and the person goes on reading the
+archive until somebody happens to open their record.
+
+`reconcile-billing` catches most of it, but only for members with a Stripe
+reference: its query begins `WHERE stripe_customer_id IS NOT NULL OR
+stripe_subscription_id IS NOT NULL`. A membership paid by transfer, an invoiced
+company, an honorary member appointed by the association — none of them are in
+it.
+
+So a second timer asks the question directly, at 03:45, half an hour after the
+billing reconciliation so that anything Stripe has just been found to have
+lapsed is already recorded here:
+
+```
+jaeronautics-forum-drift.timer  ->  flask sync-forum-members --only-changed
+```
+
+**What it costs is the point.** For each linked member it compares the state the
+portal says they should be in against the state stored on their forum account.
+That comparison is local — no call leaves the machine for the 749 people whose
+answer has not changed — and only the ones that differ are synced. On an
+ordinary night it makes no API calls at all and prints:
+
+    Nothing has drifted: the forum agrees with this portal.
+
+Two things it deliberately leaves alone: somebody who has never had a forum
+account at all (there is nothing there to be out of date), and an account that
+was erased, whose state is `anonymised` and terminal — putting them back into
+groups would undo the erasure.
+
+Run it by hand whenever you want to know, and it will tell you what is wrong
+before it fixes it:
+
+```bash
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     sync-forum-members --only-changed
+```
+
 ## Where Secrets Live (a recorded decision)
 
 Four third-party secrets are stored as ordinary rows in the `settings` table:

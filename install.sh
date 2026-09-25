@@ -57,6 +57,8 @@ NOTIFICATIONS_SERVICE_FILE=""
 NOTIFICATIONS_TIMER_FILE=""
 CLEANUP_LOGS_SERVICE_FILE=""
 CLEANUP_LOGS_TIMER_FILE=""
+FORUM_DRIFT_SERVICE_FILE=""
+FORUM_DRIFT_TIMER_FILE=""
 EXTERNAL_WORK_SERVICE_FILE=""
 EXTERNAL_WORK_TIMER_FILE=""
 UPDATE_RUNNER_SERVICE_FILE=""
@@ -162,6 +164,7 @@ collect_diagnostics() {
             "${SERVICE_NAME}-update-runner.path"
             "${SERVICE_NAME}-notifications.timer"
             "${SERVICE_NAME}-billing-reconcile.timer"
+            "${SERVICE_NAME}-forum-drift.timer"
         )
     fi
     [[ "${USE_LOCAL_DB:-0}" == "1" && -n "${DB_SERVICE_NAME:-}" ]] && units+=("${DB_SERVICE_NAME}")
@@ -449,6 +452,8 @@ resolve_paths() {
     NOTIFICATIONS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-notifications.timer"
     CLEANUP_LOGS_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.service"
     CLEANUP_LOGS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.timer"
+    FORUM_DRIFT_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-forum-drift.service"
+    FORUM_DRIFT_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-forum-drift.timer"
     EXTERNAL_WORK_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.service"
     EXTERNAL_WORK_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.timer"
     UPDATE_RUNNER_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.service"
@@ -1151,6 +1156,7 @@ roll_back_installation() {
     render_billing_reconcile_timer_files
     render_notifications_timer_files
     render_cleanup_logs_timer_files
+    render_forum_drift_timer_files
     render_external_work_timer_files
     render_update_runner
     render_update_command
@@ -2085,6 +2091,70 @@ EOF
     chmod 644 "${CLEANUP_LOGS_SERVICE_FILE}" "${CLEANUP_LOGS_TIMER_FILE}"
 }
 
+render_forum_drift_timer_files() {
+    step "Writing forum membership drift timer"
+    local unit_after="After=network.target"
+    local unit_requires=""
+    if [[ "${USE_LOCAL_DB}" == "1" && -n "${DB_SERVICE_NAME}" ]]; then
+        unit_after="After=network.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    # Everything else that ends a membership is an event somebody causes, and
+    # each of those syncs the forum where it happens. A membership ending
+    # because its last day has passed is not an event: nobody does anything, so
+    # nothing tells the forum, and the person goes on reading the archive until
+    # somebody happens to touch their record. This is what asks.
+    cat > "${FORUM_DRIFT_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics forum membership drift sync
+${unit_after}
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app sync-forum-members --only-changed
+TimeoutStartSec=900
+PrivateTmp=true
+NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
+EOF
+
+    # Half an hour after the billing reconciliation, so that a membership Stripe
+    # has just been found to have lapsed is already recorded here before this
+    # asks what the forum should be told.
+    cat > "${FORUM_DRIFT_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics forum membership drift timer
+
+[Timer]
+OnCalendar=*-*-* 03:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=${SERVICE_NAME}-forum-drift.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${FORUM_DRIFT_SERVICE_FILE}" "${FORUM_DRIFT_TIMER_FILE}"
+}
+
 render_external_work_timer_files() {
     step "Writing external work (forum sync) worker timer"
     local unit_after="After=network.target"
@@ -2579,6 +2649,7 @@ reload_services() {
     systemctl enable --now "${SERVICE_NAME}-billing-reconcile.timer"
     systemctl enable --now "${SERVICE_NAME}-notifications.timer"
     systemctl enable --now "${SERVICE_NAME}-cleanup-logs.timer"
+    systemctl enable --now "${SERVICE_NAME}-forum-drift.timer"
     systemctl enable --now "${SERVICE_NAME}-external-work.timer"
     systemctl enable --now "${SERVICE_NAME}-update-runner.timer"
     systemctl enable --now "${SERVICE_NAME}-update-runner.path"
@@ -2599,6 +2670,7 @@ verify_installation() {
     systemctl is-active --quiet "${SERVICE_NAME}-billing-reconcile.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-notifications.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-cleanup-logs.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-forum-drift.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-external-work.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-update-runner.timer"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
@@ -2773,6 +2845,7 @@ install_or_update() {
     render_billing_reconcile_timer_files
     render_notifications_timer_files
     render_cleanup_logs_timer_files
+    render_forum_drift_timer_files
     render_external_work_timer_files
     render_update_runner
     render_update_command
@@ -2814,6 +2887,13 @@ uninstall_everything() {
     fi
     if [[ -f "${CLEANUP_LOGS_SERVICE_FILE}" ]]; then
         rm -f "${CLEANUP_LOGS_SERVICE_FILE}"
+    fi
+    if [[ -f "${FORUM_DRIFT_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-forum-drift.timer" || true
+        rm -f "${FORUM_DRIFT_TIMER_FILE}"
+    fi
+    if [[ -f "${FORUM_DRIFT_SERVICE_FILE}" ]]; then
+        rm -f "${FORUM_DRIFT_SERVICE_FILE}"
     fi
     if [[ -f "${EXTERNAL_WORK_TIMER_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}-external-work.timer" || true

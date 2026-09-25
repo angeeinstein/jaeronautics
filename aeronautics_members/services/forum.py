@@ -14,7 +14,7 @@ those retries automatic rather than manual.
 from flask import current_app
 from flask_babel import _
 
-from ..db_models import User, db
+from ..db_models import Member, User, db
 from ..forum_service import (
     FORUM_SETTING_KEYS,
     FORUM_STATE_ANONYMISED,
@@ -191,3 +191,46 @@ def build_forum_entry_url(user, include_token=False):
     return build_public_url("forum.forum_entry", **route_values)
 
 
+
+
+def members_whose_forum_state_has_drifted():
+    """Members the forum still believes something out of date about.
+
+    Everything else that changes a membership is an event somebody causes --
+    a payment, an admin switching an account off, a photograph approved -- and
+    each of those syncs the forum there and then. One thing is not an event at
+    all: a membership ending because its last day has passed. Nobody does
+    anything, nothing is saved, and so nothing tells the forum. The person goes
+    on reading the archive until somebody happens to touch their record.
+
+    So this asks the question the passage of time never asks: for each linked
+    member, what should their forum state be, and what does the forum account
+    say it is? The comparison is local -- no call leaves the machine for the
+    749 people whose answer has not changed -- and only the ones that differ
+    are worth a sync.
+
+    Returns ``[(member, state now, state it should be)]``.
+    """
+    service = get_forum_service()
+    members = db.session.execute(
+        db.select(Member).where(Member.user_id.is_not(None))
+    ).scalars().all()
+
+    drifted = []
+    for member in members:
+        if member.deleted_at is not None:
+            continue
+        account = member.user.forum_account if member.user is not None else None
+        if account is None:
+            # Never synced at all. Not drift -- there is nothing on the forum
+            # to be out of date -- and syncing everybody who has never had a
+            # forum account would be a different job with a different risk.
+            continue
+        if account.state == FORUM_STATE_ANONYMISED:
+            # Terminal. The account was erased and the remote identity
+            # anonymised; putting them back into groups would undo it.
+            continue
+        should_be = service.get_desired_state(member)
+        if account.state != should_be:
+            drifted.append((member, account.state, should_be))
+    return drifted
