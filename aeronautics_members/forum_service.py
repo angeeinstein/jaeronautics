@@ -27,10 +27,12 @@ except ImportError:  # pragma: no cover - optional until dependencies are instal
 
 try:
     from .db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
+    from .permissions import Permission
     from .security_utils import build_public_url
     from .services.membership import member_has_active_access
 except ImportError:
     from db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
+    from permissions import Permission
     from security_utils import build_public_url
     from services.membership import member_has_active_access
 
@@ -58,6 +60,10 @@ FORUM_SETTING_DEFAULTS = {
     "forum_onboarding_group": "member-onboarding",
     "forum_member_group": "members",
     "forum_inactive_group": "",
+    # A Discourse group for the people who run the association, driven from the
+    # portal's own roles rather than maintained by hand on the forum. Empty
+    # means the forum does not have one and nothing is sent about it.
+    "forum_staff_group": "",
     "forum_onboarding_path": "/",
     "forum_avatar_max_bytes": str(5 * 1024 * 1024),
     "forum_avatar_allowed_types": "jpg,jpeg,png,webp",
@@ -511,13 +517,32 @@ class DiscourseConnectProvider(ForumProvider):
         ).hexdigest()
         return encoded, digest
 
-    def _build_group_fields(self, desired_state):
+    def _build_group_fields(self, desired_state, user=None):
+        """Which forum groups this person should be in, and which not.
+
+        Sent on every sync, not only on the ones that change something, because
+        the portal is the record and the forum is a copy of it. Membership
+        lapses, somebody joins the committee, somebody leaves it -- each is a
+        row changing here, and the next sync carries it across without anybody
+        going to the forum to do it by hand.
+
+        ``remove_groups`` matters as much as ``add_groups``: access that is
+        only ever granted is access nobody ever loses.
+        """
         onboarding_group = self.settings.get("forum_onboarding_group", "").strip()
         member_group = self.settings.get("forum_member_group", "").strip()
         inactive_group = self.settings.get("forum_inactive_group", "").strip()
+        staff_group = self.settings.get("forum_staff_group", "").strip()
 
         add_groups = []
         remove_groups = []
+        if staff_group:
+            # Who runs the association is a portal role, and this is the same
+            # answer the admin pages give -- so somebody who stops being on the
+            # committee stops being in the forum group at their next sync,
+            # rather than when somebody remembers.
+            runs_the_place = bool(user is not None and user.can(Permission.FORUM_MODERATE))
+            (add_groups if runs_the_place else remove_groups).append(staff_group)
         if desired_state == FORUM_STATE_ACTIVE:
             if member_group:
                 add_groups.append(member_group)
@@ -564,7 +589,7 @@ class DiscourseConnectProvider(ForumProvider):
             payload["avatar_url"] = avatar_url
             if avatar_force_update:
                 payload["avatar_force_update"] = "true"
-        payload.update(self._build_group_fields(desired_state))
+        payload.update(self._build_group_fields(desired_state, user))
         return payload
 
     def sync_user(self, forum_account, user, member, desired_state, avatar_url=None, avatar_force_update=False):
@@ -1311,6 +1336,7 @@ def normalize_forum_settings(settings_map):
     values["forum_onboarding_group"] = (values.get("forum_onboarding_group") or "").strip()
     values["forum_member_group"] = (values.get("forum_member_group") or "").strip()
     values["forum_inactive_group"] = (values.get("forum_inactive_group") or "").strip()
+    values["forum_staff_group"] = (values.get("forum_staff_group") or "").strip()
     values["forum_onboarding_path"] = (values.get("forum_onboarding_path") or "/").strip() or "/"
     values["forum_avatar_max_bytes"] = normalize_int(values.get("forum_avatar_max_bytes"), 5 * 1024 * 1024)
     values["forum_avatar_allowed_types"] = [

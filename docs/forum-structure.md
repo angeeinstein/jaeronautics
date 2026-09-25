@@ -178,26 +178,59 @@ A category with no group permission at all is public. Making one members-only
 is therefore two things: grant the members group, and **take `everyone` away**
 — granting a group does not remove anyone.
 
-**The portal already drives three of these groups**, through Discourse
-Connect, from membership state:
+**The portal drives these groups**, through Discourse Connect, from what it
+already knows about the person:
 
-| Group | Who is in it |
-|---|---|
-| `members` | Active members |
-| `member-onboarding` | Signed up, not yet active |
-| (configurable) | Lapsed, if a group is named for it |
+| Group | Who is in it | Decided by |
+|---|---|---|
+| `members` | Active members | membership coverage, by date |
+| `member-onboarding` | Signed up, not yet active | membership state |
+| `forum_inactive_group` | Lapsed, if a group is named for it | membership state |
+| `forum_staff_group` | Whoever administers the forum here | a portal role |
+| `partners` | Companies and university staff | by hand; granted nothing yet |
 
-`_build_group_fields` sends both `add_groups` and `remove_groups`, and
-`sync_user` pushes it through `/admin/users/sync_sso` rather than waiting for
-a login. So a membership that lapses takes forum access with it, without
-anybody remembering to do it. That is worth building on rather than around.
+**This is not an import step.** `_build_group_fields` sends both `add_groups`
+and `remove_groups` on *every* sync, and `sync_user` pushes it through
+`/admin/users/sync_sso` rather than waiting for a login. So a membership that
+lapses takes forum access with it at the next sync, and somebody who joins or
+leaves the committee gains or loses their forum standing the same way — without
+anybody opening the forum's admin pages. Access that is only ever granted is
+access nobody ever loses, which is why both halves are always sent.
 
-Two further groups are wanted and do not exist yet:
+The staff group is off by default: set a group name under **Admin → Settings →
+Forum** and it starts being driven by the same role that opens the forum queue
+in the portal. Leave it empty and nothing is said about it either way, so a
+group maintained by hand on the forum stays maintained by hand.
 
-- **Staff / moderators** — the board, and whoever maintains this.
-- **Companies and university staff** — people from outside the association
-  who should see some of it. Which parts is an open question; the safe
-  starting point is none of the lecture material.
+`partners` is made and granted nothing. What people from outside the
+association should see is a real question, and the answer that cannot be wrong
+while it is unanswered is "not the lecture material".
+
+## Who may read what
+
+`flask forum-permissions categories.json` is the whole of it, and
+`import-forum-content --mapping` does the same thing itself once the categories
+exist and **before it posts anything into them**.
+
+| | members | staff |
+|---|---|---|
+| Live lecture | Create — start topics and reply | Create |
+| Archive | See — read and search, nothing more | Create |
+| Everything else | untouched | untouched |
+
+Live lectures are writable because students keep adding exams and summaries; a
+read-only lecture category would make this a museum rather than somewhere
+people look things up and then contribute back. The archive is readable because
+throwing it away would be worse than keeping it filed, and not writable because
+nobody should be adding to a lecture that stopped running in 2017.
+
+"Everything else" is Discourse's own categories — `Uncategorized`, `Site
+Feedback` — which are counted and reported and never touched. What belongs to
+this arrangement is decided by the worksheet's own semester names, not by
+guessing.
+
+Run it with `--dry-run` first: it reports what each category grants now,
+including how many are still open to anybody.
 
 ### The starting position
 
@@ -206,11 +239,19 @@ what the material is, and widening access later is a decision anybody can make
 in an afternoon — narrowing it after the fact is not, because by then it has
 been indexed.
 
+That word is exact. A Discourse category with no group permission on it is not
+"visible once you are logged in" — it is public, to anybody and to every
+crawler. So this is not a hardening step for afterwards: the permissions go on
+between making the categories and posting into them, because an archive that
+was public for the two hours of an import has been public.
+
+Category permissions are also not the same thing as a private forum. With
+`login_required` off, an anonymous visitor still reaches the site and anything
+still public on it.
+
 ## What is still open
 
-- The list of live lectures, from the current curriculum.
 - What the company and university-staff group can see, if anything.
-- Whether archive categories are visible to members or only on request.
-- Whether the archive is one category or one per degree.
+- Whether `login_required` is on, which is what makes the site itself private.
 
 None of these block the test imports. All of them block the real one.

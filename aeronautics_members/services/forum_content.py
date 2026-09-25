@@ -426,6 +426,44 @@ class ContentPoster:
         answer = self._call("POST", "/categories.json", json_body=payload)
         return (answer.get("category") or {}).get("id")
 
+    def category(self, category_id):
+        """One category in full, including which groups may do what in it.
+
+        ``/site.json`` lists every category but says only what *this* account
+        may do in each, which is nothing to go on when the account is an
+        administrator and may do everything everywhere.
+        """
+        payload = self._call("GET", f"/c/{int(category_id)}/show.json")
+        return (payload.get("category") or {}) if isinstance(payload, dict) else {}
+
+    def set_category_permissions(self, category_id, permissions):
+        """Replace which groups may do what in this category.
+
+        Replace, not add: the set that is sent becomes the whole set, which is
+        how ``everyone`` is taken away. Granting a group does not remove
+        anybody, so a category that is public and also grants members is still
+        public, and that is the mistake this exists to make impossible.
+
+        Name, colour and slug go back unchanged with it. Discourse's category
+        update takes the whole record, and leaving them out of it has meant a
+        category coming back renamed to its own id.
+        """
+        current = self.category(category_id)
+        payload = {
+            "name": current.get("name"),
+            "color": current.get("color") or "0088CC",
+            "text_color": current.get("text_color") or "FFFFFF",
+            "permissions": {str(name): int(level)
+                            for name, level in permissions.items()},
+        }
+        if current.get("slug"):
+            payload["slug"] = current["slug"]
+        if current.get("parent_category_id"):
+            payload["parent_category_id"] = current["parent_category_id"]
+        return self._call(
+            "PUT", f"/categories/{int(category_id)}.json", json_body=payload
+        )
+
     def site_settings(self):
         """Every site setting and its current value, as {name: value}.
 

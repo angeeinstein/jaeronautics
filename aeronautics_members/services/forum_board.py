@@ -815,7 +815,7 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
                   limit=0, fallback_username=None, on_thread=None,
                   require_attachments=True, max_depth=MAX_CATEGORY_NESTING,
                   keep_duplicate_titles=False, plan=None, titles=None,
-                  categories_only=False):
+                  categories_only=False, after_categories=None):
     """Move every thread. Returns a summary; the detail goes to on_thread.
 
     Ordered oldest first, so that a run stopped halfway leaves a forum whose
@@ -825,6 +825,10 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
     -- see ``forum_mapping`` -- rather than from the old board's own tree.
     Everything after that is the same work: the threads do not care which
     category they are going into.
+
+    ``after_categories`` is called with the poster once the categories exist
+    and before anything is posted into them -- which is where the permissions
+    go, because a category nobody has restricted yet is one anybody can read.
 
     ``categories_only`` makes the categories and posts nothing. The structure
     is the part that is new each time it changes; posting is the part already
@@ -887,6 +891,13 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
     # run had to make is what says whether it did anything.
     summary["categories_there"] = len(made)
     summary["categories_made"] = len(created)
+
+    if after_categories is not None and not dry_run:
+        # Before a single post is sent, never after. A category is public until
+        # something says otherwise, so permissions applied at the end of a run
+        # are permissions applied to an archive that has already been readable
+        # for the length of the run.
+        after_categories(poster)
 
     if categories_only:
         return summary

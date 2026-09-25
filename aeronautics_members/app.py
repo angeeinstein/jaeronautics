@@ -262,6 +262,15 @@ from .services.forum_board import (  # noqa: E402
     migrate_board,
     settings_inventory,
 )
+from .services.forum_permissions import (  # noqa: E402
+    GUEST_GROUP,
+    STAFF_GROUP,
+    apply_permissions,
+    describe,
+    groups_wanted,
+    owned_roots,
+    permission_plan,
+)
 from .services.forum_worksheet import render_worksheet  # noqa: E402
 from .services.forum_content import (  # noqa: E402
     LOOSEN,
@@ -2737,10 +2746,18 @@ def create_app(config_overrides=None):
 
         placement = None
         titles = None
+        gatekeeper = None
         if mapping:
+            worksheet = json.loads(Path(mapping).read_text(encoding="utf-8"))
             placement = read_mapping(
-                json.loads(Path(mapping).read_text(encoding="utf-8")),
-                tables["forums"], tables["threads"],
+                worksheet, tables["forums"], tables["threads"],
+            )
+            # Applied once the categories exist and before a single post goes
+            # into them, because a category nobody has restricted is one
+            # anybody can read -- and an archive that was public for the two
+            # hours of a run has been public.
+            gatekeeper = _category_gatekeeper(
+                service, owned_roots(worksheet), dry_run=dry_run,
             )
             plan = mapping_plan(placement["paths"], tables["threads"])
             titles = titles_for(
@@ -2864,6 +2881,7 @@ def create_app(config_overrides=None):
                 max_depth=max_depth,
                 keep_duplicate_titles=keep_duplicate_titles,
                 plan=plan, titles=titles, categories_only=categories_only,
+                after_categories=gatekeeper,
             )
         finally:
             record.close()
@@ -2932,6 +2950,81 @@ def create_app(config_overrides=None):
                 f"\nFix what they say and run the same command again. What has "
                 f"landed is in {ledger} and will not be posted twice."
             )
+
+    @app.cli.command("forum-permissions")
+    @click.argument("mapping_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--dry-run", is_flag=True,
+                  help="Say what would change and change nothing.")
+    @click.option("--staff-group", default=STAFF_GROUP, show_default=True,
+                  help="The group that may post everywhere, including the "
+                       "archive. Discourse's own, unless you have another.")
+    @click.option("--guest-group", default=GUEST_GROUP, show_default=True,
+                  help="Companies and university staff. Made so it is there to "
+                       "put people in, and granted nothing.")
+    @click.option("--verbose", is_flag=True,
+                  help="A line per category rather than only the ones that "
+                       "were open.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="An 'All Users' Discourse API key.")
+    @with_appcontext
+    def forum_permissions_command(mapping_file, dry_run, staff_group,
+                                  guest_group, verbose, api_key):
+        """Members only: who may read, reply and post in each category.
+
+        A Discourse category with no group permission on it is public. Not
+        "visible once you are logged in" -- public, to anybody and to every
+        crawler. So the categories this import makes are open until something
+        says otherwise, and what goes in them is thirteen years of exams and
+        transcripts with students' names on them.
+
+        The import does this itself once the categories exist and before it
+        posts anything. This command is the same work on its own, for a forum
+        that was imported before it did, for a structure that has been changed
+        by hand since, and for checking -- with --dry-run -- what the position
+        actually is.
+
+        Live lectures: members may start topics and reply, because students
+        keep adding to them. The archive: members may read and search it and
+        nothing else. Categories that are not part of this mapping, including
+        Discourse's own, are left exactly as they are and counted.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
+
+        worksheet = json.loads(Path(mapping_file).read_text(encoding="utf-8"))
+        roots = owned_roots(worksheet)
+        click.echo(
+            f"{len(roots)} top-level categories belong to this mapping: "
+            + ", ".join(sorted(roots))
+        )
+
+        _make_the_groups(service, staff_group=staff_group,
+                         guest_group=guest_group, dry_run=dry_run)
+        report = _restrict_the_categories(
+            poster, service, roots, dry_run=dry_run,
+            staff_group=staff_group, verbose=verbose,
+        )
+        if report is None:
+            raise click.ClickException("Nothing was restricted.")
+
+        if dry_run:
+            click.echo(click.style(
+                "\nNothing was changed. Run it again without --dry-run.",
+                fg="cyan",
+            ))
+        else:
+            click.echo(click.style(
+                "\nCategory permissions are not the same thing as a private "
+                "forum: with login_required off, anonymous visitors still see "
+                "the site and anything still public on it.", fg="cyan",
+            ))
 
     @app.cli.command("publish-forum-profiles")
     @click.option("--dry-run", is_flag=True,
@@ -3094,6 +3187,135 @@ def create_app(config_overrides=None):
                 "so the setting that governs them cannot be checked.", fg="yellow"))
             return None
         return ContentPoster(dict(settings))
+
+    def _make_the_groups(service, *, staff_group=STAFF_GROUP,
+                         guest_group=GUEST_GROUP, dry_run=False):
+        """Make sure every group this arrangement needs is on the forum.
+
+        First, always. A Connect payload's ``add_groups`` is not a way to make
+        a group: Discourse matches the names against what it already has and
+        drops the rest without a word, so a person published before the group
+        existed is in no group at all and re-sending the payload changes
+        nothing. Thirty-four empty groups on a finished run is what that looks
+        like from the outside.
+        """
+        wanted = groups_wanted(
+            getattr(service, "settings", {}) or {},
+            staff_group=staff_group, guest_group=guest_group,
+        )
+        if dry_run:
+            click.echo(f"groups: would make sure {len(wanted)} exist: "
+                       f"{', '.join(wanted)}")
+            return wanted
+
+        provider = service.provider
+        if not hasattr(provider, "ensure_group"):
+            # A provider that cannot make groups is a provider this cannot be
+            # done through, which is worth a line rather than a traceback in
+            # the middle of a two-hour import.
+            click.echo(click.style(
+                "This forum provider cannot make groups, so they have to exist "
+                "already. Make them on the forum before publishing anybody.",
+                fg="yellow",
+            ), err=True)
+            return wanted
+
+        made = []
+        for name in wanted:
+            try:
+                _group, created = provider.ensure_group(name)
+            except ForumProviderError as exc:
+                click.echo(click.style(f"  ! group {name}: {exc}", fg="yellow"),
+                           err=True)
+                continue
+            if created:
+                made.append(name)
+        click.echo(
+            f"groups: {len(wanted)} needed, {len(made)} made"
+            + (f" ({', '.join(made)})" if made else "")
+        )
+        return wanted
+
+    def _restrict_the_categories(poster, service, roots, *, dry_run=False,
+                                 staff_group=STAFF_GROUP, verbose=False):
+        """Give every category this import owns to the members, and nobody else.
+
+        A category with no group permission on it is public -- not "visible
+        once you are logged in", public. So this is not a hardening step to do
+        afterwards: it is the difference between an archive of exams with
+        students' names in it being members-only and being indexed.
+        """
+        settings = getattr(service, "settings", {}) or {}
+        member_group = (settings.get("forum_member_group") or "").strip()
+        portal_staff = (settings.get("forum_staff_group") or "").strip()
+        if not member_group:
+            click.echo(click.style(
+                "No member group is configured, so there is nobody to give the "
+                "categories to. Set one under Admin -> Settings -> Forum "
+                "before importing, or every category stays public.",
+                fg="yellow",
+            ), err=True)
+            return None
+
+        try:
+            categories = poster.categories()
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Could not read the categories, so none were restricted: {exc}",
+                fg="yellow",
+            ), err=True)
+            return None
+
+        plan, untouched = permission_plan(
+            categories, roots, member_group=member_group, staff_group=staff_group,
+            portal_staff_group=portal_staff,
+        )
+        if not plan:
+            click.echo(click.style(
+                "None of the categories on this forum belong to this mapping, "
+                "so nothing was restricted. Check that the categories were made "
+                "before this ran.", fg="yellow",
+            ), err=True)
+            return None
+
+        def say(name, grants, *, changed, was_public):
+            if verbose or (changed and was_public):
+                mark = "public until now" if was_public else "changed"
+                click.echo(f"  {name}: {describe(grants)}"
+                           + (f"  ({mark})" if changed else "  (already)"))
+
+        report = apply_permissions(
+            poster, plan, dry_run=dry_run, on_category=say,
+        )
+        click.echo(
+            f"permissions: {report['categories']} categories, "
+            f"{report['set']} set, {report['already']} already right"
+            + (f", {report['opened']} of them public until now"
+               if report["opened"] else "")
+        )
+        if untouched:
+            click.echo(
+                f"  {len(untouched)} categories are not part of this mapping "
+                f"and were left alone: "
+                + ", ".join(name for _id, name in untouched[:5])
+                + (" ..." if len(untouched) > 5 else "")
+            )
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        return report
+
+    def _category_gatekeeper(service, roots, *, dry_run=False):
+        """What the import calls once the categories are there.
+
+        Bound here rather than written into ``migrate_board`` so that the board
+        importer stays a thing that moves posts, and who may read them stays a
+        question answered in one place.
+        """
+        def restrict(poster):
+            _make_the_groups(service, dry_run=dry_run)
+            _restrict_the_categories(poster, service, roots, dry_run=dry_run)
+
+        return restrict
 
     def _mind_the_avatar_setting(client, *, dry_run):
         """Make sure the avatars we send are the avatars people see.
