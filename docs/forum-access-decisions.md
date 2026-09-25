@@ -34,10 +34,13 @@ whichever one it means.
 | | `membership-inactive` | ran out, never paid, or account switched off |
 | Kind | `forum_category_groups` | `Member.member_category`, **only while active** |
 
-The kind mapping is written `kind of member = forum group`. The left-hand side
-is fixed — `student`, `alumni`, `staff`, `partner`, `honorary`, and nothing
-else, because it is what the portal stores on a member. The right-hand side is
-a name somebody chooses, and the group is made on the forum from it.
+The kind mapping is one box per kind of member on the settings page, each
+labelled with the kind and holding only the forum group's name. It is stored as
+`kind = group` lines, which is what everything reads, but nobody types the
+left-hand side: it is fixed — `student`, `alumni`, `staff`, `partner`,
+`honorary` — so a box that could hold anything else was a box that could hold a
+typo, and a typo there is silent. The right-hand side is a name somebody
+chooses, and the group is made on the forum from it.
 
 `staff` on the left is the portal's word for anybody employed at the institute,
 a secretary as much as a lecturer. It is deliberately **not** reused as the

@@ -362,11 +362,16 @@
                                     <small class="text-muted">{{ _('Forum group for whoever may administer the forum here. Membership follows this portal: it is granted and withdrawn on every sync, so nobody has to maintain it on the forum.') }}</small>
                                 </div>
                                 <div class="col-md-12">
-                                    <label class="form-label" for="forum_category_groups">{{ _('Forum Group Per Kind Of Member (optional)') }}</label>
-                                    <textarea class="form-control font-monospace" id="forum_category_groups" name="forum_category_groups" rows="5" placeholder="student = students&#10;alumni = alumni&#10;staff = lecturers&#10;partner = companies">{{ forum_settings.forum_category_groups }}</textarea>
-                                    <small class="text-muted d-block">{{ _('One line per kind of member, written as') }} <code>{{ _('kind of member') }} = {{ _('forum group') }}</code>.</small>
-                                    <small class="text-muted d-block">{{ _('On the left, the kind of member as this portal stores it. Only these five exist:') }} <code>student</code>, <code>alumni</code>, <code>staff</code>, <code>partner</code>, <code>honorary</code>. {{ _('Anything else on that side does nothing at all.') }}</small>
-                                    <small class="text-muted d-block">{{ _('On the right, the name of the forum group those members should be in. You choose the name; the group is created on the forum for you. A kind with no line here is put in no such group.') }}</small>
+                                    <label class="form-label">{{ _('Forum Group Per Kind Of Member (optional)') }}</label>
+                                    <small class="text-muted d-block mb-2">{{ _('The forum group each kind of member belongs to. You choose the names and the groups are created on the forum for you; a kind left empty is put in no such group. This portal decides who is in which group, the forum decides what each group may see.') }}</small>
+                                    <div class="row g-2">
+                                        {% for field in forum_category_group_fields %}
+                                        <div class="col-md-4">
+                                            <label class="form-label small" for="forum_group_{{ field.kind }}">{{ field.label }}</label>
+                                            <input class="form-control" type="text" id="forum_group_{{ field.kind }}" name="forum_group_{{ field.kind }}" value="{{ field.value }}" placeholder="{{ _('no group') }}">
+                                        </div>
+                                        {% endfor %}
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label" for="forum_lecture_groups">{{ _('Groups That May Read The Lecture Material') }}</label>

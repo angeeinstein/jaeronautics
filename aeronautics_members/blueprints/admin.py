@@ -9,6 +9,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify
 
+from ..member_categories import CATEGORY_ORDER
 from ..permissions import (
     PERMISSION_LABELS,
     Permission,
@@ -921,7 +922,19 @@ def admin_settings():
         set_setting_value("forum_member_group", ((request.form.get("forum_member_group") if settings_section == "forum" else before_settings.get("forum_member_group")) or "").strip() or None)
         set_setting_value("forum_inactive_group", ((request.form.get("forum_inactive_group") if settings_section == "forum" else before_settings.get("forum_inactive_group")) or "").strip() or None)
         set_setting_value("forum_staff_group", ((request.form.get("forum_staff_group") if settings_section == "forum" else before_settings.get("forum_staff_group")) or "").strip() or None)
-        set_setting_value("forum_category_groups", ((request.form.get("forum_category_groups") if settings_section == "forum" else before_settings.get("forum_category_groups")) or "").strip() or None)
+        # Stored as the lines the rest of the application reads, composed from
+        # one box per kind of member: the left-hand side is fixed, so nobody
+        # should have to type it correctly.
+        if settings_section == "forum":
+            written = "\n".join(
+                f"{kind} = {name}" for kind, name in (
+                    (kind, (request.form.get(f"forum_group_{kind}") or "").strip())
+                    for kind in CATEGORY_ORDER
+                ) if name
+            )
+        else:
+            written = before_settings.get("forum_category_groups") or ""
+        set_setting_value("forum_category_groups", written.strip() or None)
         set_setting_value("forum_lecture_groups", ((request.form.get("forum_lecture_groups") if settings_section == "forum" else before_settings.get("forum_lecture_groups")) or "").strip() or None)
         set_setting_value("forum_archive_groups", ((request.form.get("forum_archive_groups") if settings_section == "forum" else before_settings.get("forum_archive_groups")) or "").strip() or None)
         set_setting_value("forum_onboarding_path", ((request.form.get("forum_onboarding_path") if settings_section == "forum" else before_settings.get("forum_onboarding_path")) or "").strip() or "/")

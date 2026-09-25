@@ -649,3 +649,83 @@ class TestALineThatNamesNothing:
         }))
         assert "studnet = students" in problems["forum_category_groups"]
         assert "honorary" in problems["forum_category_groups"]
+
+
+class TestTheBoxesOnTheSettingsPage:
+    """One box per kind, because the left-hand side is not a thing to type.
+
+    It is fixed -- five values this portal stores on a member -- so it belongs
+    in a label beside the box rather than in something that has to be spelled
+    right, silently does nothing when it is not, and has to be looked up
+    somewhere to be spelled at all.
+    """
+
+    @pytest.fixture
+    def admin_client(self, app, client):
+        from conftest import app_module, db
+
+        from aeronautics_members.db_models import User
+
+        admin = User(email="admin-forum-groups@example.com")
+        admin.set_password("x")
+        admin.grant_role(app_module.get_role("superadmin"))
+        db.session.add(admin)
+        db.session.commit()
+        with client.session_transaction() as session:
+            session["_user_id"] = str(admin.id)
+        return client
+
+    def _save(self, client, **groups):
+        from conftest import db
+
+        form = {
+            "save_settings": "1",
+            "settings_section": "forum",
+            "forum_integration_enabled": "y",
+            "forum_provider": "discourse",
+            "forum_auth_strategy": "discourse_connect",
+            "forum_base_url": "https://forum.example.org",
+            "discourse_api_username": "system",
+            "forum_member_group": "members",
+            "forum_onboarding_group": "members-awaiting-photo",
+            "forum_inactive_group": "membership-inactive",
+            "forum_lecture_groups": "students",
+            "forum_onboarding_path": "/",
+            "forum_avatar_max_bytes": "5242880",
+            "forum_avatar_allowed_types": "jpg,png",
+        }
+        form.update({f"forum_group_{kind}": name for kind, name in groups.items()})
+        response = client.post("/admin/settings", data=form, follow_redirects=True)
+        assert response.status_code == 200
+        db.session.expire_all()
+        return response
+
+    def test_a_box_per_kind_becomes_the_mapping_the_rest_of_it_reads(
+        self, admin_client
+    ):
+        self._save(admin_client, student="students", staff="institute")
+        from aeronautics_members.services.forum import get_forum_settings_map
+
+        assert member_category_groups(get_forum_settings_map()) == {
+            "student": "students", "staff": "institute",
+        }
+
+    def test_a_kind_left_empty_is_in_no_group(self, admin_client):
+        self._save(admin_client, student="students", partner="")
+        from aeronautics_members.services.forum import get_forum_settings_map
+
+        assert "partner" not in member_category_groups(get_forum_settings_map())
+
+    def test_what_is_saved_can_never_name_a_kind_that_does_not_exist(
+        self, admin_client
+    ):
+        """The failure the text area allowed: a typo that does nothing."""
+        self._save(admin_client, student="students")
+        from aeronautics_members.services.forum import get_forum_settings_map
+
+        assert unknown_member_kinds(get_forum_settings_map()) == []
+
+    def test_every_kind_gets_a_box(self, admin_client):
+        page = admin_client.get("/admin/settings").get_data(as_text=True)
+        for kind in CATEGORY_ORDER:
+            assert f'name="forum_group_{kind}"' in page

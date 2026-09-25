@@ -1238,6 +1238,18 @@ def build_settings_page_context(edit_mail_account_id=None):
         "notification_settings": notification_settings,
         "notification_health": notification_service.get_health_snapshot(),
         "forum_settings": forum_settings,
+        # One box per kind of member rather than a text area somebody has to
+        # write both sides of. The left-hand side is fixed -- it is what this
+        # portal stores on a member -- so it belongs in the label, not in
+        # something to be typed correctly.
+        "forum_category_group_fields": [
+            {
+                "kind": kind,
+                "label": category_label(kind),
+                "value": member_category_groups(forum_settings).get(kind, ""),
+            }
+            for kind in CATEGORY_ORDER
+        ],
         "stripe_settings": stripe_settings,
         "forum_service": forum_service,
         "forum_endpoint_urls": {
