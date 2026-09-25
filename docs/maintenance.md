@@ -248,13 +248,17 @@ So take them with you:
 # On the machine being replaced.
 sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
-     dump-portal-settings --out /root/portal-settings.json --with-secrets
+     dump-portal-settings --out /var/tmp/portal-settings.json --with-secrets
 
 # On the new one, after install.sh has finished.
 sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
      restore-portal-settings /var/tmp/portal-settings.json --dry-run
 ```
+
+Somewhere the **application user** can write. These commands run as
+`jaeronautics`, which owns very little of the machine and `/root` least of all;
+put it in `/var/tmp` and move it afterwards as yourself.
 
 It carries the general, notification, forum and Stripe settings, the
 institutional email domains, and the mail accounts. It never removes anything:

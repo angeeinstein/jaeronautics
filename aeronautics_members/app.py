@@ -2991,12 +2991,24 @@ def create_app(config_overrides=None):
         """
         payload = export_settings(with_secrets=with_secrets)
         path = Path(out)
-        path.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
-        if with_secrets:
-            # Before anything else can read it, rather than after.
-            path.chmod(0o600)
+        try:
+            # Created empty and closed to this user alone before a single
+            # secret is written into it, rather than written and then tightened
+            # -- in between, the file would be readable by anybody.
+            if with_secrets:
+                path.touch(mode=0o600, exist_ok=True)
+                path.chmod(0o600)
+            path.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+        except OSError as exc:
+            raise click.ClickException(
+                f"Could not write {path}: {exc.strerror}.\n\n"
+                f"This runs as the application user, which owns very little of "
+                f"this machine -- /root in particular is not writable by it. "
+                f"Write it somewhere that user can reach, such as "
+                f"--out /var/tmp/portal-settings.json, and move it afterwards."
+            )
 
         for section, values in payload["settings"].items():
             click.echo(f"  {section:<14} {len(values)} settings")
@@ -3031,7 +3043,16 @@ def create_app(config_overrides=None):
         every machine, and a restore that blanked what it did not know about
         would be one nobody could run twice.
         """
-        payload = json.loads(Path(settings_file).read_text(encoding="utf-8"))
+        try:
+            payload = json.loads(Path(settings_file).read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise click.ClickException(
+                f"Could not read {settings_file}: {exc.strerror}. This runs as "
+                f"the application user; a file exported with --with-secrets is "
+                f"readable only by whoever wrote it."
+            )
+        except ValueError as exc:
+            raise click.ClickException(f"{settings_file} is not valid JSON: {exc}")
         try:
             report = import_settings(payload, dry_run=dry_run)
         except ValueError as exc:

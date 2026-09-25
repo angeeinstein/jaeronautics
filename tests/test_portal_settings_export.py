@@ -12,6 +12,7 @@ partial file would otherwise blank whatever the file had not heard of.
 """
 import json
 import stat
+from pathlib import Path
 
 import pytest
 
@@ -255,3 +256,59 @@ class TestTheCommands:
             db.select(Setting).where(Setting.key == "forum_lecture_groups")
         ).scalar_one()
         assert restored.value == "students, alumni"
+
+
+class TestWhenTheFileCannotBeWritten:
+    """It runs as the application user, which owns very little of the machine.
+
+    /root is the obvious place to put something you are about to download and
+    the one place that user cannot write, so this is the first thing anybody
+    hits -- and a traceback ending in PermissionError does not say which user
+    or suggest where else.
+    """
+
+    def test_an_unwritable_path_is_a_sentence_not_a_traceback(
+        self, app, configured, tmp_path, monkeypatch
+    ):
+        def refused(*_args, **_kwargs):
+            raise PermissionError(13, "Permission denied")
+
+        # Forced rather than arranged: the suite may well be run by root, and
+        # root is not stopped by a mode.
+        monkeypatch.setattr(Path, "write_text", refused)
+        monkeypatch.setattr(Path, "touch", refused)
+        result = app.test_cli_runner().invoke(args=[
+            "dump-portal-settings", "--out", str(tmp_path / "settings.json"),
+        ])
+        assert result.exit_code != 0
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+        assert "/var/tmp/portal-settings.json" in result.output
+        assert "application user" in result.output
+
+    def test_a_file_with_secrets_is_never_briefly_readable(
+        self, app, configured, tmp_path
+    ):
+        """Written into a file that is already closed, not tightened after."""
+        out = tmp_path / "settings.json"
+        out.write_text("{}")
+        out.chmod(0o644)
+        app.test_cli_runner().invoke(args=[
+            "dump-portal-settings", "--out", str(out), "--with-secrets",
+        ])
+        assert stat.S_IMODE(out.stat().st_mode) == 0o600
+
+    def test_a_missing_file_on_restore_says_so_plainly(self, app, tmp_path):
+        result = app.test_cli_runner().invoke(
+            args=["restore-portal-settings", str(tmp_path / "nothing.json")]
+        )
+        assert result.exit_code != 0
+        assert "nothing.json" in result.output
+
+    def test_something_that_is_not_json_says_so(self, app, tmp_path):
+        broken = tmp_path / "settings.json"
+        broken.write_text("{ this came out of a chat window")
+        result = app.test_cli_runner().invoke(
+            args=["restore-portal-settings", str(broken)]
+        )
+        assert result.exit_code != 0
+        assert "not valid JSON" in result.output
