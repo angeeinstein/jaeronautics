@@ -231,9 +231,29 @@ Forum** and it starts being driven by the same role that opens the forum queue
 in the portal. Leave it empty and nothing is said about it either way, so a
 group maintained by hand on the forum stays maintained by hand.
 
-`partners` is made and granted nothing. What people from outside the
-association should see is a real question, and the answer that cannot be wrong
-while it is unanswered is "not the lecture material".
+People from outside the association are sorted by the same mapping — a
+`partner = companies` line makes and fills the group. What they should see is a
+real question, and the answer that cannot be wrong while it is unanswered is
+"not the lecture material", which is what they get by default.
+
+### What is made for you, and what is not
+
+| | |
+|---|---|
+| The groups | made by the import, and by `forum-permissions` |
+| Lecture and archive permissions | set by the import, before it posts anything |
+| The settings above | **yours to fill in**, and the run stops without the first |
+| The categories nobody has made yet | **yours**, in Discourse |
+
+`forum-permissions --dry-run` says which of the settings are still empty and
+what goes wrong for each, so the answer to "have I forgotten anything" comes
+from the tool rather than from a list somebody has to keep.
+
+Each of them is empty by default because empty is a silence rather than an
+error: no group to grant the material to, no way to tell a lecturer from a
+student, nobody named as running the place, and people whose membership is not
+current put nowhere at all. A run with them unset does something defensible and
+not what anybody meant.
 
 ## Who may read what
 

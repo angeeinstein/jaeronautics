@@ -46,12 +46,6 @@ LEVEL_NAMES = {CREATE: "create", REPLY: "reply", SEE: "see"}
 #: exists, so it is granted rather than created.
 STAFF_GROUP = "staff"
 
-#: Companies and university staff, who are not members of the association. It
-#: is made so that it is there to put people in, and granted nothing at all:
-#: what they should see is an open question, and the answer that cannot be
-#: wrong is "not the lecture material".
-GUEST_GROUP = "partners"
-
 #: Discourse's everybody-including-anonymous group. Never granted; named here
 #: because taking it away is the point and a permission set that still has it
 #: is the failure this module is about.
@@ -159,8 +153,7 @@ def permission_plan(categories, roots, *, lecture_groups, archive_groups=None,
     return plan, untouched
 
 
-def groups_wanted(settings, *, staff_group=STAFF_GROUP, guest_group=GUEST_GROUP,
-                  extra=()):
+def groups_wanted(settings, *, staff_group=STAFF_GROUP, extra=()):
     """Every group that has to exist before any of this works.
 
     ``add_groups`` in a Connect payload is not a way to *make* a group.
@@ -175,7 +168,7 @@ def groups_wanted(settings, *, staff_group=STAFF_GROUP, guest_group=GUEST_GROUP,
         name = (settings.get(key) or "").strip()
         if name and name not in wanted:
             wanted.append(name)
-    for name in tuple(extra) + (staff_group, guest_group):
+    for name in tuple(extra) + (staff_group,):
         if name and name not in wanted:
             wanted.append(name)
     return wanted
@@ -286,3 +279,44 @@ def apply_permissions(poster, plan, *, dry_run=False, enforce=False,
             on_category(name, grants, changed=True, was_public=was_public)
 
     return report
+
+
+def what_is_not_set_up(settings):
+    """What still has to be decided before any of this means anything.
+
+    Every one of these is a setting whose empty value is a silence rather than
+    an error: no group to grant the material to, no way to tell a lecturer from
+    a student, nobody named as running the place. A run with them empty does
+    something defensible and not what anybody wanted, so they are said out loud
+    before the run rather than deduced from its results afterwards.
+    """
+    missing = []
+    if not access_groups(settings, "forum_lecture_groups"):
+        missing.append((
+            "forum_lecture_groups",
+            "Nobody may read the lecture material, so there is nothing to "
+            "grant and the run will stop. Name the groups that may -- students "
+            "and alumni, not the member group.",
+        ))
+    if not str(settings.get("forum_category_groups") or "").strip():
+        missing.append((
+            "forum_category_groups",
+            "Nobody is sorted by what kind of member they are, so the groups "
+            "above will never have anybody in them. One 'student = students' "
+            "line per kind.",
+        ))
+    if not str(settings.get("forum_staff_group") or "").strip():
+        missing.append((
+            "forum_staff_group",
+            "No group follows the portal's own forum-admin role, so whoever "
+            "runs the forum is whoever Discourse's own staff flags say, "
+            "maintained by hand over there.",
+        ))
+    if not str(settings.get("forum_inactive_group") or "").strip():
+        missing.append((
+            "forum_inactive_group",
+            "People whose membership is not current are put in no group, so "
+            "nothing can be shown to them -- an empty forum with no "
+            "explanation of why.",
+        ))
+    return missing

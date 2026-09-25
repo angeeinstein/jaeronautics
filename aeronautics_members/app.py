@@ -266,7 +266,6 @@ from .services.forum_board import (  # noqa: E402
     settings_inventory,
 )
 from .services.forum_permissions import (  # noqa: E402
-    GUEST_GROUP,
     STAFF_GROUP,
     access_groups,
     apply_permissions,
@@ -274,6 +273,7 @@ from .services.forum_permissions import (  # noqa: E402
     groups_wanted,
     owned_roots,
     permission_plan,
+    what_is_not_set_up,
 )
 from .services.forum_worksheet import render_worksheet  # noqa: E402
 from .services.forum_content import (  # noqa: E402
@@ -2962,9 +2962,6 @@ def create_app(config_overrides=None):
     @click.option("--staff-group", default=STAFF_GROUP, show_default=True,
                   help="The group that may post everywhere, including the "
                        "archive. Discourse's own, unless you have another.")
-    @click.option("--guest-group", default=GUEST_GROUP, show_default=True,
-                  help="Companies and university staff. Made so it is there to "
-                       "put people in, and granted nothing.")
     @click.option("--verbose", is_flag=True,
                   help="A line per category rather than only the ones that "
                        "were open.")
@@ -2976,7 +2973,7 @@ def create_app(config_overrides=None):
                   help="An 'All Users' Discourse API key.")
     @with_appcontext
     def forum_permissions_command(mapping_file, dry_run, staff_group,
-                                  guest_group, verbose, enforce, api_key):
+                                  verbose, enforce, api_key):
         """Members only: who may read, reply and post in each category.
 
         A Discourse category with no group permission on it is public. Not
@@ -3012,9 +3009,9 @@ def create_app(config_overrides=None):
             f"{len(roots)} top-level categories belong to this mapping: "
             + ", ".join(sorted(roots))
         )
+        _say_what_is_not_set_up(service)
 
-        _make_the_groups(service, staff_group=staff_group,
-                         guest_group=guest_group, dry_run=dry_run)
+        _make_the_groups(service, staff_group=staff_group, dry_run=dry_run)
         report = _restrict_the_categories(
             poster, service, roots, dry_run=dry_run, staff_group=staff_group,
             verbose=verbose, enforce=enforce,
@@ -3196,8 +3193,7 @@ def create_app(config_overrides=None):
             return None
         return ContentPoster(dict(settings))
 
-    def _make_the_groups(service, *, staff_group=STAFF_GROUP,
-                         guest_group=GUEST_GROUP, dry_run=False):
+    def _make_the_groups(service, *, staff_group=STAFF_GROUP, dry_run=False):
         """Make sure every group this arrangement needs is on the forum.
 
         First, always. A Connect payload's ``add_groups`` is not a way to make
@@ -3209,7 +3205,7 @@ def create_app(config_overrides=None):
         """
         settings = getattr(service, "settings", {}) or {}
         wanted = groups_wanted(
-            settings, staff_group=staff_group, guest_group=guest_group,
+            settings, staff_group=staff_group,
             # Every group anything here names has to exist before a soul is put
             # in one: a Connect payload cannot make a group, only fill one that
             # is already there, and it says nothing when it cannot.
@@ -3249,6 +3245,19 @@ def create_app(config_overrides=None):
             + (f" ({', '.join(made)})" if made else "")
         )
         return wanted
+
+    def _say_what_is_not_set_up(service):
+        """Before the run, not deduced from its results afterwards."""
+        missing = what_is_not_set_up(getattr(service, "settings", {}) or {})
+        if not missing:
+            return
+        click.echo(click.style(
+            f"\n{len(missing)} things are not decided yet, under "
+            f"Admin -> Settings -> Forum:", fg="yellow",
+        ))
+        for name, why in missing:
+            click.echo(click.style(f"  {name}\n    {why}", fg="yellow"))
+        click.echo("")
 
     def _no_lecture_groups():
         return (

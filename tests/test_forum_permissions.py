@@ -14,7 +14,6 @@ from aeronautics_members.forum_service import member_category_groups
 from aeronautics_members.services.forum_permissions import (
     CREATE,
     EVERYONE,
-    GUEST_GROUP,
     SEE,
     STAFF_GROUP,
     access_groups,
@@ -25,6 +24,7 @@ from aeronautics_members.services.forum_permissions import (
     live_tree,
     owned_roots,
     permission_plan,
+    what_is_not_set_up,
 )
 
 WORKSHEET = {
@@ -209,9 +209,9 @@ class TestTheGroupsThatHaveToExistFirst:
         })
         assert "" not in wanted
 
-    def test_the_staff_and_guest_groups_are_there_too(self):
-        wanted = groups_wanted({"forum_member_group": "members"})
-        assert STAFF_GROUP in wanted and GUEST_GROUP in wanted
+    def test_discourses_own_staff_group_is_there_too(self):
+        """Granted everywhere, so it has to be named; it always exists."""
+        assert STAFF_GROUP in groups_wanted({"forum_member_group": "members"})
 
     def test_a_name_used_twice_is_listed_once(self):
         wanted = groups_wanted({
@@ -564,3 +564,49 @@ class TestAGroupMeansHasPaidAndIsThatKindOfPerson:
     def test_somebody_still_onboarding_is_not_in_it_yet(self, app):
         payload = self._payload("onboarding")
         assert "students" in self._groups(payload, "remove_groups")
+
+
+class TestSayingWhatHasNotBeenDecidedYet:
+    """Each of these settings is empty by default, and empty is a silence.
+
+    A run with them unset does something defensible and not what anybody meant:
+    groups nobody is in, material nobody may read, people put nowhere. Said
+    before the run, because deducing it from the results afterwards means
+    deducing it from a forum that is already wrong.
+    """
+
+    FULL = {
+        "forum_lecture_groups": "students, alumni",
+        "forum_category_groups": "student = students",
+        "forum_staff_group": "committee",
+        "forum_inactive_group": "membership-inactive",
+    }
+
+    def _names(self, settings):
+        return [name for name, _why in what_is_not_set_up(settings)]
+
+    def test_a_forum_with_nothing_set_names_all_four(self):
+        assert len(self._names({})) == 4
+
+    def test_a_forum_with_everything_set_says_nothing(self):
+        assert self._names(self.FULL) == []
+
+    def test_the_one_that_stops_the_run_is_named(self):
+        assert "forum_lecture_groups" in self._names(
+            dict(self.FULL, forum_lecture_groups="")
+        )
+
+    def test_groups_nobody_will_ever_be_in_are_named(self):
+        """Lecture groups set and no kind mapping is a forum nobody can read."""
+        assert "forum_category_groups" in self._names(
+            dict(self.FULL, forum_category_groups="")
+        )
+
+    def test_people_who_would_be_put_nowhere_are_named(self):
+        assert "forum_inactive_group" in self._names(
+            dict(self.FULL, forum_inactive_group="")
+        )
+
+    def test_each_one_says_what_goes_wrong_rather_than_only_its_name(self):
+        for _name, why in what_is_not_set_up({}):
+            assert len(why) > 40
