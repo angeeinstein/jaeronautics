@@ -95,9 +95,19 @@ FORUM_SETTING_DEFAULTS = {
     "discourse_api_key": "",
     "discourse_api_username": "",
     "discourse_connect_secret": "",
-    "forum_onboarding_group": "member-onboarding",
+    # Named for what is true of the people in them, because these names end up
+    # on category permissions in Discourse and somebody reading one there has
+    # only the name to go on. "member-onboarding" read as "has not paid yet"
+    # and meant "has paid, and has not had a photograph approved yet", which
+    # are opposite answers to the only question the name gets asked.
+    "forum_onboarding_group": "members-awaiting-photo",
     "forum_member_group": "members",
-    "forum_inactive_group": "",
+    # Covers a membership that ran out, one that was never paid for, and an
+    # account that was switched off -- so not "expired", which is only the
+    # commonest of the three. Given a name at all so that these people can be
+    # shown how to put it right, rather than an empty forum with no
+    # explanation.
+    "forum_inactive_group": "membership-inactive",
     # A Discourse group for the people who run the association, driven from the
     # portal's own roles rather than maintained by hand on the forum. Empty
     # means the forum does not have one and nothing is sent about it.

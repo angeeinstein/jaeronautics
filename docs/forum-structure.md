@@ -184,13 +184,21 @@ answers — a lecturer is not a student whose membership is in another state —
 and a category that wants only one of them should be able to say so. So each
 axis drives its own group, and a category grants whichever it means.
 
-| Axis | Group | Decided by |
+| Axis | Group | Who is in it |
 |---|---|---|
-| Has paid | `members` | membership coverage, by date |
-| | `member-onboarding` | signed up, not yet active |
-| | `forum_inactive_group` | lapsed, if a group is named |
+| Standing | `members` | active membership **and** an approved photograph |
+| | `members-awaiting-photo` | active membership, photograph not approved yet |
+| | `membership-inactive` | ran out, never paid, or the account was switched off |
 | Kind of member | `forum_category_groups` | `Member.member_category`, **while active** |
 | Runs the place | `forum_staff_group` | a portal role |
+
+The first three are named for what is true of the people in them, because
+those names end up on category permissions in Discourse and whoever reads one
+there has only the name to go on. In particular `members-awaiting-photo` is
+**not** "has not paid": it is "has paid, and the photograph is not approved
+yet", which is the opposite answer to the question the old name got asked.
+`membership-inactive` covers all three ways of not being current, so it is not
+called "expired", which is only the commonest of them.
 
 The portal already knows what kind of member somebody is — student, alumni,
 staff, partner, honorary — so `forum_category_groups` is a line per kind under
@@ -303,6 +311,28 @@ was public for the two hours of an import has been public.
 Category permissions are also not the same thing as a private forum. With
 `login_required` off, an anonymous visitor still reaches the site and anything
 still public on it.
+
+### People who cannot see the material
+
+Three states cannot read the lectures: awaiting a photograph, inactive, and
+never a member. Showing them an empty forum is how "the forum is broken"
+reaches the committee's inbox, so the states have groups of their own and the
+groups can be granted something small.
+
+They need different things said to them, and Discourse cannot hide one topic
+from one group inside a shared category — only whole categories. So:
+
+| Category | Granted to | What is in it |
+|---|---|---|
+| About the association | everyone, or all logged-in groups | who this is, what the forum is for |
+| Getting started | `members-awaiting-photo` | how to upload a photograph and how long approval takes |
+| Membership | `membership-inactive` | how to renew, who to ask |
+
+Starting with **one** category granted to both of the latter two groups is also
+a fair answer — two pinned topics, and each person reads the one that applies.
+Splitting it later is a new category and one changed grant. What is not a fair
+answer is granting them nothing, which is the current default and reads as a
+broken site.
 
 ### Adding a kind of person later
 
