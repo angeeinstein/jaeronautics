@@ -225,7 +225,12 @@ function lectures() {
   for (const line of $("curriculum").value.split("\\n")) {
     const text = line.trim();
     if (!text) continue;
-    const cut = text.lastIndexOf("/");
+    // The first slash, not the last: the semester is the first field, and
+    // lecture names contain slashes. This board has "CNS/ATM Systems" and
+    // "Professional Internship (Seminar / Advising)", and cutting at the last
+    // slash filed them under semesters called "Master 1. Semester / CNS" and
+    // "Master 3. Semester / Professional Internship (Seminar".
+    const cut = text.indexOf("/");
     const semester = cut < 0 ? "" : text.slice(0, cut).trim();
     const lecture = cut < 0 ? text : text.slice(cut + 1).trim();
     if (lecture) out.push({ semester, lecture, full: text });

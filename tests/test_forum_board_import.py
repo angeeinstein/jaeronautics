@@ -1139,6 +1139,17 @@ class TestThePageForDecidingTheStructure:
 
         assert "#viewer[hidden] { display: none; }" in html
 
+    def test_a_lecture_whose_name_has_a_slash_in_it_keeps_it(self):
+        """"CNS/ATM Systems" is a real lecture, and so is "Professional
+        Internship (Seminar / Advising)". Splitting the line at the last slash
+        filed them under semesters called "Master 1. Semester / CNS" and
+        "Master 3. Semester / Professional Internship (Seminar".
+        """
+        html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
+
+        assert 'const cut = text.indexOf("/");' in html
+        assert 'lastIndexOf("/")' not in html
+
     def test_the_dropdown_is_grouped_by_semester(self):
         """Eighty lectures in a flat list is a list nobody finds anything in."""
         html = render_worksheet(self.rows(), "https://forum.example.at", _sortable)
