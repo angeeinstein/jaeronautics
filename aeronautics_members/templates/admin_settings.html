@@ -367,6 +367,16 @@
                                     <small class="text-muted">{{ _('One line per kind of member. This portal decides who is in which group; the forum decides what each group may see. A kind with no line here is in no such group.') }}</small>
                                 </div>
                                 <div class="col-md-6">
+                                    <label class="form-label" for="forum_lecture_groups">{{ _('Groups That May Read The Lecture Material') }}</label>
+                                    <input class="form-control" type="text" id="forum_lecture_groups" name="forum_lecture_groups" value="{{ forum_settings.forum_lecture_groups }}" placeholder="students, alumni">
+                                    <small class="text-muted">{{ _('Not the member group. Lecturers and company representatives are paying members too, and this material is a decade of exams about the lectures they give.') }}</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label" for="forum_archive_groups">{{ _('Groups That May Read The Archive') }}</label>
+                                    <input class="form-control" type="text" id="forum_archive_groups" name="forum_archive_groups" value="{{ forum_settings.forum_archive_groups }}" placeholder="{{ _('the same, if left empty') }}">
+                                    <small class="text-muted">{{ _('Read and search only; nothing new is added to a lecture that stopped running.') }}</small>
+                                </div>
+                                <div class="col-md-6">
                                     <label class="form-label" for="forum_onboarding_path">{{ _('Forum Destination Path') }}</label>
                                     <input class="form-control" type="text" id="forum_onboarding_path" name="forum_onboarding_path" value="{{ forum_settings.forum_onboarding_path }}" placeholder="/">
                                     <small class="text-muted">{{ _('Members with an approved avatar will be sent here after sign-in.') }}</small>

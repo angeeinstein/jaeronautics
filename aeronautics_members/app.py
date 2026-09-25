@@ -267,6 +267,7 @@ from .services.forum_board import (  # noqa: E402
 from .services.forum_permissions import (  # noqa: E402
     GUEST_GROUP,
     STAFF_GROUP,
+    access_groups,
     apply_permissions,
     describe,
     groups_wanted,
@@ -2966,11 +2967,15 @@ def create_app(config_overrides=None):
     @click.option("--verbose", is_flag=True,
                   help="A line per category rather than only the ones that "
                        "were open.")
+    @click.option("--enforce", is_flag=True,
+                  help="Also overwrite categories somebody has already given "
+                       "permissions to. Without it those are reported and left "
+                       "alone, because the forum is where that decision lives.")
     @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
                   help="An 'All Users' Discourse API key.")
     @with_appcontext
     def forum_permissions_command(mapping_file, dry_run, staff_group,
-                                  guest_group, verbose, api_key):
+                                  guest_group, verbose, enforce, api_key):
         """Members only: who may read, reply and post in each category.
 
         A Discourse category with no group permission on it is public. Not
@@ -3010,8 +3015,8 @@ def create_app(config_overrides=None):
         _make_the_groups(service, staff_group=staff_group,
                          guest_group=guest_group, dry_run=dry_run)
         report = _restrict_the_categories(
-            poster, service, roots, dry_run=dry_run,
-            staff_group=staff_group, verbose=verbose,
+            poster, service, roots, dry_run=dry_run, staff_group=staff_group,
+            verbose=verbose, enforce=enforce,
         )
         if report is None:
             raise click.ClickException("Nothing was restricted.")
@@ -3201,9 +3206,15 @@ def create_app(config_overrides=None):
         nothing. Thirty-four empty groups on a finished run is what that looks
         like from the outside.
         """
+        settings = getattr(service, "settings", {}) or {}
         wanted = groups_wanted(
-            getattr(service, "settings", {}) or {},
-            staff_group=staff_group, guest_group=guest_group,
+            settings, staff_group=staff_group, guest_group=guest_group,
+            # Every group anything here names has to exist before a soul is put
+            # in one: a Connect payload cannot make a group, only fill one that
+            # is already there, and it says nothing when it cannot.
+            extra=list(member_category_groups(settings).values())
+            + access_groups(settings, "forum_lecture_groups")
+            + access_groups(settings, "forum_archive_groups"),
         )
         if dry_run:
             click.echo(f"groups: would make sure {len(wanted)} exist: "
@@ -3238,8 +3249,21 @@ def create_app(config_overrides=None):
         )
         return wanted
 
+    def _no_lecture_groups():
+        return (
+            "No group is named as being allowed to read the lecture material, "
+            "so there is nobody to grant it to and every category would stay "
+            "public.\n\nSet 'Groups That May Read The Lecture Material' under "
+            "Admin -> Settings -> Forum. It is empty to begin with on purpose: "
+            "the obvious answer, everybody who has paid, is the wrong one. "
+            "Lecturers and company representatives are paying members of this "
+            "association too, and the material is a decade of exams about the "
+            "lectures they give."
+        )
+
     def _restrict_the_categories(poster, service, roots, *, dry_run=False,
-                                 staff_group=STAFF_GROUP, verbose=False):
+                                 staff_group=STAFF_GROUP, verbose=False,
+                                 enforce=False):
         """Give every category this import owns to the members, and nobody else.
 
         A category with no group permission on it is public -- not "visible
@@ -3248,15 +3272,11 @@ def create_app(config_overrides=None):
         students' names in it being members-only and being indexed.
         """
         settings = getattr(service, "settings", {}) or {}
-        member_group = (settings.get("forum_member_group") or "").strip()
+        lecture = access_groups(settings, "forum_lecture_groups")
+        archive = access_groups(settings, "forum_archive_groups", lecture)
         portal_staff = (settings.get("forum_staff_group") or "").strip()
-        if not member_group:
-            click.echo(click.style(
-                "No member group is configured, so there is nobody to give the "
-                "categories to. Set one under Admin -> Settings -> Forum "
-                "before importing, or every category stays public.",
-                fg="yellow",
-            ), err=True)
+        if not lecture:
+            click.echo(click.style(_no_lecture_groups(), fg="yellow"), err=True)
             return None
 
         try:
@@ -3269,8 +3289,8 @@ def create_app(config_overrides=None):
             return None
 
         plan, untouched = permission_plan(
-            categories, roots, member_group=member_group, staff_group=staff_group,
-            portal_staff_group=portal_staff,
+            categories, roots, lecture_groups=lecture, archive_groups=archive,
+            staff_groups=(staff_group, portal_staff),
         )
         if not plan:
             click.echo(click.style(
@@ -3287,13 +3307,15 @@ def create_app(config_overrides=None):
                            + (f"  ({mark})" if changed else "  (already)"))
 
         report = apply_permissions(
-            poster, plan, dry_run=dry_run, on_category=say,
+            poster, plan, dry_run=dry_run, enforce=enforce, on_category=say,
         )
         click.echo(
             f"permissions: {report['categories']} categories, "
             f"{report['set']} set, {report['already']} already right"
             + (f", {report['opened']} of them public until now"
                if report["opened"] else "")
+            + (f", {report['decided_elsewhere']} decided on the forum and "
+               f"left alone" if report["decided_elsewhere"] else "")
         )
         if untouched:
             click.echo(
@@ -3316,6 +3338,7 @@ def create_app(config_overrides=None):
         def restrict(poster):
             _make_the_groups(service, dry_run=dry_run)
             _restrict_the_categories(poster, service, roots, dry_run=dry_run)
+
 
         return restrict
 

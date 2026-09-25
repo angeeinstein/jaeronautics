@@ -189,7 +189,7 @@ axis drives its own group, and a category grants whichever it means.
 | Has paid | `members` | membership coverage, by date |
 | | `member-onboarding` | signed up, not yet active |
 | | `forum_inactive_group` | lapsed, if a group is named |
-| Kind of member | `forum_category_groups` | `Member.member_category` |
+| Kind of member | `forum_category_groups` | `Member.member_category`, **while active** |
 | Runs the place | `forum_staff_group` | a portal role |
 
 The portal already knows what kind of member somebody is — student, alumni,
@@ -233,17 +233,37 @@ while it is unanswered is "not the lecture material".
 `import-forum-content --mapping` does the same thing itself once the categories
 exist and **before it posts anything into them**.
 
-| | members | staff | the kind-of-member groups |
+**Not the member group.** That is the obvious answer and the wrong one: a
+lecturer and a company representative are full members of this association who
+pay the same fee, and the material is a decade of exam papers and transcripts
+*about the lectures they give*. Granting `members` would show every exam to the
+people who set them.
+
+So the lecture material is granted to the **kind-of-member** groups, named in
+`forum_lecture_groups`:
+
+| | students, alumni | staff / committee | lecturers, companies |
 |---|---|---|---|
 | Live lecture | Create — start topics and reply | Create | nothing |
-| Archive | See — read and search, nothing more | Create | nothing |
-| Everything else | untouched | untouched | nothing |
+| Archive | See — read and search only | Create | nothing |
+| A job board, when it exists | whatever you grant it | Create | Create |
+| Uncategorized, Site Feedback | untouched | untouched | untouched |
 
-The kind-of-member groups are made and filled and granted **nothing**. Access
-to the lecture material is "has paid", which is the members group. Restricting
-something to lecturers, or opening something to companies, is a grant made in
-Discourse on the one category it concerns — not something a command guesses at
-across a hundred and seven of them.
+Being in one of those groups therefore has to mean two things at once — *is a
+student here* **and** *has paid* — and Discourse cannot express that. Its
+permission check is a union across groups, never an intersection. So the
+conjunction is made on this side: the kind-of-member group is held only while
+the membership is current, and a student whose membership lapses leaves
+`students`, not only `members`.
+
+The three tiers that follow from it:
+
+- **Committee and administrators** see everything, through the staff groups.
+- **Student members** see the lecture material and the archive.
+- **Lecturers and companies** see none of it. What they should see — a job
+  board is the likely first thing — is a category made in Discourse and
+  granted to their groups. `forum-permissions` will not touch it, because it
+  is not under a semester or the archive.
 
 Live lectures are writable because students keep adding exams and summaries; a
 read-only lecture category would make this a museum rather than somewhere
@@ -258,6 +278,14 @@ guessing.
 
 Run it with `--dry-run` first: it reports what each category grants now,
 including how many are still open to anybody.
+
+**It does not undo decisions made on the forum.** By default it writes only to
+categories that are still *public* — no permissions at all, or still granting
+`everyone`. A category somebody has deliberately given permissions to is
+counted, reported and left alone, because that decision was made with
+knowledge this command does not have. Its standing job is the narrow one worth
+doing forever: nothing is ever left open. `--enforce` is the other mode, for
+the first run and for putting a forum back to a known state on purpose.
 
 ### The starting position
 

@@ -17,6 +17,7 @@ from aeronautics_members.services.forum_permissions import (
     GUEST_GROUP,
     SEE,
     STAFF_GROUP,
+    access_groups,
     apply_permissions,
     current_permissions,
     describe,
@@ -96,7 +97,7 @@ def forum():
 @pytest.fixture
 def plan(forum):
     made, _untouched = permission_plan(
-        forum.categories(), owned_roots(WORKSHEET), member_group="members"
+        forum.categories(), owned_roots(WORKSHEET), lecture_groups=["students"]
     )
     return made
 
@@ -119,7 +120,7 @@ class TestWhichCategoriesAreOurs:
 
     def test_discourses_own_categories_are_left_alone(self, forum):
         _made, untouched = permission_plan(
-            forum.categories(), owned_roots(WORKSHEET), member_group="members"
+            forum.categories(), owned_roots(WORKSHEET), lecture_groups=["students"]
         )
         assert sorted(name for _id, name in untouched) == [
             "Site Feedback", "Uncategorized",
@@ -134,17 +135,17 @@ class TestWhichCategoriesAreOurs:
 
 
 class TestWhatEachGroupMay:
-    def test_a_live_lecture_lets_members_start_topics(self, plan):
+    def test_a_live_lecture_lets_students_start_topics(self, plan):
         """Students keep adding exams; a read-only lecture is a museum."""
-        assert plan[11] == {"members": CREATE, STAFF_GROUP: CREATE}
+        assert plan[11] == {"students": CREATE, STAFF_GROUP: CREATE}
 
     def test_the_semester_above_it_is_the_same(self, plan):
-        assert plan[10]["members"] == CREATE
+        assert plan[10]["students"] == CREATE
 
     def test_the_archive_is_readable_and_nothing_more(self, plan):
-        assert plan[30]["members"] == SEE
-        assert plan[31]["members"] == SEE
-        assert plan[32]["members"] == SEE
+        assert plan[30]["students"] == SEE
+        assert plan[31]["students"] == SEE
+        assert plan[32]["students"] == SEE
 
     def test_the_staff_group_may_post_in_the_archive_too(self, plan):
         """Somebody has to be able to re-file a thread that landed wrong."""
@@ -155,13 +156,40 @@ class TestWhatEachGroupMay:
 
     def test_nobody_else_is_granted_anything(self, plan):
         for grants in plan.values():
-            assert set(grants) == {"members", STAFF_GROUP}
+            assert set(grants) == {"students", STAFF_GROUP}
 
-    def test_the_member_group_name_is_whatever_the_portal_calls_it(self, forum):
+    def test_several_groups_may_read_it(self, forum):
+        """Students and alumni, say -- Discourse checks a union of groups."""
         made, _ = permission_plan(
-            forum.categories(), owned_roots(WORKSHEET), member_group="mitglieder"
+            forum.categories(), owned_roots(WORKSHEET),
+            lecture_groups=["students", "alumni"],
         )
-        assert made[11]["mitglieder"] == CREATE
+        assert made[11] == {"students": CREATE, "alumni": CREATE,
+                            STAFF_GROUP: CREATE}
+
+    def test_the_archive_can_be_read_by_somebody_the_lectures_are_not(self, forum):
+        made, _ = permission_plan(
+            forum.categories(), owned_roots(WORKSHEET),
+            lecture_groups=["students"], archive_groups=["students", "alumni"],
+        )
+        assert set(made[31]) == {"students", "alumni", STAFF_GROUP}
+        assert "alumni" not in made[11]
+
+    def test_granting_nobody_is_refused_rather_than_done(self, forum):
+        """A plan that grants nothing reads as "members only" and is not."""
+        with pytest.raises(ValueError, match="nobody to grant"):
+            permission_plan(forum.categories(), owned_roots(WORKSHEET),
+                            lecture_groups=[])
+
+    def test_the_member_group_is_deliberately_not_the_answer(self, plan):
+        """The mistake this whole arrangement exists to stop.
+
+        A lecturer and a company representative are full members who pay the
+        same fee. Granting the member group would show every exam paper to the
+        people who set them.
+        """
+        for grants in plan.values():
+            assert "members" not in grants
 
 
 class TestTheGroupsThatHaveToExistFirst:
@@ -230,9 +258,9 @@ class TestApplyingThem:
 
     def test_a_category_that_already_grants_everyone_is_still_fixed(self):
         """Granting a group does not remove anybody: this is the whole point."""
-        forum = FakeForum(permissions={11: {"members": CREATE, EVERYONE: CREATE}})
+        forum = FakeForum(permissions={11: {"students": CREATE, EVERYONE: CREATE}})
         made, _ = permission_plan(
-            forum.categories(), owned_roots(WORKSHEET), member_group="members"
+            forum.categories(), owned_roots(WORKSHEET), lecture_groups=["students"]
         )
         apply_permissions(forum, made)
         written = dict(forum.written)[11]
@@ -253,7 +281,7 @@ class TestApplyingThem:
         assert "Angewandte Thermodynamik" in report["problems"][0]
 
     def test_it_says_what_it_did_in_words_a_person_can_check(self, plan):
-        assert describe(plan[31]) == "members: see, staff: create"
+        assert describe(plan[31]) == "staff: create, students: see"
 
 
 class TestTheGroupsFollowThePortalForever:
@@ -324,7 +352,7 @@ class TestTheGroupsFollowThePortalForever:
         """Driving a group the categories do not grant would change nothing."""
         made, _ = permission_plan(
             FakeForum().categories(), owned_roots(WORKSHEET),
-            member_group="members", portal_staff_group="committee",
+            lecture_groups=["students"], staff_groups=(STAFF_GROUP, "committee"),
         )
         assert made[11]["committee"] == CREATE
         assert made[31]["committee"] == CREATE
@@ -427,7 +455,112 @@ class TestSortingPeopleByWhatKindOfMemberTheyAre:
         guesses at across a hundred and seven of them.
         """
         made, _ = permission_plan(
-            FakeForum().categories(), owned_roots(WORKSHEET), member_group="members",
+            FakeForum().categories(), owned_roots(WORKSHEET),
+            lecture_groups=["students"],
         )
         for grants in made.values():
-            assert not {"students", "lecturers", "companies"} & set(grants)
+            assert not {"lecturers", "companies"} & set(grants)
+
+
+class TestNotUndoingWhatSomebodyDecidedOnTheForum:
+    """The standing job is narrow: nothing is ever left open.
+
+    Who may see what is decided on the forum, over months, one category at a
+    time -- a job board that companies may post in, a lounge that only the
+    committee reads. A command that reimposed its own idea of the answer every
+    time it ran would quietly undo all of that, and the undoing would look like
+    nothing at all.
+    """
+
+    def test_a_category_somebody_gave_permissions_to_is_left_alone(self):
+        forum = FakeForum(permissions={11: {"lecturers": CREATE}})
+        made, _ = permission_plan(
+            forum.categories(), owned_roots(WORKSHEET), lecture_groups=["students"]
+        )
+        report = apply_permissions(forum, made)
+        assert report["decided_elsewhere"] == 1
+        assert 11 not in dict(forum.written)
+
+    def test_but_one_that_is_still_open_is_closed(self):
+        forum = FakeForum(permissions={11: {"lecturers": CREATE}})
+        made, _ = permission_plan(
+            forum.categories(), owned_roots(WORKSHEET), lecture_groups=["students"]
+        )
+        apply_permissions(forum, made)
+        assert 12 in dict(forum.written)
+
+    def test_one_that_still_grants_everyone_is_not_a_decision(self):
+        """Public plus a group is still public, whoever set it."""
+        forum = FakeForum(permissions={11: {"lecturers": CREATE, EVERYONE: SEE}})
+        made, _ = permission_plan(
+            forum.categories(), owned_roots(WORKSHEET), lecture_groups=["students"]
+        )
+        apply_permissions(forum, made)
+        assert EVERYONE not in dict(forum.written)[11]
+
+    def test_enforce_puts_it_back_to_the_plan_when_that_is_what_is_wanted(self):
+        forum = FakeForum(permissions={11: {"lecturers": CREATE}})
+        made, _ = permission_plan(
+            forum.categories(), owned_roots(WORKSHEET), lecture_groups=["students"]
+        )
+        report = apply_permissions(forum, made, enforce=True)
+        assert report["decided_elsewhere"] == 0
+        assert dict(forum.written)[11] == {"students": CREATE, STAFF_GROUP: CREATE}
+
+
+class TestReadingTheAccessSettings:
+    def test_commas_and_newlines_are_both_how_people_type_a_list(self):
+        assert access_groups(
+            {"forum_lecture_groups": "students, alumni\nhonorary"},
+            "forum_lecture_groups",
+        ) == ["students", "alumni", "honorary"]
+
+    def test_an_empty_setting_is_empty_rather_than_a_group_called_nothing(self):
+        assert access_groups({"forum_lecture_groups": " , "},
+                             "forum_lecture_groups") == []
+
+    def test_the_archive_falls_back_to_whoever_may_read_the_lectures(self):
+        assert access_groups({}, "forum_archive_groups", ["students"]) == ["students"]
+
+
+class TestAGroupMeansHasPaidAndIsThatKindOfPerson:
+    """Discourse checks a union of groups, never an intersection.
+
+    The lecture categories are granted to the kind-of-member groups, so being
+    in one has to mean both things at once. The conjunction cannot be written
+    on the forum side, so it is made here: a student whose membership lapses
+    leaves the students group, not only the members group.
+    """
+
+    def _payload(self, state):
+        from conftest import db, make_member
+
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+
+        member = make_member(email=f"{state}-student@example.com")
+        member.member_category = "student"
+        db.session.commit()
+        provider = DiscourseConnectProvider(settings={
+            "forum_member_group": "members",
+            "forum_category_groups": "student = students\nstaff = lecturers",
+            "discourse_connect_secret": "s",
+        })
+        return provider.build_sso_payload(
+            member.user, member, desired_state=state, nonce="n1"
+        )
+
+    def _groups(self, payload, field):
+        return set(filter(None, payload.get(field, "").split(",")))
+
+    def test_an_active_student_is_in_the_students_group(self, app):
+        assert "students" in self._groups(self._payload("active"), "add_groups")
+
+    def test_a_lapsed_student_is_taken_out_of_it(self, app):
+        """Otherwise a membership that ran out still reads every exam paper."""
+        payload = self._payload("inactive")
+        assert "students" in self._groups(payload, "remove_groups")
+        assert "students" not in self._groups(payload, "add_groups")
+
+    def test_somebody_still_onboarding_is_not_in_it_yet(self, app):
+        payload = self._payload("onboarding")
+        assert "students" in self._groups(payload, "remove_groups")

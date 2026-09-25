@@ -105,6 +105,12 @@ FORUM_SETTING_DEFAULTS = {
     # Which forum group each kind of member belongs to, one "category = group"
     # per line. Empty means the forum does not sort people by kind at all.
     "forum_category_groups": "",
+    # Who may read the lecture material, and who may read the archive of it.
+    # No default on purpose: "everybody who has paid" is the obvious answer and
+    # the wrong one, because lecturers and company representatives are paying
+    # members too and the material is about the lectures they give.
+    "forum_lecture_groups": "",
+    "forum_archive_groups": "",
     "forum_onboarding_path": "/",
     "forum_avatar_max_bytes": str(5 * 1024 * 1024),
     "forum_avatar_allowed_types": "jpg,jpeg,png,webp",
@@ -584,9 +590,14 @@ class DiscourseConnectProvider(ForumProvider):
         # alumnus moves between them without anybody touching the forum.
         by_category = member_category_groups(self.settings)
         if by_category:
+            # Only while the membership is current. These groups are what the
+            # lecture categories are granted to, so being in one has to mean
+            # both "is a student here" and "has paid" -- Discourse checks a
+            # union of groups and never an intersection, so the conjunction
+            # cannot be expressed over there and is made here instead.
             theirs = by_category.get(
                 getattr(member, "member_category", None) or ""
-            )
+            ) if desired_state == FORUM_STATE_ACTIVE else None
             for group in dict.fromkeys(by_category.values()):
                 (add_groups if group == theirs else remove_groups).append(group)
 
@@ -1392,6 +1403,8 @@ def normalize_forum_settings(settings_map):
     values["forum_inactive_group"] = (values.get("forum_inactive_group") or "").strip()
     values["forum_staff_group"] = (values.get("forum_staff_group") or "").strip()
     values["forum_category_groups"] = (values.get("forum_category_groups") or "").strip()
+    values["forum_lecture_groups"] = (values.get("forum_lecture_groups") or "").strip()
+    values["forum_archive_groups"] = (values.get("forum_archive_groups") or "").strip()
     values["forum_onboarding_path"] = (values.get("forum_onboarding_path") or "/").strip() or "/"
     values["forum_avatar_max_bytes"] = normalize_int(values.get("forum_avatar_max_bytes"), 5 * 1024 * 1024)
     values["forum_avatar_allowed_types"] = [

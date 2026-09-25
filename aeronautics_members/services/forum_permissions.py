@@ -103,16 +103,39 @@ def live_tree(categories, depth_limit=8):
     return paths
 
 
-def permission_plan(categories, roots, *, member_group,
-                    staff_group=STAFF_GROUP, portal_staff_group="",
-                    archive_root=ARCHIVE_ROOT):
+def permission_plan(categories, roots, *, lecture_groups, archive_groups=None,
+                    staff_groups=(STAFF_GROUP,), archive_root=ARCHIVE_ROOT):
     """``{category id: {group: level}}``, and which categories are not ours.
+
+    ``lecture_groups`` is the whole of the access decision and there is no
+    default for it, because the obvious one is wrong. "Everybody who has paid"
+    is not who may read the exams: a lecturer and a company representative are
+    full members of this association who pay the same fee, and the material is
+    a decade of exam papers and transcripts *about* the lectures they give.
+    Granting it to the member group would show every exam to the people who
+    set them.
+
+    So the groups named here are the ones the portal fills from what kind of
+    member somebody is -- and fills only while their membership is current, so
+    that "has paid" and "is a student here" are both true of everybody in them.
+    Discourse's own permission check is a union across groups, never an
+    intersection, so the conjunction has to be made on this side. It is.
 
     Returns ``(plan, untouched)``. The second is reported rather than acted on:
     a forum where "Uncategorized" is still public is a thing to know about, and
     a command that fixed it without being asked would be one that could not be
     run without reading it first.
     """
+    lecture = [name for name in lecture_groups if name]
+    archive = [name for name in
+               (lecture if archive_groups is None else archive_groups) if name]
+    if not lecture and not archive:
+        raise ValueError(
+            "No group may read the lecture material, so there is nobody to "
+            "grant it to. Name the groups under Admin -> Settings -> Forum "
+            "before importing."
+        )
+
     plan, untouched = {}, []
     for category_id, path in live_tree(categories).items():
         if not path:
@@ -121,8 +144,12 @@ def permission_plan(categories, roots, *, member_group,
             untouched.append((category_id, " / ".join(path)))
             continue
         archived = path[0] == archive_root
-        grants = {member_group: SEE if archived else CREATE}
-        for name in (staff_group, portal_staff_group):
+        # Read and search, and nothing more, for a lecture that stopped
+        # running: it is kept because throwing it away would be worse, not so
+        # that anybody adds to it.
+        grants = {name: SEE for name in archive} if archived \
+            else {name: CREATE for name in lecture}
+        for name in staff_groups:
             if name:
                 # Everywhere, and at full level: somebody has to be able to
                 # move a thread that was filed under the wrong lecture, and in
@@ -152,6 +179,17 @@ def groups_wanted(settings, *, staff_group=STAFF_GROUP, guest_group=GUEST_GROUP,
         if name and name not in wanted:
             wanted.append(name)
     return wanted
+
+
+def access_groups(settings, key, fallback=()):
+    """The group names in one of the two access settings, in order.
+
+    Comma or newline separated, because both are what somebody types into a
+    box, and an empty one is empty rather than a group called "".
+    """
+    raw = str(settings.get(key) or "").replace("\n", ",")
+    names = [name.strip() for name in raw.split(",") if name.strip()]
+    return names or [name for name in fallback if name]
 
 
 def current_permissions(category):
@@ -186,16 +224,26 @@ def describe(grants):
     )
 
 
-def apply_permissions(poster, plan, *, dry_run=False, on_category=None):
-    """Set each category's permissions to what the plan says. Idempotent.
+def apply_permissions(poster, plan, *, dry_run=False, enforce=False,
+                      on_category=None):
+    """Close every category that is still open. Idempotent, and not destructive.
 
-    A category already set correctly is left alone rather than written again:
-    on a forum of 107 categories that is the difference between a command that
-    is run whenever anybody is unsure and one that is run once a month because
-    it takes a while.
+    By default only categories that are **public** are written -- ones with no
+    permissions at all, or which still grant ``everyone``. A category somebody
+    has already given a deliberate set of permissions to is counted, reported
+    and left exactly as it is.
+
+    That is the important half. Who may see what is a judgement made on the
+    forum, over months, one category at a time; a command that reimposed its
+    own idea of the answer every time it ran would quietly undo all of it, and
+    the undoing would look like nothing at all. So the standing job here is
+    narrower and worth doing forever: nothing is ever left open.
+
+    ``enforce`` is the other mode, for the first run and for putting a forum
+    back to a known state on purpose.
     """
-    report = {"categories": len(plan), "set": 0, "already": 0,
-              "opened": 0, "problems": []}
+    report = {"categories": len(plan), "set": 0, "already": 0, "opened": 0,
+              "decided_elsewhere": 0, "problems": []}
 
     for category_id, grants in sorted(plan.items()):
         try:
@@ -213,6 +261,15 @@ def apply_permissions(poster, plan, *, dry_run=False, on_category=None):
             report["already"] += 1
             if on_category is not None:
                 on_category(name, grants, changed=False, was_public=was_public)
+            continue
+
+        if not was_public and not enforce:
+            # Somebody decided this one, and they knew something this command
+            # does not. Said, so that a deliberate difference is visible rather
+            # than silent, and left alone.
+            report["decided_elsewhere"] += 1
+            if on_category is not None:
+                on_category(name, now, changed=False, was_public=False)
             continue
 
         if not dry_run:
