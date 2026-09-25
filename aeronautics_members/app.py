@@ -275,6 +275,7 @@ from .services.forum_permissions import (  # noqa: E402
     permission_plan,
     what_is_not_set_up,
 )
+from .services.portal_settings import export_settings, import_settings  # noqa: E402
 from .services.forum_worksheet import render_worksheet  # noqa: E402
 from .services.forum_content import (  # noqa: E402
     LOOSEN,
@@ -2966,6 +2967,101 @@ def create_app(config_overrides=None):
                 f"\nFix what they say and run the same command again. What has "
                 f"landed is in {ledger} and will not be posted twice."
             )
+
+    @app.cli.command("dump-portal-settings")
+    @click.option("--out", type=click.Path(dir_okay=False), default="portal-settings.json",
+                  show_default=True)
+    @click.option("--with-secrets", is_flag=True,
+                  help="Also export the Stripe keys, the Discourse credentials "
+                       "and the SMTP passwords. The file is then a password "
+                       "list: it is written 0600 and it is not encrypted.")
+    @with_appcontext
+    def dump_portal_settings_command(out, with_secrets):
+        """Everything an administrator typed, as a file.
+
+        A fresh install starts with a blank settings page, and filling it in is
+        forty minutes of copying values that all have to be exactly right and
+        none of which announce themselves when they are wrong. This makes
+        rebuilding the portal a restore rather than a reconstruction.
+
+        Not included: anything in .env. SECRET_KEY and the database password
+        belong to the machine rather than to the configuration, and putting an
+        old database password onto a new install would break the thing it was
+        restoring. Copy .env separately if you want it.
+        """
+        payload = export_settings(with_secrets=with_secrets)
+        path = Path(out)
+        path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        if with_secrets:
+            # Before anything else can read it, rather than after.
+            path.chmod(0o600)
+
+        for section, values in payload["settings"].items():
+            click.echo(f"  {section:<14} {len(values)} settings")
+        click.echo(f"  {'mail accounts':<14} {len(payload['mail_accounts'])}")
+        click.echo(f"\nWritten: {path}")
+
+        if with_secrets:
+            click.echo(click.style(
+                "\nThis file holds the Stripe secret key, the Discourse "
+                "credentials and every SMTP password, in the clear. Anywhere "
+                "you copy it inherits that: encrypt it (gpg -c) before it "
+                "leaves this machine, and delete it once the new install has "
+                "it.", fg="yellow",
+            ))
+        elif payload["held_back"]:
+            click.echo(
+                f"\n{len(payload['held_back'])} credentials were left out and "
+                f"have to be entered by hand on the new install: "
+                + ", ".join(payload["held_back"])
+                + "\nRun again with --with-secrets to include them."
+            )
+
+    @app.cli.command("restore-portal-settings")
+    @click.argument("settings_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--dry-run", is_flag=True, help="Say what would change and change nothing.")
+    @with_appcontext
+    def restore_portal_settings_command(settings_file, dry_run):
+        """Put an exported settings file back onto a fresh install.
+
+        Never removes anything: a setting the file does not mention is left as
+        it is. The file is a record of one machine rather than a description of
+        every machine, and a restore that blanked what it did not know about
+        would be one nobody could run twice.
+        """
+        payload = json.loads(Path(settings_file).read_text(encoding="utf-8"))
+        try:
+            report = import_settings(payload, dry_run=dry_run)
+        except ValueError as exc:
+            raise click.ClickException(str(exc))
+
+        click.echo(
+            f"{len(report['set'])} settings set, "
+            f"{len(report['already'])} already right, "
+            f"{len(report['accounts'])} mail accounts"
+        )
+        for key in report["set"]:
+            click.echo(f"  {key}")
+        if report["skipped"]:
+            click.echo(click.style(
+                f"\n{len(report['skipped'])} were exported without their value "
+                f"and have to be entered by hand: "
+                + ", ".join(report["skipped"]), fg="yellow",
+            ))
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+
+        if dry_run:
+            click.echo(click.style("\nNothing was changed.", fg="cyan"))
+            return
+        db.session.commit()
+        click.echo(click.style(
+            "\nCheck the settings pages before relying on this, and remember "
+            "the forum needs its Connect secret to match on both sides.",
+            fg="cyan",
+        ))
 
     @app.cli.command("forum-permissions")
     @click.argument("mapping_file", type=click.Path(exists=True, dir_okay=False))

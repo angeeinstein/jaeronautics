@@ -235,6 +235,65 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      sync-forum-members --only-changed
 ```
 
+## Rebuilding the Portal Somewhere Else
+
+A fresh install starts with a blank settings page, and filling it in is forty
+minutes of copying values that all have to be exactly right and none of which
+announce themselves when they are wrong. A missing lecture group is an import
+that refuses; a missing Connect secret is a login that silently does not work.
+
+So take them with you:
+
+```bash
+# On the machine being replaced.
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     dump-portal-settings --out /root/portal-settings.json --with-secrets
+
+# On the new one, after install.sh has finished.
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
+     restore-portal-settings /var/tmp/portal-settings.json --dry-run
+```
+
+It carries the general, notification, forum and Stripe settings, the
+institutional email domains, and the mail accounts. It never removes anything:
+a setting the file does not mention is left alone, because the file is a record
+of one machine rather than a description of every machine.
+
+**`--with-secrets` makes the file a password list.** The Stripe secret key, the
+Stripe webhook secret, the Discourse API key, the Connect secret and every SMTP
+password, in the clear. It is written `0600` and it is not encrypted, and
+anywhere you copy it inherits that: `gpg -c` it before it leaves the machine,
+and delete it once the new install has taken it.
+
+Without the flag those values are exported as `<not exported>`, which the
+restore skips rather than writing — an empty box says what it is, and
+`<not exported>` reads like a key somebody configured.
+
+### What it deliberately does not carry
+
+**`.env`.** `SECRET_KEY` and the database password belong to the machine rather
+than to the configuration, and putting an old database password onto a new
+install would break the thing it was restoring. Copy it separately if you want
+the old values:
+
+```bash
+cp /var/www/jaeronautics/.env /root/portal-env-$(date +%F)
+```
+
+That file is the same kind of password list, for the same reasons.
+
+**Members, payments and the audit log.** Those are the database, and the
+database dump is how they travel.
+
+### The one that fails silently
+
+`discourse_connect_secret` has to be **identical** on both sides. A fresh
+install generates its own, so unless it is restored from the file, it must also
+be set in Discourse's site settings. Nothing reports this: logins simply do not
+work.
+
 ## Where Secrets Live (a recorded decision)
 
 Four third-party secrets are stored as ordinary rows in the `settings` table:
