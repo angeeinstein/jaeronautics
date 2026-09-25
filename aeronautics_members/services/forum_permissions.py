@@ -116,6 +116,19 @@ def permission_plan(categories, roots, *, lecture_groups, archive_groups=None,
     Discourse's own permission check is a union across groups, never an
     intersection, so the conjunction has to be made on this side. It is.
 
+    The plan comes back **deepest first**, and that is not tidiness. Discourse
+    refuses to restrict a category while one of its subcategories still lets in
+    a group the parent would not:
+
+        Any group that is allowed to access a subcategory must also be allowed
+        to access the parent category. The following groups have access to one
+        of the subcategories, but no access to parent category: everyone.
+
+    Every category starts public, so restricting a semester before its lectures
+    is restricting a parent while eleven children still admit everyone -- and
+    all ten top-level categories are refused, which is exactly what happened the
+    first time this ran against a real forum.
+
     Returns ``(plan, untouched)``. The second is reported rather than acted on:
     a forum where "Uncategorized" is still public is a thing to know about, and
     a command that fixed it without being asked would be one that could not be
@@ -131,7 +144,7 @@ def permission_plan(categories, roots, *, lecture_groups, archive_groups=None,
             "before importing."
         )
 
-    plan, untouched = {}, []
+    rows, untouched = [], []
     for category_id, path in live_tree(categories).items():
         if not path:
             continue
@@ -150,8 +163,10 @@ def permission_plan(categories, roots, *, lecture_groups, archive_groups=None,
                 # move a thread that was filed under the wrong lecture, and in
                 # the archive that is most of the work that is left.
                 grants[name] = CREATE
-        plan[category_id] = grants
-    return plan, untouched
+        rows.append((len(path), category_id, grants))
+
+    rows.sort(key=lambda row: (-row[0], row[1]))
+    return {category_id: grants for _depth, category_id, grants in rows}, untouched
 
 
 def groups_wanted(settings, *, staff_group=STAFF_GROUP, extra=()):
@@ -235,16 +250,22 @@ def apply_permissions(poster, plan, *, dry_run=False, enforce=False,
 
     ``enforce`` is the other mode, for the first run and for putting a forum
     back to a known state on purpose.
+
+    The plan arrives deepest first, because Discourse will not let a parent be
+    restricted while a subcategory still admits a group the parent would not.
+    Anything refused anyway is tried once more in the opposite order, which is
+    what a *widening* needs: there the parent has to be opened before the child
+    is allowed to be.
     """
     report = {"categories": len(plan), "set": 0, "already": 0, "opened": 0,
               "decided_elsewhere": 0, "problems": []}
 
-    for category_id, grants in sorted(plan.items()):
+    def attempt(category_id, grants):
+        """Returns None when it is settled, or the reason it is not."""
         try:
             category = poster.category(category_id)
         except Exception as exc:  # provider errors differ; none is fatal here
-            report["problems"].append(f"category {category_id}: {exc}")
-            continue
+            return f"category {category_id}: {exc}"
 
         name = (category.get("name") or str(category_id)).strip()
         now = current_permissions(category)
@@ -255,7 +276,7 @@ def apply_permissions(poster, plan, *, dry_run=False, enforce=False,
             report["already"] += 1
             if on_category is not None:
                 on_category(name, grants, changed=False, was_public=was_public)
-            continue
+            return None
 
         if not was_public and not enforce:
             # Somebody decided this one, and they knew something this command
@@ -264,20 +285,31 @@ def apply_permissions(poster, plan, *, dry_run=False, enforce=False,
             report["decided_elsewhere"] += 1
             if on_category is not None:
                 on_category(name, now, changed=False, was_public=False)
-            continue
+            return None
 
         if not dry_run:
             try:
                 poster.set_category_permissions(category_id, grants)
             except Exception as exc:
-                report["problems"].append(f"{name}: {exc}")
-                continue
+                return f"{name}: {exc}"
 
         report["set"] += 1
         if was_public:
             report["opened"] += 1
         if on_category is not None:
             on_category(name, grants, changed=True, was_public=was_public)
+        return None
+
+    refused = []
+    for category_id, grants in plan.items():
+        problem = attempt(category_id, grants)
+        if problem is not None:
+            refused.append((category_id, grants))
+
+    for category_id, grants in reversed(refused):
+        problem = attempt(category_id, grants)
+        if problem is not None:
+            report["problems"].append(problem)
 
     return report
 

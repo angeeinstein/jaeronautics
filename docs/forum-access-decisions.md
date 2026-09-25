@@ -119,6 +119,24 @@ logged in", public, to anybody and every crawler. So `import-forum-content
 first thread. An archive that was public for the two hours of an import has been
 public.
 
+## 7a. Children before parents
+
+Discourse will not let a category be restricted while one of its subcategories
+still admits a group the parent would not:
+
+    Any group that is allowed to access a subcategory must also be allowed to
+    access the parent category. The following groups have access to one of the
+    subcategories, but no access to parent category: everyone.
+
+Every category starts public, so restricting a semester before its lectures is
+restricting a parent while eleven children still admit everyone. The first run
+against a real forum set 97 categories and was refused all ten of the top-level
+ones for exactly this. The plan is therefore ordered deepest first.
+
+Anything refused anyway is tried once more in the opposite order, because a
+*widening* needs the reverse: there the parent has to be opened before the child
+is allowed to be.
+
 ## 8. The command closes what is open; it does not impose an opinion
 
 `forum-permissions` writes only to categories that are still public — no

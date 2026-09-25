@@ -729,3 +729,72 @@ class TestTheBoxesOnTheSettingsPage:
         page = admin_client.get("/admin/settings").get_data(as_text=True)
         for kind in CATEGORY_ORDER:
             assert f'name="forum_group_{kind}"' in page
+
+
+class TestTheOrderDiscourseInsistsOn:
+    """Discourse refuses to restrict a parent while a child still admits more.
+
+        Any group that is allowed to access a subcategory must also be allowed
+        to access the parent category. The following groups have access to one
+        of the subcategories, but no access to parent category: everyone.
+
+    Every category starts public, so restricting a semester before its lectures
+    means restricting a parent while eleven children still admit everyone. The
+    first run against a real forum set 97 categories and was refused all ten of
+    the top-level ones for exactly this.
+    """
+
+    class StrictForum(FakeForum):
+        """A fake that enforces the rule, so the order is actually tested."""
+
+        def set_category_permissions(self, category_id, permissions):
+            children = [
+                row for row in self.rows.values()
+                if row["parent_category_id"] == int(category_id)
+            ]
+            for child in children:
+                admitted = {
+                    entry["group_name"] for entry in child["group_permissions"]
+                }
+                if admitted - set(permissions):
+                    raise RuntimeError(
+                        "(422): Any group that is allowed to access a "
+                        "subcategory must also be allowed to access the parent "
+                        "category."
+                    )
+            super().set_category_permissions(category_id, permissions)
+
+    def _plan(self, forum):
+        made, _ = permission_plan(
+            forum.categories(), owned_roots(WORKSHEET), lecture_groups=["students"]
+        )
+        return made
+
+    def test_the_plan_puts_the_deepest_categories_first(self, forum):
+        plan = self._plan(forum)
+        tree = live_tree(forum.categories())
+        depths = [len(tree[category_id]) for category_id in plan]
+        assert depths == sorted(depths, reverse=True)
+
+    def test_a_forum_that_enforces_it_still_ends_up_fully_restricted(self):
+        forum = self.StrictForum()
+        report = apply_permissions(forum, self._plan(forum))
+        assert report["problems"] == []
+        assert report["set"] == len(self._plan(forum))
+
+    def test_no_category_is_left_admitting_everyone(self):
+        forum = self.StrictForum()
+        forum.rows[11]["group_permissions"] = [
+            {"group_name": EVERYONE, "permission_type": CREATE}
+        ]
+        apply_permissions(forum, self._plan(forum))
+        for row in forum.rows.values():
+            admitted = {e["group_name"] for e in row["group_permissions"]}
+            assert EVERYONE not in admitted or row["id"] in (1, 2)
+
+    def test_one_that_cannot_be_settled_is_still_reported_once(self):
+        forum = self.StrictForum()
+        forum.refuse = {11}
+        report = apply_permissions(forum, self._plan(forum))
+        assert len(report["problems"]) == 1
+        assert "Angewandte Thermodynamik" in report["problems"][0]
