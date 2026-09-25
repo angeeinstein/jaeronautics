@@ -104,9 +104,14 @@ class FakeDiscourse:
 
 
 class FakeForumService:
-    def __init__(self, provider):
+    def __init__(self, provider, settings=None):
         self.provider = provider
         self.config_errors = []
+        self.settings = settings or {
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+        }
 
     def is_enabled(self):
         return True
@@ -246,6 +251,52 @@ class TestTheCommandsCanBeRun:
         assert "ssh -N -L" in result.output
         assert "0.0.0.0" in result.output
         assert "no password" in result.output
+
+    def test_the_mapping_is_read_and_its_categories_made(self, app, dump, tmp_path,
+                                                        monkeypatch):
+        """The whole command, on the path the production run will take.
+
+        Every piece of this is tested on its own; what is not, anywhere else,
+        is that the command passes the mapping to the importer at all. A call
+        site that did not was how this project last shipped something broken.
+        """
+        import json as _json
+        from test_forum_board_import import BoardPoster
+
+        mapping = tmp_path / "categories.json"
+        mapping.write_text(_json.dumps({"mapping": [{
+            "old_fid": "3",
+            "old_path": "Studium / 01 Semester / 01-06 Technisches Programmieren",
+            "target": "Bachelor 1. Semester / Technisches Programmieren 1",
+            "decided": True,
+        }]}), encoding="utf-8")
+
+        poster = BoardPoster()
+        # The command asks the poster about its key before doing anything, and
+        # a fake that cannot answer is a fake, not a finding.
+        poster._key_complaint = lambda: None
+        poster.find_author = None
+        monkeypatch.setattr("aeronautics_members.app.ContentPoster",
+                            lambda settings: poster)
+        monkeypatch.setattr("aeronautics_members.app.get_forum_service",
+                            lambda: FakeForumService(poster))
+
+        with app.app_context():
+            result = run(app, "import-forum-content", [
+                str(dump), "--uploads", str(tmp_path),
+                "--ledger", str(tmp_path / "l.jsonl"),
+                "--mapping", str(mapping), "--categories-only",
+            ])
+
+        assert result.exit_code == 0, result.output
+        assert "Mapping read: 1 lectures" in result.output
+        assert poster.settings_written == [], (
+            "a run that posts nothing has no reason to change a setting"
+        )
+        made = dict(poster.created_categories)
+        assert set(made) == {"Bachelor 1. Semester", "Technisches Programmieren 1"}
+        assert made["Bachelor 1. Semester"] is None, "the semester is the parent"
+        assert poster.calls == [], "and nothing was posted"
 
     @pytest.mark.parametrize("name", [
         "forum-category-worksheet", "check-forum-uploads", "check-forum-settings",

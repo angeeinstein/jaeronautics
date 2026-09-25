@@ -765,11 +765,23 @@ def ensure_categories(poster, plan, ledger, *, dry_run=False, problems=None):
 def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
                   limit=0, fallback_username=None, on_thread=None,
                   require_attachments=True, max_depth=MAX_CATEGORY_NESTING,
-                  keep_duplicate_titles=False):
+                  keep_duplicate_titles=False, plan=None, titles=None,
+                  categories_only=False):
     """Move every thread. Returns a summary; the detail goes to on_thread.
 
     Ordered oldest first, so that a run stopped halfway leaves a forum whose
     archive ends somewhere sensible rather than one with holes through it.
+
+    With ``plan`` and ``titles`` the categories come from somebody's decisions
+    -- see ``forum_mapping`` -- rather than from the old board's own tree.
+    Everything after that is the same work: the threads do not care which
+    category they are going into.
+
+    ``categories_only`` makes the categories and posts nothing. The structure
+    is the part that is new each time it changes; posting is the part already
+    proved by every run so far, and separating them means the structure can be
+    tried against a forum that already holds an archive -- where every title is
+    taken, and posting would be 720 refusals that teach nothing.
     """
     posts_by_thread = {}
     for post in tables["posts"]:
@@ -799,11 +811,13 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
             "that the users table was found, rather than a plugin's."
         )
 
-    plan = category_plan(tables["forums"], tables["threads"], max_depth)
-    titles = (
-        {} if keep_duplicate_titles
-        else unique_titles(tables["forums"], tables["threads"])
-    )
+    if plan is None:
+        plan = category_plan(tables["forums"], tables["threads"], max_depth)
+    if titles is None:
+        titles = (
+            {} if keep_duplicate_titles
+            else unique_titles(tables["forums"], tables["threads"])
+        )
     renamed = sum(
         1 for thread in tables["threads"]
         if titles.get(thread.get("tid"), "") != (thread.get("subject") or "").strip()
@@ -817,6 +831,10 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
     categories = categories_by_forum(plan, ensure_categories(
         poster, plan, ledger, dry_run=dry_run, problems=summary["problems"]
     ))
+
+    if categories_only:
+        summary["categories_made"] = len(categories)
+        return summary
 
     threads = sorted(
         tables["threads"], key=lambda row: int(row.get("dateline") or 0)

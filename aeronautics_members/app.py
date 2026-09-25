@@ -243,6 +243,12 @@ from .services.forum_profiles import (  # noqa: E402
     username_length_state,
     username_room_needed,
 )
+from .services.forum_mapping import (  # noqa: E402
+    ARCHIVE_ROOT,
+    mapping_plan,
+    read_mapping,
+    titles_for,
+)
 from .services.forum_board import (  # noqa: E402
     DEEPEST_CATEGORY_NESTING,
     MAX_CATEGORY_NESTING,
@@ -2657,11 +2663,20 @@ def create_app(config_overrides=None):
                   help="Where to write the record of what was changed.")
     @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
                   help="An 'All Users' Discourse API key.")
+    @click.option("--mapping", type=click.Path(exists=True, dir_okay=False),
+                  help="The worksheet's JSON: the lectures that still run, and "
+                       "the archive for everything else. Without it the old "
+                       "board's own categories are recreated, which is a test "
+                       "shape rather than one to keep.")
+    @click.option("--categories-only", is_flag=True,
+                  help="Make the categories and post nothing, to try a "
+                       "structure against a forum that already holds content.")
     @with_appcontext
     def import_forum_content_command(dump_file, uploads, ledger, dry_run, limit,
                                      keep_duplicate_titles,
                                      allow_missing_attachments, adjust_settings,
-                                     settings_file, api_key):
+                                     settings_file, api_key, mapping,
+                                     categories_only):
         """Moves the whole old board across, keeping the categories it had.
 
         The old structure is recreated rather than reorganised. That is a
@@ -2707,7 +2722,30 @@ def create_app(config_overrides=None):
             else MAX_CATEGORY_NESTING
         )
 
-        plan = category_plan(tables["forums"], tables["threads"], max_depth)
+        placement = None
+        titles = None
+        if mapping:
+            placement = read_mapping(
+                json.loads(Path(mapping).read_text(encoding="utf-8")),
+                tables["forums"], tables["threads"],
+            )
+            plan = mapping_plan(placement["paths"], tables["threads"])
+            titles = titles_for(
+                tables["forums"], tables["threads"], placement["archived"]
+            )
+            live_count = sum(
+                1 for row in plan
+                if row["depth"] == 2 and row["path"][0] != ARCHIVE_ROOT
+            )
+            click.echo(
+                f"Mapping read: {live_count} lectures that still run, and an "
+                f"archive of everything else."
+            )
+            for problem in placement["problems"]:
+                click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        else:
+            plan = category_plan(tables["forums"], tables["threads"], max_depth)
+
         requirements = plan_site_settings(
             tables["threads"], tables["posts"], tables["attachments"]
         )
@@ -2743,8 +2781,12 @@ def create_app(config_overrides=None):
         changes = []
         journal = None
         decision = what_to_do_about_settings(
-            ready=ready, anything=anything,
-            adjust_settings=adjust_settings, dry_run=dry_run,
+            ready=ready, anything=anything, adjust_settings=adjust_settings,
+            # A categories-only run sends no posts, so what the forum would
+            # refuse about a post cannot stop it -- the same reasoning as a dry
+            # run, and the reason this mode exists is to try a structure
+            # against a forum whose settings nobody wants touched.
+            dry_run=dry_run or categories_only,
         )
         if decision == LOOSEN:
             journal = _settings_journal_path(settings_file)
@@ -2787,6 +2829,7 @@ def create_app(config_overrides=None):
                 require_attachments=not allow_missing_attachments,
                 max_depth=max_depth,
                 keep_duplicate_titles=keep_duplicate_titles,
+                plan=plan, titles=titles, categories_only=categories_only,
             )
         finally:
             record.close()

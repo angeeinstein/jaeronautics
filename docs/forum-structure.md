@@ -124,6 +124,45 @@ Fill in `target` where a forum belongs to a lecture that still runs. Leave it
 empty for everything that is archive — the safe default, because getting it
 wrong means a thread is filed one click further away rather than lost.
 
+## Importing into that structure
+
+`import-forum-content --mapping categories.json` reads the worksheet's export
+and builds the forum from it. Without `--mapping` the old board's own
+categories are recreated, which is a shape for testing rather than one to keep.
+
+What it makes, within Discourse's two levels:
+
+    Bachelor 4. Semester            the semester, as the curriculum writes it
+      └── Angewandte Thermodynamik  the lecture, holding every year of it
+
+    Archiv
+      ├── Bachelor                  everything retired, by degree
+      └── Master
+
+A lecture category holds every year of that course at once — three old forums
+becoming one `Angewandte Thermodynamik` is the point of the exercise. An
+archived topic, by contrast, sits in a category shared with eighty other
+retired lectures, so **it carries its old lecture in its title**:
+`Klausuren (02-09 Angewandte Mathematik 2)`. A live topic keeps its subject
+unchanged wherever it can, because the category already says what the suffix
+would.
+
+Three ways a thread can end up somewhere nobody chose, all of which archive it
+and say so rather than dropping it: a forum the mapping never mentions (the
+dump is the authority on what exists), a row never decided, and a target with
+no semester in front of it.
+
+### Trying the structure on a forum that already has content
+
+    --categories-only
+
+makes the categories and posts nothing. The structure is what changes when the
+mapping changes; posting is the part every run so far has proved. Separating
+them means a new structure can be tried against the forum you already have —
+where every title is taken, and posting would be 720 refusals that teach
+nothing. Such a run touches no site settings either, because it sends no posts,
+and the empty categories can be deleted afterwards.
+
 ## Groups
 
 Discourse grants permission to **groups**, not to people, and a category
