@@ -238,27 +238,20 @@ class TestTheCommandsCanBeRun:
         assert provider.published == [], "nobody is published again"
         assert provider.members["lav21"] == {"LutzB_L21"}
 
-    def test_the_upload_server_knows_the_real_names(self, app, dump, tmp_path):
-        """It serves post_1234_..._abcdef.attach as Klausur_LAV16.pdf.
-
-        Not started here -- that would listen on a port in a test -- but its
-        index is built from the dump, and that is the part that can be wrong.
-        """
-        here = tmp_path / "uploads" / "201703"
-        here.mkdir(parents=True)
-        (here / "a.attach").write_bytes(b"%PDF-1.4 x")
-
-        with app.app_context():
-            result = run(app, "serve-forum-uploads", ["--help"])
+    def test_the_worksheet_server_explains_both_ways_to_reach_it(self, app):
+        """One machine serving, another looking at it, and no password on it."""
+        result = run(app, "serve-forum-worksheet", ["--help"])
 
         assert result.exit_code == 0
-        assert "SSH tunnel" in result.output or "tunnel" in result.output
+        assert "ssh -N -L" in result.output
+        assert "0.0.0.0" in result.output
+        assert "no password" in result.output
 
     @pytest.mark.parametrize("name", [
         "forum-category-worksheet", "check-forum-uploads", "check-forum-settings",
         "inspect-forum-attachments", "import-forum-content", "migrate-forum-thread",
         "restore-forum-settings", "dump-forum-settings", "publish-forum-profiles",
-        "import-forum-people", "inspect-forum-post", "serve-forum-uploads",
+        "import-forum-people", "inspect-forum-post", "serve-forum-worksheet",
     ])
     def test_every_one_of_them_has_help(self, app, name):
         """Which is enough to catch a decorator that does not match its function."""

@@ -201,8 +201,13 @@ let decisions = {};
 try { decisions = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
 let curriculum = "";
 try { curriculum = localStorage.getItem(KEY + ":curriculum") || ""; } catch (e) {}
-let uploads = "";
-try { uploads = localStorage.getItem(KEY + ":uploads") || ""; } catch (e) {}
+// Served by serve-forum-worksheet, the files are at the same address as the
+// page, so there is nothing to fill in. Opened from a saved file there is no
+// such address, and the box asks for one.
+let uploads = DATA.uploads_base || "";
+try {
+  uploads = localStorage.getItem(KEY + ":uploads") || uploads;
+} catch (e) {}
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
@@ -619,11 +624,18 @@ draw();
 """
 
 
-def render_worksheet(rows, forum, sortable):
-    """The page, with this board's own data in it."""
+def render_worksheet(rows, forum, sortable, uploads_base=""):
+    """The page, with this board's own data in it.
+
+    ``uploads_base`` is where the old board's files can be fetched from, and
+    is set when the page is being served by ``serve-forum-worksheet`` -- which
+    serves the files too, so the answer is "here". A page saved to a file has
+    no such address and asks for one.
+    """
     payload = {
         "forum": forum,
         "written_at": datetime.now(tz=timezone.utc).isoformat(),
+        "uploads_base": uploads_base,
         "rows": [dict(row, course=sortable(row["lecture"])) for row in rows],
     }
     # </script> inside a string would end the block it sits in.

@@ -66,31 +66,48 @@ newest first.
 
 Where the names line is not enough, the answer is to look at this year's exam
 and the old one together. Every upload is on disk as
-`post_1234_1490000000_abcdef.attach`, which no browser will render and nobody
-can find, so the worksheet cannot simply link to them. Run this next to the
-files:
+`post_1234_1490000000_abcdef.attach` — the original bytes under a name that
+says nothing and an extension no browser will render — so the files have to be
+served rather than linked to. One command does both, the page and the files:
 
 ```bash
 sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app \
-     serve-forum-uploads /var/tmp/forum-migration/dump.sql.gz \
+     serve-forum-worksheet /var/tmp/forum-migration/dump.sql.gz \
      --uploads /var/tmp/forum-migration/uploads
 ```
 
-It reads the real name and type of every attachment out of the dump and serves
-each file under them. Put its address in the worksheet's **Open files from**
-box and every PDF and image gets a button; open one, then open another, and
-they sit side by side at the bottom of the page.
+The worksheet is at `/`, every attachment is under `/files/`, and the page
+already knows that — there is nothing to fill in. Each PDF and image gets a
+button carrying its year; open one, open another, and they sit side by side at
+the bottom of the page. The real name and type come out of the dump, so a
+`.attach` file arrives as `Prüfung_Flöhr_2025.pdf`, inline.
 
-**It is bound to localhost, and it must stay there.** It serves thirteen years
-of exam papers with no authentication at all, so reach it over a tunnel:
+**It answers to anybody who can reach it, with thirteen years of exam papers
+and no password.** Two ways to use it, and the choice is a real one:
 
-```bash
-ssh -N -L 8765:127.0.0.1:8765 you@server
-```
+- **Default (`127.0.0.1`) plus a tunnel from your own machine.** Nothing is
+  exposed to the network at all:
 
-and stop it when the curating is done. It is a tool for an afternoon, not a
-service.
+  ```bash
+  ssh -N -L 8765:127.0.0.1:8765 you@jaero-test
+  ```
+
+  then open `http://127.0.0.1:8765/`. The `localhost` in that URL is *your*
+  machine; ssh carries it to the server.
+
+- **`--host 0.0.0.0`**, and it is reachable at the server's own address from
+  anywhere that can route to it — across subnets, without ssh. Simpler, and it
+  means anyone on those networks can read the archive while it runs. On a
+  trusted LAN for an afternoon that may be the right trade; make it knowingly.
+
+Either way, stop it when the curating is done. It is a tool for an afternoon,
+not a service. Nothing is served that the dump does not list, so paths outside
+the board — including `..` — are 404s rather than files.
+
+Note that decisions are saved per address: work done at
+`http://127.0.0.1:8765/` is not the same store as work done in a page opened
+from a file. Export before switching.
 
 ### Splitting the work between people
 

@@ -1794,6 +1794,23 @@ def create_app(config_overrides=None):
                 f"holds the avatar files themselves."
             )
 
+    def _forum_label():
+        """What to call this board on the worksheet. Never a reason to fail.
+
+        It names the key the page keeps decisions under, so it wants to be the
+        same from one run to the next -- but reading a dump and serving files
+        needs no database, and dying with a connection traceback because the
+        label could not be looked up is a poor trade for a string.
+        """
+        try:
+            return get_forum_service().settings.get("forum_base_url", "") or "the old board"
+        except Exception as exc:  # noqa: BLE001 -- a label, not the job
+            click.echo(click.style(
+                f"(Cannot reach the portal's database for the forum's address, "
+                f"so the page is filed under 'the old board': {exc})",
+                fg="yellow"), err=True)
+            return "the old board"
+
     def _load_mybb_dump(dump_file):
         """The old board's tables, read once, with the prefix resolved."""
         import sys
@@ -2307,37 +2324,59 @@ def create_app(config_overrides=None):
         if report.get("topic_id"):
             click.echo(f"\nTopic {report['topic_id']} — go and look at it.")
 
-    @app.cli.command("serve-forum-uploads")
+    @app.cli.command("serve-forum-worksheet")
     @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
     @click.option("--uploads", required=True, type=click.Path(exists=True, file_okay=False),
                   help="The old board's uploads folder.")
     @click.option("--port", default=8765, show_default=True)
     @click.option("--host", default="127.0.0.1", show_default=True,
-                  help="Localhost by default; reach it over an SSH tunnel.")
+                  help="Use 0.0.0.0 to reach it from another machine, having "
+                       "read what that means below.")
     @with_appcontext
-    def serve_forum_uploads_command(dump_file, uploads, port, host):
-        """Serves the old board's files so the worksheet can open them.
+    def serve_forum_worksheet_command(dump_file, uploads, port, host):
+        """Serves the category worksheet, with the old board's files in it.
 
-        Every upload is on disk as post_<pid>_<time>_<hash>.attach -- the
-        original bytes under a name that says nothing and an extension no
-        browser will render. The name somebody chose and the type it really is
-        are columns in the database, so this reads those and serves each file
-        under its real name and type. The worksheet then has an open button per
-        document, and deciding whether this year's exam and 2016's are the same
-        course is a matter of looking at them side by side.
+        One address, nothing to configure: the page is at / and every
+        attachment is under /files/, so each document on the worksheet has an
+        open button and two of them sit side by side. Deciding whether this
+        year's exam and 2016's are the same course means looking at them.
 
-        Bound to localhost. It serves thirteen years of exam papers with no
-        authentication whatever, so it belongs on a tunnel
+        The files need serving because of what they are on disk: every upload
+        is post_<pid>_<time>_<hash>.attach, the original bytes under a name
+        that says nothing and an extension no browser will render. The name
+        somebody chose and the type it really is are columns in the database,
+        so those are read from the dump and each file is served under them.
 
-            ssh -N -L 8765:127.0.0.1:8765 you@server
+        \b
+        It answers to anybody who can reach it, with thirteen years of exam
+        papers and no password. Two ways to use it:
 
-        and not on an interface anybody else can reach. Stop it when the
-        curating is done; it is a tool for an afternoon, not a service.
+        \b
+          * --host 127.0.0.1 (the default) and an SSH tunnel from your machine:
+                ssh -N -L 8765:127.0.0.1:8765 you@server
+            then open http://127.0.0.1:8765/ in your browser. Nothing is
+            exposed to the network at all.
+          * --host 0.0.0.0, and it is reachable at the server's address from
+            anywhere that can route to it. Simpler, and it means anybody on
+            that network can read the archive while it runs.
+
+        Either way, stop it when the curating is done. It is a tool for an
+        afternoon, not a service.
         """
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         from urllib.parse import unquote
 
         tables = _load_mybb_dump(dump_file)
+        rows = category_worksheet(
+            tables["forums"], tables["threads"], tables["posts"],
+            tables["attachments"], users=tables["users"],
+        )
+        if not rows:
+            raise click.ClickException("No forum in that dump holds any threads.")
+        page = render_worksheet(
+            rows, _forum_label(), _sortable, uploads_base="/files/",
+        ).encode("utf-8")
+
         uploads_dir = Path(uploads).resolve()
         known = {}
         for row in tables["attachments"]:
@@ -2347,42 +2386,59 @@ def create_app(config_overrides=None):
                     (row.get("filename") or attachname).strip(),
                     row.get("filetype") or "application/octet-stream",
                 )
-        click.echo(f"{len(known)} files, from {uploads_dir}.")
 
-        class Uploads(BaseHTTPRequestHandler):
+        class Worksheet(BaseHTTPRequestHandler):
             def do_GET(self):  # noqa: N802 -- http.server's spelling
-                wanted = unquote(self.path.lstrip("/").split("?")[0])
+                path = unquote(self.path.split("?")[0])
+                if path in ("/", "/index.html"):
+                    self._send(page, "text/html; charset=utf-8")
+                    return
+                if not path.startswith("/files/"):
+                    self.send_error(404, "Only / and /files/ are here")
+                    return
+                wanted = path[len("/files/"):]
                 entry = known.get(wanted)
                 # Served only if the dump says it exists, which is also what
                 # makes ".." pointless: nothing outside the board is in the
                 # index, so nothing outside it can be asked for.
-                path = (uploads_dir / wanted).resolve() if entry else None
-                if entry is None or not path.is_file() or uploads_dir not in path.parents:
+                on_disk = (uploads_dir / wanted).resolve() if entry else None
+                if entry is None or not on_disk.is_file() \
+                        or uploads_dir not in on_disk.parents:
                     self.send_error(404, "Not one of the old board's files")
                     return
                 filename, content_type = entry
-                body = path.read_bytes()
+                # Inline, because the point is to look at it rather than to
+                # collect it, and a viewer that downloads is not a viewer.
+                self._send(
+                    on_disk.read_bytes(), content_type,
+                    f"inline; filename*=UTF-8''{quote_plus(filename)}",
+                )
+
+            def _send(self, body, content_type, disposition=None):
                 self.send_response(200)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(body)))
-                # Inline, because the point is to look at it rather than to
-                # collect it, and a viewer that downloads is not a viewer.
-                self.send_header(
-                    "Content-Disposition",
-                    f"inline; filename*=UTF-8''{quote_plus(filename)}",
-                )
-                self.send_header("Access-Control-Allow-Origin", "*")
+                if disposition:
+                    self.send_header("Content-Disposition", disposition)
                 self.end_headers()
                 self.wfile.write(body)
 
             def log_message(self, *args):
                 pass
 
-        server = ThreadingHTTPServer((host, port), Uploads)
-        click.echo(f"Serving on http://{host}:{port}/ -- Ctrl-C to stop.")
-        click.echo("Put that address in the worksheet's \"Open files from\" box.")
+        click.echo(f"{len(rows)} old forums, {len(known)} files from {uploads_dir}.")
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            click.echo(click.style(
+                f"Reachable from the network on {host}:{port}, with no password "
+                f"and the whole archive behind it. Stop it when you are done.",
+                fg="yellow",
+            ))
+            click.echo(f"Open http://<this machine>:{port}/ in your browser.")
+        else:
+            click.echo(f"Tunnel it:  ssh -N -L {port}:127.0.0.1:{port} you@<this machine>")
+            click.echo(f"Then open:  http://127.0.0.1:{port}/")
         try:
-            server.serve_forever()
+            ThreadingHTTPServer((host, port), Worksheet).serve_forever()
         except KeyboardInterrupt:
             click.echo("\nStopped.")
 
@@ -2433,11 +2489,7 @@ def create_app(config_overrides=None):
                 writer.writerows(rows)
         else:
             Path(out).write_text(
-                render_worksheet(
-                    rows,
-                    get_forum_service().settings.get("forum_base_url", ""),
-                    _sortable,
-                ),
+                render_worksheet(rows, _forum_label(), _sortable),
                 encoding="utf-8",
             )
 
