@@ -55,14 +55,16 @@ python3 scripts/forum_package.py pack \
 It prints what it packed, and those numbers are the thing to read:
 
 ```
-  people       86.0 kB  people 739, with_avatar 412
-  mapping     197.0 kB  forums 246, decided 246, to_lectures 91, lectures 64, archived 155
-  uploads       8.7 GB  files 2347
-  avatars      41.2 MB  files 412
+  dump          1.0 MB
+  people      269.0 kB  people 740, with_avatar 677
+  mapping     104.0 kB  forums 246, decided 246, to_lectures 166, lectures 94, archived 80
+  uploads       9.1 GB  files 3439
+  avatars      34.2 MB  files 690
 ```
 
 `to_lectures 4` on an export you thought was finished is the whole point of
-printing it. So is the line about avatars: `people.json` names the avatar files
+printing it. The dump being a single megabyte is not a mistake either: the
+attachments are on disk rather than in the database, and they are the 9.1 GB. So is the line about avatars: `people.json` names the avatar files
 by name, and any it names that are not in the folder are listed, because those
 people import with no picture and nothing fails while it happens.
 
@@ -91,8 +93,8 @@ python3 /var/www/jaeronautics/scripts/forum_package.py check forum-import.zip
 The check is on this machine on purpose. On the machine that built it
 everything is always fine; what goes wrong is the nine gigabytes in between.
 It reads every file back against the checksum the archive carries for it, and
-compares what is there against what the manifest says was packed — 2,347
-attachments and not 2,300. It exits non-zero if either answer is wrong, so it
+compares what is there against what the manifest says was packed — 3,439
+files under `uploads` and not 3,400. It exits non-zero if either answer is wrong, so it
 can gate the rest.
 
 Then unpack and hand it over:
