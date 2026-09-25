@@ -7,7 +7,9 @@ things up — so the measure is whether a second-year can find last year's exam
 in two clicks, not whether the tree matches.
 
 This is the destination. It is written down because it has to be agreed before
-the real import, not discovered during it.
+the real import, not discovered during it. What was decided about who may
+read what, and why each obvious answer turned out to be wrong, is in
+[forum-access-decisions.md](forum-access-decisions.md).
 
 ## Two kinds of category
 
