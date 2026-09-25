@@ -10,6 +10,7 @@ import pytest
 
 from aeronautics_members import app as app_module
 from aeronautics_members.forum_service import member_category_groups
+from aeronautics_members.member_categories import CATEGORY_ORDER
 
 from aeronautics_members.services.forum_permissions import (
     CREATE,
@@ -24,6 +25,7 @@ from aeronautics_members.services.forum_permissions import (
     live_tree,
     owned_roots,
     permission_plan,
+    unknown_member_kinds,
     what_is_not_set_up,
 )
 
@@ -610,3 +612,40 @@ class TestSayingWhatHasNotBeenDecidedYet:
     def test_each_one_says_what_goes_wrong_rather_than_only_its_name(self):
         for _name, why in what_is_not_set_up({}):
             assert len(why) > 40
+
+
+class TestALineThatNamesNothing:
+    """The left-hand side is fixed and a typo in it is silent.
+
+    It is read, matched against nothing and dropped -- so a group is never
+    made, people are never sorted, and every report says the run succeeded.
+    """
+
+    def test_a_misspelled_kind_is_named(self):
+        assert unknown_member_kinds({
+            "forum_category_groups": "studnet = students\nalumni = alumni",
+        }) == ["studnet = students"]
+
+    def test_a_line_with_no_group_on_the_right_is_named(self):
+        assert unknown_member_kinds({
+            "forum_category_groups": "student =\n",
+        }) == ["student ="]
+
+    def test_every_real_kind_passes(self):
+        lines = "\n".join(f"{kind} = g-{kind}" for kind in CATEGORY_ORDER)
+        assert unknown_member_kinds({"forum_category_groups": lines}) == []
+
+    def test_comments_and_blank_lines_are_not_mistakes(self):
+        assert unknown_member_kinds({
+            "forum_category_groups": "\n# who gets what\nstudent = students\n",
+        }) == []
+
+    def test_the_setup_report_says_which_lines_and_what_is_allowed(self):
+        problems = dict(what_is_not_set_up({
+            "forum_lecture_groups": "students",
+            "forum_category_groups": "studnet = students",
+            "forum_staff_group": "committee",
+            "forum_inactive_group": "membership-inactive",
+        }))
+        assert "studnet = students" in problems["forum_category_groups"]
+        assert "honorary" in problems["forum_category_groups"]

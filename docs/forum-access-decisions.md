@@ -33,6 +33,17 @@ whichever one it means.
 | | `members-awaiting-photo` | active membership, photograph not approved yet |
 | | `membership-inactive` | ran out, never paid, or account switched off |
 | Kind | `forum_category_groups` | `Member.member_category`, **only while active** |
+
+The kind mapping is written `kind of member = forum group`. The left-hand side
+is fixed — `student`, `alumni`, `staff`, `partner`, `honorary`, and nothing
+else, because it is what the portal stores on a member. The right-hand side is
+a name somebody chooses, and the group is made on the forum from it.
+
+`staff` on the left is the portal's word for anybody employed at the institute,
+a secretary as much as a lecturer. It is deliberately **not** reused as the
+group name, because `forum_staff_group` and Discourse's own `staff` both mean
+the opposite thing — whoever runs the forum. Three different senses of one word
+is how somebody grants the wrong one.
 | Runs the place | `forum_staff_group` | holds the portal's forum-admin role |
 
 The standing groups are named for what is true of the people in them, because

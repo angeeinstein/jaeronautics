@@ -363,8 +363,10 @@
                                 </div>
                                 <div class="col-md-12">
                                     <label class="form-label" for="forum_category_groups">{{ _('Forum Group Per Kind Of Member (optional)') }}</label>
-                                    <textarea class="form-control font-monospace" id="forum_category_groups" name="forum_category_groups" rows="3" placeholder="student = students&#10;staff = lecturers&#10;partner = companies">{{ forum_settings.forum_category_groups }}</textarea>
-                                    <small class="text-muted">{{ _('One line per kind of member. This portal decides who is in which group; the forum decides what each group may see. A kind with no line here is in no such group.') }}</small>
+                                    <textarea class="form-control font-monospace" id="forum_category_groups" name="forum_category_groups" rows="5" placeholder="student = students&#10;alumni = alumni&#10;staff = lecturers&#10;partner = companies">{{ forum_settings.forum_category_groups }}</textarea>
+                                    <small class="text-muted d-block">{{ _('One line per kind of member, written as') }} <code>{{ _('kind of member') }} = {{ _('forum group') }}</code>.</small>
+                                    <small class="text-muted d-block">{{ _('On the left, the kind of member as this portal stores it. Only these five exist:') }} <code>student</code>, <code>alumni</code>, <code>staff</code>, <code>partner</code>, <code>honorary</code>. {{ _('Anything else on that side does nothing at all.') }}</small>
+                                    <small class="text-muted d-block">{{ _('On the right, the name of the forum group those members should be in. You choose the name; the group is created on the forum for you. A kind with no line here is put in no such group.') }}</small>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label" for="forum_lecture_groups">{{ _('Groups That May Read The Lecture Material') }}</label>

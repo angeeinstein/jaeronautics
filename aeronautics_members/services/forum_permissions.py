@@ -30,6 +30,7 @@ and a command that quietly locked them would be a command nobody could run
 twice with confidence.
 """
 
+from ..member_categories import CATEGORY_ORDER
 from .forum_board import CATEGORY_NAME_LIMIT, _fit
 from .forum_mapping import ARCHIVE_ROOT, split_target
 
@@ -281,6 +282,29 @@ def apply_permissions(poster, plan, *, dry_run=False, enforce=False,
     return report
 
 
+def unknown_member_kinds(settings):
+    """Lines in the mapping whose left-hand side is not a kind of member.
+
+    The left-hand side is fixed: it is what this portal stores on a member, and
+    there are five of them. A line naming anything else is not an error
+    anywhere -- it is read, matched against nothing, and dropped -- so a typo
+    means a group that is never made and people who are never sorted, with
+    everything reporting success. Said out loud instead.
+    """
+    unknown = []
+    for line in str(settings.get("forum_category_groups") or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        kind, sep, group = line.partition("=")
+        if not sep or not group.strip():
+            unknown.append(line)
+            continue
+        if kind.strip().lower() not in CATEGORY_ORDER:
+            unknown.append(line)
+    return unknown
+
+
 def what_is_not_set_up(settings):
     """What still has to be decided before any of this means anything.
 
@@ -304,6 +328,14 @@ def what_is_not_set_up(settings):
             "Nobody is sorted by what kind of member they are, so the groups "
             "above will never have anybody in them. One 'student = students' "
             "line per kind.",
+        ))
+    strange = unknown_member_kinds(settings)
+    if strange:
+        missing.append((
+            "forum_category_groups",
+            f"{len(strange)} lines name something that is not a kind of member "
+            f"and do nothing at all: {'; '.join(strange[:3])}. The left-hand "
+            f"side must be one of {', '.join(CATEGORY_ORDER)}.",
         ))
     if not str(settings.get("forum_staff_group") or "").strip():
         missing.append((
