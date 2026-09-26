@@ -2039,6 +2039,7 @@ Description=Joanneum Aeronautics notification delivery timer
 
 [Timer]
 OnBootSec=5m
+OnActiveSec=5m
 OnUnitActiveSec=15m
 AccuracySec=1m
 Persistent=true
@@ -2224,7 +2225,13 @@ Description=Joanneum Aeronautics external work worker timer
 
 [Timer]
 # Queued forum syncs should land quickly, so members do not wait for access.
+# OnActiveSec is what starts it on a machine that is already up: OnBootSec has
+# long passed there, and OnUnitActiveSec counts from a run that a freshly
+# installed service has never had -- so without it the timer sat "elapsed",
+# with no next trigger, for a day after a reinstall. The same holds for the
+# notification and update-runner timers.
 OnBootSec=2min
+OnActiveSec=2min
 OnUnitActiveSec=2min
 AccuracySec=30s
 Persistent=true
@@ -2302,6 +2309,7 @@ Description=Joanneum Aeronautics update request watcher (fallback poll)
 
 [Timer]
 OnBootSec=2min
+OnActiveSec=2min
 OnUnitActiveSec=5min
 AccuracySec=30s
 Unit=${SERVICE_NAME}-update-runner.service
@@ -2666,12 +2674,15 @@ reload_services() {
     # the app runs the freshly deployed code.
     systemctl enable "${SERVICE_NAME}"
     systemctl restart "${SERVICE_NAME}"
-    systemctl enable --now "${SERVICE_NAME}-billing-reconcile.timer"
-    systemctl enable --now "${SERVICE_NAME}-notifications.timer"
-    systemctl enable --now "${SERVICE_NAME}-cleanup-logs.timer"
-    systemctl enable --now "${SERVICE_NAME}-forum-drift.timer"
-    systemctl enable --now "${SERVICE_NAME}-external-work.timer"
-    systemctl enable --now "${SERVICE_NAME}-update-runner.timer"
+    # Timers restarted for the same reason, and one more: a timer stuck
+    # "elapsed" with no next trigger stays stuck under enable --now, because it
+    # counts as running. Restarting re-arms it from its new definition.
+    local timer
+    for timer in billing-reconcile notifications cleanup-logs forum-drift \
+                 external-work update-runner; do
+        systemctl enable "${SERVICE_NAME}-${timer}.timer"
+        systemctl restart "${SERVICE_NAME}-${timer}.timer"
+    done
     systemctl enable --now "${SERVICE_NAME}-update-runner.path"
     nginx -t
     systemctl reload nginx

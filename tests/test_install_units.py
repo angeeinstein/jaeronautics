@@ -98,3 +98,36 @@ def test_a_fresh_install_reaches_it(installer):
     body = installer[installer.index("ensure_repo_present() {"):]
     body = body[: body.index("\n}")]
     assert "ensure_writable_directories" in body
+
+
+def _timer_blocks(text):
+    """The body of every [Timer] section the installer writes."""
+    blocks = []
+    for chunk in text.split("[Timer]")[1:]:
+        blocks.append(chunk.split("[Install]", 1)[0])
+    return blocks
+
+
+def test_every_interval_timer_also_runs_after_it_is_started(installer):
+    """Found for real: a day of forum syncs and admin emails that never ran.
+
+    OnUnitActiveSec counts from the service's last run, and OnBootSec from
+    boot. On a machine that was already up when the installer started the
+    timer, the first has no run to count from and the second is long past, so
+    the timer shows "elapsed" with no next trigger and never fires. OnActiveSec
+    counts from the timer starting, which is what an install does.
+    """
+    assert _timer_blocks(installer), "the installer writes timers"
+    for block in _timer_blocks(installer):
+        if "OnUnitActiveSec" in block:
+            assert "OnActiveSec" in block or "OnCalendar" in block, block
+
+
+def test_the_timers_are_restarted_not_only_enabled(installer):
+    """enable --now leaves a timer that is stuck "elapsed" exactly as it is."""
+    body = installer[installer.index("reload_services() {"):]
+    body = body[: body.index("\n}")]
+    assert 'systemctl restart "${SERVICE_NAME}-${timer}.timer"' in body
+    for timer in ("billing-reconcile", "notifications", "cleanup-logs",
+                  "forum-drift", "external-work", "update-runner"):
+        assert timer in body
