@@ -165,6 +165,30 @@ AVATAR_OVERRIDE_SETTINGS = (
     "sso_overrides_avatar",
 )
 
+# What else the portal owns, and so what the forum has to take from it. Discourse
+# keeps the address and the name an account was made with and ignores what a
+# later sync says about either, unless these are on. Found on the first real
+# reclaim: the account kept forum-mybb-685@imported.invalid, which no
+# notification ever reaches. Each is (what, the names it has had, the cost).
+PORTAL_OWNED_SETTINGS = (
+    ("email", ("discourse_connect_overrides_email", "sso_overrides_email"),
+     "a reclaimed account keeps the placeholder address it was imported with, "
+     "so nothing the forum sends ever reaches its owner"),
+    ("name", ("discourse_connect_overrides_name", "sso_overrides_name"),
+     "a reclaimed account keeps its old username as its name, and a change of "
+     "name here never reaches the forum"),
+)
+
+def _portal_owned_rows(values):
+    """Read PORTAL_OWNED_SETTINGS out of a forum's settings, by whichever name."""
+    rows = []
+    for what, names, why in PORTAL_OWNED_SETTINGS:
+        name = next((candidate for candidate in names if candidate in values), None)
+        on = name is not None and str(values[name]).lower() == "true"
+        rows.append((what, name, on, why))
+    return rows
+
+
 def _record_the_name_the_forum_gave(user, remote_user):
     """Keep the portal's idea of somebody's forum name equal to the forum's.
 
@@ -938,6 +962,23 @@ class DiscourseConnectProvider(ForumProvider):
             return None
         return None
 
+    def portal_owned_state(self):
+        """``[(what, setting, on, why)]`` for the address and the name.
+
+        ``setting`` is None where this forum has no such setting at all.
+        """
+        values = {}
+        for path in SITE_SETTINGS_PATHS:
+            try:
+                payload = self._request("GET", path)
+            except ForumProviderError:
+                continue
+            rows = payload.get("site_settings") if isinstance(payload, dict) else None
+            if rows:
+                values = {row.get("setting"): row.get("value") for row in rows}
+                break
+        return _portal_owned_rows(values)
+
     def test_connection(self):
         response = self._request("GET", "/site.json")
         site_name = response.get("site_name") if isinstance(response, dict) else None
@@ -958,6 +999,17 @@ class DiscourseConnectProvider(ForumProvider):
                 f" Avatars uploaded here will not be shown there: {avatars[0]} "
                 f"is off in the forum's settings, so it fetches each picture and "
                 f"keeps its own letter. Turn it on in Admin -> Settings."
+            )
+        try:
+            off = [name for _what, name, on, _why in self.portal_owned_state()
+                   if name and not on]
+        except ForumProviderError:
+            off = []
+        if off:
+            message += (
+                f" The forum ignores the address and name sent from here while "
+                f"{' and '.join(off)} {'is' if len(off) == 1 else 'are'} off; "
+                f"publish-forum-profiles turns them on, or Admin -> Settings."
             )
         return True, message
 

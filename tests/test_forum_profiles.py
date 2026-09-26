@@ -1100,3 +1100,90 @@ class TestWaitingOutARateLimit:
         provider._request("POST", "/x", rate_limit_retries=2)
 
         assert slept == [121]
+
+
+class TestTheForumTakesTheAddressAndName:
+    """Found on the first reclaim: the account kept its placeholder address.
+
+    Discourse keeps the address and the name an account was made with and
+    ignores a later sync about either, unless it is told the portal owns them.
+    A reclaimed account then kept forum-mybb-685@imported.invalid -- which no
+    notification ever reaches -- and its old username as a name.
+    """
+
+    class SettingsClient:
+        def __init__(self, **settings):
+            self.settings = settings
+            self.written = []
+
+        def site_settings(self):
+            return dict(self.settings)
+
+        def set_site_setting(self, name, value):
+            self.written.append((name, value))
+            self.settings[name] = value
+
+    def test_both_are_turned_on(self, app):
+        from aeronautics_members.services.forum_profiles import (
+            let_the_portal_own_address_and_name,
+        )
+
+        client = self.SettingsClient(
+            discourse_connect_overrides_email=False,
+            discourse_connect_overrides_name=False,
+        )
+
+        changed = let_the_portal_own_address_and_name(client)
+
+        assert changed == ["discourse_connect_overrides_email",
+                           "discourse_connect_overrides_name"]
+        assert client.settings["discourse_connect_overrides_email"] == "true"
+
+    def test_a_forum_already_right_is_left_alone(self, app):
+        from aeronautics_members.services.forum_profiles import (
+            let_the_portal_own_address_and_name,
+        )
+
+        client = self.SettingsClient(
+            discourse_connect_overrides_email="true",
+            discourse_connect_overrides_name=True,
+        )
+
+        assert let_the_portal_own_address_and_name(client) == []
+        assert client.written == []
+
+    def test_an_older_forum_is_found_by_its_older_name(self, app):
+        from aeronautics_members.services.forum_profiles import (
+            let_the_portal_own_address_and_name,
+        )
+
+        client = self.SettingsClient(sso_overrides_email="false")
+
+        assert let_the_portal_own_address_and_name(client) == ["sso_overrides_email"]
+
+    def test_the_connection_test_says_so(self, app, monkeypatch):
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "https://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+
+        def answer(method, path, **kwargs):
+            if path == "/site.json":
+                return {"site_name": "LAVBoard"}
+            return {"site_settings": [
+                {"setting": "discourse_connect_overrides_avatar", "value": True},
+                {"setting": "discourse_connect_overrides_email", "value": False},
+                {"setting": "discourse_connect_overrides_name", "value": True},
+            ]}
+
+        monkeypatch.setattr(provider, "_request", answer)
+
+        ok, message = provider.test_connection()
+
+        assert ok
+        assert "discourse_connect_overrides_email" in message
+        assert "discourse_connect_overrides_name" not in message

@@ -26,7 +26,11 @@ import secrets
 from flask import current_app
 
 from ..db_models import ImportedForumProfile, db
-from ..forum_service import AVATAR_OVERRIDE_SETTINGS, ForumProviderError
+from ..forum_service import (
+    AVATAR_OVERRIDE_SETTINGS,
+    ForumProviderError,
+    _portal_owned_rows,
+)
 from .forum import FORUM_USERNAME_LENGTH_LIMIT
 from ..security_utils import build_public_url
 from .clock import get_now_utc
@@ -208,6 +212,32 @@ def let_avatars_through(client):
         return None
     client.set_site_setting(name, "true")
     return name
+
+
+def portal_owned_settings_state(client):
+    """``[(what, setting, on, why)]`` for the address and the name."""
+    return _portal_owned_rows(client.site_settings())
+
+
+def let_the_portal_own_address_and_name(client):
+    """Turn both on and leave them on. Returns the names that were changed.
+
+    Left on for the same reason as the avatar: the portal is where an address
+    is verified and a name is kept, so the forum shows the portal's. A member
+    cannot change either inside Discourse afterwards -- the next sync would put
+    it back -- which is the same decision said the other way round.
+
+    Only once nothing else holds the address: Discourse gives an address to
+    one account, so with this on, a leftover account keeping somebody's address
+    turns their sync into an error rather than a silent mismatch. forum-explain
+    shows which account that is.
+    """
+    changed = []
+    for _what, name, on, _why in portal_owned_settings_state(client):
+        if name and not on:
+            client.set_site_setting(name, "true")
+            changed.append(name)
+    return changed
 
 
 def groups_for_profiles(profiles):

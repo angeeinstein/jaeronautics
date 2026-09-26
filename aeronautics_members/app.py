@@ -240,7 +240,9 @@ from .services.forum_profiles import (  # noqa: E402
     avatar_setting_state,
     groups_for_profiles,
     let_avatars_through,
+    let_the_portal_own_address_and_name,
     make_room_for_usernames,
+    portal_owned_settings_state,
     profiles_to_publish,
     publish_imported_profiles,
     sync_profile_groups,
@@ -3315,6 +3317,7 @@ def create_app(config_overrides=None):
                 # from scratch comes back with Discourse's defaults, and the
                 # step nobody can forget is the one nobody has to do.
                 _mind_the_avatar_setting(settings_client, dry_run=dry_run)
+                _mind_the_address_and_name(settings_client, dry_run=dry_run)
                 _mind_the_username_length(
                     settings_client, username_room_needed(profiles), dry_run=dry_run
                 )
@@ -3630,6 +3633,35 @@ def create_app(config_overrides=None):
             f"the forum shows. Members are governed by the same setting."
         )
         return changed
+
+    def _mind_the_address_and_name(client, *, dry_run):
+        """Make the forum take the address and name the portal sends. Left on."""
+        try:
+            rows = portal_owned_settings_state(client)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Address and name: could not read the settings -- {exc}.", fg="yellow"))
+            return
+        for what, name, on, why in rows:
+            if name is None:
+                click.echo(f"Address and name: this forum has no setting for the {what}.")
+            elif on:
+                click.echo(f"Address and name: {name} is on.")
+            elif dry_run:
+                click.echo(click.style(
+                    f"Address and name: {name} is off, so {why}. The real run "
+                    f"turns it on and leaves it on.", fg="cyan"))
+        if dry_run:
+            return
+        try:
+            changed = let_the_portal_own_address_and_name(client)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Address and name: could not be turned on -- {exc}.", fg="yellow"))
+            return
+        for name in changed:
+            click.echo(f"Address and name: {name} turned on and left on -- the "
+                       f"portal is where both are kept.")
 
     def _mind_the_username_length(client, needed, *, dry_run):
         """Make the forum accept the names these people actually have.

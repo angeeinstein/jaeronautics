@@ -543,6 +543,7 @@ configured. What differs is whether the change is put back afterwards.
 | Setting | Set by | Afterwards |
 | --- | --- | --- |
 | `discourse_connect_overrides_avatar` | `publish-forum-profiles` | **left on** — the portal owns avatars, for members too |
+| `discourse_connect_overrides_email`, `_name` | `publish-forum-profiles` | **left on** — the portal owns the address and the name ([discourse-setup.md](discourse-setup.md)) |
 | `max_username_length` | `publish-forum-profiles` | **left raised** — the portal's names need it, permanently |
 | `authorized_extensions` | `import-forum-content` | **left widened** — this forum exists to share exam papers |
 | the 22 posting limits | `import-forum-content` | **restored** — they are what the forum wants day to day |
