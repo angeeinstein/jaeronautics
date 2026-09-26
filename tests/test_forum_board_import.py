@@ -970,6 +970,33 @@ class TestAFileTheForumWillNotTake:
 
         assert summary["posted"] == 2
 
+    def test_and_then_the_post_says_which_file_is_missing(self, app, tmp_path):
+        """Found for real: eight files over Cloudflare's 100 MB.
+
+        Posted without them, the posts looked complete, and a file nobody knows
+        existed is one nobody thinks to put back.
+        """
+        board = self.a_board_with_a_big_file(tmp_path)
+        poster = self.a_forum_that_refuses_uploads()
+        sent = []
+        posting = poster.create_post
+
+        def create_post(**kwargs):
+            sent.append(kwargs["raw"])
+            return posting(**kwargs)
+
+        poster.create_post = create_post
+
+        with app.app_context():
+            migrate_board(
+                poster, board, tmp_path / "uploads", Ledger(tmp_path / "l.jsonl"),
+                require_attachments=False,
+            )
+
+        assert any(
+            "not carried over: Leichtbau_LAV11.rar" in raw for raw in sent
+        ), sent
+
 
 class TestThePageForDecidingTheStructure:
     """A spreadsheet is the wrong shape for "is this the same course"."""

@@ -62,6 +62,13 @@ EMPTY_POST = "*(This post was empty on the old forum.)*"
 # and this is added beneath it, rather than the post being rewritten.
 SMILEY_ONLY_POST = "*(This post was only a smiley on the old forum.)*"
 
+# Where a file was attached on the old forum and could not be brought across --
+# larger than anything in front of this forum will pass, or not on this machine
+# -- and the post went anyway. Said in the post, because a post that simply
+# lacks it looks complete, and a file nobody knows existed is a file nobody
+# thinks to put back.
+NOT_CARRIED_OVER = "*(Attached on the old forum, not carried over: {name})*"
+
 # Discourse's emoji shortcodes, which it removes before it measures a post.
 SHORTCODE = re.compile(r":[a-z0-9_+-]{1,40}:", re.I)
 
@@ -1461,6 +1468,7 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             if not source.exists():
                 record["result"] = "missing file"
                 report["problems"].append(f"pid={post.get('pid')}: {source} is not there")
+                links.append(NOT_CARRIED_OVER.format(name=original))
                 continue
             if dry_run:
                 links.append(f"[{original}|attachment](upload://would-be-uploaded)")
@@ -1475,6 +1483,7 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             except ForumProviderError as exc:
                 refused.append(original)
                 report["problems"].append(f"pid={post.get('pid')} {original}: {exc}")
+                links.append(NOT_CARRIED_OVER.format(name=original))
                 continue
             links.append(_attachment_markdown(upload, original))
             record["attachments"] += 1
