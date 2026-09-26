@@ -1399,3 +1399,68 @@ class TestLimitsThatWereInTheListAllAlong:
         requirements = {r.setting: r for r in plan_site_settings(threads, [])}
 
         assert requirements["max_topic_title_length"].needed == 300
+
+
+class TestAConnectionThatBreaksOff:
+    """Found for real: one upload's refusal was cut off, and the run died.
+
+    ``IncompleteRead`` while reading the error body, not a ``ForumProviderError``
+    -- so nothing on the way up caught it, and seven hundred threads stopped at
+    one attachment. A broken connection costs the one thing it was carrying.
+    """
+
+    def _poster(self):
+        return ContentPoster({
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+        })
+
+    def test_a_refusal_whose_reason_never_arrives_is_still_a_refusal(
+            self, app, monkeypatch, tmp_path):
+        import http.client
+
+        class CutOff(io.BytesIO):
+            def read(self, *args):
+                raise http.client.IncompleteRead(b"")
+
+        def urlopen(request, timeout=None):
+            raise HTTPError("https://forum.example.at/uploads.json", 413,
+                            "Payload Too Large", {}, CutOff())
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.urlopen", urlopen
+        )
+        attachment = tmp_path / "a.attach"
+        attachment.write_bytes(b"x")
+
+        with app.app_context():
+            with pytest.raises(ForumProviderError, match="413"):
+                self._poster().upload(attachment, "LutzB_L21", filename="big.zip")
+
+    @pytest.mark.parametrize("broken", [
+        "RemoteDisconnected", "ConnectionResetError", "TimeoutError",
+    ])
+    def test_a_connection_dropped_mid_answer_is_a_provider_error(
+            self, app, monkeypatch, broken):
+        import http.client
+
+        error = {
+            "RemoteDisconnected": http.client.RemoteDisconnected("closed"),
+            "ConnectionResetError": ConnectionResetError(104, "reset"),
+            "TimeoutError": TimeoutError("timed out"),
+        }[broken]
+
+        def urlopen(request, timeout=None):
+            raise error
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.urlopen", urlopen
+        )
+
+        with app.app_context():
+            with pytest.raises(ForumProviderError, match="broke off"):
+                self._poster().create_post(
+                    raw="Danke!", as_username="LutzB_L21",
+                    created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+                )

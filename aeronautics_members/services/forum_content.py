@@ -20,6 +20,7 @@ importer needs a record of which MyBB post became which Discourse post so that
 a run can be resumed; a spike that is about to be thrown away does not.
 """
 
+import http.client
 import json
 import mimetypes
 import re
@@ -177,6 +178,20 @@ def bbcode_to_markdown(text):
 # Talking to Discourse
 # ---------------------------------------------------------------------------
 
+def _what_the_refusal_said(exc):
+    """The body of an error response, or a sentence saying it never arrived.
+
+    Found for real on the first full import: an upload was refused, and the
+    connection closed while the refusal was still being read -- so reading why
+    raised ``IncompleteRead`` and ended the whole run. The refusal is the fact
+    that matters; its wording is a nicety.
+    """
+    try:
+        return exc.read().decode("utf-8", "replace")
+    except (http.client.HTTPException, OSError):
+        return "(the connection closed before the forum said why)"
+
+
 class KeyCannotActAs(ForumProviderError):
     """The forum would not let this key act as the person it was asked to."""
 
@@ -313,7 +328,7 @@ class ContentPoster:
                 raw = response.read().decode("utf-8")
                 return json.loads(raw) if raw else {}
         except HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")
+            detail = _what_the_refusal_said(exc)
             if exc.code == 403 and "invalid_access" in detail and as_username:
                 # Two very different things arrive here as the same 403.
                 #
@@ -364,6 +379,16 @@ class ContentPoster:
 
         except URLError as exc:
             raise ForumProviderError(f"Could not reach Discourse: {exc}") from exc
+        except (http.client.HTTPException, OSError) as exc:
+            # The connection broke after it was made: a reset, a timeout, a
+            # response cut off part-way. Not URLError, which only covers
+            # getting connected -- so without this, one dropped upload ended a
+            # run of seven hundred threads with a traceback instead of costing
+            # one attachment.
+            raise ForumProviderError(
+                f"{method} {path}: the connection to Discourse broke off "
+                f"({type(exc).__name__}: {exc})"
+            ) from exc
 
     @staticmethod
     def _wait_seconds(detail):
