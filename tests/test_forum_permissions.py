@@ -880,6 +880,42 @@ class TestTheAuthorsMayPostWhileTheImportRuns:
         assert forum.written == []
         assert report["public"] == 2
 
+    def test_a_child_that_fails_once_does_not_strand_its_parent(self):
+        """Found for real: the retry took the parents first and all ten failed.
+
+        A forum under load refused some subcategories with a 500. Retrying the
+        parents before those children meant each parent was refused because a
+        child still admitted old_forum -- and the parents kept it.
+        """
+        forum, plan = self._restricted()
+        let_authors_post(forum, list(plan), "old_forum", allow=True)
+        flaky = {11, 21}
+        setting = forum.set_category_permissions
+
+        def once_refused(category_id, permissions):
+            if int(category_id) in flaky:
+                flaky.discard(int(category_id))
+                raise RuntimeError("(500): Internal Server Error")
+            return setting(category_id, permissions)
+
+        forum.set_category_permissions = once_refused
+
+        report = let_authors_post(forum, list(plan), "old_forum", allow=False)
+
+        assert report["problems"] == []
+        for category_id in plan:
+            assert "old_forum" not in self._grants(forum, category_id)
+
+    def test_one_that_never_goes_through_is_reported_once(self):
+        forum, plan = self._restricted()
+        let_authors_post(forum, list(plan), "old_forum", allow=True)
+        forum.refuse = {11}
+
+        report = let_authors_post(forum, list(plan), "old_forum", allow=False)
+
+        assert len(report["problems"]) == 2, "the child, and its parent after it"
+        assert any("Angewandte Thermodynamik" in problem for problem in report["problems"])
+
     def test_categories_outside_the_import_are_never_touched(self):
         forum, plan = self._restricted()
         forum.written.clear()

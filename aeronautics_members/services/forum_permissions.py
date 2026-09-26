@@ -333,8 +333,14 @@ def let_authors_post(poster, category_ids, group, *, allow):
 
     ``category_ids`` arrive deepest first, as a plan does. Allowing goes parents
     first, because a subcategory may not admit a group its parent does not;
-    taking it away goes children first, for the same reason. Anything refused is
-    tried once more in the other order.
+    taking it away goes children first, for the same reason.
+
+    Anything refused is tried again **in the same order**, up to twice more.
+    The direction is known here, so the other order is only ever wrong: on the
+    first full import a struggling forum refused some subcategories with a 500,
+    the retry then took the parents first, and all ten top-level categories
+    were refused because their children still admitted the group -- and kept
+    it, after the children had been fixed a moment later.
     """
     order = list(reversed(category_ids)) if allow else list(category_ids)
     report = {"changed": 0, "already": 0, "public": 0, "problems": []}
@@ -363,12 +369,17 @@ def let_authors_post(poster, category_ids, group, *, allow):
         report["changed"] += 1
         return None
 
-    refused = [category_id for category_id in order
-               if attempt(category_id) is not None]
-    for category_id in reversed(refused):
-        problem = attempt(category_id)
-        if problem is not None:
-            report["problems"].append(problem)
+    remaining, problems = order, {}
+    for _pass in range(3):
+        problems = {}
+        for category_id in remaining:
+            problem = attempt(category_id)
+            if problem is not None:
+                problems[category_id] = problem
+        if not problems:
+            break
+        remaining = [category_id for category_id in order if category_id in problems]
+    report["problems"].extend(problems.values())
     return report
 
 
