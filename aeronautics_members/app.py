@@ -3280,6 +3280,13 @@ def create_app(config_overrides=None):
                 on_progress=None if dry_run else _profile_progress_reporter(),
             )
 
+        if report.get("stopped"):
+            # Nobody got through, so filling the groups would only be thirty-four
+            # more refusals about people the forum has never heard of.
+            for problem in report["problems"][:3]:
+                click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+            raise click.ClickException(report["stopped"])
+
         if not dry_run:
             # Membership is set here as well as in the SSO payload, because the
             # payload is not a way to make somebody a member -- it only works

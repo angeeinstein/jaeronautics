@@ -19,6 +19,7 @@ from aeronautics_members.services.forum_import import import_forum_people
 from aeronautics_members.services.forum import FORUM_USERNAME_LENGTH_LIMIT
 from aeronautics_members.services.forum_profiles import (
     ARCHIVE_GROUP,
+    GIVE_UP_AFTER,
     avatar_setting_state,
     build_profile_payload,
     group_name_for_year_group,
@@ -29,6 +30,7 @@ from aeronautics_members.services.forum_profiles import (
     publish_imported_profiles,
     sync_profile_groups,
     username_room_needed,
+    why_nobody_can_be_published,
 )
 
 
@@ -216,6 +218,55 @@ class TestPublishing:
         db.session.commit()
 
         assert seen == [(1, 0, 1), (2, 1, 1)]
+
+    def test_the_same_refusal_for_everybody_stops_the_run(self, app):
+        """740 identical refusals is one fact, reported 740 times."""
+        for uid in range(1, 9):
+            _imported(uid=str(uid), username=f"P{uid}_L23")
+        provider = FakeProvider(fail_on=[f"P{uid}_L23" for uid in range(1, 9)])
+
+        report = publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert report["failed"] == GIVE_UP_AFTER
+        assert report["stopped"]
+
+    def test_a_signature_refusal_is_named_as_the_connect_secret(self, app):
+        """Discourse only ever says "Login Error", which points nowhere."""
+        assert "DiscourseConnect secret" in why_nobody_can_be_published(
+            'Discourse API request failed (422): {"failed":"FAILED",'
+            '"message":"Login Error"}'
+        )
+
+    def test_a_run_that_is_getting_through_is_not_stopped(self, app):
+        """Refusals after somebody got through are about those people."""
+        _imported(uid="1", username="A_L23")
+        for uid in range(2, 10):
+            _imported(uid=str(uid), username=f"P{uid}_L23")
+        provider = FakeProvider(fail_on=[f"P{uid}_L23" for uid in range(2, 10)])
+
+        report = publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert report["published"] == 1
+        assert report["failed"] == 8
+        assert "stopped" not in report
+
+    def test_different_refusals_are_not_one_fact(self, app):
+        """Five different reasons are five people worth naming, not a cause."""
+        class Varied(FakeProvider):
+            def sync_imported_profile(self, payload):
+                from aeronautics_members.forum_service import ForumProviderError
+                raise ForumProviderError(f"no to {payload['username']}")
+
+        for uid in range(1, 8):
+            _imported(uid=str(uid), username=f"P{uid}_L23")
+
+        report = publish_imported_profiles(Varied())
+        db.session.commit()
+
+        assert report["failed"] == 7
+        assert "stopped" not in report
 
     def test_a_failure_is_not_recorded_as_published(self, app):
         _imported(uid="1", username="A_L23")

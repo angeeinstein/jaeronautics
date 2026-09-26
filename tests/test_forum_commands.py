@@ -221,6 +221,47 @@ class TestTheCommandsCanBeRun:
         assert provider.members["old_forum"] == {"HoferT_M13"}
         assert provider.members["mav13"] == {"HoferT_M13"}
 
+    def test_a_forum_that_refuses_every_signature_stops_the_run(
+            self, app, monkeypatch):
+        """Found for real: 740 refusals, then 34 more about the groups.
+
+        A Connect secret that differs between the two sides fails every person
+        identically, and Discourse only says "Login Error". So the run stops at
+        the fifth, names the secret, and does not go on to fill groups with
+        people the forum has never heard of.
+        """
+        from conftest import db
+        from aeronautics_members.forum_service import ForumProviderError
+        from aeronautics_members.services.forum_import import import_forum_people
+
+        class WrongSecret(FakeDiscourse):
+            def sync_imported_profile(self, payload):
+                raise ForumProviderError(
+                    'Discourse API request failed (422): '
+                    '{"failed":"FAILED","message":"Login Error"}'
+                )
+
+            def add_group_members(self, group_id, usernames):
+                raise AssertionError("nobody got through; nobody to add")
+
+        provider = WrongSecret()
+        monkeypatch.setattr("aeronautics_members.app.get_forum_service",
+                            lambda: FakeForumService(provider))
+        with app.app_context():
+            import_forum_people([{
+                "source_user_id": str(uid), "source_username": f"P{uid}_L21",
+                "source_email": f"p{uid}@edu.fh-joanneum.at",
+                "year_group": "LAV21", "post_count": 0,
+            } for uid in range(1, 12)])
+            db.session.commit()
+
+            result = CliRunner().invoke(
+                app.cli.commands["publish-forum-profiles"], [])
+
+        assert result.exit_code != 0
+        assert "DiscourseConnect secret" in result.output
+        assert "10/11" not in result.output, "it stopped, it did not carry on"
+
     def test_the_groups_can_be_repaired_without_publishing_again(self, app, monkeypatch):
         """739 profiles is half an hour; their group membership is one minute."""
         from conftest import db

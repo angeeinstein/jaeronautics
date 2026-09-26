@@ -270,6 +270,33 @@ def sync_profile_groups(provider, plan, *, add_members=True, on_group=None):
     return report
 
 
+#: The same refusal this many times, before anybody got through, is the forum
+#: saying something about every one of them rather than about one of them. The
+#: first real run sent all 740 and got the same answer 740 times.
+GIVE_UP_AFTER = 5
+
+#: What Discourse answers on /admin/users/sync_sso when the signature does not
+#: verify -- which is to say, when the DiscourseConnect secret here is not the
+#: one in the forum's own settings. It says nothing more specific than this.
+SIGNATURE_REFUSED = "Login Error"
+
+
+def why_nobody_can_be_published(refusal):
+    """A sentence about the whole run, from the one refusal it kept getting."""
+    if SIGNATURE_REFUSED in refusal:
+        return (
+            "The forum refused the signature on every one of them. That is what "
+            "Discourse says when the DiscourseConnect secret in the portal is not "
+            "the one in the forum's settings. Make them identical -- Admin -> "
+            "Settings -> Forum here, 'discourse connect secret' there -- and run "
+            "this again."
+        )
+    return (
+        f"The first {GIVE_UP_AFTER} were all refused the same way, so the rest "
+        f"would be too: {refusal}"
+    )
+
+
 def publish_imported_profiles(
     provider,
     *,
@@ -307,6 +334,7 @@ def publish_imported_profiles(
     if limit:
         profiles = profiles[:limit]
     total = len(profiles)
+    refusals = []
 
     for profile in profiles:
         report["seen"] += 1
@@ -373,6 +401,14 @@ def publish_imported_profiles(
                 report["failed"] += 1
                 record["result"] = f"failed: {exc}"
                 report["problems"].append(f"{profile.source_username}: {exc}")
+                refusals.append(str(exc))
+                if (
+                    not report["published"]
+                    and len(refusals) >= GIVE_UP_AFTER
+                    and len(set(refusals)) == 1
+                ):
+                    report["stopped"] = why_nobody_can_be_published(refusals[0])
+                    break
                 continue
 
             profile.forum_synced_at = get_now_utc()
