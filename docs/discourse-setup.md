@@ -37,13 +37,18 @@ reasons are in [forum-access-decisions.md](forum-access-decisions.md) and
 | Setting | Set by | Left |
 |---|---|---|
 | `discourse connect overrides avatar` | `publish-forum-profiles` | **on** — the portal approves the pictures |
-| `discourse connect overrides email` | `publish-forum-profiles` | **on** — otherwise a reclaimed account keeps `forum-mybb-…@imported.invalid` and no notification reaches its owner |
-| `discourse connect overrides name` | `publish-forum-profiles` | **on** — otherwise a reclaimed account keeps its old username as its name |
+| `auth overrides email` | `publish-forum-profiles` | **on** — otherwise a reclaimed account keeps `forum-mybb-…@imported.invalid` and no notification reaches its owner |
+| `auth overrides name` | `publish-forum-profiles` | **on** — otherwise a reclaimed account keeps its old username as its name |
 | `max username length` | `publish-forum-profiles` | **raised to 30** — surname, initial and cohort need it |
 | The groups (`members`, `students`, cohorts, `old_forum`, …) | `forum-permissions`, `publish-forum-profiles` | made; membership follows the portal |
 | Permissions on the imported categories | `import-forum-content --mapping`, `forum-permissions` | members only; archive read-only |
 | `authorized extensions` | `import-forum-content` | **widened** — PDFs, archives, office files |
 | The 22 posting limits | `import-forum-content --adjust-settings` | loosened for the run, **put back** after |
+
+Only the avatar is still called *Discourse Connect* overrides; the email and
+name are **auth overrides** — they apply to every way of signing in. Leave
+`auth overrides username` **off**: returning students keep the username their
+old posts are under.
 
 The portal's **Test connection** button warns when the avatar, email or name
 setting is off, so a forum that has been rebuilt says so the first time

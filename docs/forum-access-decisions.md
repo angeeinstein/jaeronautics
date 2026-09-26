@@ -214,7 +214,7 @@ same function (`ForumService.get_reclaimed_avatar`); they were two checks once,
 and the page said "your forum access is ready" while the forum disagreed.
 
 **The forum must take the portal's address and name** for this to be whole:
-`discourse connect overrides email` and `discourse connect overrides name` on.
+`auth overrides email` and `auth overrides name` on (older Discourse: `discourse connect overrides …`).
 Without them a reclaimed account keeps the placeholder address it was imported
 with (`forum-mybb-…@imported.invalid`) — no notification ever reaches them —
 and the old username as its name. Seen on the first reclaim, 2026-09-26.

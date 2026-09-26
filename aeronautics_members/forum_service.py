@@ -170,11 +170,17 @@ AVATAR_OVERRIDE_SETTINGS = (
 # later sync says about either, unless these are on. Found on the first real
 # reclaim: the account kept forum-mybb-685@imported.invalid, which no
 # notification ever reaches. Each is (what, the names it has had, the cost).
+#
+# Current Discourse calls these auth_overrides_*: they were generalised to every
+# way of signing in, and only the avatar kept a Discourse Connect name of its
+# own. The older names are still looked for, newest first.
 PORTAL_OWNED_SETTINGS = (
-    ("email", ("discourse_connect_overrides_email", "sso_overrides_email"),
+    ("email", ("auth_overrides_email", "discourse_connect_overrides_email",
+               "sso_overrides_email"),
      "a reclaimed account keeps the placeholder address it was imported with, "
      "so nothing the forum sends ever reaches its owner"),
-    ("name", ("discourse_connect_overrides_name", "sso_overrides_name"),
+    ("name", ("auth_overrides_name", "discourse_connect_overrides_name",
+              "sso_overrides_name"),
      "a reclaimed account keeps its old username as its name, and a change of "
      "name here never reaches the forum"),
 )

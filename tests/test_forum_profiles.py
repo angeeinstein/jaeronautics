@@ -1129,15 +1129,14 @@ class TestTheForumTakesTheAddressAndName:
         )
 
         client = self.SettingsClient(
-            discourse_connect_overrides_email=False,
-            discourse_connect_overrides_name=False,
+            auth_overrides_email=False,
+            auth_overrides_name=False,
         )
 
         changed = let_the_portal_own_address_and_name(client)
 
-        assert changed == ["discourse_connect_overrides_email",
-                           "discourse_connect_overrides_name"]
-        assert client.settings["discourse_connect_overrides_email"] == "true"
+        assert changed == ["auth_overrides_email", "auth_overrides_name"]
+        assert client.settings["auth_overrides_email"] == "true"
 
     def test_a_forum_already_right_is_left_alone(self, app):
         from aeronautics_members.services.forum_profiles import (
@@ -1145,8 +1144,8 @@ class TestTheForumTakesTheAddressAndName:
         )
 
         client = self.SettingsClient(
-            discourse_connect_overrides_email="true",
-            discourse_connect_overrides_name=True,
+            auth_overrides_email="true",
+            auth_overrides_name=True,
         )
 
         assert let_the_portal_own_address_and_name(client) == []
@@ -1176,8 +1175,8 @@ class TestTheForumTakesTheAddressAndName:
                 return {"site_name": "LAVBoard"}
             return {"site_settings": [
                 {"setting": "discourse_connect_overrides_avatar", "value": True},
-                {"setting": "discourse_connect_overrides_email", "value": False},
-                {"setting": "discourse_connect_overrides_name", "value": True},
+                {"setting": "auth_overrides_email", "value": False},
+                {"setting": "auth_overrides_name", "value": True},
             ]}
 
         monkeypatch.setattr(provider, "_request", answer)
@@ -1185,5 +1184,21 @@ class TestTheForumTakesTheAddressAndName:
         ok, message = provider.test_connection()
 
         assert ok
-        assert "discourse_connect_overrides_email" in message
-        assert "discourse_connect_overrides_name" not in message
+        assert "auth_overrides_email" in message
+        assert "auth_overrides_name" not in message
+
+    def test_the_current_name_is_what_a_current_forum_is_asked_about(self, app):
+        """Found for real: Discourse 3.x has auth_overrides_*, not
+        discourse_connect_overrides_* -- only the avatar kept that name."""
+        from aeronautics_members.services.forum_profiles import (
+            portal_owned_settings_state,
+        )
+
+        client = self.SettingsClient(
+            auth_overrides_email=False, auth_overrides_name=False,
+            discourse_connect_overrides_avatar=True,
+        )
+
+        names = [name for _what, name, _on, _why in portal_owned_settings_state(client)]
+
+        assert names == ["auth_overrides_email", "auth_overrides_name"]
