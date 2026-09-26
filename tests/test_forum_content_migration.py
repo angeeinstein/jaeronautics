@@ -1464,3 +1464,64 @@ class TestAConnectionThatBreaksOff:
                     raw="Danke!", as_username="LutzB_L21",
                     created_at="2022-02-04T10:00:00+00:00", topic_id=3,
                 )
+
+
+class TestAnAuthorWithAnUmlaut:
+    """Found for real: pid 207, by NöhrerB_L12, refused with a 500.
+
+    urllib sends a header as Latin-1, Postgres read the byte as UTF-8 and said
+    "invalid multibyte character", and a 500 is not the 403 the rename lookup
+    waits for. Discourse had made the account as NohrerB_L12.
+    """
+
+    def _poster(self, monkeypatch, find_author):
+        sent = []
+
+        def urlopen(request, timeout=None):
+            sent.append(request.get_header("Api-username"))
+            return contextlib.closing(io.BytesIO(b'{"id": 7, "topic_id": 3}'))
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.urlopen", urlopen
+        )
+        poster = ContentPoster({
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+        })
+        poster.find_author = find_author
+        return poster, sent
+
+    def test_it_is_sent_as_the_name_the_forum_gave_them(self, app, monkeypatch):
+        poster, sent = self._poster(
+            monkeypatch, lambda name: {"NöhrerB_L12": "NohrerB_L12"}.get(name)
+        )
+
+        with app.app_context():
+            poster.create_post(raw="Hier die Angabe.", as_username="NöhrerB_L12",
+                               created_at="2014-03-26T10:00:00+00:00", topic_id=3)
+
+        assert sent == ["NohrerB_L12"]
+
+    def test_an_ascii_name_is_not_looked_up_at_all(self, app, monkeypatch):
+        asked = []
+        poster, sent = self._poster(monkeypatch, lambda name: asked.append(name))
+
+        with app.app_context():
+            poster.create_post(raw="Hier die Angabe.", as_username="LutzB_L21",
+                               created_at="2022-02-04T10:00:00+00:00", topic_id=3)
+
+        assert asked == []
+        assert sent == ["LutzB_L21"]
+
+    def test_nobody_by_any_name_is_a_refusal_not_a_broken_request(
+            self, app, monkeypatch):
+        poster, sent = self._poster(monkeypatch, lambda name: None)
+
+        with app.app_context():
+            with pytest.raises(ForumProviderError, match="request header"):
+                poster.create_post(raw="Hier.", as_username="NöhrerB_L12",
+                                   created_at="2014-03-26T10:00:00+00:00",
+                                   topic_id=3)
+
+        assert sent == [], "nothing is sent that Postgres would choke on"

@@ -314,6 +314,19 @@ class ContentPoster:
 
     def _call(self, method, path, *, as_username=None, json_body=None, body=None,
               content_type=None, rate_limit_retries=RATE_LIMIT_RETRIES):
+        if as_username and not as_username.isascii():
+            # A header cannot carry it. urllib sends "NöhrerB_L12" as Latin-1,
+            # Discourse hands the byte to Postgres as UTF-8, and the answer is
+            # a 500 about an invalid multibyte character -- not the 403 the
+            # rename lookup below waits for. Discourse rewrote the name to
+            # ASCII when it made the account, so ask for that name first.
+            known = self._known_by(as_username)
+            if not known or not known.isascii():
+                raise ForumProviderError(
+                    f"{as_username} cannot be sent in a request header, and "
+                    f"the forum knows them by no other name"
+                )
+            as_username = known
         headers = {
             "Api-Key": self.api_key,
             "Api-Username": as_username or self.admin_username,
