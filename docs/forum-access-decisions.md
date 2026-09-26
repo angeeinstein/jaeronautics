@@ -213,6 +213,12 @@ one with an approved upload. The member's page and the forum's groups ask the
 same function (`ForumService.get_reclaimed_avatar`); they were two checks once,
 and the page said "your forum access is ready" while the forum disagreed.
 
+**The forum must take the portal's address and name** for this to be whole:
+`discourse connect overrides email` and `discourse connect overrides name` on.
+Without them a reclaimed account keeps the placeholder address it was imported
+with (`forum-mybb-…@imported.invalid`) — no notification ever reaches them —
+and the old username as its name. Seen on the first reclaim, 2026-09-26.
+
 Somebody who reclaims an account with **no** picture -- 63 of the 740 --
 uploads one and has it approved like anybody new. They may always replace the
 old picture; a new upload goes through approval as usual.

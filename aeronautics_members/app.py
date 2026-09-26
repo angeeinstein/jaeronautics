@@ -10,7 +10,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from pathlib import Path
 from subprocess import run
-from urllib.parse import quote_plus, urljoin, urlsplit
+from urllib.parse import quote, quote_plus, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 import click
@@ -4057,6 +4057,104 @@ def create_app(config_overrides=None):
             + (f", {failed} could not be" if failed else ""),
             fg="green" if not failed else "yellow",
         ))
+
+    @app.cli.command("forum-explain")
+    @click.argument("who")
+    @with_appcontext
+    def forum_explain_command(who):
+        """Everything the portal and the forum hold about one person, side by side.
+
+        WHO is an email address or a forum username. For "why did this not
+        reach the forum": what the portal would send on the next sync, what the
+        forum actually has, any other forum account holding the same address,
+        and the queued work still waiting for this person. Reads only; changes
+        nothing on either side.
+        """
+        from .db_models import ExternalWorkItem
+
+        needle = who.strip()
+        user = db.session.execute(
+            db.select(User).where(
+                (func.lower(User.email) == needle.lower())
+                | (User.forum_username == needle)
+            )
+        ).scalars().first()
+        if user is None:
+            raise click.ClickException(f"Nobody here with the address or forum name {who}.")
+
+        service = get_forum_service()
+        member = user.member
+        account = user.forum_account
+        click.echo(click.style("In the portal", bold=True))
+        click.echo(f"  account          {user.id}  {user.email}"
+                   f"  ({'verified' if user.email_is_verified else 'address NOT verified'})")
+        click.echo(f"  forum username   {user.forum_username or '-'}")
+        click.echo(f"  roles            {', '.join(sorted(r.slug for r in user.roles)) or 'none'}")
+        click.echo(f"  switched off     {'YES' if user.is_disabled else 'no'}")
+        click.echo(f"  membership       {'none' if member is None else member.payment_status}")
+        if account is not None:
+            click.echo(f"  forum link       external_id={account.external_id}  "
+                       f"remote_user_id={account.remote_user_id}  state={account.state}")
+            if account.last_error:
+                click.echo(click.style(f"  last error       {account.last_error}", fg="yellow"))
+
+        if not service.is_ready():
+            click.echo(click.style("\nThe forum integration is not ready, so nothing is sent.", fg="yellow"))
+            return
+
+        desired = service.get_desired_state(member) if member is not None else None
+        payload = service.provider.build_sso_payload(user, member, desired, nonce="preview")
+        click.echo(click.style("\nWhat the next sync sends", bold=True))
+        for key in ("external_id", "username", "email", "name", "require_activation",
+                    "add_groups", "remove_groups", "admin", "moderator"):
+            if key in payload:
+                click.echo(f"  {key:<18} {payload[key]}")
+        if "admin" not in payload:
+            click.echo("  admin/moderator    not sent -- the portal does not manage "
+                       "them (Settings -> Forum)")
+
+        click.echo(click.style("\nWhat the forum has", bold=True))
+        remote = {}
+        try:
+            remote = service.provider.get_remote_user_by_external_id(
+                account.external_id if account is not None else str(user.id)
+            ) or {}
+        except ForumProviderError as exc:
+            click.echo(f"  no forum account for this person yet ({exc})")
+        if remote:
+            click.echo(f"  account          {remote.get('id')}  {remote.get('username')}")
+            click.echo(f"  admin            {remote.get('admin')}")
+            click.echo(f"  moderator        {remote.get('moderator')}")
+            groups = [g.get("name") for g in remote.get("groups") or [] if not g.get("automatic")]
+            click.echo(f"  groups           {', '.join(sorted(filter(None, groups))) or '-'}")
+
+        try:
+            others = service.provider._request(
+                "GET", "/admin/users/list/all.json?show_emails=true&filter="
+                + quote(user.email or needle),
+            )
+        except ForumProviderError:
+            others = []
+        others = [row for row in (others or []) if row.get("id") != remote.get("id")]
+        if others:
+            click.echo(click.style(
+                "\nOther forum accounts with this address -- Discourse gives an "
+                "address to one account only:", fg="yellow"))
+            for row in others:
+                click.echo(f"  {row.get('id')}  {row.get('username')}  "
+                           f"active={row.get('active')}  posts={row.get('post_count')}")
+
+        items = db.session.execute(
+            db.select(ExternalWorkItem)
+            .where(ExternalWorkItem.user_id == user.id)
+            .order_by(ExternalWorkItem.created_at.desc())
+        ).scalars().all()
+        if items:
+            click.echo(click.style("\nQueued work for this person", bold=True))
+            for item in items[:10]:
+                click.echo(f"  {item.created_at:%Y-%m-%d %H:%M}  {item.kind:<24} "
+                           f"{item.status:<10} attempts={item.attempts}"
+                           + (f"  {item.last_error[:80]}" if item.last_error else ""))
 
     @app.cli.command("sync-forum-members")
     @click.option("--only-active", is_flag=True, help="Only synchronize active members.")

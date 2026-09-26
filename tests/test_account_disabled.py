@@ -322,6 +322,40 @@ class TestTheAdminScreens:
         assert user.disabled_reason == "Conduct"
         assert user.member.is_active is True, "the membership is untouched"
 
+    def test_deactivating_also_ends_their_forum_session(
+            self, app, admin_client, monkeypatch):
+        """The sync takes their groups; an open session would stay open."""
+        member = _paid_member()
+        ended = []
+        monkeypatch.setattr(
+            "aeronautics_members.blueprints.admin.log_out_forum_session_if_possible",
+            lambda user: ended.append(user.id) or (True, None),
+        )
+
+        admin_client.post(
+            f"/admin/accounts/{member.user_id}/disabled",
+            data={"disable": "1", "reason": "Conduct"},
+        )
+
+        assert ended == [member.user_id]
+
+    def test_reactivating_does_not_log_anybody_out(
+            self, app, admin_client, monkeypatch):
+        member = _paid_member()
+        ended = []
+        monkeypatch.setattr(
+            "aeronautics_members.blueprints.admin.log_out_forum_session_if_possible",
+            lambda user: ended.append(user.id) or (True, None),
+        )
+        admin_client.post(f"/admin/accounts/{member.user_id}/disabled",
+                          data={"disable": "1", "reason": "Conduct"})
+        ended.clear()
+
+        admin_client.post(f"/admin/accounts/{member.user_id}/disabled",
+                          data={"disable": "0"})
+
+        assert ended == []
+
     def test_the_page_says_why_the_switch_is_missing(self, app, client, admin):
         """"You cannot do this to yourself" leads somewhere different from
         "nobody else could install an update"."""

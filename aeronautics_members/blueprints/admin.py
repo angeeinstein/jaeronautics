@@ -40,6 +40,7 @@ from ..services.forum import (
     build_forum_username_base,
     generate_unique_forum_username,
     get_forum_service,
+    log_out_forum_session_if_possible,
     sync_member_forum_state,
 )
 from ..services.members import (
@@ -672,6 +673,16 @@ def update_account_disabled(user_id):
         except Exception as exc:  # noqa: BLE001 -- the decision stands either way
             current_app.logger.warning(
                 "Could not sync forum state after disabling user_id=%s: %s", user.id, exc
+            )
+    # And out of the forum now. The sync takes their groups away, but a session
+    # already open stays open -- signed in, reading whatever an inactive member
+    # may -- until it expires on its own, which is not what "deactivate" says.
+    if disable:
+        try:
+            log_out_forum_session_if_possible(user)
+        except Exception as exc:  # noqa: BLE001
+            current_app.logger.warning(
+                "Could not end the forum session of user_id=%s: %s", user.id, exc
             )
 
     log_audit_event(
