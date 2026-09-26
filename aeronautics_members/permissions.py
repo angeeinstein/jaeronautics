@@ -49,6 +49,15 @@ class Permission:
     SETTINGS_GENERAL = "settings.general"
     SETTINGS_CREDENTIALS = "settings.credentials"
 
+    # What the forum itself is told about somebody. Discourse has exactly two
+    # global staff flags, and with forum_manage_staff_flags on, every sync sets
+    # both from these -- so who moderates the forum is decided here, and taking
+    # the role away takes the flag away. Separate from FORUM_MODERATE, which is
+    # the portal's own photo review, so that a role can carry one without the
+    # other: the Forum moderator role moderates posts and reviews nothing here.
+    FORUM_ADMIN = "forum.admin"
+    FORUM_MODERATOR = "forum.moderator"
+
     # Taking over the installation, or deciding who else may.
     SYSTEM_UPDATE = "system.update"
     ROLES_MANAGE = "roles.manage"
@@ -71,6 +80,10 @@ ROLE_PERMISSIONS = {
         Permission.NOTIFICATIONS_MANAGE,
         Permission.NOTIFICATIONS_RECEIVE,
         Permission.SETTINGS_GENERAL,
+        # Somebody trusted to administer the members here is trusted to keep
+        # order on the forum -- decided 2026-09-26. Nobody is made an admin
+        # here who would not be trusted with that.
+        Permission.FORUM_MODERATOR,
     }),
     "superadmin": frozenset({
         Permission.ADMIN_ACCESS,
@@ -86,14 +99,35 @@ ROLE_PERMISSIONS = {
         Permission.SETTINGS_CREDENTIALS,
         Permission.SYSTEM_UPDATE,
         Permission.ROLES_MANAGE,
+        Permission.FORUM_MODERATOR,
+        # Everything on the forum as well. A Discourse admin can change any
+        # site setting and make API keys, which is the forum's equivalent of
+        # holding the credentials here.
+        Permission.FORUM_ADMIN,
+    }),
+    # Moderates the forum -- flags, editing and moving posts, silencing -- and
+    # nothing in this portal. No admin workspace, no member data: somebody
+    # keeping a lecture category tidy has no reason to see who has paid.
+    "forum_moderator": frozenset({
+        Permission.FORUM_MODERATOR,
     }),
 }
 
 ROLE_LABELS = {
-    "admin": ("Admin", "Can administer members, approvals, the forum and general settings."),
+    "admin": (
+        "Admin",
+        "Can administer members, approvals, the forum and general settings. "
+        "Also a moderator on the forum itself.",
+    ),
     "superadmin": (
         "Super Admin",
-        "Can install updates, manage credentials and grant administrator access.",
+        "Can install updates, manage credentials and grant administrator access. "
+        "Also an administrator on the forum itself.",
+    ),
+    "forum_moderator": (
+        "Forum moderator",
+        "A moderator on the forum: handles flags, edits, moves and closes topics, "
+        "silences people. No access to this admin workspace.",
     ),
 }
 
@@ -121,6 +155,8 @@ PERMISSION_LABELS = {
     Permission.NOTIFICATIONS_RECEIVE: "Receive the admin notification emails",
     Permission.SETTINGS_GENERAL: "Change general and notification settings",
     Permission.SETTINGS_CREDENTIALS: "Read and change the Stripe, Discourse and SMTP credentials",
+    Permission.FORUM_ADMIN: "Be an administrator on the forum itself",
+    Permission.FORUM_MODERATOR: "Be a moderator on the forum itself",
     Permission.SYSTEM_UPDATE: "Install a new version and roll one back",
     Permission.ROLES_MANAGE: "Grant and revoke access for other people",
 }

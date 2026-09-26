@@ -112,6 +112,10 @@ FORUM_SETTING_DEFAULTS = {
     # portal's own roles rather than maintained by hand on the forum. Empty
     # means the forum does not have one and nothing is sent about it.
     "forum_staff_group": "",
+    # Whether the portal decides who is an admin or moderator on the forum.
+    # Off by default, because turning it on demotes anybody the portal does not
+    # know to be one on their next sync -- a change to make on purpose.
+    "forum_manage_staff_flags": "False",
     # Which forum group each kind of member belongs to, one "category = group"
     # per line. Empty means the forum does not sort people by kind at all.
     "forum_category_groups": "",
@@ -583,6 +587,20 @@ class DiscourseConnectProvider(ForumProvider):
         ).hexdigest()
         return encoded, digest
 
+    def _build_staff_flags(self, user):
+        """Discourse's two staff flags, from the portal's roles. Both, always.
+
+        Sent as "true" or "false" on every sync, as the groups are: a flag that
+        is only ever granted is one nobody ever loses. Nothing is sent while
+        the setting is off, which leaves whatever the forum has alone.
+        """
+        if user is None or not normalize_bool(self.settings.get("forum_manage_staff_flags")):
+            return {}
+        return {
+            "admin": "true" if user.can(Permission.FORUM_ADMIN) else "false",
+            "moderator": "true" if user.can(Permission.FORUM_MODERATOR) else "false",
+        }
+
     def _build_group_fields(self, desired_state, user=None, member=None):
         """Which forum groups this person should be in, and which not.
 
@@ -674,6 +692,7 @@ class DiscourseConnectProvider(ForumProvider):
             if avatar_force_update:
                 payload["avatar_force_update"] = "true"
         payload.update(self._build_group_fields(desired_state, user, member))
+        payload.update(self._build_staff_flags(user))
         return payload
 
     def sync_user(self, forum_account, user, member, desired_state, avatar_url=None, avatar_force_update=False):
@@ -1452,6 +1471,7 @@ def normalize_forum_settings(settings_map):
     values = dict(FORUM_SETTING_DEFAULTS)
     values.update(settings_map or {})
     values["forum_integration_enabled"] = normalize_bool(values.get("forum_integration_enabled"))
+    values["forum_manage_staff_flags"] = normalize_bool(values.get("forum_manage_staff_flags"))
     values["forum_provider"] = (values.get("forum_provider") or "discourse").strip() or "discourse"
     values["forum_auth_strategy"] = (values.get("forum_auth_strategy") or "discourse_connect").strip() or "discourse_connect"
     values["forum_base_url"] = (values.get("forum_base_url") or "").strip().rstrip("/")

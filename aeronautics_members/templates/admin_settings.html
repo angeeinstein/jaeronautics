@@ -361,6 +361,13 @@
                                     <input class="form-control" type="text" id="forum_staff_group" name="forum_staff_group" value="{{ forum_settings.forum_staff_group }}">
                                     <small class="text-muted">{{ _('Forum group for whoever may administer the forum here. Membership follows this portal: it is granted and withdrawn on every sync, so nobody has to maintain it on the forum.') }}</small>
                                 </div>
+                                <div class="col-md-8">
+                                    <div class="form-check mt-md-4">
+                                        <input class="form-check-input" type="checkbox" name="forum_manage_staff_flags" id="forum_manage_staff_flags" {% if forum_settings.forum_manage_staff_flags %}checked{% endif %}>
+                                        <label class="form-check-label" for="forum_manage_staff_flags">{{ _('This portal decides who is admin or moderator on the forum') }}</label>
+                                    </div>
+                                    <small class="text-muted d-block">{{ _('Super Admins become forum admins; Admins and the Forum moderator role become forum moderators, on every sync. Anyone synced from here without one of those roles loses the flag on the forum, so give the roles first, then switch this on.') }}</small>
+                                </div>
                                 <div class="col-md-12">
                                     <label class="form-label">{{ _('Forum Group Per Kind Of Member (optional)') }}</label>
                                     <small class="text-muted d-block mb-2">{{ _('The forum group each kind of member belongs to. You choose the names and the groups are created on the forum for you; a kind left empty is put in no such group. This portal decides who is in which group, the forum decides what each group may see.') }}</small>

@@ -440,57 +440,63 @@ class TestBootstrap:
 class TestAddingARoleNeedsNoOtherChange:
     """The point of the whole arrangement, exercised rather than asserted.
 
-    A future moderator is defined here exactly as it would be in
+    A future photo reviewer is defined here exactly as it would be in
     permissions.py -- one entry, nothing else -- and then has to work: reach the
     forum queue, be refused the settings it was not given, and count towards the
     lockout guards for the capabilities it does carry.
     """
 
     @pytest.fixture
-    def moderator_role(self, app, monkeypatch):
+    def reviewer_role(self, app, monkeypatch):
         bundle = frozenset({Permission.ADMIN_ACCESS, Permission.FORUM_MODERATE})
-        monkeypatch.setitem(ROLE_PERMISSIONS, "moderator", bundle)
+        monkeypatch.setitem(ROLE_PERMISSIONS, "photo_reviewer", bundle)
         app_module.seed_default_roles()
         db.session.commit()
         return bundle
 
-    def test_the_role_row_appears_from_the_table_alone(self, app, moderator_role):
+    def test_the_role_row_appears_from_the_table_alone(self, app, reviewer_role):
         from aeronautics_members.db_models import Role
 
-        row = db.session.execute(db.select(Role).filter_by(slug="moderator")).scalar_one_or_none()
+        row = db.session.execute(db.select(Role).filter_by(slug="photo_reviewer")).scalar_one_or_none()
         assert row is not None
 
-    def test_its_holder_reaches_what_the_entry_lists(self, client, moderator_role):
-        mod = _user("mod@example.com", "moderator")
+    def test_its_holder_reaches_what_the_entry_lists(self, client, reviewer_role):
+        mod = _user("mod@example.com", "photo_reviewer")
         _login(client, mod.id)
 
         assert client.get("/admin").status_code == 200
         assert client.get("/admin/forum").status_code == 200
 
-    def test_and_is_refused_what_it_does_not(self, client, moderator_role):
-        mod = _user("mod2@example.com", "moderator")
+    def test_and_is_refused_what_it_does_not(self, client, reviewer_role):
+        mod = _user("mod2@example.com", "photo_reviewer")
         _login(client, mod.id)
 
         assert client.get("/admin/settings").status_code == 302
         assert client.get("/admin/logs").status_code == 302
         assert client.post("/admin/system-update").status_code == 302
 
-    def test_it_counts_towards_the_capabilities_it_carries(self, app, moderator_role):
+    def test_it_counts_towards_the_capabilities_it_carries(self, app, reviewer_role):
         """So the last-admin guard sees a moderator as somebody still in charge."""
-        _user("mod3@example.com", "moderator")
+        _user("mod3@example.com", "photo_reviewer")
 
         assert app_module.count_users_with_permission(Permission.ADMIN_ACCESS) == 1
         assert app_module.count_users_with_permission(Permission.SYSTEM_UPDATE) == 0
 
-    def test_no_route_or_template_mentions_it(self, app, moderator_role):
-        """If adding a role needed edits elsewhere, they would be here."""
+    def test_no_route_or_template_mentions_it(self, app, reviewer_role):
+        """If adding a role needed edits elsewhere, they would be here.
+
+        Called photo_reviewer rather than moderator: "moderator" is also the
+        name of the Discourse Connect field the forum's staff flag travels in,
+        so it now appears in forum_service.py for a reason that has nothing to
+        do with any role.
+        """
         import pathlib
 
         root = pathlib.Path(app_module.__file__).parent
         for path in list(root.rglob("*.py")) + list(root.rglob("*.html")):
             if path.name == "permissions.py":
                 continue
-            assert "moderator" not in path.read_text(), f"{path} names the role"
+            assert "photo_reviewer" not in path.read_text(), f"{path} names the role"
 
     def test_it_receives_the_admin_digests_if_its_entry_says_so(self, app, monkeypatch):
         """The non-route surfaces have to honour the table too.
@@ -523,15 +529,15 @@ class TestAddingARoleNeedsNoOtherChange:
         assert "gets@example.com" in recipients
         assert "silent@example.com" not in recipients
 
-    def test_its_holder_lands_on_the_admin_dashboard_after_signing_in(self, app, moderator_role):
+    def test_its_holder_lands_on_the_admin_dashboard_after_signing_in(self, app, reviewer_role):
         """Another role-name check that a moderator would have failed."""
-        mod = _user("landing@example.com", "moderator")
+        mod = _user("landing@example.com", "photo_reviewer")
 
         assert app_module.get_member_portal_target(mod) == "admin.admin_dashboard"
 
-    def test_the_navigation_offers_only_what_it_can_reach(self, client, moderator_role):
+    def test_the_navigation_offers_only_what_it_can_reach(self, client, reviewer_role):
         """A link that bounces you is worse than no link."""
-        mod = _user("mod4@example.com", "moderator")
+        mod = _user("mod4@example.com", "photo_reviewer")
         _login(client, mod.id)
 
         body = client.get("/admin").get_data(as_text=True)
@@ -540,7 +546,7 @@ class TestAddingARoleNeedsNoOtherChange:
         assert "/admin/settings" not in body
         assert "/admin/logs" not in body
 
-    def test_the_account_filter_understands_a_role_it_never_heard_of(self, client, moderator_role):
+    def test_the_account_filter_understands_a_role_it_never_heard_of(self, client, reviewer_role):
         """The filter asks about the capability, not about Role.slug == "admin".
 
         Hard-coding the slug filed a moderator under "member only" and meant the
@@ -548,7 +554,7 @@ class TestAddingARoleNeedsNoOtherChange:
         arrangement is meant to remove.
         """
         boss = _user("filterboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        _user("filtermod@example.com", "moderator")
+        _user("filtermod@example.com", "photo_reviewer")
         _login(client, boss.id)
 
         staff = client.get("/admin/accounts?role=staff").get_data(as_text=True)
@@ -558,17 +564,17 @@ class TestAddingARoleNeedsNoOtherChange:
         members_only = client.get("/admin/accounts?role=member").get_data(as_text=True)
         assert "filtermod@example.com" not in members_only
 
-        by_role = client.get("/admin/accounts?role=role:moderator").get_data(as_text=True)
+        by_role = client.get("/admin/accounts?role=role:photo_reviewer").get_data(as_text=True)
         assert "filtermod@example.com" in by_role
         assert "filterboss@example.com" not in by_role
 
-    def test_the_filter_dropdown_lists_it(self, client, moderator_role):
+    def test_the_filter_dropdown_lists_it(self, client, reviewer_role):
         boss = _user("dropdownboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
         _login(client, boss.id)
 
         body = client.get("/admin/accounts").get_data(as_text=True)
 
-        assert 'value="role:moderator"' in body
+        assert 'value="role:photo_reviewer"' in body
 
 
 class TestTheAccountListIsReadOnly:

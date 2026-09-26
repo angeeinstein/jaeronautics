@@ -217,6 +217,46 @@ Somebody who reclaims an account with **no** picture -- 63 of the 740 --
 uploads one and has it approved like anybody new. They may always replace the
 old picture; a new upload goes through approval as usual.
 
+## 13. The portal decides who moderates the forum
+
+Decided 2026-09-26. Discourse has two global staff flags, `admin` and
+`moderator`, and Discourse Connect sets both from the payload. With
+**This portal decides who is admin or moderator on the forum** ticked, every
+sync sends both, `true` or `false`, from the portal's roles:
+
+| Portal role | On the forum |
+|---|---|
+| Super Admin | admin (and moderator) |
+| Admin | moderator |
+| Forum moderator | moderator — and nothing in the portal |
+
+Admin is a moderator because anybody trusted to administer the members is
+trusted to keep order on the forum; nobody is made an Admin who would not be.
+A Discourse *admin* is a different thing — every site setting, every API key —
+so only Super Admin carries it.
+
+The flags come from two permissions, `FORUM_ADMIN` and `FORUM_MODERATOR`, and
+not from `FORUM_MODERATE`, which is the portal's own photo review. That is what
+lets the Forum moderator role moderate posts without seeing member data here.
+
+Saving roles syncs the account straight away. Before this, a role taken away
+waited for something unrelated to sync the account, and the nightly drift
+check never would: it compares membership state, not roles.
+
+**The switch is off by default.** Turning it on demotes anybody the portal
+syncs who holds none of those roles, on their next sync. Give the roles first,
+then tick it, then `sync-forum-members` to apply it to everybody at once.
+Accounts the portal does not sync — `system`, anybody made on the forum by
+hand — are never touched.
+
+Trust levels are not part of this. They are Discourse's own automatic
+reputation, meant for slowing down spammers, not for deciding who does what.
+One setting matters because of them: everybody arriving through the portal
+starts at trust level 0, and level 0 may not attach files
+(`newuser_max_attachments = 0`) — on a forum for sharing exam papers, on their
+first day. `default trust level = 1` on the forum; they are verified, paying
+members with an approved photograph.
+
 ## What is deliberately still open
 
 - **The categories that do not exist yet**: Membership, Getting started, General
@@ -229,4 +269,6 @@ old picture; a new upload goes through approval as usual.
 - **`login_required`**, which is what makes the site itself private. Category
   permissions are not the same thing.
 - **Whether the committee and administrators should differ from each other.**
-  One group today; the model takes a list.
+  One group today; the model takes a list. (Who moderates is settled — §13.)
+- **Forum access without a membership** for admins and a management account.
+  Wanted, not now.

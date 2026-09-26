@@ -735,6 +735,19 @@ def update_account_roles(user_id):
         flash(_("No role changes were made."), "info")
         return redirect(url_for("admin.admin_account_detail", user_id=user_id))
 
+    # Roles decide forum groups and, when the portal manages them, the forum's
+    # own staff flags -- and until this ran, a role taken away here stayed on
+    # the forum until something unrelated happened to sync the account. The
+    # nightly check compares membership state, not roles, so it never would.
+    if user.member is not None:
+        try:
+            sync_member_forum_state(user.member)
+        except Exception as exc:  # noqa: BLE001 -- the roles are saved either way
+            current_app.logger.warning(
+                "Could not sync forum state after a role change for user_id=%s: %s",
+                user.id, exc,
+            )
+
     log_audit_event(
         category="access",
         event_type="account_roles_changed",
@@ -922,6 +935,8 @@ def admin_settings():
         set_setting_value("forum_member_group", ((request.form.get("forum_member_group") if settings_section == "forum" else before_settings.get("forum_member_group")) or "").strip() or None)
         set_setting_value("forum_inactive_group", ((request.form.get("forum_inactive_group") if settings_section == "forum" else before_settings.get("forum_inactive_group")) or "").strip() or None)
         set_setting_value("forum_staff_group", ((request.form.get("forum_staff_group") if settings_section == "forum" else before_settings.get("forum_staff_group")) or "").strip() or None)
+        manage_staff_flags = (request.form.get("forum_manage_staff_flags") == "on") if settings_section == "forum" else str(before_settings.get("forum_manage_staff_flags") or "False") == "True"
+        set_setting_value("forum_manage_staff_flags", str(manage_staff_flags))
         # Stored as the lines the rest of the application reads, composed from
         # one box per kind of member: the left-hand side is fixed, so nobody
         # should have to type it correctly.
