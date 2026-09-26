@@ -11,6 +11,8 @@ operation that triggered the sync. The durable-outbox work is what will make
 those retries automatic rather than manual.
 """
 
+import unicodedata
+
 from flask import current_app
 from flask_babel import _
 
@@ -51,9 +53,35 @@ def get_forum_service():
     return ForumService(get_forum_settings_map())
 
 
+# How German writes an umlaut without one, which is how the old board's people
+# wrote their own names: obermuellerB_L24, not obermullerB_L24.
+_GERMAN_SPELLED_OUT = str.maketrans({
+    "ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue", "ß": "ss",
+})
+
+
+def ascii_name(text):
+    """A name as a forum username can hold it: ASCII letters and digits only.
+
+    Discourse will not store "ObermüllerB_L24" -- with unicode usernames off,
+    which is its default, it rewrites the name to ASCII when it makes the
+    account and says nothing, so the portal and the forum then hold two
+    different names for one person. The same name also cannot travel in the
+    Api-Username header the import posts with. So it is spelled out the German
+    way here, and any other accent (é, č) is dropped from its letter.
+    """
+    spelled = (text or "").translate(_GERMAN_SPELLED_OUT)
+    decomposed = unicodedata.normalize("NFKD", spelled)
+    return "".join(
+        character for character in decomposed
+        if character.isascii() and character.isalnum()
+    )
+
+
 def build_forum_username_base(first_name, last_name, year_group,
                               limit=FORUM_USERNAME_LENGTH_LIMIT):
-    last_name_cleaned = "".join(filter(str.isalnum, last_name or "")).capitalize()
+    last_name_cleaned = ascii_name(last_name).capitalize()
+    first_name = ascii_name(first_name)
     first_name_initial = first_name[0].upper() if first_name else ""
     study_field_initial = year_group[0].upper() if year_group else ""
     year_short = year_group[-2:] if year_group and len(year_group) > 2 else ""

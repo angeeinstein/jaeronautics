@@ -294,6 +294,25 @@ class TestTheForumUsername:
     def test_a_name_that_fits_is_left_exactly_as_it_was(self, app):
         assert build_forum_username_base("Anna", "Huber", "LAV25") == "HuberA_L25"
 
+    @pytest.mark.parametrize("first,last,expected", [
+        ("Bianca", "Obermüller", "ObermuellerB_L24"),
+        ("Jürgen", "Größ", "GroessJ_L24"),
+        ("Özlem", "Weiß", "WeissO_L24"),
+        ("Zoë", "Dvořák", "DvorakZ_L24"),
+    ])
+    def test_an_umlaut_is_spelled_out_the_way_the_old_board_did(
+            self, app, first, last, expected):
+        """Found for real: a colleague's signup made ObermüllerB_L24.
+
+        Discourse would have stored it as ObermullerB_L24 without a word, so
+        portal and forum hold different names; the old board had written the
+        same person as obermuellerB_L24.
+        """
+        name = build_forum_username_base(first, last, "LAV24")
+
+        assert name == expected
+        assert name.isascii()
+
 
 class TestWhatTheScreensShow:
     @pytest.fixture
