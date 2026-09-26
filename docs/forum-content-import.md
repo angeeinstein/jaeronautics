@@ -601,6 +601,33 @@ somewhere sensible instead of one with holes through it.
   `screen`, or a dropped SSH session ends it — recoverable, but slower than
   not needing to recover.
 
+### The first full run (2026-09-26), and what it needed
+
+All 1,529 posts landed, in five runs over one forum. Each stop was something
+only a real run could find, and each is now handled or written down here:
+
+| Stop | Cause | Now |
+|---|---|---|
+| Every post refused, `invalid_access` | The categories were closed before posting, and the authors are in `old_forum`, not `students` | `old_forum` may post for as long as the run lasts ([decision 7b](forum-access-decisions.md)) |
+| Same refusal, earlier | The portal's own key is bound to `system` | A key with User Level **All Users**, checked before anything changes (§2) |
+| Traceback, `IncompleteRead` | A refused upload whose reason was cut off mid-read | Costs that one attachment, not the run |
+| `500`s on every upload near the end | **The forum's disk was full** | Give the forum 40-50 GB before the production run |
+| Ten top-level categories kept `old_forum` | Retried parents before children | Retried in the same order |
+| One post, `invalid multibyte character` | `Api-Username: NöhrerB_L12` -- a header cannot carry `ö` | Non-ASCII authors are sent under the name the forum gave them |
+| Eight files, `413 … cloudflare` | Over Cloudflare's 100 MB | Last run with `--allow-missing-attachments`; each post names its file |
+
+The order that worked, after the categories and people were in place:
+
+1. the run with `--limit 20`, then a look at the forum;
+2. the full run, under `tmux`, output through `tee` into a log;
+3. the same command again until only the Cloudflare files are `waiting`;
+4. once more with `--allow-missing-attachments`.
+
+A run that crashes or is interrupted still puts the settings back and takes
+posting away from `old_forum` on the way out. If it was killed outright,
+`restore-forum-settings` and `forum-permissions … --enforce` do the same by
+hand; both report "already back" when there was nothing to do.
+
 ### When nine gigabytes will not fit
 
 The portal needs room for the whole `uploads` folder, and the forum needs room
@@ -635,8 +662,11 @@ The summary line counts waiting separately from failed, because they are not
 the same thing: waiting needs a file, failed needs a look.
 
 `--allow-missing-attachments` turns the rule off, for files that are gone for
-good and words worth having anyway. It is not a way to save disk: those files
-can never be added afterwards.
+good and words worth having anyway. The post then says so --
+*"Attached on the old forum, not carried over: Thermo 2.zip"* -- so the gap is
+visible to whoever reads it. It is not a way to save disk: the import never
+comes back for those files, and the only way to add one afterwards is by hand,
+editing the post.
 
 ### Check the umlauts, early
 
