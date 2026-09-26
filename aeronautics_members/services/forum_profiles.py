@@ -240,7 +240,7 @@ def sync_profile_groups(provider, plan, *, add_members=True, on_group=None):
     people, against fourteen hundred for publishing everybody again.
     """
     report = {"groups": 0, "created": 0, "members": 0, "already_in": 0,
-              "problems": []}
+              "renamed": {}, "problems": []}
     for name in sorted(plan):
         usernames = plan[name]
         created = False
@@ -256,12 +256,32 @@ def sync_profile_groups(provider, plan, *, add_members=True, on_group=None):
                         "the forum did not say which group that is, so nobody "
                         "can be added to it"
                     )
-                added = provider.add_group_members(group_id, usernames)
+                unknown = []
+                added = provider.add_group_members(group_id, usernames, unknown=unknown)
+                lost = []
+                if unknown:
+                    found = {}
+                    for username in unknown:
+                        actual = _forum_name_for(provider, username)
+                        if actual and actual != username:
+                            found[username] = actual
+                        else:
+                            lost.append(username)
+                    if found:
+                        added += provider.add_group_members(
+                            group_id, list(found.values())
+                        )
+                        report["renamed"].update(found)
+                    if lost:
+                        report["problems"].append(
+                            f"{name}: nobody on the forum is called "
+                            f"{', '.join(lost)}, under that name or any other"
+                        )
                 report["members"] += added
                 # Everybody who was not added was already in the group, which is
                 # what a second run looks like and is not a fault. Counted apart
                 # so that "0 memberships set" cannot be read as "nobody is in".
-                report["already_in"] += max(0, len(usernames) - added)
+                report["already_in"] += max(0, len(usernames) - added - len(lost))
         except ForumProviderError as exc:
             # One group out of thirty-four must not cost the other thirty-three.
             report["problems"].append(f"{name}: {exc}")
@@ -295,6 +315,26 @@ def why_nobody_can_be_published(refusal):
         f"The first {GIVE_UP_AFTER} were all refused the same way, so the rest "
         f"would be too: {refusal}"
     )
+
+
+def _forum_name_for(provider, source_username):
+    """What the forum calls somebody the old board called ``source_username``.
+
+    Discourse rewrites a username it will not take as it is -- an umlaut, a
+    space, a name somebody else already has in another case -- and says nothing
+    when it does. The account is still theirs, and it still carries the external
+    id it was published under, which is the one handle a rewrite cannot change.
+    """
+    profile = db.session.execute(
+        db.select(ImportedForumProfile).filter_by(source_username=source_username)
+    ).scalars().first()
+    if profile is None or not profile.user_id:
+        return None
+    try:
+        user = provider.get_remote_user_by_external_id(str(profile.user_id))
+    except ForumProviderError:
+        return None
+    return (user or {}).get("username") or None
 
 
 def publish_imported_profiles(

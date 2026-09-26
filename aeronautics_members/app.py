@@ -3588,6 +3588,14 @@ def create_app(config_overrides=None):
         return changed
 
     def _report_group_problems(report):
+        renamed = report.get("renamed") or {}
+        if renamed:
+            click.echo(
+                f"  {len(renamed)} known on the forum by another name, and put "
+                f"in their groups under it:"
+            )
+            for old, new in sorted(renamed.items()):
+                click.echo(f"    {old} -> {new}")
         for problem in report["problems"]:
             click.echo(click.style(f"  ! group {problem}", fg="yellow"), err=True)
 

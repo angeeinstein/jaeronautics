@@ -214,6 +214,15 @@ def _is_named_in(message, username):
                      re.IGNORECASE) is not None
 
 
+def _names_somebody_it_does_not_have(message):
+    """Whether a refused group call was refused for a name nobody has.
+
+    Discourse checks that it found as many people as it was given names, and
+    when it did not it says only this -- not who.
+    """
+    return "invalid_parameters" in message and "usernames" in message
+
+
 _ALLOWED_IMAGE_TYPE_TO_EXTENSION = {
     "jpeg": "jpg",
     "png": "png",
@@ -744,7 +753,7 @@ class DiscourseConnectProvider(ForumProvider):
     # eight calls for the whole register and small enough to be uncontroversial.
     GROUP_MEMBER_BATCH = 100
 
-    def add_group_members(self, group_id, usernames):
+    def add_group_members(self, group_id, usernames, unknown=None):
         """Put people into a group directly, without going through SSO.
 
         Necessary because the SSO payload's ``add_groups`` is not a way to
@@ -755,16 +764,19 @@ class DiscourseConnectProvider(ForumProvider):
         the group is there first.
 
         Returns how many were newly added; the rest were already in the group.
+
+        Pass a list as ``unknown`` to have names the forum has nobody by put in
+        it, rather than the whole call failing on them.
         """
         names = [name for name in usernames if name]
         added = 0
         for start in range(0, len(names), self.GROUP_MEMBER_BATCH):
             added += self._add_some_group_members(
-                group_id, names[start:start + self.GROUP_MEMBER_BATCH]
+                group_id, names[start:start + self.GROUP_MEMBER_BATCH], unknown
             )
         return added
 
-    def _add_some_group_members(self, group_id, batch):
+    def _add_some_group_members(self, group_id, batch, unknown=None):
         """One call, minus anybody Discourse says is in the group already.
 
         Discourse refuses the *whole* batch when one name in it is already a
@@ -775,6 +787,12 @@ class DiscourseConnectProvider(ForumProvider):
 
         The refusal names them, though, so they are dropped and the rest are
         sent again.
+
+        A name the forum has nobody by fails the whole batch as well -- 400,
+        "invalid parameters: usernames" -- and that refusal does *not* say which.
+        So with ``unknown`` given, the batch is halved until each such name is on
+        its own: a handful of extra calls for one stranger in a hundred, instead
+        of ninety-nine people left out.
         """
         try:
             self._request(
@@ -785,6 +803,15 @@ class DiscourseConnectProvider(ForumProvider):
             return len(batch)
         except ForumProviderError as exc:
             message = str(exc)
+            if unknown is not None and _names_somebody_it_does_not_have(message):
+                if len(batch) == 1:
+                    unknown.append(batch[0])
+                    return 0
+                middle = len(batch) // 2
+                return (
+                    self._add_some_group_members(group_id, batch[:middle], unknown)
+                    + self._add_some_group_members(group_id, batch[middle:], unknown)
+                )
             if "already" not in message.lower():
                 raise
             remaining = [name for name in batch if not _is_named_in(message, name)]
@@ -794,7 +821,7 @@ class DiscourseConnectProvider(ForumProvider):
                 # It complained about somebody, and not about anybody we sent.
                 # Sending the same thing again would loop, so say so instead.
                 raise
-            return self._add_some_group_members(group_id, remaining)
+            return self._add_some_group_members(group_id, remaining, unknown)
 
     # Discourse has moved its user-field admin route between versions, and an
     # admin route also answers 404 -- rather than 403 -- when the API user is

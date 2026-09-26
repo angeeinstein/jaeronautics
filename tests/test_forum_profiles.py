@@ -368,7 +368,7 @@ class TestTheGroupsThemselves:
             self.made.append(name)
             return {"id": self.groups[name], "name": name}, True
 
-        def add_group_members(self, group_id, usernames):
+        def add_group_members(self, group_id, usernames, unknown=None):
             self.members.setdefault(group_id, []).extend(usernames)
             return len(usernames)
 
@@ -415,6 +415,56 @@ class TestTheGroupsThemselves:
 
         assert sorted(provider.made) == ["lav23", ARCHIVE_GROUP]
         assert provider.members == {}
+
+    def test_somebody_the_forum_renamed_is_put_in_under_their_new_name(self, app):
+        """Discourse rewrites a name it will not take, and says nothing.
+
+        The account still carries the external id it was published under, so
+        that is how they are found.
+        """
+        profile = _imported(uid="1", username="Müller_L11", year_group="LAV11")
+        provider = self.GroupProvider()
+        renamed = {str(profile.user_id): "Muller_L11"}
+        added_as = []
+
+        def add(group_id, usernames, unknown=None):
+            for username in usernames:
+                if username == "Müller_L11" and unknown is not None:
+                    unknown.append(username)
+                else:
+                    added_as.append(username)
+            return len(usernames) - (1 if "Müller_L11" in usernames else 0)
+
+        provider.add_group_members = add
+        provider.get_remote_user_by_external_id = (
+            lambda external_id: {"username": renamed[external_id]}
+        )
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["renamed"] == {"Müller_L11": "Muller_L11"}
+        assert added_as.count("Muller_L11") == 2, "archive and cohort both"
+        assert report["problems"] == []
+
+    def test_somebody_who_is_not_there_at_all_is_named(self, app):
+        _imported(uid="1", username="Ghost_L11", year_group="LAV11")
+        provider = self.GroupProvider()
+
+        def add(group_id, usernames, unknown=None):
+            unknown.extend(usernames)
+            return 0
+
+        def nobody(external_id):
+            from aeronautics_members.forum_service import ForumProviderError
+            raise ForumProviderError("404")
+
+        provider.add_group_members = add
+        provider.get_remote_user_by_external_id = nobody
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert any("Ghost_L11" in problem for problem in report["problems"])
+        assert report["already_in"] == 0, "missing is not the same as already in"
 
     def test_one_bad_group_does_not_cost_the_others(self, app):
         from aeronautics_members.forum_service import ForumProviderError
@@ -512,7 +562,7 @@ class TestAddingPeopleToAGroupTwice:
     never be completed.
     """
 
-    def _provider(self, already=()):
+    def _provider(self, already=(), strangers=()):
         from aeronautics_members.forum_service import (
             DiscourseConnectProvider, ForumProviderError,
         )
@@ -529,6 +579,14 @@ class TestAddingPeopleToAGroupTwice:
         def fake_request(method, path, data=None, **kwargs):
             asked = (data or {}).get("usernames", "").split(",")
             provider.sent.append(asked)
+            if any(name in strangers for name in asked):
+                # What Discourse says when it found fewer people than names,
+                # word for word -- and it does not say which.
+                raise ForumProviderError(
+                    "Discourse API request failed (400): "
+                    '{"errors":["You supplied invalid parameters to the '
+                    'request: usernames"],"error_type":"invalid_parameters"}'
+                )
             clash = [name for name in asked if name in members]
             if clash:
                 raise ForumProviderError(
@@ -570,6 +628,40 @@ class TestAddingPeopleToAGroupTwice:
 
         assert added == 1
         assert "KlampflL_L12" in provider.members
+
+    def test_one_stranger_does_not_keep_ninety_nine_out(self, app):
+        """Found for real: lav11, lav12, mav13 and old_forum, whole batches lost."""
+        names = [f"P{index}_L11" for index in range(100)]
+        provider = self._provider(strangers={"P37_L11"})
+        unknown = []
+
+        added = provider.add_group_members(3, names, unknown=unknown)
+
+        assert unknown == ["P37_L11"]
+        assert added == 99
+        assert provider.members == set(names) - {"P37_L11"}
+        assert len(provider.sent) < 20, "halving, not one call per person"
+
+    def test_without_somewhere_to_put_them_a_stranger_is_still_an_error(self, app):
+        """Callers that did not ask to hear about strangers are not lied to."""
+        from aeronautics_members.forum_service import ForumProviderError
+
+        provider = self._provider(strangers={"P1_L11"})
+
+        with pytest.raises(ForumProviderError):
+            provider.add_group_members(3, ["P1_L11", "P2_L11"])
+
+    def test_a_stranger_among_people_already_in_is_still_found(self, app):
+        """Both refusals in one group: the second run of a group with a rename."""
+        provider = self._provider(already={"A_L11"}, strangers={"B_L11"})
+        unknown = []
+
+        added = provider.add_group_members(3, ["A_L11", "B_L11", "C_L11"],
+                                           unknown=unknown)
+
+        assert unknown == ["B_L11"]
+        assert added == 1
+        assert "C_L11" in provider.members
 
     def test_a_refusal_that_is_not_about_membership_is_raised(self, app):
         from aeronautics_members.forum_service import (

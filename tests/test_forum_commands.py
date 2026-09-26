@@ -91,7 +91,7 @@ class FakeDiscourse:
         self.members.setdefault(name, set())
         return {"id": self.groups[name], "name": name}, True
 
-    def add_group_members(self, group_id, usernames):
+    def add_group_members(self, group_id, usernames, unknown=None):
         name = next(key for key, value in self.groups.items() if value == group_id)
         self.members.setdefault(name, set()).update(usernames)
         return len(usernames)
@@ -241,7 +241,7 @@ class TestTheCommandsCanBeRun:
                     '{"failed":"FAILED","message":"Login Error"}'
                 )
 
-            def add_group_members(self, group_id, usernames):
+            def add_group_members(self, group_id, usernames, unknown=None):
                 raise AssertionError("nobody got through; nobody to add")
 
         provider = WrongSecret()
