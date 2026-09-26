@@ -314,6 +314,64 @@ def apply_permissions(poster, plan, *, dry_run=False, enforce=False,
     return report
 
 
+def let_authors_post(poster, category_ids, group, *, allow):
+    """Add ``group`` to each category's permissions, or take it off again.
+
+    The archive is posted *as* its authors, and Discourse checks each of them
+    against the category exactly as it would a person typing: somebody who may
+    not post there is refused, with the same ``invalid_access`` a key bound to
+    one user gets. The authors are the old forum's people, in ``old_forum`` and
+    their year group -- not in the groups the material is granted to, and they
+    should not be. So for as long as the import runs they may post, and then
+    they may not.
+
+    What is there is kept either way: the group is added to, or removed from,
+    the permissions each category has *now*, so nothing decided on the forum is
+    replaced by this command's idea of it. A category that is still public is
+    left alone in both directions -- adding a group to an empty permission set
+    would restrict it to that group, which is not this step's decision.
+
+    ``category_ids`` arrive deepest first, as a plan does. Allowing goes parents
+    first, because a subcategory may not admit a group its parent does not;
+    taking it away goes children first, for the same reason. Anything refused is
+    tried once more in the other order.
+    """
+    order = list(reversed(category_ids)) if allow else list(category_ids)
+    report = {"changed": 0, "already": 0, "public": 0, "problems": []}
+
+    def attempt(category_id):
+        try:
+            category = poster.category(category_id)
+        except Exception as exc:  # provider errors differ; none is fatal here
+            return f"category {category_id}: {exc}"
+        name = (category.get("name") or str(category_id)).strip()
+        now = current_permissions(category)
+        if not now or EVERYONE in now:
+            report["public"] += 1
+            return None
+        if allow:
+            wanted = {**now, group: CREATE}
+        else:
+            wanted = {key: level for key, level in now.items() if key != group}
+        if wanted == now:
+            report["already"] += 1
+            return None
+        try:
+            poster.set_category_permissions(category_id, wanted)
+        except Exception as exc:
+            return f"{name}: {exc}"
+        report["changed"] += 1
+        return None
+
+    refused = [category_id for category_id in order
+               if attempt(category_id) is not None]
+    for category_id in reversed(refused):
+        problem = attempt(category_id)
+        if problem is not None:
+            report["problems"].append(problem)
+    return report
+
+
 def unknown_member_kinds(settings):
     """Lines in the mapping whose left-hand side is not a kind of member.
 

@@ -22,6 +22,7 @@ from aeronautics_members.services.forum_permissions import (
     current_permissions,
     describe,
     groups_wanted,
+    let_authors_post,
     live_tree,
     owned_roots,
     permission_plan,
@@ -798,3 +799,91 @@ class TestTheOrderDiscourseInsistsOn:
         report = apply_permissions(forum, self._plan(forum))
         assert len(report["problems"]) == 1
         assert "Angewandte Thermodynamik" in report["problems"][0]
+
+
+class TestTheAuthorsMayPostWhileTheImportRuns:
+    """Found for real: with the categories restricted first, every post refused.
+
+    The archive is posted as its authors, and Discourse checks each of them
+    against the category like anybody typing. They are the old forum's people
+    -- in ``old_forum``, not in ``students`` -- so they may post only for as
+    long as the import runs.
+    """
+
+    class BothWays(FakeForum):
+        """Discourse's rule, checked from the child's side as well as the parent's."""
+
+        def set_category_permissions(self, category_id, permissions):
+            row = self.rows[int(category_id)]
+            parent = self.rows.get(row["parent_category_id"])
+            if parent is not None:
+                parents = {e["group_name"] for e in parent["group_permissions"]}
+                if parents and set(permissions) - parents:
+                    raise RuntimeError("(422): must also be allowed on the parent")
+            for child in self.rows.values():
+                if child["parent_category_id"] == int(category_id):
+                    admitted = {e["group_name"] for e in child["group_permissions"]}
+                    if admitted - set(permissions):
+                        raise RuntimeError("(422): a subcategory admits more")
+            super().set_category_permissions(category_id, permissions)
+
+    def _restricted(self):
+        forum = self.BothWays()
+        plan, _ = permission_plan(
+            forum.categories(), owned_roots(WORKSHEET),
+            lecture_groups=["students"], staff_groups=["committee"],
+        )
+        apply_permissions(forum, plan)
+        return forum, plan
+
+    def _grants(self, forum, category_id):
+        return current_permissions(forum.category(category_id))
+
+    def test_they_may_post_everywhere_the_import_writes(self):
+        forum, plan = self._restricted()
+
+        report = let_authors_post(forum, list(plan), "old_forum", allow=True)
+
+        assert report["problems"] == []
+        for category_id in plan:
+            assert self._grants(forum, category_id)["old_forum"] == CREATE
+
+    def test_and_afterwards_exactly_what_was_there_before(self):
+        forum, plan = self._restricted()
+        before = {category_id: self._grants(forum, category_id) for category_id in plan}
+
+        let_authors_post(forum, list(plan), "old_forum", allow=True)
+        report = let_authors_post(forum, list(plan), "old_forum", allow=False)
+
+        assert report["problems"] == []
+        after = {category_id: self._grants(forum, category_id) for category_id in plan}
+        assert after == before
+
+    def test_something_decided_on_the_forum_survives_the_round_trip(self):
+        """Added to and taken from what is there -- never replaced by the plan."""
+        forum, plan = self._restricted()
+        # Somebody on the forum let students add to this part of the archive.
+        chosen = {"students": CREATE, "committee": CREATE}
+        forum.set_category_permissions(31, chosen)
+
+        let_authors_post(forum, list(plan), "old_forum", allow=True)
+        let_authors_post(forum, list(plan), "old_forum", allow=False)
+
+        assert self._grants(forum, 31) == chosen
+
+    def test_a_category_still_public_is_not_restricted_to_the_authors(self):
+        """Adding a group to an empty set would make it that group's alone."""
+        forum = self.BothWays()
+
+        report = let_authors_post(forum, [11, 10], "old_forum", allow=True)
+
+        assert forum.written == []
+        assert report["public"] == 2
+
+    def test_categories_outside_the_import_are_never_touched(self):
+        forum, plan = self._restricted()
+        forum.written.clear()
+
+        let_authors_post(forum, list(plan), "old_forum", allow=True)
+
+        assert {category_id for category_id, _ in forum.written} <= set(plan)

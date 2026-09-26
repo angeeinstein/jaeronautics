@@ -340,7 +340,10 @@ class ContentPoster:
                     f"API -> Keys), and revoke it afterwards -- or there is "
                     f"nobody of that name on the forum, which is what happens to "
                     f"a username past Discourse's twenty-character limit: the "
-                    f"account exists under a name it shortened."
+                    f"account exists under a name it shortened -- or they may "
+                    f"not post in that category, which Discourse reports the "
+                    f"same way. The import lets old_forum post while it runs; "
+                    f"a category restricted since then by hand does not."
                 ) from exc
             if exc.code == 429 and rate_limit_retries > 0:
                 # Discourse says exactly how long to wait, so waiting is the

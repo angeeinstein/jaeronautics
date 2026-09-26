@@ -234,6 +234,7 @@ from .services.forum_import import (  # noqa: E402
     load_people,
 )
 from .services.forum_profiles import (  # noqa: E402
+    ARCHIVE_GROUP,
     USERNAME_LENGTH_SETTING,
     YEAR_GROUP_FIELD_NAME,
     avatar_setting_state,
@@ -271,6 +272,7 @@ from .services.forum_permissions import (  # noqa: E402
     apply_permissions,
     describe,
     groups_wanted,
+    let_authors_post,
     owned_roots,
     permission_plan,
     what_is_not_set_up,
@@ -2817,6 +2819,8 @@ def create_app(config_overrides=None):
             # hours of a run has been public.
             gatekeeper = _category_gatekeeper(
                 service, owned_roots(worksheet), dry_run=dry_run,
+                authors_group=None if categories_only else ARCHIVE_GROUP,
+                mapping_file=mapping,
             )
             plan = mapping_plan(placement["paths"], tables["threads"])
             titles = titles_for(
@@ -2944,6 +2948,8 @@ def create_app(config_overrides=None):
             )
         finally:
             record.close()
+            if gatekeeper is not None:
+                gatekeeper.close()
             if changes:
                 click.echo("\nPutting the settings back:")
                 try:
@@ -3497,6 +3503,7 @@ def create_app(config_overrides=None):
         report = apply_permissions(
             poster, plan, dry_run=dry_run, enforce=enforce, on_category=say,
         )
+        report["category_ids"] = list(plan)
         click.echo(
             f"permissions: {report['categories']} categories, "
             f"{report['set']} set, {report['already']} already right"
@@ -3516,18 +3523,62 @@ def create_app(config_overrides=None):
             click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
         return report
 
-    def _category_gatekeeper(service, roots, *, dry_run=False):
+    def _category_gatekeeper(service, roots, *, dry_run=False, authors_group=None,
+                             mapping_file=None):
         """What the import calls once the categories are there.
 
         Bound here rather than written into ``migrate_board`` so that the board
         importer stays a thing that moves posts, and who may read them stays a
         question answered in one place.
+
+        With ``authors_group``, that group may also post in every category for
+        as long as the run lasts, and ``close()`` takes it away again. The
+        authors are posted as, and Discourse checks each of them against the
+        category: the first run with the categories restricted before posting
+        had every post refused, because the old forum's people are not in the
+        groups the material is granted to -- and should not be.
         """
+        opened = {}
+
         def restrict(poster):
             _make_the_groups(service, dry_run=dry_run)
-            _restrict_the_categories(poster, service, roots, dry_run=dry_run)
+            report = _restrict_the_categories(poster, service, roots, dry_run=dry_run)
+            if dry_run or not authors_group or not report:
+                return
+            ids = report.get("category_ids") or []
+            result = let_authors_post(poster, ids, authors_group, allow=True)
+            opened.update(poster=poster, ids=ids)
+            click.echo(
+                f"authors: {authors_group} may post in {len(ids)} categories "
+                f"while this runs, so the archive can be posted as the people "
+                f"who wrote it. It is taken away again at the end."
+            )
+            for problem in result["problems"]:
+                click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
 
+        def close():
+            if not opened:
+                return
+            result = let_authors_post(
+                opened["poster"], opened["ids"], authors_group, allow=False,
+            )
+            opened.clear()
+            if result["problems"]:
+                click.echo(click.style(
+                    f"COULD NOT TAKE POSTING AWAY FROM {authors_group} on "
+                    f"{len(result['problems'])} categories. Put them back with:\n"
+                    f"  flask forum-permissions {mapping_file or 'categories.json'} "
+                    f"--enforce", fg="red",
+                ), err=True)
+                for problem in result["problems"]:
+                    click.echo(click.style(f"  ! {problem}", fg="red"), err=True)
+            else:
+                click.echo(
+                    f"\nauthors: {authors_group} may no longer post in the "
+                    f"imported categories ({result['changed']} changed back)."
+                )
 
+        restrict.close = close
         return restrict
 
     def _mind_the_avatar_setting(client, *, dry_run):

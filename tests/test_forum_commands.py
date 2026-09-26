@@ -340,6 +340,83 @@ class TestTheCommandsCanBeRun:
         assert made["Bachelor 1. Semester"] is None, "the semester is the parent"
         assert poster.calls == [], "and nothing was posted"
 
+    def test_the_authors_may_post_for_exactly_as_long_as_the_run(
+            self, app, dump, tmp_path, monkeypatch):
+        """Found for real: restricted first, and then every post was refused.
+
+        The old forum's people are not in the groups the material is granted
+        to, and Discourse checks each author against the category. So they may
+        post while the run lasts -- after the categories are closed, before the
+        first post -- and not a moment after it.
+        """
+        import json as _json
+        from test_forum_board_import import BoardPoster
+
+        mapping = tmp_path / "categories.json"
+        mapping.write_text(_json.dumps({"mapping": [{
+            "old_fid": "3",
+            "old_path": "Studium / 01 Semester / 01-06 Technisches Programmieren",
+            "target": "Bachelor 1. Semester / Technisches Programmieren 1",
+            "decided": True,
+        }]}), encoding="utf-8")
+
+        poster = BoardPoster()
+        poster._key_complaint = lambda: None
+        poster.find_author = None
+        permissions, timeline = {}, []
+
+        def category(category_id):
+            return {"id": category_id, "name": str(category_id),
+                    "group_permissions": [
+                        {"group_name": name, "permission_type": level}
+                        for name, level in permissions.get(int(category_id), {}).items()
+                    ]}
+
+        def set_permissions(category_id, grants):
+            permissions[int(category_id)] = dict(grants)
+            timeline.append(("authors" if "old_forum" in grants else "closed",
+                             int(category_id)))
+
+        poster.category = category
+        poster.set_category_permissions = set_permissions
+        posting = poster.create_post
+
+        def create_post(**kwargs):
+            timeline.append(("post", None))
+            return posting(**kwargs)
+
+        poster.create_post = create_post
+        settings = {
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+            "forum_lecture_groups": "students",
+        }
+        monkeypatch.setattr("aeronautics_members.app.ContentPoster",
+                            lambda settings: poster)
+        monkeypatch.setattr("aeronautics_members.app.get_forum_service",
+                            lambda: FakeForumService(poster, settings))
+
+        with app.app_context():
+            result = run(app, "import-forum-content", [
+                str(dump), "--uploads", str(tmp_path),
+                "--ledger", str(tmp_path / "l.jsonl"),
+                "--mapping", str(mapping), "--allow-missing-attachments",
+                "--adjust-settings",
+                "--settings-file", str(tmp_path / "before.json"),
+            ])
+
+        assert result.exit_code == 0, result.output
+        kinds = [kind for kind, _ in timeline]
+        assert "post" in kinds, result.output
+        first_post, last_post = kinds.index("post"), len(kinds) - 1 - kinds[::-1].index("post")
+        assert "authors" in kinds[:first_post], "allowed before anything is posted"
+        assert kinds[0] == "closed", "and only once the categories are closed"
+        assert all(kind == "closed" for kind in kinds[last_post + 1:])
+        assert kinds[last_post + 1:], "taken away again afterwards"
+        assert all("old_forum" not in grants for grants in permissions.values())
+        assert "may no longer post" in result.output
+
     def _a_stale_ledger(self, tmp_path):
         path = tmp_path / "l.jsonl"
         path.write_text(

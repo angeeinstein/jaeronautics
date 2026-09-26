@@ -137,6 +137,24 @@ Anything refused anyway is tried once more in the opposite order, because a
 *widening* needs the reverse: there the parent has to be opened before the child
 is allowed to be.
 
+## 7b. The authors may post while the import runs, and only then
+
+The archive is posted *as* its authors, and Discourse checks each of them
+against the category exactly as it would somebody typing. They are the old
+forum's people -- in `old_forum` and their year group -- and not in `students`
+or `alumni`, and they should not be: `old_forum` is for ever, and a lapsed
+member would keep the archive through it. So with the categories closed before
+the first post (§7), every post was refused. The refusal is the same
+`invalid_access` a key bound to one user gets, which is why the first diagnosis
+was the key.
+
+So the import adds `old_forum` to every category it owns once they are closed,
+and takes it away again when it finishes, whichever way it finishes. It is
+added to and removed from what each category has *now*, so a permission set
+somebody chose on the forum comes back exactly as it was. A run that is killed
+outright leaves `old_forum` on; `forum-permissions categories.json --enforce`
+takes it off again, along with anything else that differs from the plan.
+
 ## 8. The command closes what is open; it does not impose an opinion
 
 `forum-permissions` writes only to categories that are still public — no
