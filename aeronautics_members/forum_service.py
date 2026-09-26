@@ -1186,6 +1186,27 @@ class ForumService:
             .order_by(ForumAvatarSubmission.uploaded_at.desc())
         ).scalars().first()
 
+    @staticmethod
+    def get_reclaimed_avatar(member):
+        """The old forum's picture of somebody who reclaimed that account, or None.
+
+        It counts as an approved photograph. Nobody uploaded it here and there
+        is nothing to review: it is the face the association already showed on
+        the old forum, it is on their forum profile right now, and asking a
+        returning student to upload one again would be the first thing they are
+        told. Somebody who reclaims an account with no picture on it uploads
+        one and has it approved like anybody else.
+
+        One answer for the member's page and for the forum's groups. They were
+        once two, and a returning student was told "your forum access is ready"
+        while the forum kept them in onboarding with nothing to read.
+        """
+        user = getattr(member, "user", None)
+        profile = getattr(user, "imported_forum_profile", None)
+        if profile is None or profile.claimed_at is None:
+            return None
+        return profile.avatar_path or None
+
     def get_pending_submission(self, member):
         if member is None:
             return None
@@ -1220,6 +1241,8 @@ class ForumService:
         if member.user.is_disabled:
             return FORUM_STATE_INACTIVE
         if self.get_current_approved_submission(member) is not None:
+            return FORUM_STATE_ACTIVE
+        if self.get_reclaimed_avatar(member) is not None:
             return FORUM_STATE_ACTIVE
         return FORUM_STATE_ONBOARDING
 

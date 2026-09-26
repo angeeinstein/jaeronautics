@@ -1150,3 +1150,49 @@ class TestWhatAReconnectedMemberIsAskedToDo:
         member = _make_paid(_returning())
 
         assert self._context(member)["status_key"] == "needs_avatar"
+
+    def _forum_state(self, member):
+        from aeronautics_members.services.forum import get_forum_service
+
+        return get_forum_service().get_desired_state(member)
+
+    def test_and_the_forum_agrees_with_the_page(self, app, tmp_path):
+        """Found for real: told "your forum access is ready", kept in onboarding.
+
+        The page counted the old picture and the forum's groups did not, so a
+        returning student who had paid was in members-onboarding with nothing
+        to read, and nothing in the approvals queue to release them.
+        """
+        from aeronautics_members.forum_service import FORUM_STATE_ACTIVE
+
+        member = self._reconnected_with_an_avatar(tmp_path)
+
+        assert self._context(member)["status_key"] == "active"
+        assert self._forum_state(member) == FORUM_STATE_ACTIVE
+
+    def test_without_a_picture_the_forum_still_waits_for_one(self, app, tmp_path):
+        from aeronautics_members.forum_service import FORUM_STATE_ONBOARDING
+
+        member = self._reconnected_with_an_avatar(tmp_path, with_avatar=False)
+
+        assert self._forum_state(member) == FORUM_STATE_ONBOARDING
+
+    def test_an_unclaimed_archive_does_not_let_anybody_in(self, app, tmp_path):
+        from aeronautics_members.forum_service import FORUM_STATE_ONBOARDING
+
+        profile = _archived()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        member = _make_paid(_returning())
+
+        assert self._forum_state(member) == FORUM_STATE_ONBOARDING
+
+    def test_the_picture_does_not_outlast_the_membership(self, app, tmp_path):
+        """Counting as approved is about the photograph, not about paying."""
+        from aeronautics_members.forum_service import FORUM_STATE_INACTIVE
+
+        from datetime import datetime, timezone
+
+        member = self._reconnected_with_an_avatar(tmp_path)
+        member.user.disabled_at = datetime.now(timezone.utc)
+
+        assert self._forum_state(member) == FORUM_STATE_INACTIVE

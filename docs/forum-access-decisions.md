@@ -29,7 +29,7 @@ whichever one it means.
 
 | Axis | Group | Who is in it |
 |---|---|---|
-| Standing | `members` | active membership **and** an approved photograph |
+| Standing | `members` | active membership **and** an approved photograph — or the old forum's photo on a reclaimed account (§12) |
 | | `members-onboarding` | active membership, photograph not approved yet |
 | | `membership-inactive` | ran out, never paid, or account switched off |
 | Kind | `forum_category_groups` | `Member.member_category`, **only while active** |
@@ -200,6 +200,23 @@ meant. `forum-permissions --dry-run` names them and says what goes wrong for
 each, so "have I forgotten anything" is answered by the tool rather than by a
 list somebody has to keep.
 
+## 12. A reclaimed account's old photo counts as approved
+
+Decided 2026-09-26, after the first real reclaim: a returning student paid and
+stayed in `members-onboarding` with nothing to approve. Their old forum picture
+is the face the association already showed, it is on their forum profile before
+they ever sign in, and they uploaded nothing new -- so there is nothing to
+review, and asking them to upload again would be the first thing they are told.
+
+So a reclaimed account that brought a picture with it is treated exactly like
+one with an approved upload. The member's page and the forum's groups ask the
+same function (`ForumService.get_reclaimed_avatar`); they were two checks once,
+and the page said "your forum access is ready" while the forum disagreed.
+
+Somebody who reclaims an account with **no** picture -- 63 of the 740 --
+uploads one and has it approved like anybody new. They may always replace the
+old picture; a new upload goes through approval as usual.
+
 ## What is deliberately still open
 
 - **The categories that do not exist yet**: Membership, Getting started, General
@@ -207,7 +224,8 @@ list somebody has to keep.
   touch them.
 - **Whether a paid member with no approved photograph should be able to read.**
   Today they cannot: the kind group arrives only at `active`, which requires the
-  photograph. Defensible, and a real gate on 250 people in October.
+  photograph (or a reclaimed old one, §12). Defensible, and a real gate on 250
+  people in October.
 - **`login_required`**, which is what makes the site itself private. Category
   permissions are not the same thing.
 - **Whether the committee and administrators should differ from each other.**

@@ -1280,16 +1280,7 @@ def build_forum_context(member):
     # published to their profile, and theirs since long before they signed up
     # here. It is not a ForumAvatarSubmission -- nobody submitted it for review
     # -- so nothing else in this function would notice it.
-    reclaimed_profile = (
-        member.user.imported_forum_profile
-        if member and member.user is not None
-        else None
-    )
-    reclaimed_avatar = (
-        reclaimed_profile.avatar_path
-        if reclaimed_profile is not None and reclaimed_profile.claimed_at is not None
-        else None
-    )
+    reclaimed_avatar = service.get_reclaimed_avatar(member) if member else None
 
     status_key = "disabled"
     status_message = _("The forum integration is not enabled yet.")
