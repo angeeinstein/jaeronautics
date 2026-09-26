@@ -177,6 +177,10 @@ def bbcode_to_markdown(text):
 # Talking to Discourse
 # ---------------------------------------------------------------------------
 
+class KeyCannotActAs(ForumProviderError):
+    """The forum would not let this key act as the person it was asked to."""
+
+
 class ContentPoster:
     """The few API calls this needs, as the person who wrote each post."""
 
@@ -232,6 +236,26 @@ class ContentPoster:
                 "The forum knows %s as %s", username, found
             )
         return found
+
+    def may_act_as(self, username):
+        """Whether this key may act as ``username``, who has to exist.
+
+        True or False when the forum says; None when it answered something
+        else, which is not evidence either way. Posting the archive is acting as
+        seven hundred different people, and a key bound to one user fails every
+        one of them -- worth finding out from one harmless read, before a single
+        setting has been changed.
+        """
+        try:
+            payload = self._call("GET", "/session/current.json", as_username=username)
+        except KeyCannotActAs:
+            return False
+        except ForumProviderError:
+            return None
+        user = (payload or {}).get("current_user") if isinstance(payload, dict) else None
+        if not isinstance(user, dict):
+            return None
+        return (user.get("username") or "").lower() == username.lower()
 
     def username_for_external_id(self, external_id):
         """The forum's own name for the account carrying this external id.
@@ -309,7 +333,7 @@ class ContentPoster:
                         body=body, content_type=content_type,
                         rate_limit_retries=rate_limit_retries,
                     )
-                raise ForumProviderError(
+                raise KeyCannotActAs(
                     f"Discourse will not let this API key act as {as_username}. "
                     f"Either the key is bound to one user -- posting on people's "
                     f"behalf needs one whose user level is 'All Users' (Admin -> "

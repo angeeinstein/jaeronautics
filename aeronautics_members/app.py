@@ -1948,6 +1948,46 @@ def create_app(config_overrides=None):
 
         return find
 
+    def _check_the_key_can_post_as_others(poster, *, given):
+        """Stop before anything changes if every post is going to be refused.
+
+        The archive is posted as its authors. A key bound to one user -- which
+        is exactly what the portal's own key should be -- can act as nobody
+        else, and the first real run with one changed 23 settings, made 107
+        categories and then had every post refused. Asked of somebody the
+        forum is known to have, so that "no such person" cannot be mistaken
+        for "not allowed".
+        """
+        profile = db.session.execute(
+            db.select(ImportedForumProfile)
+            .where(ImportedForumProfile.user_id.is_not(None))
+            .order_by(ImportedForumProfile.id)
+        ).scalars().first()
+        if profile is None:
+            return
+        try:
+            somebody = poster.username_for_external_id(profile.user_id)
+        except ForumProviderError:
+            return
+        if not somebody or somebody.lower() == poster.admin_username.lower():
+            return
+        if poster.may_act_as(somebody) is not False:
+            return
+        whose = (
+            "the key given in DISCOURSE_MIGRATION_API_KEY"
+            if given else
+            "the portal's own key, because no DISCOURSE_MIGRATION_API_KEY was "
+            "given -- and that one is bound to a single user on purpose"
+        )
+        raise click.ClickException(
+            f"This key may not post as anybody but {poster.admin_username}: "
+            f"asked to act as {somebody}, who is on the forum, it was refused. "
+            f"It is {whose}. Posting the archive needs a key whose User Level "
+            f"is 'All Users' (Discourse: Admin -> API -> Keys -> New Key), "
+            f"passed as DISCOURSE_MIGRATION_API_KEY and revoked afterwards. "
+            f"Nothing has been changed."
+        )
+
     def _warn_about_the_key(poster):
         """Say so early if the key is the wrong shape.
 
@@ -2747,6 +2787,8 @@ def create_app(config_overrides=None):
         # So that a post whose author's name was too long for Discourse is
         # retried under the name Discourse gave them, rather than lost.
         poster.find_author = _author_finder(poster)
+        if not categories_only:
+            _check_the_key_can_post_as_others(poster, given=bool(api_key))
 
         # Three levels only where the forum says it can do three. Where it
         # cannot, the setting is absent rather than false, and the refusal

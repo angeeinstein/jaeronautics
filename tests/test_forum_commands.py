@@ -418,3 +418,129 @@ class TestTheCommandsCanBeRun:
 
         assert result.exit_code == 0
         assert result.output.strip()
+
+
+class TestAKeyThatCanOnlyBeItself:
+    """Found for real: 23 settings changed, 107 categories made, every post refused.
+
+    The portal's own key is bound to ``system`` on purpose. Given no
+    DISCOURSE_MIGRATION_API_KEY the import falls back to it, and that key can
+    act as nobody else -- which the archive, posted as its authors, needs on
+    every single post. One read against somebody who exists says so first.
+    """
+
+    def _forum(self, monkeypatch, *, may_act_as):
+        from test_forum_board_import import BoardPoster
+
+        poster = BoardPoster()
+        poster._key_complaint = lambda: None
+        poster.admin_username = "system"
+        poster.asked_about = []
+        poster.username_for_external_id = lambda external_id: "HoferT_M13"
+
+        def may(username):
+            poster.asked_about.append(username)
+            return may_act_as
+
+        poster.may_act_as = may
+        monkeypatch.setattr("aeronautics_members.app.ContentPoster",
+                            lambda settings: poster)
+        monkeypatch.setattr("aeronautics_members.app.get_forum_service",
+                            lambda: FakeForumService(poster))
+        return poster
+
+    def _somebody_imported(self):
+        from conftest import db
+        from aeronautics_members.services.forum_import import import_forum_people
+
+        import_forum_people([{
+            "source_user_id": "7", "source_username": "HoferT_M13",
+            "source_email": "t.hofer@edu.fh-joanneum.at",
+            "year_group": "MAV13", "post_count": 3,
+        }])
+        db.session.commit()
+
+    def _run(self, app, dump, tmp_path, env=None):
+        return CliRunner().invoke(app.cli.commands["import-forum-content"], [
+            str(dump), "--uploads", str(tmp_path),
+            "--ledger", str(tmp_path / "ledger.jsonl"),
+        ], env=env or {})
+
+    def test_it_stops_before_anything_is_changed(
+            self, app, dump, tmp_path, monkeypatch):
+        poster = self._forum(monkeypatch, may_act_as=False)
+        with app.app_context():
+            self._somebody_imported()
+            result = self._run(app, dump, tmp_path)
+
+        assert result.exit_code != 0
+        assert "All Users" in result.output
+        assert "Nothing has been changed" in result.output
+        assert poster.asked_about == ["HoferT_M13"], "somebody who exists"
+        assert poster.created_categories == []
+
+    def test_without_the_variable_it_says_whose_key_that_was(
+            self, app, dump, tmp_path, monkeypatch):
+        """The likely mistake: the variable never reached the command."""
+        self._forum(monkeypatch, may_act_as=False)
+        with app.app_context():
+            self._somebody_imported()
+            result = self._run(app, dump, tmp_path)
+
+        assert "portal's own key" in result.output
+
+    def test_a_key_that_can_goes_on(self, app, dump, tmp_path, monkeypatch):
+        self._forum(monkeypatch, may_act_as=True)
+        with app.app_context():
+            self._somebody_imported()
+            result = self._run(app, dump, tmp_path)
+
+        assert "All Users" not in result.output
+        assert "needs to be" in result.output, "it went on to the settings"
+
+    def test_a_forum_that_will_not_say_is_not_a_reason_to_stop(
+            self, app, dump, tmp_path, monkeypatch):
+        """None is not evidence; the run finds out the old way."""
+        self._forum(monkeypatch, may_act_as=None)
+        with app.app_context():
+            self._somebody_imported()
+            result = self._run(app, dump, tmp_path)
+
+        assert "All Users" not in result.output
+        assert "needs to be" in result.output
+
+
+class TestAskingWhetherAKeyMayActAsSomebody:
+    def _poster(self, monkeypatch, outcome):
+        from aeronautics_members.services.forum_content import ContentPoster
+
+        poster = ContentPoster({
+            "forum_base_url": "https://forum.test",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+        })
+
+        def call(method, path, **kwargs):
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        monkeypatch.setattr(poster, "_call", call)
+        return poster
+
+    def test_a_refusal_is_no(self, app, monkeypatch):
+        from aeronautics_members.services.forum_content import KeyCannotActAs
+
+        poster = self._poster(monkeypatch, KeyCannotActAs("bound"))
+        assert poster.may_act_as("HoferT_M13") is False
+
+    def test_being_answered_as_them_is_yes(self, app, monkeypatch):
+        poster = self._poster(
+            monkeypatch, {"current_user": {"username": "HoferT_M13"}})
+        assert poster.may_act_as("HoferT_M13") is True
+
+    def test_anything_else_is_not_knowing(self, app, monkeypatch):
+        from aeronautics_members.forum_service import ForumProviderError
+
+        poster = self._poster(monkeypatch, ForumProviderError("500"))
+        assert poster.may_act_as("HoferT_M13") is None
