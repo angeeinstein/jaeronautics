@@ -97,10 +97,10 @@ FORUM_SETTING_DEFAULTS = {
     "discourse_connect_secret": "",
     # Named for what is true of the people in them, because these names end up
     # on category permissions in Discourse and somebody reading one there has
-    # only the name to go on. "member-onboarding" read as "has not paid yet"
-    # and meant "has paid, and has not had a photograph approved yet", which
-    # are opposite answers to the only question the name gets asked.
-    "forum_onboarding_group": "members-awaiting-photo",
+    # only the name to go on. Paid, photograph not approved yet: they are
+    # members, part-way through onboarding -- chosen for the real forum on
+    # 2026-09-26, over "members-awaiting-photo".
+    "forum_onboarding_group": "members-onboarding",
     "forum_member_group": "members",
     # Covers a membership that ran out, one that was never paid for, and an
     # account that was switched off -- so not "expired", which is only the

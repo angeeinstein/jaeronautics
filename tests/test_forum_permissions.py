@@ -688,7 +688,7 @@ class TestTheBoxesOnTheSettingsPage:
             "forum_base_url": "https://forum.example.org",
             "discourse_api_username": "system",
             "forum_member_group": "members",
-            "forum_onboarding_group": "members-awaiting-photo",
+            "forum_onboarding_group": "members-onboarding",
             "forum_inactive_group": "membership-inactive",
             "forum_lecture_groups": "students",
             "forum_onboarding_path": "/",

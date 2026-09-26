@@ -30,7 +30,7 @@ whichever one it means.
 | Axis | Group | Who is in it |
 |---|---|---|
 | Standing | `members` | active membership **and** an approved photograph |
-| | `members-awaiting-photo` | active membership, photograph not approved yet |
+| | `members-onboarding` | active membership, photograph not approved yet |
 | | `membership-inactive` | ran out, never paid, or account switched off |
 | Kind | `forum_category_groups` | `Member.member_category`, **only while active** |
 
@@ -51,9 +51,11 @@ is how somebody grants the wrong one.
 
 The standing groups are named for what is true of the people in them, because
 those names end up on category permissions where the reader has nothing but the
-name to go on. `member-onboarding` was renamed because it read as "has not paid"
-and meant "has paid, photograph not approved yet" — opposite answers to the only
-question the name gets asked.
+name to go on. The onboarding group is `members-onboarding`, plural: they *are*
+members, who have paid and are part-way through onboarding. The singular
+`member-onboarding` read as "not a member yet", which is the opposite answer to
+the only question the name gets asked. `members-awaiting-photo` was considered
+and not chosen (2026-09-26).
 
 ## 3. The lecture material is **not** granted to `members`
 

@@ -189,16 +189,16 @@ axis drives its own group, and a category grants whichever it means.
 | Axis | Group | Who is in it |
 |---|---|---|
 | Standing | `members` | active membership **and** an approved photograph |
-| | `members-awaiting-photo` | active membership, photograph not approved yet |
+| | `members-onboarding` | active membership, photograph not approved yet |
 | | `membership-inactive` | ran out, never paid, or the account was switched off |
 | Kind of member | `forum_category_groups` | `Member.member_category`, **while active** |
 | Runs the place | `forum_staff_group` | a portal role |
 
 The first three are named for what is true of the people in them, because
 those names end up on category permissions in Discourse and whoever reads one
-there has only the name to go on. In particular `members-awaiting-photo` is
+there has only the name to go on. In particular `members-onboarding` is
 **not** "has not paid": it is "has paid, and the photograph is not approved
-yet", which is the opposite answer to the question the old name got asked.
+yet" -- members, part-way through onboarding.
 `membership-inactive` covers all three ways of not being current, so it is not
 called "expired", which is only the commonest of them.
 
@@ -347,7 +347,7 @@ from one group inside a shared category — only whole categories. So:
 | Category | Granted to | What is in it |
 |---|---|---|
 | About the association | everyone, or all logged-in groups | who this is, what the forum is for |
-| Getting started | `members-awaiting-photo` | how to upload a photograph and how long approval takes |
+| Getting started | `members-onboarding` | how to upload a photograph and how long approval takes |
 | Membership | `membership-inactive` | how to renew, who to ask |
 
 Starting with **one** category granted to both of the latter two groups is also
