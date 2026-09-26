@@ -131,7 +131,28 @@ and `--uploads` can point at a folder holding only those.
 
 ## 2. Make a migration API key
 
-In Discourse: **Admin → API → Keys → New Key**.
+**There are two keys, and they are not the same kind.**
+
+| Key | User Level | Where it goes | Lifetime |
+|---|---|---|---|
+| The portal's own | **Single User: `system`** | Admin → Settings → Forum → Discourse API Key | permanent |
+| The migration key | **All Users** | `DISCOURSE_MIGRATION_API_KEY`, from a file | revoked after the import |
+
+The portal's key is the one it uses every day: Connect syncs, groups, avatars.
+Every one of those is an admin call made as the name in *Discourse API
+Username*, so bind the key to exactly that user — `system` — and it can do
+nothing else. That is the key to keep, and the one to set up on any new
+install, Azure included.
+
+The migration key is the exception. Posting the archive means posting *as*
+each of its original authors, which a key bound to `system` cannot do. So it
+is made for the import, handed to the commands through the environment rather
+than stored in the portal, and revoked when the import is done. Every command
+that takes it falls back to the portal's key when it is not given, which is
+right for `forum-permissions` and `publish-forum-profiles` — both are admin
+calls — and wrong only for `import-forum-content`.
+
+The migration key, then. In Discourse: **Admin → API → Keys → New Key**.
 
 - Description: something you will recognise, e.g. `forum migration`
 - User Level: **All Users**

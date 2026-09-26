@@ -288,6 +288,20 @@ cp /var/www/jaeronautics/.env /root/portal-env-$(date +%F)
 
 That file is the same kind of password list, for the same reasons.
 
+**Stripe secrets typed at the installer's prompts.** The installer writes the
+Stripe secret key and webhook secret into `.env`, and the portal reads the
+settings page first and `.env` only when the page is empty. A portal whose
+Stripe keys were only ever given to the installer therefore exports **no**
+Stripe secrets, even with `--with-secrets`, and a fresh install with those
+prompts left blank cannot take payments. Enter them on the Billing settings
+page instead; from then on they travel with the file. Found on the first
+rebuild, 2026-09-25.
+
+**The Discourse API key should not travel either, in the end.** The portal's
+own key is bound to `system` and permanent — see §2 of
+[forum-content-import.md](forum-content-import.md) — and a new machine is a
+good moment to make a new one rather than carry the old one across.
+
 **Members, payments and the audit log.** Those are the database, and the
 database dump is how they travel.
 
