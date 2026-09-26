@@ -26,10 +26,12 @@ import secrets
 from flask import current_app
 
 from ..db_models import ImportedForumProfile, db
-from ..forum_service import (
+from ..forum_service import (  # noqa: F401 -- re-exported for the import commands
     AVATAR_OVERRIDE_SETTINGS,
+    YEAR_GROUP_FIELD_NAME,
     ForumProviderError,
     _portal_owned_rows,
+    group_name_for_year_group,
 )
 from .forum import FORUM_USERNAME_LENGTH_LIMIT
 from ..security_utils import build_public_url
@@ -40,17 +42,8 @@ from .clock import get_now_utc
 # from one -- without naming thirty-three groups.
 ARCHIVE_GROUP = "old_forum"
 
-# The custom field the year group is shown in on a forum profile.
-YEAR_GROUP_FIELD_NAME = "Year group"
-
-# Discourse group names take letters, numbers and underscores. Year groups are
-# already of the form LAV23, but the export holds whatever people typed.
-def group_name_for_year_group(year_group):
-    cleaned = "".join(
-        character if character.isalnum() else "_"
-        for character in (year_group or "").strip()
-    ).strip("_")
-    return cleaned.lower() or None
+# The year-group field and the cohort group names are defined in forum_service,
+# because the member sync fills them too -- not only this import.
 
 
 def _avatar_url_for(profile, *, dry_run=False):

@@ -386,6 +386,8 @@ class TestSortingPeopleByWhatKindOfMemberTheyAre:
 
         member = make_member(email=f"{category}@example.com")
         member.member_category = category
+        # About kinds of member, so no cohort group joining the list.
+        member.year_group = None
         db.session.commit()
         provider = DiscourseConnectProvider(settings={
             "forum_member_group": "members",

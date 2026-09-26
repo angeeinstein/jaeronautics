@@ -263,6 +263,25 @@ starts at trust level 0, and level 0 may not attach files
 first day. `default trust level = 1` on the forum; they are verified, paying
 members with an approved photograph.
 
+## 14. Year groups reach the forum for members too, and cohort groups are for good
+
+Decided 2026-09-26. Only the 740 imported people had "Year group" on their
+forum profile and were in their cohort group (`lav24`, `mav13`, …); a new LAV25
+student showed "Year group —" and `@lav25` never reached them. Every sync now
+fills the profile field and adds the cohort group for members as well — made on
+the forum first if it is new, since `add_groups` drops a group that does not
+exist.
+
+**A cohort group is kept for good**, like `old_forum`: it says who somebody is,
+not what they may see, so it does not end with the membership. That is safe
+only because of the rule that goes with it: **no category is ever granted to a
+cohort group.** Access comes from `students`, `alumni` and the rest, which do
+end with the membership.
+
+A year group corrected in the portal adds the new cohort group but does not
+take the old one away; that is a rare enough mistake to fix by hand on the
+forum.
+
 ## What is deliberately still open
 
 - **The categories that do not exist yet**: Membership, Getting started, General

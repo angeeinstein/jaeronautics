@@ -41,6 +41,7 @@ reasons are in [forum-access-decisions.md](forum-access-decisions.md) and
 | `auth overrides name` | `publish-forum-profiles` | **on** — otherwise a reclaimed account keeps its old username as its name |
 | `max username length` | `publish-forum-profiles` | **raised to 30** — surname, initial and cohort need it |
 | The groups (`members`, `students`, cohorts, `old_forum`, …) | `forum-permissions`, `publish-forum-profiles` | made; membership follows the portal |
+| The year-group profile field and each new cohort group (`lav26`, …) | every member sync | made when first needed; never grant a category to a cohort group |
 | Permissions on the imported categories | `import-forum-content --mapping`, `forum-permissions` | members only; archive read-only |
 | `authorized extensions` | `import-forum-content` | **widened** — PDFs, archives, office files |
 | The 22 posting limits | `import-forum-content --adjust-settings` | loosened for the run, **put back** after |

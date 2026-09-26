@@ -185,6 +185,43 @@ PORTAL_OWNED_SETTINGS = (
      "name here never reaches the forum"),
 )
 
+# The profile field the year group is shown in, and the cohort groups (lav24,
+# mav13, ...). Both were filled only for the people imported from the old
+# forum until 2026-09-26, so a new LAV25 student showed "Year group --" and was
+# in no cohort group at all.
+YEAR_GROUP_FIELD_NAME = "Year group"
+YEAR_GROUP_FIELD_DESCRIPTION = "Which year group they studied with."
+
+
+def group_name_for_year_group(year_group):
+    """"LAV24" -> "lav24": what Discourse will take as a group name."""
+    cleaned = "".join(
+        character if character.isalnum() else "_"
+        for character in (year_group or "").strip()
+    ).strip("_")
+    return cleaned.lower() or None
+
+
+def year_group_for(member):
+    """The year group a member belongs to, as the forum should show it.
+
+    Their own, or -- for somebody who reclaimed an old account without giving
+    one here -- the one the old forum had for them.
+    """
+    value = (getattr(member, "year_group", None) or "").strip()
+    if not value:
+        user = getattr(member, "user", None)
+        profile = getattr(user, "imported_forum_profile", None)
+        if profile is not None and profile.claimed_at is not None:
+            value = (profile.year_group or "").strip()
+    return value.upper()
+
+
+# What this process already knows the forum has, so that a sync does not ask
+# about the year-group field and the cohort group every single time.
+_ALREADY_ON_THE_FORUM = {}
+
+
 def _portal_owned_rows(values):
     """Read PORTAL_OWNED_SETTINGS out of a forum's settings, by whichever name."""
     rows = []
@@ -536,6 +573,8 @@ class ForumProvider:
 
 class DiscourseConnectProvider(ForumProvider):
     slug = "discourse"
+    # ``custom.user_field_N`` for the year group, once prepare_for has found it.
+    year_group_field = None
 
     def __init__(self, settings):
         self.settings = settings
@@ -668,6 +707,14 @@ class DiscourseConnectProvider(ForumProvider):
             for group in dict.fromkeys(by_category.values()):
                 (add_groups if group == theirs else remove_groups).append(group)
 
+        # Their cohort, kept for good -- like old_forum, it says who somebody
+        # is, not what they may see, so it does not end with the membership.
+        # Which is also why no category is ever granted to a cohort group:
+        # access comes from the groups above, which do end.
+        cohort = group_name_for_year_group(year_group_for(member)) if member else None
+        if cohort:
+            add_groups.append(cohort)
+
         if staff_group:
             # Who runs the association is a portal role, and this is the same
             # answer the admin pages give -- so somebody who stops being on the
@@ -723,6 +770,10 @@ class DiscourseConnectProvider(ForumProvider):
                 payload["avatar_force_update"] = "true"
         payload.update(self._build_group_fields(desired_state, user, member))
         payload.update(self._build_staff_flags(user))
+        if self.year_group_field and member is not None:
+            # Sent empty too: the portal is the record, so a year group taken
+            # away here is taken away there.
+            payload[f"custom.{self.year_group_field}"] = year_group_for(member)
         return payload
 
     def sync_user(self, forum_account, user, member, desired_state, avatar_url=None, avatar_force_update=False):
@@ -757,6 +808,38 @@ class DiscourseConnectProvider(ForumProvider):
             "POST", "/admin/users/sync_sso", data={"sso": encoded, "sig": signature},
             rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
         )
+
+    def prepare_for(self, member):
+        """Make sure what a payload for this member names exists on the forum.
+
+        ``add_groups`` drops a group the forum does not have without a word,
+        and a custom field is addressed by an id only the forum knows. So the
+        cohort group is made and the year-group field found (or made) first --
+        once per process, not once per sync. A failure here is reported and
+        the sync goes ahead without them; neither is worth refusing somebody
+        their access over.
+        """
+        base = self.settings.get("forum_base_url")
+        field_key = (base, "year_group_field")
+        if field_key not in _ALREADY_ON_THE_FORUM:
+            try:
+                field, _created = self.ensure_user_field(
+                    YEAR_GROUP_FIELD_NAME, YEAR_GROUP_FIELD_DESCRIPTION
+                )
+                if field:
+                    _ALREADY_ON_THE_FORUM[field_key] = field
+            except (ForumProviderError, KeyError) as exc:
+                current_app.logger.warning("Year group field unavailable: %s", exc)
+        self.year_group_field = _ALREADY_ON_THE_FORUM.get(field_key)
+
+        cohort = group_name_for_year_group(year_group_for(member)) if member else None
+        group_key = (base, "group", cohort)
+        if cohort and group_key not in _ALREADY_ON_THE_FORUM:
+            try:
+                self.ensure_group(cohort)
+                _ALREADY_ON_THE_FORUM[group_key] = True
+            except (ForumProviderError, KeyError) as exc:
+                current_app.logger.warning("Cohort group %s unavailable: %s", cohort, exc)
 
     def ensure_group(self, name):
         """A Discourse group by that name, made if it is not there yet.
@@ -1184,6 +1267,7 @@ class DiscourseConnectAuthStrategy(ForumAuthStrategy):
 
         desired_state = service.get_desired_state(member)
         approved_submission = service.get_current_approved_submission(member)
+        self.provider.prepare_for(member)
         provider_payload = self.provider.build_sso_payload(
             user,
             member,
@@ -1350,6 +1434,7 @@ class ForumService:
 
         approved_submission = self.get_current_approved_submission(member)
         avatar_url = self.provider.build_avatar_url(approved_submission) if approved_submission is not None else None
+        self.provider.prepare_for(member)
 
         try:
             self.provider.sync_user(
