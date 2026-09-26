@@ -11,8 +11,17 @@
                 <div class="card-body">
                     <p class="text-muted">{{ _('This account does not have a linked membership profile yet. Complete the form below to start your membership with this login.') }}</p>
                     {% if form.errors %}
-                        <div class="alert alert-danger">
-                            {{ _('Please correct the highlighted errors and try again.') }}
+                        {# Every error, by field -- as the main signup page does. "The
+                           highlighted errors" highlighted two fields of fourteen, so a
+                           mistyped phone number or address came back unexplained. #}
+                        <div class="alert alert-danger" role="alert">
+                            <ul class="mb-0 ps-3">
+                                {% for field_name, errors in form.errors.items() %}
+                                    {% for error in errors %}
+                                        <li>{{ form[field_name].label.text if field_name in form else field_name }}: {{ error }}</li>
+                                    {% endfor %}
+                                {% endfor %}
+                            </ul>
                         </div>
                     {% endif %}
                     <form method="POST" action="{{ url_for('account.create_membership_profile') }}" novalidate>
@@ -46,6 +55,7 @@
                                     {% for error in form.year_group.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                 </div>
                             </div>
+                            {% if invoice_payments_enabled %}
                             <div class="col-12">
                                 <label class="form-label d-block">{{ form.payment_method.label.text }}</label>
                                 {% for subfield in form.payment_method %}
@@ -55,10 +65,13 @@
                                     </div>
                                 {% endfor %}
                             </div>
+                            {% endif %}
                             <div class="col-12">
                                 <div class="form-check">
                                     {{ form.terms_accepted(class='form-check-input') }}
-                                    <label class="form-check-label" for="{{ form.terms_accepted.id }}">{{ form.terms_accepted.label.text }}</label>
+                                    <label class="form-check-label" for="{{ form.terms_accepted.id }}">
+                                        {{ _('I accept the') }} <a href="{{ url_for('public.legal_texts') }}" target="_blank">{{ _('Terms and Conditions') }}</a>
+                                    </label>
                                 </div>
                             </div>
                             <div class="col-12 d-flex gap-2">

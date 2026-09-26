@@ -14,7 +14,6 @@ from ..services.audit import (
 )
 from ..services.billing import (
     create_checkout_session_for_member,
-    create_invoice_membership_for_member,
 )
 from ..services.clock import (
     get_now_utc,
@@ -59,8 +58,12 @@ from ..services.notifications import (
     flush_marked_notification_channels,
     queue_curated_admin_notification,
 )
+from ..services.signup import (
+    chosen_payment_method,
+    invoice_payments_allowed,
+)
+from ._signup import start_membership
 from ..services.workflows import (
-    send_member_welcome_email,
     sync_member_primary_email,
 )
 import stripe
@@ -86,7 +89,6 @@ from flask_login import (
 from ..db_models import (
     Member,
     MemberProfileChangeRequest,
-    Setting,
     db,
 )
 from ..forms import (
@@ -132,14 +134,11 @@ def create_membership_profile():
         form.email_private.data = current_user.email
 
     if form.validate_on_submit():
-        settings = {s.key: s.value for s in Setting.query.all()}
         form_data = form.data
         form_data.pop("csrf_token", None)
         form_data.pop("submit", None)
 
-        payment_method = form_data.pop("payment_method", "checkout")
-        if settings.get("invoice_payments_enabled") != "True":
-            payment_method = "checkout"
+        payment_method = chosen_payment_method(form_data.pop("payment_method", "checkout"))
 
         member_email = (current_user.email or "").strip().lower()
         existing_member = db.session.execute(db.select(Member).filter_by(email_private=member_email)).scalar_one_or_none()
@@ -156,6 +155,9 @@ def create_membership_profile():
             pending_checkout_started_at=get_now_utc(),
         )
         apply_member_profile(member, {**form_data, "email_private": member_email, "terms_accepted": True})
+        # Added before anything queries: the username check below would
+        # otherwise autoflush a membership the session does not hold yet.
+        db.session.add(member)
         member.user = current_user
         current_user.email = member_email
         if not current_user.forum_username:
@@ -181,66 +183,13 @@ def create_membership_profile():
         )
         db.session.commit()
 
-        try:
-            if not current_user.email_is_verified:
-                send_email_verification_email(current_app._get_current_object(), current_user)
-        except Exception as email_exc:
-            current_app.logger.warning("Could not send verification email for linked membership user_id=%s: %s", current_user.id, email_exc)
+        return start_membership(member, payment_method, what="profile")
 
-        try:
-            if payment_method == "checkout":
-                session, _cycle = create_checkout_session_for_member(member)
-                db.session.commit()
-                return redirect(session.url, code=303)
-
-            if payment_method == "invoice":
-                _subscription, cycle = create_invoice_membership_for_member(member)
-                forum_result = None
-                if cycle["free_period"]:
-                    forum_result, _forum_service = sync_member_forum_state(member)
-                db.session.commit()
-                if cycle["free_period"]:
-                    send_member_welcome_email(current_app._get_current_object(), member)
-                    if forum_result and forum_result.error:
-                        current_app.logger.warning("Forum sync reported an issue after invoice activation for member_id=%s: %s", member.id, forum_result.error)
-                return redirect(
-                    url_for(
-                        "public.thank_you",
-                        method="invoice",
-                        phase=cycle["thank_you_phase"],
-                    )
-                )
-        except stripe.StripeError as exc:
-            error_body = getattr(exc, "json_body", {}) or {}
-            error_details = error_body.get("error", {}) if isinstance(error_body, dict) else {}
-            current_app.logger.error(
-                "Stripe Error during linked membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s member_id=%s user_id=%s",
-                type(exc).__name__,
-                str(exc),
-                error_details.get("message"),
-                error_details.get("code"),
-                error_details.get("param"),
-                getattr(exc, "request_id", None),
-                getattr(exc, "http_status", None),
-                payment_method,
-                member_email,
-                member.id,
-                current_user.id,
-            )
-            flash(_("Your membership profile was created, but payment could not be started. You can resume it from your account page."), "warning")
-        except Exception:
-            current_app.logger.exception(
-                "Unexpected error during linked membership signup for user_id=%s email=%s payment_method=%s member_id=%s",
-                current_user.id,
-                member_email,
-                payment_method,
-                member.id,
-            )
-            flash(_("Your membership profile was created, but billing could not be started right now. You can resume it from your account page."), "warning")
-
-        return redirect(url_for("account.account"))
-
-    return render_template("account/create_membership.html", form=form)
+    return render_template(
+        "account/create_membership.html",
+        form=form,
+        invoice_payments_enabled=invoice_payments_allowed(),
+    )
 
 
 @account_bp.route("/account/profile", methods=["POST"])

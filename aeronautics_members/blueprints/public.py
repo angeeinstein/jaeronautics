@@ -17,20 +17,11 @@ from ..services.audit import (
     snapshot_member_for_audit,
     snapshot_user_for_audit,
 )
-from ..services.billing import (
-    create_checkout_session_for_member,
-    create_invoice_membership_for_member,
-)
 from ..services.clock import (
     get_now_utc,
 )
 from ..services.forum import (
     generate_unique_forum_username,
-    sync_member_forum_state,
-)
-from ..services.identity import (
-    send_email_verification_email,
-    send_work_email_verification_email,
 )
 from ..services.members import (
     apply_member_profile,
@@ -39,13 +30,13 @@ from ..services.membership import (
     sync_member_active_state,
 )
 from ..services.settings import (
-    get_settings_map,
     get_stripe_settings_map,
 )
-from ..services.workflows import (
-    send_member_welcome_email,
+from ..services.signup import (
+    chosen_payment_method,
+    invoice_payments_allowed,
 )
-import stripe
+from ._signup import start_membership
 from datetime import (
     datetime,
     timezone,
@@ -82,11 +73,10 @@ public_bp = Blueprint("public", __name__)
 @public_bp.route("/", methods=["GET"])
 def index():
     form = MembershipForm()
-    public_settings = get_settings_map(["invoice_payments_enabled"])
     return render_template(
         "index.html",
         form=form,
-        invoice_payments_enabled=public_settings.get("invoice_payments_enabled") == "True",
+        invoice_payments_enabled=invoice_payments_allowed(),
         stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
     )
 
@@ -95,7 +85,6 @@ def index():
 @limiter.limit(RATELIMIT_MEMBERSHIP)
 def process_membership():
     form = MembershipForm()
-    settings = get_settings_map(["invoice_payments_enabled"])
 
     if form.validate_on_submit():
         form_data = form.data
@@ -125,8 +114,7 @@ def process_membership():
             flash(_("An account with this email address already exists. Please log in instead."), "warning")
             return redirect(url_for("auth.login"))
 
-        if settings.get("invoice_payments_enabled") != "True":
-            payment_method = "checkout"
+        payment_method = chosen_payment_method(payment_method)
 
         member = Member(
             created_at=get_now_utc(),
@@ -163,83 +151,14 @@ def process_membership():
         db.session.commit()
         login_user(user)
 
-        try:
-            try:
-                send_email_verification_email(current_app._get_current_object(), user)
-            except Exception as email_exc:
-                current_app.logger.warning("Could not send verification email for user_id=%s: %s", user.id, email_exc)
-
-            # The second link goes to the university or company address, which
-            # is what confirms they study or work here -- and, for somebody who
-            # was on the old forum, what reconnects their archived account.
-            if member.email_work:
-                try:
-                    send_work_email_verification_email(current_app._get_current_object(), member)
-                    db.session.commit()
-                except Exception as email_exc:
-                    db.session.rollback()
-                    current_app.logger.warning(
-                        "Could not send university email confirmation for member_id=%s: %s",
-                        member.id, email_exc,
-                    )
-
-            if payment_method == "checkout":
-                session, _cycle = create_checkout_session_for_member(member)
-                db.session.commit()
-                return redirect(session.url, code=303)
-
-            if payment_method == "invoice":
-                _subscription, cycle = create_invoice_membership_for_member(member)
-                forum_result = None
-                if cycle["free_period"]:
-                    forum_result, _forum_service = sync_member_forum_state(member)
-                db.session.commit()
-                if cycle["free_period"]:
-                    send_member_welcome_email(current_app._get_current_object(), member)
-                    if forum_result and forum_result.error:
-                        current_app.logger.warning("Forum sync reported an issue after invoice activation for member_id=%s: %s", member.id, forum_result.error)
-                return redirect(
-                    url_for(
-                        "public.thank_you",
-                        method="invoice",
-                        phase=cycle["thank_you_phase"],
-                    )
-                )
-
-        except stripe.StripeError as e:
-            error_body = getattr(e, "json_body", {}) or {}
-            error_details = error_body.get("error", {}) if isinstance(error_body, dict) else {}
-            current_app.logger.error(
-                "Stripe Error during membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s member_id=%s",
-                type(e).__name__,
-                str(e),
-                error_details.get("message"),
-                error_details.get("code"),
-                error_details.get("param"),
-                getattr(e, "request_id", None),
-                getattr(e, "http_status", None),
-                payment_method,
-                email_address,
-                member.id,
-            )
-            flash(_("Your account was created, but payment could not be started. Please log in and resume your membership from your account page."), "warning")
-        except Exception:
-            current_app.logger.exception(
-                "Unexpected error during membership signup for email=%s payment_method=%s member_id=%s",
-                email_address,
-                payment_method,
-                member.id,
-            )
-            flash(_("Your account was created, but an unexpected error occurred while starting billing. Please log in and resume your membership from your account page."), "warning")
-
-        return redirect(url_for("account.account"))
+        return start_membership(member, payment_method, what="account")
 
     current_app.logger.warning(f"Form validation failed. Errors: {form.errors}")
     flash(_("Please correct the errors below and try again."), "danger")
     return render_template(
         "index.html",
         form=form,
-        invoice_payments_enabled=get_settings_map(["invoice_payments_enabled"]).get("invoice_payments_enabled") == "True",
+        invoice_payments_enabled=invoice_payments_allowed(),
         stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
     )
 

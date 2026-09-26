@@ -12,12 +12,14 @@ import pytest
 
 from conftest import app_module, db, make_member
 from aeronautics_members.blueprints import public, account, auth, forum, admin
+from aeronautics_members.blueprints import _signup as signup
 from aeronautics_members.db_models import (
     User, Member, MemberProfileChangeRequest, ForumAvatarSubmission, MailAccount,
 )
 from aeronautics_members.forum_service import ForumProviderError
 
-BLUEPRINT_MODULES = [app_module, public, account, auth, forum, admin]
+# signup is where both membership forms start paying, so it is patched with them.
+BLUEPRINT_MODULES = [app_module, public, account, auth, forum, admin, signup]
 
 
 class _FakeCheckout:
