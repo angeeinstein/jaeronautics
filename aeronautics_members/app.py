@@ -3011,10 +3011,20 @@ def create_app(config_overrides=None):
                 f"\n{len(summary['problems'])} problems:", fg="yellow"), err=True)
             for problem in summary["problems"]:
                 click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
-            click.echo(
-                f"\nFix what they say and run the same command again. What has "
-                f"landed is in {ledger} and will not be posted twice."
-            )
+            left = sum(summary.get(key, 0)
+                       for key in ("waiting", "failed", "not_attempted"))
+            if left:
+                click.echo(
+                    f"\nFix what they say and run the same command again. What has "
+                    f"landed is in {ledger} and will not be posted twice."
+                )
+            else:
+                # The five posts whose authors left the old board are reported
+                # on every run and need nothing doing; telling somebody to fix
+                # them and run again sends them round in a circle.
+                click.echo(click.style(
+                    "\nEverything is on the forum. The lines above are notes, "
+                    "not things left to do.", fg="green"))
 
     @app.cli.command("dump-portal-settings")
     @click.option("--out", type=click.Path(dir_okay=False), default="portal-settings.json",
