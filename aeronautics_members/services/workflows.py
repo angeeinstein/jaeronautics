@@ -37,7 +37,7 @@ from .forum import (
 from .forum_import import imported_email_for
 from .identity import rotate_email_verification_nonce
 from .membership import sync_member_active_state
-from .outbox import enqueue_forum_sync, register_handler
+from .outbox import enqueue_forum_sync, pending_count, process_pending, register_handler
 from .notifications import (
     EMAIL_JOB_STATUS_CANCELED,
     EMAIL_JOB_STATUS_EXHAUSTED,
@@ -436,6 +436,26 @@ def _handle_forum_discard_replaced_work(item):
         kept = item.user
         if kept is not None and kept.member is not None:
             enqueue_forum_sync(kept.member, reason="forum_replaced_account_removed")
+
+
+def finish_forum_cleanup_for(user):
+    """Deal with what a reconnect left on the forum, before handing this person over.
+
+    The account a reconnect leaves behind holds the person's address until the
+    worker takes it off, and Discourse will not sign anybody in to an account
+    whose address another one holds: it answers with a bare "the change you
+    wanted was rejected". The worker runs every minute or so, and somebody who
+    has just been told "welcome back" clicks straight through to the forum.
+
+    So it is done here first, for this person only. Returns whether nothing is
+    left outstanding -- False while it is failing or another worker holds it,
+    in which case sending them on would only show them that page.
+    """
+    if user is None:
+        return True
+    kinds = [ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED]
+    process_pending(limit=5, kinds=kinds, user_id=user.id)
+    return pending_count(kinds=kinds, user_id=user.id) == 0
 
 
 register_handler(ExternalWorkItem.KIND_FORUM_SYNC, _handle_forum_sync_work)

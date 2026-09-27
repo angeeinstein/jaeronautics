@@ -33,6 +33,7 @@ from ..services.notifications import (
     flush_marked_notification_channels,
     queue_curated_admin_notification,
 )
+from ..services.workflows import finish_forum_cleanup_for
 from flask import (
     abort,
     flash,
@@ -292,6 +293,15 @@ def forum_discourse_connect():
             "warning",
         )
         return redirect(url_for("forum.forum_entry"))
+
+    # A reconnect leaves the old forum account holding this address until it
+    # is dealt with, and Discourse refuses the sign-in until then.
+    if not finish_forum_cleanup_for(current_user):
+        flash(
+            _("Your forum account is still being set up. Please try again in a minute."),
+            "info",
+        )
+        return redirect(url_for("account.account"))
 
     forum_result, service = sync_member_forum_state(member)
     if forum_result and forum_result.changed:

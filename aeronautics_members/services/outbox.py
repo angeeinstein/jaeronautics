@@ -146,7 +146,7 @@ def enqueue_forum_discard_replaced(user, remote_user_id, reason=None, external_i
     )
 
 
-def claim_next(kinds=None, now=None):
+def claim_next(kinds=None, now=None, user_id=None):
     """Claim one due item, or return None.
 
     The claim is a conditional UPDATE whose row count decides the winner, so two
@@ -169,6 +169,8 @@ def claim_next(kinds=None, now=None):
     )
     if kinds:
         query = query.where(ExternalWorkItem.kind.in_(list(kinds)))
+    if user_id is not None:
+        query = query.where(ExternalWorkItem.user_id == user_id)
     query = query.order_by(ExternalWorkItem.id).limit(10)
 
     for candidate in db.session.execute(query).scalars().all():
@@ -226,14 +228,14 @@ def fail(item, error):
     db.session.commit()
 
 
-def process_pending(limit=25, kinds=None, now=None):
+def process_pending(limit=25, kinds=None, now=None, user_id=None):
     """Run due work items. Returns (completed, failed).
 
     Safe to run concurrently with itself: each item is claimed before it runs.
     """
     completed = failed = 0
     for _ in range(limit):
-        item = claim_next(kinds=kinds, now=now)
+        item = claim_next(kinds=kinds, now=now, user_id=user_id)
         if item is None:
             break
         handler = _HANDLERS.get(item.kind)
@@ -256,7 +258,7 @@ def process_pending(limit=25, kinds=None, now=None):
     return completed, failed
 
 
-def pending_count(kinds=None):
+def pending_count(kinds=None, user_id=None):
     query = db.select(db.func.count(ExternalWorkItem.id)).where(
         ExternalWorkItem.status.in_(
             [ExternalWorkItem.STATUS_PENDING, ExternalWorkItem.STATUS_PROCESSING]
@@ -264,6 +266,8 @@ def pending_count(kinds=None):
     )
     if kinds:
         query = query.where(ExternalWorkItem.kind.in_(list(kinds)))
+    if user_id is not None:
+        query = query.where(ExternalWorkItem.user_id == user_id)
     return db.session.execute(query).scalar_one()
 
 

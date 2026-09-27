@@ -414,3 +414,72 @@ class TestTellingTheForum:
             db.select(ExternalWorkItem).filter_by(kind=ExternalWorkItem.KIND_FORUM_SYNC)
         ).scalars().all()
         assert [sync.member_id for sync in syncs] == [member.id]
+
+
+class TestOpeningTheForumStraightAway:
+    """Found on the test server: reconnected, clicked through to the forum at
+    once, and Discourse answered "the change you wanted was rejected" -- the
+    leftover account still held the address. Two minutes later it worked."""
+
+    def _pending_discard(self, user, remote_user_id):
+        item = ExternalWorkItem(
+            kind=ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED, user=user,
+            payload={"remote_user_id": remote_user_id, "external_id": "1"},
+            status=ExternalWorkItem.STATUS_PENDING,
+        )
+        db.session.add(item)
+        db.session.commit()
+        return item
+
+    def _handler(self, monkeypatch, handled, fail=False):
+        from aeronautics_members.services import outbox
+
+        def handler(item):
+            if fail:
+                raise RuntimeError("forum unreachable")
+            handled.append(item.payload["remote_user_id"])
+
+        monkeypatch.setitem(outbox._HANDLERS, ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED, handler)
+
+    def test_their_own_cleanup_is_done_first_and_nobody_elses(self, app, monkeypatch):
+        from aeronautics_members.services.workflows import finish_forum_cleanup_for
+
+        handled = []
+        self._handler(monkeypatch, handled)
+        mine = make_member(email="mine@example.com")
+        theirs = make_member(email="theirs@example.com")
+        self._pending_discard(mine.user, 11)
+        self._pending_discard(theirs.user, 22)
+
+        assert finish_forum_cleanup_for(mine.user) is True
+        assert handled == [11]
+
+    def test_while_it_fails_they_are_not_sent_on(self, app, monkeypatch):
+        from aeronautics_members.services.workflows import finish_forum_cleanup_for
+
+        self._handler(monkeypatch, [], fail=True)
+        member = make_member(email="waiting@example.com")
+        self._pending_discard(member.user, 33)
+
+        assert finish_forum_cleanup_for(member.user) is False
+
+    def test_the_forum_sign_in_waits_rather_than_showing_the_rejection(self, app, client, monkeypatch):
+        from datetime import date
+
+        self._handler(monkeypatch, [], fail=True)
+        member = make_member(
+            email="clicker@example.com", payment_status="paid", is_active=True,
+            membership_starts_on=date(2026, 1, 1), membership_ends_on=date(2099, 12, 31),
+        )
+        member.user.email_verified_at = _now()
+        db.session.commit()
+        self._pending_discard(member.user, 44)
+        _sign_in(client, member.user.id)
+
+        response = client.get("/forum/discourse/connect?sso=x&sig=y")
+
+        assert response.status_code == 302
+        assert response.headers["Location"].endswith("/account")
+        with client.session_transaction() as session:
+            messages = [text for _category, text in session.get("_flashes", [])]
+        assert any("still being set up" in text for text in messages)
