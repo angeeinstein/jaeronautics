@@ -202,3 +202,32 @@ class TestAReturningStudentBeforeConfirming:
         assert "Upload Profile Picture" not in body
         assert "BackB_L21-2" not in body   # the username they are about to lose
         assert "BackB_L21" not in body     # nor the one that is not proven theirs yet
+
+
+class TestAFailedRenewal:
+    """A bounced renewal leaves the subscription running while Stripe retries.
+    The page offered Rejoin, which was then refused."""
+
+    def _failed(self, client, monkeypatch, subscription_status):
+        member = make_member(email="bounced@example.com", payment_status="failed", is_active=False,
+                             stripe_customer_id="cus_b", stripe_subscription_id="sub_b",
+                             membership_ends_on=date(2020, 12, 31))
+        with client.session_transaction() as session:
+            session["_user_id"] = str(member.user.id)
+        monkeypatch.setattr(
+            app_module, "refresh_member_billing_state",
+            lambda *a, **k: (False, {"id": "sub_b", "status": subscription_status}, None),
+        )
+        return client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+    def test_while_stripe_retries_they_are_asked_to_update_payment(self, app, client, monkeypatch):
+        body = self._failed(client, monkeypatch, "past_due")
+
+        assert "update your payment method under Manage Billing" in body
+        assert "/account/rejoin" not in body
+
+    def test_once_the_subscription_has_ended_they_can_rejoin(self, app, client, monkeypatch):
+        body = self._failed(client, monkeypatch, "canceled")
+
+        assert "/account/rejoin" in body
+        assert "update your payment method" not in body

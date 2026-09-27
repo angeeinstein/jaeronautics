@@ -319,6 +319,7 @@ from .services.billing import (  # noqa: E402
     apply_runtime_stripe_config,
     backfill_member_coverage_from_subscription,
     backfill_member_stripe_references,
+    LIVE_SUBSCRIPTION_STATUSES,
     can_rejoin,
     checkout_completed_but_not_yet_confirmed,
     create_checkout_session_for_member,
@@ -1006,9 +1007,10 @@ def render_account_dashboard(profile_form=None, identity_form=None):
         return redirect(url_for("account.create_membership_profile"))
 
     has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
+    stripe_subscription = None
     if has_stripe_reference:
         try:
-            billing_changed, _stripe_subscription, _forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
+            billing_changed, stripe_subscription, _forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
             if billing_changed:
                 db.session.commit()
         except stripe.StripeError as exc:
@@ -1037,6 +1039,13 @@ def render_account_dashboard(profile_form=None, identity_form=None):
 
     forum_context = build_forum_context(member)
     payment_arriving = checkout_completed_but_not_yet_confirmed(member)
+    # A failed payment on a subscription Stripe is still running -- a renewal
+    # debit that bounced, say. Stripe tries again, and a new card or account
+    # under Manage Billing is what helps. "Rejoin" would only be refused.
+    payment_needs_attention = (
+        member.payment_status == "failed"
+        and (stripe_subscription or {}).get("status") in LIVE_SUBSCRIPTION_STATUSES
+    )
 
     return render_template(
         "account/index.html",
@@ -1048,7 +1057,8 @@ def render_account_dashboard(profile_form=None, identity_form=None):
         can_manage_billing=bool(member.stripe_customer_id),
         can_resume_payment=can_resume_payment(member) and not payment_arriving,
         payment_arriving=payment_arriving,
-        can_rejoin=can_rejoin(member),
+        can_rejoin=can_rejoin(member) and not payment_needs_attention,
+        payment_needs_attention=payment_needs_attention,
         invoice_payments_enabled=invoice_payments_allowed(),
         forum_context=forum_context,
     )

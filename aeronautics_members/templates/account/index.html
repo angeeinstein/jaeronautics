@@ -149,6 +149,8 @@
                             {{ _('Your membership remains active, but it will not renew automatically.') }}
                         {% endif %}
                     </div>
+                {% elif payment_needs_attention %}
+                    <div class="alert alert-warning mt-4 mb-0">{{ _('Your last payment failed. Please update your payment method under Manage Billing; Stripe will then try again.') }}</div>
                 {% elif can_rejoin %}
                     {#
                         The only way back for somebody whose membership has
