@@ -5,8 +5,8 @@
 <div class="container mt-5">
     <div class="row justify-content-center">
         <div class="col-lg-6 col-md-8">
-            <div class="card shadow-lg border-0">
-                <div class="card-header bg-primary text-white text-center py-4">
+            <div class="card">
+                <div class="card-header bg-primary text-center py-4">
                     <h2 class="mb-0">{{ _('Account Login') }}</h2>
                 </div>
                 <div class="card-body p-5">
@@ -40,7 +40,7 @@
                         </div>
                     </form>
                 </div>
-                <div class="card-footer py-4 bg-light">
+                <div class="card-footer py-4">
                     <div class="d-flex flex-column gap-2 text-center">
                         <a href="{{ url_for('auth.forgot_password') }}" class="fw-bold">{{ _('Forgot your password?') }}</a>
                         <a href="{{ url_for('public.index') }}" class="text-muted {% if forum_login_hint %}fw-bold{% endif %}">{{ _('Need a new account? Sign up for membership first') }}</a>

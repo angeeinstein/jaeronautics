@@ -4,8 +4,8 @@
 <div class="container mt-5">
     <div class="row justify-content-center">
         <div class="col-lg-6 col-md-8">
-            <div class="card shadow-lg border-0">
-                <div class="card-header bg-primary text-white text-center py-4">
+            <div class="card">
+                <div class="card-header bg-primary text-center py-4">
                     <h2 class="mb-0">{{ heading }}</h2>
                 </div>
                 <div class="card-body p-5">
@@ -19,7 +19,7 @@
                         <div class="d-grid">{{ form.submit(class="btn btn-primary btn-lg") }}</div>
                     </form>
                 </div>
-                <div class="card-footer text-center py-4 bg-light">
+                <div class="card-footer text-center py-4">
                     <a href="{{ url_for('auth.login') }}" class="fw-bold">{{ _('Back to login') }}</a>
                 </div>
             </div>

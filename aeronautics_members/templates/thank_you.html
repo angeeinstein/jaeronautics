@@ -4,7 +4,7 @@
 <div class="container mt-5">
     <div class="row justify-content-center">
         <div class="col-md-8">
-            <div class="card text-center shadow-lg border-0">
+            <div class="card text-center">
                 <div class="card-body p-5">
                     {% if method == 'invoice' %}
                         <h2 class="card-title text-primary mb-4">{{ _('Thank You for Your Application!') }}</h2>
@@ -16,7 +16,7 @@
                             <p class="text-muted">{{ _('After the current year, the membership renews automatically each January 1 unless it is cancelled beforehand.') }}</p>
                         {% endif %}
                     {% else %}
-                        <h2 class="card-title text-success mb-4">{{ _('Thank You!') }}</h2>
+                        <h2 class="card-title text-primary mb-4">{{ _('Thank You!') }}</h2>
                         {% if phase == 'free_period' %}
                             <p class="lead">{{ _('Your membership is active immediately and stays free until December 31.') }}</p>
                             <p class="text-muted">{{ _('Your payment method has been saved, and Stripe will charge the full annual fee on January 1 unless you cancel beforehand.') }}</p>

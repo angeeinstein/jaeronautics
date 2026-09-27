@@ -4,7 +4,7 @@
 {% block content %}
 <div class="row g-4 mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
+        <div class="card">
             <div class="card-body">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
                     <div>
@@ -97,7 +97,7 @@
 
 <div class="row g-4">
     <div class="col-xl-4">
-        <div class="card shadow-sm border-0 mb-4">
+        <div class="card mb-4">
             <div class="card-header"><h4 class="mb-0">{{ _('Membership Overview') }}</h4></div>
             <div class="card-body">
                 {% set membership_status_labels = {
@@ -188,7 +188,7 @@
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
+        <div class="card">
             <div class="card-header"><h4 class="mb-0">{{ _('Forum Access') }}</h4></div>
             <div class="card-body">
                 <p class="mb-2"><strong>{{ _('Status') }}:</strong> {{ forum_context.status_message }}</p>
@@ -213,7 +213,7 @@
         </div>
     </div>
     <div class="col-xl-8">
-        <div class="card shadow-sm border-0 mb-4">
+        <div class="card mb-4">
             <div class="card-header"><h4 class="mb-0">{{ _('Contact Details') }}</h4></div>
             <div class="card-body">
                 {{ form_errors(profile_form) }}
@@ -224,7 +224,7 @@
                         <div class="col-md-4">{{ profile_form.house_number.label(class="form-label") }}{{ profile_form.house_number(class="form-control") }}</div>
                         <div class="col-md-4">{{ profile_form.postal_code.label(class="form-label") }}{{ profile_form.postal_code(class="form-control") }}</div>
                         <div class="col-md-4">{{ profile_form.city.label(class="form-label") }}{{ profile_form.city(class="form-control") }}</div>
-                        <div class="col-md-4">{{ profile_form.country.label(class="form-label") }}{{ profile_form.country(class="form-control") }}</div>
+                        <div class="col-md-4">{{ profile_form.country.label(class="form-label") }}{{ profile_form.country(class="form-select") }}</div>
                         <div class="col-md-6">{{ profile_form.phone_private.label(class="form-label") }}{{ profile_form.phone_private(class="form-control") }}</div>
                         <div class="col-md-6">{{ profile_form.email_private.label(class="form-label") }}{{ profile_form.email_private(class="form-control", autocomplete="email") }}</div>
                         <div class="col-md-6">{{ profile_form.phone_work.label(class="form-label") }}{{ profile_form.phone_work(class="form-control") }}</div>
@@ -237,7 +237,7 @@
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
+        <div class="card">
             <div class="card-header"><h4 class="mb-0">{{ _('Name and Membership Type') }}</h4></div>
             <div class="card-body">
                 <div class="alert alert-secondary">{{ _('Changes here are checked by an admin before they take effect.') }}</div>

@@ -5,6 +5,7 @@ somebody stuck with nothing on screen saying why.
 """
 import types
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -315,8 +316,19 @@ def test_the_portal_is_english_whatever_the_browser_asks(app, client):
     on its own and showed a half-translated site."""
     body = client.get("/?lang=de", headers={"Accept-Language": "de-AT,de;q=0.9"}).get_data(as_text=True)
 
-    assert '<html lang="en">' in body
+    assert '<html lang="en"' in body
     assert "language-selector" not in body
+
+
+def test_the_portal_is_dark_whatever_the_device_prefers(app, client):
+    """The site has one look, dark. It must not follow a device set to light
+    mode into a half-styled light page."""
+    body = client.get("/").get_data(as_text=True)
+    stylesheet = (Path(app.static_folder) / "style.css").read_text()
+
+    assert 'data-bs-theme="dark"' in body
+    assert '<meta name="color-scheme" content="dark">' in body
+    assert "prefers-color-scheme" not in stylesheet
 
 
 class TestTheSignupSentTwice:
