@@ -339,7 +339,18 @@ def process_stripe_event(event):
                 customer_id,
             )
 
-            if member_has_active_access(member) and previous_status in {"unpaid", "processing", "pending_checkout", "failed"}:
+            # A welcome is for joining. A renewal can pass through the same
+            # statuses -- a SEPA debit reads "processing" for days -- and
+            # every renewing member was welcomed to the association again.
+            this_year = coverage_year or paid_on.year
+            joining = not any(
+                period.ends_on.year < this_year for period in member.membership_periods or []
+            )
+            if (
+                joining
+                and member_has_active_access(member)
+                and previous_status in {"unpaid", "processing", "pending_checkout", "failed"}
+            ):
                 send_member_welcome_email(current_app._get_current_object(), member)
         else:
             current_app.logger.error(

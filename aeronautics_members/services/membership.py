@@ -17,7 +17,7 @@ sensibly) and new students arrive at the start of the academic year in October.
 keeps access until the coverage they bought runs out.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from babel.dates import format_date
@@ -40,6 +40,15 @@ RESUMABLE_MEMBER_STATUSES = {"pending_checkout", "processing", "failed", "unpaid
 # subscription's lifecycle. Reconciliation may preserve these, but must never
 # promote a member into one without such evidence.
 PAYMENT_EVIDENCE_STATUSES = {"paid", "free_period"}
+
+# How long a renewal Stripe is still collecting keeps somebody a member past
+# the end of their year. A SEPA debit takes days to confirm -- usually about
+# five business days, sometimes longer -- and it starts on Jan 1, a holiday.
+RENEWAL_GRACE_DAYS = 21
+
+# Statuses under which a renewal can be in flight: Stripe has not said it
+# failed, and nobody cancelled.
+RENEWAL_IN_FLIGHT_STATUSES = {"paid", "processing"}
 
 # Joining on or after this day gives the rest of the year free.
 FREE_PERIOD_START_MONTH = 10
@@ -120,14 +129,51 @@ def member_has_active_access(member, on_date=None):
         # alone would mean a member whose only coverage was revoked fell back to
         # the cached fields -- which still say "paid", and would hand back the
         # access the revocation was meant to take away.
-        return any(
+        if any(
             p.revoked_at is None and p.starts_on <= today <= p.ends_on
             for p in recorded
-        )
+        ):
+            return True
+        return renewal_in_flight(member, today)
 
     if not member.membership_ends_on or member.membership_ends_on < today:
         return False
     return member.payment_status in ACTIVE_MEMBER_STATUSES or member.is_active
+
+
+def renewal_in_flight(member, on_date=None):
+    """Whether the member's year has ended while Stripe collects the next one.
+
+    The ledger only records a year once its payment is confirmed, and a SEPA
+    debit taken on Jan 1 is confirmed days later. Without this, everybody
+    paying by SEPA stopped being a member at midnight and started again a week
+    or so on: shut out of the forum, moved to its inactive group and back, for
+    a renewal they had done nothing wrong with.
+
+    Narrow on purpose. Only straight after a recorded year has ended, and not
+    after a revoked one -- a lost chargeback must still end access. Only for a
+    subscription still running and not set to cancel, and only once Stripe has
+    renewed it: that moves the cached end of the membership into the new year.
+    And only while nothing has gone wrong: a failed debit makes the status
+    "failed", which ends this at once, as a declined card always did.
+    """
+    if member is None or getattr(member, "deleted_at", None) is not None:
+        return False
+    today = on_date or get_membership_today()
+    if not member.stripe_subscription_id or member.cancel_at_period_end:
+        return False
+    if member.payment_status not in RENEWAL_IN_FLIGHT_STATUSES:
+        return False
+    if not member.membership_ends_on or member.membership_ends_on < today:
+        return False  # Stripe has not renewed it (yet)
+
+    recorded = member.membership_periods or []
+    if not recorded:
+        return False
+    latest = max(recorded, key=lambda p: (p.ends_on, p.id or 0))
+    if latest.revoked_at is not None:
+        return False
+    return latest.ends_on < today <= latest.ends_on + timedelta(days=RENEWAL_GRACE_DAYS)
 
 
 def sync_member_active_state(member, on_date=None):

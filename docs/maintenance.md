@@ -133,6 +133,22 @@ cannot, and — because a missing file is the normal state before the first
 update — the panel silently showed nothing at all. It now says why it is empty,
 and an unreadable file is logged.
 
+## Renewing on 1 January
+
+Everybody renews on the same day, and the portal only records a year once its
+payment is confirmed. A card is charged within the hour; a SEPA debit is
+confirmed days later (usually about five business days). So that nobody paying
+by SEPA stops being a member meanwhile, access continues for up to
+`RENEWAL_GRACE_DAYS` (21) after the year ends, while:
+
+- the Stripe subscription is still running and not set to cancel,
+- Stripe has already renewed it for the new year, and
+- the status is `paid` or `processing` -- a failed debit sets `failed`, which
+  ends the grace at once, as a declined card always did.
+
+It never follows a revoked year, so a lost chargeback still ends access. The
+welcome email is only sent for somebody's first year, not when a renewal clears.
+
 ## Billing Shows Up in Stripe as a Trial
 
 The association bills one shared calendar year, which is implemented by giving
