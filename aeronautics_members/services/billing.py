@@ -415,6 +415,32 @@ def get_open_checkout_session(member):
     return None
 
 
+def checkout_completed_but_not_yet_confirmed(member):
+    """Whether they finished Checkout and Stripe's confirmation has not arrived yet.
+
+    Stripe confirms a payment to the portal separately, usually seconds after
+    the payment page closes. In between the account page read "payment not
+    finished" and offered to resume it -- to somebody who had just paid. Only
+    detected here, not acted on: whether the money is actually in is what that
+    confirmation says (a SEPA debit, for one, is still pending), so activating
+    now would be guessing.
+    """
+    if member is None or member.payment_status != "pending_checkout":
+        return False
+    if not member.stripe_checkout_session_id or member.stripe_customer_id:
+        return False
+    apply_runtime_stripe_config()
+    try:
+        session = stripe.checkout.Session.retrieve(member.stripe_checkout_session_id)
+    except stripe.StripeError as exc:
+        current_app.logger.warning(
+            "Could not check Checkout session %s for member_id=%s: %s",
+            member.stripe_checkout_session_id, member.id, exc,
+        )
+        return False
+    return session.get("status") == "complete"
+
+
 def create_checkout_session_for_member(member):
     """Start (or resume) the member's Checkout session for the current year.
 

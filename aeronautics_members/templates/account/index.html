@@ -111,7 +111,7 @@
                 } %}
                 <dl class="row mb-0">
                     <dt class="col-sm-5">{{ _('Status') }}</dt>
-                    <dd class="col-sm-7">{{ membership_status_labels.get(member.payment_status, member.payment_status|replace('_', ' ')|title) }}</dd>
+                    <dd class="col-sm-7">{% if payment_arriving %}{{ _('Payment Received') }}{% else %}{{ membership_status_labels.get(member.payment_status, member.payment_status|replace('_', ' ')|title) }}{% endif %}</dd>
                     <dt class="col-sm-5">{{ _('Membership Active') }}</dt>
                     <dd class="col-sm-7">{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
                     <dt class="col-sm-5">{{ _('Membership Starts') }}</dt>
@@ -175,6 +175,8 @@
                             <button type="submit" class="btn btn-primary">{{ _('Rejoin') }}</button>
                         </form>
                     </div>
+                {% elif payment_arriving %}
+                    <div class="alert alert-info mt-4 mb-0">{{ _('Payment received. Your membership is being activated, which usually takes a few seconds. Reload this page in a moment.') }}</div>
                 {% elif can_resume_payment %}
                     <div class="alert alert-info mt-4 mb-0">{{ _('Your account is ready, but the membership payment is not finished yet. Use the resume button above to continue.') }}</div>
                 {% elif not can_manage_billing %}

@@ -319,6 +319,7 @@ from .services.billing import (  # noqa: E402
     backfill_member_coverage_from_subscription,
     backfill_member_stripe_references,
     can_rejoin,
+    checkout_completed_but_not_yet_confirmed,
     create_checkout_session_for_member,
     create_invoice_membership_for_member,
     get_member_by_stripe_or_email,
@@ -1034,6 +1035,7 @@ def render_account_dashboard(profile_form=None, identity_form=None):
         )
 
     forum_context = build_forum_context(member)
+    payment_arriving = checkout_completed_but_not_yet_confirmed(member)
 
     return render_template(
         "account/index.html",
@@ -1043,7 +1045,8 @@ def render_account_dashboard(profile_form=None, identity_form=None):
         pending_request=pending_request,
         suggested_username_from_request=suggested_username_from_request,
         can_manage_billing=bool(member.stripe_customer_id),
-        can_resume_payment=can_resume_payment(member),
+        can_resume_payment=can_resume_payment(member) and not payment_arriving,
+        payment_arriving=payment_arriving,
         can_rejoin=can_rejoin(member),
         invoice_payments_enabled=invoice_payments_allowed(),
         forum_context=forum_context,

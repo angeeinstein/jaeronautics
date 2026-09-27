@@ -118,3 +118,42 @@ def test_a_failed_forum_sign_in_is_reported_not_looped(app, client, forum, links
 
     assert response.headers["Location"].endswith("/account")
     assert any("could not be completed" in text for text in _flashes(client))
+
+
+class TestJustAfterPaying:
+    """Stripe's confirmation arrives seconds after the payment page closes. In
+    between, the account page offered to resume a payment just made."""
+
+    def _pending(self, client):
+        member = make_member(email="justpaid@example.com", payment_status="pending_checkout",
+                             stripe_checkout_session_id="cs_done")
+        with client.session_transaction() as session:
+            session["_user_id"] = str(member.user.id)
+        return member
+
+    def _stripe_says(self, monkeypatch, status):
+        from conftest import billing
+
+        monkeypatch.setattr(billing, "apply_runtime_stripe_config", lambda: {})
+        monkeypatch.setattr(
+            billing.stripe.checkout.Session, "retrieve",
+            staticmethod(lambda session_id, **kwargs: {"id": session_id, "status": status}),
+        )
+
+    def test_a_finished_checkout_is_not_offered_again(self, app, client, monkeypatch):
+        self._pending(client)
+        self._stripe_says(monkeypatch, "complete")
+
+        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+        assert "Payment received" in body
+        assert "Resume Payment" not in body
+
+    def test_an_abandoned_one_still_is(self, app, client, monkeypatch):
+        self._pending(client)
+        self._stripe_says(monkeypatch, "open")
+
+        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+        assert "Resume Payment" in body
+        assert "Payment received" not in body
