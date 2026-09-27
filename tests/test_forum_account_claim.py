@@ -357,18 +357,6 @@ class TestWhenItMustNotFire:
 
         assert claim_archived_account(member.user) is None
 
-    def test_an_account_holding_a_role_is_left_for_a_person(self, app):
-        """Retiring an admin's row would silently take their access with it."""
-        from conftest import app_module
-
-        _archived()
-        member = _returning()
-        member.user.grant_role(app_module.get_role("admin"))
-        db.session.commit()
-
-        assert claim_archived_account(member.user) is None
-        assert member.user.is_admin is True
-
     def test_claiming_twice_is_a_no_op(self, app):
         _archived()
         member = _returning()
@@ -1038,15 +1026,53 @@ class TestTheAccountTheyLeaveBehindOnTheForum:
         assert db.session.get(User, retired_id) is None, "the row is gone"
         assert self._queued()[0].payload["remote_user_id"] == 8801, "the id is not"
 
-    def test_nothing_is_queued_when_they_were_never_on_the_forum(self, app):
-        """Most people verify before they ever reach it. No orphan, no work."""
+    def test_without_a_recorded_id_it_is_looked_for_by_identity(self, app):
+        """Most people verify before they ever reach the forum, and then there
+        is nothing there. But a sign-in whose id was never recorded here
+        leaves an account holding the address all the same."""
         _archived()
         member = self._returning_on_the_forum(remote_user_id=None)
+        retired_id = member.user.id
 
         claim_archived_account(member.user)
         db.session.commit()
 
-        assert self._queued() == []
+        (item,) = self._queued()
+        assert item.payload == {"remote_user_id": None, "external_id": str(retired_id)}
+
+    def test_an_identity_the_forum_does_not_know_is_simply_done(self, app, monkeypatch):
+        from aeronautics_members.forum_service import ForumProviderError
+        from aeronautics_members.db_models import ExternalWorkItem
+        from aeronautics_members.services.workflows import _handle_forum_discard_replaced_work
+
+        class FakeProvider:
+            def get_remote_user_by_external_id(self, external_id):
+                raise ForumProviderError("Discourse API request failed (404): not found")
+
+            def release_address(self, *args):
+                raise AssertionError("nothing to release")
+
+            def delete_remote_user(self, *args):
+                raise AssertionError("nothing to delete")
+
+        class FakeService:
+            provider = FakeProvider()
+
+            def is_ready(self):
+                return True
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.workflows.get_forum_service", lambda: FakeService(),
+        )
+        item = ExternalWorkItem(
+            kind=ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED,
+            payload={"remote_user_id": None, "external_id": "12"},
+            status=ExternalWorkItem.STATUS_PENDING,
+        )
+        db.session.add(item)
+        db.session.flush()
+
+        _handle_forum_discard_replaced_work(item)  # returns; nothing raised
 
     def test_the_claim_does_not_talk_to_the_forum_itself(self, app):
         """This runs while a student is clicking a link in an email.

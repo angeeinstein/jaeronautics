@@ -392,3 +392,66 @@ class TestItNeverDeletesSomebodysPosts:
 
         # Returns rather than raising: raising would queue it again for ever.
         _handle_forum_discard_replaced_work(item)
+
+    @pytest.mark.parametrize("flag", ["admin", "moderator"])
+    def test_a_staff_account_is_left_alone(self, app, monkeypatch, flag):
+        """Discourse refuses to delete an admin; asking would be retried for hours.
+        And it may be the account the forum is run from."""
+        provider, calls = self._provider(monkeypatch, {flag: True})
+
+        deleted, reason = provider.delete_remote_user(8801)
+
+        assert deleted is False
+        assert "admin or moderator" in reason
+        assert not any(method == "DELETE" for method, _path in calls)
+
+
+class TestReleasingTheAddress:
+    """The leftover holds the address the kept account needs, deletable or not."""
+
+    def _provider(self, monkeypatch, known_as):
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "http://forum.test", "discourse_api_key": "k",
+            "discourse_api_username": "system", "discourse_connect_secret": "s",
+        })
+        calls = []
+
+        def fake_request(method, path, data=None, json_body=None, rate_limit_retries=0):
+            calls.append((method, path, data))
+            if method == "GET":
+                return {"user": known_as}
+            return {}
+
+        monkeypatch.setattr(provider, "_request", fake_request)
+        return provider, calls
+
+    def test_the_leftover_is_moved_onto_the_placeholder(self, app, monkeypatch):
+        import base64
+        from urllib.parse import parse_qs
+
+        provider, calls = self._provider(monkeypatch, {"id": 8801})
+
+        assert provider.release_address(8801, "7", "forum-replaced-7@imported.invalid") is True
+
+        (_method, path, data) = calls[-1]
+        assert path == "/admin/users/sync_sso"
+        sent = {k: v[0] for k, v in parse_qs(base64.b64decode(data["sso"]).decode()).items()}
+        assert sent["external_id"] == "7"
+        assert sent["email"] == "forum-replaced-7@imported.invalid"
+        # Nothing else about the account is touched -- not its rights either.
+        assert "admin" not in sent and "add_groups" not in sent
+
+    def test_not_when_that_identity_is_a_different_account(self, app, monkeypatch):
+        """sync_sso would create or change an account it was never meant to."""
+        provider, calls = self._provider(monkeypatch, {"id": 9999})
+
+        assert provider.release_address(8801, "7", "x@imported.invalid") is False
+        assert not any(method == "POST" for method, _path, _data in calls)
+
+    def test_not_without_an_identity(self, app, monkeypatch):
+        provider, calls = self._provider(monkeypatch, {"id": 8801})
+
+        assert provider.release_address(8801, None, "x@imported.invalid") is False
+        assert calls == []

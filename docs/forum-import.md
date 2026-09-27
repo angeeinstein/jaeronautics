@@ -410,8 +410,19 @@ The claim happens when the verification link is followed, in
 
 It refuses, rather than guessing, when two archived accounts share one address
 (the real export has exactly one such pair), when the profile was already
-claimed, and when the signup account holds a role, a forum account or avatar
-submissions — anything the claim is not prepared to carry across.
+claimed, or when the signup account is itself an archived one. Everything else
+on the signup account moves across: the membership, portal roles (an admin who
+was on the old forum keeps them), photo uploads, change requests and the forum
+account record.
+
+The forum account signup made is then dealt with in the background. Its email
+address is first moved to a placeholder (`forum-replaced-<id>@imported.invalid`),
+because Discourse gives an address to one account only and the reclaimed
+account needs it. Then it is deleted if it is empty. One with posts or likes in
+it, or one that is an admin or moderator (which Discourse will not delete, and
+which may be the account the forum is run from), is left in place and reported
+to the admins, to be tidied up by hand once the reclaimed account has the same
+rights.
 
 **Tell students to sign up with their university address.** Somebody who uses
 a private address gets a working new account and no claim, which then needs

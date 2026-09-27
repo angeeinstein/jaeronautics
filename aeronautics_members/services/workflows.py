@@ -34,6 +34,7 @@ from .forum import (
     get_forum_service,
     sync_member_forum_state,
 )
+from .forum_import import imported_email_for
 from .identity import rotate_email_verification_nonce
 from .membership import sync_member_active_state
 from .outbox import enqueue_forum_sync, register_handler
@@ -343,20 +344,26 @@ def _handle_forum_anonymise_work(item):
 
 
 def _handle_forum_discard_replaced_work(item):
-    """Outbox handler: remove the forum account a reconnection left behind.
+    """Outbox handler: deal with the forum account a reconnection left behind.
 
     Signing up gives somebody a Discourse account before they have proved which
     archived one is theirs. Reclaiming moves them onto the archived account and
-    that first one becomes an orphan -- with zero posts, and holding the real
-    email address, which Discourse will then refuse to give to the account they
-    actually use.
+    that first one becomes an orphan -- holding the real email address, which
+    Discourse will then refuse to give to the account they actually use.
+
+    So the address comes off it first, and then it is deleted if it can be:
+    not when somebody wrote in it, and not when it is an admin or moderator,
+    which Discourse refuses and which may be the account the forum is run
+    from. Either of those is left for a person, and reported.
 
     Done here rather than in the claim itself because the claim runs while a
     returning student is clicking a link in an email. A slow or unreachable
     forum must not be able to fail that.
     """
-    remote_user_id = (item.payload or {}).get("remote_user_id")
-    if not remote_user_id:
+    payload = item.payload or {}
+    remote_user_id = payload.get("remote_user_id")
+    external_id = payload.get("external_id")
+    if not remote_user_id and not external_id:
         return
 
     service = get_forum_service()
@@ -367,17 +374,35 @@ def _handle_forum_discard_replaced_work(item):
             "The forum integration is not ready, so the replaced account "
             f"{remote_user_id} cannot be removed yet."
         )
+
     try:
+        if not remote_user_id:
+            # Never recorded here; the forum knows it by identity, if at all.
+            try:
+                remote_user_id = service.provider.get_remote_user_by_external_id(
+                    external_id
+                ).get("id")
+            except ForumProviderError as exc:
+                if "failed (404)" not in str(exc):
+                    raise
+            if not remote_user_id:
+                return  # nothing on the forum under that identity
+        released = bool(external_id) and service.provider.release_address(
+            remote_user_id, external_id, imported_email_for("replaced", external_id),
+        )
         deleted, reason = service.provider.delete_remote_user(remote_user_id)
     except ForumProviderError as exc:
         raise ExternalServiceError(
             f"Could not remove the replaced forum account {remote_user_id}: {exc}"
         ) from exc
 
-    if not deleted:
-        # Somebody wrote something from that account before they reconnected.
-        # Retrying will not change that, and deleting it would take their posts
-        # with it, so this stops here and asks for a person to look.
+    if deleted:
+        current_app.logger.info(
+            "Removed the forum account left behind by a reconnection: %s", remote_user_id
+        )
+    else:
+        # Retrying will not change why it stayed, so this stops here and asks
+        # for a person to look.
         current_app.logger.warning(
             "The forum account %s left behind by a reconnection was not removed: %s",
             remote_user_id, reason,
@@ -385,11 +410,17 @@ def _handle_forum_discard_replaced_work(item):
         queue_curated_admin_notification(
             ADMIN_ERROR_CHANNEL,
             "forum_replaced_account_kept",
-            _("A reconnected member left a forum account behind that still has content in it."),
+            _("A reconnected member left a forum account behind that could not be removed."),
             payload={
                 "remote_user_id": remote_user_id,
                 "reason": reason,
+                "address_released": released,
                 "what_to_do": (
+                    "Its address has been moved to a placeholder, so the member's "
+                    "reclaimed account works. Move anything worth keeping across, "
+                    "take away admin or moderator rights once the reclaimed "
+                    "account has them, and delete the leftover by hand."
+                    if released else
                     "Move the posts to the member's reclaimed account or delete "
                     "the leftover one by hand. Until then its email address "
                     "cannot be given to the account they actually use."
@@ -398,16 +429,13 @@ def _handle_forum_discard_replaced_work(item):
             target_user=item.user,
             commit=False,
         )
-        return
 
-    current_app.logger.info(
-        "Removed the forum account left behind by a reconnection: %s", remote_user_id
-    )
-    # And now the account they kept can be given their address -- which the one
-    # just removed was holding, so a sync that ran before this could not.
-    kept = item.user
-    if kept is not None and kept.member is not None:
-        enqueue_forum_sync(kept.member, reason="forum_replaced_account_removed")
+    # Now the account they kept can be given their address, which the leftover
+    # was holding -- so a sync that ran before this could not.
+    if deleted or released:
+        kept = item.user
+        if kept is not None and kept.member is not None:
+            enqueue_forum_sync(kept.member, reason="forum_replaced_account_removed")
 
 
 register_handler(ExternalWorkItem.KIND_FORUM_SYNC, _handle_forum_sync_work)

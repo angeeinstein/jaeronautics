@@ -1161,6 +1161,45 @@ class DiscourseConnectProvider(ForumProvider):
         )
         return True
 
+    def release_address(self, remote_user_id, external_id, placeholder):
+        """Move a left-behind account onto a placeholder address. Returns whether it did.
+
+        Discourse gives an address to one account only, so while the account a
+        returning student left behind holds theirs, the account they actually
+        use cannot be given it -- and every sync of that account fails. Deleting
+        the leftover would solve that, but it is not always possible: it may
+        have posts in it, or be an admin, which Discourse will not delete. So
+        the address comes off first, whatever happens to the account after.
+
+        Through the same Discourse Connect sync that set the address, keyed on
+        the forum identity the leftover was made with. Checked first that this
+        identity really is that account: sync_sso *creates* an account for an
+        identity it does not know, and a stray one with a placeholder address
+        would be one more thing to clean up.
+        """
+        if not external_id:
+            return False
+        try:
+            remote_user = self.get_remote_user_by_external_id(external_id)
+        except ForumProviderError as exc:
+            if "failed (404)" in str(exc):
+                return False
+            raise
+        if str(remote_user.get("id")) != str(remote_user_id):
+            return False
+        payload = {
+            "nonce": f"release-{external_id}-{int(datetime.now(timezone.utc).timestamp())}",
+            "external_id": str(external_id),
+            "email": placeholder,
+            "require_activation": "false",
+        }
+        encoded, signature = self._sign_sso_payload(payload)
+        self._request(
+            "POST", "/admin/users/sync_sso", data={"sso": encoded, "sig": signature},
+            rate_limit_retries=BULK_RATE_LIMIT_RETRIES,
+        )
+        return True
+
     def delete_remote_user(self, remote_user_id):
         """Remove an empty Discourse account. Returns (deleted, reason).
 
@@ -1189,6 +1228,14 @@ class DiscourseConnectProvider(ForumProvider):
             if "failed (404)" in str(exc):
                 return True, None
             raise
+
+        # Discourse will not delete an admin, and refusing with a 403 would be
+        # retried for hours to the same answer. Nor should it be quietly
+        # demoted first: for somebody who set the forum up, it may be the
+        # account they administer it with until the one they are moving to has
+        # the same rights.
+        if remote_user.get("admin") or remote_user.get("moderator"):
+            return False, "the account is an admin or moderator on the forum and was left alone"
 
         # Any of these means a person did something in that account.
         written = sum(

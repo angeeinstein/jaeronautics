@@ -177,18 +177,26 @@ class TestWhatNoLongerStandsInTheWay:
         request = db.session.execute(db.select(MemberProfileChangeRequest)).scalar_one()
         assert request.requested_by_user_id == profile.user_id
 
-    def test_an_account_with_roles_is_still_left_alone(self, app):
-        """Merging permissions is a judgement, not a move."""
-        from aeronautics_members.db_models import Role
+    def test_an_admin_reconnects_and_keeps_their_roles(self, app):
+        """Found on the test server: the super admin made at install was also
+        on the old forum, and the claim skipped them without a word."""
+        from conftest import app_module
 
         member = _returning(
             "79", "StaffS_L22", "staff@edu.fh-joanneum.at", "staff@example.com",
         )
-        member.user.roles.append(Role(slug="photo_reviewer", label="Photo reviewer"))
+        member.user.grant_role(app_module.get_role("superadmin"))
+        member.user.grant_role(app_module.get_role("admin"))
         member.email_work_verified_at = _now()
         db.session.commit()
 
-        assert claim_archived_account(member.user) is None
+        profile = claim_archived_account(member.user)
+        db.session.commit()
+
+        assert profile is not None
+        kept = db.session.get(User, profile.user_id)
+        assert {role.slug for role in kept.roles} == {"superadmin", "admin"}
+        assert kept.member.id == member.id
 
 
 class TestStayingSignedIn:
@@ -307,6 +315,73 @@ class TestTellingTheForum:
         }
         assert queued[ExternalWorkItem.KIND_FORUM_SYNC].member_id == member.id
         assert queued[ExternalWorkItem.KIND_FORUM_SYNC].user_id == profile.user_id
+
+    def _discard(self, monkeypatch, remote_user, *, known_as=None):
+        """Run the discard against a forum holding ``remote_user``; returns what it was asked."""
+        from aeronautics_members.services.workflows import _handle_forum_discard_replaced_work
+
+        asked = {"released": [], "deleted": []}
+
+        class FakeProvider:
+            def get_remote_user_by_external_id(self, external_id):
+                return known_as or {}
+
+            def release_address(self, remote_user_id, external_id, placeholder):
+                asked["released"].append((remote_user_id, external_id, placeholder))
+                return True
+
+            def delete_remote_user(self, remote_user_id):
+                if remote_user.get("admin"):
+                    return False, "the account is an admin or moderator on the forum and was left alone"
+                asked["deleted"].append(remote_user_id)
+                return True, None
+
+        class FakeService:
+            provider = FakeProvider()
+
+            def is_ready(self):
+                return True
+
+        monkeypatch.setattr(
+            "aeronautics_members.services.workflows.get_forum_service", lambda: FakeService(),
+        )
+        member = make_member(email="kept2@example.com")
+        item = ExternalWorkItem(
+            kind=ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED, user=member.user,
+            payload={"remote_user_id": 903, "external_id": "7"},
+            status=ExternalWorkItem.STATUS_PENDING,
+        )
+        db.session.add(item)
+        db.session.commit()
+        _handle_forum_discard_replaced_work(item)
+        db.session.commit()
+        asked["syncs"] = [
+            sync.member_id for sync in db.session.execute(
+                db.select(ExternalWorkItem).filter_by(kind=ExternalWorkItem.KIND_FORUM_SYNC)
+            ).scalars()
+        ]
+        asked["member_id"] = member.id
+        return asked
+
+    def test_the_address_comes_off_the_leftover_first(self, app, monkeypatch):
+        asked = self._discard(monkeypatch, {"id": 903})
+
+        assert asked["released"] == [(903, "7", "forum-replaced-7@imported.invalid")]
+        assert asked["deleted"] == [903]
+        assert asked["syncs"] == [asked["member_id"]]
+
+    def test_an_admin_leftover_is_kept_but_no_longer_in_the_way(self, app, monkeypatch):
+        """Discourse will not delete an admin; the address is what matters."""
+        from aeronautics_members.db_models import NotificationEvent
+
+        asked = self._discard(monkeypatch, {"id": 903, "admin": True})
+
+        assert asked["deleted"] == []
+        assert asked["released"]
+        assert asked["syncs"] == [asked["member_id"]]
+        assert db.session.execute(
+            db.select(NotificationEvent).filter_by(event_type="forum_replaced_account_kept")
+        ).scalars().first() is not None
 
     def test_removing_the_leftover_account_syncs_the_kept_one_again(self, app, monkeypatch):
         """The leftover holds the address, so a sync that ran first was refused."""

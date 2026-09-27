@@ -227,8 +227,12 @@ def _blocking_relationships(user):
     of guessing.
     """
     blocking = []
-    if user.roles:
-        blocking.append("roles")
+    # Portal roles are not listed. They move across in the claim: an archived
+    # account is somebody who has not been here yet, so it has none of its own
+    # to reconcile them with. Refusing here meant an admin who was also on the
+    # old forum -- the people who set this up, typically -- could never get
+    # their history back, and nothing told them why.
+    #
     # A forum account is deliberately NOT listed. Signing up creates one before
     # the university address has been verified, so every real returning student
     # arrives here holding one -- and while this refused them, the claim could
@@ -321,6 +325,13 @@ def claim_archived_account(user):
     archived.email_verification_nonce = user.email_verification_nonce
     archived.password_reset_nonce = None  # links issued for the retired row die here
 
+    # The same person, so the same permissions. Added to rather than replaced,
+    # in case an admin already gave the archived account one.
+    for role in list(user.roles):
+        if role not in archived.roles:
+            archived.roles.append(role)
+    user.roles = []
+
     if member is not None:
         # Both sides, not just the foreign key. The row being retired still
         # holds this membership through User.member, and deleting it below
@@ -346,16 +357,21 @@ def claim_archived_account(user):
         replaced_remote_user_id = forum_account.remote_user_id
         forum_account.remote_user_id = None
 
-        # And the forum is told to get rid of it. Nobody ever posted in it, and
-        # it holds this person's real address -- which Discourse will then
-        # refuse to give to the account they actually use, because an address
-        # can only belong to one account. Queued rather than called here: this
-        # runs while a returning student is clicking a link in an email, and a
-        # slow forum must not be able to fail that.
-        if replaced_remote_user_id:
-            enqueue_forum_discard_replaced(
-                archived, replaced_remote_user_id, reason="forum_account_reclaimed"
-            )
+        # And the forum is told to get rid of it. It holds this person's real
+        # address -- which Discourse will then refuse to give to the account
+        # they actually use, because an address can only belong to one
+        # account. Queued rather than called here: this runs while a returning
+        # student is clicking a link in an email, and a slow forum must not be
+        # able to fail that.
+        #
+        # Queued even without a remote id, since the account may exist all the
+        # same, made by a sign-in whose id was never recorded here. The handler
+        # finds it by identity -- the id of the row being retired -- which is
+        # also what lets it take the address off one it cannot delete.
+        enqueue_forum_discard_replaced(
+            archived, replaced_remote_user_id, reason="forum_account_reclaimed",
+            external_id=str(user.id),
+        )
 
     profile.claimed_at = get_now_utc()
     db.session.flush()
