@@ -38,7 +38,11 @@ load_dotenv(ROOT_ENV_PATH, override=True)
 
 # --- Configuration Setup ---
 SECRET_KEY = os.getenv("SECRET_KEY")
-LANGUAGES = os.getenv("LANGUAGES", "en,de").split(",")
+# English only, whatever LANGUAGES says in an older .env. The German
+# translation has not kept up with the portal, so offering it -- or letting a
+# German browser pick it -- showed a half-translated site. Add "de" back here
+# once the translation is brought up to date.
+LANGUAGES = ["en"]
 DB_HOST = os.getenv("DB_HOST")
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")

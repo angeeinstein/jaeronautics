@@ -308,3 +308,12 @@ def test_the_forum_card_says_its_status_once(app, client, forum, monkeypatch):
 
     assert body.count("Upload a profile picture to complete your forum access.") == 1
     assert "Please upload a profile picture before your forum access can be completed." not in body
+
+
+def test_the_portal_is_english_whatever_the_browser_asks(app, client):
+    """The German translation lags the portal; a German browser picked it up
+    on its own and showed a half-translated site."""
+    body = client.get("/?lang=de", headers={"Accept-Language": "de-AT,de;q=0.9"}).get_data(as_text=True)
+
+    assert '<html lang="en">' in body
+    assert "language-selector" not in body

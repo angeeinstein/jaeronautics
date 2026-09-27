@@ -1442,10 +1442,14 @@ def create_app(config_overrides=None):
         # with it, which is a strange way for a translated log line to fail.
         if not has_request_context():
             return app.config["BABEL_DEFAULT_LOCALE"]
+        supported = app.config["BABEL_SUPPORTED_LOCALES"]
+        if len(supported) < 2:
+            # One language: neither ?lang= nor the browser's preferences get a say.
+            return app.config["BABEL_DEFAULT_LOCALE"]
         lang = request.args.get("lang")
-        if lang in app.config["BABEL_SUPPORTED_LOCALES"]:
+        if lang in supported:
             return lang
-        return request.accept_languages.best_match(app.config["BABEL_SUPPORTED_LOCALES"])
+        return request.accept_languages.best_match(supported) or app.config["BABEL_DEFAULT_LOCALE"]
 
     if config_overrides:
         app.config.update(config_overrides)
