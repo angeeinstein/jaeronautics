@@ -29,6 +29,7 @@ from ..services.forum import (
 from ..config import (
     RATELIMIT_ACCOUNT_DELETION,
     RATELIMIT_DATA_EXPORT,
+    RATELIMIT_EMAIL_RESEND,
 )
 from ..services import (
     ServiceError,
@@ -67,6 +68,7 @@ from ..services.signup import (
     chosen_payment_method,
     invoice_payments_allowed,
 )
+from ._email_cooldown import remember_sent, sent_just_now
 from ._signup import start_membership
 from ..services.workflows import (
     sync_member_primary_email,
@@ -132,6 +134,15 @@ def account():
 @login_required
 def create_membership_profile():
     if current_user.member is not None:
+        # The form sent twice -- a double click while Stripe is asked for the
+        # payment page -- finds the profile the first one made. Carry on to
+        # that payment page rather than to the account page in its place.
+        if (
+            request.method == "POST"
+            and can_resume_payment(current_user.member)
+            and chosen_payment_method(request.form.get("payment_method", "checkout")) == "checkout"
+        ):
+            return resume_member_payment()
         return redirect(url_for("account.account"))
 
     form = CreateMembershipProfileForm()
@@ -478,13 +489,18 @@ def rejoin_membership():
 
 @account_bp.route("/account/resend-verification", methods=["POST"])
 @login_required
+@limiter.limit(RATELIMIT_EMAIL_RESEND, methods=["POST"])
 def resend_verification_email():
     if current_user.email_is_verified:
         flash(_("Your email address is already verified."), "info")
         return redirect(url_for("account.account"))
+    if sent_just_now("verify-email", current_user.email):
+        flash(_("We sent it a moment ago. Please check your inbox and your spam folder."), "info")
+        return redirect(url_for("account.account"))
 
     try:
         if send_email_verification_email(current_app._get_current_object(), current_user):
+            remember_sent("verify-email", current_user.email)
             flash(_("We sent you a new confirmation email. Not in your inbox? Please check your spam folder."), "success")
         else:
             flash(_("We could not send a verification email because no sender account is configured yet."), "warning")
@@ -496,6 +512,7 @@ def resend_verification_email():
 
 @account_bp.route("/account/resend-work-verification", methods=["POST"])
 @login_required
+@limiter.limit(RATELIMIT_EMAIL_RESEND, methods=["POST"])
 def resend_work_email_verification():
     """Send the university-address confirmation again.
 
@@ -511,10 +528,14 @@ def resend_work_email_verification():
     if member.email_work_is_verified:
         flash(_("Your university or company email address is already confirmed."), "info")
         return redirect(url_for("account.account"))
+    if sent_just_now("verify-work-email", member.email_work):
+        flash(_("We sent it a moment ago. Please check your inbox and your spam folder."), "info")
+        return redirect(url_for("account.account"))
 
     try:
         if send_work_email_verification_email(current_app._get_current_object(), member):
             db.session.commit()
+            remember_sent("verify-work-email", member.email_work)
             flash(
                 _("We sent a new confirmation email to %(address)s. Not in your inbox? Please check your spam folder.",
                   address=member.email_work),

@@ -27,7 +27,7 @@
                             </div>
                             <div class="col-lg-4">
                                 <h5 class="mb-3">{{ _('Approve') }}</h5>
-                                <form method="POST" action="{{ url_for('admin.approve_forum_avatar_submission', submission_id=submission.id) }}">
+                                <form method="POST" action="{{ url_for('admin.approve_forum_avatar_submission', submission_id=submission.id) }}" data-busy-text="{{ _('Saving…') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="mb-3">
                                         <label class="form-label" for="approve-note-{{ submission.id }}">{{ _('Note for the member (optional)') }}</label>
@@ -38,7 +38,7 @@
                             </div>
                             <div class="col-lg-4">
                                 <h5 class="mb-3">{{ _('Reject') }}</h5>
-                                <form method="POST" action="{{ url_for('admin.reject_forum_avatar_submission', submission_id=submission.id) }}">
+                                <form method="POST" action="{{ url_for('admin.reject_forum_avatar_submission', submission_id=submission.id) }}" data-busy-text="{{ _('Saving…') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <div class="mb-3">
                                         <label class="form-label" for="reject-note-{{ submission.id }}">{{ _('Reason (optional)') }}</label>

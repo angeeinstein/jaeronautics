@@ -35,6 +35,7 @@ from ..services.notifications import (
     queue_curated_admin_notification,
 )
 from ..services.workflows import finish_forum_cleanup_for
+from ._email_cooldown import remember_sent, sent_just_now
 from flask import (
     abort,
     flash,
@@ -327,9 +328,14 @@ def _confirm_email_first():
     back here: a loop the browser ended with "too many redirects". And it said
     a link had been sent when none had.
     """
+    if sent_just_now("verify-email", current_user.email):
+        flash(_("Please confirm your email address first. We sent you a link a moment ago."), "warning")
+        return redirect(url_for("account.account"))
     try:
         sent = send_email_verification_email(current_app._get_current_object(), current_user)
         db.session.commit()
+        if sent:
+            remember_sent("verify-email", current_user.email)
     except Exception as exc:  # noqa: BLE001 -- the reason belongs in the log
         db.session.rollback()
         sent = False

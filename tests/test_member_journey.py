@@ -388,3 +388,79 @@ def test_payment_buttons_show_they_are_working(app, client):
 
     assert 'data-busy-text="Taking you to payment…"' in body
     assert "submit-once.js" in body
+
+
+class TestAnEmailPerClickNoMore:
+    """Buttons that send an email sent one per click -- and a password reset
+    made each new one kill the last, so the first to arrive said "invalid"."""
+
+    def test_confirmation_resent_once_within_the_minute(self, app, client, monkeypatch):
+        from aeronautics_members.blueprints import account as account_module
+
+        sent = []
+        monkeypatch.setattr(account_module, "send_email_verification_email",
+                            lambda app, user: sent.append(user.email) or True)
+        member = make_member(email="twice@example.com")
+        with client.session_transaction() as session:
+            session["_user_id"] = str(member.user.id)
+
+        client.post("/account/resend-verification")
+        client.post("/account/resend-verification")
+
+        assert sent == ["twice@example.com"]
+        assert any("a moment ago" in text for text in _flashes(client))
+
+    def test_university_confirmation_resent_once_within_the_minute(self, app, client, monkeypatch):
+        from aeronautics_members.blueprints import account as account_module
+
+        sent = []
+        monkeypatch.setattr(account_module, "send_work_email_verification_email",
+                            lambda app, member: sent.append(member.email_work) or True)
+        member = make_member(email="twice-work@example.com", email_work="twice@edu.fh-joanneum.at")
+        with client.session_transaction() as session:
+            session["_user_id"] = str(member.user.id)
+
+        client.post("/account/resend-work-verification")
+        client.post("/account/resend-work-verification")
+
+        assert sent == ["twice@edu.fh-joanneum.at"]
+
+    def test_a_double_click_on_forgot_password_keeps_the_first_link_working(self, app, client, monkeypatch):
+        from aeronautics_members.blueprints import auth as auth_module
+        from aeronautics_members.db_models import User
+
+        sent = []
+        monkeypatch.setattr(auth_module, "send_password_reset_email",
+                            lambda app, user: sent.append(user.password_reset_nonce) or True)
+        make_member(email="forgot@example.com")
+
+        client.post("/forgot-password", data={"email": "forgot@example.com"})
+        client.post("/forgot-password", data={"email": "forgot@example.com"})
+
+        user = db.session.execute(db.select(User).filter_by(email="forgot@example.com")).scalar_one()
+        assert len(sent) == 1
+        assert user.password_reset_nonce == sent[0]  # the link in that one email still works
+
+    def test_the_forum_does_not_send_one_per_attempt(self, app, client, forum, links_sent):
+        _paid_member(client, verified=False)
+
+        client.get("/forum")
+        client.get("/forum")
+
+        assert links_sent == ["journey@example.com"]
+
+
+def test_creating_a_profile_twice_goes_on_to_payment(app, client, monkeypatch):
+    from aeronautics_members.blueprints import account as account_module
+
+    member = make_member(email="profile-twice@example.com", payment_status="pending_checkout")
+    with client.session_transaction() as session:
+        session["_user_id"] = str(member.user.id)
+    monkeypatch.setattr(
+        account_module, "create_checkout_session_for_member",
+        lambda m: (types.SimpleNamespace(url="https://checkout.stripe.test/again"), {}),
+    )
+
+    response = client.post("/account/create-membership", data={"payment_method": "checkout"})
+
+    assert response.headers["Location"] == "https://checkout.stripe.test/again"

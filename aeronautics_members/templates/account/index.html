@@ -52,7 +52,7 @@
                             {% endif %}
                         </div>
                         {% if not current_user.email_is_verified %}
-                            <form method="POST" action="{{ url_for('account.resend_verification_email') }}" class="mt-2 mb-0">
+                            <form method="POST" action="{{ url_for('account.resend_verification_email') }}" class="mt-2 mb-0" data-busy-text="{{ _('Sending…') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-sm btn-secondary">{{ _('Send confirmation email again') }}</button>
                             </form>
@@ -73,7 +73,7 @@
                                 {% endif %}
                             </div>
                             {% if not member.email_work_is_verified %}
-                                <form method="POST" action="{{ url_for('account.resend_work_email_verification') }}" class="mt-2 mb-0">
+                                <form method="POST" action="{{ url_for('account.resend_work_email_verification') }}" class="mt-2 mb-0" data-busy-text="{{ _('Sending…') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-sm btn-secondary">{{ _('Send confirmation email again') }}</button>
                                 </form>
@@ -329,7 +329,7 @@
                 {{ _('Your membership is already set to end on %(date)s. If you delete your account before then, you lose the remaining time without a refund.', date=member.membership_ends_on.strftime('%d.%m.%Y')) }}
             </p>
         {% endif %}
-        <form method="POST" action="{{ url_for('account.request_account_deletion') }}" class="mb-0">
+        <form method="POST" action="{{ url_for('account.request_account_deletion') }}" class="mb-0" data-busy-text="{{ _('Sending…') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-outline-danger">{{ _('Email me a deletion link') }}</button>
         </form>

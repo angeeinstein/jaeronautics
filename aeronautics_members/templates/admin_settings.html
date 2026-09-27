@@ -758,7 +758,7 @@
                         {% endif %}
 
                         <form method="POST" action="{{ url_for('admin.admin_request_system_update') }}"
-                              data-confirm="{{ _('Install the update now? The site will restart and be briefly unavailable.') }}">
+                              data-confirm="{{ _('Install the update now? The site will restart and be briefly unavailable.') }}" data-busy-text="{{ _('Starting…') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-primary"
                                     {% if not update_state.runner_installed or update_state.in_progress %}disabled{% endif %}>
@@ -787,7 +787,7 @@
                             {% endif %}
                         </dl>
                         <form method="POST" action="{{ url_for('admin.admin_request_system_update') }}"
-                              data-confirm="{{ _('Go back to the previous version? The site will restart and be briefly unavailable.') }}">
+                              data-confirm="{{ _('Go back to the previous version? The site will restart and be briefly unavailable.') }}" data-busy-text="{{ _('Starting…') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="action" value="rollback">
                             <button type="submit" class="btn btn-outline-secondary"

@@ -46,6 +46,11 @@
         if (!form.matches || !form.matches('form[data-busy-text]')) {
             return;
         }
+        // Answered "no" to a data-confirm question (confirm-submit.js runs on
+        // the form itself, before this): nothing is being sent.
+        if (event.defaultPrevented) {
+            return;
+        }
         if (form.hasAttribute('data-submitting')) {
             event.preventDefault();
             return;

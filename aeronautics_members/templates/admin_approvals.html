@@ -46,7 +46,7 @@
                                 </div>
                                 <div class="row g-4 mt-1">
                                     <div class="col-lg-6">
-                                        <form method="POST" action="{{ url_for('admin.approve_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                        <form method="POST" action="{{ url_for('admin.approve_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100" data-busy-text="{{ _('Saving…') }}">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <h5>{{ _('Approve Request') }}</h5>
                                             {% if request_record.username_would_change %}
@@ -68,7 +68,7 @@
                                         </form>
                                     </div>
                                     <div class="col-lg-6">
-                                        <form method="POST" action="{{ url_for('admin.reject_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                        <form method="POST" action="{{ url_for('admin.reject_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100" data-busy-text="{{ _('Saving…') }}">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <h5>{{ _('Reject Request') }}</h5>
                                             <div class="mb-3">

@@ -274,7 +274,7 @@
                     </dl>
                     {% if member.stripe_customer_id or member.stripe_subscription_id %}
                         <div class="d-flex flex-wrap gap-2 mt-4">
-                            <form method="POST" action="{{ url_for('admin.admin_sync_billing_account', user_id=user_record.id) }}" class="mb-0">
+                            <form method="POST" action="{{ url_for('admin.admin_sync_billing_account', user_id=user_record.id) }}" class="mb-0" data-busy-text="{{ _('Syncing…') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="next" value="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">
                                 <button type="submit" class="btn btn-primary">{{ _('Sync Billing') }}</button>
@@ -312,7 +312,7 @@
                     <div class="alert alert-secondary mb-3">{{ latest_forum_submission.review_note }}</div>
                 {% endif %}
                 {% if member %}
-                    <form method="POST" action="{{ url_for('admin.admin_resync_forum_account', user_id=user_record.id) }}" class="mb-0">
+                    <form method="POST" action="{{ url_for('admin.admin_resync_forum_account', user_id=user_record.id) }}" class="mb-0" data-busy-text="{{ _('Syncing…') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="next" value="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">
                         <button type="submit" class="btn btn-primary">{{ _('Resync Forum') }}</button>
@@ -431,7 +431,7 @@
                 </div>
             {% endif %}
 
-            <form method="POST" action="{{ url_for('admin.admin_delete_account', user_id=user_record.id) }}" class="mt-3">
+            <form method="POST" action="{{ url_for('admin.admin_delete_account', user_id=user_record.id) }}" class="mt-3" data-busy-text="{{ _('Deleting…') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-3">
                     <label for="delete-reason" class="form-label">{{ _('Reason (recorded in the audit log)') }}</label>

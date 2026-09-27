@@ -8,7 +8,7 @@
     </div>
 {% endif %}
 
-<form method="POST" action="{{ url_for('forum.upload_forum_avatar') }}" enctype="multipart/form-data" class="mb-0 forum-avatar-upload-form" data-avatar-upload-root data-max-upload-bytes="{{ forum_context.avatar_upload_request_limit }}" data-output-max-bytes="{{ forum_context.avatar_max_bytes }}">
+<form method="POST" action="{{ url_for('forum.upload_forum_avatar') }}" enctype="multipart/form-data" class="mb-0 forum-avatar-upload-form" data-avatar-upload-root data-max-upload-bytes="{{ forum_context.avatar_upload_request_limit }}" data-output-max-bytes="{{ forum_context.avatar_max_bytes }}" data-busy-text="{{ _('Uploading…') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="crop_mode" value="square" data-avatar-crop-mode>
     <input type="hidden" name="crop_zoom" value="1" data-avatar-crop-zoom>

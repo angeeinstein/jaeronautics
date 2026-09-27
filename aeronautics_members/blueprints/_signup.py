@@ -23,6 +23,7 @@ from ..services.identity import (
     send_work_email_verification_email,
 )
 from ..services.workflows import send_member_welcome_email
+from ._email_cooldown import remember_sent
 
 
 def start_membership(member, payment_method, *, what):
@@ -38,7 +39,8 @@ def start_membership(member, payment_method, *, what):
 
     try:
         if user is not None and not user.email_is_verified:
-            send_email_verification_email(app, user)
+            if send_email_verification_email(app, user):
+                remember_sent("verify-email", user.email)
     except Exception as email_exc:  # noqa: BLE001 -- the membership stands
         current_app.logger.warning(
             "Could not send verification email for user_id=%s: %s",
@@ -50,7 +52,8 @@ def start_membership(member, payment_method, *, what):
     # old forum, what reconnects their archived account.
     if member.email_work:
         try:
-            send_work_email_verification_email(app, member)
+            if send_work_email_verification_email(app, member):
+                remember_sent("verify-work-email", member.email_work)
             db.session.commit()
         except Exception as email_exc:  # noqa: BLE001
             db.session.rollback()

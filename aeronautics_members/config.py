@@ -81,6 +81,9 @@ RATELIMIT_ADMIN_EMAIL = os.getenv("RATELIMIT_ADMIN_EMAIL", "5 per 10 minute")
 # and expensive to serve; deletion requests send an email each time.
 RATELIMIT_DATA_EXPORT = os.getenv("RATELIMIT_DATA_EXPORT", "10 per hour")
 RATELIMIT_ACCOUNT_DELETION = os.getenv("RATELIMIT_ACCOUNT_DELETION", "5 per hour")
+# "Send the confirmation again": a cap on top of the per-browser minute between
+# two of them (blueprints/_email_cooldown.py).
+RATELIMIT_EMAIL_RESEND = os.getenv("RATELIMIT_EMAIL_RESEND", "10 per hour")
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
 
 # Domains that prove somebody is currently a student or staff. An admin can

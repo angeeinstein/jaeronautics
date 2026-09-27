@@ -13,6 +13,7 @@ from ..config import (
     RATELIMIT_REGISTER,
 )
 from ..services.forum_import import claim_archived_account
+from ._email_cooldown import remember_sent, sent_just_now
 from ..services.forum import (
     log_out_forum_session_if_possible,
 )
@@ -79,11 +80,15 @@ def forgot_password():
     if form.validate_on_submit():
         email_address = form.email.data.strip().lower()
         user = db.session.execute(db.select(User).filter_by(email=email_address)).scalar_one_or_none()
-        if user is not None:
+        # Asked again within the minute: nothing is sent. Every request makes a
+        # new link and kills the last one, so a double click left the email
+        # that arrives first -- the one people open -- saying "invalid".
+        if user is not None and not sent_just_now("password-reset", email_address):
             try:
                 rotate_password_reset_nonce(user)
                 db.session.commit()
                 send_password_reset_email(current_app._get_current_object(), user)
+                remember_sent("password-reset", email_address)
             except Exception as exc:
                 db.session.rollback()
                 current_app.logger.warning("Could not send password reset email for user_id=%s: %s", user.id, exc)
