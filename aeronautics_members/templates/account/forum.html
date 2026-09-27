@@ -6,16 +6,7 @@
         <div class="card shadow-sm border-0">
             <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
                 <h3 class="mb-0">{{ _('Forum Access') }}</h3>
-                <div class="d-flex gap-2 flex-wrap">
-                    <a href="{{ url_for('account.account') }}" class="btn btn-sm btn-secondary">{{ _('Back to Account') }}</a>
-                    {% if current_user.is_authenticated %}
-                        <form method="POST" action="{{ url_for('auth.logout') }}" class="mb-0">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="next" value="{{ url_for('auth.login', next=url_for('forum.forum_entry')) }}">
-                            <button type="submit" class="btn btn-sm btn-outline-light">{{ _('Log Out Everywhere') }}</button>
-                        </form>
-                    {% endif %}
-                </div>
+                <a href="{{ url_for('account.account') }}" class="btn btn-sm btn-secondary">{{ _('Back to Account') }}</a>
             </div>
             <div class="card-body">
                 <p class="text-muted">{{ _('Use this page to complete the steps required before member content becomes visible in the forum.') }}</p>
