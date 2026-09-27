@@ -21,6 +21,7 @@ from ..services.billing import (
     backfill_member_coverage_from_subscription,
     backfill_member_stripe_references,
     get_member_by_stripe_or_email,
+    is_free_period_trial_invoice,
     sync_member_subscription_state_from_subscription,
 )
 from ..services.clock import (
@@ -286,7 +287,17 @@ def process_stripe_event(event):
             email=customer_email,
             fetch_customer_email=True,
         )
-        if member:
+        if member and event_type.startswith("invoice") and is_free_period_trial_invoice(data_object, member):
+            # The EUR 0 invoice that opens an October joiner's free period. The
+            # free period itself is recorded at signup, and checkout completing
+            # is what activates it; this is not a payment and records none.
+            backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
+            db.session.commit()
+            current_app.logger.info(
+                "Free-period opening invoice %s for member_id=%s left as a free period, not a payment.",
+                data_object.get("id"), member.id,
+            )
+        elif member:
             previous_status = member.payment_status
             backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
 

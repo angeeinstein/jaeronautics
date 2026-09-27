@@ -258,6 +258,95 @@ class TestInvoicePaid:
         assert stub_side_effects == [member.id]
 
 
+def _zero_invoice(event_id, *, billing_reason="subscription_create", metadata=None,
+                  lines_start=None, customer="cus_test_1", subscription="sub_test_1"):
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    invoice = {
+        "id": f"in_{event_id}", "customer": customer, "subscription": subscription,
+        "billing_reason": billing_reason, "total": 0, "amount_paid": 0,
+        "status_transitions": {"paid_at": now_ts}, "created": now_ts,
+    }
+    if metadata is not None:
+        invoice["parent"] = {"subscription_details": {"metadata": metadata}}
+    if lines_start is not None:
+        invoice["lines"] = {"data": [{"period": {"start": lines_start}}]}
+    return {"id": event_id, "type": "invoice.paid", "data": {"object": invoice}}
+
+
+class TestFreePeriodOpeningInvoice:
+    """Stripe opens an October joiner's free period with a EUR 0 invoice, marked
+    paid. It is not a payment, and the free period must stay a free period."""
+
+    def _reasons(self, member):
+        return sorted(p.reason for p in db.session.get(Member, member.id).membership_periods)
+
+    def test_after_checkout_it_leaves_the_free_period_alone(self, client, monkeypatch, stub_side_effects):
+        member = make_member()
+        post_event(client, monkeypatch, checkout_event(member, member.user, activation_mode="free_period"))
+
+        resp = post_event(client, monkeypatch, _zero_invoice("evt_zero_after"))
+
+        assert resp.status_code == 200
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "free_period"
+        assert refreshed.is_active is True
+        assert self._reasons(member) == ["free_period"]
+
+    def test_before_checkout_it_records_nothing(self, client, monkeypatch, stub_side_effects):
+        """Stripe does not order its events; checkout still activates them."""
+        member = make_member(stripe_customer_id="cus_test_1", stripe_subscription_id="sub_test_1",
+                             payment_status="pending_checkout")
+
+        post_event(client, monkeypatch, _zero_invoice(
+            "evt_zero_first", metadata={"activation_mode": "free_period"},
+        ))
+        assert db.session.get(Member, member.id).payment_status == "pending_checkout"
+        assert self._reasons(member) == []
+
+        post_event(client, monkeypatch, checkout_event(member, member.user, activation_mode="free_period"))
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "free_period"
+        assert refreshed.is_active is True
+        assert self._reasons(member) == ["free_period"]
+        assert stub_side_effects == [member.id]
+
+    def test_a_renewal_that_came_to_nothing_still_extends_the_membership(
+        self, client, monkeypatch, stub_side_effects,
+    ):
+        """Settled by a coupon or account credit: free, but a renewal all the same."""
+        make_member(email="credit@example.com", stripe_customer_id="cus_cr",
+                    stripe_subscription_id="sub_cr", payment_status="free_period",
+                    is_active=True, membership_ends_on=YEAR_END)
+        periods.grant_calendar_year(
+            Member.query.filter_by(email_private="credit@example.com").one(),
+            TODAY.year, periods.MembershipPeriod.REASON_FREE_PERIOD,
+        )
+        db.session.commit()
+
+        post_event(client, monkeypatch, _zero_invoice(
+            "evt_zero_renewal", billing_reason="subscription_cycle",
+            customer="cus_cr", subscription="sub_cr",
+            lines_start=clock.start_of_day_unix(NEXT_YEAR_START),
+        ))
+
+        refreshed = Member.query.filter_by(email_private="credit@example.com").one()
+        assert refreshed.membership_ends_on == date(TODAY.year + 1, 12, 31)
+        assert refreshed.payment_status == "paid"
+
+    def test_an_opening_invoice_not_known_to_be_free_counts_as_before(
+        self, client, monkeypatch, stub_side_effects,
+    ):
+        member = make_member(stripe_customer_id="cus_test_1", stripe_subscription_id="sub_test_1",
+                             payment_status="unpaid")
+
+        post_event(client, monkeypatch, _zero_invoice(
+            "evt_zero_unknown", metadata={"activation_mode": "paid_now"},
+        ))
+
+        assert db.session.get(Member, member.id).payment_status == "paid"
+
+
 class TestRenewalCoverage:
     def test_renewal_advances_by_billing_period_not_timestamp(self, client, monkeypatch, stub_side_effects):
         # M2/M3: a renewal invoice paid at a timestamp that maps to Dec 31 must

@@ -42,10 +42,11 @@ from .membership import (
     PAYMENT_EVIDENCE_STATUSES,
     build_membership_cycle,
     format_membership_date_display,
+    invoice_coverage_year,
     set_member_membership_window,
     sync_member_active_state,
 )
-from .periods import grant_period
+from .periods import active_periods, grant_period
 from .settings import get_stripe_settings_map
 
 
@@ -400,6 +401,46 @@ def create_checkout_session_for_member(member):
     member.pending_checkout_started_at = get_now_utc()
     member.stripe_checkout_session_id = checkout_session.get("id")
     return checkout_session, cycle
+
+
+def is_free_period_trial_invoice(invoice, member):
+    """Whether ``invoice`` is the EUR 0 one Stripe issues when a free period starts.
+
+    Somebody joining from October gets the rest of the year free, which Stripe
+    models as a trial until Jan 1 -- and a trial still opens with an invoice,
+    for nothing, marked paid at once. Taken as a payment it turned every October
+    joiner into a paying member with a paid coverage record beside their free
+    one, though the portal had already recorded the free period at signup.
+
+    Deliberately narrow. Only the invoice that opens a subscription, only when
+    it came to nothing, and only when that subscription is known to be a free
+    period -- from its signup metadata, or because the free period is already
+    on record for that year. A renewal settled by a coupon or account credit
+    also comes to nothing, and that one must still extend the membership.
+    """
+    if not invoice or member is None:
+        return False
+    if invoice.get("billing_reason") != "subscription_create":
+        return False
+    # Compared with 0 rather than tested for falsiness: an invoice that does not
+    # say what it came to is not evidence that it came to nothing.
+    if invoice.get("total") != 0 or (invoice.get("amount_paid") or 0) != 0:
+        return False
+
+    # Where Stripe puts the subscription's metadata depends on the API version:
+    # subscription_details on older ones, parent.subscription_details on newer.
+    details = invoice.get("subscription_details") or (
+        (invoice.get("parent") or {}).get("subscription_details")
+    ) or {}
+    if ((details.get("metadata") or {}).get("activation_mode") or "").strip() == "free_period":
+        return True
+
+    year = invoice_coverage_year(invoice)
+    return any(
+        period.reason == MembershipPeriod.REASON_FREE_PERIOD
+        and (year is None or period.ends_on.year == year)
+        for period in active_periods(member, include_future=True)
+    )
 
 
 def create_invoice_membership_for_member(member):
