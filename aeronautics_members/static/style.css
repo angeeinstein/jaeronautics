@@ -192,6 +192,18 @@ h1, .h1, h2, .h2,
     font-weight: 500;
 }
 
+/* Small capitals labels -- "TOTAL ACCOUNTS" -- need air between letters. */
+.text-uppercase {
+    letter-spacing: 0.08em;
+}
+
+/* The opening sentence of a page (thank-you, cancelled, error pages). */
+.lead {
+    font-size: 1.125rem;
+    font-weight: 300;
+    line-height: 1.55;
+}
+
 .form-label {
     font-size: 0.875rem;
     font-weight: 500;
@@ -532,6 +544,78 @@ textarea.form-control {
 .alert {
     --bs-alert-padding-x: 1.25rem;
     --bs-alert-padding-y: 1rem;
+}
+
+/* "It worked": a bare tick drawing itself in once, on a success message. */
+.success-check {
+    flex: 0 0 auto;
+}
+
+.success-check path {
+    fill: none;
+    stroke: var(--ja-success);
+    stroke-width: 3;
+    stroke-dasharray: 28;
+    stroke-dashoffset: 28;
+    animation: success-check-draw 0.45s ease-out 0.1s forwards;
+}
+
+@keyframes success-check-draw {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .success-check path {
+        animation: none;
+        stroke-dashoffset: 0;
+    }
+}
+
+/* ---- Status labels ----------------------------------------------------------
+   A state in a word: small capitals on a faint tint of its colour, square. */
+
+.status-label {
+    display: inline-block;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+/* Confirmed, active, healthy, done. */
+.status-active {
+    background-color: rgba(40, 167, 69, 0.16);
+    color: #7eca8f;
+}
+
+/* Waiting on someone: not confirmed yet, not active yet. */
+.status-pending {
+    background-color: rgba(242, 184, 75, 0.14);
+    color: var(--ja-warning);
+}
+
+/* Something is wrong: deactivated, failed, needs attention. */
+.status-failed {
+    background-color: rgba(255, 107, 107, 0.14);
+    color: var(--ja-danger);
+}
+
+/* A plain fact: a role, erased, unclaimed. */
+.status-neutral {
+    background-color: rgba(170, 180, 187, 0.14);
+    color: var(--ja-muted);
+}
+
+/* A marker worth noticing but not a problem: old forum, running. */
+.status-info {
+    background-color: var(--ja-accent-soft);
+    color: var(--ja-link);
 }
 
 .accordion {

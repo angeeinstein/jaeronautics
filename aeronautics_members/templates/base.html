@@ -69,7 +69,14 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
+                    {% if category == 'success' %}
+                    <div class="alert alert-success d-flex align-items-center gap-2" role="status">
+                        <svg class="success-check" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 13l6.5 6.5L22 6"/></svg>
+                        <span>{{ message }}</span>
+                    </div>
+                    {% else %}
                     <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endif %}
                 {% endfor %}
             {% endif %}
         {% endwith %}

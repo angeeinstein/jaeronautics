@@ -99,7 +99,7 @@
                                 <td>
                                     {% if unclaimed_archive %}
                                         {{ archive.source_email or archive.source_username }}
-                                        <span class="badge text-bg-light border ms-1">{{ _('Old forum') }}</span>
+                                        <span class="status-label status-info ms-1">{{ _('Old forum') }}</span>
                                     {% else %}
                                         {{ user_record.email }}
                                     {% endif %}
@@ -116,20 +116,20 @@
                                 </td>
                                 <td>
                                     {% if user_record.deleted_at %}
-                                        <span class="badge text-bg-dark">{{ _('Erased') }}</span>
+                                        <span class="status-label status-neutral">{{ _('Erased') }}</span>
                                     {% elif user_record.is_disabled %}
-                                        <span class="badge text-bg-danger" title="{{ user_record.disabled_reason or '' }}">{{ _('Deactivated') }}</span>
+                                        <span class="status-label status-failed" title="{{ user_record.disabled_reason or '' }}">{{ _('Deactivated') }}</span>
                                     {% elif not user_record.password_hash %}
                                         <span class="text-muted">{{ _('No sign-in yet') }}</span>
                                     {% else %}
-                                        <span class="badge text-bg-success">{{ _('Active') }}</span>
+                                        <span class="status-label status-active">{{ _('Active') }}</span>
                                     {% endif %}
                                 </td>
                                 <td>{{ user_record.forum_username or '-' }}</td>
                                 <td>
                                     {% if user_record.roles %}
                                         {% for role in user_record.roles %}
-                                            <span class="badge text-bg-secondary me-1">{{ role.label }}</span>
+                                            <span class="status-label status-neutral me-1">{{ role.label }}</span>
                                         {% endfor %}
                                     {% else %}
                                         <span class="text-muted">{{ _('None') }}</span>
@@ -147,7 +147,7 @@
                                 <td>
                                     {% if member %}
                                         {% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}
-                                        {% if archive %}<span class="badge text-bg-light border ms-1" title="{{ _('Reconnected their old forum account') }}">{{ _('Reconnected') }}</span>{% endif %}
+                                        {% if archive %}<span class="status-label status-info ms-1" title="{{ _('Reconnected their old forum account') }}">{{ _('Reconnected') }}</span>{% endif %}
                                     {% elif archive %}
                                         <span class="text-muted">{{ _('Unclaimed') }}</span>
                                     {% else %}

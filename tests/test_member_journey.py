@@ -542,3 +542,23 @@ def test_the_navbar_marks_the_section_you_are_in(app, client):
     body = client.get("/account", follow_redirects=True).get_data(as_text=True)
 
     assert 'class="nav-link active" aria-current="page" href="/account"' in body
+
+
+def test_a_success_message_carries_the_tick(app, client):
+    with client.session_transaction() as session:
+        session["_flashes"] = [("success", "Saved."), ("warning", "Careful.")]
+
+    body = client.get("/login").get_data(as_text=True)
+
+    assert body.count('class="success-check"') == 1
+    assert '<div class="alert alert-warning">Careful.</div>' in body
+
+
+def test_states_are_shown_as_status_labels_not_bootstrap_badges():
+    templates = Path(__file__).resolve().parent.parent / "aeronautics_members" / "templates"
+    offenders = [
+        str(path.relative_to(templates))
+        for path in templates.rglob("*.html")
+        if "emails" not in path.parts and 'class="badge' in path.read_text()
+    ]
+    assert not offenders, "use status-label with a status-* tone: " + ", ".join(offenders)

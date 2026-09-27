@@ -205,6 +205,9 @@ def seed(app, app_module, subscriptions):
         *member_pages("photo-rejected"),
         *member_pages("active",
                       {"name": "account--change-password", "path": "/change-password"},
+                      # Saving the profile: the success message with its tick.
+                      {"name": "account--saved", "path": "/account",
+                       "submit": "form[action$='/account/profile']"},
                       {"name": "account--delete-confirm", "path": f"/account/delete/{delete_token}"}),
         *member_pages("sepa"),
         *member_pages("ended"),

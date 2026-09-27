@@ -65,6 +65,9 @@ border in the same colour at about half strength. Text on a tint stays white.
   are Bootstrap's, which get smaller on a phone.
 - A card's title (in its header band): 1.125rem, semibold.
 - Body: 1rem, line height 1.5. Small print: 0.875rem.
+- The opening sentence of a page (thank-you, cancelled, error pages):
+  1.125rem, light (300), line height 1.55.
+- Small uppercase labels ("TOTAL ACCOUNTS") get letter spacing of 0.08em.
 - Field labels: 0.875rem, medium (500).
 - Buttons: semibold (600).
 
@@ -112,6 +115,27 @@ in `--ja-surface-alt`. No shadow.
 no icon: info (cyan), success (green), warning (amber), danger (red),
 secondary (grey).
 
+**Status labels** -- a state in one word: small capitals (0.75rem,
+semibold) on a faint tint of the state's colour, text in that colour,
+square. Five tones, chosen by what the state means:
+
+| Tone | Look | For |
+| --- | --- | --- |
+| `status-active` | Green | Confirmed, active, healthy, completed, claimed |
+| `status-pending` | Amber | Waiting on someone: not confirmed, not active, rolled back |
+| `status-failed` | Red | Something is wrong: deactivated, failed, needs attention |
+| `status-neutral` | Grey | A plain fact: a role, erased, unclaimed, no sign-in yet |
+| `status-info` | Cyan | Worth noticing, not a problem: old forum, reconnected, running |
+
+`<span class="status-label status-active">Active</span>` -- the words stay
+in normal case in the template; the style capitalises them.
+
+**"It worked" tick** -- a bare green tick with no frame that draws itself in
+once (0.45s) at the start of a success message: after something the person
+just did worked (saved, submitted, confirmed). Messages that describe a
+steady state ("nothing needs attention") do not get it. With reduced motion
+switched on in the system, the tick is simply there.
+
 **Tables** -- transparent on the card, hairline rules, cyan semibold column
 headings, faint zebra stripes where rows are long.
 
@@ -145,14 +169,16 @@ bands, and the one real shadow (`0 12px 32px rgba(0,0,0,0.45)`).
 | Message border in full tone colour | Tone colour at about half strength | Many messages here are quiet notices ("no log entries yet"); full-strength borders made them shout louder than the buttons |
 | Mono face for dates and year groups too | Only for figures, code and logs so far | Dates and codes sit inside running text and tables; setting them apart needs markup changes, left for later |
 | Navbar logo 32px tall | 52px | The lockup's small "joanneum" line is unreadable at 32px |
-| Status pills with soft tints | Bootstrap's solid badges, square | Not built yet -- see below |
+| Four status tones: active, pending, ended, failed | Five: ended is `status-neutral` and also covers roles; an extra `status-info` (cyan) | Roles and "old forum" are neither good nor bad; showing them green or grey-as-ended would say something they don't |
+| Failed status text in the strong red (`#dc3545`) | The softer red (`#ff6b6b`) | The strong red on its own dark tint is hard to read (about 3:1); the softer red is the proposal's own error red for the dark page |
+| Tick in cyan | Tick in green | It sits inside a green success message, where a cyan tick clashed; green says "worked" on its own |
+| Page-change progress bar (thin cyan bar at the top) | Not used | Every click here loads a whole new page, which the browser already shows; the bar pays off with a front end that swaps content without reloading (React, later) |
+| Loading placeholders (skeletons) | Not used | Pages arrive from the server complete, so there is never a moment to show them; they would only fake a delay. Useful once parts of a page load on their own (React, later) |
 
 ## Not built yet
 
-- Status pills in the proposal's soft style (active / pending / ended /
-  failed) in place of Bootstrap's solid badges.
-- The 2026 refresh motion parts: page-change progress bar, loading
-  placeholders, the "it worked" tick.
+- The mono face for dates and codes (year groups, invoice numbers):
+  deferred, see the table above.
 - The page layouts of the proposal's portal kit (login, signup, account,
   admin dashboard). Current pages keep their structure.
 

@@ -580,9 +580,9 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h4 class="mb-0">{{ _('System Health') }}</h4>
                         {% if system_health.healthy %}
-                            <span class="badge bg-success">{{ _('Healthy') }}</span>
+                            <span class="status-label status-active">{{ _('Healthy') }}</span>
                         {% else %}
-                            <span class="badge bg-danger">{{ _('Needs attention') }}</span>
+                            <span class="status-label status-failed">{{ _('Needs attention') }}</span>
                         {% endif %}
                     </div>
                     <div class="card-body">
@@ -624,7 +624,7 @@
                                         {% if system_health.queues.emails_overdue %}
                                             {# A count alone cannot distinguish an email backing off
                                                from one nobody is delivering. This says which. #}
-                                            <span class="badge bg-danger">{{ _('%(count)s overdue', count=system_health.queues.emails_overdue) }}</span>
+                                            <span class="status-label status-failed">{{ _('%(count)s overdue', count=system_health.queues.emails_overdue) }}</span>
                                         {% endif %}
                                     </dd>
                                 </dl>
@@ -705,7 +705,7 @@
                                    branch as the literal "HEAD". Saying that to an administrator is
                                    worse than useless; say what actually happened. #}
                                 {% if update_state.local.branch == 'HEAD' %}
-                                    <span class="badge text-bg-warning">{{ _('rolled back') }}</span>
+                                    <span class="status-label status-pending">{{ _('rolled back') }}</span>
                                 {% elif update_state.local.branch %}
                                     <span class="text-muted">({{ update_state.local.branch }})</span>
                                 {% endif %}
@@ -819,12 +819,12 @@
                             <dt class="col-sm-4">{{ _('Result') }}</dt>
                             <dd class="col-sm-8">
                                 {% if update_state.last_run.state == 'completed' %}
-                                    <span class="badge bg-success">{{ _('Completed') }}</span>
+                                    <span class="status-label status-active">{{ _('Completed') }}</span>
                                 {% elif update_state.last_run.state == 'failed' %}
-                                    <span class="badge bg-danger">{{ _('Failed') }}</span>
+                                    <span class="status-label status-failed">{{ _('Failed') }}</span>
                                     <span class="text-muted ms-2">{{ _('exit code') }} {{ update_state.last_run.exit_code }}</span>
                                 {% else %}
-                                    <span class="badge bg-info">{{ update_state.last_run.state }}</span>
+                                    <span class="status-label status-info">{{ update_state.last_run.state }}</span>
                                 {% endif %}
                             </dd>
                             {% if update_state.last_run.finished_at %}
