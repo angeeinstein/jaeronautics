@@ -354,20 +354,30 @@ hr {
 }
 
 .site-footer {
-    margin-top: 3rem;
-    padding: 1.25rem 0 1.5rem;
+    margin-top: 2rem;
+    padding: 0.9rem 0 1rem;
     border-top: 1px solid var(--ja-border);
     color: var(--ja-muted);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
+    text-align: center;
 }
 
+/* Short labels, so the five links fit on one line even on a phone; the
+   copyright underneath, quieter. */
 .site-footer-links {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem 1.25rem;
+    justify-content: center;
+    gap: 0.25rem 0.9rem;
     margin: 0;
     padding: 0;
     list-style: none;
+}
+
+.site-footer-copyright {
+    margin: 0.25rem 0 0;
+    font-size: 0.75rem;
+    opacity: 0.8;
 }
 
 .site-footer a {

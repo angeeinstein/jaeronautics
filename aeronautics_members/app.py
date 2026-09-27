@@ -1515,14 +1515,12 @@ def create_app(config_overrides=None):
 
     @app.context_processor
     def inject_footer():
-        from urllib.parse import urlsplit as _split
         from .config import ASSOCIATION_WEBSITE_URL, CONTACT_EMAIL, IMPRESSUM_URL, PRIVACY_URL, STATUTES_URL
         from .services.clock import get_membership_today
 
         return dict(footer={
             "year": get_membership_today().year,
             "website_url": ASSOCIATION_WEBSITE_URL,
-            "website_label": _split(ASSOCIATION_WEBSITE_URL).netloc or ASSOCIATION_WEBSITE_URL,
             "impressum_url": IMPRESSUM_URL,
             "privacy_url": PRIVACY_URL,
             "statutes_url": STATUTES_URL,

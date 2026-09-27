@@ -18,7 +18,8 @@ def test_every_public_page_has_it(client, path):
     assert "mailto:office@joanneum-aeronautics.at" in body
     assert "Impressum" in body
     assert "Privacy" in body
-    assert "Statutes &amp; rules" in body or "Statutes & rules" in body
+    assert ">Statutes</a>" in body
+    assert "&copy; 20" in body or "© 20" in body
 
 
 def test_signed_in_pages_have_it_too(client, app):
