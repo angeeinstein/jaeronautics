@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Joanneum Aeronautics Membership') }}{% endblock %}
+{% block content %}
+{#
+  The front door of the members' portal, for somebody not signed in. Not a
+  second association homepage -- that is the website, linked in the footer --
+  but what this site is for and the two ways in. Signed-in visitors never see
+  it; they are sent on to their account.
+#}
+<section class="landing">
+    <img class="landing-logo" src="{{ url_for('static', filename='logo_joanneum_aeronautics_negativ.svg') }}" alt="Joanneum Aeronautics">
+    <p class="landing-eyebrow">{{ _('Members’ portal') }}</p>
+    <h1 class="landing-title">{{ _('Your membership, in one place') }}</h1>
+    <p class="lead landing-lead">
+        {{ _('Join Joanneum Aeronautics, keep your details and payments up to date, and find your way into the members’ forum.') }}
+    </p>
+    <div class="landing-actions">
+        <a href="{{ url_for('public.join') }}" class="btn btn-primary btn-lg">{{ _('Become a member') }}</a>
+        <a href="{{ url_for('auth.login') }}" class="btn btn-secondary btn-lg">{{ _('Log in') }}</a>
+    </div>
+</section>
+
+<ol class="landing-points">
+    <li class="card">
+        <div class="card-body">
+            <span class="landing-point-number">01</span>
+            <h2 class="h5">{{ _('Join') }}</h2>
+            <p class="mb-0">{{ _('Sign up in a few minutes and pay the membership fee online.') }}</p>
+        </div>
+    </li>
+    <li class="card">
+        <div class="card-body">
+            <span class="landing-point-number">02</span>
+            <h2 class="h5">{{ _('Your membership') }}</h2>
+            <p class="mb-0">{{ _('Contact details, payments and renewal: all in your account, whenever you need them.') }}</p>
+        </div>
+    </li>
+    <li class="card">
+        <div class="card-body">
+            <span class="landing-point-number">03</span>
+            <h2 class="h5">{{ _('The forum') }}</h2>
+            <p class="mb-0">{{ _('Members’ discussions, with the account you already have here. No second password.') }}</p>
+        </div>
+    </li>
+</ol>
+
+<p class="landing-note">
+    {{ _('Were you on the old forum? Join with your university email address, and your old forum account comes back with your posts.') }}
+</p>
+{% endblock %}

@@ -396,7 +396,7 @@ class TestTheSignupSentTwice:
 
 
 def test_payment_buttons_show_they_are_working(app, client):
-    body = client.get("/").get_data(as_text=True)
+    body = client.get("/join").get_data(as_text=True)
 
     assert 'data-busy-text="Taking you to payment…"' in body
     assert "submit-once.js" in body

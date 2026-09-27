@@ -39,7 +39,7 @@ def active_member(app):
     return member
 
 
-PUBLIC_PAGES = ["/", "/__health", "/login", "/legal", "/forgot-password", "/thank-you", "/cancel"]
+PUBLIC_PAGES = ["/", "/join", "/__health", "/login", "/legal", "/forgot-password", "/thank-you", "/cancel"]
 ADMIN_PAGES = ["/admin", "/admin/accounts", "/admin/settings", "/admin/reviews", "/admin/logs"]
 
 

@@ -57,6 +57,7 @@ from flask_babel import (
     _,
 )
 from flask_login import (
+    current_user,
     login_user,
 )
 from ..db_models import (
@@ -69,6 +70,7 @@ from ..forms import (
 )
 from ..app import (
     can_resume_payment,
+    get_member_portal_target,
     limiter,
 )
 
@@ -77,9 +79,28 @@ public_bp = Blueprint("public", __name__)
 
 @public_bp.route("/", methods=["GET"])
 def index():
+    """The front door: what this is, and the way in -- joining or logging in.
+
+    Somebody already signed in has no use for either, so they go straight to
+    where logging in would have taken them.
+    """
+    if current_user.is_authenticated:
+        return redirect(url_for(get_member_portal_target(current_user)))
+    return render_template("landing.html")
+
+
+@public_bp.route("/join", methods=["GET"])
+def join():
+    """The membership signup form, at an address that can go on a poster.
+
+    Signed in, there is nothing to sign up for here: members have their
+    account, and a login without a membership starts one from My Account.
+    """
+    if current_user.is_authenticated:
+        return redirect(url_for("account.account"))
     form = MembershipForm()
     return render_template(
-        "index.html",
+        "join.html",
         form=form,
         invoice_payments_enabled=invoice_payments_allowed(),
         stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
@@ -116,7 +137,7 @@ def process_membership():
                 flash(_("An account with this email address already exists. Please log in to manage or resume your membership."), "warning")
                 return redirect(url_for("auth.login"))
             flash(_("A membership profile with this email address already exists without a linked login. Please contact the club so we can resolve it."), "warning")
-            return redirect(url_for("public.index"))
+            return redirect(url_for("public.join"))
 
         if existing_user is not None:
             flash(_("An account with this email address already exists. Please log in instead."), "warning")
@@ -164,7 +185,7 @@ def process_membership():
     current_app.logger.warning(f"Form validation failed. Errors: {form.errors}")
     flash(_("Please correct the errors below and try again."), "danger")
     return render_template(
-        "index.html",
+        "join.html",
         form=form,
         invoice_payments_enabled=invoice_payments_allowed(),
         stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,

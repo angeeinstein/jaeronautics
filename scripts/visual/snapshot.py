@@ -189,8 +189,9 @@ def seed(app, app_module, subscriptions):
                 *[{**page, "user": f"{key}@example.org"} for page in extra]]
 
     return [
-        {"name": "public--signup", "path": "/"},
-        {"name": "public--signup-errors", "path": "/", "submit": "form[action$='process-membership']"},
+        {"name": "public--landing", "path": "/"},
+        {"name": "public--signup", "path": "/join"},
+        {"name": "public--signup-errors", "path": "/join", "submit": "form[action$='process-membership']"},
         {"name": "public--login", "path": "/login"},
         {"name": "public--forgot-password", "path": "/forgot-password"},
         {"name": "public--reset-password", "path": f"/reset-password/{reset_token}"},

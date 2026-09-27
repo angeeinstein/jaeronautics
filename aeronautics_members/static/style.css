@@ -989,6 +989,90 @@ textarea.form-control {
     color: var(--ja-text);
 }
 
+/* ---- Landing page -----------------------------------------------------------
+   The front door for somebody not signed in: the logo large, one sentence,
+   the two ways in, and three short points. Centred, generous space, nothing
+   that competes with the buttons. */
+
+.landing {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 3rem 0 2.5rem;
+    text-align: center;
+}
+
+.landing-logo {
+    display: block;
+    width: min(32rem, 100%);
+    height: auto;
+    margin: 0 auto 2.5rem;
+}
+
+.landing-eyebrow {
+    margin-bottom: 0.5rem;
+    color: var(--ja-accent);
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.landing-title {
+    margin-bottom: 1rem;
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+}
+
+.landing-lead {
+    max-width: 36rem;
+    margin: 0 auto 2rem;
+    color: var(--ja-muted);
+}
+
+.landing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.landing-actions .btn {
+    min-width: 15rem;
+}
+
+.landing-points {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1.5rem;
+    max-width: 60rem;
+    margin: 1rem auto 0;
+    padding: 0;
+    list-style: none;
+}
+
+.landing-points .card {
+    border-top: 2px solid var(--ja-accent);
+}
+
+.landing-points p {
+    color: var(--ja-muted);
+}
+
+.landing-point-number {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--ja-accent);
+    font-family: var(--ja-font-mono);
+    font-size: 0.875rem;
+}
+
+.landing-note {
+    max-width: 40rem;
+    margin: 2.5rem auto 0;
+    color: var(--ja-muted);
+    font-size: 0.9375rem;
+    text-align: center;
+}
+
 /* ---- Profile picture upload ------------------------------------------------ */
 
 .forum-avatar-uploader {

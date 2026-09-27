@@ -136,7 +136,7 @@ def test_all_routes_no_server_error(client, seeded):
         assert resp.status_code < 500, f"{method} {path} -> {resp.status_code}"
 
     # public
-    for p in ["/", "/__health", "/legal", "/thank-you", "/cancel"]:
+    for p in ["/", "/join", "/__health", "/legal", "/thank-you", "/cancel"]:
         hit("GET", p)
     hit("POST", "/process-membership", data={**MEMBERSHIP, "email_private": "brand@new.co",
         "password": "password123", "confirm_password": "password123", "payment_method": "checkout", "terms_accepted": "y"})

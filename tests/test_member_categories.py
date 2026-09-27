@@ -363,7 +363,7 @@ class TestWhatTheScreensShow:
         assert "LAV11" in body
 
     def test_the_signup_page_offers_every_category(self, app, client):
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/join").get_data(as_text=True)
 
         assert 'name="member_category"' in body
         for category in CATEGORY_ORDER:
@@ -371,7 +371,7 @@ class TestWhatTheScreensShow:
 
     def test_the_page_carries_the_rules_for_the_browser(self, app, client):
         """So the show/hide rule is not written down a second time in JavaScript."""
-        body = client.get("/").get_data(as_text=True)
+        body = client.get("/join").get_data(as_text=True)
 
         assert 'data-year-group-categories="student alumni"' in body
         assert 'data-year-group-required="student"' in body
