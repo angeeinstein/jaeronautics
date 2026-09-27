@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_form_errors.html" import form_errors %}
 {% block title %}{{ _('My Account') }}{% endblock %}
 {% block content %}
 <div class="row g-4 mb-4">
@@ -196,7 +197,7 @@
                 <p class="mb-3"><strong>{{ _('Forum Username') }}:</strong> {% if forum_context.reconnect_waiting %}{{ _('Your old one, once reconnected') }}{% else %}{{ current_user.forum_username or _('Not set') }}{% endif %}</p>
 
                 {% if forum_context.forum_error %}
-                    <div class="alert alert-warning">{{ forum_context.forum_error }}</div>
+                    <div class="alert alert-warning">{{ _('The forum could not be updated just now. We will try again automatically.') }}</div>
                 {% endif %}
 
                 {% if forum_context.status_key == 'active' %}
@@ -227,6 +228,7 @@
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-header"><h4 class="mb-0">{{ _('Contact Details') }}</h4></div>
             <div class="card-body">
+                {{ form_errors(profile_form) }}
                 <form method="POST" action="{{ url_for('account.save_member_profile') }}">
                     {{ profile_form.hidden_tag() }}
                     <div class="row g-3">
@@ -270,6 +272,7 @@
                         </form>
                     </div>
                 {% else %}
+                    {{ form_errors(identity_form) }}
                     <form method="POST" action="{{ url_for('account.submit_identity_change_request') }}">
                         {{ identity_form.hidden_tag() }}
                         <div class="row g-3">
@@ -282,10 +285,8 @@
                                  data-year-group-required="{{ year_group_required_categories }}">
                                 {{ identity_form.member_category.label(class="form-label") }}
                                 {{ identity_form.member_category(class="form-select") }}
-                                {% for error in identity_form.member_category.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                 <div class="mt-3" data-year-group-field>
                                     {{ identity_form.year_group.label(class="form-label") }}{{ identity_form.year_group(class="form-control", oninput="this.value = this.value.toUpperCase()") }}
-                                    {% for error in identity_form.year_group.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                 </div>
                             </div>
                             <div class="col-12">{{ identity_form.member_note.label(class="form-label") }}{{ identity_form.member_note(class="form-control", rows="4", placeholder=_('Optional note for the admin, for example if you need to correct a typo.')) }}</div>

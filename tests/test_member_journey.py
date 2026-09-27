@@ -231,3 +231,45 @@ class TestAFailedRenewal:
 
         assert "/account/rejoin" in body
         assert "update your payment method" not in body
+
+
+class TestErrorsSayWhatIsWrong:
+    def test_the_signup_form_names_fields_as_the_form_does(self, app, client):
+        body = client.post("/process-membership", data={
+            "email_private": "someone@example.com", "member_category": "student",
+            "email_work": "someone@gmail.com",
+        }).get_data(as_text=True)
+
+        assert "University or Company Email:" in body
+        assert "Email Work" not in body
+
+    def test_a_rejected_profile_change_says_why(self, app, client, monkeypatch):
+        """The page said "please correct the profile form" and showed nothing."""
+        member = make_member(email="typo@example.com")
+        with client.session_transaction() as session:
+            session["_user_id"] = str(member.user.id)
+        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+
+        body = client.post("/account/profile", data={
+            "profile-street": "Main", "profile-house_number": "1", "profile-postal_code": "8010",
+            "profile-city": "Graz", "profile-country": "Austria",
+            "profile-phone_private": "call me maybe", "profile-email_private": "typo@example.com",
+        }).get_data(as_text=True)
+
+        assert "Private Phone:" in body
+        assert "Invalid phone number format" in body
+
+    def test_a_forum_error_is_not_shown_raw(self, app, client, forum, monkeypatch):
+        from aeronautics_members.db_models import ForumAccount
+
+        member = _paid_member(client, verified=True)
+        db.session.add(ForumAccount(user=member.user, member=member, provider="discourse",
+                                    external_id=str(member.user.id), state="active",
+                                    last_error="Discourse API request failed (422): Primary email has already been taken"))
+        db.session.commit()
+        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+
+        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+        assert "Discourse API request failed" not in body
+        assert "could not be updated just now" in body

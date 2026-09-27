@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_form_errors.html" import form_errors %}
 {% block title %}{{ _('Create Membership Profile') }}{% endblock %}
 {% block content %}
 <div class="container mt-5 mb-5">
@@ -10,20 +11,7 @@
                 </div>
                 <div class="card-body">
                     <p class="text-muted">{{ _('This account does not have a linked membership profile yet. Complete the form below to start your membership with this login.') }}</p>
-                    {% if form.errors %}
-                        {# Every error, by field -- as the main signup page does. "The
-                           highlighted errors" highlighted two fields of fourteen, so a
-                           mistyped phone number or address came back unexplained. #}
-                        <div class="alert alert-danger" role="alert">
-                            <ul class="mb-0 ps-3">
-                                {% for field_name, errors in form.errors.items() %}
-                                    {% for error in errors %}
-                                        <li>{{ form[field_name].label.text if field_name in form else field_name }}: {{ error }}</li>
-                                    {% endfor %}
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    {% endif %}
+                    {{ form_errors(form) }}
                     <form method="POST" action="{{ url_for('account.create_membership_profile') }}" novalidate>
                         {{ form.hidden_tag() }}
                         <div class="row g-4">
@@ -49,10 +37,8 @@
                                  data-year-group-required="{{ year_group_required_categories }}">
                                 {{ form.member_category.label(class='form-label') }}
                                 {{ form.member_category(class='form-select') }}
-                                {% for error in form.member_category.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                 <div class="mt-3" data-year-group-field>
                                     {{ form.year_group.label(class='form-label') }}{{ form.year_group(class='form-control') }}
-                                    {% for error in form.year_group.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                                 </div>
                             </div>
                             {% if invoice_payments_enabled %}

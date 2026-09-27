@@ -27,7 +27,7 @@
                 </dl>
 
                 {% if forum_context.forum_error %}
-                    <div class="alert alert-warning">{{ forum_context.forum_error }}</div>
+                    <div class="alert alert-warning">{{ _('The forum could not be updated just now. We will try again automatically.') }}</div>
                 {% endif %}
 
                 {% if forum_context.status_key in ['payment_processing', 'reconnect_waiting'] %}
