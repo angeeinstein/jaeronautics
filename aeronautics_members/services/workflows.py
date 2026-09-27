@@ -55,13 +55,7 @@ from .settings import get_settings_map
 
 
 def _display_date(value):
-    """A date as a person reads it -- "31 December 2026" -- in the mail's language."""
-    if value is None:
-        return None
-    try:
-        return format_membership_date_display(value)
-    except Exception:  # noqa: BLE001 -- no locale outside a request; ISO is still a date
-        return value.isoformat()
+    return format_membership_date_display(value) if value is not None else None
 
 
 def send_member_welcome_email(app, member, force_send=False, notify_on_failure=True, queue_retry_on_failure=None, return_error=False):

@@ -257,7 +257,7 @@ class MembershipForm(FlaskForm):
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
     member_category = SelectField(
-        _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
@@ -295,7 +295,7 @@ class CreateMembershipProfileForm(FlaskForm):
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
     member_category = SelectField(
-        _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
@@ -366,7 +366,7 @@ class IdentityChangeRequestForm(FlaskForm):
     first_name = StringField(_l("First Name"), validators=[DataRequired()])
     last_name = StringField(_l("Last Name"), validators=[DataRequired()])
     member_category = SelectField(
-        _l("Membership"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)

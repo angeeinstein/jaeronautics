@@ -20,9 +20,6 @@ keeps access until the coverage they bought runs out.
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from babel.dates import format_date
-from flask_babel import get_locale
-
 from .clock import (
     first_day_of_year,
     get_membership_today,
@@ -56,11 +53,13 @@ FREE_PERIOD_START_DAY = 1
 
 
 def format_membership_date_display(value):
-    locale = str(get_locale()) if get_locale() else None
-    try:
-        return format_date(value, format="long", locale=locale)
-    except Exception:
-        return value.isoformat()
+    """A date as members see it everywhere: 31.12.2026.
+
+    One format across the portal, the emails and Stripe's payment page. It
+    used to follow the language setting, which in English gave the American
+    "December 31, 2026" -- while the account page showed 2026-12-31.
+    """
+    return value.strftime("%d.%m.%Y")
 
 
 def build_membership_cycle(join_date, annual_amount_cents):

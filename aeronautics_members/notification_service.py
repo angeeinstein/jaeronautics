@@ -522,7 +522,7 @@ class NotificationService:
                     "heading": _("Your profile change was approved"),
                     "body_lines": [
                         greeting,
-                        _("The change you requested to your name, title or year group was "
+                        _("The change you requested to your name, membership type or year group was "
                           "approved, and your profile now shows it."),
                         _("Note from the committee: %(note)s", note=note) if note else None,
                     ],
@@ -538,7 +538,7 @@ class NotificationService:
                     "heading": _("Your profile change was not approved"),
                     "body_lines": [
                         greeting,
-                        _("The change you requested to your name, title or year group was "
+                        _("The change you requested to your name, membership type or year group was "
                           "not approved, so your profile stays as it was."),
                         _("Note from the committee: %(note)s", note=note) if note
                         else _("If you have questions about it, please get in touch with us."),

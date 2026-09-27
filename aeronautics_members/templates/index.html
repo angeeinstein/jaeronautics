@@ -106,7 +106,7 @@
         <div class="row g-4">
             <div class="col-md-6">
                 <label for="password" class="form-label">{{ _(form.password.label.text) }}<span class="text-danger">*</span></label>
-                {{ form.password(class="form-control", autocomplete="new-password", placeholder=_("Create a password for your account")) }}
+                {{ form.password(class="form-control", autocomplete="new-password", placeholder=_("At least 8 characters")) }}
             </div>
             <div class="col-md-6">
                 <label for="confirm_password" class="form-label">{{ _(form.confirm_password.label.text) }}<span class="text-danger">*</span></label>

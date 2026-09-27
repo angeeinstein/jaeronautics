@@ -321,7 +321,7 @@ def submit_identity_change_request():
             queue_curated_admin_notification(
                 ADMIN_GENERAL_CHANNEL,
                 "identity_change_request_created",
-                _("%(email)s asked for a profile change (name, title or year group).", email=member.email_private),
+                _("%(email)s asked for a profile change (name, membership type or year group).", email=member.email_private),
                 payload={
                     "member_email": member.email_private,
                     "request_id": request_record.id,
@@ -485,7 +485,7 @@ def resend_verification_email():
 
     try:
         if send_email_verification_email(current_app._get_current_object(), current_user):
-            flash(_("We sent you a new verification email."), "success")
+            flash(_("We sent you a new confirmation email. Not in your inbox? Please check your spam folder."), "success")
         else:
             flash(_("We could not send a verification email because no sender account is configured yet."), "warning")
     except Exception as exc:
@@ -516,7 +516,8 @@ def resend_work_email_verification():
         if send_work_email_verification_email(current_app._get_current_object(), member):
             db.session.commit()
             flash(
-                _("We sent a new confirmation email to %(address)s.", address=member.email_work),
+                _("We sent a new confirmation email to %(address)s. Not in your inbox? Please check your spam folder.",
+                  address=member.email_work),
                 "success",
             )
         else:
