@@ -87,14 +87,14 @@ def forgot_password():
             except Exception as exc:
                 db.session.rollback()
                 current_app.logger.warning("Could not send password reset email for user_id=%s: %s", user.id, exc)
-        flash(_("If an account with that email address exists and email sending is configured, a password reset link is available."), "info")
+        flash(_("If an account exists for this address, we have sent a password reset link to it."), "info")
         return redirect(url_for("auth.login"))
     return render_template(
         "account/email_request.html",
         form=form,
         title=_("Reset Password"),
         heading=_("Reset your password"),
-        description=_("Enter the email address of your Joanneum Aeronautics account and we will send you a reset link."),
+        description=_("Enter the private email address you log in with, and we will send you a link to reset your password."),
     )
 
 
