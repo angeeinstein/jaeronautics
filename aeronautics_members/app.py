@@ -350,8 +350,8 @@ from .services.settings import (  # noqa: E402
 from .services.membership import (  # noqa: E402
     RESUMABLE_MEMBER_STATUSES,
     build_membership_cycle,
+    format_date_display,
     format_datetime_display,
-    format_membership_date_display,
     invoice_coverage_year,
     member_has_active_access,
     set_member_membership_window,
@@ -1515,10 +1515,11 @@ def create_app(config_overrides=None):
             member_category_label=category_label,
         )
 
-    # Dates and times on every page in one format: 31.12.2026, 31.12.2026 14:05.
+    # Dates and times on every page and email in one format and in Vienna
+    # time: 31.12.2026, 31.12.2026 14:05.
     @app.template_filter("date_display")
     def date_display_filter(value):
-        return format_membership_date_display(value) if value else ""
+        return format_date_display(value) if value else ""
 
     @app.template_filter("datetime_display")
     def datetime_display_filter(value):
@@ -4233,7 +4234,7 @@ def create_app(config_overrides=None):
         if items:
             click.echo(click.style("\nQueued work for this person", bold=True))
             for item in items[:10]:
-                click.echo(f"  {item.created_at:%Y-%m-%d %H:%M}  {item.kind:<24} "
+                click.echo(f"  {format_datetime_display(item.created_at)}  {item.kind:<24} "
                            f"{item.status:<10} attempts={item.attempts}"
                            + (f"  {item.last_error[:80]}" if item.last_error else ""))
 

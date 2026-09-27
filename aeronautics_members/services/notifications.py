@@ -25,7 +25,7 @@ from ..notification_service import (
 )
 from ..security_utils import build_public_url
 from .clock import first_day_of_year, get_membership_today, get_now_utc, last_day_of_year
-from .membership import format_membership_date_display
+from .membership import format_datetime_display, format_membership_date_display
 from .settings import get_settings_map
 
 EMAIL_JOB_TYPE_WELCOME = "welcome_email"
@@ -401,7 +401,7 @@ def sample_email_for(template_name):
     }
     subject, template_vars = samples.get(template_name, (_("Test email"), {}))
     return subject, {
-        "timestamp": now.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "timestamp": format_datetime_display(now),
         "now": now,
         **template_vars,
     }

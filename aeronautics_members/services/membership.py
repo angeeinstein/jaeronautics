@@ -20,7 +20,9 @@ keeps access until the coverage they bought runs out.
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
+from ..config import MEMBERSHIP_TIMEZONE
 from .clock import (
+    datetime_to_membership_date,
     first_day_of_year,
     get_membership_today,
     last_day_of_year,
@@ -62,21 +64,30 @@ def format_membership_date_display(value):
     return value.strftime("%d.%m.%Y")
 
 
-def format_datetime_display(value):
-    """A moment in the same format: 31.12.2026 14:05.
+def format_date_display(value):
+    """The calendar day of a date, or of a stored moment in Vienna: 31.12.2026."""
+    if isinstance(value, datetime):
+        value = datetime_to_membership_date(value)
+    return format_membership_date_display(value)
 
-    Takes a datetime or the ISO text the update runner writes. A time that
-    knows its zone is shown in UTC and says so; the database's own times are
-    UTC already and are shown as they are.
+
+def format_datetime_display(value):
+    """A moment as the clock in Vienna showed it: 31.12.2026 14:05.
+
+    Everything is stored in UTC and shown in the membership timezone -- where
+    the university is and nearly every member lives -- including the summer
+    time shift, so a time on a page matches the clock on the wall in Graz.
+    Takes a datetime (naive ones are UTC, as everything stored is) or the ISO
+    text the update runner writes.
     """
     if isinstance(value, str):
         try:
             value = datetime.fromisoformat(value)
         except ValueError:
             return value
-    if value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None:
-        return value.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
-    return value.strftime("%d.%m.%Y %H:%M")
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(MEMBERSHIP_TIMEZONE).strftime("%d.%m.%Y %H:%M")
 
 
 def build_membership_cycle(join_date, annual_amount_cents):

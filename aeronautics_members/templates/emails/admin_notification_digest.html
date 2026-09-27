@@ -23,7 +23,7 @@
         <div class="event" style="padding:14px 0; border-top:1px solid #34383b;">
             <p class="muted" style="margin:0 0 6px; color:#aab4bb; font-size:13px;">
                 <span class="badge" style="display:inline-block; padding:1px 8px; border:1px solid #00dfff; color:#00dfff; font-size:11px; text-transform:uppercase;">{{ event.severity }}</span>
-                {% if event.queued_at %}&nbsp;{{ event.queued_at.strftime('%Y-%m-%d %H:%M UTC') }}{% endif %}
+                {% if event.queued_at %}&nbsp;{{ event.queued_at|datetime_display }}{% endif %}
             </p>
             <p style="margin:0;">{{ event.summary }}</p>
             {% if event.what_to_do %}

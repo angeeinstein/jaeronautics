@@ -479,31 +479,44 @@ def test_creating_a_profile_twice_goes_on_to_payment(app, client, monkeypatch):
 
 
 class TestDatesLookTheSameEverywhere:
-    """Members saw 31.12.2026 while admins saw 2026-12-31 for the same date."""
+    """Members saw 31.12.2026 while admins saw 2026-12-31 for the same date,
+    and times were UTC -- an hour or two behind the clock in Graz."""
 
     def test_a_date(self, app):
         assert app.jinja_env.filters["date_display"](date(2026, 12, 31)) == "31.12.2026"
 
-    def test_a_stored_time(self, app):
+    def test_a_stored_time_is_shown_in_vienna_summer_time(self, app):
         from datetime import datetime
 
         show = app.jinja_env.filters["datetime_display"]
-        assert show(datetime(2026, 12, 31, 14, 5)) == "31.12.2026 14:05"
+        assert show(datetime(2026, 7, 1, 12, 5)) == "01.07.2026 14:05"
 
-    def test_a_time_with_a_zone_is_shown_in_utc(self, app):
+    def test_and_in_vienna_winter_time(self, app):
+        from datetime import datetime
+
+        show = app.jinja_env.filters["datetime_display"]
+        assert show(datetime(2026, 12, 1, 12, 5)) == "01.12.2026 13:05"
+
+    def test_a_moment_late_at_night_falls_on_the_vienna_day(self, app):
+        """23:30 UTC on 31 December is already New Year in Graz."""
+        from datetime import datetime
+
+        assert app.jinja_env.filters["date_display"](datetime(2026, 12, 31, 23, 30)) == "01.01.2027"
+
+    def test_a_time_with_its_own_zone_is_converted(self, app):
         """The update runner writes ISO text in the server's own zone."""
         show = app.jinja_env.filters["datetime_display"]
-        assert show("2026-09-27T10:30:00+02:00") == "27.09.2026 08:30 UTC"
+        assert show("2026-09-27T08:30:00+00:00") == "27.09.2026 10:30"
 
     def test_nothing_shows_nothing(self, app):
         assert app.jinja_env.filters["date_display"](None) == ""
         assert app.jinja_env.filters["datetime_display"](None) == ""
 
-    def test_no_page_formats_a_date_its_own_way(self):
+    def test_no_page_or_email_formats_a_date_its_own_way(self):
         templates = Path(__file__).resolve().parent.parent / "aeronautics_members" / "templates"
         offenders = [
             str(path.relative_to(templates))
             for path in templates.rglob("*.html")
-            if "emails" not in path.parts and "strftime" in path.read_text()
+            if "strftime" in path.read_text() or "UTC" in path.read_text()
         ]
         assert not offenders, "use |date_display or |datetime_display: " + ", ".join(offenders)
