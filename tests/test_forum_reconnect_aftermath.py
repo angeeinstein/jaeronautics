@@ -509,6 +509,12 @@ class TestTheWelcomeMail:
             return True, None
 
         monkeypatch.setattr(workflows, "send_mail", fake_send_mail)
+
+        class ForumOn:
+            def is_enabled(self):
+                return True
+
+        monkeypatch.setattr(workflows, "get_forum_service", lambda: ForumOn())
         with app.test_request_context():
             workflows.send_member_welcome_email(app, member)
             template_vars = {
@@ -516,6 +522,7 @@ class TestTheWelcomeMail:
                 if k not in {"from_account", "to_email", "subject", "template_name",
                              "attachments", "return_error"}
             }
+            template_vars.setdefault("now", datetime.now(timezone.utc))
             return render_template("emails/welcome_email.html", **template_vars)
 
     def test_somebody_with_an_old_account_is_told_it_comes_back_not_what_it_is(self, app, monkeypatch):

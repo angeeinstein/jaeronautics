@@ -142,6 +142,7 @@ def send_account_action_email(
     target_user=None,
     target_member=None,
     notify_on_failure=True,
+    note=None,
 ):
     sender_account = get_default_sender_account()
     failure_summary = failure_summary or _("An account-related email could not be sent.")
@@ -165,19 +166,17 @@ def send_account_action_email(
             )
         return False
 
-    logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
-    attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
     success, error_message = send_mail(
         from_account=sender_account,
         to_email=to_email,
         subject=subject,
         template_name="member_account_action.html",
-        attachments=attachments,
         preview_text=preview_text,
         action_url=action_url,
         action_label=action_label,
         heading=heading,
         body_lines=body_lines,
+        note=note,
         now=get_now_utc(),
         return_error=True,
     )
@@ -338,7 +337,7 @@ def get_email_template_choices(app):
     template_choices = []
     email_template_dir = os.path.join(app.root_path, "templates", "emails")
     if os.path.isdir(email_template_dir):
-        template_choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
+        template_choices = [(f, f) for f in sorted(os.listdir(email_template_dir)) if f.endswith(".html") and not f.startswith("_")]
     return template_choices
 
 

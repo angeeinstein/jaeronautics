@@ -1,7 +1,6 @@
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-import os
 import re
 
 from flask import current_app
@@ -437,8 +436,8 @@ class NotificationService:
                 "Joanneum Aeronautics: %(count)s admin error notification(s)",
                 count=len(events),
             )
-            heading = _("Admin error notifications")
-            intro = _("High-signal application issues were recorded and may require attention.")
+            heading = _("Something needs an admin's attention")
+            intro = _("The portal ran into problems it could not solve on its own.")
             action_url = build_public_url("admin.admin_logs")
             action_label = _("Open Audit Logs")
         else:
@@ -446,8 +445,8 @@ class NotificationService:
                 "Joanneum Aeronautics: %(count)s admin item(s) need attention",
                 count=len(events),
             )
-            heading = _("Admin notifications")
-            intro = _("New review tasks or other admin-relevant events were recorded.")
+            heading = _("New items to review")
+            intro = _("Members are waiting on the committee, for example for a profile picture or a change request.")
             action_url = build_public_url("admin.admin_dashboard")
             action_label = _("Open Admin Workspace")
 
@@ -460,6 +459,9 @@ class NotificationService:
                     "summary": event.summary,
                     "queued_at": event.queued_at,
                     "severity": event.severity,
+                    # Some events say what to do about them; that is the part
+                    # an admin reading this on the phone needs most.
+                    "what_to_do": (event.payload or {}).get("what_to_do"),
                 }
                 for event in visible_events
             ],
@@ -473,57 +475,84 @@ class NotificationService:
 
     def _build_user_status_message(self, event):
         payload = event.payload or {}
-        recipient_name = payload.get("first_name") or _("member")
+        first_name = payload.get("first_name")
+        greeting = _("Hello %(name)s,", name=first_name) if first_name else _("Hello,")
+        note = (payload.get("review_note") or payload.get("admin_note") or "").strip()
+        account_url = build_public_url("account.account")
+
+        if event.event_type == "forum_avatar_approved":
+            return (
+                _("Your forum access is complete"),
+                {
+                    "preview_text": _("Your profile picture was approved."),
+                    "action_url": build_public_url("forum.forum_entry"),
+                    "action_label": _("Open Forum"),
+                    "heading": _("Your profile picture was approved"),
+                    "body_lines": [
+                        greeting,
+                        _("Your profile picture was approved, so your forum access is now "
+                          "complete: you can read and write in the members' area."),
+                    ],
+                },
+            )
         if event.event_type == "forum_avatar_rejected":
             return (
-                _("Your forum profile picture needs attention"),
+                _("Please upload a new profile picture"),
                 {
-                    "preview_text": _("Your forum profile picture was reviewed and needs to be replaced."),
-                    "action_url": build_public_url("forum.forum_entry"),
+                    "preview_text": _("Your profile picture could not be approved."),
+                    "action_url": account_url,
                     "action_label": _("Upload a New Picture"),
-                    "heading": _("Your profile picture needs to be replaced"),
+                    "heading": _("Your profile picture could not be approved"),
                     "body_lines": [
-                        _("Hello %(name)s, your forum profile picture was rejected during review.", name=recipient_name),
-                        payload.get("review_note") or _("Please upload a new picture to continue with forum onboarding."),
+                        greeting,
+                        _("We could not approve the profile picture you uploaded for the forum."),
+                        _("Reason: %(note)s", note=note) if note else None,
+                        _("Please upload a new one on your account page. Once it is approved, "
+                          "your forum access is complete."),
                     ],
                 },
             )
         if event.event_type == "identity_request_approved":
             return (
-                _("Your identity change request was approved"),
+                _("Your profile change was approved"),
                 {
-                    "preview_text": _("Your identity change request has been approved."),
-                    "action_url": build_public_url("account.account"),
+                    "preview_text": _("Your requested profile change has been approved."),
+                    "action_url": account_url,
                     "action_label": _("Open My Account"),
-                    "heading": _("Identity change approved"),
+                    "heading": _("Your profile change was approved"),
                     "body_lines": [
-                        _("Hello %(name)s, your identity change request was approved.", name=recipient_name),
-                        payload.get("admin_note") or _("Your member profile now reflects the approved identity details."),
+                        greeting,
+                        _("The change you requested to your name, title or year group was "
+                          "approved, and your profile now shows it."),
+                        _("Note from the committee: %(note)s", note=note) if note else None,
                     ],
                 },
             )
         if event.event_type == "identity_request_rejected":
             return (
-                _("Your identity change request was reviewed"),
+                _("Your profile change was not approved"),
                 {
-                    "preview_text": _("Your identity change request was rejected."),
-                    "action_url": build_public_url("account.account"),
+                    "preview_text": _("Your requested profile change was not approved."),
+                    "action_url": account_url,
                     "action_label": _("Open My Account"),
-                    "heading": _("Identity change rejected"),
+                    "heading": _("Your profile change was not approved"),
                     "body_lines": [
-                        _("Hello %(name)s, your identity change request was rejected.", name=recipient_name),
-                        payload.get("admin_note") or _("Please review the note and submit a new request if needed."),
+                        greeting,
+                        _("The change you requested to your name, title or year group was "
+                          "not approved, so your profile stays as it was."),
+                        _("Note from the committee: %(note)s", note=note) if note
+                        else _("If you have questions about it, please get in touch with us."),
                     ],
                 },
             )
         return (
-            _("An update is available for your account"),
+            _("An update on your Joanneum Aeronautics account"),
             {
                 "preview_text": event.summary,
-                "action_url": build_public_url("account.account"),
+                "action_url": account_url,
                 "action_label": _("Open My Account"),
-                "heading": _("Account update"),
-                "body_lines": [event.summary],
+                "heading": _("An update on your account"),
+                "body_lines": [greeting, event.summary],
             },
         )
 
@@ -538,8 +567,6 @@ class NotificationService:
         if sender_record is None:
             return False, f"Notification sender account '{sender_account}' does not exist."
 
-        logo_path = os.path.join(self.app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
-        attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
         primary_recipient = recipients[0]
         blind_copies = recipients[1:] or None
         return send_mail(
@@ -548,7 +575,6 @@ class NotificationService:
             bcc_emails=blind_copies,
             subject=subject,
             template_name="admin_notification_digest.html",
-            attachments=attachments,
             return_error=True,
             **template_vars,
         )
@@ -558,14 +584,11 @@ class NotificationService:
         if not sender_account:
             return False, "No notification sender account is configured."
 
-        logo_path = os.path.join(self.app.root_path, "static", "Logo_Aeronautics_signature-logo.png")
-        attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
         return send_mail(
             from_account=sender_account,
             to_email=event.recipient_email,
             subject=subject,
             template_name="member_account_action.html",
-            attachments=attachments,
             return_error=True,
             **template_vars,
         )

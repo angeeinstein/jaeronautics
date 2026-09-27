@@ -136,6 +136,7 @@ from ..forms import (
 from ..forum_service import (
     FORUM_AVATAR_STATUS_PENDING,
     FORUM_SETTING_KEYS,
+    FORUM_STATE_ACTIVE,
     FORUM_STATE_SYNC_ERROR,
     ForumProviderError,
 )
@@ -519,6 +520,8 @@ def approve_forum_avatar_submission(submission_id):
     before_submission = snapshot_forum_avatar_submission_for_audit(submission)
     before_account = snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None)
     review_note = (request.form.get("review_note") or "").strip() or None
+    account = submission.user.forum_account if submission.user else None
+    was_active = account is not None and account.state == FORUM_STATE_ACTIVE
 
     try:
         result = forum_service.approve_avatar_submission(submission, reviewer=current_user, review_note=review_note)
@@ -540,6 +543,22 @@ def approve_forum_avatar_submission(submission_id):
         },
         metadata={"review_note": review_note, "error": result.error, "desired_state": result.desired_state},
     )
+    # The moment their forum access becomes complete, which they were waiting
+    # for -- and until now only heard about if the picture was rejected. Not
+    # for somebody replacing a picture: their access was complete already.
+    if not result.error and result.desired_state == FORUM_STATE_ACTIVE and not was_active:
+        queue_user_status_notification(
+            "forum_avatar_approved",
+            _("Your profile picture was approved."),
+            recipient_email=(submission.user.email if submission.user is not None else None),
+            payload={
+                "first_name": submission.member.first_name if submission.member is not None else None,
+            },
+            target_user=submission.user,
+            target_member=submission.member,
+            object_type="forum_avatar_submission",
+            object_id=submission.id,
+        )
     db.session.commit()
 
     if result.error:
@@ -1482,7 +1501,7 @@ def send_test_email():
 
         email_template_dir = os.path.join(current_app.root_path, "templates", "emails")
         if os.path.isdir(email_template_dir):
-            form.template.choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
+            form.template.choices = [(f, f) for f in sorted(os.listdir(email_template_dir)) if f.endswith(".html") and not f.startswith("_")]
     except Exception as exc:
         current_app.logger.error(f"Could not load email accounts or templates for test form validation: {exc}")
         form.sender.choices = []
@@ -1493,15 +1512,12 @@ def send_test_email():
         recipient = form.recipient.data
         template = form.template.data
 
-        logo_path = os.path.join(current_app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
-        attachments = [{"path": logo_path, "cid": "logo"}]
 
         success = send_mail(
             from_account=sender,
             to_email=recipient,
             subject=f"Test: {template}",
             template_name=template,
-            attachments=attachments,
             first_name="Test User",
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             now=datetime.now(timezone.utc),

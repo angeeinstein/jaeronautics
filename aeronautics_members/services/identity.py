@@ -143,15 +143,17 @@ def send_email_verification_email(app, user):
     return send_account_action_email(
         app,
         to_email=user.email,
-        subject=_("Verify your Joanneum Aeronautics email"),
-        preview_text=_("Confirm your email address for your Joanneum Aeronautics account."),
+        subject=_("Confirm your email address"),
+        preview_text=_("One click to confirm the address of your Joanneum Aeronautics account."),
         action_url=verify_url,
-        action_label=_("Verify Email"),
+        action_label=_("Confirm Email Address"),
         heading=_("Confirm your email address"),
         body_lines=[
-            _("Please confirm your email address for your Joanneum Aeronautics account."),
-            _("This helps us keep your account secure and reach you when needed."),
+            _("Please confirm that this is your email address. It is the address you "
+              "sign in with, and the one we use to reach you."),
         ],
+        note=_("The link is valid for 7 days. If you did not sign up with Joanneum "
+               "Aeronautics, you can ignore this email."),
         failure_event_type="verification_email_failed",
         failure_summary=_("A verification email could not be sent."),
         failure_payload={"email_type": "verification"},
@@ -221,16 +223,20 @@ def send_work_email_verification_email(app, member):
     return send_account_action_email(
         app,
         to_email=member.email_work,
-        subject=_("Confirm your university or company email"),
+        subject=_("Confirm your university or company email address"),
         preview_text=_("Confirm this address for your Joanneum Aeronautics membership."),
         action_url=verify_url,
         action_label=_("Confirm Address"),
         heading=_("Confirm your university or company address"),
         body_lines=[
-            _("Please confirm this address for your Joanneum Aeronautics membership."),
-            _("We use it to confirm that you currently study or work here. Your "
-              "private address stays your login and is how we reach you later."),
+            _("Please confirm this address for your Joanneum Aeronautics membership. "
+              "It shows that you study or work here."),
+            _("If you were on the old forum with this address, confirming it also "
+              "gives you your old forum account and your posts back."),
+            _("You keep signing in with your private address, and that is where we "
+              "write to you."),
         ],
+        note=_("The link is valid for 7 days."),
         failure_event_type="work_verification_email_failed",
         failure_summary=_("A university email confirmation could not be sent."),
         failure_payload={"email_type": "work_verification"},
@@ -250,9 +256,11 @@ def send_password_reset_email(app, user):
         action_label=_("Reset Password"),
         heading=_("Reset your password"),
         body_lines=[
-            _("A password reset was requested for your Joanneum Aeronautics account."),
-            _("If this was you, use the link below to set a new password. If not, you can ignore this email."),
+            _("Somebody asked to reset the password of your Joanneum Aeronautics account. "
+              "If it was you, choose a new password with the button below."),
         ],
+        note=_("The link is valid for 24 hours and works once. If you did not ask for "
+               "this, you can ignore this email: your password stays as it is."),
         failure_event_type="password_reset_email_failed",
         failure_summary=_("A password reset email could not be sent."),
         failure_payload={"email_type": "password_reset"},

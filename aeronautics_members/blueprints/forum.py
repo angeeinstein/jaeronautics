@@ -208,7 +208,7 @@ def upload_forum_avatar():
         queue_curated_admin_notification(
             ADMIN_GENERAL_CHANNEL,
             "forum_avatar_uploaded",
-            _("A new forum avatar approval request was submitted by %(email)s.", email=member.email_private),
+            _("%(email)s uploaded a profile picture for approval.", email=member.email_private),
             payload={
                 "member_email": member.email_private,
                 "forum_username": current_user.forum_username,

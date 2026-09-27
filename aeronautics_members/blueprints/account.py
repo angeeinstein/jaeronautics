@@ -321,7 +321,7 @@ def submit_identity_change_request():
             queue_curated_admin_notification(
                 ADMIN_GENERAL_CHANNEL,
                 "identity_change_request_created",
-                _("A new identity change request was submitted by %(email)s.", email=member.email_private),
+                _("%(email)s asked for a profile change (name, title or year group).", email=member.email_private),
                 payload={
                     "member_email": member.email_private,
                     "request_id": request_record.id,

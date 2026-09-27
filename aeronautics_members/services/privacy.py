@@ -641,8 +641,9 @@ def send_account_deletion_email(app, user):
               "and any active membership subscription will be cancelled without a refund."),
             _("We keep a record of the membership fees you paid, without your personal details, "
               "because bookkeeping law requires it."),
-            _("This link expires in one hour. If you did not request this, you can ignore this email."),
         ],
+        note=_("The link is valid for one hour. If you did not ask for this, you can "
+               "ignore this email and nothing will be deleted."),
         failure_event_type="account_deletion_email_failed",
         failure_summary=_("An account deletion confirmation email could not be sent."),
         failure_payload={"email_type": "account_deletion"},

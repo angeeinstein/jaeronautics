@@ -10,7 +10,6 @@ These are the natural entry points for a route -- HTML today, JSON later -- sinc
 they express a complete operation rather than a step of one.
 """
 
-import os
 
 import stripe
 from flask import current_app
@@ -21,6 +20,7 @@ from ..db_models import EmailDeliveryJob, ExternalWorkItem, Member, User, db
 from . import ExternalServiceError
 from ..mail_utils import send_mail
 from ..notification_service import ADMIN_ERROR_CHANNEL
+from ..security_utils import build_public_url
 from .billing import (
     apply_runtime_stripe_config,
     get_latest_stripe_subscription_for_member,
@@ -36,7 +36,7 @@ from .forum import (
 )
 from .forum_import import find_claimable_profile, imported_email_for
 from .identity import rotate_email_verification_nonce
-from .membership import sync_member_active_state
+from .membership import format_membership_date_display, sync_member_active_state
 from .outbox import enqueue_forum_sync, pending_count, process_pending, register_handler
 from .notifications import (
     EMAIL_JOB_STATUS_CANCELED,
@@ -52,6 +52,16 @@ from .notifications import (
 from .settings import get_settings_map
 
 
+
+
+def _display_date(value):
+    """A date as a person reads it -- "31 December 2026" -- in the mail's language."""
+    if value is None:
+        return None
+    try:
+        return format_membership_date_display(value)
+    except Exception:  # noqa: BLE001 -- no locale outside a request; ISO is still a date
+        return value.isoformat()
 
 
 def send_member_welcome_email(app, member, force_send=False, notify_on_failure=True, queue_retry_on_failure=None, return_error=False):
@@ -99,8 +109,6 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
         and member.user.imported_forum_profile is None
         and find_claimable_profile(member.email_work) is not None
     )
-    logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
-    attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
 
     forum_service = get_forum_service()
     forum_entry_url = None
@@ -112,13 +120,12 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
         to_email=member.email_private,
         subject=_("Welcome to Joanneum Aeronautics!"),
         template_name=template_name,
-        attachments=attachments,
         first_name=member.first_name,
         suggested_username=suggested_username,
         old_forum_account_waiting=old_forum_account_waiting,
-        membership_starts_on=member.membership_starts_on,
-        membership_ends_on=member.membership_ends_on,
-        renewal_due_on=member.renewal_due_on,
+        membership_ends_on_display=_display_date(member.membership_ends_on),
+        renewal_due_on_display=_display_date(member.renewal_due_on),
+        account_url=build_public_url("account.account"),
         forum_integration_enabled=forum_service.is_enabled(),
         forum_entry_url=forum_entry_url,
         now=get_now_utc(),

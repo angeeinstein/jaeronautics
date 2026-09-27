@@ -10,6 +10,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 TEMPLATES = REPO / "aeronautics_members" / "templates"
+EMAIL_TEMPLATES = TEMPLATES / "emails"
 NGINX_CONF = REPO / "deploy" / "nginx" / "aeronautics.conf"
 
 # <script> with no src= attribute, i.e. one carrying an inline body.
@@ -50,6 +51,11 @@ def test_no_inline_style_attributes_in_templates():
     """
     offenders = []
     for path in TEMPLATES.rglob("*.html"):
+        # Emails are exempt: no browser applies the site's CSP to them, and
+        # inline styles are what mail clients -- Outlook, Gmail's apps -- do
+        # honour. They are only ever rendered by send_mail, never served.
+        if path.parent == EMAIL_TEMPLATES:
+            continue
         for lineno, line in enumerate(path.read_text().splitlines(), 1):
             if INLINE_STYLE.search(line):
                 offenders.append(f"{path.relative_to(TEMPLATES)}:{lineno}")
@@ -169,3 +175,14 @@ def test_stylesheets_stay_same_origin():
     # Defences that cost nothing once everything is same-origin.
     for directive in ("object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'"):
         assert directive in csp, f"CSP is missing {directive}"
+
+
+def test_email_templates_are_never_served_as_pages():
+    """What makes their exemption above safe."""
+    python = (REPO / "aeronautics_members").rglob("*.py")
+    for path in python:
+        if path.name == "mail_utils.py":
+            continue
+        assert 'render_template(f"emails/' not in path.read_text(), path
+        assert "render_template('emails/" not in path.read_text(), path
+        assert 'render_template("emails/' not in path.read_text(), path
