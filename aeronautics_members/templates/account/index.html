@@ -149,6 +149,32 @@
                             {{ _('Your membership remains active, but it will not renew automatically.') }}
                         {% endif %}
                     </div>
+                {% elif can_rejoin %}
+                    {#
+                        The only way back for somebody whose membership has
+                        ended: the billing portal reopens a subscription only
+                        until it has actually ended, and a cancelled one cannot
+                        be restarted.
+                    #}
+                    <div class="alert alert-secondary mt-4 mb-0">
+                        <p class="mb-2">{{ _('Your membership has ended. You can rejoin at any time; you pay for the rest of the current year, as when you first joined.') }}</p>
+                        <form method="POST" action="{{ url_for('account.rejoin_membership') }}" class="mb-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            {% if invoice_payments_enabled %}
+                                <div class="mb-2">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="payment_method" id="rejoin-checkout" value="checkout" checked>
+                                        <label class="form-check-label" for="rejoin-checkout">{{ _('Card or SEPA Direct Debit') }}</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="payment_method" id="rejoin-invoice" value="invoice">
+                                        <label class="form-check-label" for="rejoin-invoice">{{ _('Invoice') }}</label>
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">{{ _('Rejoin') }}</button>
+                        </form>
+                    </div>
                 {% elif can_resume_payment %}
                     <div class="alert alert-info mt-4 mb-0">{{ _('Your account is ready, but the membership payment is not finished yet. Use the resume button above to continue.') }}</div>
                 {% elif not can_manage_billing %}

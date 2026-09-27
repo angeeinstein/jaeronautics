@@ -13,7 +13,11 @@ from ..services.audit import (
     snapshot_user_for_audit,
 )
 from ..services.billing import (
+    backfill_member_stripe_references,
+    can_rejoin,
     create_checkout_session_for_member,
+    find_live_stripe_subscription,
+    sync_member_subscription_state_from_subscription,
 )
 from ..services.clock import (
     get_now_utc,
@@ -54,6 +58,7 @@ from ..services.members import (
 from ..services.membership import (
     member_has_active_access,
 )
+from ..services.outbox import enqueue_forum_sync
 from ..services.notifications import (
     flush_marked_notification_channels,
     queue_curated_admin_notification,
@@ -407,6 +412,68 @@ def resume_member_payment():
         current_app.logger.exception("Unexpected error while resuming payment for member_id=%s", member.id)
         flash(_("Could not restart the membership payment right now."), "danger")
     return redirect(url_for("account.account"))
+
+
+@account_bp.route("/account/rejoin", methods=["POST"])
+@login_required
+def rejoin_membership():
+    """Start a membership again after it has ended.
+
+    Stripe cannot restart a cancelled subscription -- "canceled" is final
+    there -- so this is a new one, on the same Stripe customer. Without it
+    somebody whose membership lapsed had no way back: the signup page sends
+    them to log in, the create-profile page sees they already have one, and the
+    billing portal only reopens a subscription that has not ended yet.
+    """
+    member = get_current_member_for_user(current_user)
+    if member is None:
+        flash(_("No membership profile is linked to this account yet."), "warning")
+        return redirect(url_for("public.index"))
+    if not can_rejoin(member):
+        flash(_("Your membership has not ended, so there is nothing to restart."), "info")
+        return redirect(url_for("account.account"))
+
+    try:
+        live = find_live_stripe_subscription(member)
+    except stripe.StripeError as exc:
+        current_app.logger.error(
+            "Could not check Stripe for a running subscription before a rejoin for member_id=%s: %s",
+            member.id, exc,
+        )
+        flash(_("We could not check your billing with Stripe right now. Please try again later."), "danger")
+        return redirect(url_for("account.account"))
+
+    if live is not None:
+        # The portal was behind Stripe, not the membership over. Catch up
+        # instead of starting a second subscription that would charge twice.
+        backfill_member_stripe_references(member, subscription_id=live.get("id"))
+        sync_member_subscription_state_from_subscription(member, live)
+        enqueue_forum_sync(member, reason="Found running while rejoining.")
+        db.session.commit()
+        flash(
+            _("Your membership is still running in Stripe, so there is nothing to restart. "
+              "If a payment is outstanding, you can settle it under Manage Billing."),
+            "info",
+        )
+        return redirect(url_for("account.account"))
+
+    payment_method = chosen_payment_method(request.form.get("payment_method", "checkout"))
+    log_audit_event(
+        category="membership",
+        event_type="membership_rejoin_started",
+        actor_user=current_user,
+        target_user=current_user,
+        target_member=member,
+        before=snapshot_member_for_audit(member),
+        after=None,
+        metadata={
+            "payment_method": payment_method,
+            "previous_status": member.payment_status,
+            "previous_subscription_id": member.stripe_subscription_id,
+        },
+    )
+    db.session.commit()
+    return start_membership(member, payment_method, what="rejoin")
 
 
 @account_bp.route("/account/resend-verification", methods=["POST"])

@@ -28,9 +28,10 @@ from ..services.workflows import send_member_welcome_email
 def start_membership(member, payment_method, *, what):
     """Send the confirmation links, then start paying. Returns the response.
 
-    ``what`` is "account" for a signup that made the login too, and "profile"
-    for somebody who already had one; it only changes the wording of a message
-    about something that went wrong after the membership was saved.
+    ``what`` is "account" for a signup that made the login too, "profile" for
+    somebody who already had one, and "rejoin" for a membership starting again
+    after it ended; it only changes the wording of a message about something
+    that went wrong after the membership was saved.
     """
     app = current_app._get_current_object()
     user = member.user
@@ -91,7 +92,9 @@ def start_membership(member, payment_method, *, what):
             getattr(exc, "request_id", None), getattr(exc, "http_status", None),
             payment_method, member.id,
         )
-        if what == "account":
+        if what == "rejoin":
+            flash(_("Payment could not be started right now. Please try rejoining again later."), "warning")
+        elif what == "account":
             flash(_("Your account was created, but payment could not be started. Please log in and resume your membership from your account page."), "warning")
         else:
             flash(_("Your membership profile was created, but payment could not be started. You can resume it from your account page."), "warning")
@@ -100,7 +103,9 @@ def start_membership(member, payment_method, *, what):
             "Unexpected error while starting a membership: payment_method=%s member_id=%s",
             payment_method, member.id,
         )
-        if what == "account":
+        if what == "rejoin":
+            flash(_("Billing could not be started right now. Please try rejoining again later."), "warning")
+        elif what == "account":
             flash(_("Your account was created, but an unexpected error occurred while starting billing. Please log in and resume your membership from your account page."), "warning")
         else:
             flash(_("Your membership profile was created, but billing could not be started right now. You can resume it from your account page."), "warning")

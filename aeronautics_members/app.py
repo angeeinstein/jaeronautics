@@ -318,6 +318,7 @@ from .services.billing import (  # noqa: E402
     apply_runtime_stripe_config,
     backfill_member_coverage_from_subscription,
     backfill_member_stripe_references,
+    can_rejoin,
     create_checkout_session_for_member,
     create_invoice_membership_for_member,
     get_member_by_stripe_or_email,
@@ -325,6 +326,7 @@ from .services.billing import (  # noqa: E402
     subscription_period_bounds,
     sync_member_subscription_state_from_subscription,
 )
+from .services.signup import invoice_payments_allowed  # noqa: E402
 from .services.webhook_inbox import (  # noqa: E402
     STRIPE_EVENT_LEASE,
     claim_stripe_event,
@@ -1042,6 +1044,8 @@ def render_account_dashboard(profile_form=None, identity_form=None):
         suggested_username_from_request=suggested_username_from_request,
         can_manage_billing=bool(member.stripe_customer_id),
         can_resume_payment=can_resume_payment(member),
+        can_rejoin=can_rejoin(member),
+        invoice_payments_enabled=invoice_payments_allowed(),
         forum_context=forum_context,
     )
 

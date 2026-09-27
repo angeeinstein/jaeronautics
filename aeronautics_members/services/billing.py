@@ -43,6 +43,7 @@ from .membership import (
     build_membership_cycle,
     format_membership_date_display,
     invoice_coverage_year,
+    member_has_active_access,
     set_member_membership_window,
     sync_member_active_state,
 )
@@ -311,6 +312,86 @@ def get_latest_stripe_subscription_for_member(member):
     return subscriptions[0] if subscriptions else None
 
 
+# A membership has ended, rather than never started or still running: the
+# subscription was cancelled ("canceled"), Stripe gave up on its payments
+# ("failed"), or the coverage simply ran out ("expired").
+REJOINABLE_MEMBER_STATUSES = {"canceled", "expired", "failed"}
+
+# Stripe subscription statuses for a subscription Stripe is still running, and
+# might still charge. Anything else -- "canceled", "incomplete_expired" -- is
+# over, and cannot be restarted: Stripe treats both as final.
+LIVE_SUBSCRIPTION_STATUSES = {"active", "trialing", "past_due", "unpaid", "incomplete", "paused"}
+
+
+def can_rejoin(member):
+    """Whether the account page should offer to start the membership again.
+
+    Decided on what the portal knows, so the page does not ask Stripe on every
+    load. Clicking asks Stripe before charging anything; see
+    find_live_stripe_subscription.
+    """
+    if member is None or getattr(member, "deleted_at", None) is not None:
+        return False
+    if member_has_active_access(member):
+        return False
+    return member.payment_status in REJOINABLE_MEMBER_STATUSES
+
+
+def find_live_stripe_subscription(member):
+    """A subscription Stripe is still running for this member, or None.
+
+    The last check before starting another one. The portal's own status can
+    lag: on Jan 1 a paying member reads "expired" until the SEPA renewal
+    clears, while Stripe is busy collecting it -- and a second subscription
+    then would charge them twice. Raises StripeError when Stripe cannot be
+    asked, because "could not tell" must not be taken for "none".
+    """
+    if member is None or not member.stripe_customer_id:
+        return None
+    apply_runtime_stripe_config()
+    try:
+        listing = stripe.Subscription.list(
+            customer=member.stripe_customer_id, status="all", limit=20,
+        )
+    except stripe.StripeError as exc:
+        if getattr(exc, "code", None) == "resource_missing":
+            return None  # the customer itself is gone, and everything with it
+        raise
+    for subscription in listing.get("data", []) if hasattr(listing, "get") else []:
+        if subscription.get("status") in LIVE_SUBSCRIPTION_STATUSES:
+            return subscription
+    return None
+
+
+def reusable_stripe_customer_id(member):
+    """The member's existing Stripe customer, brought up to date, or None.
+
+    Somebody coming back stays the same customer in Stripe, with their old
+    invoices next to the new ones, rather than becoming a second customer that
+    has to be matched to the first by hand. Their address and name are sent
+    again first: receipts go to the address Stripe holds, and the member may
+    have changed theirs since.
+    """
+    if member is None or not member.stripe_customer_id:
+        return None
+    try:
+        stripe.Customer.modify(
+            member.stripe_customer_id,
+            email=member.email_private,
+            name=f"{member.first_name} {member.last_name}",
+        )
+    except stripe.StripeError as exc:
+        if getattr(exc, "code", None) != "resource_missing":
+            raise
+        current_app.logger.warning(
+            "Stripe customer %s for member_id=%s no longer exists; a new one will be made.",
+            member.stripe_customer_id, member.id,
+        )
+        member.stripe_customer_id = None
+        return None
+    return member.stripe_customer_id
+
+
 def get_open_checkout_session(member):
     """The member's previous Checkout session, if it is still usable.
 
@@ -362,12 +443,25 @@ def create_checkout_session_for_member(member):
     if prorated_line_item is not None:
         line_items.insert(0, prorated_line_item)
 
+    # Scoped to the member and the membership year, so a double-submitted form
+    # or a retried request returns the session that already exists rather than
+    # opening a second one. Stripe keeps a key for 24 hours, which is also how
+    # long a Checkout session stays open. Somebody rejoining carries their
+    # ended subscription in the key as well: they may have joined earlier the
+    # same year, and that key would hand back the first, completed session.
+    idempotency_key = f"checkout:member:{member.id}:{cycle['current_year']}"
+    if member.stripe_subscription_id:
+        idempotency_key += f":after:{member.stripe_subscription_id}"
+
+    # One or the other: Stripe refuses both. An existing customer is kept, so
+    # a returning member is one customer in Stripe, not two.
+    customer_id = reusable_stripe_customer_id(member)
+    customer_params = (
+        {"customer": customer_id} if customer_id else {"customer_email": member.email_private}
+    )
+
     checkout_session = stripe.checkout.Session.create(
-        # Scoped to the member and the membership year, so a double-submitted
-        # form or a retried request returns the session that already exists
-        # rather than opening a second one. Stripe keeps a key for 24 hours,
-        # which is also how long a Checkout session stays open.
-        idempotency_key=f"checkout:member:{member.id}:{cycle['current_year']}",
+        idempotency_key=idempotency_key,
         # Identifiers only. The profile itself is deliberately NOT sent: Stripe
         # caps a metadata value at 500 characters, and a perfectly ordinary
         # profile -- a double-barrelled surname, a title, two long university
@@ -390,7 +484,7 @@ def create_checkout_session_for_member(member):
             }
         },
         payment_method_collection="always",
-        customer_email=member.email_private,
+        **customer_params,
         success_url=build_public_url(
             "public.thank_you",
             method="checkout",
@@ -452,13 +546,15 @@ def create_invoice_membership_for_member(member):
     activation_mode = "free_period" if cycle["free_period"] else "paid_now"
     membership_metadata = build_membership_metadata(member, cycle, activation_mode)
 
-    customer = stripe.Customer.create(
-        email=member.email_private,
-        name=f"{member.first_name} {member.last_name}",
-    )
+    customer_id = reusable_stripe_customer_id(member)
+    if customer_id is None:
+        customer_id = stripe.Customer.create(
+            email=member.email_private,
+            name=f"{member.first_name} {member.last_name}",
+        ).id
 
     subscription_params = {
-        "customer": customer.id,
+        "customer": customer_id,
         "items": [{"price": price_id}],
         "collection_method": "send_invoice",
         "days_until_due": 30,
@@ -471,7 +567,7 @@ def create_invoice_membership_for_member(member):
 
     subscription = stripe.Subscription.create(**subscription_params)
     member.pending_checkout_started_at = get_now_utc()
-    member.stripe_customer_id = customer.id
+    member.stripe_customer_id = customer_id
     member.stripe_subscription_id = subscription.id
 
     if cycle["free_period"]:
