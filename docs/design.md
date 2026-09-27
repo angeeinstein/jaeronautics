@@ -153,11 +153,15 @@ bands, and the one real shadow (`0 12px 32px rgba(0,0,0,0.45)`).
   is the logo: `static/logo_joanneum_aeronautics_negativ.svg`, white and
   cyan for dark backgrounds, 52px tall in the navbar.
 - Where there is only room for a square -- browser tab, phone home screen,
-  an avatar -- the "A" with the airplane alone, on black:
-  `static/favicon.svg` (cut from the lockup's own shapes, so it is the same
-  drawing), with `favicon-32.png` and `apple-touch-icon.png` (180px) for
-  browsers that want a picture. The same files can be uploaded as the
-  forum's favicon and touch icon.
+  an avatar -- the "A" with the airplane alone: `static/favicon.svg`, cut from
+  the lockup's own shapes, so it is the same drawing. No background: the parts
+  that are white in the lockup are white on a dark browser and the navy
+  `#1d2733` on a light one, where white would vanish.
+- `favicon-32.png` is the fallback for browsers that take no SVG icon: also
+  transparent, those parts in a neutral grey that reads on both. The phone
+  home-screen icon (`apple-touch-icon.png`, 180px) keeps the mark on black,
+  because iOS wants an opaque square and would fill a transparent one black
+  anyway. The same files can be uploaded as the forum's favicon and touch icon.
 
 ## Wording and formats
 
