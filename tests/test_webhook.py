@@ -95,6 +95,19 @@ def checkout_event(member, user, activation_mode="free_period", payment_status="
 
 
 class TestCheckoutCompleted:
+    @pytest.mark.parametrize("mode,paid", [("free_period", "no_payment_required"), ("paid_now", "paid")])
+    def test_the_forum_is_told(self, client, monkeypatch, stub_side_effects, mode, paid):
+        """A free period has no payment to tell it, so checkout has to."""
+        member = make_member()
+        post_event(client, monkeypatch, checkout_event(
+            member, member.user, activation_mode=mode, payment_status=paid,
+        ))
+
+        queued = db.session.execute(
+            db.select(ExternalWorkItem).filter_by(kind=ExternalWorkItem.KIND_FORUM_SYNC)
+        ).scalars().all()
+        assert [item.member_id for item in queued] == [member.id]
+
     def test_free_period_activates_member_and_sends_welcome(self, client, monkeypatch, stub_side_effects):
         member = make_member()
         event = checkout_event(member, member.user, activation_mode="free_period")

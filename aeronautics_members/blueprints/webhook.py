@@ -233,6 +233,12 @@ def process_stripe_event(event):
                     cancel_at_period_end=False,
                 )
 
+            # The forum learns about the membership here too, not only from
+            # invoice.paid: an October joiner's free period has no payment, so
+            # no invoice.paid that counts, and somebody already on the forum --
+            # a returning student, a member rejoining -- would otherwise keep
+            # their old groups until they happened to open it.
+            enqueue_forum_sync(member, reason="Checkout completed.")
             db.session.commit()
 
             if member_has_active_access(member) and not previously_active:
