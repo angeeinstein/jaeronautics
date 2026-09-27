@@ -573,6 +573,66 @@ textarea.form-control {
     }
 }
 
+/* A checklist: one line per thing being checked, its state as an icon in
+   front -- a spinner while it is being checked, the drawing tick once it
+   works, a red cross when it does not. Used on the Backup & Restore card. */
+.checklist {
+    list-style: none;
+    padding: 0;
+}
+
+.checklist-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--ja-border);
+}
+
+.checklist-item:last-child {
+    border-bottom: 0;
+}
+
+.checklist-icon {
+    flex: 0 0 22px;
+    display: flex;
+    justify-content: center;
+    padding-top: 0.1rem;
+}
+
+.checklist-icon .spinner-border {
+    color: var(--ja-accent);
+}
+
+.checklist-label {
+    display: block;
+    font-weight: 600;
+}
+
+.checklist-detail {
+    display: block;
+    color: var(--ja-muted);
+    font-size: 0.875rem;
+}
+
+.checklist-failed .checklist-label {
+    color: var(--ja-danger);
+}
+
+.checklist-cross path {
+    fill: none;
+    stroke: var(--ja-danger);
+    stroke-width: 3;
+}
+
+.checklist-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-top: 0.45rem;
+    background-color: var(--ja-muted);
+}
+
 /* ---- Status labels ----------------------------------------------------------
    A state in a word: small capitals on a faint tint of its colour, square. */
 

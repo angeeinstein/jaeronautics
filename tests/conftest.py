@@ -76,6 +76,8 @@ def app(tmp_path):
             "WTF_CSRF_ENABLED": False,
             "RATELIMIT_ENABLED": False,
             "PUBLIC_BASE_URL": "https://members.test",
+            # Never the repository's own storage/backups.
+            "BACKUP_DIR": str(tmp_path / "backups"),
         }
     )
     with application.app_context():

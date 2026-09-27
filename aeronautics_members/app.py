@@ -188,6 +188,7 @@ from .permissions import (  # noqa: E402
 )
 from .services.diagnostics import collect_system_health  # noqa: E402
 from .services.system_update import describe_update_state  # noqa: E402
+from .services.backup import describe_backup_page  # noqa: E402
 from .services.outbox import (  # noqa: E402
     failed_items,
     pending_count,
@@ -620,6 +621,19 @@ def static_asset_version(app, filename):
 
 
 
+
+
+def _stand_down_while_paused(job_name):
+    """Check a timer-run job in; True when background jobs are paused after a restore."""
+    from .services.background_jobs import check_in
+
+    if check_in(job_name):
+        click.echo(
+            "Background jobs are paused after a restore. Resume them under "
+            "Settings > Maintenance > Backup & Restore. Not running."
+        )
+        return True
+    return False
 
 
 def set_setting_value(key, value):
@@ -1248,6 +1262,7 @@ def build_settings_page_context(edit_mail_account_id=None):
         # JSON status endpoint uses, so the page and the API cannot disagree.
         "update_state": describe_update_state(),
         "system_health": collect_system_health(),
+        "backup_page": describe_backup_page(),
         # The health report counts undelivered emails; this is what an admin
         # needs to actually resolve one -- who it was for, and why it failed.
         "undelivered_emails": list_undelivered_emails(),
@@ -1517,6 +1532,12 @@ def create_app(config_overrides=None):
 
     # Dates and times on every page and email in one format and in Vienna
     # time: 31.12.2026, 31.12.2026 14:05.
+    @app.template_global("background_jobs_paused")
+    def background_jobs_paused_global():
+        from .services.background_jobs import is_paused
+
+        return is_paused()
+
     @app.template_filter("date_display")
     def date_display_filter(value):
         return format_date_display(value) if value else ""
@@ -3185,6 +3206,128 @@ def create_app(config_overrides=None):
             fg="cyan",
         ))
 
+    @app.cli.command("create-backup")
+    @click.option("--out", "out_path", type=click.Path(dir_okay=False),
+                  help="Where to write it. Default: the backups folder, where the admin page lists it.")
+    @click.option("--passphrase-stdin", is_flag=True,
+                  help="Read the passphrase from standard input instead of asking.")
+    @click.option("--created-by", default=None, help="Who asked for it, for the record.")
+    @with_appcontext
+    def create_backup_command(out_path, passphrase_stdin, created_by):
+        """Write an encrypted backup of everything this installation holds.
+
+        The accounts and memberships, every setting and credential, uploaded
+        pictures waiting for review, and the SECRET_KEY, Stripe keys and mail
+        accounts from .env. Restore it with ``install.sh --restore FILE``.
+        """
+        from .services import backup as backup_service
+
+        if passphrase_stdin:
+            passphrase = sys.stdin.readline().rstrip("\n")
+        else:
+            passphrase = click.prompt("Passphrase", hide_input=True, confirmation_prompt=True)
+
+        keep_in_folder = out_path is None
+        destination = Path(out_path) if out_path else backup_service.new_backup_path()
+        recorder = backup_service.StatusRecorder(created_by)
+        try:
+            result = backup_service.create_backup(destination, passphrase, created_by=created_by, progress=recorder)
+        except backup_service.BackupError as exc:
+            recorder.fail(str(exc))
+            raise click.ClickException(str(exc))
+        except Exception as exc:  # noqa: BLE001 -- the page must not be left saying "running"
+            recorder.fail(f"The backup failed: {exc}")
+            raise
+        if keep_in_folder:
+            backup_service.prune_backups(keep=backup_service.BACKUPS_KEPT)
+        recorder.finish(result)
+
+        actor = db.session.execute(db.select(User).filter_by(email=created_by)).scalar_one_or_none() if created_by else None
+        log_audit_event(category="system", event_type="backup_created", actor_user=actor, target_user=actor,
+                        metadata={"file": result["file"], "size": result["size"], "sha256": result["sha256"]})
+        db.session.commit()
+        click.echo(f"Backup written: {destination} ({result['size']} bytes, {result['rows']} rows, "
+                   f"{result['files']} files)")
+        click.echo(f"SHA-256: {result['sha256']}")
+
+    @app.cli.command("restore-backup")
+    @click.argument("backup_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--passphrase-stdin", is_flag=True,
+                  help="Read the passphrase from standard input instead of asking.")
+    @click.option("--yes", is_flag=True, help="Do not ask before replacing everything.")
+    @click.option("--env-out", type=click.Path(dir_okay=False),
+                  help="Write the restored .env values here (JSON) for the installer to apply, "
+                       "instead of writing .env directly.")
+    @with_appcontext
+    def restore_backup_command(backup_file, passphrase_stdin, yes, env_out):
+        """Replace everything on this installation with a backup.
+
+        Every account, setting and file here is replaced by the backup's --
+        including any account made while installing. Afterwards every
+        background job is paused until an administrator resumes them on the
+        Backup & Restore page, because a copy restored onto a test machine
+        would otherwise start emailing members and pushing to the real forum.
+
+        Normally run through ``install.sh --restore FILE``, which also applies
+        the .env values and restarts the portal.
+        """
+        from .services import backup as backup_service
+        from .services.background_jobs import clear_heartbeats, pause
+
+        env_path = backup_service.env_file_path()
+        if not env_out and not os.access(env_path if env_path.exists() else env_path.parent, os.W_OK):
+            raise click.ClickException(
+                f"{env_path} cannot be written by this user. Run the restore through "
+                "`install.sh --restore FILE`, or pass --env-out."
+            )
+
+        if passphrase_stdin:
+            passphrase = sys.stdin.readline().rstrip("\n")
+        else:
+            passphrase = click.prompt("Passphrase", hide_input=True)
+
+        try:
+            checked = backup_service.inspect_backup(backup_file, passphrase)
+            backup_service.check_restorable(checked["manifest"])
+        except backup_service.BackupError as exc:
+            raise click.ClickException(str(exc))
+        manifest, contents = checked["manifest"], checked["contents"]
+        click.echo(f"Backup made {manifest['created_at']}"
+                   + (f" by {manifest['created_by']}" if manifest.get("created_by") else ""))
+        click.echo(f"  {sum(contents['tables'].values())} rows in {len(contents['tables'])} tables, "
+                   f"{len(contents['files'])} files, database version {manifest['schema_revision']}")
+        if not yes:
+            click.confirm("Replace EVERYTHING on this installation with this backup?", abort=True)
+
+        def report(step, message):
+            click.echo(f"  {message}")
+
+        try:
+            result = backup_service.restore_backup(backup_file, passphrase, progress=report)
+        except backup_service.BackupError as exc:
+            raise click.ClickException(str(exc))
+
+        seed_default_roles()
+        backfill_legacy_admin_roles()
+        backfill_member_user_links()
+        clear_heartbeats()
+        pause("restore", backup_created_at=manifest["created_at"])
+        log_audit_event(category="system", event_type="backup_restored",
+                        metadata={"backup_created_at": manifest["created_at"],
+                                  "backup_created_by": manifest.get("created_by"),
+                                  "schema_revision": manifest["schema_revision"]})
+        db.session.commit()
+
+        if env_out:
+            Path(env_out).write_text(json.dumps(result["env"]))
+            os.chmod(env_out, 0o600)
+        else:
+            backup_service.apply_env_values(env_path, result["env"])
+        click.echo(click.style(
+            "Restored. Background jobs are paused: sign in with an account from the backup and "
+            "resume them under Settings > Maintenance > Backup & Restore.", fg="cyan",
+        ))
+
     @app.cli.command("forum-permissions")
     @click.argument("mapping_file", type=click.Path(exists=True, dir_okay=False))
     @click.option("--dry-run", is_flag=True,
@@ -3987,6 +4130,8 @@ def create_app(config_overrides=None):
     @with_appcontext
     def reconcile_billing(reconcile_all, lookahead_days):
         """Reconciles local billing state with Stripe for Stripe-managed memberships."""
+        if _stand_down_while_paused("billing-reconcile"):
+            return
         today = get_membership_today()
         cutoff = today + timedelta(days=max(0, lookahead_days))
         stripe_linked_filter = or_(Member.stripe_customer_id.is_not(None), Member.stripe_subscription_id.is_not(None))
@@ -4248,6 +4393,8 @@ def create_app(config_overrides=None):
     @with_appcontext
     def sync_forum_members(only_active, only_changed):
         """Synchronizes forum state for many linked members."""
+        if _stand_down_while_paused("forum-drift"):
+            return
         if only_changed:
             return _sync_the_ones_that_drifted()
         query = db.select(Member).where(Member.user_id.is_not(None))
@@ -4271,6 +4418,8 @@ def create_app(config_overrides=None):
     @with_appcontext
     def deliver_notifications_command():
         """Delivers queued admin and user notification emails."""
+        if _stand_down_while_paused("notifications"):
+            return
         email_summary = process_email_delivery_jobs(app)
         db.session.commit()
         summary = get_notification_service().deliver_pending_notifications()
@@ -4363,6 +4512,8 @@ def create_app(config_overrides=None):
         Items are claimed under a lease, so running this while another copy is
         already running is safe -- a second worker simply finds nothing to claim.
         """
+        if _stand_down_while_paused("external-work"):
+            return
         completed, failed = process_pending(limit=limit)
         outstanding = pending_count()
         click.echo(f"External work: {completed} completed, {failed} failed, {outstanding} still queued.")
@@ -4386,6 +4537,8 @@ def create_app(config_overrides=None):
         records forever. Only truly old rows are removed, so recent history is
         always preserved.
         """
+        if _stand_down_while_paused("cleanup-logs"):
+            return
         audit_deleted = 0
         if audit_days > 0:
             cutoff = get_now_utc() - timedelta(days=audit_days)

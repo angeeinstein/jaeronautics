@@ -18,6 +18,15 @@
         </div>
     </div>
 
+    {% if background_jobs_paused() %}
+        <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span>{{ _('This portal was restored from a backup and its background jobs are paused: no emails, forum sync or payment checks run on their own.') }}</span>
+            {% if current_user.can('system.backup') %}
+                <a class="btn btn-sm btn-secondary" href="{{ url_for('admin.admin_settings', _anchor='backup-restore') }}">{{ _('Review and resume') }}</a>
+            {% endif %}
+        </div>
+    {% endif %}
+
     <div class="admin-page-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
         <div>
             <h1 class="h3 mb-1">{{ page_title or _('Admin Area') }}</h1>

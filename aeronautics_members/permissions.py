@@ -60,6 +60,8 @@ class Permission:
 
     # Taking over the installation, or deciding who else may.
     SYSTEM_UPDATE = "system.update"
+    # A backup is every member's data and every credential in one file.
+    SYSTEM_BACKUP = "system.backup"
     ROLES_MANAGE = "roles.manage"
 
 
@@ -98,6 +100,7 @@ ROLE_PERMISSIONS = {
         Permission.SETTINGS_GENERAL,
         Permission.SETTINGS_CREDENTIALS,
         Permission.SYSTEM_UPDATE,
+        Permission.SYSTEM_BACKUP,
         Permission.ROLES_MANAGE,
         Permission.FORUM_MODERATOR,
         # Everything on the forum as well. A Discourse admin can change any
@@ -158,6 +161,7 @@ PERMISSION_LABELS = {
     Permission.FORUM_ADMIN: "Be an administrator on the forum itself",
     Permission.FORUM_MODERATOR: "Be a moderator on the forum itself",
     Permission.SYSTEM_UPDATE: "Install a new version and roll one back",
+    Permission.SYSTEM_BACKUP: "Make and download encrypted backups, and resume background jobs after a restore",
     Permission.ROLES_MANAGE: "Grant and revoke access for other people",
 }
 

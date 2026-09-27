@@ -43,6 +43,13 @@ ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-}"
 # revision, and the rollback point has to name the one being replaced.
 PRE_UPDATE_REVISION="${BOOTSTRAP_PRE_UPDATE_REVISION:-}"
 NONINTERACTIVE="${BOOTSTRAP_NONINTERACTIVE:-0}"
+# --restore FILE: a backup made on the Backup & Restore page, and optionally a
+# file holding its passphrase (for a run without a terminal).
+RESTORE_FILE=""
+RESTORE_PASSPHRASE_FILE=""
+# Set while restoring onto a new server: the backup brings its own accounts,
+# so asking for a first admin that the restore then deletes would be a trap.
+SKIP_ADMIN_ACCOUNT="0"
 
 PACKAGE_MANAGER=""
 DB_SERVICE_NAME=""
@@ -250,6 +257,9 @@ Options:
   --ssl-email EMAIL
   --admin-email EMAIL
   --admin-password PASSWORD
+  --restore FILE            Restore a backup (from the Backup & Restore page).
+                            Installs first if this server has no installation.
+  --passphrase-file FILE    Read the backup's passphrase from FILE instead of asking.
   --yes, --non-interactive
   -h, --help
 EOF
@@ -421,6 +431,17 @@ parse_args() {
                 ;;
             --admin-password)
                 ADMIN_PASSWORD="${2:-}"
+                shift 2
+                ;;
+            --restore)
+                MODE="restore"
+                [[ -n "${2:-}" ]] || { error "--restore needs the backup file"; exit 2; }
+                RESTORE_FILE="$(realpath -m -- "$2")"
+                shift 2
+                ;;
+            --passphrase-file)
+                [[ -n "${2:-}" ]] || { error "--passphrase-file needs a file"; exit 2; }
+                RESTORE_PASSPHRASE_FILE="$(realpath -m -- "$2")"
                 shift 2
                 ;;
             --yes|--non-interactive)
@@ -1830,6 +1851,11 @@ ensure_admin_account() {
     local existing_admin_count="0"
     local create_admin_now="0"
 
+    if [[ "${SKIP_ADMIN_ACCOUNT}" == "1" ]]; then
+        info "Not creating an admin account: the backup being restored brings its own."
+        return
+    fi
+
     existing_admin_count="$(count_admin_accounts 2>/dev/null || printf '0')"
     if [[ ! "${existing_admin_count}" =~ ^[0-9]+$ ]]; then
         existing_admin_count="0"
@@ -2891,6 +2917,96 @@ install_or_update() {
     cleanup_package_caches
 }
 
+app_units() {
+    # The portal and everything that runs on its behalf, for stopping and
+    # starting around a restore. The update runner stays: it is root's.
+    printf '%s\n' "${SERVICE_NAME}"
+    local timer
+    for timer in billing-reconcile notifications cleanup-logs forum-drift external-work; do
+        printf '%s\n' "${SERVICE_NAME}-${timer}.timer"
+    done
+}
+
+restore_from_backup() {
+    [[ -f "${RESTORE_FILE}" && -r "${RESTORE_FILE}" ]] || die "Cannot read the backup file ${RESTORE_FILE}."
+
+    if [[ "${INSTALLATION_EXISTS}" != "1" ]]; then
+        step "No installation here yet: installing first, then restoring the backup"
+        SKIP_ADMIN_ACCOUNT="1"
+        MODE="install"
+        print_summary
+        install_or_update
+        MODE="restore"
+    else
+        source_existing_env
+    fi
+
+    local passphrase=""
+    if [[ -n "${RESTORE_PASSPHRASE_FILE}" ]]; then
+        [[ -r "${RESTORE_PASSPHRASE_FILE}" ]] || die "Cannot read the passphrase file ${RESTORE_PASSPHRASE_FILE}."
+        IFS= read -r passphrase < "${RESTORE_PASSPHRASE_FILE}" || true
+    else
+        has_tty || die "No terminal to ask for the backup passphrase. Pass --passphrase-file FILE."
+        prompt_value passphrase "Passphrase of the backup" "" 1 1
+    fi
+
+    # The portal's own user does the restore, reading a copy it owns: the
+    # original may sit somewhere only root can read.
+    local staging
+    staging="$(mktemp -d "/var/tmp/${APP_NAME}-restore.XXXXXX")"
+    chmod 700 "${staging}"
+    cp -- "${RESTORE_FILE}" "${staging}/backup.jabackup"
+    chown -R "${APP_USER}:${APP_GROUP}" "${staging}"
+    chmod 600 "${staging}/backup.jabackup"
+
+    step "Stopping the portal while it is restored"
+    local unit
+    while IFS= read -r unit; do
+        systemctl stop "${unit}" 2>/dev/null || true
+    done < <(app_units)
+
+    step "Restoring ${RESTORE_FILE}"
+    if ! printf '%s\n' "${passphrase}" | run_as_app_user env PYTHONPATH="${INSTALL_DIR}" \
+            "${INSTALL_DIR}/.venv/bin/flask" --app aeronautics_members.app:create_app \
+            restore-backup "${staging}/backup.jabackup" --passphrase-stdin --yes \
+            --env-out "${staging}/env.json"; then
+        passphrase=""
+        rm -rf -- "${staging}"
+        while IFS= read -r unit; do
+            systemctl start "${unit}" 2>/dev/null || true
+        done < <(app_units)
+        die "The restore did not complete; see above. If it stopped before emptying the database, nothing was changed."
+    fi
+    passphrase=""
+
+    # SECRET_KEY, the Stripe keys and the mail accounts from the backup. .env is
+    # root's, so root writes them -- with the portal's own function, so the
+    # quoting is the one both bash and the portal read back the same way.
+    if [[ -s "${staging}/env.json" ]]; then
+        step "Restoring the secret key and credentials in ${ENV_FILE}"
+        env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/python" - "${ENV_FILE}" "${staging}/env.json" <<'PY'
+import json
+import sys
+
+from aeronautics_members.services.backup import apply_env_values
+
+with open(sys.argv[2], encoding="utf-8") as handle:
+    apply_env_values(sys.argv[1], json.load(handle))
+PY
+        chown root:"${APP_GROUP}" "${ENV_FILE}"
+        chmod 640 "${ENV_FILE}"
+    fi
+    rm -rf -- "${staging}"
+
+    step "Starting the portal again"
+    systemctl daemon-reload
+    while IFS= read -r unit; do
+        systemctl start "${unit}"
+    done < <(app_units)
+
+    success "Restored. Background jobs are paused: sign in with an account from the backup, then review and resume them under Settings > Maintenance > Backup & Restore."
+}
+
 uninstall_everything() {
     step "Uninstalling ${APP_NAME}"
 
@@ -3044,6 +3160,10 @@ main() {
             ;;
         rollback)
             roll_back_installation
+            cleanup_bootstrap_dir
+            ;;
+        restore)
+            restore_from_backup
             cleanup_bootstrap_dir
             ;;
         uninstall)

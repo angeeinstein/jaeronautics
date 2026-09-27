@@ -251,7 +251,118 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      sync-forum-members --only-changed
 ```
 
+## Backup and Restore
+
+One file holds everything that makes this installation different from a fresh
+one. A fresh install plus that file is the old portal again — the way to move
+to a new server (Azure), and the way back after losing one.
+
+### What is in a backup
+
+| In it | Not in it |
+| --- | --- |
+| The whole database: every account and password hash, membership, role, setting and credential entered on the settings pages (Stripe, Discourse, SMTP), mail accounts, audit log, old forum archive, queued work | The database password, host and port, the domain, paths, nginx and systemd files — they belong to the machine and the installer writes them |
+| `storage/` — pictures waiting for review, imported forum avatars | `storage/backups` itself |
+| From `.env`: `SECRET_KEY` (so logins and emailed links keep working), the Stripe keys and `MAIL_ACCOUNTS_JSON` | The rate-limit counters in Redis — temporary by nature |
+
+Two things a portal backup cannot cover: **the forum** keeps its own data (back
+it up under Discourse → Admin → Backups), and **Stripe** keeps payments and
+subscriptions itself — the portal only holds the IDs that point there. A
+complete recovery is a portal backup plus a forum backup.
+
+### It is encrypted, and the passphrase is not stored
+
+A backup is every member's address and every credential in one file, so it is
+only ever written encrypted: AES-256-GCM, with the key derived (scrypt) from a
+passphrase chosen when the backup is made. The passphrase is not kept anywhere.
+**Without it the backup cannot be restored, by anyone.** Keep it somewhere safe
+and apart from the file.
+
+A wrong passphrase, a file cut short or a file altered in any way is refused
+before anything is changed.
+
+### Making one
+
+**Settings → Maintenance → Backup & Restore** (super admins only). Enter the
+passphrase twice and press **Back up**; the card shows each step as it runs,
+then checks the finished file by reading it back completely. The newest five
+are kept in `storage/backups` for download; older ones are removed when a new
+one is made. Where backups should live for good — Azure storage, a schedule —
+is decided once this has proven itself.
+
+From a shell, the same thing:
+
+```bash
+sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
+     /var/www/jaeronautics/.venv/bin/flask --app aeronautics_members.app:create_app create-backup
+```
+
+### Restoring
+
+Copy the file to the server and run the installer with it:
+
+```bash
+sudo ./install.sh --restore /path/to/portal-backup-20261001-101500.jabackup
+```
+
+- **On a new server** it installs first and then restores. It does not ask
+  for a first admin account: the backup brings its own, and one made now would
+  be deleted by the restore anyway.
+- **On an existing installation** it replaces everything there — every
+  account, including any made while installing.
+
+It asks for the passphrase (`--passphrase-file FILE` for a run without a
+terminal), stops the portal, restores the database, files and `.env` values,
+and starts it again.
+
+**Versions.** A backup from an older portal version is rebuilt at its own
+database version and then upgraded, exactly as an update would. A backup from
+a *newer* version than the installation is refused — update the installation
+first.
+
+### After a restore: background jobs are paused
+
+A restored copy holds the real Stripe keys, the real mail accounts and the real
+forum's API key. On a test machine it would otherwise start emailing members
+and pushing accounts to the live forum as soon as its timers fired. So after a
+restore every background job — email delivery, the forum queue, the nightly
+billing and forum checks, log cleanup — stands down, and every admin page says
+so.
+
+Sign in with an account from the backup and open **Backup & Restore**. The
+card lists the background timers (a timer that fires while paused still checks
+in, so this shows they are installed). Tick *This is the server members use*
+and press **Resume background jobs**. The card then checks, line by line:
+
+- the database is at the current version;
+- Stripe accepts the key (and knows the membership price);
+- the forum accepts its API key;
+- every mail account can sign in;
+- each frequent timer has run since resuming, the daily ones are scheduled;
+- the queue that built up while paused drains.
+
+Each line turns from a spinner to a tick — or a red cross with the reason.
+**Check again** repeats the checks after fixing something.
+
+Things a person does on a paused copy still happen (a password reset email, a
+manual forum resync); the pause covers what the machine does on its own.
+
+### Data protection
+
+A backup keeps people as they were when it was made. Someone who deletes their
+account afterwards is still in older backups, and restoring one brings them
+back. So keep backups only as long as they are useful, and after restoring an
+older one, check the audit log for accounts erased since then.
+
+### Try it before you need it
+
+A backup that has never been restored is a hope, not a backup. Restore one onto
+a spare machine once — the Azure move is the natural occasion.
+
 ## Rebuilding the Portal Somewhere Else
+
+A full **backup** (above) carries everything, settings included. The settings
+export described here is the lighter tool for carrying only the settings.
 
 A fresh install starts with a blank settings page, and filling it in is forty
 minutes of copying values that all have to be exactly right and none of which
