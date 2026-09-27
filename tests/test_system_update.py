@@ -437,3 +437,120 @@ class TestTheRemoteCheckSurvivesARollback:
                     / "templates" / "admin_settings.html").read_text()
         assert "rolled back" in template
         assert "update_state.local.branch == 'HEAD'" in template
+
+
+class TestAnUpdateThatNeverFinishes:
+    """A runner killed mid-update left the page saying "Update running" for good.
+
+    Seen live, twice: apt stalled, systemd's 30-minute limit killed the runner
+    before its own 45-minute one could record a failure, and neither a reboot
+    nor a successful `update` from the shell changed the status file -- so the
+    page kept showing a frozen update and refused to start another.
+    """
+
+    RUNNER = Path(__file__).resolve().parent.parent / "deploy" / "update-runner.sh"
+    INSTALLER = Path(__file__).resolve().parent.parent / "install.sh"
+
+    def _run_runner(self, state_dir, command, wait=True):
+        import os
+        import subprocess
+
+        env = {**os.environ, "UPDATE_STATE_DIR": str(state_dir), "UPDATE_COMMAND": str(command),
+               "INSTALL_DIR": str(state_dir), "UPDATE_TIMEOUT": "120"}
+        process = subprocess.Popen(["bash", str(self.RUNNER)], env=env, start_new_session=True)
+        if wait:
+            process.wait(timeout=60)
+        return process
+
+    def _command(self, tmp_path, body):
+        command = tmp_path / "fake-update"
+        command.write_text("#!/usr/bin/env bash\n" + body + "\n")
+        command.chmod(0o755)
+        return command
+
+    def _status(self, state_dir):
+        return json.loads((state_dir / "status.json").read_text())
+
+    def test_systemd_gives_the_runner_time_to_record_a_timeout(self):
+        timeout = int(re.search(r'UPDATE_TIMEOUT="\$\{UPDATE_TIMEOUT:-(\d+)\}"', self.RUNNER.read_text()).group(1))
+        unit_limit = int(re.search(r"ExecStart=\$\{UPDATE_RUNNER_SCRIPT\}\n(?:#.*\n)*TimeoutStartSec=(\d+)",
+                                   self.INSTALLER.read_text()).group(1))
+        assert unit_limit > timeout + 60  # the runner's own limit, plus its --kill-after
+
+    def test_a_normal_update_completes(self, tmp_path):
+        state_dir = tmp_path / "updates"
+        state_dir.mkdir()
+        (state_dir / "request.json").write_text('{"requested_at": "x", "action": "update"}')
+        self._run_runner(state_dir, self._command(tmp_path, 'echo "[STEP] one"'))
+
+        status = self._status(state_dir)
+        assert status["state"] == "completed" and status["boot_id"]
+        assert not (state_dir / "request.processing.json").exists()
+
+    def test_a_runner_that_is_stopped_says_so(self, tmp_path):
+        """What systemd does at its time limit, on a service stop or a reboot."""
+        import os
+        import signal
+        import time
+
+        state_dir = tmp_path / "updates"
+        state_dir.mkdir()
+        (state_dir / "request.json").write_text('{"requested_at": "x", "action": "update"}')
+        process = self._run_runner(state_dir, self._command(tmp_path, 'echo "Get:1 http://archive"; sleep 60'),
+                                   wait=False)
+        for _ in range(100):
+            if (state_dir / "status.json").exists() and self._status(state_dir)["state"] == "running":
+                break
+            time.sleep(0.1)
+        time.sleep(0.5)
+        os.kill(process.pid, signal.SIGTERM)  # the runner itself; systemd also signals the rest
+        process.wait(timeout=30)
+
+        status = self._status(state_dir)
+        assert status["state"] == "failed"
+        assert "stopped before it finished" in status["log_tail"]
+        assert not (state_dir / "request.processing.json").exists()
+
+    def test_a_run_that_died_without_a_word_is_cleaned_up_by_the_next(self, tmp_path):
+        """SIGKILL or power loss: no trap runs, so the next tick recovers."""
+        state_dir = tmp_path / "updates"
+        state_dir.mkdir()
+        (state_dir / "status.json").write_text(json.dumps({"state": "running", "started_at": "2026-09-27T12:00:00+02:00"}))
+        (state_dir / "request.processing.json").write_text("{}")
+
+        self._run_runner(state_dir, self._command(tmp_path, "exit 0"))
+
+        assert self._status(state_dir)["state"] == "failed"
+        assert not (state_dir / "request.processing.json").exists()
+
+    def test_the_page_does_not_believe_a_run_from_before_a_reboot(self, app, state_dir, monkeypatch):
+        (state_dir / "status.json").write_text(json.dumps({
+            "state": "running", "started_at": system_update.get_now_utc().isoformat(), "boot_id": "an-older-boot",
+        }))
+        monkeypatch.setattr(system_update, "_current_boot_id", lambda: "this-boot")
+
+        state = system_update.describe_update_state()
+        assert not state["in_progress"]
+        assert state["last_run"]["state"] == "failed" and "restarted" in state["last_run"]["interrupted"]
+
+    def test_the_page_does_not_believe_a_run_older_than_any_update(self, app, state_dir):
+        """Status files written before this fix carry no boot id: the age decides."""
+        (state_dir / "status.json").write_text(json.dumps({
+            "state": "running", "started_at": "2026-09-27T09:00:00+02:00",
+        }))
+        state = system_update.describe_update_state()
+        assert not state["in_progress"]
+        assert "more than an hour" in state["last_run"]["interrupted"]
+        system_update.request_update(requested_by_user_id=None)  # and a new one can start
+
+    def test_a_request_nobody_picks_up_does_not_block_forever(self, app, state_dir):
+        (state_dir / "request.json").write_text(json.dumps({"requested_at": "2026-09-27T09:00:00+00:00"}))
+        state = system_update.describe_update_state()
+        assert not state["in_progress"] and state["request_never_picked_up"]
+
+    def test_a_fresh_run_still_counts_as_running(self, app, state_dir, monkeypatch):
+        (state_dir / "status.json").write_text(json.dumps({
+            "state": "running", "started_at": system_update.get_now_utc().isoformat(), "boot_id": "this-boot",
+        }))
+        monkeypatch.setattr(system_update, "_current_boot_id", lambda: "this-boot")
+        assert system_update.describe_update_state()["in_progress"]

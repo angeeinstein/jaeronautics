@@ -23,6 +23,7 @@ the JSON status endpoint the page polls.
 import json
 import os
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import current_app
@@ -51,6 +52,15 @@ LIVE_LOG_TAIL_LINES = 40
 # How long a remote-revision lookup is reused. The check is a network call to
 # the git remote, so it is not made on every page load.
 REMOTE_CHECK_TTL_SECONDS = 600
+
+# The runner stops a hung update after 45 minutes and systemd stops the runner
+# after 55. A status still saying "running" past this is a run nothing will
+# ever finish -- the runner was killed before it could say so.
+RUNNING_TOO_LONG = timedelta(minutes=60)
+# The runner's watcher fires immediately, its timer every five minutes. A
+# request nobody has picked up by now will not be.
+UNCLAIMED_TOO_LONG = timedelta(minutes=15)
+BOOT_ID_PATH = Path("/proc/sys/kernel/random/boot_id")
 
 _remote_cache = {"checked_at": None, "value": None}
 
@@ -129,15 +139,55 @@ def runner_is_installed():
 
 
 def read_status():
-    """The privileged runner's report on the most recent update, if any."""
+    """The privileged runner's report on the most recent update, if any.
+
+    A run the file still calls "running" but that cannot be -- the server has
+    restarted since, or it has gone on far longer than the runner allows -- is
+    reported as the failure it is. Otherwise a runner killed mid-update left
+    the page showing a frozen update and refusing to start another, and no
+    reboot or shell update ever changed that file.
+    """
     status_path = UPDATE_STATE_DIR / STATUS_FILENAME
     try:
-        return json.loads(status_path.read_text())
+        status = json.loads(status_path.read_text())
     except FileNotFoundError:
         return {}
     except (OSError, ValueError) as exc:
         current_app.logger.warning("Could not read update status file: %s", exc)
         return {}
+    reason = _why_it_cannot_still_be_running(status)
+    if reason:
+        status = {**status, "state": "failed", "interrupted": reason}
+    return status
+
+
+def _parse_time(value):
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _current_boot_id():
+    try:
+        return BOOT_ID_PATH.read_text().strip()
+    except OSError:
+        return None
+
+
+def _why_it_cannot_still_be_running(status):
+    if status.get("state") not in {"requested", "running"}:
+        return None
+    recorded_boot, current_boot = status.get("boot_id"), _current_boot_id()
+    if recorded_boot and current_boot and recorded_boot != current_boot:
+        return ("The server restarted while this update was running, so it did not finish. "
+                "Start it again, or run \"update\" from a shell.")
+    started_at = _parse_time(status.get("started_at"))
+    if started_at and get_now_utc() - started_at > RUNNING_TOO_LONG:
+        return ("This update stopped without finishing: it was still marked as running after more "
+                "than an hour. Start it again, or run \"update\" from a shell to see where it stops.")
+    return None
 
 
 def read_pending_request():
@@ -151,8 +201,21 @@ def read_pending_request():
         return {}
 
 
+def request_is_waiting():
+    """A request the runner has not picked up yet -- and still might."""
+    pending = read_pending_request()
+    if pending is None:
+        return False
+    requested_at = _parse_time(pending.get("requested_at"))
+    return not (requested_at and get_now_utc() - requested_at > UNCLAIMED_TOO_LONG)
+
+
+def request_was_never_picked_up():
+    return read_pending_request() is not None and not request_is_waiting()
+
+
 def update_is_in_progress():
-    if read_pending_request() is not None:
+    if request_is_waiting():
         return True
     return read_status().get("state") in {"requested", "running"}
 
@@ -290,7 +353,9 @@ def describe_update_state(force_remote_check=False):
             "revision_before": status.get("revision_before"),
             "revision_after": status.get("revision_after"),
             "log_tail": log_tail,
+            "interrupted": status.get("interrupted"),
         },
+        "request_never_picked_up": request_was_never_picked_up(),
     }
 
 

@@ -751,6 +751,8 @@
                                 </div>
                                 <pre id="update-progress-log" class="p-3 border rounded small text-break update-log">{{ update_state.last_run.log_tail or _('Waiting for output...') }}</pre>
                             </div>
+                        {% elif update_state.request_never_picked_up %}
+                            <div class="alert alert-warning" role="alert">{{ _('An update was requested but never started: the update runner on the server is not picking up requests. Run "update" from a shell, or run the installer once to set the runner up again.') }}</div>
                         {% elif update_state.update_available %}
                             <div class="alert alert-warning" role="alert">{{ _('A newer version is available.') }}</div>
                         {% elif not update_state.remote_check_failed %}
@@ -820,6 +822,9 @@
                             <dd class="col-sm-8">
                                 {% if update_state.last_run.state == 'completed' %}
                                     <span class="status-label status-active">{{ _('Completed') }}</span>
+                                {% elif update_state.last_run.state == 'failed' and update_state.last_run.interrupted %}
+                                    <span class="status-label status-failed">{{ _('Did not finish') }}</span>
+                                    <div class="small text-muted mt-1">{{ update_state.last_run.interrupted }}</div>
                                 {% elif update_state.last_run.state == 'failed' %}
                                     <span class="status-label status-failed">{{ _('Failed') }}</span>
                                     <span class="text-muted ms-2">{{ _('exit code') }} {{ update_state.last_run.exit_code }}</span>

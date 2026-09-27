@@ -20,6 +20,7 @@ REQUEST_FILE="${STATE_DIR}/request.json"
 CLAIM_FILE="${STATE_DIR}/request.processing.json"
 STATUS_FILE="${STATE_DIR}/status.json"
 LOG_FILE="${STATE_DIR}/last-run.log"
+LOCK_FILE="${STATE_DIR}/runner.lock"
 UPDATE_COMMAND="${UPDATE_COMMAND:-/usr/local/bin/update}"
 ROLLBACK_FILE="${ROLLBACK_FILE:-/etc/jaeronautics/rollback.conf}"
 INSTALL_DIR="${INSTALL_DIR:-/var/www/jaeronautics}"
@@ -34,6 +35,10 @@ UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-2700}"
 # Group allowed to read the log, so the web application can show progress while
 # the update is still running. Falls back to root-only if unset.
 LOG_GROUP="${LOG_GROUP:-}"
+
+# Which boot this run belongs to. A "running" status from an earlier boot is a
+# run the reboot ended, whatever the file still says.
+BOOT_ID="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || printf '')"
 
 json_escape() {
     # Escape a string for embedding in JSON without needing python or jq.
@@ -61,7 +66,11 @@ read_status_number() {
 }
 
 count_steps() {
-    grep -c '^\[STEP\]' "${LOG_FILE}" 2>/dev/null || printf '0'
+    # grep -c prints "0" and exits 1 when nothing matches; "|| printf 0" then
+    # added a second 0 on its own line, and the status file stopped being JSON.
+    local count
+    count="$(grep -c '^\[STEP\]' "${LOG_FILE}" 2>/dev/null)" || true
+    printf '%s' "${count:-0}"
 }
 
 write_status() {
@@ -83,6 +92,8 @@ write_status() {
   "revision_after": "$(json_escape "${revision_after}")",
   "steps_done": ${steps_done},
   "steps_expected": ${steps_expected},
+  "boot_id": "$(json_escape "${BOOT_ID}")",
+  "runner_pid": $$,
   "log_tail": "$(json_escape "${log_tail}")"
 }
 EOF
@@ -96,8 +107,57 @@ read_request_field() {
     sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" "${CLAIM_FILE}" | head -n1
 }
 
+read_status_text() {
+    sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "${STATUS_FILE}" 2>/dev/null | head -n1
+}
+
+# Written when this run is stopped before it can finish on its own: systemd's
+# time limit, a service stop, a reboot. Without it the status file keeps
+# saying "running" forever -- the admin page then shows a frozen update and
+# refuses to start another, and neither a reboot nor a successful update from
+# the shell changes that file.
+on_interrupt() {
+    trap - TERM INT HUP
+    local log_tail steps_done
+    if [[ -n "${UPDATE_PID:-}" ]]; then
+        # timeout passes this on to the update it runs.
+        kill -TERM "${UPDATE_PID}" 2>/dev/null || true
+        wait "${UPDATE_PID}" 2>/dev/null || true
+    fi
+    printf '\n[ERROR] The update was stopped before it finished (%s).\n' "$1" >>"${LOG_FILE}" 2>/dev/null || true
+    printf '[ERROR] Run "update" from a shell to finish it and see where it stops.\n' >>"${LOG_FILE}" 2>/dev/null || true
+    log_tail="$(tail -n "${LOG_TAIL_LINES}" "${LOG_FILE}" 2>/dev/null || printf '')"
+    steps_done="$(count_steps)"
+    write_status "failed" 143 "${STARTED_AT:-}" "$(date --iso-8601=seconds)" \
+        "${REVISION_BEFORE:-}" "$(current_revision)" "${log_tail}" "${steps_done}" "${EXPECTED_STEPS:-0}"
+    rm -f "${CLAIM_FILE}"
+    exit 143
+}
+
+# A claim left by a run that died without its trap (SIGKILL, power loss):
+# holding the lock proves no run is still going, so the claim is stale. Say
+# so in the status the page reads, and clear the way for the next request.
+recover_from_a_dead_run() {
+    [[ -f "${CLAIM_FILE}" ]] || return 0
+    if [[ "$(read_status_text state)" == "running" ]]; then
+        local log_tail
+        printf '\n[ERROR] This update was interrupted and did not finish.\n' >>"${LOG_FILE}" 2>/dev/null || true
+        log_tail="$(tail -n "${LOG_TAIL_LINES}" "${LOG_FILE}" 2>/dev/null || printf '')"
+        write_status "failed" 143 "$(read_status_text started_at)" "$(date --iso-8601=seconds)" \
+            "$(read_status_text revision_before)" "$(current_revision)" "${log_tail}" "$(count_steps)" 0
+    fi
+    rm -f "${CLAIM_FILE}"
+}
+
 main() {
     [[ -d "${STATE_DIR}" ]] || exit 0
+
+    # One run at a time, and a way to tell a live run from a dead one: the
+    # lock goes with the process, however it ends.
+    exec 9>"${LOCK_FILE}"
+    flock -n 9 || exit 0
+    recover_from_a_dead_run
+
     # Nothing requested: this is the normal case on almost every timer tick.
     [[ -f "${REQUEST_FILE}" ]] || exit 0
 
@@ -124,10 +184,16 @@ main() {
     local started_at revision_before expected_steps
     started_at="$(date --iso-8601=seconds)"
     revision_before="$(current_revision)"
+    STARTED_AT="${started_at}"
+    REVISION_BEFORE="${revision_before}"
     # How many steps the last successful update took. Using the real previous
     # run rather than a hardcoded guess keeps the bar honest when the number of
     # steps changes with the configuration (local database, TLS, and so on).
     expected_steps="$(read_status_number steps_expected)"
+    EXPECTED_STEPS="${expected_steps}"
+    trap 'on_interrupt "stopped by a signal: SIGTERM -- a time limit, a service stop or a reboot"' TERM
+    trap 'on_interrupt "stopped by a signal: SIGINT"' INT
+    trap 'on_interrupt "stopped by a signal: SIGHUP"' HUP
     write_status "running" 0 "${started_at}" "" "${revision_before}" "" "" 0 "${expected_steps}"
 
     # Create the log and make it readable before the update starts, so the admin
@@ -141,9 +207,17 @@ main() {
         chmod 600 "${LOG_FILE}" 2>/dev/null || true
     fi
 
+    # In the background and waited for, rather than in the foreground: bash
+    # holds a trapped signal until a foreground command ends, so a stop request
+    # would wait out the whole update. `wait` returns at once instead, and
+    # on_interrupt stops the update itself.
     local exit_code=0
-    if ! stdbuf -oL -eL timeout --signal=TERM --kill-after=60 "${UPDATE_TIMEOUT}" \
-        "${UPDATE_COMMAND}" "${command_args[@]+"${command_args[@]}"}" >>"${LOG_FILE}" 2>&1; then
+    stdbuf -oL -eL timeout --signal=TERM --kill-after=60 "${UPDATE_TIMEOUT}" \
+        "${UPDATE_COMMAND}" "${command_args[@]+"${command_args[@]}"}" >>"${LOG_FILE}" 2>&1 &
+    UPDATE_PID=$!
+    if wait "${UPDATE_PID}"; then
+        exit_code=0
+    else
         exit_code=$?
     fi
     if [[ ${exit_code} -eq 124 ]]; then
@@ -166,6 +240,7 @@ main() {
 
     local steps_done
     steps_done="$(count_steps)"
+    trap - TERM INT HUP
     write_status "${state}" "${exit_code}" "${started_at}" "${finished_at}" \
         "${revision_before}" "${revision_after}" "${log_tail}" "${steps_done}" "${steps_done}"
     rm -f "${CLAIM_FILE}"

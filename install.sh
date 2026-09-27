@@ -2310,7 +2310,10 @@ Environment=UPDATE_COMMAND=${UPDATE_COMMAND_PATH}
 Environment=INSTALL_DIR=${INSTALL_DIR}
 Environment=LOG_GROUP=${APP_GROUP}
 ExecStart=${UPDATE_RUNNER_SCRIPT}
-TimeoutStartSec=1800
+# Above the runner's own limit (UPDATE_TIMEOUT, 45 minutes, plus a minute for
+# the update to stop): the runner is what records a hung update as failed. At
+# 1800 systemd killed it first, mid-run, and the page showed "running" for good.
+TimeoutStartSec=3300
 EOF
 
     # A path unit starts the runner the moment the request file appears, so an
