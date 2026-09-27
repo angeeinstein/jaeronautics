@@ -166,16 +166,16 @@ def test_all_routes_no_server_error(client, seeded):
     hit("GET", "/forum/avatar/public/bad")
     hit("POST", "/forum/avatar", uid=mu, data={})
     # admin
-    for p in ["/admin", "/admin/accounts", f"/admin/accounts/{mu}", "/admin/approvals", "/admin/logs", "/admin/forum", "/admin/settings"]:
+    for p in ["/admin", "/admin/accounts", f"/admin/accounts/{mu}", "/admin/reviews", "/admin/logs", "/admin/settings"]:
         hit("GET", p, uid=a)
     hit("POST", f"/admin/accounts/{mu}/billing-sync", uid=a)
     hit("POST", f"/admin/accounts/{mu}/forum-resync", uid=a)
     hit("POST", f"/admin/accounts/{mu}/roles", uid=a, data={"roles": ["admin"]})
     hit("POST", f"/admin/accounts/{mu}/roles", uid=a, data={})
-    hit("POST", f"/admin/forum/submissions/{ids['sub_id']}/approve", uid=a, data={"review_note": "ok"})
-    hit("POST", f"/admin/forum/submissions/{ids['sub_id']}/reject", uid=a, data={"review_note": "no"})
-    hit("POST", f"/admin/profile-requests/{ids['pcr_id']}/approve", uid=a, data={"admin_note": "ok"})
-    hit("POST", f"/admin/profile-requests/{ids['pcr_id']}/reject", uid=a, data={"admin_note": "no"})
+    hit("POST", f"/admin/reviews/pictures/{ids['sub_id']}/approve", uid=a, data={"review_note": "ok"})
+    hit("POST", f"/admin/reviews/pictures/{ids['sub_id']}/reject", uid=a, data={"review_note": "no"})
+    hit("POST", f"/admin/reviews/name-changes/{ids['pcr_id']}/approve", uid=a, data={"admin_note": "ok"})
+    hit("POST", f"/admin/reviews/name-changes/{ids['pcr_id']}/reject", uid=a, data={"admin_note": "no"})
     hit("POST", "/admin/settings/mail-accounts", uid=a, data={"mail-account_key": "office2", "mail-host": "smtp.x", "mail-port": "587", "mail-username": "u", "mail-password": "p", "mail-starttls": "y"})
     hit("POST", f"/admin/settings/mail-accounts/{ids['mail_id']}/test-connection", uid=a)
     hit("POST", "/admin/settings/mail-accounts/export", uid=a, data={"export_password": "secretsecret"})

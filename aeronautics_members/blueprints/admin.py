@@ -78,7 +78,7 @@ from ..services import (
     ServiceError,
 )
 from ..services import backup as backup_service
-from ..services import background_jobs, resume_checks
+from ..services import background_jobs, resume_checks, reviews
 from ..services.system_update import (
     describe_update_state,
     request_update,
@@ -122,7 +122,6 @@ from sqlalchemy.orm import (
 from ..db_models import (
     AuditLog,
     EmailDeliveryJob,
-    ForumAccount,
     ForumAvatarSubmission,
     ImportedForumProfile,
     MailAccount,
@@ -137,10 +136,8 @@ from ..forms import (
     TestEmailForm,
 )
 from ..forum_service import (
-    FORUM_AVATAR_STATUS_PENDING,
     FORUM_SETTING_KEYS,
     FORUM_STATE_ACTIVE,
-    FORUM_STATE_SYNC_ERROR,
     ForumProviderError,
 )
 from ..mail_utils import (
@@ -154,7 +151,6 @@ from ..notification_service import (
 )
 from ..app import (
     ADMIN_DIRECTORY_PAGE_SIZE,
-    APPROVAL_HISTORY_PAGE_SIZE,
     AUDIT_LOG_PAGE_SIZE,
     build_account_directory_query,
     build_forum_context,
@@ -191,20 +187,25 @@ def _role_removal_warning(user):
 @requires(Permission.ADMIN_ACCESS)
 def admin_dashboard():
     metrics = get_admin_dashboard_metrics()
-    pending_request_preview = db.session.execute(
-        db.select(MemberProfileChangeRequest)
-        .options(selectinload(MemberProfileChangeRequest.member))
-        .where(MemberProfileChangeRequest.status == "pending")
-        .order_by(MemberProfileChangeRequest.created_at.asc())
-        .limit(5)
+    # Cancelled memberships mostly end on the same day -- the end of the paid
+    # period everybody shares -- and "ending 31.12." says more than
+    # "cancelled". Only claimed when it is true for all of them.
+    cancel_end_dates = db.session.execute(
+        db.select(Member.membership_ends_on)
+        .where(
+            Member.deleted_at.is_(None),
+            Member.cancel_at_period_end.is_(True),
+        )
+        .distinct()
     ).scalars().all()
-    recent_logs = get_recent_audit_logs(limit=10)
     return render_template(
         "admin_dashboard.html",
         active_admin_section="dashboard",
         metrics=metrics,
-        pending_request_preview=pending_request_preview,
-        recent_logs=recent_logs,
+        cancel_end_date=cancel_end_dates[0] if len(cancel_end_dates) == 1 else None,
+        waiting=reviews.waiting_counts(current_user),
+        oldest_waiting=reviews.oldest_waiting(current_user),
+        recent_logs=get_recent_audit_logs(limit=8) if current_user.can(Permission.LOGS_VIEW) else [],
     )
 
 
@@ -428,37 +429,41 @@ def admin_sync_billing_account(user_id):
     return redirect(next_url)
 
 
-@admin_bp.route("/admin/forum", methods=["GET"])
+@admin_bp.route("/admin/reviews", methods=["GET"])
 @login_required
-@requires(Permission.FORUM_MODERATE)
-def admin_forum():
-    page = request.args.get("page", 1, type=int)
-    pending_avatar_pagination = db.paginate(
-        db.select(ForumAvatarSubmission)
-        .options(
-            selectinload(ForumAvatarSubmission.user),
-            selectinload(ForumAvatarSubmission.member),
-            selectinload(ForumAvatarSubmission.reviewed_by),
-        )
-        .where(ForumAvatarSubmission.status == FORUM_AVATAR_STATUS_PENDING)
-        .order_by(ForumAvatarSubmission.uploaded_at.asc()),
-        page=page,
-        per_page=20,
-        error_out=False,
+@requires(Permission.ADMIN_ACCESS)
+def admin_reviews():
+    # Name changes need APPROVALS_REVIEW, pictures and sync problems
+    # FORUM_MODERATE; the page is for anybody holding either and shows each
+    # of them only their part. The approve and reject routes check again.
+    if not reviews.can_review_anything(current_user):
+        flash(_("You do not have permission to access this page."), "danger")
+        return redirect(url_for("admin.admin_dashboard"))
+
+    queue = reviews.review_queue(current_user)
+    decorate_pending_identity_requests(
+        [item.record for item in queue if item.kind == reviews.KIND_NAME_CHANGE]
     )
-    sync_error_accounts = db.session.execute(
-        db.select(ForumAccount)
-        .options(selectinload(ForumAccount.user), selectinload(ForumAccount.member))
-        .where(or_(ForumAccount.state == FORUM_STATE_SYNC_ERROR, ForumAccount.last_error.is_not(None)))
-        .order_by(ForumAccount.updated_at.desc())
-        .limit(25)
-    ).scalars().all()
+    for item in queue:
+        if item.kind == reviews.KIND_NAME_CHANGE:
+            item.changes = reviews.describe_changes(item.record)
+            item.is_name_change = reviews.is_name_change(item.changes)
+    history_page = request.args.get("page", 1, type=int)
+    history = reviews.review_history(current_user, page=history_page)
+    for item in history.items:
+        if item.kind == reviews.KIND_NAME_CHANGE:
+            item.is_name_change = reviews.is_name_change(reviews.describe_changes(item.record))
     return render_template(
-        "admin_forum.html",
-        active_admin_section="forum",
-        metrics=get_admin_dashboard_metrics(),
-        pending_avatar_pagination=pending_avatar_pagination,
-        sync_error_accounts=sync_error_accounts,
+        "admin_reviews.html",
+        active_admin_section="reviews",
+        queue=queue,
+        waiting=reviews.waiting_counts(current_user),
+        queue_limit=reviews.QUEUE_LIMIT,
+        sync_problems=reviews.sync_problems(current_user),
+        history=history,
+        # Opened when somebody is paging through it, so the next page does
+        # not arrive folded shut.
+        history_open="page" in request.args,
     )
 
 
@@ -503,7 +508,7 @@ def admin_resync_forum_account(user_id):
     return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
 
-@admin_bp.route("/admin/forum/submissions/<int:submission_id>/approve", methods=["POST"])
+@admin_bp.route("/admin/reviews/pictures/<int:submission_id>/approve", methods=["POST"])
 @login_required
 @requires(Permission.FORUM_MODERATE)
 def approve_forum_avatar_submission(submission_id):
@@ -516,8 +521,8 @@ def approve_forum_avatar_submission(submission_id):
         .where(ForumAvatarSubmission.id == submission_id)
     ).scalar_one_or_none()
     if submission is None:
-        flash(_("The selected avatar submission could not be found."), "warning")
-        return redirect(url_for("admin.admin_forum"))
+        flash(_("That profile picture is no longer waiting for review."), "warning")
+        return redirect(url_for("admin.admin_reviews"))
 
     forum_service = get_forum_service()
     before_submission = snapshot_forum_avatar_submission_for_audit(submission)
@@ -530,7 +535,7 @@ def approve_forum_avatar_submission(submission_id):
         result = forum_service.approve_avatar_submission(submission, reviewer=current_user, review_note=review_note)
     except ForumProviderError as exc:
         flash(str(exc), "danger")
-        return redirect(url_for("admin.admin_forum"))
+        return redirect(url_for("admin.admin_reviews"))
 
     event_type = "avatar_approved" if not result.error else "avatar_approval_failed"
     log_audit_event(
@@ -565,13 +570,13 @@ def approve_forum_avatar_submission(submission_id):
     db.session.commit()
 
     if result.error:
-        flash(_("The avatar review was saved, but syncing it to the forum failed: %(message)s", message=result.error), "warning")
+        flash(_("The profile picture was approved, but sending it to the forum failed: %(message)s", message=result.error), "warning")
     else:
-        flash(_("The avatar was approved and the forum access was updated."), "success")
-    return redirect(url_for("admin.admin_forum"))
+        flash(_("Profile picture approved and sent to the forum."), "success")
+    return redirect(url_for("admin.admin_reviews"))
 
 
-@admin_bp.route("/admin/forum/submissions/<int:submission_id>/reject", methods=["POST"])
+@admin_bp.route("/admin/reviews/pictures/<int:submission_id>/reject", methods=["POST"])
 @login_required
 @requires(Permission.FORUM_MODERATE)
 def reject_forum_avatar_submission(submission_id):
@@ -584,8 +589,8 @@ def reject_forum_avatar_submission(submission_id):
         .where(ForumAvatarSubmission.id == submission_id)
     ).scalar_one_or_none()
     if submission is None:
-        flash(_("The selected avatar submission could not be found."), "warning")
-        return redirect(url_for("admin.admin_forum"))
+        flash(_("That profile picture is no longer waiting for review."), "warning")
+        return redirect(url_for("admin.admin_reviews"))
 
     forum_service = get_forum_service()
     before_submission = snapshot_forum_avatar_submission_for_audit(submission)
@@ -596,7 +601,7 @@ def reject_forum_avatar_submission(submission_id):
         result = forum_service.reject_avatar_submission(submission, reviewer=current_user, review_note=review_note)
     except ForumProviderError as exc:
         flash(str(exc), "danger")
-        return redirect(url_for("admin.admin_forum"))
+        return redirect(url_for("admin.admin_reviews"))
 
     log_audit_event(
         category="forum",
@@ -625,8 +630,8 @@ def reject_forum_avatar_submission(submission_id):
         object_id=submission.id,
     )
     db.session.commit()
-    flash(_("The avatar submission was rejected."), "success")
-    return redirect(url_for("admin.admin_forum"))
+    flash(_("Profile picture rejected."), "success")
+    return redirect(url_for("admin.admin_reviews"))
 
 
 @admin_bp.route("/admin/settings/test-forum-connection", methods=["POST"])
@@ -799,56 +804,6 @@ def update_account_roles(user_id):
     db.session.commit()
     flash(_("Roles updated."), "success")
     return redirect(url_for("admin.admin_account_detail", user_id=user_id))
-
-
-@admin_bp.route("/admin/approvals", methods=["GET"])
-@login_required
-@requires(Permission.APPROVALS_REVIEW)
-def admin_approvals():
-    pending_identity_requests = db.session.execute(
-        db.select(MemberProfileChangeRequest)
-        .options(
-            selectinload(MemberProfileChangeRequest.member).selectinload(Member.user),
-            selectinload(MemberProfileChangeRequest.requested_by),
-            selectinload(MemberProfileChangeRequest.reviewed_by),
-        )
-        .where(MemberProfileChangeRequest.status == "pending")
-        .order_by(MemberProfileChangeRequest.created_at.asc())
-    ).scalars().all()
-    decorate_pending_identity_requests(pending_identity_requests)
-
-    history_page = request.args.get("page", 1, type=int)
-    history_pagination = db.paginate(
-        db.select(MemberProfileChangeRequest)
-        .options(
-            selectinload(MemberProfileChangeRequest.member).selectinload(Member.user),
-            selectinload(MemberProfileChangeRequest.requested_by),
-            selectinload(MemberProfileChangeRequest.reviewed_by),
-        )
-        .where(MemberProfileChangeRequest.status != "pending")
-        .order_by(MemberProfileChangeRequest.reviewed_at.desc(), MemberProfileChangeRequest.created_at.desc()),
-        page=history_page,
-        per_page=APPROVAL_HISTORY_PAGE_SIZE,
-        error_out=False,
-    )
-    recent_logs = db.session.execute(
-        db.select(AuditLog)
-        .options(
-            selectinload(AuditLog.actor_user),
-            selectinload(AuditLog.target_user),
-            selectinload(AuditLog.target_member),
-        )
-        .where(AuditLog.category.in_(["profile", "profile_change_request"]))
-        .order_by(AuditLog.created_at.desc())
-        .limit(20)
-    ).scalars().all()
-    return render_template(
-        "admin_approvals.html",
-        active_admin_section="approvals",
-        pending_identity_requests=pending_identity_requests,
-        history_pagination=history_pagination,
-        recent_logs=recent_logs,
-    )
 
 
 @admin_bp.route("/admin/settings", methods=["GET", "POST"])
@@ -1091,14 +1046,14 @@ def admin_logs():
     )
 
 
-@admin_bp.route("/admin/profile-requests/<int:request_id>/approve", methods=["POST"])
+@admin_bp.route("/admin/reviews/name-changes/<int:request_id>/approve", methods=["POST"])
 @login_required
 @requires(Permission.APPROVALS_REVIEW)
 def approve_profile_change_request(request_id):
     request_record = db.session.get(MemberProfileChangeRequest, request_id)
     if request_record is None or request_record.status != "pending":
-        flash(_("The selected change request could not be found."), "warning")
-        return redirect(url_for("admin.admin_approvals"))
+        flash(_("That change request is no longer waiting for review."), "warning")
+        return redirect(url_for("admin.admin_reviews"))
 
     member = request_record.member
     before_member = snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)
@@ -1162,20 +1117,20 @@ def approve_profile_change_request(request_id):
         object_id=request_record.id,
     )
     db.session.commit()
-    flash(_("Identity change request approved."), "success")
+    flash(_("Change request approved."), "success")
     if forum_result and forum_result.error:
         flash(_("The forum profile could not be synchronized right now. Please run a forum resync after checking the settings."), "warning")
-    return redirect(url_for("admin.admin_approvals"))
+    return redirect(url_for("admin.admin_reviews"))
 
 
-@admin_bp.route("/admin/profile-requests/<int:request_id>/reject", methods=["POST"])
+@admin_bp.route("/admin/reviews/name-changes/<int:request_id>/reject", methods=["POST"])
 @login_required
 @requires(Permission.APPROVALS_REVIEW)
 def reject_profile_change_request(request_id):
     request_record = db.session.get(MemberProfileChangeRequest, request_id)
     if request_record is None or request_record.status != "pending":
-        flash(_("The selected change request could not be found."), "warning")
-        return redirect(url_for("admin.admin_approvals"))
+        flash(_("That change request is no longer waiting for review."), "warning")
+        return redirect(url_for("admin.admin_reviews"))
 
     request_record.status = "rejected"
     request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
@@ -1205,8 +1160,8 @@ def reject_profile_change_request(request_id):
         object_id=request_record.id,
     )
     db.session.commit()
-    flash(_("Identity change request rejected."), "success")
-    return redirect(url_for("admin.admin_approvals"))
+    flash(_("Change request rejected."), "success")
+    return redirect(url_for("admin.admin_reviews"))
 
 
 @admin_bp.route("/admin/settings/mail-accounts", methods=["POST"])

@@ -220,8 +220,7 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--account-detail", "user": "admin@example.org", "path": f"/admin/accounts/{active.user.id}"},
         {"name": "admin--account-detail-ended", "user": "admin@example.org",
          "path": f"/admin/accounts/{Member.query.filter_by(email_private='ended@example.org').one().user_id}"},
-        {"name": "admin--approvals", "user": "admin@example.org", "path": "/admin/approvals"},
-        {"name": "admin--forum", "user": "admin@example.org", "path": "/admin/forum"},
+        {"name": "admin--reviews", "user": "admin@example.org", "path": "/admin/reviews"},
         {"name": "admin--logs", "user": "admin@example.org", "path": "/admin/logs"},
         {"name": "admin--settings", "user": "admin@example.org", "path": "/admin/settings"},
     ]

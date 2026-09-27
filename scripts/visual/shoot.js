@@ -31,6 +31,8 @@ function inspect() {
   const visible = (el) => {
     const style = getComputedStyle(el);
     if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) === 0) return false;
+    // Inside a folded <details>: laid out, but not drawn.
+    if (el.checkVisibility && !el.checkVisibility()) return false;
     const r = el.getBoundingClientRect();
     return r.width > 2 && r.height > 2;
   };

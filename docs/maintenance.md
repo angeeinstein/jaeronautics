@@ -588,7 +588,7 @@ next start. A moderator would be:
 
 `tests/test_roles.py::TestAddingARoleNeedsNoOtherChange` does exactly this and
 then checks the claim rather than asserting it: the row appears, the holder
-reaches `/admin/forum`, is bounced from settings, logs and updates, counts
+reaches `/admin/reviews`, is bounced from settings, logs and updates, counts
 towards the capabilities it carries, is offered only the navigation it can use —
 and no file outside `permissions.py` mentions the role at all.
 

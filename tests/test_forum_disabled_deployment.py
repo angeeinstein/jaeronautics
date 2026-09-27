@@ -133,10 +133,9 @@ class TestTheAdminSideRenders:
             "/admin",
             "/admin/accounts",
             f"/admin/accounts/{member.user_id}",
-            "/admin/approvals",
             "/admin/logs",
             "/admin/settings",
-            "/admin/forum",
+            "/admin/reviews",
         ):
             assert client.get(path).status_code == 200, path
 

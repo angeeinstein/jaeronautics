@@ -465,7 +465,7 @@ class TestAddingARoleNeedsNoOtherChange:
         _login(client, mod.id)
 
         assert client.get("/admin").status_code == 200
-        assert client.get("/admin/forum").status_code == 200
+        assert client.get("/admin/reviews").status_code == 200
 
     def test_and_is_refused_what_it_does_not(self, client, reviewer_role):
         mod = _user("mod2@example.com", "photo_reviewer")
@@ -542,7 +542,7 @@ class TestAddingARoleNeedsNoOtherChange:
 
         body = client.get("/admin").get_data(as_text=True)
 
-        assert "/admin/forum" in body
+        assert "/admin/reviews" in body
         assert "/admin/settings" not in body
         assert "/admin/logs" not in body
 

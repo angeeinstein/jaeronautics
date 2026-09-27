@@ -4,7 +4,7 @@
 {% block admin_content %}
 <div class="card mb-4">
     <div class="card-body">
-        <form method="GET" action="{{ url_for('admin.admin_logs') }}" class="row g-3 align-items-end">
+        <form method="GET" action="{{ url_for('admin.admin_logs') }}" class="row g-3 align-items-end" data-live-filter="#log-results" role="search">
             <div class="col-lg-5">
                 <label class="form-label" for="log-q">{{ _('Search') }}</label>
                 <input type="text" class="form-control" id="log-q" name="q" value="{{ search_term }}" placeholder="{{ _('Actor, target email, category, or event') }}">
@@ -18,14 +18,18 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-12 d-flex gap-2">
-                <button type="submit" class="btn btn-primary">{{ _('Apply Filters') }}</button>
+            <div class="col d-flex align-items-center justify-content-end gap-3">
+                {# Filters apply by themselves (live-filter.js); this button is
+                   only for a browser without JavaScript. #}
+                <noscript><button type="submit" class="btn btn-primary">{{ _('Apply') }}</button></noscript>
+                <span class="stat-sub" data-live-filter-status role="status" hidden><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>{{ _('Updating…') }}</span>
                 <a href="{{ url_for('admin.admin_logs') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
             </div>
         </form>
     </div>
 </div>
 
+<div id="log-results">
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="mb-0">{{ _('Audit Log') }}</h4>
@@ -98,4 +102,8 @@
         {% endif %}
     </div>
 </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='live-filter.js') }}"></script>
 {% endblock %}

@@ -40,7 +40,7 @@ def active_member(app):
 
 
 PUBLIC_PAGES = ["/", "/__health", "/login", "/legal", "/forgot-password", "/thank-you", "/cancel"]
-ADMIN_PAGES = ["/admin", "/admin/accounts", "/admin/settings", "/admin/approvals", "/admin/logs", "/admin/forum"]
+ADMIN_PAGES = ["/admin", "/admin/accounts", "/admin/settings", "/admin/reviews", "/admin/logs"]
 
 
 @pytest.mark.parametrize("path", PUBLIC_PAGES)

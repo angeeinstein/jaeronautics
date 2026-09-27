@@ -133,8 +133,38 @@ in normal case in the template; the style capitalises them.
 **"It worked" tick** -- a bare green tick with no frame that draws itself in
 once (0.45s) at the start of a success message: after something the person
 just did worked (saved, submitted, confirmed). Messages that describe a
-steady state ("nothing needs attention") do not get it. With reduced motion
-switched on in the system, the tick is simply there.
+steady state do not get the drawing; the all-clear line (below) shows the
+same tick standing still. With reduced motion switched on in the system, the
+tick is simply there.
+
+**All-clear line** -- where a section would only say that nothing is there
+("no reviews waiting", "no sync problems"), it is left out; if the page would
+then be empty, one card with the still tick, a bold sentence and a muted one
+takes its place. Never a card per thing that is not happening.
+
+**Attention list** -- the dashboard's first card: one row per kind of open
+task, the count in the mono face, a line naming the oldest one, and a button
+straight to it. Only kinds with something open appear; with none, the
+all-clear line instead.
+
+**Figures** -- at most four on a page, each with the one number that explains
+it underneath in muted text ("6 active members -- of 11 accounts, 1 waiting
+for payment"), and a link to the list behind it where there is one.
+
+**Tab counts** -- a small square with a number on a section tab (Reviews 3),
+in the colours opposite to the tab so it reads on both the cyan and the grey.
+Only for things waiting on the person looking.
+
+**Review queue** -- everything waiting for a decision in one list, oldest
+first, each item with its own note field and its own Approve and Reject. A
+kind label (status-info) says what it is. Long items fold (`<details>`) and
+show only what changes.
+
+**Filters** -- apply themselves: a dropdown at once, the search after a pause
+of about half a second, Enter at once. Only the results are replaced, so the
+search keeps its cursor, and the address bar follows. A Reset button stays;
+there is no Apply button (one appears only without JavaScript). A small
+spinner with "Updating…" shows while results load.
 
 **Tables** -- transparent on the card, hairline rules, cyan semibold column
 headings, faint zebra stripes where rows are long.
@@ -195,8 +225,10 @@ bands, and the one real shadow (`0 12px 32px rgba(0,0,0,0.45)`).
 
 - The mono face for dates and codes (year groups, invoice numbers):
   deferred, see the table above.
-- The page layouts of the proposal's portal kit (login, signup, account,
-  admin dashboard). Current pages keep their structure.
+- The page layouts of the proposal's portal kit (login, signup, account).
+  Current pages keep their structure. The admin dashboard was reworked, but
+  around the attention list and four figures above rather than the kit's
+  layout.
 
 ## Checking a change
 

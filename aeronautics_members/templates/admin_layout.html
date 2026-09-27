@@ -10,8 +10,7 @@
                    for themselves; this is about not offering a dead end. #}
                 <a href="{{ url_for('admin.admin_dashboard') }}" class="btn {% if active_admin_section == 'dashboard' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Dashboard') }}</a>
                 {% if current_user.can('accounts.view') %}<a href="{{ url_for('admin.admin_accounts') }}" class="btn {% if active_admin_section == 'accounts' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Accounts') }}</a>{% endif %}
-                {% if current_user.can('forum.moderate') %}<a href="{{ url_for('admin.admin_forum') }}" class="btn {% if active_admin_section == 'forum' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Forum') }}</a>{% endif %}
-                {% if current_user.can('approvals.review') %}<a href="{{ url_for('admin.admin_approvals') }}" class="btn {% if active_admin_section == 'approvals' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Approvals') }}</a>{% endif %}
+                {% if current_user.can('approvals.review') or current_user.can('forum.moderate') %}{% set review_count = waiting_for_review_count() %}<a href="{{ url_for('admin.admin_reviews') }}" class="btn {% if active_admin_section == 'reviews' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Reviews') }}{% if review_count %}<span class="nav-count" title="{{ _('%(count)s waiting for review', count=review_count) }}">{{ review_count }}</span>{% endif %}</a>{% endif %}
                 {% if current_user.can('logs.view') %}<a href="{{ url_for('admin.admin_logs') }}" class="btn {% if active_admin_section == 'logs' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Logs') }}</a>{% endif %}
                 {% if current_user.can('settings.general') %}<a href="{{ url_for('admin.admin_settings') }}" class="btn {% if active_admin_section == 'settings' %}btn-primary{% else %}btn-secondary{% endif %}">{{ _('Settings') }}</a>{% endif %}
             </div>
@@ -33,7 +32,7 @@
             {% if page_description %}
                 <p class="text-muted mb-0">{{ page_description }}</p>
             {% else %}
-                <p class="text-muted mb-0">{{ _('Manage accounts, memberships, forum access, approvals, logs, and settings.') }}</p>
+                <p class="text-muted mb-0">{{ _('Manage accounts, memberships, reviews, logs, and settings.') }}</p>
             {% endif %}
         </div>
         <div class="d-flex flex-wrap gap-2 justify-content-lg-end">

@@ -560,6 +560,13 @@ textarea.form-control {
     animation: success-check-draw 0.45s ease-out 0.1s forwards;
 }
 
+/* The same tick on a steady state -- the all-clear line -- stands still:
+   nothing just happened, and it would redraw on every visit. */
+.all-clear .success-check path {
+    animation: none;
+    stroke-dashoffset: 0;
+}
+
 @keyframes success-check-draw {
     to {
         stroke-dashoffset: 0;
@@ -732,6 +739,143 @@ textarea.form-control {
 
 .admin-page-header h1 {
     letter-spacing: 0.01em;
+}
+
+/* How many things wait behind a tab, e.g. Reviews 3. Inverted against the
+   button it sits in, so it reads on the cyan active tab and the grey ones. */
+.nav-count {
+    display: inline-block;
+    min-width: 1.4rem;
+    margin-left: 0.4rem;
+    padding: 0 0.35rem;
+    font-size: 0.75rem;
+    line-height: 1.4rem;
+    text-align: center;
+    background-color: var(--ja-accent);
+    color: var(--ja-accent-text);
+}
+
+.btn-primary .nav-count {
+    background-color: var(--ja-accent-text);
+    color: var(--ja-accent);
+}
+
+/* The smaller line under a figure or a title. */
+.stat-sub {
+    color: var(--ja-muted);
+    font-size: 0.875rem;
+}
+
+/* A figure on the dashboard that opens the accounts behind it. */
+.stat-card {
+    color: inherit;
+    text-decoration: none;
+}
+
+.stat-card:hover .card,
+.stat-card:focus-visible .card {
+    border-color: var(--ja-accent);
+}
+
+/* "Needs your attention": one line per kind of open task. */
+.attention-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--ja-border);
+}
+
+.attention-item:last-child {
+    border-bottom: 0;
+}
+
+.attention-count {
+    min-width: 2.5rem;
+    font-family: var(--ja-font-mono);
+    font-size: 1.6rem;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* Nothing to do: the tick and one sentence instead of an empty card. */
+.all-clear {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+}
+
+/* The review queue: every item its own row with its own decision. */
+.review-item {
+    padding: 1rem;
+    border-bottom: 1px solid var(--ja-border);
+}
+
+.review-item:last-child {
+    border-bottom: 0;
+}
+
+.review-item > summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    cursor: pointer;
+    list-style: none;
+}
+
+.review-item > summary > .flex-grow-1 {
+    flex-basis: 14rem;
+}
+
+.review-item > summary::-webkit-details-marker {
+    display: none;
+}
+
+.review-item > summary::after {
+    content: "\25BE";
+    margin-left: auto;
+    color: var(--ja-muted);
+    transition: transform 0.15s ease;
+}
+
+.review-item[open] > summary::after {
+    transform: rotate(180deg);
+}
+
+.review-photo {
+    flex: 0 0 auto;
+    width: 140px;
+    height: 140px;
+    object-fit: cover;
+    border: 1px solid var(--ja-border);
+}
+
+.review-changes {
+    margin: 0 0 1rem;
+    border-collapse: collapse;
+}
+
+.review-changes th,
+.review-changes td {
+    padding: 0.2rem 1.25rem 0.2rem 0;
+    vertical-align: top;
+}
+
+.review-changes th {
+    color: var(--ja-muted);
+    font-weight: 400;
+}
+
+.review-changes .was {
+    color: var(--ja-muted);
+    text-decoration: line-through;
+}
+
+/* A section folded away until asked for, e.g. the review history. */
+.card > details > summary {
+    cursor: pointer;
 }
 
 .settings-sidebar-card {

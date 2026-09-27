@@ -4,7 +4,7 @@
 {% block admin_content %}
 <div class="card mb-4">
     <div class="card-body">
-        <form method="GET" action="{{ url_for('admin.admin_accounts') }}" class="row g-3 align-items-end">
+        <form method="GET" action="{{ url_for('admin.admin_accounts') }}" class="row g-3 align-items-end" data-live-filter="#account-results" role="search">
             <div class="col-lg-4">
                 <label class="form-label" for="account-q">{{ _('Search') }}</label>
                 <input type="text" class="form-control" id="account-q" name="q" value="{{ search_term }}" placeholder="{{ _('Email, name, or forum username') }}">
@@ -61,14 +61,18 @@
                     <option value="inactive" {% if active_filter == 'inactive' %}selected{% endif %}>{{ _('Inactive') }}</option>
                 </select>
             </div>
-            <div class="col-12 d-flex gap-2">
-                <button type="submit" class="btn btn-primary">{{ _('Apply Filters') }}</button>
+            <div class="col d-flex align-items-center justify-content-end gap-3">
+                {# Filters apply by themselves (live-filter.js); this button is
+                   only for a browser without JavaScript. #}
+                <noscript><button type="submit" class="btn btn-primary">{{ _('Apply') }}</button></noscript>
+                <span class="stat-sub" data-live-filter-status role="status" hidden><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>{{ _('Updating…') }}</span>
                 <a href="{{ url_for('admin.admin_accounts') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
             </div>
         </form>
     </div>
 </div>
 
+<div id="account-results">
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="mb-0">{{ _('Account Directory') }}</h4>
@@ -176,7 +180,7 @@
                         {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
                             {% if page_num %}
                                 <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('admin.admin_accounts', q=search_term, role=role_filter, membership_status=membership_filter, active=active_filter, page=page_num) }}">{{ page_num }}</a>
+                                    <a class="page-link" href="{{ url_for('admin.admin_accounts', q=search_term, role=role_filter, membership_status=membership_filter, kind=kind_filter, account=account_filter, active=active_filter, page=page_num) }}">{{ page_num }}</a>
                                 </li>
                             {% else %}
                                 <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
@@ -190,4 +194,8 @@
         {% endif %}
     </div>
 </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='live-filter.js') }}"></script>
 {% endblock %}

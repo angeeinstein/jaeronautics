@@ -192,7 +192,7 @@ class TestTheApprovalEmail:
             db.session.commit()
             with client.session_transaction() as session:
                 session["_user_id"] = str(admin.user.id)
-            client.post(f"/admin/forum/submissions/{submission.id}/approve", data={})
+            client.post(f"/admin/reviews/pictures/{submission.id}/approve", data={})
             return queued
 
         return run

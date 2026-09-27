@@ -477,7 +477,6 @@ AUDIT_LOG_RETENTION_DAYS = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "0"))
 NOTIFICATION_RETENTION_DAYS = int(os.getenv("NOTIFICATION_RETENTION_DAYS", "365"))
 ADMIN_DIRECTORY_PAGE_SIZE = 50
 AUDIT_LOG_PAGE_SIZE = 50
-APPROVAL_HISTORY_PAGE_SIZE = 25
 
 
 
@@ -1530,14 +1529,22 @@ def create_app(config_overrides=None):
             member_category_label=category_label,
         )
 
-    # Dates and times on every page and email in one format and in Vienna
-    # time: 31.12.2026, 31.12.2026 14:05.
     @app.template_global("background_jobs_paused")
     def background_jobs_paused_global():
         from .services.background_jobs import is_paused
 
         return is_paused()
 
+    # The number on the Reviews tab, on every admin page: what is waiting for
+    # this user's decision, so it is noticed without opening the dashboard.
+    @app.template_global("waiting_for_review_count")
+    def waiting_for_review_count_global():
+        from .services.reviews import waiting_for_review_count
+
+        return waiting_for_review_count(current_user)
+
+    # Dates and times on every page and email in one format and in Vienna
+    # time: 31.12.2026, 31.12.2026 14:05.
     @app.template_filter("date_display")
     def date_display_filter(value):
         return format_date_display(value) if value else ""

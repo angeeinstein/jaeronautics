@@ -1,108 +1,158 @@
 {% extends "admin_layout.html" %}
 {% set page_title = _('Admin Dashboard') %}
-{% set page_description = _('Overview of accounts, memberships, forum onboarding, approvals, and recent activity.') %}
+{% set page_description = _('What needs doing, and how the membership stands.') %}
 {% block admin_content %}
-<div class="row g-4">
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Total Accounts') }}</div><div class="display-6 mt-2">{{ metrics.total_accounts }}</div></div></div></div>
+{#
+  Two questions, in this order: is anything waiting for me, and how is the
+  membership doing. The first is a list of tasks that is simply absent when
+  there are none; the second is four figures, each with the one number that
+  explains it underneath, instead of eleven tiles of equal weight.
+#}
+{% set review_url = url_for('admin.admin_reviews') %}
+{% if waiting.name_change or waiting.picture or waiting.sync_problems %}
+<div class="card mb-4">
+    <div class="card-header"><h4 class="mb-0">{{ _('Needs your attention') }}</h4></div>
+    <div class="card-body py-1">
+        {% if waiting.name_change %}
+            {% set record = oldest_waiting.name_change %}
+            <div class="attention-item">
+                <span class="attention-count">{{ waiting.name_change }}</span>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">{{ ngettext('Change request to review', 'Change requests to review', waiting.name_change) }}</div>
+                    <div class="stat-sub">
+                        {% if waiting.name_change > 1 %}{{ _('Oldest:') }} {% endif %}
+                        {% if record.is_name_change %}
+                            {{ record.member.first_name }} {{ record.member.last_name }} &rarr; {{ record.requested_full_name }}
+                        {% else %}
+                            {{ record.member.first_name }} {{ record.member.last_name }}: {{ record.changes|map(attribute=1)|join(', ') }}
+                        {% endif %}
+                    </div>
+                </div>
+                <a class="btn btn-sm btn-primary" href="{{ review_url }}#review-queue">{{ _('Review') }}</a>
+            </div>
+        {% endif %}
+        {% if waiting.picture %}
+            {% set record = oldest_waiting.picture %}
+            <div class="attention-item">
+                <span class="attention-count">{{ waiting.picture }}</span>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">{{ ngettext('Profile picture to review', 'Profile pictures to review', waiting.picture) }}</div>
+                    <div class="stat-sub">
+                        {% if waiting.picture > 1 %}{{ _('Oldest:') }} {% endif %}
+                        {{ record.member.first_name }} {{ record.member.last_name }}, {{ _('uploaded %(when)s', when=record.uploaded_at|datetime_display) }}
+                    </div>
+                </div>
+                <a class="btn btn-sm btn-primary" href="{{ review_url }}#review-queue">{{ _('Review') }}</a>
+            </div>
+        {% endif %}
+        {% if waiting.sync_problems %}
+            {% set record = oldest_waiting.sync_problems %}
+            <div class="attention-item">
+                <span class="attention-count">{{ waiting.sync_problems }}</span>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">{{ ngettext('Forum sync problem', 'Forum sync problems', waiting.sync_problems) }}</div>
+                    <div class="stat-sub">
+                        {% if waiting.sync_problems > 1 %}{{ _('Latest:') }} {% endif %}
+                        {{ _('%(account)s could not be updated on the forum', account=(record.user.email if record.user else _('An account'))) }}
+                    </div>
+                </div>
+                <a class="btn btn-sm btn-secondary" href="{{ review_url }}#sync-problems">{{ _('Show') }}</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% elif current_user.can('approvals.review') or current_user.can('forum.moderate') %}
+<div class="card mb-4">
+    <div class="all-clear">
+        <svg class="success-check" width="22" height="22" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 13l6.5 6.5L22 6"/></svg>
+        <div>
+            <div class="fw-semibold">{{ _('Nothing needs your attention') }}</div>
+            <div class="stat-sub">{{ _('No reviews waiting, no forum problems.') }}</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% macro stat(label, value, sub, href=None) %}
+    <div class="col-md-6 col-xl">
+        {% if href and current_user.can('accounts.view') %}<a class="stat-card d-block h-100" href="{{ href }}">{% endif %}
+        <div class="card h-100"><div class="card-body">
+            <div class="text-muted small text-uppercase">{{ label }}</div>
+            <div class="display-6 mt-1">{{ value }}</div>
+            <div class="stat-sub">{{ sub }}</div>
+        </div></div>
+        {% if href and current_user.can('accounts.view') %}</a>{% endif %}
+    </div>
+{% endmacro %}
+
+<div class="row g-4 mb-4">
+    {{ stat(
+        _('Active members'),
+        metrics.active_memberships,
+        _('of %(total)s accounts', total=metrics.total_accounts)
+            ~ ((' · ' ~ ngettext('%(num)s waiting for payment', '%(num)s waiting for payment', metrics.pending_checkouts)) if metrics.pending_checkouts else ''),
+        url_for('admin.admin_accounts', active='active'),
+    ) }}
+    {% if cancel_end_date %}
+        {{ stat(
+            _('Ending %(date)s', date=cancel_end_date|date_display),
+            metrics.cancel_scheduled_memberships,
+            _('cancelled, stay active until then'),
+            url_for('admin.admin_accounts', membership_status='cancel_scheduled'),
+        ) }}
+    {% else %}
+        {{ stat(
+            _('Cancelled'),
+            metrics.cancel_scheduled_memberships,
+            _('stay active until their paid period ends') if metrics.cancel_scheduled_memberships else _('nobody has cancelled'),
+            url_for('admin.admin_accounts', membership_status='cancel_scheduled'),
+        ) }}
+    {% endif %}
+    {{ stat(
+        _('On the forum'),
+        metrics.forum_active_accounts,
+        ngettext('%(num)s still setting up their account', '%(num)s still setting up their account', metrics.forum_onboarding_accounts)
+            if metrics.forum_onboarding_accounts else _('nobody still setting up'),
+    ) }}
     {% if metrics.archived_forum_accounts %}
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body">
         {#
           Kept apart from the account and membership counts rather than added
           to them. Those answer "how many relationships does this system
           administer" -- who pays, who can be reached, who renews -- and an
-          archived person is none of that. A combined figure would be quotable
-          and useless for every decision made from this page.
+          archived person is none of that.
         #}
-        <div class="text-muted small text-uppercase">{{ _('From The Old Forum') }}</div>
-        <div class="display-6 mt-2">{{ metrics.archived_forum_accounts }}</div>
-        <a class="small text-decoration-none" href="{{ url_for('admin.admin_accounts', kind='archived') }}">
-            {{ _('%(count)s reconnected', count=metrics.archived_forum_claimed) }}
-        </a>
-    </div></div></div>
+        {{ stat(
+            _('Old forum archive'),
+            metrics.archived_forum_accounts,
+            _('%(count)s reconnected so far', count=metrics.archived_forum_claimed),
+            url_for('admin.admin_accounts', kind='archived'),
+        ) }}
     {% endif %}
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Linked Members') }}</div><div class="display-6 mt-2">{{ metrics.linked_members }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Active Memberships') }}</div><div class="display-6 mt-2">{{ metrics.active_memberships }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Checkouts') }}</div><div class="display-6 mt-2">{{ metrics.pending_checkouts }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Identity Requests') }}</div><div class="display-6 mt-2">{{ metrics.pending_identity_requests }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Cancel Scheduled') }}</div><div class="display-6 mt-2">{{ metrics.cancel_scheduled_memberships }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Forum Onboarding') }}</div><div class="display-6 mt-2">{{ metrics.forum_onboarding_accounts }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Forum Active') }}</div><div class="display-6 mt-2">{{ metrics.forum_active_accounts }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Pending Avatars') }}</div><div class="display-6 mt-2">{{ metrics.pending_forum_avatars }}</div></div></div></div>
-    <div class="col-md-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="text-muted small text-uppercase">{{ _('Forum Sync Errors') }}</div><div class="display-6 mt-2">{{ metrics.forum_sync_errors }}</div></div></div></div>
 </div>
 
-<div class="row g-4 mt-1">
-    {% if current_user.can('approvals.review') %}
-    <div class="col-lg-4">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">{{ _('Pending Approvals') }}</h4>
-                <a href="{{ url_for('admin.admin_approvals') }}" class="btn btn-sm btn-secondary">{{ _('Open') }}</a>
-            </div>
-            <div class="card-body">
-                {% if pending_request_preview %}
-                    <div class="list-group list-group-flush">
-                        {% for request_record in pending_request_preview %}
-                            <a href="{{ url_for('admin.admin_approvals') }}" class="list-group-item list-group-item-action bg-transparent text-reset px-0">
-                                <div class="fw-semibold">{{ request_record.member.email_private }}</div>
-                                <div class="text-muted small">{{ request_record.member.first_name }} {{ request_record.member.last_name }} -> {{ request_record.requested_full_name }}</div>
-                            </a>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="alert alert-info mb-0">{{ _('There are no pending identity change requests right now.') }}</div>
-                {% endif %}
-            </div>
-        </div>
+{% if current_user.can('logs.view') %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">{{ _('Recent activity') }}</h4>
+        <a href="{{ url_for('admin.admin_logs') }}" class="btn btn-sm btn-secondary">{{ _('All logs') }}</a>
     </div>
-    {% endif %}
-    {% if current_user.can('forum.moderate') %}
-    <div class="col-lg-4">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">{{ _('Forum Queue') }}</h4>
-                <a href="{{ url_for('admin.admin_forum') }}" class="btn btn-sm btn-secondary">{{ _('Open Forum Admin') }}</a>
+    <div class="card-body py-2">
+        {% if recent_logs %}
+            <div class="list-group list-group-flush">
+                {% for entry in recent_logs %}
+                    <a href="{{ url_for('admin.admin_logs') }}" class="list-group-item list-group-item-action bg-transparent text-reset px-0">
+                        <div class="fw-semibold">{{ entry.category|replace('_', ' ')|title }} / {{ entry.event_type|replace('_', ' ')|title }}</div>
+                        <div class="text-muted small">
+                            {{ entry.target_user.email if entry.target_user else (entry.target_member.email_private if entry.target_member else '-') }}
+                            · {{ entry.created_at|datetime_display }}
+                        </div>
+                    </a>
+                {% endfor %}
             </div>
-            <div class="card-body">
-                <p class="mb-3">{{ _('Review pending avatar uploads, fix sync issues, and monitor onboarding progress.') }}</p>
-                <dl class="row mb-0">
-                    <dt class="col-sm-7">{{ _('Pending Avatars') }}</dt>
-                    <dd class="col-sm-5">{{ metrics.pending_forum_avatars }}</dd>
-                    <dt class="col-sm-7">{{ _('Onboarding Accounts') }}</dt>
-                    <dd class="col-sm-5">{{ metrics.forum_onboarding_accounts }}</dd>
-                    <dt class="col-sm-7">{{ _('Sync Errors') }}</dt>
-                    <dd class="col-sm-5">{{ metrics.forum_sync_errors }}</dd>
-                </dl>
-            </div>
-        </div>
+        {% else %}
+            <p class="stat-sub my-2">{{ _('Nothing has been recorded yet.') }}</p>
+        {% endif %}
     </div>
-    {% endif %}
-    {% if current_user.can('logs.view') %}
-    <div class="col-lg-4">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">{{ _('Recent Activity') }}</h4>
-                <a href="{{ url_for('admin.admin_logs') }}" class="btn btn-sm btn-secondary">{{ _('Open Logs') }}</a>
-            </div>
-            <div class="card-body">
-                {% if recent_logs %}
-                    <div class="list-group list-group-flush">
-                        {% for entry in recent_logs %}
-                            <a href="{{ url_for('admin.admin_logs') }}" class="list-group-item list-group-item-action bg-transparent text-reset px-0">
-                                <div class="fw-semibold">{{ entry.category|replace('_', ' ')|title }} / {{ entry.event_type|replace('_', ' ')|title }}</div>
-                                <div class="text-muted small">
-                                    {{ entry.target_user.email if entry.target_user else (entry.target_member.email_private if entry.target_member else '-') }}
-                                    - {{ entry.created_at|datetime_display }}
-                                </div>
-                            </a>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="alert alert-info mb-0">{{ _('No audit log entries yet.') }}</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    {% endif %}
 </div>
+{% endif %}
 {% endblock %}
