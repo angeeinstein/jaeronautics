@@ -331,28 +331,31 @@ hr {
    As in the design system: primary is the accent with dark text, secondary
    grey, danger red, outline an accent border. */
 
-/* Semibold, and as tall as the fields beside them: 2.25 / 3 / 3.5rem. A
-   minimum rather than a fixed height, so a label that wraps on a phone
-   still fits. */
+/* Semibold. Text at Bootstrap's sizes (0.875 / 1 / 1.25rem); heights of
+   2.25 / 2.75 / 3.25rem -- 2.75rem (44px) being the usual minimum for a
+   comfortable tap on a phone -- with side padding in proportion to the
+   text. Minimums rather than fixed heights, so a label that wraps on a
+   phone still fits. See docs/design.md for why not the proposal's sizes. */
 .btn:not(.btn-link) {
     --bs-btn-font-weight: 600;
-    --bs-btn-padding-x: 1.25rem;
+    --bs-btn-padding-x: 1rem;
+    --bs-btn-font-size: 1rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 3rem;
+    min-height: 2.75rem;
 }
 
 .btn-sm:not(.btn-link) {
-    --bs-btn-padding-x: 0.9rem;
+    --bs-btn-padding-x: 0.75rem;
     --bs-btn-font-size: 0.875rem;
     min-height: 2.25rem;
 }
 
 .btn-lg:not(.btn-link) {
-    --bs-btn-padding-x: 1.75rem;
-    --bs-btn-font-size: 1.125rem;
-    min-height: 3.5rem;
+    --bs-btn-padding-x: 1.5rem;
+    --bs-btn-font-size: 1.25rem;
+    min-height: 3.25rem;
 }
 
 .btn-primary {

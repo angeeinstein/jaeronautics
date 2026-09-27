@@ -74,7 +74,10 @@ right face.
 
 ## Sizing
 
-- Fields and buttons are 3rem tall; small buttons 2.25rem, large 3.5rem.
+- Fields are 3rem tall. Buttons are at least 2.75rem (44px, the usual
+  minimum for a comfortable tap); small ones 2.25rem, large ones 3.25rem.
+  Button text is 1rem, small 0.875rem, large 1.25rem, with side padding of
+  1 / 0.75 / 1.5rem.
 - Spacing follows Bootstrap's scale (0.25, 0.5, 1, 1.5, 3rem), which matches
   the proposal's steps where they overlap.
 - Content is at most 1320px wide (Bootstrap's container); the admin
@@ -135,7 +138,7 @@ bands, and the one real shadow (`0 12px 32px rgba(0,0,0,0.45)`).
 | --- | --- | --- |
 | React components | Bootstrap 5.3 with its variables set to these colours | The portal is server-rendered Flask; a React front end is planned for later and can take this concept over as it is |
 | Fonts from Google Fonts | Served from the portal | No visitor's address goes to Google (a German court awarded a visitor damages over exactly this in 2022), and the site's security policy allows no outside fonts |
-| Fixed button heights | Minimum heights | A label that wraps on a phone must still fit inside its button |
+| Button heights 2.25 / 3 / 3.5rem, text 0.875 / 1 / 1.125rem, wide side padding | Minimum heights 2.25 / 2.75 / 3.25rem, text 0.875 / 1 / 1.25rem, side padding in proportion to the text | Tried as proposed: the label looked small in a box with a lot of empty space around it, and large buttons (login, payment) had smaller text than before. 2.75rem keeps normal buttons easy to tap on a phone. Minimums, not fixed heights, so a label that wraps still fits |
 | Primary button hover: fade to 88% | Lighter cyan (`--ja-accent-hover`) | The proposal defines that colour itself; fading towards the dark page reads like "disabled" |
 | Fixed heading sizes (h1 2.25rem ...) | Bootstrap's responsive sizes, the proposal's faces and weights | Fixed sizes are too large on a phone; the look comes from the face and weight |
 | Tick box outline `--ja-border-strong` | `--ja-placeholder` (lighter grey) | The proposal's outline is about 1.5:1 against a card, and empty boxes were easy to miss; accessibility guidance (WCAG) asks for 3:1, the lighter grey gives 4.7:1 |
