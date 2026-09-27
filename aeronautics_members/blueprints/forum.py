@@ -24,6 +24,7 @@ from ..services.identity import (
     TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN,
     mark_email_verified_from_token,
     read_token,
+    send_email_verification_email,
     user_for_email_token,
 )
 from ..services.membership import (
@@ -148,6 +149,9 @@ def forum_entry():
 
     forum_context = build_forum_context(member)
     if forum_context["can_enter_forum"]:
+        # The forum will only send them back to be refused; say why here.
+        if not current_user.email_is_verified:
+            return _confirm_email_first()
         try:
             return redirect(
                 service.build_forum_redirect(destination_path=service.settings.get("forum_onboarding_path")),
@@ -288,11 +292,7 @@ def forum_discourse_connect():
     # DiscourseConnect asserts this address to the forum, which associates forum
     # accounts by email. Never vouch for an address we have not verified.
     if not current_user.email_is_verified:
-        flash(
-            _("Please confirm your email address before signing in to the forum. We have sent you a verification link."),
-            "warning",
-        )
-        return redirect(url_for("forum.forum_entry"))
+        return _confirm_email_first()
 
     # A reconnect leaves the old forum account holding this address until it
     # is dealt with, and Discourse refuses the sign-in until then.
@@ -312,8 +312,40 @@ def forum_discourse_connect():
         return redirect(redirect_url, code=303)
     except ForumProviderError as exc:
         current_app.logger.warning("DiscourseConnect handoff failed for member_id=%s: %s", member.id, exc)
-        flash(_("The forum sign-in could not be completed right now."), "danger")
-        return redirect(url_for("forum.forum_entry"))
+        flash(_("The forum sign-in could not be completed right now. Please try again later."), "danger")
+        # Not back to /forum: that forwards to the forum, which sends them
+        # straight back here -- round and round until the browser gives up.
+        return redirect(url_for("account.account"))
+
+
+def _confirm_email_first():
+    """Stop, send a fresh confirmation link, and say so -- on the account page.
+
+    Somebody can pay, upload a photo and have it approved without ever opening
+    the first confirmation mail, so this is an ordinary way to arrive here. It
+    used to send them to /forum, which forwards to the forum, which sends them
+    back here: a loop the browser ended with "too many redirects". And it said
+    a link had been sent when none had.
+    """
+    try:
+        sent = send_email_verification_email(current_app._get_current_object(), current_user)
+        db.session.commit()
+    except Exception as exc:  # noqa: BLE001 -- the reason belongs in the log
+        db.session.rollback()
+        sent = False
+        current_app.logger.warning(
+            "Could not send a confirmation link before forum sign-in for user_id=%s: %s",
+            current_user.id, exc,
+        )
+    if sent:
+        flash(
+            _("Please confirm your email address first. We have just sent a new link to %(address)s.",
+              address=current_user.email),
+            "warning",
+        )
+    else:
+        flash(_("Please confirm your email address first."), "warning")
+    return redirect(url_for("account.account"))
 
 
 @forum_bp.route("/forum/logout", methods=["GET"])
