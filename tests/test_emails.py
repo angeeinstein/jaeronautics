@@ -16,7 +16,7 @@ from aeronautics_members import mail_utils
 from aeronautics_members.db_models import MailAccount, NotificationEvent, Setting
 
 STATIC = Path(__file__).resolve().parent.parent / "aeronautics_members" / "static"
-LIGHT_LOGO = (STATIC / "logo_joanneum_aeronautics_negativ.png").read_bytes()
+HEADER = (STATIC / "email_header.png").read_bytes()
 
 
 class FakeSMTP:
@@ -111,8 +111,10 @@ class TestMemberNotificationsAreSent:
 
 
 class TestEveryEmail:
-    def test_carries_the_logo_that_can_be_seen_on_black(self, app, outbox):
-        """The digests used the signature logo: dark lettering on a black header."""
+    def test_carries_the_header_image(self, app, outbox):
+        """The digests used the signature logo: dark lettering on a black header.
+        Now every email carries the header as one image, which dark mode cannot
+        recolour."""
         from datetime import datetime, timezone
 
         from aeronautics_members.notification_service import ADMIN_ERROR_CHANNEL
@@ -132,7 +134,7 @@ class TestEveryEmail:
 
         assert ok
         (logo,) = _parts(outbox[-1], "image/png")
-        assert logo.get_payload(decode=True) == LIGHT_LOGO
+        assert logo.get_payload(decode=True) == HEADER
         # And what to do about it, which the digest used to leave out.
         assert "Do this about it." in _parts(outbox[-1], "text/plain")[0].get_payload(decode=True).decode()
 

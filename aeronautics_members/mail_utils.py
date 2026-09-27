@@ -96,10 +96,14 @@ def probe_mail_account_connection(config):
 
 
 
-# The header of every email shows this, on black. It has to be the light
-# version: the signature logo is dark lettering on a transparent background,
-# and on the black header only its turquoise parts could be seen.
-EMAIL_LOGO_FILE = "logo_joanneum_aeronautics_negativ.png"
+# The header of every email: the black band with the logo and the turquoise
+# line, as one image. Mail apps in dark mode recolour backgrounds and text but
+# never images, so a logo drawn onto its own background looks the same in every
+# one of them -- where a white logo on a band an app had turned light vanished.
+# Made from logo_joanneum_aeronautics_negativ.png at twice its shown size (640
+# wide), for phone screens; 25 KB, where attaching the logo file itself sent
+# nearly 300 KB with every email.
+EMAIL_LOGO_FILE = "email_header.png"
 
 
 def email_logo_attachment():

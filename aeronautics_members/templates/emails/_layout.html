@@ -8,6 +8,14 @@
     colours that make this readable -- light text on a dark card -- have to be
     on the elements themselves. The stylesheet only adds what can be lost.
 
+    In dark mode some mail apps recolour the email: Gmail on the iPhone and
+    Outlook on Windows invert it, so this dark design arrives light there, with
+    dark text. That is left to happen on purpose. The known tricks for pinning
+    the dark colours in Gmail lock the backgrounds and then rely on a second
+    trick to keep the text light; the day Gmail stops honouring the second, the
+    email turns into dark text on a dark background. Inverted, it is always
+    readable -- and the header is an image, which no app recolours.
+
     ``preview_text`` is the line an inbox shows beside the subject. It is
     hidden in the email itself, where it used to sit visibly above a heading
     that said the same thing.
@@ -43,8 +51,13 @@
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1f2123"
                        style="max-width:{{ email_width|default(640) }}px; background-color:#1f2123; border:1px solid #34383b;">
                     <tr>
-                        <td align="center" bgcolor="#000000" style="background-color:#000000; padding:24px 28px; border-bottom:4px solid #00dfff;">
-                            <img src="cid:logo" alt="Joanneum Aeronautics" width="220" style="display:block; max-width:220px; width:220px; height:auto; border:0;">
+                        {#- One image: band, logo and line together. Mail apps in dark
+                            mode recolour backgrounds -- Gmail on the iPhone and Outlook
+                            on Windows turn a dark email light -- but never an image, and
+                            a white logo on a background turned light simply vanished. -#}
+                        <td align="center" bgcolor="#000000" style="background-color:#000000; padding:0; line-height:0; font-size:0;">
+                            <img src="cid:logo" alt="Joanneum Aeronautics" width="{{ email_width|default(640) }}"
+                                 style="display:block; width:100%; max-width:{{ email_width|default(640) }}px; height:auto; border:0; color:#ffffff; font-size:18px; line-height:1.4;">
                         </td>
                     </tr>
                     <tr>
