@@ -483,3 +483,58 @@ class TestOpeningTheForumStraightAway:
         with client.session_transaction() as session:
             messages = [text for _category, text in session.get("_flashes", [])]
         assert any("still being set up" in text for text in messages)
+
+
+class TestTheWelcomeMail:
+    """Sent at payment, usually before the university address is confirmed --
+    so before the reconnect that decides which username they will have."""
+
+    def _welcome(self, app, monkeypatch, member):
+        from flask import render_template
+
+        from aeronautics_members.db_models import Setting
+        from aeronautics_members.services import workflows
+
+        for key, value in {
+            "automatic_emails_enabled": "True",
+            "welcome_email_sender": "office",
+            "automatic_email_template": "welcome_email.html",
+        }.items():
+            db.session.add(Setting(key=key, value=value))
+        db.session.commit()
+        sent = {}
+
+        def fake_send_mail(**kwargs):
+            sent.update(kwargs)
+            return True, None
+
+        monkeypatch.setattr(workflows, "send_mail", fake_send_mail)
+        with app.test_request_context():
+            workflows.send_member_welcome_email(app, member)
+            template_vars = {
+                k: v for k, v in sent.items()
+                if k not in {"from_account", "to_email", "subject", "template_name",
+                             "attachments", "return_error"}
+            }
+            return render_template("emails/welcome_email.html", **template_vars)
+
+    def test_somebody_with_an_old_account_is_told_it_comes_back_not_what_it_is(self, app, monkeypatch):
+        member = _returning("81", "MailM_L22", "mail@edu.fh-joanneum.at", "mail@example.com")
+        member.user.forum_username = "NewN_L22-2"
+        db.session.commit()
+
+        body = self._welcome(app, monkeypatch, member)
+
+        assert "will be reconnected" in body
+        assert "NewN_L22-2" not in body   # a username they will never use
+        assert "MailM_L22" not in body    # nor whose account that address was
+
+    def test_everybody_else_is_given_their_username(self, app, monkeypatch):
+        member = make_member(email="plain@example.com", email_work="plain@edu.fh-joanneum.at")
+        member.user.forum_username = "PlainP_L25"
+        db.session.commit()
+
+        body = self._welcome(app, monkeypatch, member)
+
+        assert "PlainP_L25" in body
+        assert "will be reconnected" not in body

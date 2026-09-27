@@ -41,8 +41,12 @@
 
                 <div class="section">
                     <h4>{{ _('Lavboard Forum Access') }}</h4>
-                    <p>{{ _('Your Lavboard forum account uses the following username:') }}</p>
-                    <p class="username-box">{{ suggested_username }}</p>
+                    {% if old_forum_account_waiting %}
+                        <p>{{ _('You had an account on the old forum. Once you confirm your university email address, it will be reconnected: you keep its username and your posts.') }}</p>
+                    {% else %}
+                        <p>{{ _('Your Lavboard forum account uses the following username:') }}</p>
+                        <p class="username-box">{{ suggested_username }}</p>
+                    {% endif %}
                     {% if forum_integration_enabled and forum_entry_url %}
                         <p>{{ _('Before member content becomes visible on Lavboard, please upload a profile picture for approval.') }}</p>
                         <div class="button-row">

@@ -34,7 +34,7 @@ from .forum import (
     get_forum_service,
     sync_member_forum_state,
 )
-from .forum_import import imported_email_for
+from .forum_import import find_claimable_profile, imported_email_for
 from .identity import rotate_email_verification_nonce
 from .membership import sync_member_active_state
 from .outbox import enqueue_forum_sync, pending_count, process_pending, register_handler
@@ -88,6 +88,17 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
         return (False, error_message) if return_error else False
 
     suggested_username = member.user.forum_username if member.user and member.user.forum_username else generate_suggested_username(member)
+    # Somebody whose university address an old forum account was registered
+    # under gets that account -- and its username -- once they confirm the
+    # address, which usually comes after this mail. So the new username would
+    # be one they never use. Nor is the old one named: until the address is
+    # confirmed, whoever typed it has not shown it is theirs, and naming the
+    # account would tell them whose it is.
+    old_forum_account_waiting = (
+        member.user is not None
+        and member.user.imported_forum_profile is None
+        and find_claimable_profile(member.email_work) is not None
+    )
     logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
     attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
 
@@ -104,6 +115,7 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
         attachments=attachments,
         first_name=member.first_name,
         suggested_username=suggested_username,
+        old_forum_account_waiting=old_forum_account_waiting,
         membership_starts_on=member.membership_starts_on,
         membership_ends_on=member.membership_ends_on,
         renewal_due_on=member.renewal_due_on,
