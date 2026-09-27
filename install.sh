@@ -284,6 +284,10 @@ APT_NETWORK_OPTS=(
     -o Acquire::https::Timeout=30
     -o Acquire::Retries=2
     -o DPkg::Lock::Timeout=120
+    # One request per connection. Pipelined requests through a flaky mirror or
+    # proxy are what turned downloads into "Ign:" lines and then a retry that
+    # never returned (seen on jaero-test, 2026-09-27).
+    -o Acquire::http::Pipeline-Depth=0
 )
 
 retry() {
@@ -527,7 +531,42 @@ update_package_index_once() {
     PACKAGE_CACHE_UPDATED=1
 }
 
+packages_missing() {
+    # The ones not installed yet, one per line.
+    local pkg
+    for pkg in "$@"; do
+        case "${PACKAGE_MANAGER}" in
+            apt)
+                dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null | grep -q 'install ok installed' \
+                    || printf '%s\n' "${pkg}"
+                ;;
+            dnf|yum)
+                rpm -q "${pkg}" >/dev/null 2>&1 || printf '%s\n' "${pkg}"
+                ;;
+            *)
+                printf '%s\n' "${pkg}"
+                ;;
+        esac
+    done
+}
+
 install_packages() {
+    # An update of the portal needs nothing from the distribution's mirrors
+    # when every package is already there. Asking anyway re-downloaded the whole
+    # package index (about 35 MB -- it is deleted after every run) on every
+    # update, so a portal update failed whenever the Ubuntu mirror had a bad
+    # moment. System updates are unattended-upgrades' job; "--mode repair"
+    # still refreshes these packages on purpose.
+    if [[ "${MODE:-}" == "update" ]]; then
+        local missing=()
+        mapfile -t missing < <(packages_missing "$@")
+        if (( ${#missing[@]} == 0 )); then
+            info "System packages already installed: $*"
+            return
+        fi
+        set -- "${missing[@]}"
+    fi
+
     update_package_index_once
 
     case "${PACKAGE_MANAGER}" in

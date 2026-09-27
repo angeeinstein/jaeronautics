@@ -554,3 +554,57 @@ class TestAnUpdateThatNeverFinishes:
         }))
         monkeypatch.setattr(system_update, "_current_boot_id", lambda: "this-boot")
         assert system_update.describe_update_state()["in_progress"]
+
+
+class TestAnUpdateDoesNotNeedTheUbuntuMirror:
+    """Every update re-downloaded Ubuntu's whole package index, then deleted it.
+
+    So a portal update failed whenever archive.ubuntu.com had a bad moment --
+    which is what froze the update on 2026-09-27: "Ign:" on two downloads, then
+    apt's retry never returned. Updates now skip apt when nothing is missing.
+    """
+
+    INSTALLER = Path(__file__).resolve().parent.parent / "install.sh"
+
+    def _run(self, tmp_path, mode, installed):
+        import subprocess
+
+        source = self.INSTALLER.read_text()
+        functions = "\n".join(
+            re.search(rf"^{name}\(\) \{{\n.*?^\}}\n", source, re.M | re.S).group(0)
+            for name in ("packages_missing", "install_packages")
+        )
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "dpkg-query").write_text(
+            "#!/usr/bin/env bash\n"
+            f'case " {" ".join(installed)} " in *" ${{@: -1}} "*) printf "install ok installed";; esac\n'
+        )
+        (bin_dir / "dpkg-query").chmod(0o755)
+        script = (
+            f"{functions}\n"
+            "info() { printf 'INFO %s\\n' \"$*\"; }\n"
+            "update_package_index_once() { printf 'INDEX\\n'; }\n"
+            "retry() { shift; printf 'RUN %s\\n' \"$*\"; }\n"
+            "APT_NETWORK_OPTS=()\n"
+            f"PACKAGE_MANAGER=apt MODE={mode}\n"
+            "install_packages git nginx redis-server\n"
+        )
+        return subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                              env={"PATH": f"{bin_dir}:/usr/bin:/bin"}, check=True).stdout
+
+    def test_nothing_is_fetched_when_everything_is_installed(self, tmp_path):
+        output = self._run(tmp_path, "update", ["git", "nginx", "redis-server"])
+        assert "INDEX" not in output and "RUN" not in output
+
+    def test_only_what_is_missing_is_installed(self, tmp_path):
+        output = self._run(tmp_path, "update", ["git", "nginx"])
+        assert "INDEX" in output
+        assert "RUN apt-get install -y redis-server" in output
+
+    def test_a_repair_still_refreshes_everything(self, tmp_path):
+        output = self._run(tmp_path, "repair", ["git", "nginx", "redis-server"])
+        assert "RUN apt-get install -y git nginx redis-server" in output
+
+    def test_apt_does_not_pipeline_requests(self):
+        assert "Acquire::http::Pipeline-Depth=0" in self.INSTALLER.read_text()

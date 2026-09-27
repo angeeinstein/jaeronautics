@@ -36,3 +36,8 @@ env/
 
 storage/
 
+
+# Written by install.sh on every run (Cloudflare Tunnel guidance for this
+# machine). Generated, so not tracked -- and without this line every update
+# warned about "local git changes" that were only these files.
+cloudflare/
