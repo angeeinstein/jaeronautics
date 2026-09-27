@@ -212,10 +212,21 @@ def save_member_profile():
             flash(str(exc), "danger")
             return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
 
-        for field_name in DIRECT_MEMBER_PROFILE_FIELDS:
-            if field_name == "email_private":
-                continue
-            setattr(member, field_name, normalize_optional_member_value(field_name, getattr(profile_form, field_name).data))
+        # Through apply_member_profile rather than field by field, because that
+        # is what drops the university address's confirmation when the address
+        # changes. Setting the fields directly kept the tick on whatever was
+        # typed next -- and a confirmed university address is what gives a
+        # returning student their old forum account and its posts.
+        previous_email_work = (member.email_work or "").strip().lower()
+        contact_fields = tuple(f for f in DIRECT_MEMBER_PROFILE_FIELDS if f != "email_private")
+        apply_member_profile(
+            member,
+            {f: getattr(profile_form, f).data for f in contact_fields},
+            fields=contact_fields,
+        )
+        work_email_changed = bool(member.email_work) and (
+            member.email_work.strip().lower() != previous_email_work
+        )
 
         log_audit_event(
             category="profile",
@@ -240,6 +251,21 @@ def save_member_profile():
                 flash(_("Your profile was updated."), "success")
         else:
             flash(_("Your profile was updated."), "success")
+        if work_email_changed:
+            try:
+                if send_work_email_verification_email(current_app._get_current_object(), member):
+                    db.session.commit()  # the link's nonce
+                    flash(
+                        _("Please confirm %(address)s using the link we sent there.", address=member.email_work),
+                        "info",
+                    )
+            except Exception as exc:  # noqa: BLE001 -- the reason belongs in the log, not the page
+                db.session.rollback()
+                current_app.logger.warning(
+                    "Could not send the work email verification after a profile update for member_id=%s: %s",
+                    member.id,
+                    exc,
+                )
         if forum_result and forum_result.error:
             flash(_("Your forum profile could not be synchronized right now. Please try again later."), "warning")
         return redirect(url_for("account.account"))
