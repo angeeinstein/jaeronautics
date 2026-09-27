@@ -22,6 +22,7 @@ from ..config import (
     RATELIMIT_ADMIN_EMAIL,
     STRIPE_SETTING_KEYS,
 )
+from ..services.diagnostics import collect_system_health
 from ..services.audit import (
     get_recent_audit_logs,
     log_audit_event,
@@ -205,6 +206,12 @@ def admin_dashboard():
         cancel_end_date=cancel_end_dates[0] if len(cancel_end_dates) == 1 else None,
         waiting=reviews.waiting_counts(current_user),
         oldest_waiting=reviews.oldest_waiting(current_user),
+        # Only a line pointing at the health report, which is where emails are
+        # retried and problems explained; for whoever can open that tab.
+        health_problems=(
+            collect_system_health()["problems"]
+            if current_user.can(Permission.SYSTEM_UPDATE) else []
+        ),
         recent_logs=get_recent_audit_logs(limit=8) if current_user.can(Permission.LOGS_VIEW) else [],
     )
 

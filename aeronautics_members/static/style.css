@@ -790,6 +790,11 @@ textarea.form-control {
     border-bottom: 0;
 }
 
+.attention-item > .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
 .attention-count {
     min-width: 2.5rem;
     font-family: var(--ja-font-mono);

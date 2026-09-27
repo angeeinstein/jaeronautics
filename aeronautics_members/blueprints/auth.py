@@ -396,6 +396,7 @@ def change_password():
             current_user.set_password(form.new_password.data)
             db.session.commit()
             flash(_("Your password has been updated!"), "success")
-            return redirect(url_for(get_member_portal_target(current_user)))
+            # Back where the button is: My Account, for staff too.
+            return redirect(url_for("account.account"))
         flash(_("Invalid current password"), "danger")
     return render_template("change_password.html", form=form)

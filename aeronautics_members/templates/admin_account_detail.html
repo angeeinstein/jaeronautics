@@ -28,12 +28,6 @@
                     <dt class="col-sm-5">{{ _('Email Verified') }}</dt>
                     <dd class="col-sm-7">{% if user_record.email_is_verified %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
                 </dl>
-                {% if current_user.id == user_record.id and not member %}
-                    <div class="mt-4">
-                        <a href="{{ url_for('account.create_membership_profile') }}" class="btn btn-secondary">{{ _('Create Membership Profile') }}</a>
-                    </div>
-                {% endif %}
-
                 {% if can_manage_roles %}
                     {#
                       One form for every role rather than a grant and a revoke

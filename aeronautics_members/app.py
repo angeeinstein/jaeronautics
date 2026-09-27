@@ -1019,7 +1019,7 @@ def decorate_pending_identity_requests(requests_):
 def render_account_dashboard(profile_form=None, identity_form=None):
     member = get_current_member_for_user(current_user)
     if member is None:
-        return redirect(url_for("account.create_membership_profile"))
+        return render_template("account/no_membership.html")
 
     has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
     stripe_subscription = None

@@ -9,7 +9,7 @@
   explains it underneath, instead of eleven tiles of equal weight.
 #}
 {% set review_url = url_for('admin.admin_reviews') %}
-{% if waiting.name_change or waiting.picture or waiting.sync_problems %}
+{% if waiting.name_change or waiting.picture or waiting.sync_problems or health_problems %}
 <div class="card mb-4">
     <div class="card-header"><h4 class="mb-0">{{ _('Needs your attention') }}</h4></div>
     <div class="card-body py-1">
@@ -59,15 +59,28 @@
                 <a class="btn btn-sm btn-secondary" href="{{ review_url }}#sync-problems">{{ _('Show') }}</a>
             </div>
         {% endif %}
+        {% if health_problems %}
+            <div class="attention-item">
+                <span class="attention-count">{{ health_problems|length }}</span>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">{{ ngettext('System health problem', 'System health problems', health_problems|length) }}</div>
+                    <div class="stat-sub">
+                        {{ health_problems[0] }}
+                        {% if health_problems|length > 1 %}{{ ngettext('And %(num)s more.', 'And %(num)s more.', health_problems|length - 1) }}{% endif %}
+                    </div>
+                </div>
+                <a class="btn btn-sm btn-secondary" href="{{ url_for('admin.admin_settings', _anchor='settings-maintenance') }}">{{ _('Open health') }}</a>
+            </div>
+        {% endif %}
     </div>
 </div>
-{% elif current_user.can('approvals.review') or current_user.can('forum.moderate') %}
+{% elif current_user.can('approvals.review') or current_user.can('forum.moderate') or current_user.can('system.update') %}
 <div class="card mb-4">
     <div class="all-clear">
         <svg class="success-check" width="22" height="22" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 13l6.5 6.5L22 6"/></svg>
         <div>
             <div class="fw-semibold">{{ _('Nothing needs your attention') }}</div>
-            <div class="stat-sub">{{ _('No reviews waiting, no forum problems.') }}</div>
+            <div class="stat-sub">{{ _('No reviews waiting, no forum or system problems.') if current_user.can('system.update') else _('No reviews waiting, no forum problems.') }}</div>
         </div>
     </div>
 </div>

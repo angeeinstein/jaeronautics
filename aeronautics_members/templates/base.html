@@ -28,11 +28,11 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-lg-center">
                     {% if current_user.is_authenticated %}
-                        {% if current_user.member %}
-                            <li class="nav-item">
-                                <a class="nav-link{% if (request.endpoint or '').startswith(('account.', 'forum.')) %} active" aria-current="page{% endif %}" href="{{ url_for('account.account') }}">{{ _('My Account') }}</a>
-                            </li>
-                        {% endif %}
+                        {# Everybody signed in has an account, membership or not;
+                           the page shows the part they have. #}
+                        <li class="nav-item">
+                            <a class="nav-link{% if (request.endpoint or '').startswith(('account.', 'forum.')) or request.endpoint == 'auth.change_password' %} active" aria-current="page{% endif %}" href="{{ url_for('account.account') }}">{{ _('My Account') }}</a>
+                        </li>
                         {% if current_user.can('admin.access') %}
                             <li class="nav-item">
                                 <a class="nav-link{% if (request.endpoint or '').startswith('admin.') %} active" aria-current="page{% endif %}" href="{{ url_for('admin.admin_dashboard') }}">{{ _('Admin') }}</a>

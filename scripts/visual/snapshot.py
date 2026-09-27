@@ -215,6 +215,7 @@ def seed(app, app_module, subscriptions):
         *member_pages("cancelling"),
         *member_pages("returning"),
         {"name": "account--create-profile", "user": "admin@example.org", "path": "/account/create-membership"},
+        {"name": "account--staff-no-membership", "user": "admin@example.org", "path": "/account"},
         {"name": "admin--dashboard", "user": "admin@example.org", "path": "/admin"},
         {"name": "admin--accounts", "user": "admin@example.org", "path": "/admin/accounts"},
         {"name": "admin--account-detail", "user": "admin@example.org", "path": f"/admin/accounts/{active.user.id}"},

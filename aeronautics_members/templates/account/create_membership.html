@@ -61,7 +61,7 @@
                                 </div>
                             </div>
                             <div class="col-12 d-flex gap-2">
-                                <a href="{{ url_for('admin.admin_dashboard' if current_user.can('admin.access') else 'public.index') }}" class="btn btn-secondary">{{ _('Back') }}</a>
+                                <a href="{{ url_for('account.account') }}" class="btn btn-secondary">{{ _('Back') }}</a>
                                 <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
                             </div>
                         </div>
