@@ -1057,6 +1057,7 @@ def render_account_dashboard(profile_form=None, identity_form=None):
         can_manage_billing=bool(member.stripe_customer_id),
         can_resume_payment=can_resume_payment(member) and not payment_arriving,
         payment_arriving=payment_arriving,
+        has_access=member_has_active_access(member),
         can_rejoin=can_rejoin(member) and not payment_needs_attention,
         payment_needs_attention=payment_needs_attention,
         invoice_payments_enabled=invoice_payments_allowed(),
@@ -1360,7 +1361,7 @@ def build_forum_context(member):
         can_upload_avatar = True
     else:
         status_key = "needs_avatar"
-        status_message = _("Upload a profile picture to continue with forum onboarding.")
+        status_message = _("Upload a profile picture to complete your forum access.")
         can_upload_avatar = True
 
     avatar_max_bytes = service.settings["forum_avatar_max_bytes"]

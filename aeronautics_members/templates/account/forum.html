@@ -30,16 +30,11 @@
                     <div class="alert alert-warning">{{ _('The forum could not be updated just now. We will try again automatically.') }}</div>
                 {% endif %}
 
-                {% if forum_context.status_key in ['payment_processing', 'reconnect_waiting'] %}
-                    {# The status line above says it all. #}
-                {% elif forum_context.status_key == 'inactive_membership' %}
-                    <div class="alert alert-secondary mb-0">{{ _('Your forum access will become available again once your membership is active.') }}</div>
-                {% elif forum_context.status_key == 'disabled' %}
-                    <div class="alert alert-secondary mb-0">{{ _('The forum integration is not configured yet.') }}</div>
-                {% elif forum_context.status_key == 'active' %}
-                    <div class="alert alert-success">{{ _('Your forum access is ready. If you are not redirected automatically, use the button below.') }}</div>
+                {#- The status line above says where things stand; nothing below repeats it. -#}
+                {% if forum_context.status_key == 'active' %}
+                    <p>{{ _('If you are not taken to the forum automatically, use the button below.') }}</p>
                     <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
-                {% else %}
+                {% elif forum_context.status_key in ['needs_avatar', 'pending_avatar', 'rejected_avatar'] %}
                     {% if forum_context.status_key == 'rejected_avatar' and forum_context.latest_submission.review_note %}
                         <div class="alert alert-secondary">{{ _('Reason: %(note)s', note=forum_context.latest_submission.review_note) }}</div>
                     {% endif %}

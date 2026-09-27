@@ -101,8 +101,8 @@
             <div class="card-header"><h4 class="mb-0">{{ _('Membership Overview') }}</h4></div>
             <div class="card-body">
                 {% set membership_status_labels = {
-                    'paid': _('Active'),
-                    'free_period': _('Active'),
+                    'paid': _('Paid'),
+                    'free_period': _('Free until year end'),
                     'cancel_scheduled': _('Renewal Canceled'),
                     'canceled': _('Ended'),
                     'pending_checkout': _('Payment Setup Incomplete'),
@@ -114,7 +114,7 @@
                     <dt class="col-sm-5">{{ _('Status') }}</dt>
                     <dd class="col-sm-7">{% if payment_arriving %}{{ _('Payment Received') }}{% else %}{{ membership_status_labels.get(member.payment_status, member.payment_status|replace('_', ' ')|title) }}{% endif %}</dd>
                     <dt class="col-sm-5">{{ _('Membership Active') }}</dt>
-                    <dd class="col-sm-7">{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
+                    <dd class="col-sm-7">{% if has_access %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
                     <dt class="col-sm-5">{{ _('Membership Starts') }}</dt>
                     <dd class="col-sm-7">{{ member.membership_starts_on.strftime('%Y-%m-%d') if member.membership_starts_on else _('Not set') }}</dd>
                     <dt class="col-sm-5">{{ _('Membership Ends') }}</dt>
@@ -200,26 +200,16 @@
                     <div class="alert alert-warning">{{ _('The forum could not be updated just now. We will try again automatically.') }}</div>
                 {% endif %}
 
+                {#- The status line above says where things stand; nothing below repeats it. -#}
                 {% if forum_context.status_key == 'active' %}
-                    <div class="alert alert-success">{{ _('Your forum access is active and ready to open.') }}</div>
                     <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
                 {% elif forum_context.status_key in ['needs_avatar', 'pending_avatar', 'rejected_avatar'] %}
-                    {% if forum_context.status_key == 'pending_avatar' %}
-                        <div class="alert alert-info">{{ _('Your profile picture is waiting for admin approval.') }}</div>
-                    {% elif forum_context.status_key == 'rejected_avatar' %}
-                        <div class="alert alert-warning">{{ _('Your last profile picture was rejected. Please upload a new one.') }}</div>
-                    {% else %}
-                        <div class="alert alert-secondary">{{ _('Please upload a profile picture before your forum access can be completed.') }}</div>
-                    {% endif %}
-
                     {% if forum_context.status_key == 'rejected_avatar' and forum_context.latest_submission.review_note %}
                         <div class="alert alert-secondary">{{ _('Reason: %(note)s', note=forum_context.latest_submission.review_note) }}</div>
                     {% endif %}
 
                     {% set upload_id_prefix = 'forum-avatar' %}
                     {% include 'account/_forum_avatar_upload.html' %}
-                {% else %}
-                    <div class="alert alert-secondary mb-0">{{ forum_context.status_message }}</div>
                 {% endif %}
             </div>
         </div>

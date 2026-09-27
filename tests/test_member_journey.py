@@ -297,3 +297,14 @@ class TestThePhotoUpload:
         body = self._page(client, forum, monkeypatch)
 
         assert "Reason: That is a giraffe." in body
+
+
+def test_the_forum_card_says_its_status_once(app, client, forum, monkeypatch):
+    forum.photo_approved = False
+    _paid_member(client, verified=True)
+    monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+
+    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+    assert body.count("Upload a profile picture to complete your forum access.") == 1
+    assert "Please upload a profile picture before your forum access can be completed." not in body
