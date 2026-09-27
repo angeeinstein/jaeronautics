@@ -11,7 +11,10 @@
     <link rel="preload" href="{{ url_for('static', filename='fonts/archivo-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='logo_joanneum_aeronautics_negativ.svg') }}" type="image/svg+xml">
+    {#- The "A with airplane" mark alone: the full logo is unreadable at tab size. -#}
+    <link rel="icon" href="{{ url_for('static', filename='favicon-32.png') }}" type="image/png" sizes="32x32">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 </head>
 <body class="app-shell">
     <nav class="navbar navbar-expand-lg navbar-dark app-navbar">

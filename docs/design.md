@@ -147,6 +147,18 @@ white line with a soft glow. The two never look alike.
 **Menus and dialogs** -- surface fill, hairline border, header and footer
 bands, and the one real shadow (`0 12px 32px rgba(0,0,0,0.45)`).
 
+## Logo and icon
+
+- The full lockup (the "A" with the airplane, then "joanneum AERONAUTICS")
+  is the logo: `static/logo_joanneum_aeronautics_negativ.svg`, white and
+  cyan for dark backgrounds, 52px tall in the navbar.
+- Where there is only room for a square -- browser tab, phone home screen,
+  an avatar -- the "A" with the airplane alone, on black:
+  `static/favicon.svg` (cut from the lockup's own shapes, so it is the same
+  drawing), with `favicon-32.png` and `apple-touch-icon.png` (180px) for
+  browsers that want a picture. The same files can be uploaded as the
+  forum's favicon and touch icon.
+
 ## Wording and formats
 
 - English only.

@@ -562,3 +562,14 @@ def test_states_are_shown_as_status_labels_not_bootstrap_badges():
         if "emails" not in path.parts and 'class="badge' in path.read_text()
     ]
     assert not offenders, "use status-label with a status-* tone: " + ", ".join(offenders)
+
+
+def test_the_tab_icon_is_the_square_mark(app, client):
+    """The full logo was unreadable at tab size."""
+    body = client.get("/login").get_data(as_text=True)
+    static = Path(app.static_folder)
+
+    for name in ("favicon.svg", "favicon-32.png", "apple-touch-icon.png"):
+        assert f"/static/{name}" in body
+        assert (static / name).is_file()
+    assert "logo_joanneum_aeronautics_negativ.svg\" type=\"image/svg+xml\"" not in body
