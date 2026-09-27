@@ -36,7 +36,7 @@ from .forum import (
 )
 from .identity import rotate_email_verification_nonce
 from .membership import sync_member_active_state
-from .outbox import register_handler
+from .outbox import enqueue_forum_sync, register_handler
 from .notifications import (
     EMAIL_JOB_STATUS_CANCELED,
     EMAIL_JOB_STATUS_EXHAUSTED,
@@ -403,6 +403,11 @@ def _handle_forum_discard_replaced_work(item):
     current_app.logger.info(
         "Removed the forum account left behind by a reconnection: %s", remote_user_id
     )
+    # And now the account they kept can be given their address -- which the one
+    # just removed was holding, so a sync that ran before this could not.
+    kept = item.user
+    if kept is not None and kept.member is not None:
+        enqueue_forum_sync(kept.member, reason="forum_replaced_account_removed")
 
 
 register_handler(ExternalWorkItem.KIND_FORUM_SYNC, _handle_forum_sync_work)

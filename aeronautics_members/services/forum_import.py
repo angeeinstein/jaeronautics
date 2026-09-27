@@ -33,7 +33,7 @@ from ..db_models import ImportedForumProfile, User, db
 from ..forum_service import get_forum_storage_dir, normalize_avatar_image
 from . import ValidationError
 from .clock import get_now_utc
-from .outbox import enqueue_forum_discard_replaced
+from .outbox import enqueue_forum_discard_replaced, enqueue_forum_sync
 
 SOURCE_MYBB = "mybb"
 
@@ -236,10 +236,13 @@ def _blocking_relationships(user):
     # below instead.
     if user.imported_forum_profile is not None:
         blocking.append("an imported forum profile")
-    if user.forum_avatar_submissions:
-        blocking.append("avatar submissions")
-    if user.requested_profile_changes or user.reviewed_profile_changes:
-        blocking.append("profile change requests")
+    # Photo uploads and identity change requests are not listed either. Both
+    # hang off the membership, which moves across whole, and name the account
+    # only through plain columns the sweep below repoints. The account page
+    # offers the photo upload before the university address is confirmed, so
+    # refusing here stranded anybody who did things in that order -- with no
+    # way to find out why. A later approved upload still wins over the old
+    # forum's picture: it is what gets sent as the avatar.
     return blocking
 
 
@@ -379,6 +382,15 @@ def claim_archived_account(user):
     # membership, and the old forum hanging off it as history.
     db.session.delete(user)
     db.session.flush()
+
+    # Nothing else tells the forum. The account there still carries the old
+    # forum's placeholder address and none of this person's groups, and every
+    # state the portal compares says all is well: the membership did not
+    # change, only whose row it hangs off. Queued, like the discard above; the
+    # discard queues another once the leftover account is gone, since that one
+    # holds the address this sync is about to hand over.
+    if member is not None:
+        enqueue_forum_sync(member, reason="forum_account_reclaimed")
 
     current_app.logger.info(
         "Forum account %s claimed by member account %s (archived user %s)",
