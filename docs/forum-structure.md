@@ -341,20 +341,25 @@ never a member. Showing them an empty forum is how "the forum is broken"
 reaches the committee's inbox, so the states have groups of their own and the
 groups can be granted something small.
 
-They need different things said to them, and Discourse cannot hide one topic
-from one group inside a shared category — only whole categories. So:
+Only one of them actually reaches the forum. Signing in to it needs an active
+membership, so somebody whose membership ran out cannot start a forum session
+at all: following a forum link lands them on the portal, which says their
+membership is not active and offers **Rejoin** on the account page. That is
+where lapsed members are told what to do, not a forum category.
+`membership-inactive` still matters for one case -- a forum session that was
+already open when the membership ended moves into it -- so grant it nothing
+beyond what everyone may see.
+
+Somebody awaiting a photograph does sign in, and needs telling what is
+missing:
 
 | Category | Granted to | What is in it |
 |---|---|---|
 | About the association | everyone, or all logged-in groups | who this is, what the forum is for |
 | Getting started | `members-onboarding` | how to upload a photograph and how long approval takes |
-| Membership | `membership-inactive` | how to renew, who to ask |
 
-Starting with **one** category granted to both of the latter two groups is also
-a fair answer — two pinned topics, and each person reads the one that applies.
-Splitting it later is a new category and one changed grant. What is not a fair
-answer is granting them nothing, which is the current default and reads as a
-broken site.
+What is not a fair answer is granting `members-onboarding` nothing, which is
+the current default and reads as a broken site.
 
 ### Adding a kind of person later
 
