@@ -17,6 +17,9 @@ NGINX_CONF = REPO / "deploy" / "nginx" / "aeronautics.conf"
 INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>", re.I)
 # A style="" attribute, which style-src blocks just as it blocks inline scripts.
 INLINE_STYLE = re.compile(r"<[^>]+\sstyle\s*=\s*[\"']", re.I)
+# An onclick="" / oninput="" handler -- in HTML or passed to a form field in
+# Jinja -- which script-src blocks too.
+INLINE_HANDLER = re.compile(r"(?<![\w-])on[a-z]+\s*=\s*[\"']", re.I)
 
 
 def test_no_inline_scripts_in_templates():
@@ -29,6 +32,22 @@ def test_no_inline_scripts_in_templates():
     assert not offenders, (
         "Inline <script> blocks are blocked by the production CSP; move the code "
         "into aeronautics_members/static/ and reference it with url_for('static', ...):\n"
+        + "\n".join(offenders)
+    )
+
+
+def test_no_inline_event_handlers_in_templates():
+    offenders = []
+    for path in TEMPLATES.rglob("*.html"):
+        if path.is_relative_to(EMAIL_TEMPLATES):
+            continue
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            if INLINE_HANDLER.search(line):
+                offenders.append(f"{path.relative_to(TEMPLATES)}:{lineno}")
+
+    assert not offenders, (
+        "Inline event handlers are blocked by the production CSP and never run; "
+        "attach the listener from a script in aeronautics_members/static/:\n"
         + "\n".join(offenders)
     )
 

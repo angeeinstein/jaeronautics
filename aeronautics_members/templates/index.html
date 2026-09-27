@@ -99,7 +99,7 @@
             </div>
             <div class="col-md-6" data-year-group-field>
                 <label for="year_group" class="form-label">{{ _(form.year_group.label.text) }}<span class="text-danger">*</span></label>
-                {{ form.year_group(class="form-control", placeholder="e.g. LAV25", oninput="this.value = this.value.toUpperCase()", pattern="[A-Z]+[0-9]{2}", title=_("Invalid format. Please use uppercase letters followed by two numbers, like LAV25.")) }}
+                {{ form.year_group(class="form-control", placeholder="e.g. LAV25", pattern="[A-Za-z]+[0-9]{2}", title=_("Invalid format. Please use letters followed by two numbers, like LAV25.")) }}
             </div>
         </div>
 

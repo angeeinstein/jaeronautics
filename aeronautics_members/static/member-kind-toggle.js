@@ -51,6 +51,21 @@
 
         chooser.addEventListener("change", apply);
         apply();
+
+        if (input) {
+            // Year groups are written in capitals (LAV25). The server accepts
+            // "lav25" as well; this only shows what will be kept. Here rather
+            // than an oninput="" attribute, which the CSP blocks.
+            input.addEventListener("input", function () {
+                var upper = input.value.toUpperCase();
+                if (upper !== input.value) {
+                    var start = input.selectionStart;
+                    var end = input.selectionEnd;
+                    input.value = upper;
+                    input.setSelectionRange(start, end);
+                }
+            });
+        }
     }
 
     document.addEventListener("DOMContentLoaded", function () {

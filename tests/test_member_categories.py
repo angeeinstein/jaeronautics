@@ -112,12 +112,25 @@ class TestTheForm:
     @pytest.mark.parametrize("category", OFFERED_A_YEAR_GROUP)
     def test_a_category_that_is_offered_one_still_has_to_spell_it_right(self, app, category):
         form = MembershipForm(
-            formdata=_signup_data(member_category=category, year_group="lav25"),
+            formdata=_signup_data(member_category=category, year_group="LAV2025"),
             meta={"csrf": False},
         )
 
         assert form.validate() is False
         assert "year_group" in form.errors
+
+    @pytest.mark.parametrize("category", OFFERED_A_YEAR_GROUP)
+    def test_small_letters_are_kept_as_capitals(self, app, category):
+        """"lav25" is the same year group as LAV25. The browser refused it
+        with a format error, because the script meant to capitalise it as it
+        was typed sat in an attribute the CSP blocks."""
+        form = MembershipForm(
+            formdata=_signup_data(member_category=category, year_group="lav25"),
+            meta={"csrf": False},
+        )
+
+        assert form.validate() is True, form.errors
+        assert form.year_group.data == "LAV25"
 
     def test_an_alumnus_may_leave_it_blank(self, app):
         """Somebody who studied here in 2006 may genuinely not know it.

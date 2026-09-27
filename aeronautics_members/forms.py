@@ -128,7 +128,7 @@ def resolve_member_category(form):
 
 YEAR_GROUP_VALIDATOR = Regexp(
     r"^[A-Z]+[0-9]{2}$",
-    message=_l("Invalid format. Please use uppercase letters followed by two numbers, like LAV25."),
+    message=_l("Invalid format. Please use letters followed by two numbers, like LAV25."),
 )
 
 
@@ -164,6 +164,8 @@ class YearGroupRequirement:
             field.data = None
             raise StopValidation()
 
+        # Year groups are written in capitals (LAV25); "lav25" means the same.
+        field.data = value.upper()
         return  # let Length and the format check run
 
 
