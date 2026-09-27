@@ -126,6 +126,18 @@ function inspect() {
           }, entry.submit),
         ]);
       }
+      // Times of day ("Uploaded 2026-09-27 08:30", "Last synced ...") differ
+      // from one run to the next; zeroed, they don't show up as a change.
+      await page.evaluate(() => {
+        const clock = /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?|\d{2}\.\d{2}\.\d{4},? \d{2}:\d{2}(:\d{2})?/g;
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (clock.test(node.nodeValue)) {
+            node.nodeValue = node.nodeValue.replace(clock, (time) => time.replace(/\d/g, '0'));
+          }
+          clock.lastIndex = 0;
+        }
+      });
       const shot = `${entry.name}__${mode.suffix}`;
       await page.screenshot({ path: path.join(outDir, `${shot}.png`), fullPage: true });
       if (!mode.suffix.endsWith('-dark')) findings[shot] = await page.evaluate(inspect);
