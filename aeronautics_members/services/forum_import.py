@@ -182,6 +182,21 @@ def find_claimable_profile(email):
     return matches[0] if len(matches) == 1 else None
 
 
+def old_forum_account_waiting(member):
+    """Whether an old forum account waits for this member's university address.
+
+    True until they confirm it, which is what reconnects them. Says only that
+    one exists: until the address is confirmed, whoever typed it has not shown
+    it is theirs, so which account it is stays unsaid.
+    """
+    user = getattr(member, "user", None)
+    if member is None or user is None or user.imported_forum_profile is not None:
+        return False
+    if member.email_work_is_verified:
+        return False
+    return find_claimable_profile(member.email_work) is not None
+
+
 def verified_addresses_for(user):
     """Every address this person has actually proved they can read.
 

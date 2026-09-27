@@ -34,7 +34,7 @@ from .forum import (
     get_forum_service,
     sync_member_forum_state,
 )
-from .forum_import import find_claimable_profile, imported_email_for
+from .forum_import import imported_email_for, old_forum_account_waiting
 from .identity import rotate_email_verification_nonce
 from .membership import format_membership_date_display, sync_member_active_state
 from .outbox import enqueue_forum_sync, pending_count, process_pending, register_handler
@@ -104,11 +104,7 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
     # be one they never use. Nor is the old one named: until the address is
     # confirmed, whoever typed it has not shown it is theirs, and naming the
     # account would tell them whose it is.
-    old_forum_account_waiting = (
-        member.user is not None
-        and member.user.imported_forum_profile is None
-        and find_claimable_profile(member.email_work) is not None
-    )
+    reconnect_waiting = old_forum_account_waiting(member)
 
     forum_service = get_forum_service()
     forum_entry_url = None
@@ -122,7 +118,7 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
         template_name=template_name,
         first_name=member.first_name,
         suggested_username=suggested_username,
-        old_forum_account_waiting=old_forum_account_waiting,
+        old_forum_account_waiting=reconnect_waiting,
         membership_ends_on_display=_display_date(member.membership_ends_on),
         renewal_due_on_display=_display_date(member.renewal_due_on),
         account_url=build_public_url("account.account"),

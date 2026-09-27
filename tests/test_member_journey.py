@@ -23,11 +23,12 @@ class FakeForum:
     settings = {"forum_avatar_max_bytes": 5_000_000, "forum_onboarding_path": "/",
                 "forum_avatar_allowed_types": ["jpg", "png"]}
     handoff_error = None
+    photo_approved = True
 
     def is_enabled(self): return True
     def is_ready(self): return True
     def get_pending_submission(self, member): return None
-    def get_current_approved_submission(self, member): return object()
+    def get_current_approved_submission(self, member): return object() if self.photo_approved else None
     def get_reclaimed_avatar(self, member): return None
     def get_latest_submission(self, member): return None
     def get_upload_request_limit(self): return 10_000_000
@@ -176,3 +177,28 @@ class TestWhileASepaDebitClears:
         assert "usually takes a few business days" in body
         assert "starts as soon as your payment has cleared" in body
         assert "not active" not in body
+
+
+class TestAReturningStudentBeforeConfirming:
+    """Their old account -- username, posts, usually a picture -- comes back
+    when they confirm the university address. Until then the page asked for a
+    photo and showed a new username they would never use."""
+
+    def test_they_are_told_to_confirm_not_to_upload(self, app, client, forum, monkeypatch):
+        from aeronautics_members.services.forum_import import import_forum_people
+
+        forum.photo_approved = False
+        import_forum_people([{"source_user_id": "9", "source_username": "BackB_L21",
+                              "source_email": "back@edu.fh-joanneum.at", "year_group": "LAV21"}])
+        member = _paid_member(client, verified=True)
+        member.email_work = "back@edu.fh-joanneum.at"
+        member.user.forum_username = "BackB_L21-2"
+        db.session.commit()
+        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+
+        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+        assert "Confirm your university email address to get your old account back" in body
+        assert "Upload Profile Picture" not in body
+        assert "BackB_L21-2" not in body   # the username they are about to lose
+        assert "BackB_L21" not in body     # nor the one that is not proven theirs yet

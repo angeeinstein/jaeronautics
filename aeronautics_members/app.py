@@ -231,6 +231,7 @@ from .services.notifications import (  # noqa: E402
 )
 from .services.forum_import import (  # noqa: E402
     import_forum_people,
+    old_forum_account_waiting,
     load_people,
 )
 from .services.forum_profiles import (  # noqa: E402
@@ -1290,6 +1291,7 @@ def build_forum_context(member):
     # here. It is not a ForumAvatarSubmission -- nobody submitted it for review
     # -- so nothing else in this function would notice it.
     reclaimed_avatar = service.get_reclaimed_avatar(member) if member else None
+    reconnect_waiting = old_forum_account_waiting(member)
 
     status_key = "disabled"
     status_message = _("The forum integration is not enabled yet.")
@@ -1331,6 +1333,13 @@ def build_forum_context(member):
         status_message = _("Your forum access is ready, with the profile picture from the old forum.")
         can_enter_forum = service.is_ready()
         can_upload_avatar = True  # still free to replace it
+    elif reconnect_waiting:
+        # Their old account comes back once they confirm the university
+        # address -- with its username and, usually, its picture. Asking for a
+        # photo first would be asking for one they may not need.
+        status_key = "reconnect_waiting"
+        status_message = _("You were on the old forum. Confirm your university email address to get "
+                           "your old account back, with its username and posts.")
     elif pending_submission is not None:
         status_key = "pending_avatar"
         status_message = _("Your profile picture is under review. You will get full forum access as soon as it is approved.")
@@ -1356,6 +1365,7 @@ def build_forum_context(member):
         "status_message": status_message,
         "can_upload_avatar": can_upload_avatar,
         "can_enter_forum": can_enter_forum,
+        "reconnect_waiting": reconnect_waiting,
         "entry_url": url_for("forum.forum_entry"),
         "forum_error": forum_account.last_error if forum_account is not None else None,
         "avatar_max_bytes": avatar_max_bytes,

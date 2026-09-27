@@ -21,7 +21,7 @@
                 <p class="text-muted">{{ _('Use this page to complete the steps required before member content becomes visible in the forum.') }}</p>
                 <dl class="row">
                     <dt class="col-sm-4">{{ _('Forum Username') }}</dt>
-                    <dd class="col-sm-8">{{ current_user.forum_username or _('Not set') }}</dd>
+                    <dd class="col-sm-8">{% if forum_context.reconnect_waiting %}{{ _('Your old one, once reconnected') }}{% else %}{{ current_user.forum_username or _('Not set') }}{% endif %}</dd>
                     <dt class="col-sm-4">{{ _('Status') }}</dt>
                     <dd class="col-sm-8">{{ forum_context.status_message }}</dd>
                 </dl>
@@ -30,7 +30,7 @@
                     <div class="alert alert-warning">{{ forum_context.forum_error }}</div>
                 {% endif %}
 
-                {% if forum_context.status_key == 'payment_processing' %}
+                {% if forum_context.status_key in ['payment_processing', 'reconnect_waiting'] %}
                     {# The status line above says it all. #}
                 {% elif forum_context.status_key == 'inactive_membership' %}
                     <div class="alert alert-secondary mb-0">{{ _('Your forum access will become available again once your membership is active.') }}</div>
