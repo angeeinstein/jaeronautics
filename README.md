@@ -41,7 +41,7 @@ jaeronautics/
 |-- tests/                  # pytest suite (billing math, webhook, page rendering)
 |-- install.sh              # Linux install/update/repair/uninstall entrypoint
 |-- deploy/                 # Example nginx and systemd files
-|-- docs/                   # Small operational notes
+|-- docs/                   # Operational notes; design.md is the design concept
 |-- .env.example            # Safe environment template
 |-- requirements.txt
 |-- requirements-dev.txt    # Test/development dependencies

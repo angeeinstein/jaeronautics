@@ -5,9 +5,73 @@
    site's colours are handed to Bootstrap as its variables below; components
    pick them up from there. !important is kept for the few places where the
    thing to beat is itself !important (Bootstrap utilities, the browser's
-   autofill colours). */
+   autofill colours).
+
+   docs/design.md is the design concept this implements -- and says where and
+   why it differs from the Claude Design proposal it started from. */
+
+/* ---- Fonts, served from here (no Google Fonts request) --------------------
+   Inter for all text, Archivo for headings, IBM Plex Mono for figures and
+   code. Latin plus Latin Extended, which covers names like Popović. SIL Open
+   Font License; see fonts/LICENSE-*.txt. */
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url("fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url("fonts/inter-latin-ext-wght-normal.woff2") format("woff2-variations");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: "Archivo";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url("fonts/archivo-latin-wght-normal.woff2") format("woff2-variations");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: "Archivo";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url("fonts/archivo-latin-ext-wght-normal.woff2") format("woff2-variations");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url("fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 500;
+    src: url("fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+}
 
 :root {
+    --ja-font-body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --ja-font-display: "Archivo", "Inter", system-ui, sans-serif;
+    --ja-font-mono: "IBM Plex Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
     --ja-bg: #161718;
     --ja-surface: #1f2123;
     --ja-surface-alt: #26292b;
@@ -23,9 +87,15 @@
     --ja-accent-active: #00c2df;
     --ja-accent-text: #081114;
     --ja-accent-soft: rgba(0, 223, 255, 0.12);
-    --ja-accent-ring: rgba(0, 223, 255, 0.18);
+    --ja-accent-ring: rgba(0, 223, 255, 0.25);
+    --ja-link: #66ecff;
+    --ja-link-hover: #33e7ff;
     --ja-danger: #ff6b6b;
+    --ja-danger-strong: #dc3545;
     --ja-warning: #f2b84b;
+    --ja-success: #28a745;
+    /* The one shadow there is: on things that float over the page. */
+    --ja-shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 :root[data-bs-theme=dark] {
@@ -42,14 +112,21 @@
     --bs-tertiary-bg-rgb: 38, 41, 43;
     --bs-border-color: var(--ja-border);
     --bs-border-color-translucent: var(--ja-border);
+    --bs-body-font-family: var(--ja-font-body);
+    --bs-font-sans-serif: var(--ja-font-body);
+    --bs-font-monospace: var(--ja-font-mono);
 
     --bs-primary: var(--ja-accent);
     --bs-primary-rgb: 0, 223, 255;
     --bs-warning: var(--ja-warning);
     --bs-warning-rgb: 242, 184, 75;
-    --bs-link-color: var(--ja-accent);
-    --bs-link-color-rgb: 0, 223, 255;
-    --bs-link-hover-color: var(--ja-accent-hover);
+    --bs-success: var(--ja-success);
+    --bs-success-rgb: 40, 167, 69;
+    --bs-danger: var(--ja-danger-strong);
+    --bs-danger-rgb: 220, 53, 69;
+    --bs-link-color: var(--ja-link);
+    --bs-link-color-rgb: 102, 236, 255;
+    --bs-link-hover-color: var(--ja-link-hover);
     --bs-link-hover-color-rgb: 51, 231, 255;
     --bs-focus-ring-color: var(--ja-accent-ring);
 
@@ -57,8 +134,8 @@
     --bs-info-bg-subtle: var(--ja-accent-soft);
     --bs-info-border-subtle: rgba(0, 223, 255, 0.35);
     --bs-info-text-emphasis: var(--ja-text);
-    --bs-success-bg-subtle: var(--ja-accent-soft);
-    --bs-success-border-subtle: rgba(0, 223, 255, 0.35);
+    --bs-success-bg-subtle: rgba(40, 167, 69, 0.14);
+    --bs-success-border-subtle: rgba(40, 167, 69, 0.55);
     --bs-success-text-emphasis: var(--ja-text);
     --bs-secondary-bg-subtle: rgba(170, 180, 187, 0.10);
     --bs-secondary-border-subtle: rgba(170, 180, 187, 0.28);
@@ -89,11 +166,36 @@ a {
     text-decoration: none;
 }
 
+/* Headings in Archivo: the two top levels bold, the rest semibold. Sizes stay
+   Bootstrap's, which shrink on a phone. */
+h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5, h6, .h6,
+.display-1, .display-2, .display-3, .display-4, .display-5 {
+    font-family: var(--ja-font-display);
+    font-weight: 600;
+}
+
+h1, .h1, h2, .h2,
+.display-1, .display-2, .display-3, .display-4, .display-5 {
+    font-weight: 700;
+}
+
 /* A card's title sits in a bar beside its buttons: sized to fit there, not
    at the heading level's full size. */
 .card-header :is(h1, h2, h3, h4, h5, h6) {
     font-size: 1.125rem;
     font-weight: 600;
+}
+
+/* Figures -- the counts on the admin dashboards -- in the mono face. */
+.display-6 {
+    font-family: var(--ja-font-mono);
+    font-weight: 500;
+}
+
+.form-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.4rem;
 }
 
 hr {
@@ -110,8 +212,8 @@ hr {
 
 .app-navbar {
     --bs-navbar-color: var(--ja-text);
-    --bs-navbar-hover-color: var(--ja-accent);
-    --bs-navbar-active-color: var(--ja-text);
+    --bs-navbar-hover-color: var(--ja-text);
+    --bs-navbar-active-color: var(--ja-accent);
     --bs-navbar-brand-color: var(--ja-text);
     --bs-navbar-brand-hover-color: var(--ja-text);
     --bs-navbar-brand-padding-y: 0.1rem;
@@ -170,6 +272,44 @@ hr {
     letter-spacing: 0.01em;
 }
 
+/* Where you are, and where you are pointing: the current section is cyan
+   with a thick cyan line under it; a link under the pointer stays white and
+   gets a thin white line with a soft glow -- the one place the brand allows
+   a glow. The two never look alike. */
+.app-navbar .nav-link {
+    position: relative;
+    transition: color 0.16s ease-out, text-shadow 0.16s ease-out;
+}
+
+.app-navbar .nav-link::before {
+    content: "";
+    position: absolute;
+    left: 0.45rem;
+    right: 0.45rem;
+    bottom: 0.3rem;
+    height: 1px;
+    background-color: var(--ja-text);
+    opacity: 0;
+    transition: opacity 0.16s ease-out;
+}
+
+.app-navbar .nav-link:hover:not(.active),
+.app-navbar .nav-link:focus-visible:not(.active) {
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+}
+
+.app-navbar .nav-link:hover:not(.active)::before,
+.app-navbar .nav-link:focus-visible:not(.active)::before {
+    opacity: 1;
+    box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.55);
+}
+
+.app-navbar .nav-link.active::before {
+    height: 3px;
+    background-color: var(--ja-accent);
+    opacity: 1;
+}
+
 .navbar .dropdown-toggle::after {
     margin-left: 0.4rem;
 }
@@ -179,6 +319,7 @@ hr {
 }
 
 .dropdown-menu {
+    box-shadow: var(--ja-shadow-overlay);
     --bs-dropdown-bg: var(--ja-surface-alt);
     --bs-dropdown-border-color: var(--ja-border);
     --bs-dropdown-link-color: var(--ja-text);
@@ -189,6 +330,30 @@ hr {
 /* ---- Buttons --------------------------------------------------------------
    As in the design system: primary is the accent with dark text, secondary
    grey, danger red, outline an accent border. */
+
+/* Semibold, and as tall as the fields beside them: 2.25 / 3 / 3.5rem. A
+   minimum rather than a fixed height, so a label that wraps on a phone
+   still fits. */
+.btn:not(.btn-link) {
+    --bs-btn-font-weight: 600;
+    --bs-btn-padding-x: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+}
+
+.btn-sm:not(.btn-link) {
+    --bs-btn-padding-x: 0.9rem;
+    --bs-btn-font-size: 0.875rem;
+    min-height: 2.25rem;
+}
+
+.btn-lg:not(.btn-link) {
+    --bs-btn-padding-x: 1.75rem;
+    --bs-btn-font-size: 1.125rem;
+    min-height: 3.5rem;
+}
 
 .btn-primary {
     --bs-btn-color: var(--ja-accent-text);
@@ -251,8 +416,8 @@ textarea.form-control {
 .form-control:focus,
 .form-select:focus {
     background-color: var(--ja-surface-input);
-    border-color: var(--ja-accent);
-    box-shadow: 0 0 0 0.14rem var(--ja-accent-ring);
+    border-color: var(--ja-accent-hover);
+    box-shadow: 0 0 0 2px var(--ja-accent-ring);
 }
 
 :root[data-bs-theme=dark] .form-select {
@@ -304,8 +469,8 @@ textarea.form-control {
 }
 
 .form-check-input:focus {
-    border-color: var(--ja-accent);
-    box-shadow: 0 0 0 0.2rem var(--ja-accent-ring);
+    border-color: var(--ja-accent-hover);
+    box-shadow: 0 0 0 2px var(--ja-accent-ring);
 }
 
 /* ---- Cards, lists, tables ------------------------------------------------- */
@@ -393,6 +558,10 @@ textarea.form-control {
     --bs-modal-border-color: var(--ja-border);
     --bs-modal-header-border-color: var(--ja-border);
     --bs-modal-footer-border-color: var(--ja-border);
+}
+
+.modal-content {
+    box-shadow: var(--ja-shadow-overlay);
 }
 
 .modal-header,

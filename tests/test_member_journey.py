@@ -520,3 +520,25 @@ class TestDatesLookTheSameEverywhere:
             if "strftime" in path.read_text() or "UTC" in path.read_text()
         ]
         assert not offenders, "use |date_display or |datetime_display: " + ", ".join(offenders)
+
+
+def test_everything_the_stylesheet_loads_is_there(app):
+    """A font file left out of a deploy falls back silently to another face."""
+    import re
+
+    static = Path(app.static_folder)
+    stylesheet = (static / "style.css").read_text()
+    referenced = re.findall(r'url\("(fonts/[^"]+)"\)', stylesheet)
+
+    assert referenced, "the fonts are expected to come from static/fonts"
+    assert [name for name in referenced if not (static / name).is_file()] == []
+
+
+def test_the_navbar_marks_the_section_you_are_in(app, client):
+    member = make_member(email="nav@example.com")
+    with client.session_transaction() as session:
+        session["_user_id"] = str(member.user_id)
+
+    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+    assert 'class="nav-link active" aria-current="page" href="/account"' in body
