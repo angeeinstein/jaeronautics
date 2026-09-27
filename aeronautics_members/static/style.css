@@ -339,6 +339,48 @@ hr {
     --bs-dropdown-link-hover-bg: var(--ja-accent-soft);
 }
 
+/* ---- Page frame and footer ---------------------------------------------------
+   The footer sits at the bottom of the window on short pages and after the
+   content on long ones: the page is a column, the content takes what is left. */
+
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.app-shell > .container {
+    flex: 1 0 auto;
+}
+
+.site-footer {
+    margin-top: 3rem;
+    padding: 1.25rem 0 1.5rem;
+    border-top: 1px solid var(--ja-border);
+    color: var(--ja-muted);
+    font-size: 0.875rem;
+}
+
+.site-footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.site-footer a {
+    color: var(--ja-muted);
+    text-decoration: none;
+}
+
+.site-footer a:hover,
+.site-footer a:focus-visible {
+    color: var(--ja-link);
+    text-decoration: underline;
+}
+
 /* ---- Buttons --------------------------------------------------------------
    As in the design system: primary is the accent with dark text, secondary
    grey, danger red, outline an accent border. */

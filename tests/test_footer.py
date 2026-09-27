@@ -1,0 +1,51 @@
+"""The footer on every page, and where its links lead."""
+import pytest
+
+from conftest import make_member
+from aeronautics_members import config
+
+
+def _login(client, user_id):
+    with client.session_transaction() as session:
+        session["_user_id"] = str(user_id)
+
+
+@pytest.mark.parametrize("path", ["/", "/login", "/legal", "/forgot-password"])
+def test_every_public_page_has_it(client, path):
+    body = client.get(path).get_data(as_text=True)
+
+    assert '<footer class="site-footer">' in body
+    assert "mailto:office@joanneum-aeronautics.at" in body
+    assert "Impressum" in body
+    assert "Privacy" in body
+    assert "Statutes &amp; rules" in body or "Statutes & rules" in body
+
+
+def test_signed_in_pages_have_it_too(client, app):
+    member = make_member(email="footer@example.com")
+    _login(client, member.user.id)
+
+    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+    assert '<footer class="site-footer">' in body
+
+
+def test_until_configured_the_links_lead_to_the_website_and_the_legal_page(client):
+    body = client.get("/login").get_data(as_text=True)
+    footer = body.split('<footer class="site-footer">')[1]
+
+    assert footer.count('href="https://joanneum-aeronautics.at"') == 3  # Impressum, privacy, website
+    assert 'href="/legal"' in footer
+
+
+def test_configured_addresses_are_used(client, monkeypatch):
+    monkeypatch.setattr(config, "IMPRESSUM_URL", "https://example.org/impressum")
+    monkeypatch.setattr(config, "PRIVACY_URL", "https://example.org/privacy")
+    monkeypatch.setattr(config, "STATUTES_URL", "https://example.org/statutes")
+
+    footer = client.get("/login").get_data(as_text=True).split('<footer class="site-footer">')[1]
+
+    assert 'href="https://example.org/impressum"' in footer
+    assert 'href="https://example.org/privacy"' in footer
+    assert 'href="https://example.org/statutes"' in footer
+    assert 'href="/legal"' not in footer

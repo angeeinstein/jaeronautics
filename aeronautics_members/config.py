@@ -54,6 +54,16 @@ STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
 STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 PUBLIC_BASE_URL = normalize_public_base_url(os.getenv("PUBLIC_BASE_URL"))
+
+# The footer on every page. Where the Impressum, the privacy notice and the
+# statutes will finally live is not settled yet: until IMPRESSUM_URL and
+# PRIVACY_URL are set both lead to the association's website, and until
+# STATUTES_URL is set the statutes lead to this portal's own legal page.
+ASSOCIATION_WEBSITE_URL = os.getenv("ASSOCIATION_WEBSITE_URL", "https://joanneum-aeronautics.at")
+IMPRESSUM_URL = os.getenv("IMPRESSUM_URL") or ASSOCIATION_WEBSITE_URL
+PRIVACY_URL = os.getenv("PRIVACY_URL") or ASSOCIATION_WEBSITE_URL
+STATUTES_URL = os.getenv("STATUTES_URL") or None
+CONTACT_EMAIL = os.getenv("CONTACT_EMAIL", "office@joanneum-aeronautics.at")
 ADDITIONAL_ALLOWED_HOSTS = os.getenv("ADDITIONAL_ALLOWED_HOSTS", "")
 STRIPE_SETTING_KEYS = ("stripe_publishable_key", "stripe_secret_key", "stripe_price_id", "stripe_webhook_secret")
 DEFAULT_STRIPE_SETTINGS = {
