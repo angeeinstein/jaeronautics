@@ -163,7 +163,7 @@
                     </dd>
                     {% if user_record.is_disabled %}
                         <dt class="col-sm-4">{{ _('Deactivated On') }}</dt>
-                        <dd class="col-sm-8">{{ user_record.disabled_at.strftime('%Y-%m-%d') }}</dd>
+                        <dd class="col-sm-8">{{ user_record.disabled_at|date_display }}</dd>
                         <dt class="col-sm-4">{{ _('Reason') }}</dt>
                         <dd class="col-sm-8">{{ user_record.disabled_reason or _('None recorded') }}</dd>
                     {% endif %}
@@ -231,12 +231,12 @@
                         <dt class="col-sm-5">{{ _('Posts') }}</dt>
                         <dd class="col-sm-7">{{ archive.post_count if archive.post_count is not none else '-' }}</dd>
                         <dt class="col-sm-5">{{ _('Joined') }}</dt>
-                        <dd class="col-sm-7">{{ archive.joined_on.strftime('%Y-%m-%d') if archive.joined_on else '-' }}</dd>
+                        <dd class="col-sm-7">{{ archive.joined_on|date_display if archive.joined_on else '-' }}</dd>
                         <dt class="col-sm-5">{{ _('Last Posted') }}</dt>
-                        <dd class="col-sm-7">{{ archive.last_posted_on.strftime('%Y-%m-%d') if archive.last_posted_on else _('Never') }}</dd>
+                        <dd class="col-sm-7">{{ archive.last_posted_on|date_display if archive.last_posted_on else _('Never') }}</dd>
                         {% if archive.claimed_at %}
                             <dt class="col-sm-5">{{ _('Reconnected On') }}</dt>
-                            <dd class="col-sm-7">{{ archive.claimed_at.strftime('%Y-%m-%d') }}</dd>
+                            <dd class="col-sm-7">{{ archive.claimed_at|date_display }}</dd>
                         {% endif %}
                     </dl>
                 </div>
@@ -266,9 +266,9 @@
                         <dt class="col-sm-4">{{ _('Active') }}</dt>
                         <dd class="col-sm-8">{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
                         <dt class="col-sm-4">{{ _('Coverage Ends') }}</dt>
-                        <dd class="col-sm-8">{{ member.membership_ends_on.strftime('%Y-%m-%d') if member.membership_ends_on else '-' }}</dd>
+                        <dd class="col-sm-8">{{ member.membership_ends_on|date_display if member.membership_ends_on else '-' }}</dd>
                         <dt class="col-sm-4">{{ _('Next Renewal') }}</dt>
-                        <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('Not scheduled') }}{% else %}{{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else '-' }}{% endif %}</dd>
+                        <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('Not scheduled') }}{% else %}{{ member.renewal_due_on|date_display if member.renewal_due_on else '-' }}{% endif %}</dd>
                         <dt class="col-sm-4">{{ _('Auto-Renewal') }}</dt>
                         <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled for the end of the covered year.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
                     </dl>
@@ -303,7 +303,7 @@
                     <dt class="col-sm-5">{{ _('Latest Avatar') }}</dt>
                     <dd class="col-sm-7">{{ latest_forum_submission.status|replace('_', ' ')|title if latest_forum_submission else '-' }}</dd>
                     <dt class="col-sm-5">{{ _('Last Synced') }}</dt>
-                    <dd class="col-sm-7">{{ forum_account.last_synced_at.strftime('%Y-%m-%d %H:%M') if forum_account and forum_account.last_synced_at else '-' }}</dd>
+                    <dd class="col-sm-7">{{ forum_account.last_synced_at|datetime_display if forum_account and forum_account.last_synced_at else '-' }}</dd>
                 </dl>
                 {% if forum_context.forum_error %}
                     <div class="alert alert-warning mt-4 mb-3">{{ forum_context.forum_error }}</div>
@@ -341,7 +341,7 @@
                     <tbody>
                         {% for entry in recent_logs %}
                             <tr>
-                                <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ entry.created_at|datetime_display }}</td>
                                 <td>{{ entry.category|replace('_', ' ')|title }}</td>
                                 <td>{{ entry.event_type|replace('_', ' ')|title }}</td>
                                 <td>{{ entry.actor_user.email if entry.actor_user else '-' }}</td>
@@ -383,7 +383,7 @@
 
         {% if deletion_impact.already_erased %}
             <div class="alert alert-secondary mb-0">
-                {{ _('The personal data on this account was erased on %(date)s. The membership and payment record was kept.', date=user_record.deleted_at.strftime('%Y-%m-%d')) }}
+                {{ _('The personal data on this account was erased on %(date)s. The membership and payment record was kept.', date=user_record.deleted_at|date_display) }}
             </div>
         {% elif deletion_impact.is_self %}
             <div class="alert alert-secondary mb-0">

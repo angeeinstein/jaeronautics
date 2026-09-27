@@ -48,7 +48,7 @@
                     <tbody>
                         {% for entry in pagination.items %}
                             <tr>
-                                <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ entry.created_at|datetime_display }}</td>
                                 <td>{{ entry.category|replace('_', ' ')|title }}</td>
                                 <td>{{ entry.event_type|replace('_', ' ')|title }}</td>
                                 <td>{{ entry.actor_user.email if entry.actor_user else '-' }}</td>

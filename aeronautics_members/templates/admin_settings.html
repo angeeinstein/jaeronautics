@@ -185,10 +185,10 @@
                                                             <div class="small text-muted">{{ _('Rolling 24h cap: %(count)s', count=admin_general_state.get('daily_cap')) }}</div>
                                                         {% endif %}
                                                     </td>
-                                                    <td>{% if admin_general_state.get('next_allowed_at') %}{{ admin_general_state.get('next_allowed_at').strftime('%Y-%m-%d %H:%M UTC') }}{% else %}{{ _('Now') }}{% endif %}</td>
+                                                    <td>{% if admin_general_state.get('next_allowed_at') %}{{ admin_general_state.get('next_allowed_at')|datetime_display }}{% else %}{{ _('Now') }}{% endif %}</td>
                                                     <td>
                                                         {% if admin_general_state.get('failure_backoff_until') %}
-                                                            {{ admin_general_state.get('failure_backoff_until').strftime('%Y-%m-%d %H:%M UTC') }}
+                                                            {{ admin_general_state.get('failure_backoff_until')|datetime_display }}
                                                         {% else %}
                                                             -
                                                         {% endif %}
@@ -211,10 +211,10 @@
                                                             <div class="small text-muted">{{ _('Rolling 24h cap: %(count)s', count=admin_error_state.get('daily_cap')) }}</div>
                                                         {% endif %}
                                                     </td>
-                                                    <td>{% if admin_error_state.get('next_allowed_at') %}{{ admin_error_state.get('next_allowed_at').strftime('%Y-%m-%d %H:%M UTC') }}{% else %}{{ _('Now') }}{% endif %}</td>
+                                                    <td>{% if admin_error_state.get('next_allowed_at') %}{{ admin_error_state.get('next_allowed_at')|datetime_display }}{% else %}{{ _('Now') }}{% endif %}</td>
                                                     <td>
                                                         {% if admin_error_state.get('failure_backoff_until') %}
-                                                            {{ admin_error_state.get('failure_backoff_until').strftime('%Y-%m-%d %H:%M UTC') }}
+                                                            {{ admin_error_state.get('failure_backoff_until')|datetime_display }}
                                                         {% else %}
                                                             -
                                                         {% endif %}
@@ -228,10 +228,10 @@
                                                     <td>{{ _('Yes') if user_status_state.get('enabled') else _('No') }}</td>
                                                     <td>{{ user_status_state.get('pending_count', 0) }}</td>
                                                     <td>{{ _('Immediate') }}</td>
-                                                    <td>{% if user_status_state.get('next_allowed_at') %}{{ user_status_state.get('next_allowed_at').strftime('%Y-%m-%d %H:%M UTC') }}{% else %}{{ _('Now') }}{% endif %}</td>
+                                                    <td>{% if user_status_state.get('next_allowed_at') %}{{ user_status_state.get('next_allowed_at')|datetime_display }}{% else %}{{ _('Now') }}{% endif %}</td>
                                                     <td>
                                                         {% if user_status_state.get('failure_backoff_until') %}
-                                                            {{ user_status_state.get('failure_backoff_until').strftime('%Y-%m-%d %H:%M UTC') }}
+                                                            {{ user_status_state.get('failure_backoff_until')|datetime_display }}
                                                         {% else %}
                                                             -
                                                         {% endif %}
@@ -657,7 +657,7 @@
                                             <tr>
                                                 <td>{{ job.recipient_email or '-' }}</td>
                                                 <td>{{ job.email_type|replace('_', ' ') }}</td>
-                                                <td>{{ job.last_attempted_at.strftime('%Y-%m-%d %H:%M') if job.last_attempted_at else '-' }}</td>
+                                                <td>{{ job.last_attempted_at|datetime_display if job.last_attempted_at else '-' }}</td>
                                                 <td class="text-muted">{{ (job.last_error or '-')|truncate(90) }}</td>
                                                 <td class="text-end text-nowrap">
                                                     <form method="POST" action="{{ url_for('admin.admin_resolve_undelivered_email', job_id=job.id, action='retry') }}" class="d-inline">
@@ -709,7 +709,7 @@
                                 {% elif update_state.local.branch %}
                                     <span class="text-muted">({{ update_state.local.branch }})</span>
                                 {% endif %}
-                                {% if update_state.local.committed_at %}<br><small class="text-muted">{{ update_state.local.committed_at }}</small>{% endif %}
+                                {% if update_state.local.committed_at %}<br><small class="text-muted">{{ update_state.local.committed_at|datetime_display }}</small>{% endif %}
                                 {% if update_state.local.subject %}<br><small class="text-muted">{{ update_state.local.subject }}</small>{% endif %}
                             </dd>
                             <dt class="col-sm-4">{{ _('Latest available') }}</dt>
@@ -779,7 +779,7 @@
                             <dd class="col-sm-8"><code>{{ update_state.rollback_point.short_revision }}</code></dd>
                             {% if update_state.rollback_point.recorded_at %}
                             <dt class="col-sm-4">{{ _('Recorded') }}</dt>
-                            <dd class="col-sm-8"><span class="text-muted">{{ update_state.rollback_point.recorded_at }}</span></dd>
+                            <dd class="col-sm-8"><span class="text-muted">{{ update_state.rollback_point.recorded_at|datetime_display }}</span></dd>
                             {% endif %}
                             {% if update_state.rollback_point.database_backup %}
                             <dt class="col-sm-4">{{ _('Database backup') }}</dt>
@@ -829,7 +829,7 @@
                             </dd>
                             {% if update_state.last_run.finished_at %}
                             <dt class="col-sm-4">{{ _('Finished') }}</dt>
-                            <dd class="col-sm-8"><small class="text-muted">{{ update_state.last_run.finished_at }}</small></dd>
+                            <dd class="col-sm-8"><small class="text-muted">{{ update_state.last_run.finished_at|datetime_display }}</small></dd>
                             {% endif %}
                             {% if update_state.last_run.revision_after %}
                             <dt class="col-sm-4">{{ _('Version after') }}</dt>

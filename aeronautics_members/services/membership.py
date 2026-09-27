@@ -17,7 +17,7 @@ sensibly) and new students arrive at the start of the academic year in October.
 keeps access until the coverage they bought runs out.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from .clock import (
@@ -60,6 +60,23 @@ def format_membership_date_display(value):
     "December 31, 2026" -- while the account page showed 2026-12-31.
     """
     return value.strftime("%d.%m.%Y")
+
+
+def format_datetime_display(value):
+    """A moment in the same format: 31.12.2026 14:05.
+
+    Takes a datetime or the ISO text the update runner writes. A time that
+    knows its zone is shown in UTC and says so; the database's own times are
+    UTC already and are shown as they are.
+    """
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    if value.tzinfo is not None and value.tzinfo.utcoffset(value) is not None:
+        return value.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+    return value.strftime("%d.%m.%Y %H:%M")
 
 
 def build_membership_cycle(join_date, annual_amount_cents):

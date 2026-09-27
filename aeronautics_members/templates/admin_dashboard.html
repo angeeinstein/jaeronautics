@@ -92,7 +92,7 @@
                                 <div class="fw-semibold">{{ entry.category|replace('_', ' ')|title }} / {{ entry.event_type|replace('_', ' ')|title }}</div>
                                 <div class="text-muted small">
                                     {{ entry.target_user.email if entry.target_user else (entry.target_member.email_private if entry.target_member else '-') }}
-                                    - {{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                    - {{ entry.created_at|datetime_display }}
                                 </div>
                             </a>
                         {% endfor %}

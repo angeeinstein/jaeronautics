@@ -350,6 +350,8 @@ from .services.settings import (  # noqa: E402
 from .services.membership import (  # noqa: E402
     RESUMABLE_MEMBER_STATUSES,
     build_membership_cycle,
+    format_datetime_display,
+    format_membership_date_display,
     invoice_coverage_year,
     member_has_active_access,
     set_member_membership_window,
@@ -1512,6 +1514,15 @@ def create_app(config_overrides=None):
             ),
             member_category_label=category_label,
         )
+
+    # Dates and times on every page in one format: 31.12.2026, 31.12.2026 14:05.
+    @app.template_filter("date_display")
+    def date_display_filter(value):
+        return format_membership_date_display(value) if value else ""
+
+    @app.template_filter("datetime_display")
+    def datetime_display_filter(value):
+        return format_datetime_display(value) if value else ""
 
     @app.template_filter("redact_audit_payload")
     def redact_audit_payload_filter(value):

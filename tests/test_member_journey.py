@@ -476,3 +476,34 @@ def test_creating_a_profile_twice_goes_on_to_payment(app, client, monkeypatch):
     response = client.post("/account/create-membership", data={"payment_method": "checkout"})
 
     assert response.headers["Location"] == "https://checkout.stripe.test/again"
+
+
+class TestDatesLookTheSameEverywhere:
+    """Members saw 31.12.2026 while admins saw 2026-12-31 for the same date."""
+
+    def test_a_date(self, app):
+        assert app.jinja_env.filters["date_display"](date(2026, 12, 31)) == "31.12.2026"
+
+    def test_a_stored_time(self, app):
+        from datetime import datetime
+
+        show = app.jinja_env.filters["datetime_display"]
+        assert show(datetime(2026, 12, 31, 14, 5)) == "31.12.2026 14:05"
+
+    def test_a_time_with_a_zone_is_shown_in_utc(self, app):
+        """The update runner writes ISO text in the server's own zone."""
+        show = app.jinja_env.filters["datetime_display"]
+        assert show("2026-09-27T10:30:00+02:00") == "27.09.2026 08:30 UTC"
+
+    def test_nothing_shows_nothing(self, app):
+        assert app.jinja_env.filters["date_display"](None) == ""
+        assert app.jinja_env.filters["datetime_display"](None) == ""
+
+    def test_no_page_formats_a_date_its_own_way(self):
+        templates = Path(__file__).resolve().parent.parent / "aeronautics_members" / "templates"
+        offenders = [
+            str(path.relative_to(templates))
+            for path in templates.rglob("*.html")
+            if "emails" not in path.parts and "strftime" in path.read_text()
+        ]
+        assert not offenders, "use |date_display or |datetime_display: " + ", ".join(offenders)

@@ -21,7 +21,7 @@
                                 {% if submission.public_token %}
                                     <img src="{{ url_for('forum.forum_avatar_public_file', token=submission.public_token) }}" alt="{{ _('Avatar preview') }}" class="img-fluid rounded border mb-3">
                                 {% endif %}
-                                <div class="small text-muted">{{ _('Uploaded') }}: {{ submission.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                                <div class="small text-muted">{{ _('Uploaded') }}: {{ submission.uploaded_at|datetime_display }}</div>
                                 <div class="small text-muted">{{ _('Member') }}: {{ submission.member.email_private }}</div>
                                 <div class="small text-muted">{{ _('Forum Username') }}: {{ submission.user.forum_username or '-' }}</div>
                             </div>
@@ -93,7 +93,7 @@
                                 <td>{{ forum_account.user.email if forum_account.user else '-' }}</td>
                                 <td>{{ forum_account.state|replace('_', ' ')|title }}</td>
                                 <td>{{ forum_account.last_error or '-' }}</td>
-                                <td>{{ forum_account.last_synced_at.strftime('%Y-%m-%d %H:%M') if forum_account.last_synced_at else '-' }}</td>
+                                <td>{{ forum_account.last_synced_at|datetime_display if forum_account.last_synced_at else '-' }}</td>
                                 <td class="text-end">
                                     {% if forum_account.user %}
                                         <form method="POST" action="{{ url_for('admin.admin_resync_forum_account', user_id=forum_account.user.id) }}" class="mb-0 d-inline-block">
