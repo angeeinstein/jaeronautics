@@ -26,6 +26,7 @@ from ..services.identity import (
     read_token,
     rotate_password_reset_nonce,
     send_password_reset_email,
+    user_for_email_token,
 )
 from flask import (
     flash,
@@ -131,7 +132,7 @@ def reset_password(token):
 def verify_email(token):
     try:
         token_data = read_token(token, "verify-email", TOKEN_MAX_AGE_VERIFY_EMAIL)
-        user = db.session.get(User, int(token_data.get("user_id")))
+        user = user_for_email_token(token_data)
     except (BadSignature, SignatureExpired, ValueError, TypeError):
         token_data = None
         user = None
@@ -145,6 +146,8 @@ def verify_email(token):
         flash(_("This verification link is invalid or has expired."), "danger")
         return redirect(url_for("auth.login"))
 
+    # Decided before the claim, which deletes this row.
+    signed_in_here = current_user.is_authenticated and current_user.id == user.id
     claimed = None
     if mark_email_verified_from_token(token_data, user):
         # A returning student gets their old forum identity back here, because
@@ -165,6 +168,7 @@ def verify_email(token):
             claimed = None
             current_app.logger.exception("Forum account claim failed for user %s", user.id)
         db.session.commit()
+        _stay_signed_in(claimed, signed_in_here)
 
     flash(_("Your email address has been verified."), "success")
     if claimed is not None:
@@ -174,7 +178,7 @@ def verify_email(token):
               username=claimed.source_username),
             "success",
         )
-    if current_user.is_authenticated and current_user.id == user.id:
+    if signed_in_here:
         return redirect(url_for(get_member_portal_target(current_user)))
     return redirect(url_for("auth.login"))
 
@@ -203,6 +207,7 @@ def verify_work_email(token):
         flash(_("This confirmation link is invalid or has expired."), "danger")
         return redirect(url_for("auth.login"))
 
+    signed_in_here = current_user.is_authenticated and member.user_id == current_user.id
     claimed = None
     if mark_work_email_verified_from_token(token_data, member):
         try:
@@ -216,6 +221,7 @@ def verify_work_email(token):
                 "Forum account claim failed for member %s", member.id
             )
         db.session.commit()
+        _stay_signed_in(claimed, signed_in_here)
 
     flash(_("Your university or company email address has been confirmed."), "success")
     if claimed is not None:
@@ -225,7 +231,7 @@ def verify_work_email(token):
               username=claimed.source_username),
             "success",
         )
-    if current_user.is_authenticated and member.user_id == current_user.id:
+    if signed_in_here:
         return redirect(url_for(get_member_portal_target(current_user)))
     return redirect(url_for("auth.login"))
 
@@ -276,7 +282,7 @@ def login():
             return redirect(url_for("auth.login"))
         if user and user.check_password(form.password.data):
             login_user(user)
-            _reconnect_on_sign_in(user)
+            user = _reconnect_on_sign_in(user)
             destination = session.pop("login_next", None)
             session.pop("login_source", None)
             destination = destination if is_safe_next_url(destination) else None
@@ -307,11 +313,17 @@ def _reconnect_on_sign_in(user):
     Deliberately quiet on failure. A returning student getting into their
     account matters more than the reconnection, so nothing here may keep them
     out.
+
+    Returns the account they are now signed in as, which after a reconnect is
+    the archived one: the row they signed in with no longer exists.
     """
+    user_id = user.id
     try:
         profile = claim_archived_account(user)
         if profile is not None:
             db.session.commit()
+            _stay_signed_in(profile, True)
+            user = profile.user
             current_app.logger.info(
                 "Reconnected %s at sign-in; the claim had not happened at verification.",
                 profile.source_username,
@@ -324,8 +336,21 @@ def _reconnect_on_sign_in(user):
     except Exception as exc:  # noqa: BLE001 -- never block a sign-in
         db.session.rollback()
         current_app.logger.warning(
-            "Reconnection attempt at sign-in failed for user_id=%s: %s", user.id, exc
+            "Reconnection attempt at sign-in failed for user_id=%s: %s", user_id, exc
         )
+    return user
+
+
+def _stay_signed_in(claimed, was_signed_in_as_the_retired_row):
+    """Carry a session across a reconnect, onto the account that survived it.
+
+    The claim deletes the row somebody signed up with and keeps them on the
+    archived one. A session still naming the deleted row is a session for
+    nobody: the next page load finds no such user and they are silently
+    signed out -- straight after being told "welcome back".
+    """
+    if claimed is not None and was_signed_in_as_the_retired_row and claimed.user is not None:
+        login_user(claimed.user)
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])

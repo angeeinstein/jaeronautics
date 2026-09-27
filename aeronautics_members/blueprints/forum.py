@@ -24,6 +24,7 @@ from ..services.identity import (
     TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN,
     mark_email_verified_from_token,
     read_token,
+    user_for_email_token,
 )
 from ..services.membership import (
     member_has_active_access,
@@ -61,7 +62,6 @@ from pathlib import (
 from ..db_models import (
     ForumAvatarSubmission,
     ImportedForumProfile,
-    User,
     db,
 )
 from ..forum_service import (
@@ -88,7 +88,9 @@ def forum_entry():
     if token:
         try:
             token_data = read_token(token, "forum-entry", TOKEN_MAX_AGE_FORUM_ENTRY)
-            token_user = db.session.get(User, int(token_data.get("user_id")))
+            # Follows the link across a reconnect of an old forum account,
+            # which retires the row the welcome mail was addressed to.
+            token_user = user_for_email_token(token_data)
         except (BadSignature, SignatureExpired, ValueError, TypeError):
             token_data = None
             token_user = None

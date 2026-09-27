@@ -15,8 +15,10 @@ import secrets
 
 from flask_babel import _
 from itsdangerous import URLSafeTimedSerializer
+from sqlalchemy import func
 
 from ..config import SECRET_KEY
+from ..db_models import User, db
 from ..security_utils import build_public_url
 from .clock import get_now_utc
 from .notifications import send_account_action_email
@@ -85,6 +87,37 @@ def email_verification_claims_match(token_data, user):
     # Tokens predating the nonce carry none; require one so old links cannot be
     # replayed against an account that has since been issued a fresh link.
     return bool(expected_nonce) and token_data.get("nonce") == expected_nonce
+
+
+def user_for_email_token(token_data):
+    """The account a verification or forum link was issued to, or None.
+
+    Normally the one its ``user_id`` names. A returning student's first account
+    is gone once they reconnect their old forum account, though: the claim moves
+    everything onto the archived row and deletes the one the links were issued
+    for. Every link sent before that -- the first verification mail, the forum
+    link in the welcome mail -- would then say "invalid or has expired" to
+    somebody who did nothing wrong.
+
+    The claim carries the address and the verification nonce across, so a link
+    still proves the same thing about the account that now holds them. Followed
+    only when both match: the nonce is the secret part, and a bare address
+    must never be enough to land in somebody's account.
+    """
+    if not isinstance(token_data, dict):
+        return None
+    user = db.session.get(User, int(token_data.get("user_id")))
+    if user is not None:
+        return user
+    address = (token_data.get("email") or "").strip().lower()
+    if not address or not token_data.get("nonce"):
+        return None
+    successor = db.session.execute(
+        db.select(User).where(func.lower(User.email) == address)
+    ).scalar_one_or_none()
+    if successor is None or not email_verification_claims_match(token_data, successor):
+        return None
+    return successor
 
 
 def mark_email_verified_from_token(token_data, user):
