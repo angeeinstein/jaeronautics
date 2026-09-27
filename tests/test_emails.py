@@ -210,3 +210,30 @@ def test_the_layout_is_not_offered_as_a_template(app):
     names = [name for name, _label in get_email_template_choices(app)]
     assert "welcome_email.html" in names
     assert not any(name.startswith("_") for name in names)
+
+
+class TestTheTestEmail:
+    """Sent from the admin settings to see what members receive. Sent with next
+    to nothing, templates arrived half empty and looked broken on a phone."""
+
+    @pytest.mark.parametrize("template,expected", [
+        ("welcome_email.html", ["Hello Anna,", "MusterA_L25", "Open Forum", "Active until"]),
+        ("member_account_action.html", ["Confirm your email address", "Confirm Email Address", "valid for 7 days"]),
+        ("admin_notification_digest.html", ["Open Audit Logs", "could not be removed", "Delete the leftover"]),
+        ("test_email.html", ["the sender account is working", "Sent at:"]),
+    ])
+    def test_it_is_filled_in_like_a_real_one(self, app, client, outbox, template, expected):
+        admin = make_member(email="admin@example.org")
+        admin.user.grant_role(app_module.get_role("superadmin"))
+        db.session.commit()
+        with client.session_transaction() as session:
+            session["_user_id"] = str(admin.user.id)
+
+        client.post("/admin/settings/send-test-email", data={
+            "sender": "office", "recipient": "me@example.org", "template": template,
+        })
+
+        (text,) = _parts(outbox[-1], "text/plain")
+        body = text.get_payload(decode=True).decode()
+        for phrase in expected:
+            assert phrase in body, (template, phrase)

@@ -23,7 +23,9 @@ from ..notification_service import (
     NOTIFICATION_SETTING_KEYS,
     NotificationService,
 )
-from .clock import get_now_utc
+from ..security_utils import build_public_url
+from .clock import first_day_of_year, get_membership_today, get_now_utc, last_day_of_year
+from .membership import format_membership_date_display
 from .settings import get_settings_map
 
 EMAIL_JOB_TYPE_WELCOME = "welcome_email"
@@ -339,6 +341,70 @@ def get_email_template_choices(app):
     if os.path.isdir(email_template_dir):
         template_choices = [(f, f) for f in sorted(os.listdir(email_template_dir)) if f.endswith(".html") and not f.startswith("_")]
     return template_choices
+
+
+def sample_email_for(template_name):
+    """``(subject, template variables)`` to preview a template with, from the admin settings.
+
+    Filled in the way a real email would be. Sent with next to nothing, a
+    template came out half empty -- no heading, a button without a label --
+    and a test meant to show what members receive looked broken instead.
+    """
+    today = get_membership_today()
+    now = get_now_utc()
+    samples = {
+        "welcome_email.html": (
+            _("Welcome to Joanneum Aeronautics!"),
+            {
+                "first_name": "Anna",
+                "suggested_username": "MusterA_L25",
+                "old_forum_account_waiting": False,
+                "membership_ends_on_display": format_membership_date_display(last_day_of_year(today.year)),
+                "renewal_due_on_display": format_membership_date_display(first_day_of_year(today.year + 1)),
+                "forum_integration_enabled": True,
+                "forum_entry_url": build_public_url("forum.forum_entry"),
+                "account_url": build_public_url("account.account"),
+            },
+        ),
+        "member_account_action.html": (
+            _("Confirm your email address"),
+            {
+                "preview_text": _("One click to confirm the address of your Joanneum Aeronautics account."),
+                "heading": _("Confirm your email address"),
+                "body_lines": [
+                    _("Please confirm that this is your email address. It is the address you "
+                      "sign in with, and the one we use to reach you."),
+                ],
+                "action_url": build_public_url("public.index"),
+                "action_label": _("Confirm Email Address"),
+                "note": _("The link is valid for 7 days. If you did not sign up with Joanneum "
+                          "Aeronautics, you can ignore this email."),
+            },
+        ),
+        "admin_notification_digest.html": (
+            _("Joanneum Aeronautics: %(count)s admin error notification(s)", count=1),
+            {
+                "heading": _("Something needs an admin's attention"),
+                "intro": _("The portal ran into problems it could not solve on its own."),
+                "event_counts": [],
+                "events": [{
+                    "summary": _("A reconnected member left a forum account behind that could not be removed."),
+                    "queued_at": now,
+                    "severity": "warning",
+                    "what_to_do": _("Its address has been moved to a placeholder. Delete the leftover by hand."),
+                }],
+                "omitted_count": 0,
+                "action_url": build_public_url("admin.admin_logs"),
+                "action_label": _("Open Audit Logs"),
+            },
+        ),
+    }
+    subject, template_vars = samples.get(template_name, (_("Test email"), {}))
+    return subject, {
+        "timestamp": now.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "now": now,
+        **template_vars,
+    }
 
 
 def normalize_mail_account_key(raw_key):

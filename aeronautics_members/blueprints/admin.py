@@ -72,6 +72,7 @@ from ..services.notifications import (
     queue_curated_admin_notification,
     queue_user_status_notification,
     requeue_email_delivery_job,
+    sample_email_for,
 )
 from ..services import (
     ServiceError,
@@ -1512,15 +1513,13 @@ def send_test_email():
         recipient = form.recipient.data
         template = form.template.data
 
-
+        subject, template_vars = sample_email_for(template)
         success = send_mail(
             from_account=sender,
             to_email=recipient,
-            subject=f"Test: {template}",
+            subject=f"Test: {subject}",
             template_name=template,
-            first_name="Test User",
-            timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-            now=datetime.now(timezone.utc),
+            **template_vars,
         )
 
         if success:
