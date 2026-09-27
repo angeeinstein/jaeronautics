@@ -24,6 +24,7 @@ from ..services.clock import (
 )
 from ..services.forum import (
     generate_unique_forum_username,
+    get_forum_service,
     sync_member_forum_state,
 )
 from ..config import (
@@ -222,6 +223,22 @@ def save_member_profile():
     if profile_form.validate_on_submit():
         before_user = snapshot_user_for_audit(current_user)
         before_member = snapshot_member_for_audit(member, fields=DIRECT_MEMBER_PROFILE_FIELDS)
+        has_forum_account = member.user is not None and (
+            member.user.forum_account is not None or member_has_active_access(member)
+        )
+        new_email = (profile_form.email_private.data or "").strip().lower()
+        if has_forum_account and new_email and new_email != (member.email_private or "").strip().lower():
+            # Checked before anything is saved: the forum refuses an address
+            # another of its accounts has, and taking it here anyway left the
+            # portal on the new address and the forum on the old one. Not
+            # knowing (forum unreachable) lets the change through; the sync
+            # then reports its problem where admins see it.
+            if get_forum_service().address_taken_by_another_forum_account(member.user, new_email):
+                flash(
+                    _("This email address already belongs to another account on the forum, so it cannot be used here. Please choose a different address, or contact us if that forum account is yours."),
+                    "danger",
+                )
+                return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
         try:
             email_changed = sync_member_primary_email(member, profile_form.email_private.data)
         except ValueError as exc:
@@ -255,13 +272,17 @@ def save_member_profile():
             metadata={"email_changed": email_changed},
         )
         forum_result = None
-        if member.user is not None and (member.user.forum_account is not None or member_has_active_access(member)):
+        if has_forum_account:
             forum_result, _forum_service = sync_member_forum_state(member)
         db.session.commit()
         if email_changed:
             try:
                 send_email_verification_email(current_app._get_current_object(), current_user)
                 flash(_("Your profile was updated. Please verify your new email address using the link we sent you."), "success")
+                if has_forum_account:
+                    # The forum now has the new address and waits for it to be
+                    # confirmed, so the account there is paused until then.
+                    flash(_("Your forum access is paused until you confirm the new address."), "info")
             except Exception as exc:
                 current_app.logger.warning("Could not send verification email after profile update for user_id=%s: %s", current_user.id, exc)
                 flash(_("Your profile was updated."), "success")

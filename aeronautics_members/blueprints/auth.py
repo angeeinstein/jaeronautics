@@ -16,6 +16,7 @@ from ..services.forum_import import claim_archived_account
 from ._email_cooldown import remember_sent, sent_just_now
 from ..services.forum import (
     log_out_forum_session_if_possible,
+    sync_member_forum_state,
 )
 from ..services.identity import (
     TOKEN_MAX_AGE_PASSWORD_RESET,
@@ -174,6 +175,8 @@ def verify_email(token):
             current_app.logger.exception("Forum account claim failed for user %s", user.id)
         db.session.commit()
         _stay_signed_in(claimed, signed_in_here)
+        if claimed is None:
+            _tell_the_forum_the_address_is_confirmed(user)
 
     flash(_("Your email address has been verified."), "success")
     if claimed is not None:
@@ -344,6 +347,30 @@ def _reconnect_on_sign_in(user):
             "Reconnection attempt at sign-in failed for user_id=%s: %s", user_id, exc
         )
     return user
+
+
+def _tell_the_forum_the_address_is_confirmed(user):
+    """Reactivate the forum account now that its address is confirmed.
+
+    A changed address reaches the forum at once, unconfirmed, and the forum
+    pauses the account until it is. Nothing told it about the confirmation,
+    so the account stayed paused -- no notifications -- until the member next
+    opened the forum from here.
+
+    Not after a reconnect: that leaves the old forum account holding this
+    address until it is cleaned up, and the forum entry does that first.
+    A failure is logged and the next sync puts it right; it must never cost
+    somebody their confirmation.
+    """
+    member = user.member
+    if member is None or user.forum_account is None:
+        return
+    try:
+        sync_member_forum_state(member)
+        db.session.commit()
+    except Exception:  # noqa: BLE001 -- never block a verification
+        db.session.rollback()
+        current_app.logger.exception("Forum sync after email confirmation failed for user %s", user.id)
 
 
 def _stay_signed_in(claimed, was_signed_in_as_the_retired_row):

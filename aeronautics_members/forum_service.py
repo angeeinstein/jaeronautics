@@ -764,6 +764,13 @@ class DiscourseConnectProvider(ForumProvider):
             # its own activation instead of silently accepting the address.
             "require_activation": "false" if user.email_is_verified else "true",
         }
+        # Discourse welcomes somebody every time it activates their account,
+        # not only the first time -- and it deactivates it whenever the
+        # address changes to one we have not confirmed. Without this a member
+        # was welcomed to the forum again for changing their email address.
+        forum_account = getattr(user, "forum_account", None)
+        if forum_account is not None and forum_account.activated_at is not None:
+            payload["suppress_welcome_message"] = "true"
         if avatar_url:
             payload["avatar_url"] = avatar_url
             if avatar_force_update:
@@ -1022,6 +1029,16 @@ class DiscourseConnectProvider(ForumProvider):
         if not field:
             return None, False
         return f"user_field_{field.get('id')}", True
+
+    def find_users_with_email(self, email):
+        """Forum accounts whose address is exactly this one.
+
+        The admin user list takes an exact ``email`` filter on the primary
+        address. Archived accounts from the old forum are not found by their
+        real address: they carry a placeholder there until reconnected.
+        """
+        response = self._request("GET", f"/admin/users/list/all.json?{urlencode({'email': email})}")
+        return [row for row in response if isinstance(row, dict)] if isinstance(response, list) else []
 
     def get_remote_user_by_external_id(self, external_id):
         response = self._request("GET", f"/u/by-external/{quote(str(external_id))}.json")
@@ -1357,6 +1374,29 @@ class ForumService:
     def is_ready(self):
         return self.is_enabled() and not self.config_errors and self.provider is not None and self.auth_strategy is not None
 
+    def address_taken_by_another_forum_account(self, user, email):
+        """Whether a forum account other than ``user``'s already has ``email``.
+
+        Asked before a member switches to a new address: Discourse would
+        refuse the change -- two accounts cannot share an address -- and the
+        member would be left with a portal on the new address and a forum on
+        the old one. True or False, or None when the forum could not be asked,
+        which the caller must not read as "free".
+        """
+        if not self.is_ready():
+            return False
+        try:
+            found = self.provider.find_users_with_email(email)
+            if not found:
+                return False
+            ours = None
+            if user.forum_account is not None:
+                ours = self.provider._resolve_remote_user_id(user.forum_account)
+        except ForumProviderError as exc:
+            current_app.logger.warning("Could not ask the forum whether an address is in use: %s", exc)
+            return None
+        return any(str(row.get("id")) != str(ours) for row in found)
+
     def ensure_forum_account(self, user, member=None):
         forum_account = user.forum_account
         changed = False
@@ -1505,6 +1545,10 @@ class ForumService:
                 forum_account.last_error = None
                 changed = True
             forum_account.last_synced_at = datetime.now(timezone.utc)
+            if forum_account.activated_at is None and member.user.email_is_verified:
+                # Sent with a confirmed address, so the forum has activated the
+                # account and welcomed them: from now on it is asked not to.
+                forum_account.activated_at = forum_account.last_synced_at
             changed = True
             return ForumSyncResult(changed=changed, desired_state=desired_state, forum_account=forum_account, error=None)
         except ForumProviderError as exc:

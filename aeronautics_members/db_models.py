@@ -395,6 +395,11 @@ class ForumAccount(db.Model):
     last_synced_email = db.Column(db.String(255), nullable=True)
     last_synced_username = db.Column(db.String(255), nullable=True)
     last_synced_at = db.Column(db.DateTime, nullable=True)
+    # When the forum first had this account with a confirmed address -- the
+    # moment Discourse activates it and sends its welcome message. Set, it
+    # asks the forum not to welcome them again when it reactivates the
+    # account, as it does after an email change is confirmed.
+    activated_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
