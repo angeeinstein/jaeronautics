@@ -17,12 +17,12 @@
                             <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
                         {% endif %}
                         {% if can_manage_billing %}
-                            <form method="POST" action="{{ url_for('account.manage_member_billing') }}" class="mb-0">
+                            <form method="POST" action="{{ url_for('account.manage_member_billing') }}" class="mb-0" data-busy-text="{{ _('Opening billing…') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-primary">{{ _('Manage Billing') }}</button>
                             </form>
                         {% elif can_resume_payment %}
-                            <form method="POST" action="{{ url_for('account.resume_member_payment') }}" class="mb-0">
+                            <form method="POST" action="{{ url_for('account.resume_member_payment') }}" class="mb-0" data-busy-text="{{ _('Taking you to payment…') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-primary">{{ _('Resume Payment') }}</button>
                             </form>
@@ -161,7 +161,7 @@
                     #}
                     <div class="alert alert-secondary mt-4 mb-0">
                         <p class="mb-2">{{ _('Your membership has ended. You can rejoin at any time; you pay for the rest of the current year, as when you first joined.') }}</p>
-                        <form method="POST" action="{{ url_for('account.rejoin_membership') }}" class="mb-0">
+                        <form method="POST" action="{{ url_for('account.rejoin_membership') }}" class="mb-0" data-busy-text="{{ _('Taking you to payment…') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             {% if invoice_payments_enabled %}
                                 <div class="mb-2">
@@ -318,7 +318,7 @@
                 {% endif %}
                 {{ _('If you cancel your membership first, it keeps running until then and simply does not renew. Deleting your account now cancels it immediately, and the remaining time is not refunded.') }}
                 {% if can_manage_billing %}
-                    <form method="POST" action="{{ url_for('account.manage_member_billing') }}" class="mt-2 mb-0">
+                    <form method="POST" action="{{ url_for('account.manage_member_billing') }}" class="mt-2 mb-0" data-busy-text="{{ _('Opening billing…') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-sm btn-primary">{{ _('Cancel my membership instead') }}</button>
                     </form>

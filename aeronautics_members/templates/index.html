@@ -14,7 +14,7 @@
             </p>
         </div>
     </div>
-    <form method="POST" action="{{ url_for('public.process_membership') }}" class="space-y-6">
+    <form method="POST" action="{{ url_for('public.process_membership') }}" class="space-y-6" data-busy-text="{{ _('Taking you to payment…') }}">
         {{ form.hidden_tag() }}
 
         {{ form_errors(form) }}
@@ -142,7 +142,7 @@
         </p>
 
         <div class="mt-6">
-            {{ form.submit(class="btn btn-primary w-100 btn-lg") }}
+            <button type="submit" class="btn btn-primary w-100 btn-lg">{{ form.submit.label.text }}</button>
         </div>
     </form>
 </div>

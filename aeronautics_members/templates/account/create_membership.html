@@ -12,7 +12,7 @@
                 <div class="card-body">
                     <p class="text-muted">{{ _('This account does not have a linked membership profile yet. Complete the form below to start your membership with this login.') }}</p>
                     {{ form_errors(form) }}
-                    <form method="POST" action="{{ url_for('account.create_membership_profile') }}" novalidate>
+                    <form method="POST" action="{{ url_for('account.create_membership_profile') }}" novalidate data-busy-text="{{ _('Taking you to payment…') }}">
                         {{ form.hidden_tag() }}
                         <div class="row g-4">
                             <div class="col-md-6">{{ form.salutation.label(class='form-label') }}{{ form.salutation(class='form-select') }}</div>
@@ -62,7 +62,7 @@
                             </div>
                             <div class="col-12 d-flex gap-2">
                                 <a href="{{ url_for('admin.admin_dashboard' if current_user.can('admin.access') else 'public.index') }}" class="btn btn-secondary">{{ _('Back') }}</a>
-                                {{ form.submit(class='btn btn-primary') }}
+                                <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
                             </div>
                         </div>
                     </form>

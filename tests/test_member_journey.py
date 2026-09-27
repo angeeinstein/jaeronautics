@@ -317,3 +317,74 @@ def test_the_portal_is_english_whatever_the_browser_asks(app, client):
 
     assert '<html lang="en">' in body
     assert "language-selector" not in body
+
+
+class TestTheSignupSentTwice:
+    """A double click while Stripe was being asked for the payment page -- or
+    filling the form in again after cancelling -- answered "already exists"."""
+
+    FORM = {
+        "salutation": "Ms", "first_name": "Dora", "last_name": "Double", "street": "Main",
+        "house_number": "1", "postal_code": "8010", "city": "Graz", "country": "Austria",
+        "phone_private": "+43123", "email_private": "dora@example.com",
+        "email_work": "dora.double@edu.fh-joanneum.at", "member_category": "student",
+        "year_group": "LAV25", "password": "right-password", "confirm_password": "right-password",
+        "payment_method": "checkout", "terms_accepted": "y",
+    }
+
+    @pytest.fixture
+    def checkouts(self, monkeypatch):
+        from aeronautics_members.blueprints import _signup, public
+
+        opened = []
+
+        def open_checkout(member):
+            opened.append(member.id)
+            return types.SimpleNamespace(url=f"https://checkout.stripe.test/{member.id}"), {}
+
+        monkeypatch.setattr(_signup, "create_checkout_session_for_member", open_checkout)
+        monkeypatch.setattr(public, "create_checkout_session_for_member", open_checkout)
+        monkeypatch.setattr(_signup, "send_email_verification_email", lambda *a, **k: True)
+        monkeypatch.setattr(_signup, "send_work_email_verification_email", lambda *a, **k: True)
+        return opened
+
+    def test_the_second_one_goes_on_to_payment(self, app, client, checkouts):
+        first = client.post("/process-membership", data=self.FORM)
+        client.post("/logout")
+
+        second = client.post("/process-membership", data=self.FORM)
+
+        assert first.headers["Location"].startswith("https://checkout.stripe.test/")
+        assert second.headers["Location"] == first.headers["Location"]
+        from aeronautics_members.db_models import User
+        assert len(db.session.execute(db.select(User).filter_by(email="dora@example.com")).scalars().all()) == 1
+
+    def test_not_with_a_different_password(self, app, client, checkouts):
+        client.post("/process-membership", data=self.FORM)
+        client.post("/logout")
+
+        second = client.post("/process-membership", data={
+            **self.FORM, "password": "wrong-password", "confirm_password": "wrong-password",
+        })
+
+        assert second.headers["Location"].endswith("/login")
+        assert len(checkouts) == 1
+
+    def test_not_once_payment_has_started_at_stripe(self, app, client, checkouts):
+        client.post("/process-membership", data=self.FORM)
+        client.post("/logout")
+        from aeronautics_members.db_models import Member
+        member = db.session.execute(db.select(Member).filter_by(email_private="dora@example.com")).scalar_one()
+        member.stripe_customer_id = "cus_started"
+        db.session.commit()
+
+        second = client.post("/process-membership", data=self.FORM)
+
+        assert second.headers["Location"].endswith("/login")
+
+
+def test_payment_buttons_show_they_are_working(app, client):
+    body = client.get("/").get_data(as_text=True)
+
+    assert 'data-busy-text="Taking you to payment…"' in body
+    assert "submit-once.js" in body

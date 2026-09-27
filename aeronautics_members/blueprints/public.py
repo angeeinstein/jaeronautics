@@ -5,6 +5,7 @@ Route handlers moved verbatim out of app.py (dedented; @app.route ->
 from the app module, which is fully initialized before this is imported.
 """
 
+import stripe
 from flask import Blueprint, current_app
 from sqlalchemy import text
 
@@ -16,6 +17,9 @@ from ..services.audit import (
     log_audit_event,
     snapshot_member_for_audit,
     snapshot_user_for_audit,
+)
+from ..services.billing import (
+    create_checkout_session_for_member,
 )
 from ..services.clock import (
     get_now_utc,
@@ -64,6 +68,7 @@ from ..forms import (
     MembershipForm,
 )
 from ..app import (
+    can_resume_payment,
     limiter,
 )
 
@@ -105,6 +110,9 @@ def process_membership():
 
         if existing_member is not None:
             if existing_member.user_id:
+                continued = _continue_unfinished_signup(existing_member, password, payment_method)
+                if continued is not None:
+                    return continued
                 flash(_("An account with this email address already exists. Please log in to manage or resume your membership."), "warning")
                 return redirect(url_for("auth.login"))
             flash(_("A membership profile with this email address already exists without a linked login. Please contact the club so we can resolve it."), "warning")
@@ -161,6 +169,40 @@ def process_membership():
         invoice_payments_enabled=invoice_payments_allowed(),
         stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
     )
+
+
+def _continue_unfinished_signup(member, password, requested_method):
+    """Carry on to payment for a signup that never got that far. Or None.
+
+    The same form sent twice -- a double click while Stripe is being asked for
+    a payment page, or filling it in again after cancelling the payment --
+    found the account the first one made and answered "already exists, please
+    log in", often in place of the payment page. With the right password that
+    is somebody the login form would let in anyway, so they are logged in and
+    sent on, to the payment page already open for them where there is one.
+
+    Only for an account whose payment has not started at Stripe, and only for
+    Checkout: paying by invoice creates a subscription outright, and a second
+    would be a second invoice.
+    """
+    user = member.user
+    if user is None or user.is_disabled or not user.check_password(password):
+        return None
+    if not can_resume_payment(member) or chosen_payment_method(requested_method) != "checkout":
+        return None
+
+    login_user(user)
+    try:
+        checkout, _cycle = create_checkout_session_for_member(member)
+        db.session.commit()
+        return redirect(checkout.url, code=303)
+    except stripe.StripeError as exc:
+        db.session.rollback()
+        current_app.logger.error(
+            "Could not continue an unfinished signup to Checkout for member_id=%s: %s", member.id, exc
+        )
+        flash(_("The payment page could not be opened right now. You can continue from your account."), "warning")
+        return redirect(url_for("account.account"))
 
 
 @public_bp.route("/thank-you")
