@@ -1309,6 +1309,12 @@ def build_forum_context(member):
         # has paid for the year would simply be untrue.
         status_key = "account_disabled"
         status_message = _("Your account has been deactivated, so forum access is not available.")
+    elif not member_has_active_access(member) and member.payment_status == "processing":
+        # Paid, and waiting for the money to arrive: a SEPA debit takes days.
+        # "Your membership is not active" would read as though something had
+        # gone wrong.
+        status_key = "payment_processing"
+        status_message = _("Your forum access starts as soon as your payment has cleared.")
     elif not member_has_active_access(member):
         status_key = "inactive_membership"
         status_message = _("Your forum access is currently unavailable because your membership is not active.")

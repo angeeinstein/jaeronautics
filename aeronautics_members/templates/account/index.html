@@ -175,6 +175,8 @@
                             <button type="submit" class="btn btn-primary">{{ _('Rejoin') }}</button>
                         </form>
                     </div>
+                {% elif member.payment_status == 'processing' and not member.is_active %}
+                    <div class="alert alert-info mt-4 mb-0">{{ _('Your payment is being processed. A SEPA direct debit usually takes a few business days to clear; your membership starts then, and we will email you.') }}</div>
                 {% elif payment_arriving %}
                     <div class="alert alert-info mt-4 mb-0">{{ _('Payment received. Your membership is being activated, which usually takes a few seconds. Reload this page in a moment.') }}</div>
                 {% elif can_resume_payment %}

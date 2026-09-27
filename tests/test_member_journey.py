@@ -157,3 +157,22 @@ class TestJustAfterPaying:
 
         assert "Resume Payment" in body
         assert "Payment received" not in body
+
+
+class TestWhileASepaDebitClears:
+    """Paid by SEPA, told "set up successfully" -- and then days of "not
+    active" with nothing saying the money simply takes a while."""
+
+    def test_the_account_page_says_it_is_on_its_way(self, app, client, forum, monkeypatch):
+        member = make_member(email="sepa-first@example.com", payment_status="processing",
+                             is_active=False, stripe_customer_id="cus_p")
+        with client.session_transaction() as session:
+            session["_user_id"] = str(member.user.id)
+        # The page asks Stripe for the latest on every load; there is no Stripe here.
+        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+
+        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+        assert "usually takes a few business days" in body
+        assert "starts as soon as your payment has cleared" in body
+        assert "not active" not in body

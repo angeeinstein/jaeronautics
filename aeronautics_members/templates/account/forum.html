@@ -30,7 +30,9 @@
                     <div class="alert alert-warning">{{ forum_context.forum_error }}</div>
                 {% endif %}
 
-                {% if forum_context.status_key == 'inactive_membership' %}
+                {% if forum_context.status_key == 'payment_processing' %}
+                    {# The status line above says it all. #}
+                {% elif forum_context.status_key == 'inactive_membership' %}
                     <div class="alert alert-secondary mb-0">{{ _('Your forum access will become available again once your membership is active.') }}</div>
                 {% elif forum_context.status_key == 'disabled' %}
                     <div class="alert alert-secondary mb-0">{{ _('The forum integration is not configured yet.') }}</div>
