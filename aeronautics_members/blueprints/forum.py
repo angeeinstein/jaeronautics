@@ -225,7 +225,7 @@ def upload_forum_avatar():
         )
         db.session.commit()
         flush_marked_notification_channels()
-        flash(_("Your profile picture was uploaded and is now waiting for admin approval."), "success")
+        flash(_("Thanks! Your profile picture is waiting for approval. We will email you once it is approved."), "success")
     except ForumProviderError as exc:
         db.session.rollback()
         flash(str(exc), "danger")

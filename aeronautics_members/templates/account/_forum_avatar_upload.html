@@ -17,9 +17,10 @@
 
     <div class="mb-3">
         <label for="{{ file_input_id }}" class="form-label">{{ _('Profile Picture') }}</label>
+        <p class="mb-2">{{ _('Please use a real photo of yourself. Any pose is fine, as long as it is you.') }}</p>
         <input type="file" class="form-control" id="{{ file_input_id }}" name="avatar" accept="image/jpeg,image/png,image/webp" required data-avatar-file-input>
         <small class="text-muted d-block mt-2">
-            {{ _('Allowed types: %(types)s. Uploads up to %(upload_limit)s are accepted and optimized down to the avatar limit of %(avatar_limit)s.', types=forum_context.service.settings['forum_avatar_allowed_types']|join(', '), upload_limit=forum_context.avatar_upload_request_limit_display, avatar_limit=forum_context.avatar_max_bytes_display) }}
+            {{ _('%(types)s, up to %(upload_limit)s.', types=forum_context.service.settings['forum_avatar_allowed_types']|map('upper')|join(', '), upload_limit=forum_context.avatar_upload_request_limit_display) }}
         </small>
     </div>
 

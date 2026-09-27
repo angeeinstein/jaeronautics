@@ -40,8 +40,8 @@
                     <div class="alert alert-success">{{ _('Your forum access is ready. If you are not redirected automatically, use the button below.') }}</div>
                     <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
                 {% else %}
-                    {% if forum_context.latest_submission and forum_context.latest_submission.review_note %}
-                        <div class="alert alert-secondary">{{ forum_context.latest_submission.review_note }}</div>
+                    {% if forum_context.status_key == 'rejected_avatar' and forum_context.latest_submission.review_note %}
+                        <div class="alert alert-secondary">{{ _('Reason: %(note)s', note=forum_context.latest_submission.review_note) }}</div>
                     {% endif %}
                     {% set upload_id_prefix = 'forum-avatar-page' %}
                     {% include 'account/_forum_avatar_upload.html' %}

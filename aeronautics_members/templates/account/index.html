@@ -212,8 +212,8 @@
                         <div class="alert alert-secondary">{{ _('Please upload a profile picture before your forum access can be completed.') }}</div>
                     {% endif %}
 
-                    {% if forum_context.latest_submission and forum_context.latest_submission.review_note %}
-                        <div class="alert alert-secondary">{{ forum_context.latest_submission.review_note }}</div>
+                    {% if forum_context.status_key == 'rejected_avatar' and forum_context.latest_submission.review_note %}
+                        <div class="alert alert-secondary">{{ _('Reason: %(note)s', note=forum_context.latest_submission.review_note) }}</div>
                     {% endif %}
 
                     {% set upload_id_prefix = 'forum-avatar' %}

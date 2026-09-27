@@ -273,3 +273,27 @@ class TestErrorsSayWhatIsWrong:
 
         assert "Discourse API request failed" not in body
         assert "could not be updated just now" in body
+
+
+class TestThePhotoUpload:
+    def _page(self, client, forum, monkeypatch, **forum_state):
+        forum.photo_approved = False
+        for key, value in forum_state.items():
+            setattr(forum, key, value)
+        _paid_member(client, verified=True)
+        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+        return client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+    def test_says_what_photo_is_wanted(self, app, client, forum, monkeypatch):
+        body = self._page(client, forum, monkeypatch)
+
+        assert "real photo of yourself" in body
+        assert "optimized down to the avatar limit" not in body
+
+    def test_a_rejection_gives_its_reason_as_a_reason(self, app, client, forum, monkeypatch):
+        rejected = types.SimpleNamespace(status="rejected", review_note="That is a giraffe.")
+        forum.get_latest_submission = lambda member: rejected
+
+        body = self._page(client, forum, monkeypatch)
+
+        assert "Reason: That is a giraffe." in body
