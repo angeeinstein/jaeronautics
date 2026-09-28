@@ -59,6 +59,7 @@ class Ledger:
         self.topics = {}
         self.posts = {}
         self.categories = {}
+        self.titles = {}
         self._handle = None
         if self.path.exists():
             self._read()
@@ -84,6 +85,8 @@ class Ledger:
             self.posts[key] = value
         elif kind == "category":
             self.categories[key] = value
+        elif kind == "title":
+            self.titles[key] = value
 
     def _write(self, kind, key, value):
         self._remember({"kind": kind, "key": key, "id": value})
@@ -117,6 +120,45 @@ class Ledger:
 
     def record_category(self, fid, category_id):
         self._write("category", str(fid), category_id)
+
+    def title_for(self, tid):
+        return self.titles.get(str(tid))
+
+    def record_title(self, tid, title):
+        self._write("title", str(tid), title)
+
+
+def retitle_existing(poster, ledger, titles, summary):
+    """Give topics an earlier run posted the title this run would give them.
+
+    Found on the Azure forum: the first twenty threads went in while live
+    lectures' shared subjects were still numbered -- "Klausuren #13" -- and
+    the fix to the naming would otherwise only reach the threads not posted
+    yet. The ledger says which topic each thread became and, from now on,
+    what it was called; a topic with no title on record is looked up once.
+    Run while the settings are loosened, so Discourse does not prettify the
+    new title on its way in.
+    """
+    for tid, topic_id in list(ledger.topics.items()):
+        wanted = titles.get(tid)
+        if not wanted or not topic_id:
+            continue
+        known = ledger.title_for(tid)
+        try:
+            if known is None:
+                known = poster.topic_title(topic_id)
+            if _title_key(known) != _title_key(wanted):
+                poster.rename_topic(topic_id, wanted)
+                summary["retitled"].append((known, wanted))
+            if known != wanted or ledger.title_for(tid) is None:
+                ledger.record_title(tid, wanted)
+        except ForumProviderError as exc:
+            # One refused rename is one topic keeping its old name until the
+            # next run, not a reason to post nothing.
+            summary["problems"].append(
+                f"thread {tid}: topic {topic_id} could not be renamed to "
+                f"{wanted!r}: {exc}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -879,7 +921,7 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
     summary = {
         "categories": len(plan), "threads": 0, "posted": 0, "renamed": renamed,
         "already_there": 0, "waiting": 0, "not_attempted": 0, "failed": 0,
-        "problems": [],
+        "problems": [], "retitled": [],
     }
     created = []
     made = ensure_categories(
@@ -901,6 +943,9 @@ def migrate_board(poster, tables, uploads_dir, ledger, *, dry_run=False,
 
     if categories_only:
         return summary
+
+    if not dry_run and titles and hasattr(poster, "rename_topic"):
+        retitle_existing(poster, ledger, titles, summary)
 
     threads = sorted(
         tables["threads"], key=lambda row: int(row.get("dateline") or 0)

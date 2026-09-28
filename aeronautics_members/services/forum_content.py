@@ -515,6 +515,15 @@ class ContentPoster:
     def read_post(self, post_id):
         return self._call("GET", f"/posts/{quote(str(post_id))}.json")
 
+    def topic_title(self, topic_id):
+        """What a topic is called on the forum now."""
+        payload = self._call("GET", f"/t/{int(topic_id)}.json")
+        return (payload.get("title") or "") if isinstance(payload, dict) else ""
+
+    def rename_topic(self, topic_id, title):
+        """Give a topic another title. Its posts and its id stay as they are."""
+        return self._call("PUT", f"/t/-/{int(topic_id)}.json", json_body={"title": title})
+
     def categories(self):
         """Every category the forum has, with its parent. Flat list.
 
@@ -1635,6 +1644,8 @@ def migrate_thread(poster, thread, posts, attachments_by_post, usernames_by_uid,
             # of what landed is only useful if it is never behind what landed.
             if opening and report["topic_id"]:
                 ledger.record_topic(thread.get("tid"), report["topic_id"])
+                if hasattr(ledger, "record_title"):
+                    ledger.record_title(thread.get("tid"), title)
             ledger.record_post(post.get("pid"), created.get("id"))
 
     current_app.logger.info("Spike: moved thread %s", thread.get("tid"))
