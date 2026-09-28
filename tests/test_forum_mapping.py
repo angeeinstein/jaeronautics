@@ -224,6 +224,59 @@ class TestTheTitlesItGives:
 
         assert len(set(titles.values())) == 3
 
+    def live_klausuren(self, *rows):
+        """``(tid, fid, dateline)`` rows, all called Klausuren."""
+        return [{"tid": tid, "fid": fid, "subject": "Klausuren", "firstpost": tid,
+                 "dateline": dateline} for tid, fid, dateline in rows]
+
+    PATHS = {
+        "10": ["Bachelor 4. Semester", "Mensch-Maschine-Interaktion"],
+        "11": ["Bachelor 4. Semester", "Angewandte Thermodynamik"],
+        "12": ["Bachelor 4. Semester", "Angewandte Thermodynamik"],
+    }
+
+    def test_a_live_clash_is_told_apart_by_the_lecture_as_it_is_called_now(self):
+        threads = self.live_klausuren(("1", "10", "1490000000"), ("2", "11", "1590000000"))
+
+        titles = titles_for(FORUMS, threads, paths=self.PATHS)
+
+        assert titles == {"1": "Klausuren (Mensch-Maschine-Interaktion)",
+                          "2": "Klausuren (Angewandte Thermodynamik)"}
+
+    def test_one_crowded_lecture_does_not_number_everybody_else(self):
+        """Found on the Azure forum: one pair in one lecture and one year,
+        and all ninety-one Klausuren came out as "Klausuren #13"."""
+        threads = self.live_klausuren(
+            ("1", "10", "1490000000"),                 # 2017, alone in its lecture
+            ("2", "11", "1400000000"),                 # 05/2014
+            ("3", "12", "1402000000"),                 # 06/2014, same lecture now
+            ("4", "11", "1590000000"),                 # 2020
+        )
+
+        titles = titles_for(FORUMS, threads, paths=self.PATHS)
+
+        assert titles["1"] == "Klausuren (Mensch-Maschine-Interaktion)"
+        assert titles["2"] == "Klausuren (Angewandte Thermodynamik 05/2014)"
+        assert titles["3"] == "Klausuren (Angewandte Thermodynamik 06/2014)"
+        assert titles["4"] == "Klausuren (Angewandte Thermodynamik 2020)"
+        assert not any("#" in title for title in titles.values())
+
+    def test_the_old_id_is_the_last_resort_only(self):
+        threads = self.live_klausuren(("5", "11", "1400000000"), ("6", "12", "1400000100"))
+
+        titles = titles_for(FORUMS, threads, paths=self.PATHS)
+
+        assert titles["5"] == "Klausuren (Angewandte Thermodynamik 05/2014) #5"
+        assert titles["6"] == "Klausuren (Angewandte Thermodynamik 05/2014) #6"
+
+    def test_the_archive_is_titled_as_it_always_was(self):
+        threads = self.live_klausuren(("1", "10", "1490000000"), ("2", "11", "1590000000"))
+
+        titles = titles_for(FORUMS, threads, archived={"10", "11"}, paths=self.PATHS)
+
+        assert titles == {"1": "Klausuren (04-09 Mensch-Maschine-Interaktion)",
+                          "2": "Klausuren (04-02 Angewandte Thermodynamik)"}
+
     def test_an_archived_and_a_live_thread_do_not_collide_either(self):
         titles = titles_for(FORUMS, THREADS, archived={"10", "11"})
 

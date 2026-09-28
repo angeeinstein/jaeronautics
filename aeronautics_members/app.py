@@ -2962,8 +2962,25 @@ def create_app(config_overrides=None):
             )
             plan = mapping_plan(placement["paths"], tables["threads"])
             titles = titles_for(
-                tables["forums"], tables["threads"], placement["archived"]
+                tables["forums"], tables["threads"], placement["archived"],
+                paths=placement["paths"],
             )
+            if dry_run:
+                # The lectures that still run keep their subject unless it
+                # clashes; these are the ones that do, for reading before the
+                # run rather than on the forum after it. The archive's are
+                # always labelled and are not listed.
+                relabelled = sorted(
+                    (titles[thread.get("tid")], thread.get("subject") or "")
+                    for thread in tables["threads"]
+                    if thread.get("fid") not in placement["archived"]
+                    and thread.get("tid") in titles
+                    and titles[thread.get("tid")] != (thread.get("subject") or "").strip()
+                )
+                click.echo(f"Titles in lectures that still run, where the subject "
+                           f"is shared ({len(relabelled)}):")
+                for title, subject in relabelled:
+                    click.echo(f"  {subject.strip()}  ->  {title}")
             live_count = sum(
                 1 for row in plan
                 if row["depth"] == 2 and row["path"][0] != ARCHIVE_ROOT
@@ -3132,6 +3149,13 @@ def create_app(config_overrides=None):
                 f"Discourse will not take two topics with the same name. That "
                 f"count is for the whole board, not only what this run posted."
             )
+        if summary.get("retitled"):
+            click.echo(
+                f"{len(summary['retitled'])} topics posted by an earlier run "
+                f"were renamed to the title this run gives them:"
+            )
+            for was, now in summary["retitled"]:
+                click.echo(f"  {was}  ->  {now}")
         if summary["waiting"]:
             click.echo(
                 f"{summary['waiting']} posts were left alone because a file they "

@@ -24,6 +24,8 @@ carries its old lecture in its title -- "Klausuren (02-09 Angewandte Mathematik
 2)" -- because "Klausuren" alone, of ninety-one, says nothing at all.
 """
 
+from datetime import datetime, timezone
+
 from .forum_board import (
     CATEGORY_NAME_LIMIT,
     _fit,
@@ -192,7 +194,7 @@ def mapping_plan(paths_by_fid, threads):
     return sorted(rows.values(), key=lambda row: (row["depth"], row["key"]))
 
 
-def titles_for(forums, threads, archived=frozenset(), limit=None):
+def titles_for(forums, threads, archived=frozenset(), limit=None, paths=None):
     """A title per thread that no other thread on the board shares.
 
     Discourse refuses a second topic with a title it already has, and 323 of
@@ -205,11 +207,20 @@ def titles_for(forums, threads, archived=frozenset(), limit=None):
     one only when it has to be -- inside a lecture's own category the subject
     is already unambiguous, and "Klausuren" reads better than "Klausuren
     (02-09 Angewandte Mathematik 2)" when the category says the same thing.
+
+    A live thread that has to be labelled gets the lecture as it is called now
+    -- the category it is filed under, from ``paths`` -- and more only where
+    that lecture has two of the same: the year, then the month. Settled per
+    lecture, not per subject: on the Azure forum all ninety-one "Klausuren"
+    were one group, one pair in one lecture in one year made the whole group
+    fall through to the old thread id, and the board's most-read threads came
+    out as "Klausuren #13".
     """
     from .forum_board import TITLE_LENGTH_LIMIT, _year_of
 
     limit = TITLE_LENGTH_LIMIT if limit is None else limit
     tree = forum_tree(forums)
+    paths = paths or {}
 
     def lecture_of(thread):
         path = tree.get(thread.get("fid"), [])
@@ -220,6 +231,48 @@ def titles_for(forums, threads, archived=frozenset(), limit=None):
 
     def fit(text):
         return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+    titles, used = {}, set()
+
+    def label_of(thread):
+        placed = paths.get(thread.get("fid")) or []
+        return str(placed[-1]).strip() if placed else lecture_of(thread)
+
+    def month_of(thread):
+        dateline = thread.get("dateline")
+        if not dateline:
+            return ""
+        when = datetime.fromtimestamp(int(dateline), tz=timezone.utc)
+        return f"{when.month:02d}/{when.year}"
+
+    def live_name(thread, level):
+        """Level 0: the lecture. 1: and the year. 2: the month instead. 3: the id."""
+        detail = label_of(thread)
+        when = {1: str(year_of(thread)), 2: month_of(thread)}.get(level, "")
+        if level >= 3:
+            when = month_of(thread)
+        inside = " ".join(part for part in (detail, when) if part)
+        text = f"{_subject_of(thread)} ({inside})" if inside else _subject_of(thread)
+        if level >= 3:
+            text = f"{text} #{thread.get('tid')}"
+        return fit(text)
+
+    def settle_live(cluster, level):
+        if level >= 3:
+            for thread in cluster:
+                name = live_name(thread, 3)
+                titles[thread.get("tid")] = name
+                used.add(_title_key(name))
+            return
+        clashes = {}
+        for thread in cluster:
+            clashes.setdefault(_title_key(live_name(thread, level)), []).append(thread)
+        for key, sharing in clashes.items():
+            if len(sharing) == 1 and key not in used:
+                titles[sharing[0].get("tid")] = live_name(sharing[0], level)
+                used.add(key)
+            else:
+                settle_live(sharing, level + 1)
 
     def base(thread):
         subject = _subject_of(thread)
@@ -249,11 +302,13 @@ def titles_for(forums, threads, archived=frozenset(), limit=None):
     schemes = (base, with_lecture, with_year,
                lambda thread: f"{base(thread)} #{thread.get('tid')}")
 
+    # The archive first, as it always was: its titles carry the old lecture
+    # whether they collide or not, and nothing below changes them.
     groups = {}
     for thread in threads:
-        groups.setdefault(_title_key(base(thread)), []).append(thread)
+        if thread.get("fid") in archived:
+            groups.setdefault(_title_key(base(thread)), []).append(thread)
 
-    titles, used = {}, set()
     for sharing in groups.values():
         names = [fit(_subject_of(thread)) for thread in sharing]
         for scheme in schemes:
@@ -268,4 +323,17 @@ def titles_for(forums, threads, archived=frozenset(), limit=None):
         for thread, name in zip(sharing, names):
             titles[thread.get("tid")] = name
             used.add(_title_key(name))
+
+    # Then the lectures that still run: the subject alone where nobody else
+    # used it, and otherwise only as much more as tells the clash apart.
+    live = {}
+    for thread in threads:
+        if thread.get("fid") not in archived:
+            live.setdefault(_title_key(_subject_of(thread)), []).append(thread)
+    for key, sharing in live.items():
+        if len(sharing) == 1 and key not in used:
+            titles[sharing[0].get("tid")] = fit(_subject_of(sharing[0]))
+            used.add(key)
+        else:
+            settle_live(sharing, 0)
     return titles

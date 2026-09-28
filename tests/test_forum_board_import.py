@@ -28,6 +28,7 @@ from aeronautics_members.services.forum_board import (
     ensure_categories,
     forum_tree,
     migrate_board,
+    retitle_existing,
     settings_inventory,
 )
 from aeronautics_members.services.forum_content import migrate_thread
@@ -281,7 +282,7 @@ class TestCarryingOnFromWhereItStopped:
 
         written = [json.loads(line) for line in
                    path.read_text(encoding="utf-8").splitlines()]
-        assert {row["kind"] for row in written} == {"topic", "post"}
+        assert {row["kind"] for row in written} == {"topic", "title", "post"}
         assert any(row["key"] == "100" for row in written if row["kind"] == "post")
         assert not any(row["key"] == "101" for row in written if row["kind"] == "post")
 
@@ -1369,3 +1370,73 @@ class TestTitlesThatCannotBothBeKlausuren:
         assert [c["title"] for c in poster.calls if c["title"]] == [
             "Klausuren Aerodynamik"
         ]
+
+
+class TestRenamingWhatAnEarlierRunPosted:
+    """Found on the Azure forum: twenty threads in as "Klausuren #13" before the
+    naming was fixed. The fix has to reach them too, not only what is left."""
+
+    class Renamer:
+        def __init__(self, titles, refuse=()):
+            self.titles = dict(titles)
+            self.refuse = set(refuse)
+            self.lookups = []
+
+        def topic_title(self, topic_id):
+            self.lookups.append(topic_id)
+            return self.titles[topic_id]
+
+        def rename_topic(self, topic_id, title):
+            if topic_id in self.refuse:
+                raise ForumProviderError("PUT failed (422): title already used")
+            self.titles[topic_id] = title
+
+    def test_a_topic_under_an_old_title_is_renamed_and_the_rest_left_alone(
+            self, app, tmp_path):
+        ledger = Ledger(tmp_path / "l.jsonl")
+        ledger.record_topic("13", 124)
+        ledger.record_topic("14", 125)
+        poster = self.Renamer({124: "Klausuren #13", 125: "Exams (Aircraft Systems)"})
+        summary = {"retitled": [], "problems": []}
+
+        with app.app_context():
+            retitle_existing(poster, ledger,
+                             {"13": "Klausuren (Leichtbau)",
+                              "14": "Exams (Aircraft Systems)"}, summary)
+
+        assert poster.titles[124] == "Klausuren (Leichtbau)"
+        assert summary["retitled"] == [("Klausuren #13", "Klausuren (Leichtbau)")]
+        assert ledger.title_for("13") == "Klausuren (Leichtbau)"
+
+    def test_a_title_on_record_is_not_looked_up_again(self, app, tmp_path):
+        """Seven hundred lookups on every re-run is what a record saves."""
+        path = tmp_path / "l.jsonl"
+        ledger = Ledger(path)
+        ledger.record_topic("13", 124)
+        ledger.record_title("13", "Klausuren (Leichtbau)")
+        ledger.close()
+        poster = self.Renamer({124: "Klausuren (Leichtbau)"})
+        summary = {"retitled": [], "problems": []}
+
+        with app.app_context():
+            retitle_existing(poster, Ledger(path),
+                             {"13": "Klausuren (Leichtbau)"}, summary)
+
+        assert poster.lookups == []
+        assert summary["retitled"] == []
+
+    def test_a_refused_rename_is_reported_not_fatal(self, app, tmp_path):
+        ledger = Ledger(tmp_path / "l.jsonl")
+        ledger.record_topic("13", 124)
+        ledger.record_topic("22", 130)
+        poster = self.Renamer({124: "Klausuren #13", 130: "Exams #22"}, refuse={124})
+        summary = {"retitled": [], "problems": []}
+
+        with app.app_context():
+            retitle_existing(poster, ledger,
+                             {"13": "Klausuren (Leichtbau)",
+                              "22": "Exams (Aircraft Systems)"}, summary)
+
+        assert poster.titles[130] == "Exams (Aircraft Systems)"
+        assert len(summary["problems"]) == 1
+        assert ledger.title_for("13") is None, "tried again on the next run"
