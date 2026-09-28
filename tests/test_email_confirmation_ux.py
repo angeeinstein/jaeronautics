@@ -11,10 +11,9 @@ email was the end of the road.
 """
 from datetime import date, datetime
 
-import pytest
 
 from conftest import db, make_member
-from aeronautics_members.db_models import ImportedForumProfile, Setting, User
+from aeronautics_members.db_models import ImportedForumProfile, User
 from aeronautics_members.services.forum_import import import_forum_people
 
 OLD_EMAIL = "a.popovic@edu.fh-joanneum.at"
@@ -139,7 +138,7 @@ class TestReconnectingAtSignIn:
 
     def test_somebody_missed_at_verification_reconnects_on_sign_in(self, app, client):
         profile = self._archived()
-        member = _member(work_verified=True)  # verified, but never claimed
+        _member(work_verified=True)  # verified, but never claimed
 
         client.post("/login", data={
             "email": "private@example.com", "password": "hunter2hunter2",

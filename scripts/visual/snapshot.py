@@ -32,7 +32,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]

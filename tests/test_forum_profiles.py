@@ -14,7 +14,7 @@ import json
 import pytest
 
 from conftest import db
-from aeronautics_members.db_models import ImportedForumProfile, User
+from aeronautics_members.db_models import ImportedForumProfile
 from aeronautics_members.services.forum_import import import_forum_people
 from aeronautics_members.services.forum import FORUM_USERNAME_LENGTH_LIMIT
 from aeronautics_members.services.forum_profiles import (
@@ -665,7 +665,7 @@ class TestAddingPeopleToAGroupTwice:
 
     def test_a_refusal_that_is_not_about_membership_is_raised(self, app):
         from aeronautics_members.forum_service import (
-            DiscourseConnectProvider, ForumProviderError,
+            ForumProviderError,
         )
 
         provider = self._provider()

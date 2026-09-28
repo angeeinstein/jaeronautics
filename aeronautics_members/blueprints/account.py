@@ -55,7 +55,6 @@ from ..services.members import (
     DIRECT_MEMBER_PROFILE_FIELDS,
     IDENTITY_MEMBER_FIELDS,
     apply_member_profile,
-    normalize_optional_member_value,
 )
 from ..services.membership import (
     member_has_active_access,

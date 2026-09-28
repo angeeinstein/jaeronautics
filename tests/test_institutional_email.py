@@ -16,12 +16,11 @@ import pytest
 from werkzeug.datastructures import MultiDict
 
 from conftest import db, make_member
-from aeronautics_members.db_models import Member, Setting
+from aeronautics_members.db_models import Setting
 from aeronautics_members.forms import MembershipForm
 from aeronautics_members.member_categories import MemberCategory
 from aeronautics_members.services.identity import (
     build_work_email_verification_claims,
-    generate_token,
     mark_work_email_verified_from_token,
 )
 from aeronautics_members.services.institutional_email import (
