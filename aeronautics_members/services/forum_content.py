@@ -917,6 +917,16 @@ def plan_site_settings(threads, posts, attachments=()):
                 "max_topics_per_day", max(opened.values()), AT_LEAST,
                 "the whole of one person's thirteen years lands on one day",
             ))
+            # Trust level 1 has its own first-day limits in newer Discourse, and
+            # everybody here arrives at level 1 (default trust level). Found on
+            # the Azure forum: max_topics_in_first_day at 62 and the seventh
+            # thread of one person refused for 22 hours, at tl1's default of 6.
+            # A forum without these reports them as unknown and is left alone.
+            requirements.append(Requirement(
+                "tl1_max_topics_in_first_day", max(opened.values()), AT_LEAST,
+                f"the same {max(opened.values())} threads, counted separately "
+                f"for trust level 1, which is where everybody arrives",
+            ))
 
         replied = Counter(
             post.get("uid") for post in posts if post.get("pid") not in opening_pids
@@ -925,6 +935,11 @@ def plan_site_settings(threads, posts, attachments=()):
             requirements.append(Requirement(
                 "max_replies_in_first_day", max(replied.values()), AT_LEAST,
                 f"one person wrote {max(replied.values())} replies",
+            ))
+            requirements.append(Requirement(
+                "tl1_max_replies_in_first_day", max(replied.values()), AT_LEAST,
+                f"the same {max(replied.values())} replies, counted separately "
+                f"for trust level 1",
             ))
 
         # What a post carries is not what its author typed. Each attachment is

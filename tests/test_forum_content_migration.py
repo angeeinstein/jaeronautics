@@ -644,6 +644,17 @@ class TestTheGuardsAimedAtBrandNewAccounts:
         assert requirements["max_topics_in_first_day"].needed == 7
         assert requirements["max_topics_per_day"].needed == 7
 
+    def test_trust_level_one_has_its_own_first_day_caps(self):
+        """Everybody arrives at level 1, whose defaults are 6 topics and 30 replies."""
+        threads = [{"tid": str(n), "subject": f"Klausur {n}", "firstpost": str(n)}
+                   for n in range(1, 8)]
+        posts = [a_post(str(n), uid="7") for n in range(1, 8)]
+        posts += [a_post(str(n), uid="8") for n in range(100, 131)]
+        requirements = {r.setting: r for r in plan_site_settings(threads, posts)}
+
+        assert requirements["tl1_max_topics_in_first_day"].needed == 7
+        assert requirements["tl1_max_replies_in_first_day"].needed == 31
+
     def test_links_and_images_are_counted(self):
         posts = [a_post("1", message="Siehe https://a.at und https://b.at und https://c.at")]
         requirements = {r.setting: r for r in plan_site_settings([], posts)}
