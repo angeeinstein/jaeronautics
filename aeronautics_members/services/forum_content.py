@@ -380,14 +380,32 @@ class ContentPoster:
                     f"same way. The import lets old_forum post while it runs; "
                     f"a category restricted since then by hand does not."
                 ) from exc
+            if exc.code == 429 and (self._asked_to_wait(detail) or 0) > RATE_LIMIT_MAX_WAIT:
+                # A limit counted in hours or days. Waiting five minutes five
+                # times does not reach the end of it -- on the Azure forum that
+                # was twenty-five silent minutes a post, every post refused,
+                # and the reason printed only once the run was over. Said now,
+                # and the post left for the next run.
+                said = self._refusal_text(detail)
+                current_app.logger.warning(
+                    "Discourse refused %s %s and asks to wait %ss: %s",
+                    method, path, self._asked_to_wait(detail), said,
+                )
+                raise ForumProviderError(
+                    f"{method} {path} failed (429): the forum asks to wait "
+                    f"{self._asked_to_wait(detail)}s, which no retry reaches: {said}"
+                ) from exc
             if exc.code == 429 and rate_limit_retries > 0:
                 # Discourse says exactly how long to wait, so waiting is the
                 # whole fix. Dropping the post instead loses it: the settings
                 # go back at the end of the run, and the person re-running it
                 # has no way to ask for only the posts that failed.
                 wait = self._wait_seconds(detail)
-                current_app.logger.info(
-                    "Discourse rate limit on %s, waiting %ss", path, wait
+                # Said on the terminal, not only in a log nobody is reading: a
+                # run waiting out a limit looks exactly like a run that hangs.
+                current_app.logger.warning(
+                    "Discourse rate limit on %s, waiting %ss: %s",
+                    path, wait, self._refusal_text(detail),
                 )
                 time.sleep(wait)
                 return self._call(
@@ -411,12 +429,29 @@ class ContentPoster:
             ) from exc
 
     @staticmethod
-    def _wait_seconds(detail):
-        """How long Discourse asked to be left alone for, within reason."""
+    def _asked_to_wait(detail):
+        """The seconds Discourse asked for, or None when it did not say."""
         try:
             asked = json.loads(detail).get("extras", {}).get("wait_seconds")
+            return int(asked) if asked is not None else None
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    @staticmethod
+    def _refusal_text(detail):
+        """Discourse's own sentence for a refusal, rather than its JSON."""
+        try:
+            errors = json.loads(detail).get("errors")
         except (ValueError, AttributeError):
-            asked = None
+            errors = None
+        if isinstance(errors, list) and errors:
+            return " ".join(str(error) for error in errors)
+        return str(detail or "")[:300]
+
+    @classmethod
+    def _wait_seconds(cls, detail):
+        """How long Discourse asked to be left alone for, within reason."""
+        asked = cls._asked_to_wait(detail)
         return min(max(int(asked or RATE_LIMIT_FALLBACK_WAIT), 1), RATE_LIMIT_MAX_WAIT)
 
     def upload(self, path, as_username, filename=None, content_type=None):

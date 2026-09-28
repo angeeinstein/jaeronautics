@@ -1065,6 +1065,41 @@ class TestBeingToldToWait:
 
         assert len(slept) == 5, "five tries, then the problem is somebody else's"
 
+    def test_a_limit_counted_in_hours_fails_at_once_and_says_why(self, app, monkeypatch):
+        """Found on the Azure forum: every post refused, five silent waits each."""
+        slept = []
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.time.sleep", slept.append
+        )
+        refusal = json.dumps({
+            "errors": ["You've performed this action too many times. Please wait 23 hours."],
+            "error_type": "rate_limit",
+            "extras": {"wait_seconds": 82800},
+        }).encode()
+        monkeypatch.setattr(
+            "aeronautics_members.services.forum_content.urlopen",
+            lambda request, timeout=None: (_ for _ in ()).throw(HTTPError(
+                "https://forum.example.at/posts.json", 429, "Too Many", {},
+                io.BytesIO(refusal),
+            )),
+        )
+        poster = ContentPoster({
+            "forum_base_url": "https://forum.example.at",
+            "discourse_api_key": "c" * 64,
+            "discourse_api_username": "system",
+        })
+
+        with app.app_context():
+            with pytest.raises(ForumProviderError) as raised:
+                poster.create_post(
+                    raw="Danke!", as_username="LutzB_L21",
+                    created_at="2022-02-04T10:00:00+00:00", topic_id=3,
+                )
+
+        assert slept == []
+        assert "Please wait 23 hours" in str(raised.value)
+        assert "82800" in str(raised.value)
+
     def test_an_hour_is_not_a_wait_it_honours(self, app):
         assert ContentPoster._wait_seconds(
             json.dumps({"extras": {"wait_seconds": 3600}})
