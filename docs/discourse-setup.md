@@ -30,7 +30,25 @@ reasons are in [forum-access-decisions.md](forum-access-decisions.md) and
 | **Disk: 40–50 GB** | the container / VM | The archive's uploads are 7 GB, Discourse keeps resized copies, and a backup needs as much again while it is made. The test forum ran out mid-import |
 | `client_max_body_size` ≥ 200m | the container's nginx (`app.yml`) | Otherwise anything over 10 MB is refused before Discourse sees it |
 | Raised API rate limits | `app.yml`, `DISCOURSE_MAX_…` | **For the import only** — put them back afterwards |
+| Real visitor addresses behind the tunnel | `app.yml` `run:` — see below | cloudflared hands every request over from `172.17.0.1`, so the container's nginx (`web.ratelimited.template.yml`: 12 a second, 200 a minute per address) counts the whole forum as one visitor. Found on Azure: the import alone drew 429s from nginx |
 | `app.yml` itself | keep a copy | Not part of any Discourse backup |
+
+For the real addresses, under `run:` in `app.yml`, then `./launcher rebuild app`:
+
+```yaml
+  - file:
+      path: /etc/nginx/conf.d/outlets/server/20-real-ip-from-tunnel.conf
+      chmod: 644
+      contents: |
+        set_real_ip_from 172.17.0.1;
+        real_ip_header CF-Connecting-IP;
+```
+
+Only the tunnel on the host is trusted to name the visitor; Discourse's own
+`cloudflare.template.yml` trusts Cloudflare's ranges instead, which is right
+for a proxied origin and wrong here, where every request arrives from the
+Docker bridge. Check afterwards that the access log shows real addresses:
+`sudo tail -n 5 /var/discourse/shared/standalone/log/var-log/nginx/access.log`.
 
 ## Set by the portal's commands — leave them as they are
 
@@ -44,7 +62,7 @@ reasons are in [forum-access-decisions.md](forum-access-decisions.md) and
 | The year-group profile field and each new cohort group (`lav26`, …) | every member sync | made when first needed; never grant a category to a cohort group |
 | Permissions on the imported categories | `import-forum-content --mapping`, `forum-permissions` | members only; archive read-only |
 | `authorized extensions` | `import-forum-content` | **widened** — PDFs, archives, office files |
-| The 22 posting limits | `import-forum-content --adjust-settings` | loosened for the run, **put back** after |
+| The 24 posting limits | `import-forum-content --adjust-settings` | loosened for the run, **put back** after. Includes `tl1_max_topics_in_first_day` and `tl1_max_replies_in_first_day`: with `default trust level` 1 these apply instead of the plain ones (defaults 6 and 30), and without them one person's seventh thread is refused for 22 hours |
 
 Only the avatar is still called *Discourse Connect* overrides; the email and
 name are **auth overrides** — they apply to every way of signing in. Leave
