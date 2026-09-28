@@ -33,11 +33,18 @@ During installation the script can ask for:
 ```text
 jaeronautics/
 |-- aeronautics_members/    # Flask app package
+|   |-- app.py              # App factory, helpers, CLI commands
+|   |-- blueprints/         # Route handlers (public, auth, account, forum, admin, webhook)
+|   |-- db_models.py        # SQLAlchemy models
+|   `-- *_service.py        # Forum, notification, mail services
+|-- migrations/             # Alembic database migrations
+|-- tests/                  # pytest suite (billing math, webhook, page rendering)
 |-- install.sh              # Linux install/update/repair/uninstall entrypoint
 |-- deploy/                 # Example nginx and systemd files
-|-- docs/                   # Small operational notes
+|-- docs/                   # Operational notes; design.md is the design concept
 |-- .env.example            # Safe environment template
 |-- requirements.txt
+|-- requirements-dev.txt    # Test/development dependencies
 `-- wsgi.py                 # Gunicorn entrypoint
 ```
 
@@ -92,6 +99,19 @@ sudo bash install.sh --mode update
 sudo bash install.sh --mode repair
 sudo bash install.sh --mode uninstall
 ```
+
+### Quick Update Command
+
+After the first install, the installer creates an `update` command on the
+system path. To update the app at any time, just type:
+
+```bash
+update
+```
+
+It re-runs the installer in update mode (elevating with `sudo` automatically),
+which pulls the latest code, installs dependencies, applies database
+migrations, and restarts the service.
 
 ## Notes
 

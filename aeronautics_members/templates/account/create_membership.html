@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_form_errors.html" import form_errors %}
 {% block title %}{{ _('Create Membership Profile') }}{% endblock %}
 {% block content %}
 <div class="container mt-5 mb-5">
@@ -10,12 +11,8 @@
                 </div>
                 <div class="card-body">
                     <p class="text-muted">{{ _('This account does not have a linked membership profile yet. Complete the form below to start your membership with this login.') }}</p>
-                    {% if form.errors %}
-                        <div class="alert alert-danger">
-                            {{ _('Please correct the highlighted errors and try again.') }}
-                        </div>
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('create_membership_profile') }}" novalidate>
+                    {{ form_errors(form) }}
+                    <form method="POST" action="{{ url_for('account.create_membership_profile') }}" novalidate data-busy-text="{{ _('Taking you to payment…') }}">
                         {{ form.hidden_tag() }}
                         <div class="row g-4">
                             <div class="col-md-6">{{ form.salutation.label(class='form-label') }}{{ form.salutation(class='form-select') }}</div>
@@ -35,7 +32,16 @@
                             </div>
                             <div class="col-md-6">{{ form.phone_work.label(class='form-label') }}{{ form.phone_work(class='form-control') }}</div>
                             <div class="col-md-6">{{ form.email_work.label(class='form-label') }}{{ form.email_work(class='form-control') }}</div>
-                            <div class="col-md-6">{{ form.year_group.label(class='form-label') }}{{ form.year_group(class='form-control') }}</div>
+                            <div class="col-md-6" data-member-kind
+                                 data-year-group-categories="{{ year_group_categories }}"
+                                 data-year-group-required="{{ year_group_required_categories }}">
+                                {{ form.member_category.label(class='form-label') }}
+                                {{ form.member_category(class='form-select') }}
+                                <div class="mt-3" data-year-group-field>
+                                    {{ form.year_group.label(class='form-label') }}{{ form.year_group(class='form-control') }}
+                                </div>
+                            </div>
+                            {% if invoice_payments_enabled %}
                             <div class="col-12">
                                 <label class="form-label d-block">{{ form.payment_method.label.text }}</label>
                                 {% for subfield in form.payment_method %}
@@ -45,15 +51,18 @@
                                     </div>
                                 {% endfor %}
                             </div>
+                            {% endif %}
                             <div class="col-12">
                                 <div class="form-check">
                                     {{ form.terms_accepted(class='form-check-input') }}
-                                    <label class="form-check-label" for="{{ form.terms_accepted.id }}">{{ form.terms_accepted.label.text }}</label>
+                                    <label class="form-check-label" for="{{ form.terms_accepted.id }}">
+                                        {{ _('I accept the') }} <a href="{{ url_for('public.legal_texts') }}" target="_blank">{{ _('Terms and Conditions') }}</a>
+                                    </label>
                                 </div>
                             </div>
                             <div class="col-12 d-flex gap-2">
-                                <a href="{{ url_for('admin_dashboard' if current_user.has_role('admin') else 'index') }}" class="btn btn-secondary">{{ _('Back') }}</a>
-                                {{ form.submit(class='btn btn-primary') }}
+                                <a href="{{ url_for('account.account') }}" class="btn btn-secondary">{{ _('Back') }}</a>
+                                <button type="submit" class="btn btn-primary">{{ form.submit.label.text }}</button>
                             </div>
                         </div>
                     </form>
@@ -62,4 +71,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='member-kind-toggle.js') }}"></script>
 {% endblock %}

@@ -11,7 +11,7 @@ DEFAULT_APP_GROUP="jaeronautics"
 DEFAULT_APP_PORT="8000"
 DEFAULT_DB_NAME="jaeronautics"
 DEFAULT_DB_USER="jaeronautics"
-DEFAULT_LANGUAGES="en,de"
+DEFAULT_LANGUAGES="en"
 DEFAULT_RATELIMIT_STORAGE_URI="redis://127.0.0.1:6379/0"
 STATE_DIR="/etc/jaeronautics"
 STATE_FILE="${STATE_DIR}/install.conf"
@@ -38,7 +38,18 @@ USE_CLOUDFLARE_TUNNEL="${BOOTSTRAP_USE_CLOUDFLARE_TUNNEL:-0}"
 CLOUDFLARE_ORIGIN_HOST="${BOOTSTRAP_CLOUDFLARE_ORIGIN_HOST:-}"
 ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-}"
+# The revision that was running before bootstrap_self_update replaced the
+# checkout. Carried across the re-exec because by then HEAD is already the new
+# revision, and the rollback point has to name the one being replaced.
+PRE_UPDATE_REVISION="${BOOTSTRAP_PRE_UPDATE_REVISION:-}"
 NONINTERACTIVE="${BOOTSTRAP_NONINTERACTIVE:-0}"
+# --restore FILE: a backup made on the Backup & Restore page, and optionally a
+# file holding its passphrase (for a run without a terminal).
+RESTORE_FILE=""
+RESTORE_PASSPHRASE_FILE=""
+# Set while restoring onto a new server: the backup brings its own accounts,
+# so asking for a first admin that the restore then deletes would be a trap.
+SKIP_ADMIN_ACCOUNT="0"
 
 PACKAGE_MANAGER=""
 DB_SERVICE_NAME=""
@@ -51,9 +62,42 @@ BILLING_RECONCILE_SERVICE_FILE=""
 BILLING_RECONCILE_TIMER_FILE=""
 NOTIFICATIONS_SERVICE_FILE=""
 NOTIFICATIONS_TIMER_FILE=""
+CLEANUP_LOGS_SERVICE_FILE=""
+CLEANUP_LOGS_TIMER_FILE=""
+FORUM_DRIFT_SERVICE_FILE=""
+FORUM_DRIFT_TIMER_FILE=""
+EXTERNAL_WORK_SERVICE_FILE=""
+EXTERNAL_WORK_TIMER_FILE=""
+UPDATE_RUNNER_SERVICE_FILE=""
+UPDATE_RUNNER_TIMER_FILE=""
+UPDATE_RUNNER_PATH_FILE=""
+UPDATE_RUNNER_SCRIPT="/usr/local/lib/jaeronautics/update-runner.sh"
+# Where the revision running before the last update is recorded, so there is
+# something concrete to go back to.
+ROLLBACK_FILE="${STATE_DIR}/rollback.conf"
+SKIP_DB_BACKUP="${SKIP_DB_BACKUP:-0}"
+LAST_DB_BACKUP_FILE=""
+UPDATE_STATE_DIR="/var/lib/jaeronautics/updates"
+UPDATE_COMMAND_PATH="/usr/local/bin/update"
 PACKAGE_CACHE_UPDATED=0
 INSTALLATION_EXISTS=0
 USE_LOCAL_DB="1"
+
+# Set when the database is moving and the data is to follow it. The SOURCE_
+# values are the configuration as it was before this run, captured before the
+# prompts overwrite it, because by the time the new values are known the old
+# ones are the only way back to the data.
+MIGRATE_DB_DATA="0"
+MIGRATION_DUMP_FILE=""
+MIGRATION_SOURCE_COUNTS=""
+MIGRATION_OVERWRITE_DEST="0"
+MIGRATION_TEMP_FILES=()
+DB_CONN_ARGS=()
+SOURCE_DB_HOST=""
+SOURCE_DB_PORT=""
+SOURCE_DB_NAME=""
+SOURCE_DB_USER=""
+SOURCE_DB_PASSWORD=""
 
 if [[ -t 1 ]]; then
     COLOR_RED=$'\033[0;31m'
@@ -93,16 +137,109 @@ die() {
     exit 1
 }
 
+require_safe_sql_identifier() {
+    # DB_NAME and DB_USER are interpolated straight into CREATE DATABASE, CREATE
+    # USER and GRANT. Quoting them correctly for MySQL is fiddly and easy to get
+    # subtly wrong, and a database called anything but a plain identifier is a
+    # poor idea regardless -- so reject those names up front instead. MySQL
+    # limits a user name to 32 characters and a database name to 64.
+    local label="$1" value="$2" max_length="$3"
+    if [[ ! "${value}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        die "${label} must contain only letters, digits and underscores and start with a letter or underscore. Got: ${value}"
+    fi
+    if (( ${#value} > max_length )); then
+        die "${label} must be at most ${max_length} characters. Got ${#value}."
+    fi
+}
+
+diag_section() {
+    printf '\n----- %s -----\n' "$*"
+}
+
+collect_diagnostics() {
+    # Gather what someone would look up by hand after a failed install. This is
+    # printed into the installer's own output, so it reaches the admin page's
+    # update log too -- which is the whole point: an administrator without shell
+    # access should be able to see *why* it failed, not just that it did.
+    command -v systemctl >/dev/null 2>&1 || return 0
+
+    local units=()
+    [[ -n "${SERVICE_NAME:-}" ]] && units+=("${SERVICE_NAME}")
+    if [[ -n "${SERVICE_NAME:-}" ]]; then
+        units+=(
+            "${SERVICE_NAME}-external-work.timer"
+            "${SERVICE_NAME}-update-runner.path"
+            "${SERVICE_NAME}-notifications.timer"
+            "${SERVICE_NAME}-billing-reconcile.timer"
+            "${SERVICE_NAME}-forum-drift.timer"
+        )
+    fi
+    [[ "${USE_LOCAL_DB:-0}" == "1" && -n "${DB_SERVICE_NAME:-}" ]] && units+=("${DB_SERVICE_NAME}")
+    units+=("nginx")
+
+    diag_section "Unit states"
+    local unit
+    for unit in "${units[@]}"; do
+        printf '%-46s %s\n' "${unit}" "$(systemctl is-active "${unit}" 2>&1 || true)"
+    done
+
+    diag_section "Units in a failed state"
+    systemctl --failed --no-pager --no-legend 2>/dev/null || true
+
+    if [[ -n "${SERVICE_NAME:-}" ]]; then
+        diag_section "Last 60 log lines for ${SERVICE_NAME}"
+        journalctl -u "${SERVICE_NAME}" -n 60 --no-pager 2>/dev/null || true
+    fi
+
+    if [[ "${USE_LOCAL_DB:-0}" == "1" && -n "${DB_SERVICE_NAME:-}" ]]; then
+        diag_section "Last 20 log lines for ${DB_SERVICE_NAME}"
+        journalctl -u "${DB_SERVICE_NAME}" -n 20 --no-pager 2>/dev/null || true
+    fi
+
+    diag_section "nginx configuration test"
+    nginx -t 2>&1 || true
+    if [[ -r /var/log/nginx/error.log ]]; then
+        diag_section "Last 20 lines of the nginx error log"
+        tail -n 20 /var/log/nginx/error.log 2>/dev/null || true
+    fi
+
+    if [[ -n "${APP_PORT:-}" ]]; then
+        diag_section "Health endpoint, direct to the application"
+        curl -sS -m 10 -o - -w '\nHTTP %{http_code}\n' "http://127.0.0.1:${APP_PORT}/__health" 2>&1 || true
+    fi
+    if [[ -n "${DOMAIN:-}" ]]; then
+        diag_section "Health endpoint, through nginx"
+        curl -sS -m 10 -k -o - -w '\nHTTP %{http_code}\n' -H "Host: ${DOMAIN}" \
+            "http://127.0.0.1/__health" 2>&1 || true
+    fi
+
+    # Out of disk is a common and easily missed cause of an install failing
+    # halfway through.
+    diag_section "Disk space"
+    df -h "${INSTALL_DIR:-/}" / 2>/dev/null || true
+
+    printf '\n'
+}
+
 on_error() {
+    # Capture the failing status before anything else runs and overwrites it.
+    local failed_status=$?
     local line="$1"
     local command="$2"
     error "Installer failed at line ${line}: ${command}"
-    if [[ -n "${SERVICE_NAME:-}" ]] && command -v systemctl >/dev/null 2>&1; then
-        warn "Recent ${SERVICE_NAME} service logs:"
-        journalctl -u "${SERVICE_NAME}" -n 20 --no-pager 2>/dev/null || true
-    fi
+    warn "Collecting diagnostics for the failure above."
+    collect_diagnostics
+    error "Installer failed. The diagnostics above show the state at the time of failure."
+    # Exit non-zero explicitly. Without this the handler's own last command --
+    # which succeeds -- became the script's status, so a failed install exited 0.
+    # The update runner reads that status, so the admin page showed a green
+    # "Completed" for a deploy that had just printed "Installer failed".
+    exit "$(( failed_status == 0 ? 1 : failed_status ))"
 }
 trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
+# The database credential files live only as long as the run that needs them,
+# however that run ends.
+trap 'cleanup_migration_temp_files' EXIT
 
 usage() {
     cat <<'EOF'
@@ -120,6 +257,9 @@ Options:
   --ssl-email EMAIL
   --admin-email EMAIL
   --admin-password PASSWORD
+  --restore FILE            Restore a backup (from the Backup & Restore page).
+                            Installs first if this server has no installation.
+  --passphrase-file FILE    Read the backup's passphrase from FILE instead of asking.
   --yes, --non-interactive
   -h, --help
 EOF
@@ -136,6 +276,19 @@ tty_print() {
         printf '%b' "$*" >&2
     fi
 }
+
+# Give up on a stalled mirror rather than hanging forever; apt has no default
+# timeout at all.
+APT_NETWORK_OPTS=(
+    -o Acquire::http::Timeout=30
+    -o Acquire::https::Timeout=30
+    -o Acquire::Retries=2
+    -o DPkg::Lock::Timeout=120
+    # One request per connection. Pipelined requests through a flaky mirror or
+    # proxy are what turned downloads into "Ign:" lines and then a retry that
+    # never returned (seen on jaero-test, 2026-09-27).
+    -o Acquire::http::Pipeline-Depth=0
+)
 
 retry() {
     local attempts="$1"
@@ -232,6 +385,14 @@ load_state() {
 parse_args() {
     while (($#)); do
         case "$1" in
+            --rollback)
+                MODE="rollback"
+                shift
+                ;;
+            --skip-db-backup)
+                SKIP_DB_BACKUP=1
+                shift
+                ;;
             --mode)
                 MODE="${2:-}"
                 shift 2
@@ -276,6 +437,17 @@ parse_args() {
                 ADMIN_PASSWORD="${2:-}"
                 shift 2
                 ;;
+            --restore)
+                MODE="restore"
+                [[ -n "${2:-}" ]] || { error "--restore needs the backup file"; exit 2; }
+                RESTORE_FILE="$(realpath -m -- "$2")"
+                shift 2
+                ;;
+            --passphrase-file)
+                [[ -n "${2:-}" ]] || { error "--passphrase-file needs a file"; exit 2; }
+                RESTORE_PASSPHRASE_FILE="$(realpath -m -- "$2")"
+                shift 2
+                ;;
             --yes|--non-interactive)
                 NONINTERACTIVE="1"
                 shift
@@ -285,7 +457,12 @@ parse_args() {
                 exit 0
                 ;;
             *)
-                die "Unknown argument: $1"
+                # A mistyped argument is a usage error, not a failed install:
+                # going through die() here tripped the ERR trap and buried the
+                # one line that matters under a page of service diagnostics.
+                error "Unknown argument: $1"
+                usage >&2
+                exit 2
                 ;;
         esac
     done
@@ -298,6 +475,15 @@ resolve_paths() {
     BILLING_RECONCILE_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-billing-reconcile.timer"
     NOTIFICATIONS_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-notifications.service"
     NOTIFICATIONS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-notifications.timer"
+    CLEANUP_LOGS_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.service"
+    CLEANUP_LOGS_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-cleanup-logs.timer"
+    FORUM_DRIFT_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-forum-drift.service"
+    FORUM_DRIFT_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-forum-drift.timer"
+    EXTERNAL_WORK_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.service"
+    EXTERNAL_WORK_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-external-work.timer"
+    UPDATE_RUNNER_SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.service"
+    UPDATE_RUNNER_TIMER_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.timer"
+    UPDATE_RUNNER_PATH_FILE="/etc/systemd/system/${SERVICE_NAME}-update-runner.path"
 
     if [[ -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]]; then
         NGINX_CONF_PATH="/etc/nginx/sites-available/${SERVICE_NAME}.conf"
@@ -328,7 +514,11 @@ update_package_index_once() {
     case "${PACKAGE_MANAGER}" in
         apt)
             export DEBIAN_FRONTEND=noninteractive
-            retry 3 apt-get update
+            # Bound the network waits. Without these apt will sit on an
+            # unresponsive mirror indefinitely, and because the update runs
+            # unattended behind the admin button there is nobody to notice --
+            # the update simply never finishes and the button stays disabled.
+            retry 3 apt-get "${APT_NETWORK_OPTS[@]}" update
             ;;
         dnf)
             retry 3 dnf makecache
@@ -341,12 +531,47 @@ update_package_index_once() {
     PACKAGE_CACHE_UPDATED=1
 }
 
+packages_missing() {
+    # The ones not installed yet, one per line.
+    local pkg
+    for pkg in "$@"; do
+        case "${PACKAGE_MANAGER}" in
+            apt)
+                dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null | grep -q 'install ok installed' \
+                    || printf '%s\n' "${pkg}"
+                ;;
+            dnf|yum)
+                rpm -q "${pkg}" >/dev/null 2>&1 || printf '%s\n' "${pkg}"
+                ;;
+            *)
+                printf '%s\n' "${pkg}"
+                ;;
+        esac
+    done
+}
+
 install_packages() {
+    # An update of the portal needs nothing from the distribution's mirrors
+    # when every package is already there. Asking anyway re-downloaded the whole
+    # package index (about 35 MB -- it is deleted after every run) on every
+    # update, so a portal update failed whenever the Ubuntu mirror had a bad
+    # moment. System updates are unattended-upgrades' job; "--mode repair"
+    # still refreshes these packages on purpose.
+    if [[ "${MODE:-}" == "update" ]]; then
+        local missing=()
+        mapfile -t missing < <(packages_missing "$@")
+        if (( ${#missing[@]} == 0 )); then
+            info "System packages already installed: $*"
+            return
+        fi
+        set -- "${missing[@]}"
+    fi
+
     update_package_index_once
 
     case "${PACKAGE_MANAGER}" in
         apt)
-            retry 3 apt-get install -y "$@"
+            retry 3 apt-get "${APT_NETWORK_OPTS[@]}" install -y "$@"
             ;;
         dnf)
             retry 3 dnf install -y "$@"
@@ -393,10 +618,13 @@ bootstrap_packages() {
 base_packages() {
     case "${PACKAGE_MANAGER}" in
         apt)
-            printf '%s\n' ca-certificates curl git nginx mariadb-client mariadb-server openssl python3 python3-pip python3-venv redis-server
+            # mariadb-client always: the data has to be readable whether the
+            # database is on this box or elsewhere. mariadb-server only once
+            # the local/external answer is known, from install_or_update.
+            printf '%s\n' ca-certificates curl git nginx mariadb-client openssl python3 python3-pip python3-venv redis-server
             ;;
         dnf|yum)
-            printf '%s\n' ca-certificates curl git nginx mariadb-server openssl python3 python3-pip redis
+            printf '%s\n' ca-certificates curl git nginx mariadb openssl python3 python3-pip redis
             ;;
     esac
 }
@@ -760,7 +988,10 @@ choose_existing_install_action() {
             1) MODE="update"; return ;;
             2) MODE="repair"; return ;;
             3) MODE="uninstall"; return ;;
-            4) die "Cancelled." ;;
+            # Not a failure: going through die() here tripped the ERR trap, so
+            # choosing "cancel" printed "Installer failed", a stack line and a
+            # page of diagnostics for what was a deliberate answer.
+            4) info "Cancelled."; exit 0 ;;
             *) warn "Please choose 1, 2, 3, or 4." ;;
         esac
     done
@@ -828,17 +1059,46 @@ backup_runtime_state() {
         cp -a "${NGINX_CONF_PATH}" "${BACKUP_DIR}/${APP_NAME}-nginx-${backup_stamp}.conf"
     fi
 
-    if [[ "${USE_LOCAL_DB:-1}" == "1" && ( "${DB_HOST:-127.0.0.1}" == "127.0.0.1" || "${DB_HOST:-localhost}" == "localhost" ) && -n "${DB_NAME:-}" ]]; then
+    # Whether the database is on this box or elsewhere. The guard here used to
+    # require a local one, which meant the installations most in need of a
+    # backup -- the ones whose database this script cannot snapshot along with
+    # the filesystem -- were the ones silently running without it.
+    if [[ -n "${DB_NAME:-}" ]]; then
+        # This dump is the only way back from a migration, because a rollback
+        # restores code and deliberately leaves the schema alone. Failing to take
+        # it is therefore a reason to stop, not a warning to scroll past.
         if dump_client="$(db_dump_client 2>/dev/null)"; then
             dump_file="${BACKUP_DIR}/${APP_NAME}-db-${backup_stamp}.sql.gz"
-            if "${dump_client}" --protocol=socket -u root --single-transaction --quick --skip-lock-tables "${DB_NAME}" | gzip -c > "${dump_file}"; then
+            set_db_conn_args "${DB_HOST:-127.0.0.1}" "${DB_PORT:-3306}" "${DB_USER:-}" "${DB_PASSWORD:-}"
+            if "${dump_client}" "${DB_CONN_ARGS[@]}" --single-transaction --quick \
+               --skip-lock-tables --default-character-set=utf8mb4 "${DB_NAME}" | gzip -c > "${dump_file}"; then
                 info "Backed up MariaDB database to ${dump_file}"
+                LAST_DB_BACKUP_FILE="${dump_file}"
             else
                 rm -f "${dump_file}" 2>/dev/null || true
-                warn "Database backup failed for ${DB_NAME}. Continuing without a DB dump."
+                if [[ "${SKIP_DB_BACKUP:-0}" == "1" ]]; then
+                    warn "Database backup failed for ${DB_NAME}, continuing because --skip-db-backup was given."
+                else
+                    die "Database backup failed for ${DB_NAME}. Refusing to continue: without it there is no way back from a schema change. Fix the problem, or re-run with --skip-db-backup if you accept that risk."
+                fi
             fi
+        elif [[ "${SKIP_DB_BACKUP:-0}" == "1" ]]; then
+            warn "No mysqldump/mariadb-dump found, continuing because --skip-db-backup was given."
         else
-            warn "Could not find mysqldump/mariadb-dump. Continuing without a DB dump backup."
+            die "Could not find mysqldump or mariadb-dump, so no database backup can be taken. Install one, or re-run with --skip-db-backup if you accept that risk."
+        fi
+    fi
+
+    # Staged avatar uploads are real data the database does not hold: they are
+    # files awaiting an administrator's approval, and a restore without them
+    # loses those submissions silently.
+    if [[ -d "${INSTALL_DIR}/storage" ]] && command_exists tar; then
+        local storage_archive="${BACKUP_DIR}/${APP_NAME}-storage-${backup_stamp}.tar.gz"
+        if tar -czf "${storage_archive}" -C "${INSTALL_DIR}" storage 2>/dev/null; then
+            info "Backed up uploaded files to ${storage_archive}"
+        else
+            rm -f "${storage_archive}" 2>/dev/null || true
+            warn "Could not back up ${INSTALL_DIR}/storage."
         fi
     fi
 
@@ -859,6 +1119,116 @@ warn_local_repo_changes() {
     fi
 }
 
+record_rollback_point() {
+    # Called before the checkout moves, so this records what is running *now*.
+    local revision alembic_revision
+    # PRE_UPDATE_REVISION is what was running before the self-update replaced
+    # the checkout. Without it this reads HEAD, which by now is the revision
+    # being installed -- so the rollback point named the version we are moving
+    # *to*, and rolling back could only ever report "already running that".
+    revision="${PRE_UPDATE_REVISION}"
+    if [[ -z "${revision}" ]]; then
+        revision="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf '')"
+    fi
+    [[ -n "${revision}" ]] || return 0
+
+    alembic_revision="$(current_schema_revision)"
+
+    mkdir -p "${STATE_DIR}"
+    cat > "${ROLLBACK_FILE}" <<EOF
+# Written by install.sh before an update. "rollback --rollback" returns here.
+ROLLBACK_REVISION="${revision}"
+ROLLBACK_BRANCH="${BRANCH:-}"
+ROLLBACK_SCHEMA_REVISION="${alembic_revision}"
+ROLLBACK_DB_BACKUP="${LAST_DB_BACKUP_FILE:-}"
+ROLLBACK_RECORDED_AT="$(date --iso-8601=seconds)"
+EOF
+    # Readable by the application group, not just root: the admin page shows
+    # the rollback point, and the web process runs unprivileged. At 0600 it got
+    # PermissionError and -- because a missing file is the normal state before
+    # the first update -- silently rendered no rollback panel at all. The file
+    # holds a revision, a schema revision and a backup path; no secrets.
+    chown "root:${APP_GROUP}" "${ROLLBACK_FILE}" 2>/dev/null || true
+    chmod 640 "${ROLLBACK_FILE}"
+    info "Recorded rollback point at ${revision:0:8}."
+}
+
+current_schema_revision() {
+    # Read straight from the database rather than through the application, which
+    # may be the very thing that is broken.
+    local client
+    if ! client="$(db_client 2>/dev/null)"; then
+        printf ''
+        return 0
+    fi
+    "${client}" --protocol=socket -u root -N -B -e \
+        "SELECT version_num FROM \`${DB_NAME}\`.alembic_version LIMIT 1;" 2>/dev/null || printf ''
+}
+
+roll_back_installation() {
+    [[ -f "${ROLLBACK_FILE}" ]] || die "No rollback point has been recorded yet, so there is nothing to go back to."
+    # shellcheck disable=SC1090
+    source "${ROLLBACK_FILE}"
+    [[ -n "${ROLLBACK_REVISION:-}" ]] || die "The rollback point in ${ROLLBACK_FILE} has no revision recorded."
+
+    local current_revision
+    current_revision="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+    if [[ "${current_revision}" == "${ROLLBACK_REVISION}" ]]; then
+        success "Already running ${ROLLBACK_REVISION:0:8}; nothing to roll back."
+        return 0
+    fi
+
+    step "Rolling back to ${ROLLBACK_REVISION:0:8}"
+
+    # The unit file names the database and cache services it must start after.
+    # install_or_update detects them; this path did not, so the rollback wrote
+    # "After=network.target .service" and "Requires=.service" and systemd
+    # dropped the ordering -- the app would then be free to start before
+    # MariaDB on the next reboot.
+    detect_redis_service_name
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        detect_db_service_name
+    fi
+    info "Recorded at ${ROLLBACK_RECORDED_AT:-unknown}, currently running ${current_revision:0:8}."
+
+    local schema_now
+    schema_now="$(current_schema_revision)"
+    if [[ -n "${ROLLBACK_SCHEMA_REVISION:-}" && -n "${schema_now}" && "${schema_now}" != "${ROLLBACK_SCHEMA_REVISION}" ]]; then
+        # Deliberately not undone. Every migration here only adds tables and
+        # columns, which older code ignores, so leaving the schema forward is
+        # safe. Undoing it would mean dropping tables -- destroying everything
+        # written since the update, which is worse than the fault being escaped.
+        warn "The database schema moved from ${ROLLBACK_SCHEMA_REVISION} to ${schema_now} during that update."
+        warn "The rollback restores the code only and leaves the schema as it is."
+        if [[ -n "${ROLLBACK_DB_BACKUP:-}" && -f "${ROLLBACK_DB_BACKUP}" ]]; then
+            warn "To put the data back as well, restore ${ROLLBACK_DB_BACKUP} by hand afterwards."
+        fi
+    fi
+
+    git_in_dir "${INSTALL_DIR}" fetch --prune origin || true
+    git_in_dir "${INSTALL_DIR}" checkout --detach "${ROLLBACK_REVISION}" \
+        || die "Could not check out ${ROLLBACK_REVISION}. The repository may have been rewritten."
+
+    # Reinstall from the rolled-back revision so dependencies, unit files and the
+    # nginx configuration all match the code that is about to run.
+    ensure_writable_directories
+    ensure_virtualenv
+    render_service_file
+    render_billing_reconcile_timer_files
+    render_notifications_timer_files
+    render_cleanup_logs_timer_files
+    render_forum_drift_timer_files
+    render_external_work_timer_files
+    render_update_runner
+    render_update_command
+    render_nginx_config
+    systemctl daemon-reload
+    reload_services
+    verify_installation
+
+    success "Rolled back to ${ROLLBACK_REVISION:0:8}."
+}
+
 sync_repo_to_dir() {
     local target_dir="$1"
     local repo_url="$2"
@@ -870,7 +1240,12 @@ sync_repo_to_dir() {
         warn_local_repo_changes "${target_dir}"
         info "Updating repository in ${target_dir}"
         git_in_dir "${target_dir}" remote set-url origin "${repo_url}" || true
-        retry 3 git_in_dir "${target_dir}" fetch --prune origin
+        # Ensure the requested branch is fetched even if the original clone was a
+        # single-branch (shallow) clone whose refspec only tracks its own branch.
+        # Without this, switching to a different branch fails because
+        # origin/<branch> is never fetched.
+        git_in_dir "${target_dir}" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*" || true
+        retry 3 git_in_dir "${target_dir}" fetch --prune origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
         git_in_dir "${target_dir}" checkout -B "${branch}" "origin/${branch}"
         git_in_dir "${target_dir}" reset --hard "origin/${branch}"
         return
@@ -912,6 +1287,13 @@ bootstrap_self_update() {
         rm -rf "${BOOTSTRAP_DIR}" 2>/dev/null || true
     fi
 
+    # Read HEAD before syncing. This is the last moment the old revision is
+    # still checked out: sync_repo_to_dir moves it, and everything after the
+    # re-exec below sees only the new one.
+    if [[ -z "${PRE_UPDATE_REVISION}" && -d "${INSTALL_DIR}/.git" ]]; then
+        PRE_UPDATE_REVISION="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf '')"
+    fi
+
     sync_repo_to_dir "${bootstrap_target}" "${REPO_URL}" "${BRANCH}"
     chmod +x "${bootstrap_target}/install.sh"
 
@@ -934,6 +1316,7 @@ bootstrap_self_update() {
         BOOTSTRAP_ADMIN_EMAIL="${ADMIN_EMAIL}" \
         BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
         BOOTSTRAP_NONINTERACTIVE="${NONINTERACTIVE}" \
+        BOOTSTRAP_PRE_UPDATE_REVISION="${PRE_UPDATE_REVISION}" \
         bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}"
     exit $?
 }
@@ -1003,7 +1386,26 @@ detect_existing_installation() {
 
 ensure_repo_present() {
     sync_repo_to_dir "${INSTALL_DIR}" "${REPO_URL}" "${BRANCH}"
+    ensure_writable_directories
     chown -R "${APP_USER}:${APP_GROUP}" "${INSTALL_DIR}"
+}
+
+# The one directory the application writes inside its own tree, and the only
+# one git cannot bring: it is ignored, so a fresh clone has no storage/ at all.
+# Every unit grants it with ReadWritePaths, and systemd will not start a
+# service whose ReadWritePaths names something that does not exist -- so on a
+# genuinely fresh install the service failed at once with
+#
+#   Failed to set up mount namespacing: /var/www/jaeronautics/storage:
+#   No such file or directory
+#   status=226/NAMESPACE
+#
+# which never showed up in testing, because every install until then was an
+# update over a tree where the running application had already made it.
+ensure_writable_directories() {
+    install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${INSTALL_DIR}/storage"
+    install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 \
+        "${INSTALL_DIR}/storage/forum_avatar_staging"
 }
 
 ensure_virtualenv() {
@@ -1016,7 +1418,26 @@ ensure_virtualenv() {
 
     step "Installing Python dependencies"
     run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade pip wheel
-    run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade -r "${INSTALL_DIR}/requirements.txt"
+
+    # Prefer the lock file: it pins the transitive dependencies too and checks
+    # every download against a recorded hash, so an update installs the same
+    # code that was tested rather than whatever the index happens to serve
+    # today. requirements.txt stays the fallback for checkouts that predate the
+    # lock, and USE_DEPENDENCY_LOCK=0 is the escape hatch if a locked version
+    # ever fails to build on a newer Python -- but reach for it knowing the
+    # install is then unpinned.
+    if [[ -f "${INSTALL_DIR}/requirements.lock" && "${USE_DEPENDENCY_LOCK:-1}" != "0" ]]; then
+        if ! run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir \
+            --require-hashes -r "${INSTALL_DIR}/requirements.lock"; then
+            error "If a pinned version cannot be built here, regenerate requirements.lock;"
+            error "as a temporary measure, re-run with USE_DEPENDENCY_LOCK=0 to install"
+            error "from requirements.txt without pinned transitive versions or hashes."
+            die "Installing the locked dependencies failed."
+        fi
+    else
+        warn "Installing from requirements.txt: transitive versions are not pinned."
+        run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade -r "${INSTALL_DIR}/requirements.txt"
+    fi
 }
 
 collect_configuration() {
@@ -1074,6 +1495,15 @@ collect_configuration() {
         CLOUDFLARE_ORIGIN_HOST=""
     fi
 
+    # Snapshot the database this installation is using right now, before the
+    # prompts below overwrite it. If the answers move the database, these are
+    # the only remaining directions to where the data actually lives.
+    SOURCE_DB_HOST="${DB_HOST:-}"
+    SOURCE_DB_PORT="${DB_PORT:-3306}"
+    SOURCE_DB_NAME="${DB_NAME:-}"
+    SOURCE_DB_USER="${DB_USER:-}"
+    SOURCE_DB_PASSWORD="${DB_PASSWORD:-}"
+
     if [[ "${reconfigure_all}" == "1" || -z "${DB_HOST:-}" ]]; then
         prompt_yes_no USE_LOCAL_DB "Use a locally managed MariaDB database?" "${USE_LOCAL_DB}"
     fi
@@ -1094,6 +1524,9 @@ collect_configuration() {
         if [[ "${reconfigure_all}" == "1" || -z "${DB_HOST:-}" ]]; then
             prompt_value DB_HOST "Database host" "${DB_HOST:-}" 0 1
         fi
+        if [[ "${reconfigure_all}" == "1" || -z "${DB_PORT:-}" ]]; then
+            prompt_value DB_PORT "Database port" "${DB_PORT:-3306}" 0 1
+        fi
         if [[ "${reconfigure_all}" == "1" || -z "${DB_NAME:-}" ]]; then
             prompt_value DB_NAME "Database name" "${DB_NAME}" 0 1
         fi
@@ -1104,6 +1537,8 @@ collect_configuration() {
             prompt_value DB_PASSWORD "Database password" "${DB_PASSWORD:-}" 1 1
         fi
     fi
+
+    offer_database_migration
 
     if is_placeholder "${STRIPE_SECRET_KEY:-}"; then
         STRIPE_SECRET_KEY=""
@@ -1156,6 +1591,12 @@ write_env_file() {
             public_scheme="https"
         fi
         public_base_url="${public_scheme}://${DOMAIN}"
+
+        if [[ "${public_scheme}" == "http" ]]; then
+            warn "Public deployment configured over plain HTTP (no Let's Encrypt, no Cloudflare Tunnel)."
+            warn "The app requires HTTPS for its session cookie (SESSION_COOKIE_SECURE), so login will NOT work over http://${DOMAIN}."
+            warn "Enable Let's Encrypt or put the site behind a Cloudflare Tunnel (which terminates TLS) before using it."
+        fi
     fi
 
     cat > "${ENV_FILE}" <<EOF
@@ -1173,6 +1614,7 @@ STRIPE_WEBHOOK_SECRET=$(dotenv_quote "${STRIPE_WEBHOOK_SECRET}")
 PUBLIC_BASE_URL=$(dotenv_quote "${public_base_url}")
 RATELIMIT_STORAGE_URI=$(dotenv_quote "${RATELIMIT_STORAGE_URI}")
 MAIL_ACCOUNTS_JSON=$(dotenv_quote "${MAIL_ACCOUNTS_JSON}")
+UPDATE_STATE_DIR=$(dotenv_quote "${UPDATE_STATE_DIR}")
 EOF
 
     chown root:"${APP_GROUP}" "${ENV_FILE}"
@@ -1203,6 +1645,10 @@ ensure_database() {
     fi
 
     step "Configuring local MariaDB database"
+    # The password is escaped because it is a string literal and may legitimately
+    # contain anything; the names are identifiers and are validated instead.
+    require_safe_sql_identifier "The database name" "${DB_NAME}" 64
+    require_safe_sql_identifier "The database user" "${DB_USER}" 32
     local password_sql
     password_sql="$(sql_escape "${DB_PASSWORD}")"
     run_db_sql "
@@ -1214,6 +1660,221 @@ ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${password_sql}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;"
+}
+
+# ---------------------------------------------------------------------------
+# Carrying the data across when the database moves
+#
+# Switching between a locally managed MariaDB and an external server is a
+# configuration change, but the data does not follow by itself -- so without
+# this the app comes back up against an empty database and looks, convincingly,
+# like every member has vanished. The move works in both directions: out to a
+# managed server when this outgrows one box, and back in when a single box is
+# easier to snapshot.
+#
+# The ordering is the safety property. The dump is taken and verified while the
+# old configuration is still the live one, so anything that fails leaves a
+# working installation pointed at the database that still holds the data.
+# ---------------------------------------------------------------------------
+
+# Has the database actually moved, and if so, does the data follow?
+#
+# Only asked when there was a database before and it is not the one now
+# configured -- on a first install there is nothing to carry, and answering a
+# question about moving data that does not exist yet is just confusing.
+offer_database_migration() {
+    MIGRATE_DB_DATA="0"
+
+    [[ -n "${SOURCE_DB_HOST}" && -n "${SOURCE_DB_NAME}" ]] || return 0
+    if [[ "${SOURCE_DB_HOST}" == "${DB_HOST}" && "${SOURCE_DB_NAME}" == "${DB_NAME}" \
+          && "${SOURCE_DB_PORT}" == "${DB_PORT}" ]]; then
+        return 0
+    fi
+
+    local moving_to="an external server at ${DB_HOST}"
+    db_host_is_local "${DB_HOST}" && moving_to="a locally managed MariaDB"
+
+    tty_print "\n${COLOR_BOLD}The database is moving.${COLOR_RESET}\n"
+    tty_print "  from  ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST}\n"
+    tty_print "  to    ${DB_NAME} on ${moving_to}\n"
+    tty_print "Without copying the data across, the site comes back up empty.\n"
+    prompt_yes_no MIGRATE_DB_DATA "Copy the existing data to the new database?" "1"
+
+    if [[ "${MIGRATE_DB_DATA}" != "1" ]]; then
+        warn "Starting with an empty database. The old one at ${SOURCE_DB_HOST} is left as it is."
+    fi
+}
+
+db_host_is_local() {
+    case "${1:-}" in
+        ""|127.0.0.1|localhost|::1) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Connection arguments for a database, returned in DB_CONN_ARGS.
+#
+# A password is never passed as an argument: ps(1) shows every argument of every
+# process to every user on the box, so it goes into a 0600 defaults file that is
+# removed when the installer exits. --defaults-extra-file has to come first or
+# the client ignores it.
+set_db_conn_args() {
+    local host="$1" port="$2" user="$3" password="$4"
+    DB_CONN_ARGS=()
+
+    if db_host_is_local "${host}"; then
+        # The local server is administered over the unix socket as root, the
+        # same way ensure_database provisions it.
+        DB_CONN_ARGS=(--protocol=socket -u root)
+        return
+    fi
+
+    local creds
+    creds="$(mktemp "${TMPDIR:-/tmp}/jaeronautics-db.XXXXXX.cnf")"
+    chmod 600 "${creds}"
+    printf '[client]\nuser=%s\npassword=%s\n' "${user}" "${password}" > "${creds}"
+    MIGRATION_TEMP_FILES+=("${creds}")
+    DB_CONN_ARGS=(--defaults-extra-file="${creds}" -h "${host}" -P "${port:-3306}" --protocol=TCP)
+}
+
+cleanup_migration_temp_files() {
+    local file=""
+    for file in "${MIGRATION_TEMP_FILES[@]:-}"; do
+        [[ -n "${file}" ]] && rm -f "${file}"
+    done
+    MIGRATION_TEMP_FILES=()
+}
+
+# table<TAB>rowcount for every base table, which is what the import is checked
+# against. Comparing row counts rather than just "did mysql exit 0" is the
+# difference between knowing the data arrived and hoping it did.
+db_table_row_counts() {
+    local database="$1"
+    local client table
+    client="$(db_client)"
+    while IFS= read -r table; do
+        [[ -z "${table}" ]] && continue
+        printf '%s\t%s\n' "${table}" "$("${client}" "${DB_CONN_ARGS[@]}" -N -B \
+            -e "SELECT COUNT(*) FROM \`${database}\`.\`${table}\`" 2>/dev/null || printf 'ERR')"
+    done < <("${client}" "${DB_CONN_ARGS[@]}" -N -B -e "
+        SELECT table_name FROM information_schema.tables
+         WHERE table_schema = '$(sql_escape "${database}")'
+           AND table_type = 'BASE TABLE'
+         ORDER BY table_name" 2>/dev/null)
+}
+
+# A dump that was cut off part way -- a full disk, a dropped connection, a
+# server that went away -- looks exactly like a good one until you restore it.
+# mysqldump writes its trailer last, so the trailer is the proof it finished.
+verify_sql_dump() {
+    local file="$1"
+    local tables=0
+
+    [[ -s "${file}" ]] || { error "The dump file is empty or missing: ${file}"; return 1; }
+    if ! tail -5 "${file}" | grep -q "Dump completed"; then
+        error "The dump has no completion marker, so it was cut short: ${file}"
+        return 1
+    fi
+    tables="$(grep -c "^CREATE TABLE" "${file}" || true)"
+    if [[ "${tables}" -lt 1 ]]; then
+        error "The dump contains no tables, so it is not a usable copy: ${file}"
+        return 1
+    fi
+    info "Dump verified: ${tables} tables, $(du -h "${file}" | cut -f1)."
+    return 0
+}
+
+dump_source_database() {
+    step "Copying the existing data out of ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST}"
+
+    local dump_client
+    dump_client="$(db_dump_client)" || die "Neither mariadb-dump nor mysqldump is installed, so the data cannot be carried across."
+
+    mkdir -p "${BACKUP_DIR}"
+    MIGRATION_DUMP_FILE="${BACKUP_DIR}/${APP_NAME}-migration-$(date +%Y%m%d%H%M%S).sql"
+
+    set_db_conn_args "${SOURCE_DB_HOST}" "${SOURCE_DB_PORT}" "${SOURCE_DB_USER}" "${SOURCE_DB_PASSWORD}"
+    MIGRATION_SOURCE_COUNTS="$(db_table_row_counts "${SOURCE_DB_NAME}")"
+    if [[ -z "${MIGRATION_SOURCE_COUNTS}" ]]; then
+        die "Could not read ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST}. Check the host, user and password before retrying; nothing has been changed."
+    fi
+
+    # --single-transaction so the other databases on a shared server keep
+    # working; --routines and --triggers because a schema is not only tables.
+    if ! "${dump_client}" "${DB_CONN_ARGS[@]}" --single-transaction --quick \
+         --skip-lock-tables --routines --triggers --default-character-set=utf8mb4 \
+         "${SOURCE_DB_NAME}" > "${MIGRATION_DUMP_FILE}" 2>"${MIGRATION_DUMP_FILE}.err"; then
+        error "Reading the existing database failed:"
+        sed 's/^/    /' "${MIGRATION_DUMP_FILE}.err" >&2 || true
+        rm -f "${MIGRATION_DUMP_FILE}" "${MIGRATION_DUMP_FILE}.err"
+        die "Nothing has been changed; the installation still points at ${SOURCE_DB_HOST}."
+    fi
+    rm -f "${MIGRATION_DUMP_FILE}.err"
+    chmod 600 "${MIGRATION_DUMP_FILE}"
+
+    verify_sql_dump "${MIGRATION_DUMP_FILE}" \
+        || die "Nothing has been changed; the installation still points at ${SOURCE_DB_HOST}."
+    success "Saved a verified copy to ${MIGRATION_DUMP_FILE}"
+}
+
+import_migrated_database() {
+    step "Loading the data into ${DB_NAME} on ${DB_HOST}"
+
+    local client
+    client="$(db_client)"
+    set_db_conn_args "${DB_HOST}" "${DB_PORT}" "${DB_USER}" "${DB_PASSWORD}"
+
+    # An external destination is not created by this installer, so it has to
+    # exist already -- and it has to be empty, or loading into it would write
+    # over whatever is there.
+    if ! db_host_is_local "${DB_HOST}"; then
+        # Reachability and emptiness are separate questions. An empty
+        # destination is the normal case for a move onto a managed server, and
+        # reading "no tables" as "no database" would refuse every one of them.
+        if ! "${client}" "${DB_CONN_ARGS[@]}" "${DB_NAME}" -N -B -e "SELECT 1" >/dev/null 2>&1; then
+            die "Cannot reach database ${DB_NAME} on ${DB_HOST} as ${DB_USER}. Create it (CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci), grant access, and check the host, port and password. Nothing has been changed."
+        fi
+        local existing table_count
+        existing="$(db_table_row_counts "${DB_NAME}")"
+        table_count="$(printf '%s' "${existing}" | grep -c . || true)"
+        if [[ "${table_count}" -gt 0 && "${MIGRATION_OVERWRITE_DEST}" != "1" ]]; then
+            warn "${DB_NAME} on ${DB_HOST} already contains ${table_count} tables."
+            prompt_yes_no MIGRATION_OVERWRITE_DEST "Overwrite what is already in ${DB_NAME} on ${DB_HOST}?" "0"
+            [[ "${MIGRATION_OVERWRITE_DEST}" == "1" ]] \
+                || die "Left the destination alone. The copied data is at ${MIGRATION_DUMP_FILE}; nothing else has been changed."
+        fi
+    fi
+
+    if ! "${client}" "${DB_CONN_ARGS[@]}" --default-character-set=utf8mb4 \
+         "${DB_NAME}" < "${MIGRATION_DUMP_FILE}" 2>"${MIGRATION_DUMP_FILE}.err"; then
+        error "Loading the data failed:"
+        sed 's/^/    /' "${MIGRATION_DUMP_FILE}.err" >&2 || true
+        rm -f "${MIGRATION_DUMP_FILE}.err"
+        die "The copy is still at ${MIGRATION_DUMP_FILE} and ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST} is untouched, so nothing has been lost."
+    fi
+    rm -f "${MIGRATION_DUMP_FILE}.err"
+
+    verify_migrated_database
+}
+
+# Every table, every row count, both sides. Anything less can miss a table that
+# failed to load, and a member list that is quietly short by one is worse than
+# one that is obviously empty.
+verify_migrated_database() {
+    local destination_counts differences
+    set_db_conn_args "${DB_HOST}" "${DB_PORT}" "${DB_USER}" "${DB_PASSWORD}"
+    destination_counts="$(db_table_row_counts "${DB_NAME}")"
+
+    differences="$(diff <(printf '%s\n' "${MIGRATION_SOURCE_COUNTS}") \
+                        <(printf '%s\n' "${destination_counts}") || true)"
+    if [[ -n "${differences}" ]]; then
+        error "What arrived does not match what was read. Differences (< source, > destination):"
+        printf '%s\n' "${differences}" | sed 's/^/    /' >&2
+        die "The copy is still at ${MIGRATION_DUMP_FILE} and ${SOURCE_DB_NAME} on ${SOURCE_DB_HOST} is untouched. Put ${ENV_FILE} back to the old database, or investigate, before using this installation."
+    fi
+
+    success "Verified: $(printf '%s' "${destination_counts}" | grep -c .) tables, row counts identical on both sides."
+    info "The old database at ${SOURCE_DB_HOST} has not been touched. Keep it until you are satisfied, then remove it yourself."
 }
 
 initialize_database_schema() {
@@ -1228,6 +1889,11 @@ count_admin_accounts() {
 ensure_admin_account() {
     local existing_admin_count="0"
     local create_admin_now="0"
+
+    if [[ "${SKIP_ADMIN_ACCOUNT}" == "1" ]]; then
+        info "Not creating an admin account: the backup being restored brings its own."
+        return
+    fi
 
     existing_admin_count="$(count_admin_accounts 2>/dev/null || printf '0')"
     if [[ ! "${existing_admin_count}" =~ ^[0-9]+$ ]]; then
@@ -1297,12 +1963,30 @@ User=${APP_USER}
 Group=${APP_GROUP}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
-ExecStart=${INSTALL_DIR}/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:${APP_PORT} wsgi:application
+# Threads, so a page waiting on Stripe or the forum holds one thread rather
+# than a whole worker: three workers of one request each meant three slow
+# forum calls stalled the entire site. Twelve requests at once now, and the
+# outside calls themselves time out well inside the 60 seconds.
+ExecStart=${INSTALL_DIR}/.venv/bin/gunicorn --workers 3 --threads 4 --timeout 60 --graceful-timeout 30 --bind 127.0.0.1:${APP_PORT} wsgi:application
 Restart=always
 RestartSec=5
 TimeoutStartSec=60
 PrivateTmp=true
 NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 
 [Install]
 WantedBy=multi-user.target
@@ -1338,6 +2022,20 @@ ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_ap
 TimeoutStartSec=180
 PrivateTmp=true
 NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 EOF
 
     cat > "${BILLING_RECONCILE_TIMER_FILE}" <<EOF
@@ -1388,6 +2086,20 @@ ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_ap
 TimeoutStartSec=180
 PrivateTmp=true
 NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
 EOF
 
     cat > "${NOTIFICATIONS_TIMER_FILE}" <<EOF
@@ -1396,6 +2108,7 @@ Description=Joanneum Aeronautics notification delivery timer
 
 [Timer]
 OnBootSec=5m
+OnActiveSec=5m
 OnUnitActiveSec=15m
 AccuracySec=1m
 Persistent=true
@@ -1406,6 +2119,317 @@ WantedBy=timers.target
 EOF
 
     chmod 644 "${NOTIFICATIONS_SERVICE_FILE}" "${NOTIFICATIONS_TIMER_FILE}"
+}
+
+render_cleanup_logs_timer_files() {
+    step "Writing log-retention cleanup timer"
+    local unit_after="After=network.target"
+    local unit_requires=""
+
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        unit_after="After=network.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    cat > "${CLEANUP_LOGS_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics log retention cleanup
+${unit_after}
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app cleanup-logs
+TimeoutStartSec=300
+PrivateTmp=true
+NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
+EOF
+
+    cat > "${CLEANUP_LOGS_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics log retention cleanup timer
+
+[Timer]
+OnCalendar=monthly
+AccuracySec=6h
+Persistent=true
+Unit=${SERVICE_NAME}-cleanup-logs.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${CLEANUP_LOGS_SERVICE_FILE}" "${CLEANUP_LOGS_TIMER_FILE}"
+}
+
+render_forum_drift_timer_files() {
+    step "Writing forum membership drift timer"
+    local unit_after="After=network.target"
+    local unit_requires=""
+    if [[ "${USE_LOCAL_DB}" == "1" && -n "${DB_SERVICE_NAME}" ]]; then
+        unit_after="After=network.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    # Everything else that ends a membership is an event somebody causes, and
+    # each of those syncs the forum where it happens. A membership ending
+    # because its last day has passed is not an event: nobody does anything, so
+    # nothing tells the forum, and the person goes on reading the archive until
+    # somebody happens to touch their record. This is what asks.
+    cat > "${FORUM_DRIFT_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics forum membership drift sync
+${unit_after}
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app sync-forum-members --only-changed
+TimeoutStartSec=900
+PrivateTmp=true
+NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
+EOF
+
+    # Half an hour after the billing reconciliation, so that a membership Stripe
+    # has just been found to have lapsed is already recorded here before this
+    # asks what the forum should be told.
+    cat > "${FORUM_DRIFT_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics forum membership drift timer
+
+[Timer]
+OnCalendar=*-*-* 03:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=${SERVICE_NAME}-forum-drift.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${FORUM_DRIFT_SERVICE_FILE}" "${FORUM_DRIFT_TIMER_FILE}"
+}
+
+render_external_work_timer_files() {
+    step "Writing external work (forum sync) worker timer"
+    local unit_after="After=network.target"
+    local unit_requires=""
+
+    if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        unit_after="After=network.target ${DB_SERVICE_NAME}.service"
+        unit_requires="Requires=${DB_SERVICE_NAME}.service"
+    fi
+
+    cat > "${EXTERNAL_WORK_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics external work worker (Discourse sync)
+${unit_after}
+${unit_requires}
+
+[Service]
+Type=oneshot
+User=${APP_USER}
+Group=${APP_GROUP}
+WorkingDirectory=${INSTALL_DIR}
+EnvironmentFile=${ENV_FILE}
+Environment=PYTHONPATH=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/.venv/bin/flask --app aeronautics_members.app:create_app process-external-work
+TimeoutStartSec=600
+PrivateTmp=true
+NoNewPrivileges=true
+# Reduce what a compromised process can reach: the filesystem is read-only apart
+# from the paths granted below, and the usual escalation surfaces are closed.
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# ProtectSystem=strict makes everything read-only, so grant back the two places
+# the application legitimately writes: staged forum avatars await approval in
+# storage, and the update button leaves its request in the state directory.
+ReadWritePaths=${INSTALL_DIR}/storage ${UPDATE_STATE_DIR}
+EOF
+
+    cat > "${EXTERNAL_WORK_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics external work worker timer
+
+[Timer]
+# Queued forum syncs should land quickly, so members do not wait for access.
+# OnActiveSec is what starts it on a machine that is already up: OnBootSec has
+# long passed there, and OnUnitActiveSec counts from a run that a freshly
+# installed service has never had -- so without it the timer sat "elapsed",
+# with no next trigger, for a day after a reinstall. The same holds for the
+# notification and update-runner timers.
+OnBootSec=2min
+OnActiveSec=2min
+OnUnitActiveSec=2min
+AccuracySec=30s
+Persistent=true
+Unit=${SERVICE_NAME}-external-work.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${EXTERNAL_WORK_SERVICE_FILE}" "${EXTERNAL_WORK_TIMER_FILE}"
+}
+
+render_update_runner() {
+    step "Installing admin-page update runner"
+
+    # The web application runs unprivileged and must never be able to run the
+    # update itself: a sudoers rule for it would turn any compromise of the web
+    # process into root in one step. Instead the app writes a request into this
+    # directory, and the root-owned runner below acts on it. The request carries
+    # no instructions -- what gets deployed comes from this installer's own
+    # state -- so the unprivileged side can ask for an update but cannot choose
+    # what an update is.
+    install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${UPDATE_STATE_DIR}"
+    install -d -m 0755 "$(dirname "${UPDATE_RUNNER_SCRIPT}")"
+
+    # Write via a temporary file and rename: bash reads a script incrementally,
+    # so truncating this file while an update is running would corrupt the very
+    # process performing it.
+    local runner_tmp="${UPDATE_RUNNER_SCRIPT}.tmp"
+    if [[ -f "${INSTALL_DIR}/deploy/update-runner.sh" ]]; then
+        cp -f "${INSTALL_DIR}/deploy/update-runner.sh" "${runner_tmp}"
+    else
+        warn "deploy/update-runner.sh not found; the admin update button will be unavailable."
+        return
+    fi
+    chmod 750 "${runner_tmp}"
+    mv -f "${runner_tmp}" "${UPDATE_RUNNER_SCRIPT}"
+
+    cat > "${UPDATE_RUNNER_SERVICE_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics admin-requested update runner
+After=network.target
+
+[Service]
+Type=oneshot
+# Runs as root by design: installing an update needs systemd, nginx and
+# packages. It acts only on a request file written by the web application.
+Environment=UPDATE_STATE_DIR=${UPDATE_STATE_DIR}
+Environment=UPDATE_COMMAND=${UPDATE_COMMAND_PATH}
+Environment=INSTALL_DIR=${INSTALL_DIR}
+Environment=LOG_GROUP=${APP_GROUP}
+ExecStart=${UPDATE_RUNNER_SCRIPT}
+# Above the runner's own limit (UPDATE_TIMEOUT, 45 minutes, plus a minute for
+# the update to stop): the runner is what records a hung update as failed. At
+# 1800 systemd killed it first, mid-run, and the page showed "running" for good.
+TimeoutStartSec=3300
+EOF
+
+    # A path unit starts the runner the moment the request file appears, so an
+    # administrator does not wait out a polling interval.
+    cat > "${UPDATE_RUNNER_PATH_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics update request watcher (immediate)
+
+[Path]
+PathExists=${UPDATE_STATE_DIR}/request.json
+Unit=${SERVICE_NAME}-update-runner.service
+
+[Install]
+WantedBy=paths.target
+EOF
+
+    # The timer stays as a safety net: it recovers a request written while the
+    # path unit was not running, which the path unit alone would never notice.
+    cat > "${UPDATE_RUNNER_TIMER_FILE}" <<EOF
+[Unit]
+Description=Joanneum Aeronautics update request watcher (fallback poll)
+
+[Timer]
+OnBootSec=2min
+OnActiveSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=${SERVICE_NAME}-update-runner.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    chmod 644 "${UPDATE_RUNNER_SERVICE_FILE}" "${UPDATE_RUNNER_TIMER_FILE}" "${UPDATE_RUNNER_PATH_FILE}"
+}
+
+render_update_command() {
+    step "Installing 'update' convenience command"
+
+    # Do not clobber a pre-existing 'update' binary that we did not create.
+    if [[ -e "${UPDATE_COMMAND_PATH}" ]] && ! grep -q "jaeronautics-update-command" "${UPDATE_COMMAND_PATH}" 2>/dev/null; then
+        warn "Skipping 'update' command: ${UPDATE_COMMAND_PATH} already exists and was not created by this installer."
+        return
+    fi
+
+    cat > "${UPDATE_COMMAND_PATH}" <<EOF
+#!/usr/bin/env bash
+# jaeronautics-update-command
+# Convenience command generated by ${APP_NAME} install.sh.
+# Type 'update' and press Enter to update the app (re-runs the installer in update mode).
+set -euo pipefail
+INSTALLER="${INSTALL_DIR}/install.sh"
+if [[ ! -f "\${INSTALLER}" ]]; then
+    echo "Installer not found at \${INSTALLER}. Is ${APP_NAME} still installed?" >&2
+    exit 1
+fi
+# "update --rollback" (or "rollback") returns to the revision that was running
+# before the last update.
+MODE_ARGS=(--mode update)
+if [[ "\${1:-}" == "--rollback" || "\$(basename "\$0")" == "rollback" ]]; then
+    MODE_ARGS=(--rollback)
+    [[ "\${1:-}" == "--rollback" ]] && shift
+fi
+if [[ \${EUID} -ne 0 ]]; then
+    exec sudo bash "\${INSTALLER}" "\${MODE_ARGS[@]}" "\$@"
+fi
+exec bash "\${INSTALLER}" "\${MODE_ARGS[@]}" "\$@"
+EOF
+
+    chmod 755 "${UPDATE_COMMAND_PATH}"
+    # A 'rollback' alias, so going back is as easy to remember as going forward.
+    ln -sf "${UPDATE_COMMAND_PATH}" "$(dirname "${UPDATE_COMMAND_PATH}")/rollback"
+    success "Run 'update' any time to update ${APP_NAME}, or 'rollback' to return to the previous version."
 }
 
 render_nginx_config() {
@@ -1431,10 +2455,15 @@ server {
     ssl_session_cache shared:SSL:10m;
     ssl_protocols TLSv1.2 TLSv1.3;
 
+    # Tell browsers to use HTTPS for this host from now on. Sent from the
+    # port-80 block too, because TLS terminates at the Cloudflare Tunnel and the
+    # browser still receives this over HTTPS; a browser ignores it on plain HTTP.
+    # No "preload" -- that is hard to reverse and belongs to a deliberate choice.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://cdn.jsdelivr.net/npm/; style-src 'self' https://cdn.jsdelivr.net/npm/; frame-src https://js.stripe.com; img-src 'self' data:;" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; frame-ancestors 'self'; frame-src 'none';" always;
 
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
@@ -1464,10 +2493,15 @@ server {
     listen 80;
     server_name ${DOMAIN};
 
+    # Tell browsers to use HTTPS for this host from now on. Sent from the
+    # port-80 block too, because TLS terminates at the Cloudflare Tunnel and the
+    # browser still receives this over HTTPS; a browser ignores it on plain HTTP.
+    # No "preload" -- that is hard to reverse and belongs to a deliberate choice.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://js.stripe.com https://cdn.jsdelivr.net/npm/; style-src 'self' https://cdn.jsdelivr.net/npm/; frame-src https://js.stripe.com; img-src 'self' data:;" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; frame-ancestors 'self'; frame-src 'none';" always;
 
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
@@ -1643,6 +2677,10 @@ check_health_endpoint() {
     local response=""
 
     if ! response="$(curl -fsS -L --max-time 20 "$@" "${url}")"; then
+        # Retry without -f so the body and status of the failure are visible;
+        # "it returned 502" is far more useful than "the check failed".
+        warn "Health check failed for ${url}; response was:"
+        curl -sS -L --max-time 20 -o - -w '\nHTTP %{http_code}\n' "$@" "${url}" 2>&1 || true
         return 1
     fi
 
@@ -1702,9 +2740,22 @@ obtain_ssl_certificate() {
 reload_services() {
     step "Reloading system services"
     systemctl daemon-reload
-    systemctl enable --now "${SERVICE_NAME}"
-    systemctl enable --now "${SERVICE_NAME}-billing-reconcile.timer"
-    systemctl enable --now "${SERVICE_NAME}-notifications.timer"
+    # enable --now starts a stopped unit but does NOT restart an already-running
+    # one, so on an update gunicorn would keep executing the previous code while
+    # serving the newly deployed templates. Enable, then restart, to guarantee
+    # the app runs the freshly deployed code.
+    systemctl enable "${SERVICE_NAME}"
+    systemctl restart "${SERVICE_NAME}"
+    # Timers restarted for the same reason, and one more: a timer stuck
+    # "elapsed" with no next trigger stays stuck under enable --now, because it
+    # counts as running. Restarting re-arms it from its new definition.
+    local timer
+    for timer in billing-reconcile notifications cleanup-logs forum-drift \
+                 external-work update-runner; do
+        systemctl enable "${SERVICE_NAME}-${timer}.timer"
+        systemctl restart "${SERVICE_NAME}-${timer}.timer"
+    done
+    systemctl enable --now "${SERVICE_NAME}-update-runner.path"
     nginx -t
     systemctl reload nginx
 }
@@ -1721,6 +2772,10 @@ verify_installation() {
     systemctl is-active --quiet "${SERVICE_NAME}"
     systemctl is-active --quiet "${SERVICE_NAME}-billing-reconcile.timer"
     systemctl is-active --quiet "${SERVICE_NAME}-notifications.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-cleanup-logs.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-forum-drift.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-external-work.timer"
+    systemctl is-active --quiet "${SERVICE_NAME}-update-runner.timer"
     check_health_endpoint "http://127.0.0.1:${APP_PORT}/__health"
     success "The application is responding on 127.0.0.1:${APP_PORT}"
 
@@ -1849,6 +2904,9 @@ install_or_update() {
     source_existing_env
     if [[ "${INSTALLATION_EXISTS}" == "1" ]]; then
         backup_runtime_state
+        # Must run before ensure_repo_present moves the checkout, or it would
+        # record the revision being installed rather than the one being replaced.
+        record_rollback_point
     fi
 
     detect_redis_service_name
@@ -1861,20 +2919,39 @@ install_or_update() {
     collect_configuration
 
     if [[ "${USE_LOCAL_DB}" == "1" ]]; then
+        # Deferred until the answer is known: an installation pointed at an
+        # external server has no use for a local database daemon.
+        install_packages mariadb-server
         detect_db_service_name
         ensure_systemd_service "${DB_SERVICE_NAME}"
     else
         DB_SERVICE_NAME=""
     fi
 
+    # Before write_env_file on purpose. Everything up to here is reversible by
+    # doing nothing, so a database that cannot be read or a dump that cannot be
+    # verified stops the run with the installation still pointing at the
+    # database that holds the data.
+    if [[ "${MIGRATE_DB_DATA}" == "1" ]]; then
+        dump_source_database
+    fi
+
     write_env_file
     ensure_virtualenv
     ensure_database
+    if [[ "${MIGRATE_DB_DATA}" == "1" ]]; then
+        import_migrated_database
+    fi
     initialize_database_schema
     ensure_admin_account
     render_service_file
     render_billing_reconcile_timer_files
     render_notifications_timer_files
+    render_cleanup_logs_timer_files
+    render_forum_drift_timer_files
+    render_external_work_timer_files
+    render_update_runner
+    render_update_command
     obtain_ssl_certificate
     render_nginx_config
     write_cloudflare_tunnel_files
@@ -1884,6 +2961,96 @@ install_or_update() {
     verify_installation
     verify_cloudflare_tunnel
     cleanup_package_caches
+}
+
+app_units() {
+    # The portal and everything that runs on its behalf, for stopping and
+    # starting around a restore. The update runner stays: it is root's.
+    printf '%s\n' "${SERVICE_NAME}"
+    local timer
+    for timer in billing-reconcile notifications cleanup-logs forum-drift external-work; do
+        printf '%s\n' "${SERVICE_NAME}-${timer}.timer"
+    done
+}
+
+restore_from_backup() {
+    [[ -f "${RESTORE_FILE}" && -r "${RESTORE_FILE}" ]] || die "Cannot read the backup file ${RESTORE_FILE}."
+
+    if [[ "${INSTALLATION_EXISTS}" != "1" ]]; then
+        step "No installation here yet: installing first, then restoring the backup"
+        SKIP_ADMIN_ACCOUNT="1"
+        MODE="install"
+        print_summary
+        install_or_update
+        MODE="restore"
+    else
+        source_existing_env
+    fi
+
+    local passphrase=""
+    if [[ -n "${RESTORE_PASSPHRASE_FILE}" ]]; then
+        [[ -r "${RESTORE_PASSPHRASE_FILE}" ]] || die "Cannot read the passphrase file ${RESTORE_PASSPHRASE_FILE}."
+        IFS= read -r passphrase < "${RESTORE_PASSPHRASE_FILE}" || true
+    else
+        has_tty || die "No terminal to ask for the backup passphrase. Pass --passphrase-file FILE."
+        prompt_value passphrase "Passphrase of the backup" "" 1 1
+    fi
+
+    # The portal's own user does the restore, reading a copy it owns: the
+    # original may sit somewhere only root can read.
+    local staging
+    staging="$(mktemp -d "/var/tmp/${APP_NAME}-restore.XXXXXX")"
+    chmod 700 "${staging}"
+    cp -- "${RESTORE_FILE}" "${staging}/backup.jabackup"
+    chown -R "${APP_USER}:${APP_GROUP}" "${staging}"
+    chmod 600 "${staging}/backup.jabackup"
+
+    step "Stopping the portal while it is restored"
+    local unit
+    while IFS= read -r unit; do
+        systemctl stop "${unit}" 2>/dev/null || true
+    done < <(app_units)
+
+    step "Restoring ${RESTORE_FILE}"
+    if ! printf '%s\n' "${passphrase}" | run_as_app_user env PYTHONPATH="${INSTALL_DIR}" \
+            "${INSTALL_DIR}/.venv/bin/flask" --app aeronautics_members.app:create_app \
+            restore-backup "${staging}/backup.jabackup" --passphrase-stdin --yes \
+            --env-out "${staging}/env.json"; then
+        passphrase=""
+        rm -rf -- "${staging}"
+        while IFS= read -r unit; do
+            systemctl start "${unit}" 2>/dev/null || true
+        done < <(app_units)
+        die "The restore did not complete; see above. If it stopped before emptying the database, nothing was changed."
+    fi
+    passphrase=""
+
+    # SECRET_KEY, the Stripe keys and the mail accounts from the backup. .env is
+    # root's, so root writes them -- with the portal's own function, so the
+    # quoting is the one both bash and the portal read back the same way.
+    if [[ -s "${staging}/env.json" ]]; then
+        step "Restoring the secret key and credentials in ${ENV_FILE}"
+        env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/python" - "${ENV_FILE}" "${staging}/env.json" <<'PY'
+import json
+import sys
+
+from aeronautics_members.services.backup import apply_env_values
+
+with open(sys.argv[2], encoding="utf-8") as handle:
+    apply_env_values(sys.argv[1], json.load(handle))
+PY
+        chown root:"${APP_GROUP}" "${ENV_FILE}"
+        chmod 640 "${ENV_FILE}"
+    fi
+    rm -rf -- "${staging}"
+
+    step "Starting the portal again"
+    systemctl daemon-reload
+    while IFS= read -r unit; do
+        systemctl start "${unit}"
+    done < <(app_units)
+
+    success "Restored. Background jobs are paused: sign in with an account from the backup, then review and resume them under Settings > Maintenance > Backup & Restore."
 }
 
 uninstall_everything() {
@@ -1907,10 +3074,48 @@ uninstall_everything() {
     if [[ -f "${NOTIFICATIONS_SERVICE_FILE}" ]]; then
         rm -f "${NOTIFICATIONS_SERVICE_FILE}"
     fi
+    if [[ -f "${CLEANUP_LOGS_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-cleanup-logs.timer" || true
+        rm -f "${CLEANUP_LOGS_TIMER_FILE}"
+    fi
+    if [[ -f "${CLEANUP_LOGS_SERVICE_FILE}" ]]; then
+        rm -f "${CLEANUP_LOGS_SERVICE_FILE}"
+    fi
+    if [[ -f "${FORUM_DRIFT_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-forum-drift.timer" || true
+        rm -f "${FORUM_DRIFT_TIMER_FILE}"
+    fi
+    if [[ -f "${FORUM_DRIFT_SERVICE_FILE}" ]]; then
+        rm -f "${FORUM_DRIFT_SERVICE_FILE}"
+    fi
+    if [[ -f "${EXTERNAL_WORK_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-external-work.timer" || true
+        rm -f "${EXTERNAL_WORK_TIMER_FILE}"
+    fi
+    if [[ -f "${EXTERNAL_WORK_SERVICE_FILE}" ]]; then
+        rm -f "${EXTERNAL_WORK_SERVICE_FILE}"
+    fi
+    if [[ -f "${UPDATE_RUNNER_PATH_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-update-runner.path" || true
+        rm -f "${UPDATE_RUNNER_PATH_FILE}"
+    fi
+    if [[ -f "${UPDATE_RUNNER_TIMER_FILE}" ]]; then
+        systemctl disable --now "${SERVICE_NAME}-update-runner.timer" || true
+        rm -f "${UPDATE_RUNNER_TIMER_FILE}"
+    fi
+    if [[ -f "${UPDATE_RUNNER_SERVICE_FILE}" ]]; then
+        rm -f "${UPDATE_RUNNER_SERVICE_FILE}"
+    fi
+    rm -f "${UPDATE_RUNNER_SCRIPT}"
+    rm -rf "${UPDATE_STATE_DIR}"
     if [[ -f "${SERVICE_FILE}" ]]; then
         systemctl disable --now "${SERVICE_NAME}" || true
         rm -f "${SERVICE_FILE}"
         systemctl daemon-reload
+    fi
+
+    if [[ -f "${UPDATE_COMMAND_PATH}" ]] && grep -q "jaeronautics-update-command" "${UPDATE_COMMAND_PATH}" 2>/dev/null; then
+        rm -f "${UPDATE_COMMAND_PATH}"
     fi
 
     if [[ -n "${NGINX_ENABLED_PATH}" ]]; then
@@ -1999,13 +3204,21 @@ main() {
             print_cloudflare_tunnel_help
             success "Installation finished successfully."
             ;;
+        rollback)
+            roll_back_installation
+            cleanup_bootstrap_dir
+            ;;
+        restore)
+            restore_from_backup
+            cleanup_bootstrap_dir
+            ;;
         uninstall)
             print_summary
             uninstall_everything
             cleanup_bootstrap_dir
             ;;
         *)
-            die "Invalid mode '${MODE}'. Expected install, update, repair, or uninstall."
+            die "Invalid mode '${MODE}'. Expected install, update, repair, rollback, or uninstall."
             ;;
     esac
 }

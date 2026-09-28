@@ -7,7 +7,7 @@
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">{{ _('Account') }}</h4>
-                <a href="{{ url_for('admin_accounts') }}" class="btn btn-sm btn-secondary">{{ _('Back to Accounts') }}</a>
+                <a href="{{ url_for('admin.admin_accounts') }}" class="btn btn-sm btn-secondary">{{ _('Back to Accounts') }}</a>
             </div>
             <div class="card-body">
                 <dl class="row mb-0">
@@ -19,7 +19,7 @@
                     <dd class="col-sm-7">
                         {% if user_record.roles %}
                             {% for role in user_record.roles %}
-                                <span class="badge text-bg-secondary me-1">{{ role.label }}</span>
+                                <span class="status-label status-neutral me-1">{{ role.label }}</span>
                             {% endfor %}
                         {% else %}
                             <span class="text-muted">{{ _('None') }}</span>
@@ -28,33 +28,221 @@
                     <dt class="col-sm-5">{{ _('Email Verified') }}</dt>
                     <dd class="col-sm-7">{% if user_record.email_is_verified %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
                 </dl>
-                <div class="d-flex flex-wrap gap-2 mt-4">
-                    {% if can_grant_admin %}
-                        <form method="POST" action="{{ url_for('grant_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to grant admin access?') }}');">
+                {% if can_manage_roles %}
+                    {#
+                      One form for every role rather than a grant and a revoke
+                      button per role: the list comes from the permission table,
+                      so a role added there appears here with nothing to change,
+                      and the guards are about the resulting set rather than
+                      about one role at a time.
+                    #}
+                    <hr class="mt-4">
+                    {# The question the role list is really being asked, but only
+                       when somebody asks it: a dozen lines of capability above
+                       the controls buries the controls. Folded like the
+                       per-role lists below, for the same reason. #}
+                    {% if effective_permissions %}
+                        <details class="small text-muted mb-3">
+                            <summary>{{ _('Show what this account can currently do (%(count)s)', count=effective_permissions|length) }}</summary>
+                            <ul class="mb-0 mt-1">
+                                {% for label in effective_permissions %}<li>{{ label }}</li>{% endfor %}
+                            </ul>
+                        </details>
+                    {% else %}
+                        <p class="small text-muted mb-3">{{ _('This account has no access beyond an ordinary member.') }}</p>
+                    {% endif %}
+
+                    <h6 class="text-muted text-uppercase small">{{ _('Roles') }}</h6>
+                    {% if role_change_blocked %}
+                        <div class="alert alert-secondary mb-0">
+                            {{ role_change_blocked }}
+                            {{ _('Another administrator can change them, or use grant-superadmin on the server.') }}
+                        </div>
+                    {% else %}
+                        {% if role_removal_warning %}
+                            <div class="alert alert-warning small">{{ role_removal_warning }}</div>
+                        {% endif %}
+                        {# The union rule, stated once. A list of checkboxes
+                           otherwise leaves it to be inferred. #}
+                        <p class="small text-muted">
+                            {{ _('The account gets the combined permissions of every role selected here.') }}
+                        </p>
+                        <form method="POST" action="{{ url_for('admin.update_account_roles', user_id=user_record.id) }}"
+                              data-confirm="{{ _('Change this account’s roles?') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-primary">{{ _('Grant Admin Access') }}</button>
+                            {% for option in role_options %}
+                                <div class="form-check">
+                                    {#
+                                      Never disabled, even when covered: unticking the
+                                      covering role has to leave this one tickable in the
+                                      same submission, and a disabled box posts nothing.
+                                    #}
+                                    <input class="form-check-input" type="checkbox" name="roles"
+                                           value="{{ option.slug }}" id="role-{{ option.slug }}"
+                                           data-role-permissions="{{ option.slug }}"
+                                           {% if option.held %}checked{% endif %}
+                                           {% if user_record.deleted_at %}disabled{% endif %}>
+                                    <label class="form-check-label" for="role-{{ option.slug }}">
+                                        {{ option.label }}
+                                        {% if option.covered_by %}
+                                            <span class="status-label status-neutral ms-1">{{ _('included in %(role)s', role=option.covered_by) }}</span>
+                                        {% endif %}
+                                        {% if option.description %}
+                                            <span class="d-block text-muted small">{{ option.description }}</span>
+                                        {% endif %}
+                                        {# What ticking this box hands over, without
+                                           having to read permissions.py to find out. #}
+                                        <details class="small text-muted">
+                                            <summary>{{ _('Show what this role can do') }}</summary>
+                                            <ul class="mb-0">
+                                                {% for label in option.permissions %}<li>{{ label }}</li>{% endfor %}
+                                            </ul>
+                                        </details>
+                                    </label>
+                                </div>
+                            {% endfor %}
+                            <p class="text-muted small mt-2 mb-0">
+                                {{ _('A role that another ticked role already covers is not stored separately — it would describe the same account twice.') }}
+                            </p>
+                            {% if not user_record.deleted_at %}
+                                <button type="submit" class="btn btn-primary btn-sm mt-3">{{ _('Save roles') }}</button>
+                            {% endif %}
                         </form>
                     {% endif %}
-                    {% if can_revoke_admin %}
-                        <form method="POST" action="{{ url_for('revoke_admin_access', user_id=user_record.id) }}" class="mb-0" onsubmit="return confirm('{{ _('Do you really want to revoke admin access?') }}');">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-danger">{{ _('Revoke Admin Access') }}</button>
-                        </form>
-                    {% endif %}
-                    {% if current_user.id == user_record.id and not member %}
-                        <a href="{{ url_for('create_membership_profile') }}" class="btn btn-secondary">{{ _('Create Membership Profile') }}</a>
-                    {% endif %}
-                </div>
-                {% if user_record.has_role('admin') and current_user.id == user_record.id %}
-                    <div class="alert alert-secondary mt-4 mb-0">{{ _('You cannot revoke your own admin access from the UI.') }}</div>
-                {% elif user_record.has_role('admin') and admin_count <= 1 %}
-                    <div class="alert alert-secondary mt-4 mb-0">{{ _('This is the last remaining admin account.') }}</div>
                 {% endif %}
             </div>
         </div>
     </div>
     <div class="col-lg-7">
-        <div class="card h-100">
+        <div class="card mb-4">
+            <div class="card-header"><h4 class="mb-0">{{ _('Account Status') }}</h4></div>
+            <div class="card-body">
+                {#
+                  Two statuses, deliberately side by side. They answer different
+                  questions and are allowed to disagree: somebody paid up for the
+                  year can be barred from signing in, and a perfectly good account
+                  can sit here with no membership yet.
+                #}
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">{{ _('Account') }}</dt>
+                    <dd class="col-sm-8">
+                        {% if user_record.deleted_at %}
+                            <span class="status-label status-neutral">{{ _('Erased') }}</span>
+                        {% elif user_record.is_disabled %}
+                            <span class="status-label status-failed">{{ _('Deactivated') }}</span>
+                        {% elif not user_record.password_hash %}
+                            <span class="status-label status-neutral">{{ _('No sign-in yet') }}</span>
+                        {% else %}
+                            <span class="status-label status-active">{{ _('Active') }}</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-4">{{ _('Membership') }}</dt>
+                    <dd class="col-sm-8">
+                        {#
+                          "None" would be wrong for somebody carried over from
+                          the old forum. They joined the association, nobody
+                          ever formally ended it, and what is actually missing
+                          is the record -- their name, address and contact
+                          details were never kept.
+                        #}
+                        {% if not member and user_record.imported_forum_profile %}
+                            <span class="text-muted">{{ _('Not recorded — joined before the portal existed') }}</span>
+                        {% elif not member %}
+                            <span class="text-muted">{{ _('None') }}</span>
+                        {% elif member.is_active %}
+                            <span class="status-label status-active">{{ _('Active') }}</span>
+                        {% else %}
+                            <span class="status-label status-pending">{{ _('Not active') }}</span>
+                        {% endif %}
+                    </dd>
+                    {% if user_record.is_disabled %}
+                        <dt class="col-sm-4">{{ _('Deactivated On') }}</dt>
+                        <dd class="col-sm-8">{{ user_record.disabled_at|date_display }}</dd>
+                        <dt class="col-sm-4">{{ _('Reason') }}</dt>
+                        <dd class="col-sm-8">{{ user_record.disabled_reason or _('None recorded') }}</dd>
+                    {% endif %}
+                </dl>
+
+                {% if can_manage_roles and not user_record.deleted_at %}
+                    {% if user_record.is_disabled %}
+                        <form method="POST" action="{{ url_for('admin.update_account_disabled', user_id=user_record.id) }}" class="mt-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="disable" value="0">
+                            <button type="submit" class="btn btn-primary">{{ _('Reactivate Account') }}</button>
+                        </form>
+                    {% elif disable_blockers %}
+                        {% for _code, message in disable_blockers %}
+                            <div class="alert alert-secondary mt-3 mb-0">{{ message }}</div>
+                        {% endfor %}
+                    {% else %}
+                        <form method="POST" action="{{ url_for('admin.update_account_disabled', user_id=user_record.id) }}" class="mt-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="disable" value="1">
+                            <label class="form-label" for="disable-reason">{{ _('Reason') }}</label>
+                            <input type="text" class="form-control mb-2" id="disable-reason" name="reason" maxlength="255"
+                                   placeholder="{{ _('Why is this account being deactivated?') }}">
+                            <button type="submit" class="btn btn-danger">{{ _('Deactivate Account') }}</button>
+                            <div class="form-text">{{ _('Stops them signing in and removes their forum access. The membership, including anything they have paid, is left exactly as it is.') }}</div>
+                        </form>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+        {% set archive = user_record.imported_forum_profile %}
+        {% if archive %}
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ _('Old Forum Account') }}</h4>
+                {% if archive.claimed_at %}
+                    <span class="status-label status-active">{{ _('Claimed') }}</span>
+                {% else %}
+                    <span class="status-label status-neutral">{{ _('Unclaimed') }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-3 align-items-start">
+                    {% if archive.avatar_path %}
+                        <img src="{{ url_for('admin.admin_archived_avatar', user_id=user_record.id) }}"
+                             alt="{{ archive.display_name }}" width="72" height="72"
+                             class="rounded border flex-shrink-0" style="object-fit: cover;">
+                    {% endif %}
+                    <dl class="row mb-0 flex-grow-1">
+                        <dt class="col-sm-5">{{ _('Name on the forum') }}</dt>
+                        <dd class="col-sm-7">{{ archive.display_name }}</dd>
+                        <dt class="col-sm-5">{{ _('Forum Username') }}</dt>
+                        <dd class="col-sm-7">{{ archive.source_username }}</dd>
+                        <dt class="col-sm-5">{{ _('Year Group') }}</dt>
+                        <dd class="col-sm-7">{{ archive.year_group or _('None') }}</dd>
+                        <dt class="col-sm-5">{{ _('Address it was registered under') }}</dt>
+                        <dd class="col-sm-7">{{ archive.source_email or _('None') }}</dd>
+                        <dt class="col-sm-5">{{ _('Group on the old forum') }}</dt>
+                        <dd class="col-sm-7">
+                            {{ archive.source_group or _('Unknown') }}
+                            {% if archive.source_group_reason %}
+                                <small class="text-muted d-block">{{ archive.source_group_reason }}</small>
+                            {% endif %}
+                        </dd>
+                        <dt class="col-sm-5">{{ _('Posts') }}</dt>
+                        <dd class="col-sm-7">{{ archive.post_count if archive.post_count is not none else '-' }}</dd>
+                        <dt class="col-sm-5">{{ _('Joined') }}</dt>
+                        <dd class="col-sm-7">{{ archive.joined_on|date_display if archive.joined_on else '-' }}</dd>
+                        <dt class="col-sm-5">{{ _('Last Posted') }}</dt>
+                        <dd class="col-sm-7">{{ archive.last_posted_on|date_display if archive.last_posted_on else _('Never') }}</dd>
+                        {% if archive.claimed_at %}
+                            <dt class="col-sm-5">{{ _('Reconnected On') }}</dt>
+                            <dd class="col-sm-7">{{ archive.claimed_at|date_display }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+                {% if not archive.claimed_at %}
+                    <p class="text-muted small mb-0 mt-3">
+                        {{ _('This account is reconnected automatically when somebody signs up and confirms the address above. Until then it exists so the old posts keep a name and a face.') }}
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        <div class="card">
             <div class="card-header"><h4 class="mb-0">{{ _('Membership') }}</h4></div>
             <div class="card-body">
                 {% if member %}
@@ -63,24 +251,26 @@
                         <dd class="col-sm-8">{{ member.title or '' }} {{ member.first_name }} {{ member.last_name }}</dd>
                         <dt class="col-sm-4">{{ _('Private Email') }}</dt>
                         <dd class="col-sm-8">{{ member.email_private }}</dd>
+                        <dt class="col-sm-4">{{ _('Category') }}</dt>
+                        <dd class="col-sm-8">{{ member.category_label }}</dd>
                         <dt class="col-sm-4">{{ _('Year Group') }}</dt>
-                        <dd class="col-sm-8">{{ member.year_group }}</dd>
+                        <dd class="col-sm-8">{{ member.year_group or _('None') }}</dd>
                         <dt class="col-sm-4">{{ _('Payment Status') }}</dt>
                         <dd class="col-sm-8">{{ member.payment_status|replace('_', ' ')|title }}</dd>
                         <dt class="col-sm-4">{{ _('Active') }}</dt>
                         <dd class="col-sm-8">{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
                         <dt class="col-sm-4">{{ _('Coverage Ends') }}</dt>
-                        <dd class="col-sm-8">{{ member.membership_ends_on.strftime('%Y-%m-%d') if member.membership_ends_on else '-' }}</dd>
+                        <dd class="col-sm-8">{{ member.membership_ends_on|date_display if member.membership_ends_on else '-' }}</dd>
                         <dt class="col-sm-4">{{ _('Next Renewal') }}</dt>
-                        <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('Not scheduled') }}{% else %}{{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else '-' }}{% endif %}</dd>
+                        <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('Not scheduled') }}{% else %}{{ member.renewal_due_on|date_display if member.renewal_due_on else '-' }}{% endif %}</dd>
                         <dt class="col-sm-4">{{ _('Auto-Renewal') }}</dt>
                         <dd class="col-sm-8">{% if member.cancel_at_period_end %}{{ _('No, cancellation is scheduled for the end of the covered year.') }}{% else %}{{ _('Yes') }}{% endif %}</dd>
                     </dl>
                     {% if member.stripe_customer_id or member.stripe_subscription_id %}
                         <div class="d-flex flex-wrap gap-2 mt-4">
-                            <form method="POST" action="{{ url_for('admin_sync_billing_account', user_id=user_record.id) }}" class="mb-0">
+                            <form method="POST" action="{{ url_for('admin.admin_sync_billing_account', user_id=user_record.id) }}" class="mb-0" data-busy-text="{{ _('Syncing…') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <input type="hidden" name="next" value="{{ url_for('admin_account_detail', user_id=user_record.id) }}">
+                                <input type="hidden" name="next" value="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">
                                 <button type="submit" class="btn btn-primary">{{ _('Sync Billing') }}</button>
                             </form>
                         </div>
@@ -107,7 +297,7 @@
                     <dt class="col-sm-5">{{ _('Latest Avatar') }}</dt>
                     <dd class="col-sm-7">{{ latest_forum_submission.status|replace('_', ' ')|title if latest_forum_submission else '-' }}</dd>
                     <dt class="col-sm-5">{{ _('Last Synced') }}</dt>
-                    <dd class="col-sm-7">{{ forum_account.last_synced_at.strftime('%Y-%m-%d %H:%M') if forum_account and forum_account.last_synced_at else '-' }}</dd>
+                    <dd class="col-sm-7">{{ forum_account.last_synced_at|datetime_display if forum_account and forum_account.last_synced_at else '-' }}</dd>
                 </dl>
                 {% if forum_context.forum_error %}
                     <div class="alert alert-warning mt-4 mb-3">{{ forum_context.forum_error }}</div>
@@ -116,9 +306,9 @@
                     <div class="alert alert-secondary mb-3">{{ latest_forum_submission.review_note }}</div>
                 {% endif %}
                 {% if member %}
-                    <form method="POST" action="{{ url_for('admin_resync_forum_account', user_id=user_record.id) }}" class="mb-0">
+                    <form method="POST" action="{{ url_for('admin.admin_resync_forum_account', user_id=user_record.id) }}" class="mb-0" data-busy-text="{{ _('Syncing…') }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <input type="hidden" name="next" value="{{ url_for('admin_account_detail', user_id=user_record.id) }}">
+                        <input type="hidden" name="next" value="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">
                         <button type="submit" class="btn btn-primary">{{ _('Resync Forum') }}</button>
                     </form>
                 {% endif %}
@@ -145,16 +335,21 @@
                     <tbody>
                         {% for entry in recent_logs %}
                             <tr>
-                                <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ entry.created_at|datetime_display }}</td>
                                 <td>{{ entry.category|replace('_', ' ')|title }}</td>
                                 <td>{{ entry.event_type|replace('_', ' ')|title }}</td>
                                 <td>{{ entry.actor_user.email if entry.actor_user else '-' }}</td>
                                 <td>
                                     <details>
                                         <summary>{{ _('Show') }}</summary>
+                                        {# See admin_logs.html: Cloudflare's email obfuscation would
+                                           replace addresses inside these JSON payloads with an <a>
+                                           element and break them. #}
+                                        <!--email_off-->
                                         {% if entry.before_state %}<pre class="mt-2 mb-2">{{ entry.before_state | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
                                         {% if entry.after_state %}<pre class="mt-2 mb-2">{{ entry.after_state | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
                                         {% if entry.event_metadata %}<pre class="mt-2 mb-0">{{ entry.event_metadata | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
+                                        <!--/email_off-->
                                     </details>
                                 </td>
                             </tr>
@@ -164,6 +359,88 @@
             </div>
         {% else %}
             <div class="alert alert-info mb-0">{{ _('No recent log entries for this account.') }}</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mt-4" id="account-privacy">
+    <div class="card-header"><h4 class="mb-0">{{ _('Personal Data') }}</h4></div>
+    <div class="card-body">
+        <p class="mb-3">
+            {{ _('Download a copy of everything stored about this account, or erase the personal data on request.') }}
+        </p>
+        <a href="{{ url_for('admin.admin_export_account_data', user_id=user_record.id) }}" class="btn btn-secondary">
+            {{ _('Download data export (JSON)') }}
+        </a>
+
+        <hr class="my-4">
+
+        {% if deletion_impact.already_erased %}
+            <div class="alert alert-secondary mb-0">
+                {{ _('The personal data on this account was erased on %(date)s. The membership and payment record was kept.', date=user_record.deleted_at|date_display) }}
+            </div>
+        {% elif deletion_impact.is_self %}
+            <div class="alert alert-secondary mb-0">
+                {{ _('You cannot delete your own account here. Use your account page, so the confirmation goes to your mailbox.') }}
+            </div>
+        {% elif deletion_impact.is_last_admin %}
+            <div class="alert alert-warning mb-0">
+                {{ _('This is the last remaining administrator account and cannot be deleted. Grant admin access to someone else first.') }}
+            </div>
+        {% else %}
+            <h5 class="text-danger">{{ _('Delete personal data') }}</h5>
+            <p>{{ _('This cannot be undone. Before you continue, note what it does:') }}</p>
+            <ul>
+                <li>{{ _('Name, address, phone numbers and email addresses are overwritten.') }}</li>
+                <li>{{ _('The login stops working and any admin role is removed.') }}</li>
+                <li>
+                    {{ _('Membership periods and payment records are kept without personal details, because bookkeeping law requires it.') }}
+                    {% if deletion_impact.paid_periods %}
+                        <strong>{{ _('%(count)s paid period(s) will be retained.', count=deletion_impact.paid_periods) }}</strong>
+                    {% endif %}
+                </li>
+                {% if deletion_impact.has_forum_account %}
+                    <li>{{ _('The forum account is anonymised. Posts stay, under an anonymous name.') }}</li>
+                {% endif %}
+                {% if deletion_impact.has_stripe_customer %}
+                    {# Left there on purpose: Stripe is the association's
+                       accounting record, and the retained customer id below is
+                       the only way back from an erased row to who paid. #}
+                    <li>{{ _('The Stripe customer is left as it is — it is the association’s accounting record and the only remaining link between this erased account and who paid. The customer number stays on the row below.') }}</li>
+                {% endif %}
+            </ul>
+
+            {% if deletion_impact.subscription_active %}
+                <div class="alert alert-warning">
+                    <strong>{{ _('This member has an active subscription.') }}</strong>
+                    {{ _('It will be cancelled immediately. No refund is issued — if the association wants to refund the unused part of the year, do that in Stripe first.') }}
+                    {% if live_subscription and live_subscription.get('status') %}
+                        <div class="small mt-1">{{ _('Stripe currently reports the subscription as: %(status)s', status=live_subscription.get('status')) }}</div>
+                    {% endif %}
+                </div>
+            {% endif %}
+            {% if deletion_impact.coverage_end %}
+                <div class="alert alert-warning">
+                    {{ _('This member has paid coverage until %(date)s. Deleting the account ends their access now.', date=deletion_impact.coverage_end) }}
+                </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('admin.admin_delete_account', user_id=user_record.id) }}" class="mt-3" data-busy-text="{{ _('Deleting…') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="delete-reason" class="form-label">{{ _('Reason (recorded in the audit log)') }}</label>
+                    <input type="text" class="form-control" id="delete-reason" name="reason" maxlength="255"
+                           placeholder="{{ _('e.g. deletion requested by the member, or expulsion decided on ...') }}">
+                </div>
+                <div class="mb-3">
+                    <label for="delete-confirm-email" class="form-label">
+                        {{ _('Type %(email)s to confirm', email=user_record.email) }}
+                    </label>
+                    <input type="text" class="form-control" id="delete-confirm-email" name="confirm_email"
+                           autocomplete="off" required>
+                </div>
+                <button type="submit" class="btn btn-danger">{{ _('Erase personal data') }}</button>
+            </form>
         {% endif %}
     </div>
 </div>

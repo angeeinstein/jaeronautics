@@ -9,10 +9,10 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             {% if current_user.member %}
-                <a href="{{ url_for('account') }}" class="btn btn-secondary">{{ _('Open My Account') }}</a>
+                <a href="{{ url_for('account.account') }}" class="btn btn-secondary">{{ _('Open My Account') }}</a>
             {% endif %}
-            <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
-            <form method="POST" action="{{ url_for('logout') }}" class="mb-0">
+            <a href="{{ url_for('auth.change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
+            <form method="POST" action="{{ url_for('auth.logout') }}" class="mb-0">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-danger">{{ _('Logout') }}</button>
             </form>
@@ -44,7 +44,8 @@
                                                 <h5>{{ _('Current Data') }}</h5>
                                                 <p class="mb-2"><strong>{{ _('Name:') }}</strong> {{ request_record.member.title or '' }} {{ request_record.member.first_name }} {{ request_record.member.last_name }}</p>
                                                 <p class="mb-2"><strong>{{ _('Salutation:') }}</strong> {{ request_record.member.salutation }}</p>
-                                                <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.member.year_group }}</p>
+                                                <p class="mb-2"><strong>{{ _('Category:') }}</strong> {{ member_category_label(request_record.member.member_category) }}</p>
+                                                <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.member.year_group or _('None') }}</p>
                                                 <p class="mb-0"><strong>{{ _('Forum Username:') }}</strong> {{ request_record.current_forum_username or _('Not set') }}</p>
                                             </div>
                                         </div>
@@ -53,7 +54,8 @@
                                                 <h5>{{ _('Requested Data') }}</h5>
                                                 <p class="mb-2"><strong>{{ _('Name:') }}</strong> {{ request_record.requested_title or '' }} {{ request_record.requested_first_name }} {{ request_record.requested_last_name }}</p>
                                                 <p class="mb-2"><strong>{{ _('Salutation:') }}</strong> {{ request_record.requested_salutation }}</p>
-                                                <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.requested_year_group }}</p>
+                                                <p class="mb-2"><strong>{{ _('Category:') }}</strong> {{ member_category_label(request_record.requested_member_category) }}</p>
+                                                <p class="mb-2"><strong>{{ _('Year Group:') }}</strong> {{ request_record.requested_year_group or _('None') }}</p>
                                                 <p class="mb-2"><strong>{{ _('Suggested Forum Username:') }}</strong> {{ request_record.suggested_forum_username }}</p>
                                                 {% if request_record.member_note %}
                                                     <p class="mb-0"><strong>{{ _('Member Note:') }}</strong> {{ request_record.member_note }}</p>
@@ -63,7 +65,7 @@
                                     </div>
                                     <div class="row g-4 mt-1">
                                         <div class="col-lg-6">
-                                            <form method="POST" action="{{ url_for('approve_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                            <form method="POST" action="{{ url_for('admin.approve_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <h5>{{ _('Approve Request') }}</h5>
                                                 {% if request_record.username_would_change %}
@@ -87,7 +89,7 @@
                                             </form>
                                         </div>
                                         <div class="col-lg-6">
-                                            <form method="POST" action="{{ url_for('reject_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
+                                            <form method="POST" action="{{ url_for('admin.reject_profile_change_request', request_id=request_record.id) }}" class="border p-3 h-100">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <h5>{{ _('Reject Request') }}</h5>
                                                 <div class="mb-3">
@@ -155,7 +157,7 @@
             {% endif %}
         </div>
         <div class="card-body">
-            <form method="POST" action="{{ url_for('save_mail_account') }}">
+            <form method="POST" action="{{ url_for('admin.save_mail_account') }}">
                 {{ mail_account_form.hidden_tag() }}
                 {{ mail_account_form.mail_account_id }}
                 <div class="row g-3">
@@ -195,7 +197,7 @@
                                     <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
                                     <td class="text-end">
                                         <a href="{{ url_for('admin', edit_mail_account=mail_account.id) }}" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
-                                        <button type="button" class="btn btn-sm btn-danger ms-2" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
+                                        <button type="button" class="btn btn-sm btn-danger ms-2" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('admin.delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
                                     </td>
                                 </tr>
                             {% endfor %}
@@ -212,7 +214,7 @@
         <div class="card-header"><h4>{{ _('Send Test Email') }}</h4></div>
         <div class="card-body">
             {% if test_email_form.sender.choices %}
-                <form method="POST" action="{{ url_for('send_test_email') }}">
+                <form method="POST" action="{{ url_for('admin.send_test_email') }}">
                     {{ test_email_form.hidden_tag() }}
                     <div class="mb-3">{{ test_email_form.sender.label(class="form-label") }}{{ test_email_form.sender(class="form-select") }}</div>
                     <div class="mb-3">{{ test_email_form.recipient.label(class="form-label") }}{{ test_email_form.recipient(class="form-control", placeholder=_('recipient@example.com')) }}</div>
@@ -246,31 +248,5 @@
         </div>
     </div>
 </div>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    var deleteModal = document.getElementById('deleteMailAccountModal');
-    if (!deleteModal) {
-        return;
-    }
-
-    deleteModal.addEventListener('show.bs.modal', function (event) {
-        var trigger = event.relatedTarget;
-        if (!trigger) {
-            return;
-        }
-
-        var deleteUrl = trigger.getAttribute('data-delete-url') || '#';
-        var accountKey = trigger.getAttribute('data-account-key') || '';
-        var deleteForm = deleteModal.querySelector('#delete-mail-account-form');
-        var accountName = deleteModal.querySelector('#delete-mail-account-name');
-
-        if (deleteForm) {
-            deleteForm.action = deleteUrl;
-        }
-        if (accountName) {
-            accountName.textContent = accountKey;
-        }
-    });
-});
-</script>
+<script src="{{ url_for('static', filename='mail-account-delete-modal.js') }}"></script>
 {% endblock %}

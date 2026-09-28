@@ -4,7 +4,7 @@
 {% block admin_content %}
 <div class="card mb-4">
     <div class="card-body">
-        <form method="GET" action="{{ url_for('admin_logs') }}" class="row g-3 align-items-end">
+        <form method="GET" action="{{ url_for('admin.admin_logs') }}" class="row g-3 align-items-end" data-live-filter="#log-results" role="search">
             <div class="col-lg-5">
                 <label class="form-label" for="log-q">{{ _('Search') }}</label>
                 <input type="text" class="form-control" id="log-q" name="q" value="{{ search_term }}" placeholder="{{ _('Actor, target email, category, or event') }}">
@@ -18,14 +18,18 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-12 d-flex gap-2">
-                <button type="submit" class="btn btn-primary">{{ _('Apply Filters') }}</button>
-                <a href="{{ url_for('admin_logs') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
+            <div class="col d-flex align-items-center justify-content-end gap-3">
+                {# Filters apply by themselves (live-filter.js); this button is
+                   only for a browser without JavaScript. #}
+                <noscript><button type="submit" class="btn btn-primary">{{ _('Apply') }}</button></noscript>
+                <span class="stat-sub" data-live-filter-status role="status" hidden><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>{{ _('Updating…') }}</span>
+                <a href="{{ url_for('admin.admin_logs') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
             </div>
         </form>
     </div>
 </div>
 
+<div id="log-results">
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="mb-0">{{ _('Audit Log') }}</h4>
@@ -48,7 +52,7 @@
                     <tbody>
                         {% for entry in pagination.items %}
                             <tr>
-                                <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ entry.created_at|datetime_display }}</td>
                                 <td>{{ entry.category|replace('_', ' ')|title }}</td>
                                 <td>{{ entry.event_type|replace('_', ' ')|title }}</td>
                                 <td>{{ entry.actor_user.email if entry.actor_user else '-' }}</td>
@@ -56,9 +60,21 @@
                                 <td>
                                     <details>
                                         <summary>{{ _('Show') }}</summary>
+                                        {#
+                                          Cloudflare's Email Address Obfuscation rewrites any address
+                                          it finds in HTML into a link plus a decoder script. In prose
+                                          that is harmless; inside these blocks it replaces the value
+                                          in a JSON string literal with an <a> element, so an admin
+                                          copying an audit payload out gets broken JSON rather than
+                                          the record. The email_off markers below are Cloudflare's own
+                                          opt-out and keep this one region verbatim whether or not the
+                                          zone setting is on.
+                                        #}
+                                        <!--email_off-->
                                         {% if entry.before_state %}<pre class="mt-2 mb-2">{{ entry.before_state | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
                                         {% if entry.after_state %}<pre class="mt-2 mb-2">{{ entry.after_state | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
                                         {% if entry.event_metadata %}<pre class="mt-2 mb-0">{{ entry.event_metadata | redact_audit_payload | tojson(indent=2) }}</pre>{% endif %}
+                                        <!--/email_off-->
                                     </details>
                                 </td>
                             </tr>
@@ -72,7 +88,7 @@
                         {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
                             {% if page_num %}
                                 <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('admin_logs', q=search_term, category=category, page=page_num) }}">{{ page_num }}</a>
+                                    <a class="page-link" href="{{ url_for('admin.admin_logs', q=search_term, category=category, page=page_num) }}">{{ page_num }}</a>
                                 </li>
                             {% else %}
                                 <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
@@ -86,4 +102,8 @@
         {% endif %}
     </div>
 </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='live-filter.js') }}"></script>
 {% endblock %}

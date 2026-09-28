@@ -1,0 +1,1204 @@
+"""Publishing the old forum's people so they can still be found.
+
+The old board is the association's register of everyone who was ever a member,
+and people use it to look somebody up from an earlier cohort. Recreating that
+means every imported person gets a profile -- not only the 242 who posted --
+with their name, their year group and the face they had.
+
+What matters here is mostly what must NOT happen: these are not accounts, they
+must not be named after a placeholder address, and they must not cause 740
+activation emails to a domain that cannot resolve.
+"""
+import json
+
+import pytest
+
+from conftest import db
+from aeronautics_members.db_models import ImportedForumProfile
+from aeronautics_members.services.forum_import import import_forum_people
+from aeronautics_members.services.forum import FORUM_USERNAME_LENGTH_LIMIT
+from aeronautics_members.services.forum_profiles import (
+    ARCHIVE_GROUP,
+    GIVE_UP_AFTER,
+    avatar_setting_state,
+    build_profile_payload,
+    group_name_for_year_group,
+    groups_for_profiles,
+    let_avatars_through,
+    make_room_for_usernames,
+    profiles_to_publish,
+    publish_imported_profiles,
+    sync_profile_groups,
+    username_room_needed,
+    why_nobody_can_be_published,
+)
+
+
+def _imported(uid="645", username="PopovicA_L23", year_group="LAV23", **extra):
+    import_forum_people([{
+        "source_user_id": uid,
+        "source_username": username,
+        "source_email": "a.popovic@edu.fh-joanneum.at",
+        "year_group": year_group,
+        "post_count": 7,
+        **extra,
+    }])
+    db.session.commit()
+    return db.session.execute(
+        db.select(ImportedForumProfile).filter_by(source_user_id=uid)
+    ).scalar_one()
+
+
+class FakeProvider:
+    """Records what would have gone to Discourse."""
+
+    def __init__(self, fail_on=()):
+        self.sent = []
+        self.fail_on = set(fail_on)
+
+    def sync_imported_profile(self, payload):
+        from aeronautics_members.forum_service import ForumProviderError
+        if payload["username"] in self.fail_on:
+            raise ForumProviderError("Discourse said no")
+        self.sent.append(payload)
+        return {"ok": True}
+
+
+class TestWhatTheForumIsTold:
+    def test_they_are_named_by_their_display_name(self, app):
+        """Not by their email, which is a placeholder that cannot resolve.
+
+        The member payload falls back to the address when there is no
+        membership, which would call every one of these profiles
+        forum-mybb-645@imported.invalid.
+        """
+        profile = _imported()
+
+        payload = build_profile_payload(profile)
+
+        assert payload["name"] == profile.display_name
+        assert "imported.invalid" not in payload["name"]
+
+    def test_no_activation_email_is_asked_for(self, app):
+        """740 of them would go to a domain reserved for never resolving."""
+        profile = _imported()
+
+        assert build_profile_payload(profile)["require_activation"] == "false"
+
+    def test_they_are_keyed_on_the_portal_account(self, app):
+        """The same external_id their posts will be attached to."""
+        profile = _imported()
+
+        assert build_profile_payload(profile)["external_id"] == str(profile.user_id)
+
+    def test_they_land_in_their_cohort_and_the_archive(self, app):
+        profile = _imported(year_group="LAV23")
+
+        groups = build_profile_payload(profile)["add_groups"].split(",")
+
+        assert ARCHIVE_GROUP in groups
+        assert "lav23" in groups
+
+    def test_somebody_with_no_year_group_still_gets_published(self, app):
+        """Five people have none. They belong in the register regardless."""
+        profile = _imported(year_group=None, username="dpilz")
+
+        groups = build_profile_payload(profile)["add_groups"].split(",")
+
+        assert groups == [ARCHIVE_GROUP]
+
+    def test_the_year_group_is_only_sent_when_there_is_a_field_for_it(self, app):
+        profile = _imported()
+
+        without = build_profile_payload(profile)
+        with_field = build_profile_payload(profile, year_group_field="user_field_3")
+
+        assert not any(key.startswith("custom.") for key in without)
+        assert with_field["custom.user_field_3"] == "LAV23"
+
+
+class TestGroupNames:
+    @pytest.mark.parametrize("year_group,expected", [
+        ("LAV23", "lav23"),
+        ("MAV17", "mav17"),
+        ("ATM17", "atm17"),
+        ("  LAV23  ", "lav23"),
+        ("LAV 23", "lav_23"),
+        ("", None),
+        (None, None),
+    ])
+    def test_it_makes_a_usable_group_name(self, year_group, expected):
+        assert group_name_for_year_group(year_group) == expected
+
+
+class TestPublishing:
+    def test_everyone_is_published_not_only_the_posters(self, app):
+        """498 of the 740 never wrote a word and still belong in the register."""
+        _imported(uid="1", username="A_L23")
+        _imported(uid="2", username="B_L19", post_count=0)
+        provider = FakeProvider()
+
+        report = publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert report["published"] == 2
+        assert {payload["username"] for payload in provider.sent} == {"A_L23", "B_L19"}
+
+    def test_a_rehearsal_sends_nothing(self, app):
+        _imported()
+        provider = FakeProvider()
+
+        report = publish_imported_profiles(provider, dry_run=True)
+
+        assert provider.sent == []
+        assert report["published"] == 1, "but it still reports what it would do"
+
+    def test_a_rehearsal_leaves_no_token_behind(self, app, tmp_path):
+        """The rollback undoes the database; a written token would outlive it."""
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+
+        publish_imported_profiles(FakeProvider(), dry_run=True)
+
+        assert profile.avatar_public_token is None
+
+    def test_one_refusal_does_not_stop_the_rest(self, app):
+        """740 calls; one of them will fail and the other 739 still matter."""
+        _imported(uid="1", username="A_L23")
+        _imported(uid="2", username="B_L19")
+        provider = FakeProvider(fail_on=["A_L23"])
+
+        report = publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert report["failed"] == 1
+        assert report["published"] == 1
+        assert any("A_L23" in problem for problem in report["problems"])
+
+    def test_a_second_run_can_skip_what_already_went(self, app):
+        """One API call per person, so an interrupted run must be resumable."""
+        _imported(uid="1", username="A_L23")
+        _imported(uid="2", username="B_L19")
+        publish_imported_profiles(FakeProvider(fail_on=["B_L19"]))
+        db.session.commit()
+
+        resumed = FakeProvider()
+        publish_imported_profiles(resumed, only_unsynced=True)
+        db.session.commit()
+
+        assert [payload["username"] for payload in resumed.sent] == ["B_L19"]
+
+    def test_it_says_where_it_is_while_it_runs(self, app):
+        """Half an hour of silence and a hung command look the same."""
+        _imported(uid="1", username="A_L23")
+        _imported(uid="2", username="B_L19")
+        seen = []
+
+        publish_imported_profiles(
+            FakeProvider(),
+            on_progress=lambda done, total, report: seen.append((done, total)),
+        )
+        db.session.commit()
+
+        assert seen == [(1, 2), (2, 2)]
+
+    def test_progress_is_still_reported_for_somebody_who_failed(self, app):
+        """Or it goes quiet exactly when there is most to say."""
+        _imported(uid="1", username="A_L23")
+        _imported(uid="2", username="B_L19")
+        seen = []
+
+        publish_imported_profiles(
+            FakeProvider(fail_on=["A_L23"]),
+            on_progress=lambda done, total, report: seen.append(
+                (done, report["published"], report["failed"])
+            ),
+        )
+        db.session.commit()
+
+        assert seen == [(1, 0, 1), (2, 1, 1)]
+
+    def test_the_same_refusal_for_everybody_stops_the_run(self, app):
+        """740 identical refusals is one fact, reported 740 times."""
+        for uid in range(1, 9):
+            _imported(uid=str(uid), username=f"P{uid}_L23")
+        provider = FakeProvider(fail_on=[f"P{uid}_L23" for uid in range(1, 9)])
+
+        report = publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert report["failed"] == GIVE_UP_AFTER
+        assert report["stopped"]
+
+    def test_a_signature_refusal_is_named_as_the_connect_secret(self, app):
+        """Discourse only ever says "Login Error", which points nowhere."""
+        assert "DiscourseConnect secret" in why_nobody_can_be_published(
+            'Discourse API request failed (422): {"failed":"FAILED",'
+            '"message":"Login Error"}'
+        )
+
+    def test_a_run_that_is_getting_through_is_not_stopped(self, app):
+        """Refusals after somebody got through are about those people."""
+        _imported(uid="1", username="A_L23")
+        for uid in range(2, 10):
+            _imported(uid=str(uid), username=f"P{uid}_L23")
+        provider = FakeProvider(fail_on=[f"P{uid}_L23" for uid in range(2, 10)])
+
+        report = publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert report["published"] == 1
+        assert report["failed"] == 8
+        assert "stopped" not in report
+
+    def test_different_refusals_are_not_one_fact(self, app):
+        """Five different reasons are five people worth naming, not a cause."""
+        class Varied(FakeProvider):
+            def sync_imported_profile(self, payload):
+                from aeronautics_members.forum_service import ForumProviderError
+                raise ForumProviderError(f"no to {payload['username']}")
+
+        for uid in range(1, 8):
+            _imported(uid=str(uid), username=f"P{uid}_L23")
+
+        report = publish_imported_profiles(Varied())
+        db.session.commit()
+
+        assert report["failed"] == 7
+        assert "stopped" not in report
+
+    def test_a_failure_is_not_recorded_as_published(self, app):
+        _imported(uid="1", username="A_L23")
+
+        publish_imported_profiles(FakeProvider(fail_on=["A_L23"]))
+        db.session.commit()
+
+        profile = db.session.execute(db.select(ImportedForumProfile)).scalar_one()
+        assert profile.forum_synced_at is None, "or the retry would skip it"
+
+
+class TestTheForumHavingRoomForTheirNames:
+    """A rebuilt forum comes back with Discourse's defaults, every time.
+
+    So the settings the portal needs are applied by the command rather than
+    remembered by a person: max_username_length is 20 by default, the scheme
+    needs 24 for a student called Niedergrottenthaler, and Discourse shortens
+    what it cannot store without reporting it.
+    """
+
+    class SettingsClient:
+        def __init__(self, **settings):
+            self.settings = settings
+            self.written = []
+
+        def site_settings(self):
+            return dict(self.settings)
+
+        def set_site_setting(self, name, value):
+            self.written.append((name, value))
+            self.settings[name] = value
+
+    def test_the_longest_name_being_published_is_what_is_asked_for(self, app):
+        _imported(uid="1", username="NiedergrottenthalerR_L12")
+
+        needed = username_room_needed(profiles_to_publish(), floor=10)
+
+        assert needed == len("NiedergrottenthalerR_L12")
+
+    def test_it_never_asks_for_less_than_the_portal_itself_needs(self, app):
+        """The forum must also take next October's intake, not only this board."""
+        _imported(uid="1", username="dpilz")
+
+        assert username_room_needed(profiles_to_publish()) == FORUM_USERNAME_LENGTH_LIMIT
+
+    def test_a_limit_that_is_too_low_is_raised(self, app):
+        client = self.SettingsClient(max_username_length="20")
+
+        changed = make_room_for_usernames(client, 30)
+
+        assert changed == ("max_username_length", "20", 30)
+        assert client.written == [("max_username_length", "30")]
+
+    def test_and_stays_raised(self, app):
+        """Put back to 20 it would mangle the next such surname."""
+        client = self.SettingsClient(max_username_length="20")
+
+        make_room_for_usernames(client, 30)
+
+        assert client.settings["max_username_length"] == "30"
+        assert len(client.written) == 1
+
+    def test_a_forum_that_already_has_room_is_left_alone(self, app):
+        client = self.SettingsClient(max_username_length="40")
+
+        assert make_room_for_usernames(client, 30) is None
+        assert client.written == []
+
+    def test_a_limit_that_is_not_a_number_is_treated_as_too_small(self, app):
+        client = self.SettingsClient(max_username_length="")
+
+        assert make_room_for_usernames(client, 30) is not None
+
+    def test_a_forum_without_the_setting_is_not_an_error(self, app):
+        assert make_room_for_usernames(self.SettingsClient(title="LAVBoard"), 30) is None
+
+
+class TestTheGroupsThemselves:
+    """The register is only useful if the groups actually hold people.
+
+    They did not. The first real run published 739 profiles, every payload
+    naming the groups to put them in, and left thirty-four empty groups behind:
+    Discourse's SSO ``add_groups`` matches those names against the groups that
+    already exist and drops the rest silently, and the groups were being made
+    afterwards. Nothing reported a problem, because the report counts what was
+    sent.
+    """
+
+    class GroupProvider:
+        def __init__(self, existing=()):
+            self.groups = {name: index + 1 for index, name in enumerate(existing)}
+            self.members = {}
+            self.made = []
+
+        def ensure_group(self, name):
+            if name in self.groups:
+                return {"id": self.groups[name], "name": name}, False
+            self.groups[name] = len(self.groups) + 1
+            self.made.append(name)
+            return {"id": self.groups[name], "name": name}, True
+
+        def add_group_members(self, group_id, usernames, unknown=None):
+            self.members.setdefault(group_id, []).extend(usernames)
+            return len(usernames)
+
+    def test_the_plan_comes_from_the_database_not_from_a_run(self, app):
+        """So the groups can be made before anybody is published."""
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        _imported(uid="2", username="B_L23", year_group="LAV23")
+        _imported(uid="3", username="C_L19", year_group="LAV19")
+
+        plan = groups_for_profiles(profiles_to_publish())
+
+        assert sorted(plan) == ["lav19", "lav23", ARCHIVE_GROUP]
+        assert sorted(plan[ARCHIVE_GROUP]) == ["A_L23", "B_L23", "C_L19"]
+        assert plan["lav19"] == ["C_L19"]
+
+    def test_everybody_is_put_in_their_groups(self, app):
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider()
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["created"] == 2
+        assert report["members"] == 2
+        assert provider.members[provider.groups["lav23"]] == ["A_L23"]
+        assert provider.members[provider.groups[ARCHIVE_GROUP]] == ["A_L23"]
+
+    def test_a_group_that_is_already_there_is_still_filled(self, app):
+        """The repair case: the groups exist, empty, from the broken run."""
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider(existing=[ARCHIVE_GROUP, "lav23"])
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["created"] == 0
+        assert report["members"] == 2, "which is the whole point of running it again"
+
+    def test_making_them_without_filling_them_sends_nobody(self, app):
+        """The step that runs before publishing: the people do not exist yet."""
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider()
+
+        sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()),
+                            add_members=False)
+
+        assert sorted(provider.made) == ["lav23", ARCHIVE_GROUP]
+        assert provider.members == {}
+
+    def test_somebody_the_forum_renamed_is_put_in_under_their_new_name(self, app):
+        """Discourse rewrites a name it will not take, and says nothing.
+
+        The account still carries the external id it was published under, so
+        that is how they are found.
+        """
+        profile = _imported(uid="1", username="Müller_L11", year_group="LAV11")
+        provider = self.GroupProvider()
+        renamed = {str(profile.user_id): "Muller_L11"}
+        added_as = []
+
+        def add(group_id, usernames, unknown=None):
+            for username in usernames:
+                if username == "Müller_L11" and unknown is not None:
+                    unknown.append(username)
+                else:
+                    added_as.append(username)
+            return len(usernames) - (1 if "Müller_L11" in usernames else 0)
+
+        provider.add_group_members = add
+        provider.get_remote_user_by_external_id = (
+            lambda external_id: {"username": renamed[external_id]}
+        )
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["renamed"] == {"Müller_L11": "Muller_L11"}
+        assert added_as.count("Muller_L11") == 2, "archive and cohort both"
+        assert report["problems"] == []
+
+    def test_somebody_who_is_not_there_at_all_is_named(self, app):
+        _imported(uid="1", username="Ghost_L11", year_group="LAV11")
+        provider = self.GroupProvider()
+
+        def add(group_id, usernames, unknown=None):
+            unknown.extend(usernames)
+            return 0
+
+        def nobody(external_id):
+            from aeronautics_members.forum_service import ForumProviderError
+            raise ForumProviderError("404")
+
+        provider.add_group_members = add
+        provider.get_remote_user_by_external_id = nobody
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert any("Ghost_L11" in problem for problem in report["problems"])
+        assert report["already_in"] == 0, "missing is not the same as already in"
+
+    def test_one_bad_group_does_not_cost_the_others(self, app):
+        from aeronautics_members.forum_service import ForumProviderError
+
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider()
+        good = provider.ensure_group
+
+        def refuse_one(name):
+            if name == "lav23":
+                raise ForumProviderError("Discourse said no")
+            return good(name)
+
+        provider.ensure_group = refuse_one
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["members"] == 1
+        assert any("lav23" in problem for problem in report["problems"])
+
+    def test_a_group_the_forum_gives_no_id_for_is_a_reported_problem(self, app):
+        """Rather than a traceback, or worse, silence."""
+        _imported(uid="1", username="A_L23", year_group="LAV23")
+        provider = self.GroupProvider()
+        provider.ensure_group = lambda name: ({"name": name}, False)
+
+        report = sync_profile_groups(provider, groups_for_profiles(profiles_to_publish()))
+
+        assert report["members"] == 0
+        assert len(report["problems"]) == 2
+
+
+class TestTheSettingThatDecidesWhetherAvatarsAreUsed:
+    """676 avatars were sent, fetched, and thrown away.
+
+    Discourse really does download the picture -- the request arrives at the
+    portal and is answered with the JPEG -- and then keeps the letter it drew,
+    because ``discourse_connect_overrides_avatar`` was off. Nothing fails and
+    nothing is logged; the run reports ``with_avatar=676`` either way.
+    """
+
+    class SettingsClient:
+        def __init__(self, **settings):
+            self.settings = settings
+            self.written = []
+
+        def site_settings(self):
+            return dict(self.settings)
+
+        def set_site_setting(self, name, value):
+            self.written.append((name, value))
+            self.settings[name] = value
+
+    def test_it_finds_the_setting_this_forum_calls_it(self, app):
+        """Older Discourse versions call it sso_overrides_avatar."""
+        old = self.SettingsClient(sso_overrides_avatar=False)
+
+        assert avatar_setting_state(old) == ("sso_overrides_avatar", False, False)
+
+    def test_a_forum_without_the_setting_is_not_an_error(self, app):
+        assert avatar_setting_state(self.SettingsClient(title="LAVBoard")) is None
+
+    def test_it_is_turned_on_and_named(self, app):
+        client = self.SettingsClient(discourse_connect_overrides_avatar=False)
+
+        assert let_avatars_through(client) == "discourse_connect_overrides_avatar"
+        assert client.written == [("discourse_connect_overrides_avatar", "true")]
+
+    def test_it_stays_on_afterwards(self, app):
+        """A decision, not a convenience.
+
+        The portal is where a photograph is uploaded and where it is approved
+        before anybody sees it, and the same setting governs members: turning it
+        back off would mean an approved avatar is ignored there too.
+        """
+        client = self.SettingsClient(discourse_connect_overrides_avatar=False)
+
+        let_avatars_through(client)
+
+        assert client.settings["discourse_connect_overrides_avatar"] == "true"
+        assert len(client.written) == 1, "nothing puts it back"
+
+    def test_a_forum_that_already_allows_it_is_left_alone(self, app):
+        client = self.SettingsClient(discourse_connect_overrides_avatar=True)
+
+        assert let_avatars_through(client) is None
+        assert client.written == []
+
+
+class TestAddingPeopleToAGroupTwice:
+    """Running it again is the ordinary case, and Discourse treats it as a fault.
+
+    ``PUT /groups/:id/members.json`` refuses the *whole* batch when one name in
+    it is already a member -- so on a real run one duplicate kept ninety-nine
+    new people out of their cohort, and a group that was partly filled could
+    never be completed.
+    """
+
+    def _provider(self, already=(), strangers=()):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider, ForumProviderError,
+        )
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "https://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+        provider.sent = []
+        members = set(already)
+
+        def fake_request(method, path, data=None, **kwargs):
+            asked = (data or {}).get("usernames", "").split(",")
+            provider.sent.append(asked)
+            if any(name in strangers for name in asked):
+                # What Discourse says when it found fewer people than names,
+                # word for word -- and it does not say which.
+                raise ForumProviderError(
+                    "Discourse API request failed (400): "
+                    '{"errors":["You supplied invalid parameters to the '
+                    'request: usernames"],"error_type":"invalid_parameters"}'
+                )
+            clash = [name for name in asked if name in members]
+            if clash:
+                raise ForumProviderError(
+                    "Discourse API request failed (422): "
+                    '{"errors":["The following users are already members of '
+                    f'this group: {", ".join(clash)}"]}}'
+                )
+            members.update(asked)
+            return {}
+
+        provider._request = fake_request
+        provider.members = members
+        return provider
+
+    def test_the_people_who_are_not_in_yet_still_get_in(self, app):
+        """The bug: one duplicate and the other ninety-nine were dropped."""
+        provider = self._provider(already={"HoferT_M13"})
+
+        added = provider.add_group_members(3, ["HoferT_M13", "LutzB_L21", "dpilz"])
+
+        assert added == 2
+        assert {"LutzB_L21", "dpilz"} <= provider.members
+        assert len(provider.sent) == 2, "the batch is sent again without them"
+
+    def test_a_group_that_is_already_complete_is_not_an_error(self, app):
+        provider = self._provider(already={"HoferT_M13", "LutzB_L21"})
+
+        assert provider.add_group_members(3, ["HoferT_M13", "LutzB_L21"]) == 0
+
+    def test_a_similar_name_is_not_mistaken_for_the_complaint(self, app):
+        """The board has KlampflS_L10 and KlampflL_L12.
+
+        A substring test on a message naming one would drop the other from the
+        retry, and nobody would ever find out why they are not in their cohort.
+        """
+        provider = self._provider(already={"KlampflS_L10"})
+
+        added = provider.add_group_members(3, ["KlampflS_L10", "KlampflL_L12"])
+
+        assert added == 1
+        assert "KlampflL_L12" in provider.members
+
+    def test_one_stranger_does_not_keep_ninety_nine_out(self, app):
+        """Found for real: lav11, lav12, mav13 and old_forum, whole batches lost."""
+        names = [f"P{index}_L11" for index in range(100)]
+        provider = self._provider(strangers={"P37_L11"})
+        unknown = []
+
+        added = provider.add_group_members(3, names, unknown=unknown)
+
+        assert unknown == ["P37_L11"]
+        assert added == 99
+        assert provider.members == set(names) - {"P37_L11"}
+        assert len(provider.sent) < 20, "halving, not one call per person"
+
+    def test_without_somewhere_to_put_them_a_stranger_is_still_an_error(self, app):
+        """Callers that did not ask to hear about strangers are not lied to."""
+        from aeronautics_members.forum_service import ForumProviderError
+
+        provider = self._provider(strangers={"P1_L11"})
+
+        with pytest.raises(ForumProviderError):
+            provider.add_group_members(3, ["P1_L11", "P2_L11"])
+
+    def test_a_stranger_among_people_already_in_is_still_found(self, app):
+        """Both refusals in one group: the second run of a group with a rename."""
+        provider = self._provider(already={"A_L11"}, strangers={"B_L11"})
+        unknown = []
+
+        added = provider.add_group_members(3, ["A_L11", "B_L11", "C_L11"],
+                                           unknown=unknown)
+
+        assert unknown == ["B_L11"]
+        assert added == 1
+        assert "C_L11" in provider.members
+
+    def test_a_refusal_that_is_not_about_membership_is_raised(self, app):
+        from aeronautics_members.forum_service import (
+            ForumProviderError,
+        )
+
+        provider = self._provider()
+
+        def refuse(method, path, data=None, **kwargs):
+            raise ForumProviderError("Discourse API request failed (403): no")
+
+        provider._request = refuse
+        with pytest.raises(ForumProviderError):
+            provider.add_group_members(3, ["HoferT_M13"])
+
+
+class TestTheConnectionTestMentionsIt:
+    """Because a dropped avatar has no other symptom.
+
+    The picture is uploaded here, approved here, fetched by the forum -- every
+    step reports success -- and then the forum shows a letter. Nothing in the
+    portal knows, so the button an admin presses when the forum looks wrong is
+    where this belongs.
+    """
+
+    def _provider(self, rows, settings_fail=False):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider, ForumProviderError,
+        )
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "https://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+
+        def fake_request(method, path, **kwargs):
+            if path == "/site.json":
+                return {"site_name": "LAVBoard"}
+            if settings_fail:
+                raise ForumProviderError("Discourse API request failed (403)")
+            return {"site_settings": rows}
+
+        provider._request = fake_request
+        return provider
+
+    def test_it_says_so_when_the_forum_will_ignore_our_avatars(self):
+        provider = self._provider(
+            [{"setting": "discourse_connect_overrides_avatar", "value": "false"}]
+        )
+
+        ok, message = provider.test_connection()
+
+        assert ok, "the connection itself is fine, which is the confusing part"
+        assert "discourse_connect_overrides_avatar" in message
+        assert "will not be shown" in message
+
+    def test_a_forum_that_is_set_up_right_gets_no_lecture(self):
+        provider = self._provider(
+            [{"setting": "discourse_connect_overrides_avatar", "value": "true"}]
+        )
+
+        _ok, message = provider.test_connection()
+
+        assert message == "Connected to Discourse site 'LAVBoard'."
+
+    def test_a_forum_that_will_not_say_is_not_called_fine(self):
+        """A key that cannot read settings must not become a clean bill."""
+        provider = self._provider([], settings_fail=True)
+
+        _ok, message = provider.test_connection()
+
+        assert "avatar" not in message.lower()
+
+
+class TestTheAvatarTheForumFetches:
+    def test_the_url_is_public_and_token_guarded(self, app, tmp_path):
+        """Discourse fetches it itself, unauthenticated, from its own server.
+
+        And the staging directory also holds avatars awaiting review, so the
+        route must not take a filename.
+        """
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider)
+        db.session.commit()
+
+        avatar_url = provider.sent[0]["avatar_url"]
+        assert profile.avatar_public_token
+        assert profile.avatar_public_token in avatar_url
+        assert avatar_url.startswith("http"), "Discourse fetches it, so it must be absolute"
+        assert len(profile.avatar_public_token) >= 20, "short enough to guess is no guard"
+
+    def test_each_profile_gets_its_own_token(self, app, tmp_path):
+        """A token shared or derived from the row id would guard nothing."""
+        first = _imported(uid="1", username="A_L23")
+        second = _imported(uid="2", username="B_L19")
+        for profile in (first, second):
+            profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+
+        publish_imported_profiles(FakeProvider())
+        db.session.commit()
+
+        assert first.avatar_public_token != second.avatar_public_token
+
+    def test_the_route_refuses_an_unknown_token(self, app, client):
+        _imported()
+
+        assert client.get("/forum/avatar/imported/not-a-real-token").status_code == 404
+
+    def test_the_route_serves_the_file_for_a_real_token(self, app, client, tmp_path):
+        from PIL import Image
+
+        profile = _imported()
+        face = tmp_path / "face.jpg"
+        Image.new("RGB", (32, 32), (10, 20, 30)).save(face)
+        profile.avatar_path = str(face)
+        db.session.commit()
+        publish_imported_profiles(FakeProvider())
+        db.session.commit()
+
+        response = client.get(f"/forum/avatar/imported/{profile.avatar_public_token}")
+
+        assert response.status_code == 200
+        assert response.data[:2] == b"\xff\xd8", "a JPEG"
+
+    def test_it_is_served_without_signing_in(self, app, client, tmp_path):
+        """The admin-only route cannot serve Discourse; that is why this exists."""
+        from PIL import Image
+
+        profile = _imported()
+        face = tmp_path / "face.jpg"
+        Image.new("RGB", (8, 8), (1, 2, 3)).save(face)
+        profile.avatar_path = str(face)
+        db.session.commit()
+        publish_imported_profiles(FakeProvider())
+        db.session.commit()
+
+        # No session at all on this client.
+        assert client.get(
+            f"/forum/avatar/imported/{profile.avatar_public_token}"
+        ).status_code == 200
+
+
+class TestMakingTheGroups:
+    """Discourse answers 404 for a group that does not exist yet.
+
+    Which is the ordinary case on a first run, for all thirty-four of them.
+    Treating it as a failure meant the very first publish created no groups at
+    all and reported thirty-four errors, while claiming success.
+    """
+
+    def _provider(self, monkeypatch, *, lookup_fails=True):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider,
+            ForumProviderError,
+        )
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "http://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+        calls = []
+
+        def fake_request(method, path, data=None, json_body=None, rate_limit_retries=0):
+            calls.append((method, path))
+            if method == "GET" and path.startswith("/groups/"):
+                if lookup_fails:
+                    raise ForumProviderError("Discourse API request failed (404)")
+                return {"group": {"id": 7, "name": "lav23"}}
+            return {"basic_group": {"id": 9, "name": "lav23"}}
+
+        monkeypatch.setattr(provider, "_request", fake_request)
+        return provider, calls
+
+    def test_a_missing_group_is_created_not_reported_as_broken(self, app, monkeypatch):
+        provider, calls = self._provider(monkeypatch, lookup_fails=True)
+
+        group, created = provider.ensure_group("lav23")
+
+        assert created is True
+        assert group["name"] == "lav23"
+        assert ("POST", "/admin/groups.json") in calls
+
+    def test_an_existing_group_is_left_alone(self, app, monkeypatch):
+        """Thirty-four groups on the first run, none of them again after."""
+        provider, calls = self._provider(monkeypatch, lookup_fails=False)
+
+        group, created = provider.ensure_group("lav23")
+
+        assert created is False
+        assert group["id"] == 7
+        assert ("POST", "/admin/groups.json") not in calls
+
+
+class TestFindingTheUserFieldEndpoint:
+    """Discourse has moved this admin route between versions.
+
+    And an admin route answers 404 rather than 403 when the API user is not
+    staff, so one guessed path cannot tell a wrong URL from wrong credentials.
+    Guessing one and dying on it meant a 404 aborted the whole publish before a
+    single profile went across -- which is what happened on the first real run.
+    """
+
+    def _provider(self, monkeypatch, working_path=None):
+        from aeronautics_members.forum_service import (
+            DiscourseConnectProvider,
+            ForumProviderError,
+        )
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "http://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+        tried = []
+
+        def fake_request(method, path, data=None, json_body=None, rate_limit_retries=0):
+            tried.append((method, path))
+            if method == "GET":
+                if path == working_path:
+                    return {"user_fields": [{"id": 4, "name": "Year group"}]}
+                raise ForumProviderError("Discourse API request failed (404)")
+            return {"user_field": {"id": 9, "name": "Year group"}}
+
+        monkeypatch.setattr(provider, "_request", fake_request)
+        return provider, tried
+
+    @pytest.mark.parametrize("working_path", [
+        "/admin/customize/user_fields.json",
+        "/admin/config/user_fields.json",
+        "/admin/user_fields.json",
+    ])
+    def test_it_finds_whichever_path_this_version_answers_on(
+        self, app, monkeypatch, working_path
+    ):
+        provider, _tried = self._provider(monkeypatch, working_path)
+
+        assert provider.find_user_field("Year group") == "user_field_4"
+
+    def test_it_creates_on_the_path_that_answered(self, app, monkeypatch):
+        """Not on the first candidate, which may be the one that 404s."""
+        provider, tried = self._provider(
+            monkeypatch, "/admin/config/user_fields.json"
+        )
+
+        field, created = provider.ensure_user_field("Something else")
+
+        assert created is True
+        assert ("POST", "/admin/config/user_fields.json") in tried
+
+    def test_when_no_path_works_it_says_what_to_check(self, app, monkeypatch):
+        """404 on every admin route usually means the API user is not staff."""
+        from aeronautics_members.forum_service import ForumProviderError
+
+        provider, _tried = self._provider(monkeypatch, working_path=None)
+
+        with pytest.raises(ForumProviderError) as raised:
+            provider.find_user_field("Year group")
+
+        assert "discourse_api_username" in str(raised.value)
+
+
+class TestTheTokenItself:
+    def test_it_survives_being_pasted_into_a_shell(self, app, tmp_path):
+        """token_urlsafe can begin with "-", which curl then reads as a flag.
+
+        Which is exactly how the first real run was misdiagnosed: the avatar
+        route was fine and the manual check 404'd because the paste had lost
+        the leading hyphen.
+        """
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+
+        publish_imported_profiles(FakeProvider())
+        db.session.commit()
+
+        token = profile.avatar_public_token
+        assert not token.startswith("-")
+        assert token.isalnum(), "no characters that a shell or a URL parser argues about"
+
+
+class TestTheAvatarNeedsASecondCall:
+    """Discourse ignores avatar_url on the call that creates the account.
+
+    Found on the real forum: twenty profiles published in one pass all showed
+    letter avatars, and the one re-sent afterwards came back with its
+    photograph. The account has to exist before the picture will stick.
+    """
+
+    def test_somebody_with_an_avatar_is_sent_twice(self, app, tmp_path):
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert len(provider.sent) == 2, "create, then update to carry the avatar"
+        assert provider.sent[0]["username"] == provider.sent[1]["username"]
+        assert all(payload.get("avatar_url") for payload in provider.sent)
+
+    def test_somebody_without_one_is_sent_once(self, app):
+        """Sixty-three of them have no picture; a second call would buy nothing."""
+        _imported()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert len(provider.sent) == 1
+
+    def test_the_second_call_carries_a_fresh_nonce(self, app, tmp_path):
+        """A nonce is meant to be used once, even where it is not checked."""
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider)
+        db.session.commit()
+
+        assert provider.sent[0]["nonce"] != provider.sent[1]["nonce"]
+
+    def test_a_rehearsal_still_sends_neither(self, app, tmp_path):
+        profile = _imported()
+        profile.avatar_path = str(tmp_path / "face.jpg")
+        db.session.commit()
+        provider = FakeProvider()
+
+        publish_imported_profiles(provider, dry_run=True)
+
+        assert provider.sent == []
+
+
+class TestWaitingOutARateLimit:
+    """Discourse allows about sixty admin calls a minute.
+
+    Publishing the register is around fourteen hundred, so the first real run
+    got sixty through and then failed 654 times in a row. Being told to wait is
+    the normal course of this job, not a fault -- and Discourse says exactly
+    how long, so there is nothing to guess.
+    """
+
+    def _provider(self, monkeypatch, fail_times, wait_seconds=44):
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+        from urllib.error import HTTPError
+        import io
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "http://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+        state = {"calls": 0}
+        slept = []
+
+        body = json.dumps({
+            "errors": ["You've performed this action too many times."],
+            "error_type": "rate_limit",
+            "extras": {"wait_seconds": wait_seconds},
+        }).encode()
+
+        def fake_urlopen(request, timeout=None):
+            state["calls"] += 1
+            if state["calls"] <= fail_times:
+                raise HTTPError(
+                    "http://forum.test", 429, "Too Many Requests", {}, io.BytesIO(body)
+                )
+            return io.BytesIO(b'{"ok": true}')
+
+        class _Reader:
+            def __init__(self, stream): self._stream = stream
+            def read(self): return self._stream.read()
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def wrapped(request, timeout=None):
+            result = fake_urlopen(request, timeout=timeout)
+            return _Reader(result)
+
+        monkeypatch.setattr("aeronautics_members.forum_service.urlopen", wrapped)
+        monkeypatch.setattr(
+            "aeronautics_members.forum_service.time.sleep", lambda s: slept.append(s)
+        )
+        return provider, state, slept
+
+    def test_a_bulk_call_waits_the_time_it_was_told_and_retries(self, app, monkeypatch):
+        provider, state, slept = self._provider(monkeypatch, fail_times=2)
+
+        result = provider._request("POST", "/x", rate_limit_retries=5)
+
+        assert result == {"ok": True}
+        assert state["calls"] == 3, "two refusals, then through"
+        assert slept == [45, 45], "the 44 it asked for, plus a second of margin"
+
+    def test_a_web_request_does_not_sleep(self, app, monkeypatch):
+        """Somebody is waiting on the other end of that page load."""
+        from aeronautics_members.forum_service import ForumProviderError
+
+        provider, state, slept = self._provider(monkeypatch, fail_times=1)
+
+        with pytest.raises(ForumProviderError):
+            provider._request("POST", "/x")          # the default: no retries
+
+        assert slept == []
+        assert state["calls"] == 1
+
+    def test_it_gives_up_rather_than_waiting_for_ever(self, app, monkeypatch):
+        from aeronautics_members.forum_service import ForumProviderError
+
+        provider, state, slept = self._provider(monkeypatch, fail_times=99)
+
+        with pytest.raises(ForumProviderError):
+            provider._request("POST", "/x", rate_limit_retries=3)
+
+        assert len(slept) == 3
+
+    def test_an_absurd_wait_is_capped(self, app, monkeypatch):
+        """A misreported window should not park the run for an hour."""
+        provider, _state, slept = self._provider(
+            monkeypatch, fail_times=1, wait_seconds=9999
+        )
+
+        provider._request("POST", "/x", rate_limit_retries=2)
+
+        assert slept == [121]
+
+
+class TestTheForumTakesTheAddressAndName:
+    """Found on the first reclaim: the account kept its placeholder address.
+
+    Discourse keeps the address and the name an account was made with and
+    ignores a later sync about either, unless it is told the portal owns them.
+    A reclaimed account then kept forum-mybb-685@imported.invalid -- which no
+    notification ever reaches -- and its old username as a name.
+    """
+
+    class SettingsClient:
+        def __init__(self, **settings):
+            self.settings = settings
+            self.written = []
+
+        def site_settings(self):
+            return dict(self.settings)
+
+        def set_site_setting(self, name, value):
+            self.written.append((name, value))
+            self.settings[name] = value
+
+    def test_both_are_turned_on(self, app):
+        from aeronautics_members.services.forum_profiles import (
+            let_the_portal_own_address_and_name,
+        )
+
+        client = self.SettingsClient(
+            auth_overrides_email=False,
+            auth_overrides_name=False,
+        )
+
+        changed = let_the_portal_own_address_and_name(client)
+
+        assert changed == ["auth_overrides_email", "auth_overrides_name"]
+        assert client.settings["auth_overrides_email"] == "true"
+
+    def test_a_forum_already_right_is_left_alone(self, app):
+        from aeronautics_members.services.forum_profiles import (
+            let_the_portal_own_address_and_name,
+        )
+
+        client = self.SettingsClient(
+            auth_overrides_email="true",
+            auth_overrides_name=True,
+        )
+
+        assert let_the_portal_own_address_and_name(client) == []
+        assert client.written == []
+
+    def test_an_older_forum_is_found_by_its_older_name(self, app):
+        from aeronautics_members.services.forum_profiles import (
+            let_the_portal_own_address_and_name,
+        )
+
+        client = self.SettingsClient(sso_overrides_email="false")
+
+        assert let_the_portal_own_address_and_name(client) == ["sso_overrides_email"]
+
+    def test_the_connection_test_says_so(self, app, monkeypatch):
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+
+        provider = DiscourseConnectProvider({
+            "forum_base_url": "https://forum.test",
+            "discourse_api_key": "k",
+            "discourse_api_username": "system",
+            "discourse_connect_secret": "s",
+        })
+
+        def answer(method, path, **kwargs):
+            if path == "/site.json":
+                return {"site_name": "LAVBoard"}
+            return {"site_settings": [
+                {"setting": "discourse_connect_overrides_avatar", "value": True},
+                {"setting": "auth_overrides_email", "value": False},
+                {"setting": "auth_overrides_name", "value": True},
+            ]}
+
+        monkeypatch.setattr(provider, "_request", answer)
+
+        ok, message = provider.test_connection()
+
+        assert ok
+        assert "auth_overrides_email" in message
+        assert "auth_overrides_name" not in message
+
+    def test_the_current_name_is_what_a_current_forum_is_asked_about(self, app):
+        """Found for real: Discourse 3.x has auth_overrides_*, not
+        discourse_connect_overrides_* -- only the avatar kept that name."""
+        from aeronautics_members.services.forum_profiles import (
+            portal_owned_settings_state,
+        )
+
+        client = self.SettingsClient(
+            auth_overrides_email=False, auth_overrides_name=False,
+            discourse_connect_overrides_avatar=True,
+        )
+
+        names = [name for _what, name, _on, _why in portal_owned_settings_state(client)]
+
+        assert names == ["auth_overrides_email", "auth_overrides_name"]

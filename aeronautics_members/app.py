@@ -1,13 +1,17 @@
+import csv
+import getpass
+import hashlib
 import json
 import os
 import secrets
 import sys
+import time
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 from pathlib import Path
 from subprocess import run
-from urllib.parse import quote_plus, urljoin, urlsplit
+from urllib.parse import quote, quote_plus, urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 import click
@@ -18,6 +22,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    has_request_context,
     jsonify,
     redirect,
     render_template,
@@ -29,6 +34,7 @@ from flask import (
 from flask.cli import with_appcontext
 from flask_babel import Babel, _, format_currency, format_date, get_locale
 from flask_limiter import Limiter
+from flask_migrate import Migrate
 from flask_limiter.errors import RateLimitExceeded
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf.csrf import CSRFError, CSRFProtect
@@ -45,9 +51,15 @@ try:
         EmailDeliveryJob,
         ForumAccount,
         ForumAvatarSubmission,
+        ImportedForumProfile,
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        NotificationBatch,
+        NotificationEvent,
+        ProcessedStripeEvent,
+        ROLE_ADMIN,
+        ROLE_SUPERADMIN,
         Role,
         Setting,
         User,
@@ -81,6 +93,7 @@ try:
         ForumService,
         delete_submission_file,
         format_bytes_human,
+        member_category_groups,
         normalize_forum_settings,
     )
     from .mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
@@ -99,9 +112,15 @@ except ImportError:
         EmailDeliveryJob,
         ForumAccount,
         ForumAvatarSubmission,
+        ImportedForumProfile,
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        NotificationBatch,
+        NotificationEvent,
+        ProcessedStripeEvent,
+        ROLE_ADMIN,
+        ROLE_SUPERADMIN,
         Role,
         Setting,
         User,
@@ -135,6 +154,7 @@ except ImportError:
         ForumService,
         delete_submission_file,
         format_bytes_human,
+        member_category_groups,
         normalize_forum_settings,
     )
     from mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
@@ -148,184 +168,382 @@ except ImportError:
     )
     from security_utils import build_public_url, is_trusted_host, normalize_public_base_url
 
-PACKAGE_DIR = Path(__file__).resolve().parent
-REPO_ROOT = PACKAGE_DIR.parent
-LEGACY_APP_DIR = REPO_ROOT / "var" / "www" / "aeronautics-members"
-ROOT_ENV_PATH = REPO_ROOT / ".env"
-LEGACY_ENV_PATH = LEGACY_APP_DIR / ".env"
-TRANSLATIONS_DIR = PACKAGE_DIR / "translations"
-PYBABEL_CONFIG = PACKAGE_DIR / "babel.cfg"
-MESSAGES_POT = PACKAGE_DIR / "messages.pot"
-
-# Prefer the new root-level .env file, but keep the legacy location as a fallback.
-load_dotenv(LEGACY_ENV_PATH)
-load_dotenv(ROOT_ENV_PATH, override=True)
-
-# --- Configuration Setup ---
-SECRET_KEY = os.getenv("SECRET_KEY")
-LANGUAGES = os.getenv("LANGUAGES", "en,de").split(",")
-DB_HOST = os.getenv("DB_HOST")
-DB_NAME = os.getenv("DB_NAME")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = quote_plus(os.getenv("DB_PASSWORD", ""))
-DB_PORT = os.getenv("DB_PORT", "3306")
-
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
-STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-PUBLIC_BASE_URL = normalize_public_base_url(os.getenv("PUBLIC_BASE_URL"))
-ADDITIONAL_ALLOWED_HOSTS = os.getenv("ADDITIONAL_ALLOWED_HOSTS", "")
-STRIPE_SETTING_KEYS = ("stripe_publishable_key", "stripe_secret_key", "stripe_price_id", "stripe_webhook_secret")
-DEFAULT_STRIPE_SETTINGS = {
-    "stripe_publishable_key": STRIPE_PUBLISHABLE_KEY or "",
-    "stripe_secret_key": STRIPE_SECRET_KEY or "",
-    "stripe_price_id": STRIPE_PRICE_ID or "",
-    "stripe_webhook_secret": STRIPE_WEBHOOK_SECRET or "",
-}
-MEMBERSHIP_TIMEZONE_NAME = os.getenv("MEMBERSHIP_TIMEZONE", "Europe/Vienna")
-try:
-    MEMBERSHIP_TIMEZONE = ZoneInfo(MEMBERSHIP_TIMEZONE_NAME)
-except Exception:
-    MEMBERSHIP_TIMEZONE = timezone.utc
-    MEMBERSHIP_TIMEZONE_NAME = "UTC"
-RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "redis://127.0.0.1:6379/0")
-RATELIMIT_LOGIN = os.getenv("RATELIMIT_LOGIN", "10 per 15 minute")
-RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "5 per hour")
-RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "10 per hour")
-RATELIMIT_PASSWORD_CHANGE = os.getenv("RATELIMIT_PASSWORD_CHANGE", "5 per 15 minute")
-RATELIMIT_ADMIN_EMAIL = os.getenv("RATELIMIT_ADMIN_EMAIL", "5 per 10 minute")
-MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
-
-SENSITIVE_SETTING_KEYS = {"stripe_secret_key", "stripe_webhook_secret", "discourse_api_key", "discourse_connect_secret"}
-SENSITIVE_AUDIT_FIELD_NAMES = SENSITIVE_SETTING_KEYS | {"password", "pass", "secret", "smtp_password", "export_password"}
+# Configuration lives in config.py, a leaf module the service layer can import
+# without depending on this one. Re-exported here so existing imports keep working.
+from .services.institutional_email import (  # noqa: E402
+    SETTING_KEY as INSTITUTIONAL_EMAIL_SETTING_KEY,
+    get_institutional_domains,
+)
+from .member_categories import (  # noqa: E402
+    CATEGORY_ORDER,
+    categories_showing_year_group,
+    category_label,
+    requires_year_group,
+)
+from .permissions import (  # noqa: E402
+    Permission,
+    ROLE_PERMISSIONS,
+    role_description,
+    role_label,
+    roles_with,
+)
+from .services.diagnostics import collect_system_health  # noqa: E402
+from .services.system_update import describe_update_state  # noqa: E402
+from .services.backup import describe_backup_page  # noqa: E402
+from .services.outbox import (  # noqa: E402
+    failed_items,
+    pending_count,
+    process_pending,
+)
+from .services.identity import (  # noqa: E402
+    TOKEN_MAX_AGE_FORUM_ENTRY,
+    TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN,
+    TOKEN_MAX_AGE_PASSWORD_RESET,
+    TOKEN_MAX_AGE_VERIFY_EMAIL,
+    build_email_verification_claims,
+    email_verification_claims_match,
+    generate_token,
+    mark_email_verified_from_token,
+    read_token,
+    rotate_email_verification_nonce,
+    rotate_password_reset_nonce,
+    send_email_verification_email,
+    send_password_reset_email,
+)
+from .services.forum import (  # noqa: E402
+    build_forum_username_base,
+    generate_unique_forum_username,
+    get_forum_service,
+    get_forum_settings_map,
+    log_out_forum_session_if_possible,
+    members_whose_forum_state_has_drifted,
+    sync_member_forum_state,
+)
+from .services.notifications import (  # noqa: E402
+    build_mail_accounts_export_payload,
+    flush_marked_notification_channels,
+    get_db_mail_accounts,
+    get_email_template_choices,
+    get_notification_service,
+    get_notification_settings_map,
+    list_undelivered_emails,
+    normalize_imported_mail_accounts_payload,
+    queue_curated_admin_notification,
+    queue_user_status_notification,
+)
+from .services.forum_import import (  # noqa: E402
+    import_forum_people,
+    old_forum_account_waiting,
+    load_people,
+)
+from .services.forum_profiles import (  # noqa: E402
+    ARCHIVE_GROUP,
+    USERNAME_LENGTH_SETTING,
+    YEAR_GROUP_FIELD_NAME,
+    avatar_setting_state,
+    groups_for_profiles,
+    let_avatars_through,
+    let_the_portal_own_address_and_name,
+    make_room_for_usernames,
+    portal_owned_settings_state,
+    profiles_to_publish,
+    publish_imported_profiles,
+    sync_profile_groups,
+    username_length_state,
+    username_room_needed,
+)
+from .services.forum_mapping import (  # noqa: E402
+    ARCHIVE_ROOT,
+    mapping_plan,
+    read_mapping,
+    titles_for,
+)
+from .services.forum_board import (  # noqa: E402
+    DEEPEST_CATEGORY_NESTING,
+    MAX_CATEGORY_NESTING,
+    Ledger,
+    _sortable,
+    audit_uploads,
+    category_nesting_requirement,
+    category_plan,
+    category_worksheet,
+    ledger_describes,
+    migrate_board,
+    settings_inventory,
+)
+from .services.forum_permissions import (  # noqa: E402
+    STAFF_GROUP,
+    access_groups,
+    apply_permissions,
+    describe,
+    groups_wanted,
+    let_authors_post,
+    owned_roots,
+    permission_plan,
+    what_is_not_set_up,
+)
+from .services.portal_settings import export_settings, import_settings  # noqa: E402
+from .services.forum_worksheet import render_worksheet  # noqa: E402
+from .services.forum_content import (  # noqa: E402
+    LOOSEN,
+    REFUSE,
+    ContentPoster,
+    bbcode_to_markdown,
+    check_site_settings,
+    dates_survived,
+    loosen_site_settings,
+    mark_journal_restored,
+    migrate_thread,
+    plan_site_settings,
+    read_settings_journal,
+    rehearsal_threads,
+    restore_site_settings,
+    what_to_do_about_settings,
+)
+from .services.workflows import (  # noqa: E402
+    process_email_delivery_jobs,
+    refresh_member_billing_state,
+    send_member_welcome_email,
+    sync_member_primary_email,
+)
+from .services.audit import (  # noqa: E402
+    get_recent_audit_logs,
+    log_audit_event,
+    redact_sensitive_audit_value,
+    redact_settings_states_for_audit,
+    snapshot_forum_account_for_audit,
+    snapshot_forum_avatar_submission_for_audit,
+    snapshot_mail_account_for_audit,
+    snapshot_member_for_audit,
+    snapshot_user_for_audit,
+)
+from .services.billing import (  # noqa: E402
+    apply_runtime_stripe_config,
+    backfill_member_coverage_from_subscription,
+    backfill_member_stripe_references,
+    LIVE_SUBSCRIPTION_STATUSES,
+    can_rejoin,
+    checkout_completed_but_not_yet_confirmed,
+    create_checkout_session_for_member,
+    create_invoice_membership_for_member,
+    get_member_by_stripe_or_email,
+    subscription_has_scheduled_cancellation,
+    subscription_period_bounds,
+    sync_member_subscription_state_from_subscription,
+)
+from .services.signup import invoice_payments_allowed  # noqa: E402
+from .services.webhook_inbox import (  # noqa: E402
+    STRIPE_EVENT_LEASE,
+    claim_stripe_event,
+    complete_stripe_event,
+    release_stripe_event,
+    stripe_event_already_processed,
+)
+from .services.members import (  # noqa: E402
+    DIRECT_MEMBER_PROFILE_FIELDS,
+    IDENTITY_MEMBER_FIELDS,
+    apply_member_profile,
+    normalize_optional_member_value,
+)
+from .services.settings import (  # noqa: E402
+    get_settings_map,
+    get_stripe_settings_map,
+)
+from .services.membership import (  # noqa: E402
+    RESUMABLE_MEMBER_STATUSES,
+    build_membership_cycle,
+    format_date_display,
+    format_datetime_display,
+    invoice_coverage_year,
+    member_has_active_access,
+    set_member_membership_window,
+    sync_member_active_state,
+    update_member_paid_coverage,
+)
+from .services.clock import (  # noqa: E402
+    first_day_of_year,
+    get_membership_today,
+    get_now_utc,
+    last_day_of_year,
+    parse_iso_date,
+    start_of_day_unix,
+    to_membership_date,
+)
+from .config import (  # noqa: E402
+    ADDITIONAL_ALLOWED_HOSTS,
+    DB_HOST,
+    DB_NAME,
+    DB_PASSWORD,
+    DB_PORT,
+    DB_USER,
+    LANGUAGES,
+    MAX_CONTENT_LENGTH,
+    MESSAGES_POT,
+    PACKAGE_DIR,
+    PUBLIC_BASE_URL,
+    PYBABEL_CONFIG,
+    RATELIMIT_ADMIN_EMAIL,
+    RATELIMIT_LOGIN,
+    RATELIMIT_MEMBERSHIP,
+    RATELIMIT_PASSWORD_CHANGE,
+    RATELIMIT_REGISTER,
+    RATELIMIT_STORAGE_URI,
+    REPO_ROOT,
+    SECRET_KEY,
+    STRIPE_PRICE_ID,
+    STRIPE_PUBLISHABLE_KEY,
+    STRIPE_SECRET_KEY,
+    STRIPE_SETTING_KEYS,
+    STRIPE_WEBHOOK_SECRET,
+    TRANSLATIONS_DIR,
+)
 
 babel = Babel()
 login_manager = LoginManager()
 csrf = CSRFProtect()
+migrate = Migrate()
+
+
+# Stripe's own defaults are an 80-second timeout and two automatic retries: a
+# Stripe having a bad minute could hold a page for four. Five seconds to
+# connect and fifteen to answer is ample for an API that normally answers in a
+# fraction of one, and a single retry -- Stripe makes retried requests safe
+# with idempotency keys -- keeps the worst case at about half a minute, inside
+# the web server's 60-second limit.
+STRIPE_TIMEOUT_SECONDS = (5, 15)
+STRIPE_NETWORK_RETRIES = 1
+
+
+def configure_stripe_http_client():
+    stripe.default_http_client = stripe.new_default_http_client(timeout=STRIPE_TIMEOUT_SECONDS)
+    stripe.max_network_retries = STRIPE_NETWORK_RETRIES
 
 
 def get_rate_limit_identity():
+    """Whom a limit counts against unless a route says otherwise.
+
+    The account, for somebody signed in: a whole lecture hall behind one campus
+    address would otherwise share one budget for resending a confirmation or
+    downloading their data. The network address for everybody else.
+    """
+    if current_user and current_user.is_authenticated:
+        return f"user:{current_user.get_id()}"
+    return rate_limit_network()
+
+
+def rate_limit_network():
+    """The network address alone -- the loose, flood-stopping limits."""
     return request.remote_addr or "unknown"
+
+
+def rate_limit_network_and_address():
+    """The network address plus the email address typed into the form.
+
+    The tight limit on a form that takes a password: ten wrong guesses at one
+    account lock that account's guessing from that network, and nobody else's.
+    The address is hashed so the limiter's store holds no email addresses.
+    """
+    address = (request.form.get("email") or request.form.get("email_private") or "").strip().lower()
+    digest = hashlib.sha256(address.encode("utf-8")).hexdigest()[:16] if address else "-"
+    return f"{rate_limit_network()}|{digest}"
+
+
+def rate_limit_network_and_path():
+    """The network address plus the page -- for a reset link, the link itself."""
+    return f"{rate_limit_network()}|{request.path}"
 
 
 limiter = Limiter(
     key_func=get_rate_limit_identity,
     storage_uri=RATELIMIT_STORAGE_URI,
     default_limits=[],
+    # If Redis, which keeps the counts, is unreachable, count in each worker's
+    # memory instead of failing the request: logging in and signing up must
+    # not stop working because the limiter lost its store. Limits still apply,
+    # just per worker, until Redis is back.
+    in_memory_fallback_enabled=True,
+    swallow_errors=True,
 )
 
 
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    user = db.session.get(User, int(user_id))
+    # An erased account must not keep browsing on a session issued before the
+    # erasure. Clearing the password hash stops new logins but says nothing
+    # about sessions that already exist, and an expelled member being signed in
+    # somewhere else is exactly when that matters. Returning None here ends
+    # every one of them at the next request.
+    if user is not None and user.deleted_at is not None:
+        return None
+    # Same reasoning for a switched-off account, and the same urgency: an
+    # account is usually disabled *because* somebody should stop using it now,
+    # and leaving their open sessions alive would mean waiting for a logout
+    # that may never come.
+    if user is not None and user.is_disabled:
+        return None
+    return user
 
 
 
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.has_role("admin"):
+def requires(*permissions):
+    """Gate a route on capabilities rather than on who somebody is.
+
+    ``@requires(Permission.SYSTEM_UPDATE)`` says what the route does; which
+    roles carry that is permissions.py's business alone. A role added there
+    reaches every route its bundle lists without one of them being edited,
+    which is the whole point -- the alternative is finding each route a new
+    role should reach and hoping none is missed.
+
+    The interface hides what it will not offer, but hiding a link is not access
+    control: the URL is still there to be typed, and somebody who had the role
+    yesterday knows it. This is the check that decides. Somebody who may reach
+    the admin workspace at all is sent back to the dashboard rather than to the
+    public page, because they are legitimately signed in here.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if current_user.is_authenticated and all(
+                current_user.can(permission) for permission in permissions
+            ):
+                return f(*args, **kwargs)
+
             flash(_("You do not have permission to access this page."), "danger")
-            return redirect(url_for("index"))
-        return f(*args, **kwargs)
+            if current_user.is_authenticated and current_user.can(Permission.ADMIN_ACCESS):
+                return redirect(url_for("admin.admin_dashboard"))
+            return redirect(url_for("public.index"))
 
-    return decorated_function
+        return decorated_function
+
+    return decorator
 
 
-DIRECT_MEMBER_PROFILE_FIELDS = (
-    "street",
-    "house_number",
-    "postal_code",
-    "city",
-    "country",
-    "phone_private",
-    "email_private",
-    "phone_work",
-    "email_work",
-)
 
-IDENTITY_MEMBER_FIELDS = (
-    "salutation",
-    "title",
-    "first_name",
-    "last_name",
-    "year_group",
-)
 
-MEMBER_PROFILE_FIELDS = IDENTITY_MEMBER_FIELDS + DIRECT_MEMBER_PROFILE_FIELDS
-ACTIVE_MEMBER_STATUSES = {"paid", "free_period", "canceled", "cancel_scheduled"}
-RESUMABLE_MEMBER_STATUSES = {"pending_checkout", "processing", "failed", "unpaid"}
-TOKEN_MAX_AGE_VERIFY_EMAIL = 60 * 60 * 24 * 7
-TOKEN_MAX_AGE_PASSWORD_RESET = 60 * 60 * 24
-TOKEN_MAX_AGE_FORUM_ENTRY = 60 * 60 * 24 * 30
-TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN = 60 * 60
-EMAIL_JOB_TYPE_WELCOME = "welcome_email"
-EMAIL_JOB_STATUS_PENDING = "pending"
-EMAIL_JOB_STATUS_SENT = "sent"
-EMAIL_JOB_STATUS_EXHAUSTED = "exhausted"
-EMAIL_JOB_STATUS_CANCELED = "canceled"
-WELCOME_EMAIL_RETRY_DELAYS = (
-    timedelta(minutes=15),
-    timedelta(hours=24),
-)
 PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
+# Log retention. 0 means keep forever. Audit logs default to keep-forever because
+# they are the account/security trail; higher-churn notification delivery records
+# default to a generous one-year window.
+AUDIT_LOG_RETENTION_DAYS = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "0"))
+NOTIFICATION_RETENTION_DAYS = int(os.getenv("NOTIFICATION_RETENTION_DAYS", "365"))
 ADMIN_DIRECTORY_PAGE_SIZE = 50
 AUDIT_LOG_PAGE_SIZE = 50
-APPROVAL_HISTORY_PAGE_SIZE = 25
 
 
 
-def build_forum_username_base(first_name, last_name, year_group):
-    last_name_cleaned = "".join(filter(str.isalnum, last_name or "")).capitalize()
-    first_name_initial = first_name[0].upper() if first_name else ""
-    study_field_initial = year_group[0].upper() if year_group else ""
-    year_short = year_group[-2:] if year_group and len(year_group) > 2 else ""
-    return f"{last_name_cleaned}{first_name_initial}_{study_field_initial}{year_short}"
 
 
 
-def generate_suggested_username(member):
-    """Generates the base forum username using the legacy welcome-email scheme."""
-    return build_forum_username_base(member.first_name, member.last_name, member.year_group)
 
 
 
-def generate_unique_forum_username(first_name, last_name, year_group, exclude_user_id=None, preferred=None):
-    base = preferred or build_forum_username_base(first_name, last_name, year_group)
-    if not base:
-        base = "Member"
-
-    candidate = base
-    suffix = 2
-    while True:
-        query = db.select(User).filter_by(forum_username=candidate)
-        if exclude_user_id is not None:
-            query = query.filter(User.id != exclude_user_id)
-        existing_user = db.session.execute(query).scalar_one_or_none()
-        if existing_user is None:
-            return candidate
-        candidate = f"{base}-{suffix}"
-        suffix += 1
 
 
 
-def get_email_template_choices(app):
-    template_choices = []
-    email_template_dir = os.path.join(app.root_path, "templates", "emails")
-    if os.path.isdir(email_template_dir):
-        template_choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
-    return template_choices
 
 
 
-def get_db_mail_accounts():
-    try:
-        return db.session.execute(
-            db.select(MailAccount).order_by(MailAccount.account_key.asc())
-        ).scalars().all()
-    except Exception:
-        return []
 
 
 
@@ -341,523 +559,133 @@ def static_asset_version(app, filename):
 
 
 
-def get_membership_now():
-    return datetime.now(timezone.utc).astimezone(MEMBERSHIP_TIMEZONE)
 
 
 
-def get_membership_today():
-    return get_membership_now().date()
 
 
 
-def get_now_utc():
-    return datetime.now(timezone.utc)
 
 
 
-def parse_iso_date(value):
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
 
 
 
-def to_membership_date(unix_timestamp):
-    if not unix_timestamp:
-        return get_membership_today()
-    return datetime.fromtimestamp(unix_timestamp, timezone.utc).astimezone(MEMBERSHIP_TIMEZONE).date()
 
 
 
-def subscription_has_scheduled_cancellation(subscription):
-    if not subscription:
-        return False
 
-    if bool(subscription.get("cancel_at_period_end")):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def _stand_down_while_paused(job_name):
+    """Check a timer-run job in; True when background jobs are paused after a restore."""
+    from .services.background_jobs import check_in
+
+    if check_in(job_name):
+        click.echo(
+            "Background jobs are paused after a restore. Resume them under "
+            "Settings > Maintenance > Backup & Restore. Not running."
+        )
         return True
+    return False
 
-    cancel_at = subscription.get("cancel_at")
-    if cancel_at is None:
-        return False
-
-    try:
-        return int(cancel_at) > int(datetime.now(timezone.utc).timestamp())
-    except (TypeError, ValueError):
-        return False
-
-
-
-def first_day_of_year(year):
-    return date(year, 1, 1)
-
-
-
-def last_day_of_year(year):
-    return date(year, 12, 31)
-
-
-
-def start_of_day_unix(day_value):
-    local_start = datetime.combine(day_value, datetime.min.time(), tzinfo=MEMBERSHIP_TIMEZONE)
-    return int(local_start.astimezone(timezone.utc).timestamp())
-
-
-
-def build_membership_cycle(join_date, annual_amount_cents):
-    current_year = join_date.year
-    next_year_start = first_day_of_year(current_year + 1)
-    current_year_end = last_day_of_year(current_year)
-    total_days = (first_day_of_year(current_year + 1) - first_day_of_year(current_year)).days
-    remaining_days = (current_year_end - join_date).days + 1
-    free_period = join_date >= date(current_year, 10, 1)
-    prorated_amount_cents = 0
-    if not free_period:
-        prorated_amount_cents = int(
-            (Decimal(annual_amount_cents) * Decimal(remaining_days) / Decimal(total_days)).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-        )
-
-    return {
-        "join_date": join_date,
-        "coverage_start": join_date,
-        "coverage_end": current_year_end,
-        "renewal_due_on": next_year_start,
-        "trial_end_unix": start_of_day_unix(next_year_start),
-        "trial_end_iso": next_year_start.isoformat(),
-        "free_period": free_period,
-        "prorated_amount_cents": prorated_amount_cents,
-        "remaining_days": remaining_days,
-        "total_days": total_days,
-        "current_year": current_year,
-        "thank_you_phase": "free_period" if free_period else "prorated",
-    }
-
-
-
-def get_stripe_membership_price():
-    stripe_settings = apply_runtime_stripe_config()
-    price_id = stripe_settings.get("stripe_price_id") or STRIPE_PRICE_ID
-    if not price_id:
-        raise ValueError("Stripe membership pricing is not configured.")
-    price = stripe.Price.retrieve(price_id, expand=["product"])
-    recurring = price.get("recurring") or {}
-    interval = recurring.get("interval")
-    interval_count = recurring.get("interval_count", 1)
-    is_yearly = (interval == "year" and interval_count == 1) or (interval == "month" and interval_count == 12)
-    if not is_yearly:
-        raise ValueError(
-            f"STRIPE_PRICE_ID must point to an annual recurring Stripe price. "
-            f"Got interval={interval!r}, interval_count={interval_count!r}."
-        )
-
-    unit_amount = price.get("unit_amount")
-    if unit_amount is None:
-        raise ValueError("The Stripe membership price must have a fixed unit_amount.")
-
-    return {
-        "id": price["id"],
-        "currency": price["currency"],
-        "unit_amount": int(unit_amount),
-        "interval": interval,
-        "interval_count": int(interval_count),
-    }
-
-
-
-def format_membership_date_display(value):
-    locale = str(get_locale()) if get_locale() else None
-    try:
-        return format_date(value, format="long", locale=locale)
-    except Exception:
-        return value.isoformat()
-
-
-
-def format_checkout_amount(amount_cents, currency):
-    locale = str(get_locale()) if get_locale() else None
-    amount = Decimal(amount_cents) / Decimal("100")
-    try:
-        return format_currency(amount, currency.upper(), locale=locale)
-    except Exception:
-        return f"{amount:.2f} {currency.upper()}"
-
-
-
-def build_checkout_submit_message(cycle, price_details):
-    coverage_end = format_membership_date_display(cycle["coverage_end"])
-    renewal_due_on = format_membership_date_display(cycle["renewal_due_on"])
-    annual_fee = format_checkout_amount(price_details["unit_amount"], price_details["currency"])
-
-    if cycle["free_period"]:
-        return _(
-            "No payment is due today. Your membership is active through %(coverage_end)s. "
-            "The annual fee of %(annual_fee)s will be charged on %(renewal_due_on)s unless you cancel beforehand.",
-            coverage_end=coverage_end,
-            annual_fee=annual_fee,
-            renewal_due_on=renewal_due_on,
-        )
-
-    prorated_fee = format_checkout_amount(cycle["prorated_amount_cents"], price_details["currency"])
-    return _(
-        "Today you pay %(prorated_fee)s for membership through %(coverage_end)s. "
-        "The annual fee of %(annual_fee)s will be charged on %(renewal_due_on)s unless you cancel beforehand.",
-        prorated_fee=prorated_fee,
-        coverage_end=coverage_end,
-        annual_fee=annual_fee,
-        renewal_due_on=renewal_due_on,
-    )
-
-
-
-def build_prorated_line_item(cycle, price_details):
-    if cycle["prorated_amount_cents"] <= 0:
-        return None
-
-    return {
-        "price_data": {
-            "currency": price_details["currency"],
-            "product_data": {
-                "name": _(
-                    "Membership through %(coverage_end)s (prorated)",
-                    coverage_end=format_membership_date_display(cycle["coverage_end"]),
-                ),
-            },
-            "unit_amount": cycle["prorated_amount_cents"],
-        },
-        "quantity": 1,
-    }
-
-
-
-def normalize_optional_member_value(field_name, value):
-    if value == "" and field_name in {"title", "phone_work", "email_work"}:
-        return None
-    return value
-
-
-
-def apply_member_profile(member, form_data, fields=MEMBER_PROFILE_FIELDS):
-    for field_name in fields:
-        value = normalize_optional_member_value(field_name, form_data.get(field_name))
-        setattr(member, field_name, value)
-    if "terms_accepted" in form_data:
-        member.terms_accepted = bool(form_data.get("terms_accepted"))
-
-
-
-def build_member_payload(member):
-    payload = {field_name: getattr(member, field_name) for field_name in MEMBER_PROFILE_FIELDS}
-    payload["terms_accepted"] = True
-    return payload
-
-
-
-def member_has_active_access(member, on_date=None):
-    if member is None:
-        return False
-    today = on_date or get_membership_today()
-    if not member.membership_ends_on or member.membership_ends_on < today:
-        return False
-    return member.payment_status in ACTIVE_MEMBER_STATUSES or member.is_active
-
-
-
-def sync_member_active_state(member, on_date=None):
-    if member is None:
-        return False
-
-    today = on_date or get_membership_today()
-    changed = False
-
-    if member.membership_ends_on and member.membership_ends_on < today and member.is_active:
-        member.is_active = False
-        changed = True
-        if member.payment_status in ACTIVE_MEMBER_STATUSES:
-            member.payment_status = "expired"
-    elif member.membership_ends_on and member.membership_ends_on >= today and member.payment_status in ACTIVE_MEMBER_STATUSES and not member.is_active:
-        member.is_active = True
-        changed = True
-
-    return changed
-
-
-
-def set_member_membership_window(member, starts_on, ends_on, renewal_due_on, payment_status, is_active, cancel_at_period_end=False):
-    member.membership_starts_on = starts_on
-    member.membership_ends_on = ends_on
-    member.renewal_due_on = renewal_due_on
-    member.payment_status = payment_status
-    member.is_active = is_active
-    member.cancel_at_period_end = cancel_at_period_end
-
-
-
-def get_member_by_stripe_reference(customer_id=None, subscription_id=None, member_id=None, user_id=None):
-    if member_id:
-        member = db.session.get(Member, int(member_id))
-        if member is not None:
-            return member
-    if user_id:
-        member = db.session.execute(db.select(Member).filter_by(user_id=int(user_id))).scalar_one_or_none()
-        if member is not None:
-            return member
-    if subscription_id:
-        member = Member.query.filter_by(stripe_subscription_id=subscription_id).first()
-        if member is not None:
-            return member
-    if customer_id:
-        return Member.query.filter_by(stripe_customer_id=customer_id).first()
-    return None
-
-
-
-def get_member_by_email(email):
-    if not email:
-        return None
-    normalized_email = str(email).strip()
-    if not normalized_email:
-        return None
-    return Member.query.filter_by(email_private=normalized_email).first()
-
-
-
-def get_member_by_stripe_or_email(
-    customer_id=None,
-    subscription_id=None,
-    member_id=None,
-    user_id=None,
-    email=None,
-    fetch_customer_email=False,
-):
-    member = get_member_by_stripe_reference(
-        customer_id=customer_id,
-        subscription_id=subscription_id,
-        member_id=member_id,
-        user_id=user_id,
-    )
-    if member is not None:
-        return member
-
-    member = get_member_by_email(email)
-    if member is not None:
-        return member
-
-    if customer_id and fetch_customer_email:
-        try:
-            apply_runtime_stripe_config()
-            customer = stripe.Customer.retrieve(customer_id)
-        except Exception as exc:
-            current_app.logger.warning(
-                "Could not retrieve Stripe customer %s while resolving a pending member: %s",
-                customer_id,
-                exc,
-            )
-            return None
-
-        member = get_member_by_email(customer.get("email"))
-        if member is not None:
-            return member
-
-    return None
-
-
-
-def backfill_member_stripe_references(member, customer_id=None, subscription_id=None):
-    changed = False
-
-    if customer_id and isinstance(customer_id, str) and customer_id.startswith("cus_") and member.stripe_customer_id != customer_id:
-        member.stripe_customer_id = customer_id
-        changed = True
-
-    if (
-        subscription_id
-        and isinstance(subscription_id, str)
-        and subscription_id.startswith("sub_")
-        and member.stripe_subscription_id != subscription_id
-    ):
-        member.stripe_subscription_id = subscription_id
-        changed = True
-
-    return changed
-
-
-
-def update_member_paid_coverage(member, paid_on):
-    coverage_year = paid_on.year
-    if member.membership_ends_on and member.membership_ends_on >= paid_on:
-        coverage_year = member.membership_ends_on.year
-
-    starts_on = member.membership_starts_on
-    if starts_on is None or starts_on.year != coverage_year:
-        starts_on = first_day_of_year(coverage_year) if paid_on == first_day_of_year(coverage_year) else paid_on
-
-    set_member_membership_window(
-        member,
-        starts_on=starts_on,
-        ends_on=last_day_of_year(coverage_year),
-        renewal_due_on=first_day_of_year(coverage_year + 1),
-        payment_status="paid",
-        is_active=True,
-        cancel_at_period_end=member.cancel_at_period_end,
-    )
-
-
-
-def get_default_sender_account():
-    settings = {s.key: s.value for s in Setting.query.all()}
-    preferred_sender = settings.get("welcome_email_sender")
-    if preferred_sender:
-        return preferred_sender
-
-    try:
-        mail_accounts = load_mail_accounts_config()
-        return next(iter(mail_accounts.keys()), None)
-    except Exception:
-        return None
-
-
-
-def send_account_action_email(
-    app,
-    to_email,
-    subject,
-    preview_text,
-    action_url,
-    action_label,
-    heading,
-    body_lines,
-    failure_event_type="account_action_email_failed",
-    failure_summary=None,
-    failure_payload=None,
-    target_user=None,
-    target_member=None,
-    notify_on_failure=True,
-):
-    sender_account = get_default_sender_account()
-    failure_summary = failure_summary or _("An account-related email could not be sent.")
-    payload = {
-        "recipient": to_email,
-        "subject": subject,
-        "sender_account": sender_account or None,
-        **(failure_payload or {}),
-    }
-    if not sender_account:
-        app.logger.warning("Could not send account email to %s because no sender account is configured.", to_email)
-        if notify_on_failure:
-            queue_curated_admin_notification(
-                ADMIN_ERROR_CHANNEL,
-                failure_event_type,
-                failure_summary,
-                payload=payload,
-                target_user=target_user,
-                target_member=target_member,
-                commit=True,
-            )
-        return False
-
-    logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
-    attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
-    success, error_message = send_mail(
-        from_account=sender_account,
-        to_email=to_email,
-        subject=subject,
-        template_name="member_account_action.html",
-        attachments=attachments,
-        preview_text=preview_text,
-        action_url=action_url,
-        action_label=action_label,
-        heading=heading,
-        body_lines=body_lines,
-        now=get_now_utc(),
-        return_error=True,
-    )
-    if not success and notify_on_failure:
-        queue_curated_admin_notification(
-            ADMIN_ERROR_CHANNEL,
-            failure_event_type,
-            failure_summary,
-            payload={**payload, "error": error_message},
-            target_user=target_user,
-            target_member=target_member,
-            commit=True,
-        )
-    return success
-
-
-
-def get_token_serializer():
-    return URLSafeTimedSerializer(SECRET_KEY)
-
-
-
-def generate_token(purpose, **payload):
-    return get_token_serializer().dumps(payload, salt=f"jaeronautics-{purpose}")
-
-
-
-def read_token(token, purpose, max_age):
-    return get_token_serializer().loads(token, salt=f"jaeronautics-{purpose}", max_age=max_age)
-
-
-
-def rotate_password_reset_nonce(user):
-    user.password_reset_nonce = secrets.token_urlsafe(24)
-    return user.password_reset_nonce
-
-
-
-def build_password_reset_token(user):
-    nonce = user.password_reset_nonce or rotate_password_reset_nonce(user)
-    return generate_token("reset-password", user_id=user.id, nonce=nonce)
-
-
-
-def send_email_verification_email(app, user):
-    token = generate_token("verify-email", user_id=user.id)
-    verify_url = build_public_url("verify_email", token=token)
-    return send_account_action_email(
-        app,
-        to_email=user.email,
-        subject=_("Verify your Joanneum Aeronautics email"),
-        preview_text=_("Confirm your email address for your Joanneum Aeronautics account."),
-        action_url=verify_url,
-        action_label=_("Verify Email"),
-        heading=_("Confirm your email address"),
-        body_lines=[
-            _("Please confirm your email address for your Joanneum Aeronautics account."),
-            _("This helps us keep your account secure and reach you when needed."),
-        ],
-        failure_event_type="verification_email_failed",
-        failure_summary=_("A verification email could not be sent."),
-        failure_payload={"email_type": "verification"},
-        target_user=user,
-    )
-
-def send_password_reset_email(app, user):
-    token = build_password_reset_token(user)
-    reset_url = build_public_url("reset_password", token=token)
-    return send_account_action_email(
-        app,
-        to_email=user.email,
-        subject=_("Reset your Joanneum Aeronautics password"),
-        preview_text=_("Use this link to choose a new password for your account."),
-        action_url=reset_url,
-        action_label=_("Reset Password"),
-        heading=_("Reset your password"),
-        body_lines=[
-            _("A password reset was requested for your Joanneum Aeronautics account."),
-            _("If this was you, use the link below to set a new password. If not, you can ignore this email."),
-        ],
-        failure_event_type="password_reset_email_failed",
-        failure_summary=_("A password reset email could not be sent."),
-        failure_payload={"email_type": "password_reset"},
-        target_user=user,
-    )
 
 def set_setting_value(key, value):
     setting = db.session.get(Setting, key)
@@ -874,363 +702,56 @@ def set_setting_value(key, value):
 
 
 
-def get_settings_map(keys=None):
-    query = db.select(Setting)
-    if keys:
-        query = query.where(Setting.key.in_(list(keys)))
-    return {setting.key: setting.value for setting in db.session.execute(query).scalars().all()}
 
 
 
-def get_forum_settings_map():
-    return get_settings_map(FORUM_SETTING_KEYS)
 
 
 
-def get_stripe_settings_map():
-    values = dict(DEFAULT_STRIPE_SETTINGS)
-    values.update(get_settings_map(STRIPE_SETTING_KEYS))
-    return values
 
 
 
-def apply_runtime_stripe_config():
-    stripe_settings = get_stripe_settings_map()
-    stripe.api_key = stripe_settings.get("stripe_secret_key") or STRIPE_SECRET_KEY
-    return stripe_settings
 
 
 
-def get_forum_service():
-    return ForumService(get_forum_settings_map())
 
 
 
-def get_notification_settings_map():
-    return get_settings_map(NOTIFICATION_SETTING_KEYS)
-
-
-
-def get_notification_service():
-    return NotificationService(current_app._get_current_object())
-
-
-
-def flush_marked_notification_channels():
-    channels = sorted(db.session.info.pop("notification_channels_to_flush", set()))
-    if not channels:
-        return {}
-    try:
-        return get_notification_service().deliver_pending_notifications(channels=channels)
-    except Exception as exc:
-        current_app.logger.error("Could not flush queued notification emails: %s", exc)
-        return {}
-
-
-
-def queue_curated_admin_notification(channel, event_type, summary, payload=None, target_user=None, target_member=None, object_type=None, object_id=None, severity="error", commit=False):
-    if channel not in {ADMIN_GENERAL_CHANNEL, ADMIN_ERROR_CHANNEL}:
-        return None
-    try:
-        service = get_notification_service()
-        if channel == ADMIN_GENERAL_CHANNEL:
-            event = service.queue_admin_general(
-                event_type=event_type,
-                summary=summary,
-                payload=payload,
-                target_user=target_user,
-                target_member=target_member,
-                object_type=object_type,
-                object_id=object_id,
-            )
-        else:
-            event = service.queue_admin_error(
-                event_type=event_type,
-                summary=summary,
-                payload=payload,
-                target_user=target_user,
-                target_member=target_member,
-                object_type=object_type,
-                object_id=object_id,
-                severity=severity,
-            )
-        if commit and event is not None:
-            db.session.commit()
-            flush_marked_notification_channels()
-        return event
-    except Exception as exc:
-        current_app.logger.error("Could not queue admin notification '%s': %s", event_type, exc)
-        if commit:
-            db.session.rollback()
-        return None
-
-
-
-def queue_user_status_notification(event_type, summary, recipient_email, payload=None, target_user=None, target_member=None, object_type=None, object_id=None):
-    try:
-        return get_notification_service().queue_user_status(
-            event_type=event_type,
-            summary=summary,
-            recipient_email=recipient_email,
-            payload=payload,
-            target_user=target_user,
-            target_member=target_member,
-            object_type=object_type,
-            object_id=object_id,
-        )
-    except Exception as exc:
-        current_app.logger.error("Could not queue user notification '%s': %s", event_type, exc)
-        return None
-
-
-def log_out_forum_session_if_possible(user):
-    if user is None or getattr(user, "forum_account", None) is None:
-        return False, None
-
-    service = get_forum_service()
-    did_log_out, error = service.log_out_user(user)
-    if error:
-        current_app.logger.warning("Forum logout sync failed for user_id=%s: %s", user.id, error)
-    return did_log_out, error
-
-
-
-def snapshot_forum_account_for_audit(forum_account):
-    if forum_account is None:
-        return None
-    return serialize_audit_value(
-        {
-            "id": forum_account.id,
-            "provider": forum_account.provider,
-            "external_id": forum_account.external_id,
-            "remote_user_id": forum_account.remote_user_id,
-            "state": forum_account.state,
-            "last_synced_email": forum_account.last_synced_email,
-            "last_synced_username": forum_account.last_synced_username,
-            "last_synced_at": forum_account.last_synced_at,
-            "last_error": forum_account.last_error,
-            "member_id": forum_account.member_id,
-            "user_id": forum_account.user_id,
-        }
-    )
-
-
-
-def snapshot_forum_avatar_submission_for_audit(submission):
-    if submission is None:
-        return None
-    return serialize_audit_value(
-        {
-            "id": submission.id,
-            "status": submission.status,
-            "original_filename": submission.original_filename,
-            "content_type": submission.content_type,
-            "file_size": submission.file_size,
-            "file_hash": submission.file_hash,
-            "storage_path": submission.storage_path,
-            "review_note": submission.review_note,
-            "sync_error": submission.sync_error,
-            "forum_synced_at": submission.forum_synced_at,
-            "uploaded_at": submission.uploaded_at,
-            "reviewed_at": submission.reviewed_at,
-            "member_id": submission.member_id,
-            "user_id": submission.user_id,
-            "reviewed_by_user_id": submission.reviewed_by_user_id,
-        }
-    )
-
-
-
-def build_forum_entry_url(user, include_token=False):
-    route_values = {}
-    if include_token and user is not None:
-        route_values["token"] = generate_token(
-            "forum-entry",
-            user_id=user.id,
-            issued_at=int(get_now_utc().timestamp()),
-        )
-    return build_public_url("forum_entry", **route_values)
-
-
-
-def queue_email_delivery_job(email_type, recipient_email=None, target_user=None, target_member=None, payload=None, initial_delay=None, error_message=None):
-    normalized_recipient = (recipient_email or "").strip().lower() or None
-    if initial_delay is None:
-        initial_delay = timedelta()
-
-    query = db.select(EmailDeliveryJob).where(
-        EmailDeliveryJob.email_type == email_type,
-        EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
-    )
-    if target_member is not None and target_member.id is not None:
-        query = query.where(EmailDeliveryJob.target_member_id == target_member.id)
-    elif target_user is not None and target_user.id is not None:
-        query = query.where(EmailDeliveryJob.target_user_id == target_user.id)
-    elif normalized_recipient:
-        query = query.where(EmailDeliveryJob.recipient_email == normalized_recipient)
-    else:
-        return None, False
-
-    existing_job = db.session.execute(
-        query.order_by(EmailDeliveryJob.created_at.asc(), EmailDeliveryJob.id.asc())
-    ).scalars().first()
-    if existing_job is not None:
-        if normalized_recipient:
-            existing_job.recipient_email = normalized_recipient
-        if payload is not None:
-            existing_job.payload = payload
-        if error_message:
-            existing_job.last_error = str(error_message)[:4000]
-        return existing_job, False
-
-    job = EmailDeliveryJob(
-        email_type=email_type,
-        recipient_email=normalized_recipient,
-        target_user_id=target_user.id if target_user is not None else None,
-        target_member_id=target_member.id if target_member is not None else None,
-        payload=payload,
-        status=EMAIL_JOB_STATUS_PENDING,
-        retry_count=0,
-        next_attempt_at=get_now_utc() + initial_delay,
-        last_error=str(error_message)[:4000] if error_message else None,
-    )
-    db.session.add(job)
-    return job, True
-
-
-
-def queue_welcome_email_retry_job(member, error_message=None):
-    if member is None:
-        return None, False
-    return queue_email_delivery_job(
-        EMAIL_JOB_TYPE_WELCOME,
-        recipient_email=member.email_private,
-        target_user=member.user,
-        target_member=member,
-        initial_delay=WELCOME_EMAIL_RETRY_DELAYS[0],
-        error_message=error_message,
-    )
-
-
-
-def mark_email_delivery_jobs_sent(email_type, target_user=None, target_member=None):
-    query = db.select(EmailDeliveryJob).where(
-        EmailDeliveryJob.email_type == email_type,
-        EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
-    )
-    if target_member is not None and target_member.id is not None:
-        query = query.where(EmailDeliveryJob.target_member_id == target_member.id)
-    elif target_user is not None and target_user.id is not None:
-        query = query.where(EmailDeliveryJob.target_user_id == target_user.id)
-    else:
-        return 0
-
-    jobs = db.session.execute(query).scalars().all()
-    if not jobs:
-        return 0
-
-    now = get_now_utc()
-    for job in jobs:
-        job.status = EMAIL_JOB_STATUS_SENT
-        job.sent_at = now
-        job.next_attempt_at = None
-        job.last_error = None
-    return len(jobs)
-
-
-
-def process_email_delivery_jobs(app):
-    now = get_now_utc()
-    summary = {
-        "processed": 0,
-        "sent": 0,
-        "exhausted": 0,
-        "canceled": 0,
-        "failed": 0,
-    }
-    jobs = db.session.execute(
-        db.select(EmailDeliveryJob)
-        .where(
-            EmailDeliveryJob.status == EMAIL_JOB_STATUS_PENDING,
-            or_(EmailDeliveryJob.next_attempt_at.is_(None), EmailDeliveryJob.next_attempt_at <= now),
-        )
-        .order_by(EmailDeliveryJob.next_attempt_at.asc(), EmailDeliveryJob.id.asc())
-    ).scalars().all()
-    if not jobs:
-        return summary
-
-    automatic_emails_enabled = get_settings_map().get("automatic_emails_enabled") == "True"
-
-    for job in jobs:
-        summary["processed"] += 1
-        job.last_attempted_at = now
-
-        if job.email_type != EMAIL_JOB_TYPE_WELCOME:
-            job.status = EMAIL_JOB_STATUS_CANCELED
-            job.next_attempt_at = None
-            job.last_error = _("This queued email type is no longer supported.")
-            summary["canceled"] += 1
-            continue
-
-        member = db.session.get(Member, job.target_member_id) if job.target_member_id else None
-        if member is None:
-            job.status = EMAIL_JOB_STATUS_CANCELED
-            job.next_attempt_at = None
-            job.last_error = _("The linked member profile no longer exists.")
-            summary["canceled"] += 1
-            continue
-
-        job.recipient_email = member.email_private
-
-        if not automatic_emails_enabled:
-            job.status = EMAIL_JOB_STATUS_CANCELED
-            job.next_attempt_at = None
-            job.last_error = _("Automatic emails were disabled before this retry could be sent.")
-            summary["canceled"] += 1
-            continue
-
-        success, error_message = send_member_welcome_email(
-            app,
-            member,
-            force_send=False,
-            notify_on_failure=False,
-            queue_retry_on_failure=False,
-            return_error=True,
-        )
-        if success:
-            mark_email_delivery_jobs_sent(EMAIL_JOB_TYPE_WELCOME, target_member=member)
-            job.status = EMAIL_JOB_STATUS_SENT
-            job.sent_at = now
-            job.next_attempt_at = None
-            job.last_error = None
-            summary["sent"] += 1
-            continue
-
-        summary["failed"] += 1
-        job.last_error = (error_message or _("The welcome email could not be sent."))[:4000]
-        job.retry_count += 1
-        if job.retry_count >= len(WELCOME_EMAIL_RETRY_DELAYS):
-            job.status = EMAIL_JOB_STATUS_EXHAUSTED
-            job.next_attempt_at = None
-            summary["exhausted"] += 1
-            queue_curated_admin_notification(
-                ADMIN_ERROR_CHANNEL,
-                "welcome_email_retry_exhausted",
-                _("A welcome email could not be delivered after automatic retries."),
-                payload={
-                    "recipient": member.email_private,
-                    "last_error": job.last_error,
-                    "retry_count": job.retry_count,
-                },
-                target_user=member.user,
-                target_member=member,
-                commit=False,
-            )
-            continue
-
-        job.next_attempt_at = now + WELCOME_EMAIL_RETRY_DELAYS[job.retry_count]
-
-    return summary
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1244,143 +765,12 @@ def is_safe_next_url(target):
 
 
 
-def sync_member_forum_state(member, raise_on_error=False):
-    service = get_forum_service()
-    if member is None or member.user is None:
-        return None, service
-
-    result = service.sync_member(member)
-    if result and result.changed:
-        db.session.flush()
-
-    if result and result.error:
-        current_app.logger.warning(
-            "Forum sync reported an issue for member_id=%s user_id=%s desired_state=%s: %s",
-            member.id,
-            member.user_id,
-            result.desired_state,
-            result.error,
-        )
-        queue_curated_admin_notification(
-            ADMIN_ERROR_CHANNEL,
-            "forum_sync_failed",
-            _("A forum synchronization attempt failed for %(email)s.", email=member.email_private),
-            payload={
-                "member_email": member.email_private,
-                "forum_username": member.user.forum_username,
-                "desired_state": result.desired_state,
-                "error": result.error,
-            },
-            target_user=member.user,
-            target_member=member,
-            object_type="forum_account",
-            object_id=result.forum_account.id if result and result.forum_account is not None else None,
-        )
-        if raise_on_error:
-            raise ForumProviderError(result.error)
-
-    return result, service
 
 
 
-def build_forum_context(member):
-    service = get_forum_service()
-    forum_account = member.user.forum_account if member and member.user else None
-    pending_submission = service.get_pending_submission(member) if member else None
-    approved_submission = service.get_current_approved_submission(member) if member else None
-    latest_submission = service.get_latest_submission(member) if member else None
-
-    status_key = "disabled"
-    status_message = _("The forum integration is not enabled yet.")
-    can_upload_avatar = False
-    can_enter_forum = False
-
-    if member is None or member.user is None:
-        status_key = "no_membership"
-        status_message = _("A linked membership profile is required before forum access can be prepared.")
-    elif not service.is_enabled():
-        status_key = "disabled"
-        status_message = _("The forum integration is not enabled yet.")
-    elif not member_has_active_access(member):
-        status_key = "inactive_membership"
-        status_message = _("Your forum access is currently unavailable because your membership is not active.")
-    elif approved_submission is not None:
-        status_key = "active"
-        status_message = _("Your forum access is ready.")
-        can_enter_forum = service.is_ready()
-    elif pending_submission is not None:
-        status_key = "pending_avatar"
-        status_message = _("Your profile picture is under review. You will get full forum access as soon as it is approved.")
-        can_upload_avatar = True
-    elif latest_submission is not None and latest_submission.status == FORUM_AVATAR_STATUS_REJECTED:
-        status_key = "rejected_avatar"
-        status_message = _("Your profile picture was rejected. Please upload a new one to continue.")
-        can_upload_avatar = True
-    else:
-        status_key = "needs_avatar"
-        status_message = _("Upload a profile picture to continue with forum onboarding.")
-        can_upload_avatar = True
-
-    avatar_max_bytes = service.settings["forum_avatar_max_bytes"]
-    avatar_upload_request_limit = service.get_upload_request_limit()
-    return {
-        "service": service,
-        "forum_account": forum_account,
-        "pending_submission": pending_submission,
-        "approved_submission": approved_submission,
-        "latest_submission": latest_submission,
-        "status_key": status_key,
-        "status_message": status_message,
-        "can_upload_avatar": can_upload_avatar,
-        "can_enter_forum": can_enter_forum,
-        "entry_url": url_for("forum_entry"),
-        "forum_error": forum_account.last_error if forum_account is not None else None,
-        "avatar_max_bytes": avatar_max_bytes,
-        "avatar_max_bytes_display": format_bytes_human(avatar_max_bytes),
-        "avatar_upload_request_limit": avatar_upload_request_limit,
-        "avatar_upload_request_limit_display": format_bytes_human(avatar_upload_request_limit),
-    }
 
 
 
-def sync_member_primary_email(member, new_email):
-    new_email = (new_email or "").strip().lower()
-    if not new_email:
-        raise ValueError(_("The private email address is required."))
-
-    existing_member = db.session.execute(
-        db.select(Member).filter(Member.email_private == new_email, Member.id != member.id)
-    ).scalar_one_or_none()
-    if existing_member is not None:
-        raise ValueError(_("A membership profile with this email address already exists."))
-
-    if member.user is not None:
-        existing_user = db.session.execute(
-            db.select(User).filter(User.email == new_email, User.id != member.user.id)
-        ).scalar_one_or_none()
-        if existing_user is not None:
-            raise ValueError(_("An account with this email address already exists."))
-
-    email_changed = member.email_private != new_email
-    member.email_private = new_email
-
-    if member.user is not None and member.user.email != new_email:
-        member.user.email = new_email
-        member.user.email_verified_at = None
-
-    if email_changed and member.stripe_customer_id:
-        try:
-            apply_runtime_stripe_config()
-            stripe.Customer.modify(member.stripe_customer_id, email=new_email)
-        except Exception as exc:
-            current_app.logger.warning(
-                "Could not sync Stripe customer email for member_id=%s customer_id=%s: %s",
-                member.id,
-                member.stripe_customer_id,
-                exc,
-            )
-
-    return email_changed
 
 
 
@@ -1395,7 +785,8 @@ def create_identity_change_request(member, requested_by_user, form_data):
         requested_title=normalize_optional_member_value("title", form_data.get("title")),
         requested_first_name=form_data["first_name"],
         requested_last_name=form_data["last_name"],
-        requested_year_group=form_data["year_group"],
+        requested_member_category=form_data["member_category"],
+        requested_year_group=normalize_optional_member_value("year_group", form_data.get("year_group")),
         member_note=(form_data.get("member_note") or "").strip() or None,
         status="pending",
     )
@@ -1430,283 +821,69 @@ def get_role(slug, label=None, description=None):
 
 
 def seed_default_roles():
-    get_role("admin", label="Admin", description="Can access the admin workspace.")
+    """Create a row for every role the permission table defines.
+
+    Driven off ROLE_PERMISSIONS so adding a role there is genuinely the only
+    edit: the row appears on the next start, ready to be granted.
+    """
+    for slug in ROLE_PERMISSIONS:
+        get_role(slug, label=role_label(slug), description=role_description(slug))
 
 
 
-def count_users_with_role(role_slug):
-    return db.session.scalar(
-        db.select(func.count()).select_from(User).where(User.roles.any(Role.slug == role_slug))
-    ) or 0
+def count_users_with_permission(permission, active_only=True):
+    """How many accounts could still do this, whatever role gives it to them.
+
+    The lockout guards ask this rather than counting super admins, so a role
+    added to permissions.py with SYSTEM_UPDATE starts counting towards "somebody
+    can still install an update" without the guards being touched.
+    """
+    slugs = roles_with(permission)
+    if not slugs:
+        return 0
+    query = db.select(func.count()).select_from(User).where(User.roles.any(Role.slug.in_(slugs)))
+    if active_only:
+        query = query.where(User.deleted_at.is_(None))
+    return db.session.scalar(query) or 0
 
 
 
-def serialize_audit_value(value):
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    if isinstance(value, Decimal):
-        return str(value)
-    if isinstance(value, dict):
-        return {key: serialize_audit_value(inner_value) for key, inner_value in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [serialize_audit_value(inner_value) for inner_value in value]
-    return value
 
 
 
-def is_sensitive_audit_field_name(field_name):
-    normalized_name = str(field_name or "").strip().lower()
-    if not normalized_name:
-        return False
-    if normalized_name in SENSITIVE_AUDIT_FIELD_NAMES:
-        return True
-    return any(token in normalized_name for token in ("secret", "password", "api_key", "webhook_secret"))
 
 
 
-def redact_sensitive_audit_value(value, placeholder="<configured>"):
-    serialized = serialize_audit_value(value)
-    if isinstance(serialized, dict):
-        redacted = {}
-        for key, inner_value in serialized.items():
-            if is_sensitive_audit_field_name(key):
-                has_secret_value = inner_value is not None and inner_value != "" and inner_value != [] and inner_value != {}
-                redacted[key] = placeholder if has_secret_value else None
-            else:
-                redacted[key] = redact_sensitive_audit_value(inner_value, placeholder=placeholder)
-        return redacted
-    if isinstance(serialized, list):
-        return [redact_sensitive_audit_value(item, placeholder=placeholder) for item in serialized]
-    return serialized
 
 
 
-def redact_settings_states_for_audit(before_settings, after_settings):
-    redacted_before = dict(before_settings or {})
-    redacted_after = dict(after_settings or {})
-    for key in SENSITIVE_SETTING_KEYS:
-        before_value = redacted_before.get(key)
-        after_value = redacted_after.get(key)
-        before_present = before_value not in {None, ""}
-        after_present = after_value not in {None, ""}
-        redacted_before[key] = "<configured>" if before_present else None
-        if not after_present:
-            redacted_after[key] = "<cleared>" if before_present else None
-        elif before_present and before_value != after_value:
-            redacted_after[key] = "<changed>"
-        else:
-            redacted_after[key] = "<configured>"
-    return redacted_before, redacted_after
 
 
 
-def snapshot_user_for_audit(user):
-    if user is None:
-        return None
-    return serialize_audit_value(
-        {
-            "id": user.id,
-            "email": user.email,
-            "forum_username": user.forum_username,
-            "roles": sorted(role.slug for role in user.roles),
-            "email_verified_at": user.email_verified_at,
-        }
-    )
 
 
 
-def snapshot_member_for_audit(member, fields=None):
-    if member is None:
-        return None
-    snapshot_fields = fields or MEMBER_PROFILE_FIELDS
-    payload = {field_name: getattr(member, field_name) for field_name in snapshot_fields}
-    payload.update(
-        {
-            "id": member.id,
-            "payment_status": member.payment_status,
-            "is_active": member.is_active,
-            "membership_starts_on": member.membership_starts_on,
-            "membership_ends_on": member.membership_ends_on,
-            "renewal_due_on": member.renewal_due_on,
-            "cancel_at_period_end": member.cancel_at_period_end,
-            "stripe_customer_id": member.stripe_customer_id,
-            "stripe_subscription_id": member.stripe_subscription_id,
-        }
-    )
-    return serialize_audit_value(payload)
 
 
 
-def snapshot_mail_account_for_audit(mail_account):
-    if mail_account is None:
-        return None
-    return serialize_audit_value(
-        {
-            "id": mail_account.id,
-            "account_key": mail_account.account_key,
-            "host": mail_account.host,
-            "port": mail_account.port,
-            "username": mail_account.username,
-            "starttls": mail_account.starttls,
-        }
-    )
 
 
 
-def normalize_mail_account_key(raw_key):
-    if raw_key is None:
-        return ""
-    normalized = "".join(
-        character if (character.isalnum() or character in {"-", "_"}) else "_"
-        for character in str(raw_key).strip()
-    )
-    while "__" in normalized:
-        normalized = normalized.replace("__", "_")
-    return normalized.strip("_")
 
 
 
-def parse_imported_starttls(value, security_hint=None):
-    if value is not None:
-        if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on", "starttls"}
-        return bool(value)
-
-    security_value = (security_hint or "").strip().lower()
-    if security_value in {"starttls", "tls-starttls", "smtp-starttls", "explicit_tls"}:
-        return True
-    if security_value in {"ssl", "ssl/tls", "tls", "implicit_tls"}:
-        return False
-    return False
 
 
 
-def normalize_imported_mail_account_record(raw_record, fallback_key=None):
-    if not isinstance(raw_record, dict):
-        raise ValueError("Each imported mail account entry must be a JSON object.")
-
-    account_key = normalize_mail_account_key(
-        raw_record.get("account_key")
-        or raw_record.get("key")
-        or raw_record.get("name")
-        or fallback_key
-    )
-    host = (raw_record.get("host") or raw_record.get("smtp_host") or raw_record.get("server") or "").strip()
-    username = (
-        raw_record.get("username")
-        or raw_record.get("user")
-        or raw_record.get("email")
-        or raw_record.get("login")
-        or ""
-    ).strip()
-    password = (
-        raw_record.get("password")
-        or raw_record.get("pass")
-        or raw_record.get("secret")
-        or raw_record.get("smtp_password")
-        or ""
-    )
-    port_value = raw_record.get("port") or raw_record.get("smtp_port")
-    security_hint = raw_record.get("security") or raw_record.get("encryption") or raw_record.get("transport_security")
-    starttls = parse_imported_starttls(raw_record.get("starttls"), security_hint=security_hint)
-
-    if not account_key:
-        raise ValueError("Every imported mail account needs a valid account key.")
-    if not host:
-        raise ValueError(f"Mail account '{account_key}' is missing the SMTP host.")
-    if not username:
-        raise ValueError(f"Mail account '{account_key}' is missing the SMTP username.")
-    if not password:
-        raise ValueError(f"Mail account '{account_key}' is missing the SMTP password.")
-    if port_value in (None, ""):
-        raise ValueError(f"Mail account '{account_key}' is missing the SMTP port.")
-
-    try:
-        port = int(port_value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Mail account '{account_key}' has an invalid SMTP port.") from exc
-
-    if port < 1 or port > 65535:
-        raise ValueError(f"Mail account '{account_key}' has an invalid SMTP port.")
-
-    return {
-        "account_key": account_key,
-        "host": host,
-        "port": port,
-        "username": username,
-        "password": password,
-        "starttls": starttls,
-    }
 
 
 
-def normalize_imported_mail_accounts_payload(payload):
-    raw_records = []
-
-    if isinstance(payload, dict) and isinstance(payload.get("mail_accounts"), list):
-        raw_records = [(None, entry) for entry in payload.get("mail_accounts", [])]
-    elif isinstance(payload, list):
-        raw_records = [(None, entry) for entry in payload]
-    elif isinstance(payload, dict):
-        raw_records = [
-            (key, value)
-            for key, value in payload.items()
-            if isinstance(value, dict)
-        ]
-    else:
-        raise ValueError("The uploaded JSON must be a Jaeronautics export, a legacy mail-account mapping, or a list of mail account objects.")
-
-    if not raw_records:
-        raise ValueError("The uploaded file does not contain any mail accounts.")
-
-    normalized_records = []
-    seen_keys = set()
-    for fallback_key, raw_record in raw_records:
-        normalized = normalize_imported_mail_account_record(raw_record, fallback_key=fallback_key)
-        if normalized["account_key"] in seen_keys:
-            raise ValueError(f"The uploaded file contains the account key '{normalized['account_key']}' more than once.")
-        seen_keys.add(normalized["account_key"])
-        normalized_records.append(normalized)
-
-    return normalized_records
 
 
 
-def build_mail_accounts_export_payload():
-    return {
-        "format": "jaeronautics_mail_accounts",
-        "version": 1,
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "mail_accounts": [
-            {
-                "account_key": mail_account.account_key,
-                "host": mail_account.host,
-                "port": mail_account.port,
-                "username": mail_account.username,
-                "password": mail_account.password,
-                "starttls": mail_account.starttls,
-            }
-            for mail_account in get_db_mail_accounts()
-        ],
-    }
 
 
 
-def log_audit_event(category, event_type, actor_user=None, target_user=None, target_member=None, before=None, after=None, metadata=None):
-    db.session.add(
-        AuditLog(
-            actor_user=actor_user,
-            target_user=target_user,
-            target_member=target_member,
-            category=category,
-            event_type=event_type,
-            before_state=redact_sensitive_audit_value(before) if before is not None else None,
-            after_state=redact_sensitive_audit_value(after) if after is not None else None,
-            event_metadata=redact_sensitive_audit_value(metadata) if metadata is not None else None,
-        )
-    )
 
 
 
@@ -1729,251 +906,51 @@ def can_resume_payment(member):
 
 
 def get_member_portal_target(user):
-    if user.has_role("admin"):
-        return "admin_dashboard"
-    return "account"
+    # Where signing in lands you. A capability, not a role name: an account
+    # holding only super admin was being sent to the member page.
+    if user.can(Permission.ADMIN_ACCESS):
+        return "admin.admin_dashboard"
+    return "account.account"
 
 
 
-def build_membership_metadata(member, cycle, activation_mode):
-    return {
-        "membership_starts_on": cycle["coverage_start"].isoformat(),
-        "membership_ends_on": cycle["coverage_end"].isoformat(),
-        "renewal_due_on": cycle["renewal_due_on"].isoformat(),
-        "activation_mode": activation_mode,
-        "member_email": member.email_private,
-        "member_id": str(member.id),
-        "user_id": str(member.user_id) if member.user_id else "",
-    }
 
 
 
-def create_checkout_session_for_member(member):
-    stripe_settings = apply_runtime_stripe_config()
-    price_id = stripe_settings.get("stripe_price_id") or STRIPE_PRICE_ID
-    price_details = get_stripe_membership_price()
-    join_date = get_membership_today()
-    cycle = build_membership_cycle(join_date, price_details["unit_amount"])
-    activation_mode = "free_period" if cycle["free_period"] else "paid_now"
-    membership_metadata = build_membership_metadata(member, cycle, activation_mode)
-    line_items = [{"price": price_id, "quantity": 1}]
-    prorated_line_item = build_prorated_line_item(cycle, price_details)
-    if prorated_line_item is not None:
-        line_items.insert(0, prorated_line_item)
-
-    checkout_payload = build_member_payload(member)
-    session = stripe.checkout.Session.create(
-        payment_method_types=["card", "sepa_debit"],
-        line_items=line_items,
-        mode="subscription",
-        metadata={**membership_metadata, "member_data": json.dumps(checkout_payload)},
-        subscription_data={
-            "trial_end": cycle["trial_end_unix"],
-            "metadata": membership_metadata,
-        },
-        custom_text={
-            "submit": {
-                "message": build_checkout_submit_message(cycle, price_details),
-            }
-        },
-        payment_method_collection="always",
-        customer_email=member.email_private,
-        success_url=build_public_url(
-            "thank_you",
-            method="checkout",
-            phase=cycle["thank_you_phase"],
-        ),
-        cancel_url=build_public_url("cancel"),
-    )
-    member.pending_checkout_started_at = get_now_utc()
-    return session, cycle
 
 
 
-def create_invoice_membership_for_member(member):
-    stripe_settings = apply_runtime_stripe_config()
-    price_id = stripe_settings.get("stripe_price_id") or STRIPE_PRICE_ID
-    price_details = get_stripe_membership_price()
-    join_date = get_membership_today()
-    cycle = build_membership_cycle(join_date, price_details["unit_amount"])
-    activation_mode = "free_period" if cycle["free_period"] else "paid_now"
-    membership_metadata = build_membership_metadata(member, cycle, activation_mode)
-
-    customer = stripe.Customer.create(
-        email=member.email_private,
-        name=f"{member.first_name} {member.last_name}",
-    )
-
-    subscription_params = {
-        "customer": customer.id,
-        "items": [{"price": price_id}],
-        "collection_method": "send_invoice",
-        "days_until_due": 30,
-        "trial_end": cycle["trial_end_unix"],
-        "metadata": membership_metadata,
-    }
-    prorated_line_item = build_prorated_line_item(cycle, price_details)
-    if prorated_line_item is not None:
-        subscription_params["add_invoice_items"] = [prorated_line_item]
-
-    subscription = stripe.Subscription.create(**subscription_params)
-    member.pending_checkout_started_at = get_now_utc()
-    member.stripe_customer_id = customer.id
-    member.stripe_subscription_id = subscription.id
-
-    if cycle["free_period"]:
-        set_member_membership_window(
-            member,
-            starts_on=cycle["coverage_start"],
-            ends_on=cycle["coverage_end"],
-            renewal_due_on=cycle["renewal_due_on"],
-            payment_status="free_period",
-            is_active=True,
-            cancel_at_period_end=False,
-        )
-    else:
-        set_member_membership_window(
-            member,
-            starts_on=cycle["coverage_start"],
-            ends_on=cycle["coverage_end"],
-            renewal_due_on=cycle["renewal_due_on"],
-            payment_status="unpaid",
-            is_active=False,
-            cancel_at_period_end=False,
-        )
-
-    return subscription, cycle
 
 
 
-def get_latest_stripe_subscription_for_member(member):
-    if member is None:
-        return None
-
-    if member.stripe_subscription_id:
-        apply_runtime_stripe_config()
-        return stripe.Subscription.retrieve(member.stripe_subscription_id)
-
-    if not member.stripe_customer_id:
-        return None
-
-    apply_runtime_stripe_config()
-    subscription_list = stripe.Subscription.list(customer=member.stripe_customer_id, status="all", limit=1)
-    subscriptions = subscription_list.get("data", []) if hasattr(subscription_list, "get") else []
-    return subscriptions[0] if subscriptions else None
 
 
 
-def backfill_member_coverage_from_subscription(member, subscription):
-    if member is None or not subscription:
-        return False
-
-    metadata = subscription.get("metadata", {}) or {}
-    starts_on = parse_iso_date(metadata.get("membership_starts_on"))
-    ends_on = parse_iso_date(metadata.get("membership_ends_on"))
-    renewal_due_on = parse_iso_date(metadata.get("renewal_due_on"))
-    changed = False
-
-    if starts_on and member.membership_starts_on != starts_on:
-        member.membership_starts_on = starts_on
-        changed = True
-    if ends_on and member.membership_ends_on != ends_on:
-        member.membership_ends_on = ends_on
-        changed = True
-    if renewal_due_on and member.renewal_due_on != renewal_due_on:
-        member.renewal_due_on = renewal_due_on
-        changed = True
-
-    return changed
 
 
 
-def sync_member_subscription_state_from_subscription(member, subscription):
-    if member is None or not subscription:
-        return False
-
-    changed = backfill_member_stripe_references(
-        member,
-        customer_id=subscription.get("customer") or member.stripe_customer_id,
-        subscription_id=subscription.get("id"),
-    )
-
-    if backfill_member_coverage_from_subscription(member, subscription):
-        changed = True
-
-    cancel_at_period_end = subscription_has_scheduled_cancellation(subscription)
-    if member.cancel_at_period_end != cancel_at_period_end:
-        member.cancel_at_period_end = cancel_at_period_end
-        changed = True
-
-    subscription_status = subscription.get("status")
-    activation_mode = ((subscription.get("metadata", {}) or {}).get("activation_mode") or "").strip()
-    coverage_is_current = bool(member.membership_ends_on and member.membership_ends_on >= get_membership_today())
-
-    if subscription_status == "canceled":
-        desired_status = "canceled"
-        desired_active = coverage_is_current
-    elif cancel_at_period_end:
-        desired_status = "cancel_scheduled" if coverage_is_current else member.payment_status
-        desired_active = coverage_is_current
-    elif subscription_status in {"active", "trialing"} and coverage_is_current:
-        desired_status = "free_period" if activation_mode == "free_period" else "paid"
-        desired_active = True
-    else:
-        desired_status = None
-        desired_active = member.is_active
-
-    if desired_status and member.payment_status != desired_status:
-        member.payment_status = desired_status
-        changed = True
-
-    if member.is_active != desired_active:
-        member.is_active = desired_active
-        changed = True
-
-    if sync_member_active_state(member):
-        changed = True
-
-    return changed
 
 
 
-def sync_member_subscription_state_from_stripe(member):
-    if member is None or not (member.stripe_customer_id or member.stripe_subscription_id):
-        return False
-
-    subscription = get_latest_stripe_subscription_for_member(member)
-    if not subscription:
-        return False
-
-    return sync_member_subscription_state_from_subscription(member, subscription)
 
 
 
-def refresh_member_billing_state(member, force_stripe_sync=False, sync_forum=False, on_date=None):
-    if member is None:
-        return False, None, None
 
-    changed = False
-    stripe_subscription = None
-    has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
 
-    if has_stripe_reference and force_stripe_sync:
-        stripe_subscription = get_latest_stripe_subscription_for_member(member)
-        if stripe_subscription and sync_member_subscription_state_from_subscription(member, stripe_subscription):
-            changed = True
 
-    if sync_member_active_state(member, on_date=on_date):
-        changed = True
 
-    forum_result = None
-    forum_service = get_forum_service()
-    if sync_forum and member.user is not None and (forum_service.is_enabled() or member.user.forum_account is not None):
-        forum_result, _forum_service = sync_member_forum_state(member)
-        if forum_result and forum_result.changed:
-            changed = True
 
-    return changed, stripe_subscription, forum_result
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1985,180 +962,11 @@ def get_portal_session(member):
     apply_runtime_stripe_config()
     return stripe.billing_portal.Session.create(
         customer=member.stripe_customer_id,
-        return_url=build_public_url("account", refresh_billing=1, rt=refresh_token),
+        return_url=build_public_url("account.account", refresh_billing=1, rt=refresh_token),
     )
 
 
 
-def send_member_welcome_email(app, member, force_send=False, notify_on_failure=True, queue_retry_on_failure=None, return_error=False):
-    settings = get_settings_map()
-    if queue_retry_on_failure is None:
-        queue_retry_on_failure = not force_send
-
-    if not force_send and settings.get("automatic_emails_enabled") != "True":
-        return (False, _("Automatic welcome emails are disabled.")) if return_error else False
-
-    sender_account = settings.get("welcome_email_sender")
-    template_name = settings.get("automatic_email_template")
-    if not sender_account or not template_name:
-        error_message = _("Email sender or template is not configured in the admin settings.")
-        if force_send:
-            raise ValueError(error_message)
-        if queue_retry_on_failure:
-            queue_welcome_email_retry_job(member, error_message=error_message)
-        if notify_on_failure:
-            queue_curated_admin_notification(
-                ADMIN_ERROR_CHANNEL,
-                "welcome_email_failed",
-                _("A welcome email could not be sent because the sender or template is not configured."),
-                payload={
-                    "recipient": member.email_private,
-                    "sender_account": sender_account or None,
-                    "template_name": template_name or None,
-                    "error": error_message,
-                },
-                target_user=member.user,
-                target_member=member,
-                commit=True,
-            )
-        return (False, error_message) if return_error else False
-
-    suggested_username = member.user.forum_username if member.user and member.user.forum_username else generate_suggested_username(member)
-    logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
-    attachments = [{"path": logo_path, "cid": "logo"}] if os.path.exists(logo_path) else None
-
-    forum_service = get_forum_service()
-    forum_entry_url = None
-    if forum_service.is_enabled() and member.user is not None:
-        forum_entry_url = build_forum_entry_url(member.user, include_token=True)
-
-    success, error_message = send_mail(
-        from_account=sender_account,
-        to_email=member.email_private,
-        subject=_("Welcome to Joanneum Aeronautics!"),
-        template_name=template_name,
-        attachments=attachments,
-        first_name=member.first_name,
-        suggested_username=suggested_username,
-        membership_starts_on=member.membership_starts_on,
-        membership_ends_on=member.membership_ends_on,
-        renewal_due_on=member.renewal_due_on,
-        forum_integration_enabled=forum_service.is_enabled(),
-        forum_entry_url=forum_entry_url,
-        now=get_now_utc(),
-        return_error=True,
-    )
-    if success:
-        mark_email_delivery_jobs_sent(EMAIL_JOB_TYPE_WELCOME, target_member=member)
-        return (True, None) if return_error else True
-
-    if queue_retry_on_failure:
-        queue_welcome_email_retry_job(member, error_message=error_message)
-    if notify_on_failure:
-        queue_curated_admin_notification(
-            ADMIN_ERROR_CHANNEL,
-            "welcome_email_failed",
-            _("A welcome email could not be sent."),
-            payload={
-                "recipient": member.email_private,
-                "sender_account": sender_account,
-                "template_name": template_name,
-                "error": error_message,
-            },
-            target_user=member.user,
-            target_member=member,
-            commit=True,
-        )
-    return (False, error_message) if return_error else False
-
-
-
-def ensure_user_schema():
-    inspector = inspect(db.engine)
-    if "users" not in inspector.get_table_names():
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("users")}
-    alter_statements = []
-    if "forum_username" not in columns:
-        alter_statements.append("ALTER TABLE users ADD COLUMN forum_username VARCHAR(255) NULL")
-    if "email_verified_at" not in columns:
-        alter_statements.append("ALTER TABLE users ADD COLUMN email_verified_at DATETIME NULL")
-    if "password_reset_nonce" not in columns:
-        alter_statements.append("ALTER TABLE users ADD COLUMN password_reset_nonce VARCHAR(255) NULL")
-
-    with db.engine.begin() as connection:
-        for statement in alter_statements:
-            connection.execute(sql_text(statement))
-
-        inspector = inspect(connection)
-        unique_constraints = inspector.get_unique_constraints("users")
-        indexes = inspector.get_indexes("users")
-        has_forum_username_unique = any(
-            constraint.get("column_names") == ["forum_username"]
-            for constraint in unique_constraints
-        ) or any(
-            index.get("unique") and index.get("column_names") == ["forum_username"]
-            for index in indexes
-        )
-        if not has_forum_username_unique:
-            connection.execute(
-                sql_text("CREATE UNIQUE INDEX uq_users_forum_username ON users (forum_username)")
-            )
-
-
-
-def ensure_member_schema():
-    inspector = inspect(db.engine)
-    if "member" not in inspector.get_table_names():
-        return
-
-    columns = {column["name"] for column in inspector.get_columns("member")}
-    alter_statements = []
-
-    if "user_id" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN user_id INTEGER NULL")
-    if "pending_checkout_started_at" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN pending_checkout_started_at DATETIME NULL")
-    if "stripe_subscription_id" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN stripe_subscription_id VARCHAR(255) NULL")
-    if "membership_starts_on" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN membership_starts_on DATE NULL")
-    if "membership_ends_on" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN membership_ends_on DATE NULL")
-    if "renewal_due_on" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN renewal_due_on DATE NULL")
-    if "cancel_at_period_end" not in columns:
-        alter_statements.append("ALTER TABLE member ADD COLUMN cancel_at_period_end BOOLEAN NOT NULL DEFAULT 0")
-
-    with db.engine.begin() as connection:
-        for statement in alter_statements:
-            connection.execute(sql_text(statement))
-
-        inspector = inspect(connection)
-        unique_constraints = inspector.get_unique_constraints("member")
-        indexes = inspector.get_indexes("member")
-        has_subscription_unique = any(
-            constraint.get("column_names") == ["stripe_subscription_id"]
-            for constraint in unique_constraints
-        ) or any(
-            index.get("unique") and index.get("column_names") == ["stripe_subscription_id"]
-            for index in indexes
-        )
-        if not has_subscription_unique:
-            connection.execute(
-                sql_text("CREATE UNIQUE INDEX uq_member_stripe_subscription_id ON member (stripe_subscription_id)")
-            )
-
-        has_user_unique = any(
-            constraint.get("column_names") == ["user_id"]
-            for constraint in unique_constraints
-        ) or any(
-            index.get("unique") and index.get("column_names") == ["user_id"]
-            for index in indexes
-        )
-        if not has_user_unique:
-            connection.execute(sql_text("CREATE UNIQUE INDEX uq_member_user_id ON member (user_id)"))
 
 
 
@@ -2217,13 +1025,442 @@ def backfill_member_user_links():
         db.session.commit()
 
 
-def create_app():
+
+def populate_member_profile_form(form, member):
+    for field_name in DIRECT_MEMBER_PROFILE_FIELDS:
+        getattr(form, field_name).data = getattr(member, field_name)
+
+
+def populate_identity_change_form(form, member, pending_request=None):
+    if pending_request is not None:
+        form.salutation.data = pending_request.requested_salutation
+        form.title.data = pending_request.requested_title
+        form.first_name.data = pending_request.requested_first_name
+        form.last_name.data = pending_request.requested_last_name
+        form.year_group.data = pending_request.requested_year_group
+        form.member_category.data = pending_request.requested_member_category
+        form.member_note.data = pending_request.member_note
+        return
+
+    form.salutation.data = member.salutation
+    form.title.data = member.title
+    form.first_name.data = member.first_name
+    form.last_name.data = member.last_name
+    form.year_group.data = member.year_group
+    form.member_category.data = member.member_category
+
+
+def decorate_pending_identity_requests(requests_):
+    for request_record in requests_:
+        request_record.current_forum_username = (
+            request_record.member.user.forum_username if request_record.member and request_record.member.user else None
+        )
+        request_record.suggested_forum_username = generate_unique_forum_username(
+            request_record.requested_first_name,
+            request_record.requested_last_name,
+            request_record.requested_year_group,
+            exclude_user_id=request_record.member.user.id if request_record.member and request_record.member.user else None,
+        )
+        request_record.username_would_change = bool(
+            request_record.current_forum_username
+            and request_record.current_forum_username != request_record.suggested_forum_username
+        )
+    return requests_
+
+
+def render_account_dashboard(profile_form=None, identity_form=None):
+    member = get_current_member_for_user(current_user)
+    if member is None:
+        return render_template("account/no_membership.html")
+
+    has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
+    stripe_subscription = None
+    if has_stripe_reference:
+        try:
+            billing_changed, stripe_subscription, _forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
+            if billing_changed:
+                db.session.commit()
+        except stripe.StripeError as exc:
+            current_app.logger.warning("Could not refresh Stripe billing state for member_id=%s: %s", member.id, exc)
+    elif sync_member_active_state(member):
+        db.session.commit()
+
+    pending_request = member.open_identity_change_request
+    profile_form = profile_form or MemberProfileForm(prefix="profile")
+    profile_form.member_category_value = member.member_category
+    identity_form = identity_form or IdentityChangeRequestForm(prefix="identity")
+
+    if not profile_form.is_submitted():
+        populate_member_profile_form(profile_form, member)
+    if not identity_form.is_submitted():
+        populate_identity_change_form(identity_form, member, pending_request=pending_request)
+
+    suggested_username_from_request = None
+    if pending_request is not None and member.user is not None:
+        suggested_username_from_request = generate_unique_forum_username(
+            pending_request.requested_first_name,
+            pending_request.requested_last_name,
+            pending_request.requested_year_group,
+            exclude_user_id=member.user.id,
+        )
+
+    forum_context = build_forum_context(member)
+    payment_arriving = checkout_completed_but_not_yet_confirmed(member)
+    # A failed payment on a subscription Stripe is still running -- a renewal
+    # debit that bounced, say. Stripe tries again, and a new card or account
+    # under Manage Billing is what helps. "Rejoin" would only be refused.
+    payment_needs_attention = (
+        member.payment_status == "failed"
+        and (stripe_subscription or {}).get("status") in LIVE_SUBSCRIPTION_STATUSES
+    )
+
+    return render_template(
+        "account/index.html",
+        member=member,
+        profile_form=profile_form,
+        identity_form=identity_form,
+        pending_request=pending_request,
+        suggested_username_from_request=suggested_username_from_request,
+        can_manage_billing=bool(member.stripe_customer_id),
+        can_resume_payment=can_resume_payment(member) and not payment_arriving,
+        payment_arriving=payment_arriving,
+        has_access=member_has_active_access(member),
+        can_rejoin=can_rejoin(member) and not payment_needs_attention,
+        payment_needs_attention=payment_needs_attention,
+        invoice_payments_enabled=invoice_payments_allowed(),
+        forum_context=forum_context,
+    )
+
+
+def get_admin_dashboard_metrics():
+    # Erased rows stay -- they are the payment record -- but they are not people
+    # the association has any more, so they are excluded here exactly as they
+    # are in the health report. Counting them made the dashboard disagree with
+    # the Maintenance panel by the number of erasures, and any future import of
+    # non-member accounts would widen that gap until neither number meant
+    # anything.
+    present_user = User.deleted_at.is_(None)
+    present_member = Member.deleted_at.is_(None)
+    return {
+        # Portal accounts only. Counting the archive here would say the
+        # association has 760 accounts when it has twenty, and this number is
+        # read as "how many people use this".
+        #
+        # Somebody who has reconnected counts, though: they signed up, they
+        # pay, they are here. Excluding them on the grounds that they were once
+        # imported would leave this figure hundreds short after an intake, and
+        # permanently.
+        "total_accounts": db.session.scalar(
+            db.select(func.count()).select_from(User).where(
+                present_user,
+                ~User.imported_forum_profile.has(
+                    ImportedForumProfile.claimed_at.is_(None)
+                ),
+            )
+        ) or 0,
+        "archived_forum_accounts": db.session.scalar(
+            db.select(func.count()).select_from(ImportedForumProfile)
+        ) or 0,
+        "archived_forum_claimed": db.session.scalar(
+            db.select(func.count()).select_from(ImportedForumProfile).where(
+                ImportedForumProfile.claimed_at.is_not(None)
+            )
+        ) or 0,
+        "linked_members": db.session.scalar(
+            db.select(func.count()).select_from(Member).where(present_member, Member.user_id.is_not(None))
+        ) or 0,
+        "active_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.is_active.is_(True))) or 0,
+        "pending_checkouts": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.payment_status == "pending_checkout")) or 0,
+        "pending_identity_requests": db.session.scalar(db.select(func.count()).select_from(MemberProfileChangeRequest).where(MemberProfileChangeRequest.status == "pending")) or 0,
+        "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.cancel_at_period_end.is_(True))) or 0,
+        "forum_onboarding_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ONBOARDING)) or 0,
+        "forum_active_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ACTIVE)) or 0,
+        "forum_sync_errors": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_SYNC_ERROR)) or 0,
+        "pending_forum_avatars": db.session.scalar(db.select(func.count()).select_from(ForumAvatarSubmission).where(ForumAvatarSubmission.status == FORUM_AVATAR_STATUS_PENDING)) or 0,
+    }
+
+
+
+
+def build_account_directory_query(
+    search_term, role_filter, membership_filter, active_filter,
+    kind_filter="all", account_filter="all",
+):
+    query = (
+        db.select(User)
+        .options(
+            selectinload(User.member),
+            selectinload(User.roles),
+            selectinload(User.imported_forum_profile),
+        )
+        .outerjoin(Member, Member.user_id == User.id)
+        .outerjoin(ImportedForumProfile, ImportedForumProfile.user_id == User.id)
+    )
+
+    if search_term:
+        pattern = f"%{search_term}%"
+        query = query.where(
+            or_(
+                User.email.ilike(pattern),
+                User.forum_username.ilike(pattern),
+                Member.email_private.ilike(pattern),
+                Member.first_name.ilike(pattern),
+                Member.last_name.ilike(pattern),
+                # A person carried over from the old forum has no name and a
+                # placeholder address, so the only things worth searching them
+                # by are what the archive recorded.
+                ImportedForumProfile.display_name.ilike(pattern),
+                ImportedForumProfile.source_email.ilike(pattern),
+            )
+        )
+
+    # Former forum people live in this same list -- a former member is a member
+    # the association still has a record of, and reconnecting one is the same
+    # action as anything else done from an account page. This only narrows it.
+    #
+    # "Archived" means still only an archive: a profile nobody has claimed.
+    # Once somebody comes back they are an ordinary account that happens to
+    # carry its history, and filing them under "from the old forum" for the
+    # next decade would be describing where they came from rather than what
+    # they are.
+    unclaimed = User.imported_forum_profile.has(ImportedForumProfile.claimed_at.is_(None))
+    if kind_filter == "archived":
+        query = query.where(unclaimed)
+    elif kind_filter == "portal":
+        query = query.where(~unclaimed)
+
+    # "Who can administer" is a capability question, not a role-name one. Asking
+    # for Role.slug == "admin" would file an account holding only a future role
+    # under "member only", and would have to be edited every time a role is
+    # added -- which is the thing permissions.py exists to avoid.
+    staff_roles = roles_with(Permission.ADMIN_ACCESS)
+    if role_filter == "staff":
+        query = query.where(User.roles.any(Role.slug.in_(staff_roles)))
+    elif role_filter.startswith("role:"):
+        query = query.where(User.roles.any(Role.slug == role_filter.split(":", 1)[1]))
+    elif role_filter == "member":
+        query = query.where(User.member.has(), ~User.roles.any(Role.slug.in_(staff_roles)))
+    elif role_filter == "no_membership":
+        query = query.where(~User.member.has())
+
+    if membership_filter == "none":
+        query = query.where(~User.member.has())
+    elif membership_filter == "inactive":
+        query = query.where(User.member.has(Member.is_active.is_(False)))
+    elif membership_filter != "all":
+        query = query.where(User.member.has(Member.payment_status == membership_filter))
+
+    if active_filter == "active":
+        query = query.where(User.member.has(Member.is_active.is_(True)))
+    elif active_filter == "inactive":
+        query = query.where(User.member.has(Member.is_active.is_(False)))
+
+    # The account's own state, which is a different question from the
+    # membership's and filtered separately for that reason.
+    if account_filter == "active":
+        query = query.where(
+            User.disabled_at.is_(None),
+            User.deleted_at.is_(None),
+            User.password_hash.is_not(None),
+        )
+    elif account_filter == "disabled":
+        query = query.where(User.disabled_at.is_not(None))
+    elif account_filter == "no_sign_in":
+        query = query.where(User.password_hash.is_(None), User.deleted_at.is_(None))
+
+    return query.order_by(User.email.asc()).distinct()
+
+
+def build_settings_page_context(edit_mail_account_id=None):
+    test_email_form = TestEmailForm()
+    mail_account_form = MailAccountForm(prefix="mail")
+    editing_mail_account = None
+    sender_choices = []
+    template_choices = get_email_template_choices(current_app._get_current_object())
+    mail_account_records = get_db_mail_accounts()
+    general_settings = get_settings_map([
+        "invoice_payments_enabled",
+        "automatic_emails_enabled",
+        "welcome_email_sender",
+        "automatic_email_template",
+        INSTITUTIONAL_EMAIL_SETTING_KEY,
+    ])
+    notification_settings = normalize_notification_settings(get_notification_settings_map())
+    forum_settings = normalize_forum_settings(get_forum_settings_map())
+    stripe_settings = get_stripe_settings_map()
+    forum_service = ForumService(forum_settings)
+    notification_service = NotificationService(current_app._get_current_object())
+    try:
+        mail_accounts = load_mail_accounts_config()
+        sender_choices = [(account_key, account_key) for account_key in mail_accounts.keys()]
+    except Exception as exc:
+        current_app.logger.error(f"Could not load email accounts for admin settings: {exc}")
+
+    if edit_mail_account_id:
+        editing_mail_account = db.session.get(MailAccount, edit_mail_account_id)
+        if editing_mail_account is not None:
+            mail_account_form.mail_account_id.data = str(editing_mail_account.id)
+            mail_account_form.account_key.data = editing_mail_account.account_key
+            mail_account_form.host.data = editing_mail_account.host
+            mail_account_form.port.data = editing_mail_account.port
+            mail_account_form.username.data = editing_mail_account.username
+            mail_account_form.starttls.data = editing_mail_account.starttls
+
+    test_email_form.sender.choices = sender_choices
+    test_email_form.template.choices = template_choices
+    return {
+        # Version/update state for the Maintenance tab. Same service call the
+        # JSON status endpoint uses, so the page and the API cannot disagree.
+        "update_state": describe_update_state(),
+        "system_health": collect_system_health(),
+        "backup_page": describe_backup_page(),
+        # The health report counts undelivered emails; this is what an admin
+        # needs to actually resolve one -- who it was for, and why it failed.
+        "undelivered_emails": list_undelivered_emails(),
+        "test_email_form": test_email_form,
+        "mail_account_form": mail_account_form,
+        "mail_account_records": mail_account_records,
+        "editing_mail_account": editing_mail_account,
+        "sender_choices": sender_choices,
+        "template_choices": template_choices,
+        "general_settings": general_settings,
+        # The list actually in force, which is not the same as the stored text
+        # when the box is empty and the built-in default applies.
+        "institutional_email_domains": get_institutional_domains(),
+        "notification_settings": notification_settings,
+        "notification_health": notification_service.get_health_snapshot(),
+        "forum_settings": forum_settings,
+        # One box per kind of member rather than a text area somebody has to
+        # write both sides of. The left-hand side is fixed -- it is what this
+        # portal stores on a member -- so it belongs in the label, not in
+        # something to be typed correctly.
+        "forum_category_group_fields": [
+            {
+                "kind": kind,
+                "label": category_label(kind),
+                "value": member_category_groups(forum_settings).get(kind, ""),
+            }
+            for kind in CATEGORY_ORDER
+        ],
+        "stripe_settings": stripe_settings,
+        "forum_service": forum_service,
+        "forum_endpoint_urls": {
+            "entry": build_public_url("forum.forum_entry"),
+            "connect": build_public_url("forum.forum_discourse_connect"),
+            "logout": build_public_url("forum.forum_logout"),
+        },
+        "public_base_url": current_app.config.get("PUBLIC_BASE_URL") or "",
+        "forum_provider_choices": [("discourse", _("Discourse"))],
+        "forum_auth_strategy_choices": [
+            ("discourse_connect", _("DiscourseConnect")),
+            ("oauth2_provider", _("OAuth2 Provider (reserved)")),
+        ],
+    }
+
+
+
+def build_forum_context(member):
+    service = get_forum_service()
+    forum_account = member.user.forum_account if member and member.user else None
+    pending_submission = service.get_pending_submission(member) if member else None
+    approved_submission = service.get_current_approved_submission(member) if member else None
+    latest_submission = service.get_latest_submission(member) if member else None
+    # The avatar a returning student already has: imported from the old forum,
+    # published to their profile, and theirs since long before they signed up
+    # here. It is not a ForumAvatarSubmission -- nobody submitted it for review
+    # -- so nothing else in this function would notice it.
+    reclaimed_avatar = service.get_reclaimed_avatar(member) if member else None
+    reconnect_waiting = old_forum_account_waiting(member)
+
+    status_key = "disabled"
+    status_message = _("The forum integration is not enabled yet.")
+    can_upload_avatar = False
+    can_enter_forum = False
+
+    if member is None or member.user is None:
+        status_key = "no_membership"
+        status_message = _("A linked membership profile is required before forum access can be prepared.")
+    elif not service.is_enabled():
+        status_key = "disabled"
+        status_message = _("The forum integration is not enabled yet.")
+    elif member.user.is_disabled:
+        # Checked before the membership, because it is the stronger statement:
+        # a switched-off account stays out whether or not the subscription is
+        # paid up, and saying "your membership is not active" to somebody who
+        # has paid for the year would simply be untrue.
+        status_key = "account_disabled"
+        status_message = _("Your account has been deactivated, so forum access is not available.")
+    elif not member_has_active_access(member) and member.payment_status == "processing":
+        # Paid, and waiting for the money to arrive: a SEPA debit takes days.
+        # "Your membership is not active" would read as though something had
+        # gone wrong.
+        status_key = "payment_processing"
+        status_message = _("Your forum access starts as soon as your payment has cleared.")
+    elif not member_has_active_access(member):
+        status_key = "inactive_membership"
+        status_message = _("Your forum access is currently unavailable because your membership is not active.")
+    elif approved_submission is not None:
+        status_key = "active"
+        status_message = _("Your forum access is ready.")
+        can_enter_forum = service.is_ready()
+    elif reclaimed_avatar is not None:
+        # They came back to an account that already has a face on it -- the one
+        # they uploaded to the old forum, which is live on their profile right
+        # now. Asking them to upload a picture would be asking them to redo
+        # something already done, as the first thing they are told.
+        status_key = "active"
+        status_message = _("Your forum access is ready, with the profile picture from the old forum.")
+        can_enter_forum = service.is_ready()
+        can_upload_avatar = True  # still free to replace it
+    elif reconnect_waiting:
+        # Their old account comes back once they confirm the university
+        # address -- with its username and, usually, its picture. Asking for a
+        # photo first would be asking for one they may not need.
+        status_key = "reconnect_waiting"
+        status_message = _("You were on the old forum. Confirm your university email address to get "
+                           "your old account back, with its username and posts.")
+    elif pending_submission is not None:
+        status_key = "pending_avatar"
+        status_message = _("Your profile picture is under review. You will get full forum access as soon as it is approved.")
+        can_upload_avatar = True
+    elif latest_submission is not None and latest_submission.status == FORUM_AVATAR_STATUS_REJECTED:
+        status_key = "rejected_avatar"
+        status_message = _("Your profile picture was rejected. Please upload a new one to continue.")
+        can_upload_avatar = True
+    else:
+        status_key = "needs_avatar"
+        status_message = _("Upload a profile picture to complete your forum access.")
+        can_upload_avatar = True
+
+    avatar_max_bytes = service.settings["forum_avatar_max_bytes"]
+    avatar_upload_request_limit = service.get_upload_request_limit()
+    return {
+        "service": service,
+        "forum_account": forum_account,
+        "pending_submission": pending_submission,
+        "approved_submission": approved_submission,
+        "latest_submission": latest_submission,
+        "status_key": status_key,
+        "status_message": status_message,
+        "can_upload_avatar": can_upload_avatar,
+        "can_enter_forum": can_enter_forum,
+        "reconnect_waiting": reconnect_waiting,
+        "entry_url": url_for("forum.forum_entry"),
+        "forum_error": forum_account.last_error if forum_account is not None else None,
+        "avatar_max_bytes": avatar_max_bytes,
+        "avatar_max_bytes_display": format_bytes_human(avatar_max_bytes),
+        "avatar_upload_request_limit": avatar_upload_request_limit,
+        "avatar_upload_request_limit_display": format_bytes_human(avatar_upload_request_limit),
+    }
+
+
+def create_app(config_overrides=None):
     app = Flask(__name__)
 
     @app.context_processor
     def inject_language_switcher():
         def switch_lang_url(lang):
-            endpoint = request.endpoint or "index"
+            endpoint = request.endpoint or "public.index"
             values = dict(request.view_args or {})
             values.update(request.args.to_dict(flat=True))
             values["lang"] = lang
@@ -2232,14 +1469,20 @@ def create_app():
             except BuildError:
                 fallback_values = request.args.to_dict(flat=True)
                 fallback_values["lang"] = lang
-                return url_for("index", **fallback_values)
+                return url_for("public.index", **fallback_values)
 
         return dict(switch_lang_url=switch_lang_url)
 
     app.config["SECRET_KEY"] = SECRET_KEY
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    )
+    # A DATABASE_URL override lets tests (and alternative deployments) point at a
+    # different backend such as SQLite without touching the MySQL defaults.
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    else:
+        app.config["SQLALCHEMY_DATABASE_URI"] = (
+            f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["STRIPE_PUBLISHABLE_KEY"] = STRIPE_PUBLISHABLE_KEY
     app.config["STRIPE_SECRET_KEY"] = STRIPE_SECRET_KEY
@@ -2260,17 +1503,52 @@ def create_app():
     app.config["BABEL_DEFAULT_TIMEZONE"] = "UTC"
 
     def select_locale():
+        # Babel calls this for every _() -- including from the notification
+        # timer, the CLI commands and the webhook worker, where there is no
+        # request to read a language from. Touching `request` there raised
+        # "Working outside of request context" and took the whole pass down
+        # with it, which is a strange way for a translated log line to fail.
+        if not has_request_context():
+            return app.config["BABEL_DEFAULT_LOCALE"]
+        supported = app.config["BABEL_SUPPORTED_LOCALES"]
+        if len(supported) < 2:
+            # One language: neither ?lang= nor the browser's preferences get a say.
+            return app.config["BABEL_DEFAULT_LOCALE"]
         lang = request.args.get("lang")
-        if lang in app.config["BABEL_SUPPORTED_LOCALES"]:
+        if lang in supported:
             return lang
-        return request.accept_languages.best_match(app.config["BABEL_SUPPORTED_LOCALES"])
+        return request.accept_languages.best_match(supported) or app.config["BABEL_DEFAULT_LOCALE"]
+
+    if config_overrides:
+        app.config.update(config_overrides)
 
     db.init_app(app)
+    # Anchor the migrations directory to the repo root so Alembic commands work
+    # regardless of the process working directory (e.g. when invoked from
+    # install.sh / systemd rather than a shell sitting in the checkout).
+    migrate.init_app(app, db, directory=str(REPO_ROOT / "migrations"))
     login_manager.init_app(app)
-    login_manager.login_view = "login"
+    login_manager.login_view = "auth.login"
     babel.init_app(app, locale_selector=select_locale)
     csrf.init_app(app)
     limiter.init_app(app)
+
+    # Blueprints are imported here (deferred) so their modules can import helpers
+    # from this fully-initialized module without a circular import.
+    from .blueprints.account import account_bp
+    from .blueprints.admin import admin_bp, admin_dashboard
+    from .blueprints.auth import auth_bp
+    from .blueprints.forum import forum_bp
+    from .blueprints.public import public_bp
+    from .blueprints.webhook import webhook_bp
+
+    csrf.exempt(webhook_bp)
+    app.register_blueprint(webhook_bp)
+    app.register_blueprint(public_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(account_bp)
+    app.register_blueprint(forum_bp)
+    app.register_blueprint(admin_bp)
 
     @app.context_processor
     def inject_babel_globals():
@@ -2286,6 +1564,60 @@ def create_app():
             get_locale=get_locale,
             cleaned_args=cleaned_args,
         )
+
+    @app.context_processor
+    def inject_footer():
+        from .config import ASSOCIATION_WEBSITE_URL, CONTACT_EMAIL, IMPRESSUM_URL, PRIVACY_URL, STATUTES_URL
+        from .services.clock import get_membership_today
+
+        return dict(footer={
+            "year": get_membership_today().year,
+            "website_url": ASSOCIATION_WEBSITE_URL,
+            "impressum_url": IMPRESSUM_URL,
+            "privacy_url": PRIVACY_URL,
+            "statutes_url": STATUTES_URL,
+            "contact_email": CONTACT_EMAIL,
+        })
+
+    @app.context_processor
+    def inject_member_category_rules():
+        """Hands the year group rules to the page so JavaScript need not know them.
+
+        Rendered into data attributes and read back by member-kind-toggle.js,
+        which keeps member_categories.py the only place the rule is written
+        down.
+        """
+        return dict(
+            year_group_categories=" ".join(categories_showing_year_group()),
+            year_group_required_categories=" ".join(
+                category for category in CATEGORY_ORDER if requires_year_group(category)
+            ),
+            member_category_label=category_label,
+        )
+
+    @app.template_global("background_jobs_paused")
+    def background_jobs_paused_global():
+        from .services.background_jobs import is_paused
+
+        return is_paused()
+
+    # The number on the Reviews tab, on every admin page: what is waiting for
+    # this user's decision, so it is noticed without opening the dashboard.
+    @app.template_global("waiting_for_review_count")
+    def waiting_for_review_count_global():
+        from .services.reviews import waiting_for_review_count
+
+        return waiting_for_review_count(current_user)
+
+    # Dates and times on every page and email in one format and in Vienna
+    # time: 31.12.2026, 31.12.2026 14:05.
+    @app.template_filter("date_display")
+    def date_display_filter(value):
+        return format_date_display(value) if value else ""
+
+    @app.template_filter("datetime_display")
+    def datetime_display_filter(value):
+        return format_datetime_display(value) if value else ""
 
     @app.template_filter("redact_audit_payload")
     def redact_audit_payload_filter(value):
@@ -2323,23 +1655,61 @@ def create_app():
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
     stripe.api_key = STRIPE_SECRET_KEY
+    configure_stripe_http_client()
 
     @app.cli.command("db-init")
     @with_appcontext
     def db_init():
-        """Creates database tables if they do not exist and upgrades newer account and membership columns when needed."""
-        click.echo("Creating database tables...")
+        """Bring the database schema to the latest Alembic revision, then seed roles.
+
+        Two situations, both safe to run on every deploy:
+
+        * Fresh database -> run migrations to build the full schema.
+        * Already migrated -> apply any pending migrations.
+
+        A third case used to exist: a database created before migrations, which
+        was reconciled column by column and then stamped at head. That is gone
+        deliberately. Stamping records migrations as applied without running
+        them, which is only truthful while every migration merely adds tables
+        and columns -- ``create_all`` cannot reproduce one that transforms data,
+        and the coverage-ledger migration backfills rows. A database stamped
+        past that would look migrated while holding none of the evidence.
+
+        Since no such database will be migrated into this system -- members
+        re-subscribe through the new portal instead -- the branch has no
+        legitimate user left, only the chance to silently skip a migration on a
+        database restored from a partial backup. It now refuses and says so.
+        """
+        from flask_migrate import upgrade
+
+        click.echo("Preparing database schema...")
         try:
-            db.create_all()
+            inspector = inspect(db.engine)
+            existing_tables = set(inspector.get_table_names())
+
+            if "users" in existing_tables and "alembic_version" not in existing_tables:
+                click.echo(
+                    "This database has application tables but no Alembic version "
+                    "record, so there is no way to tell which migrations it has "
+                    "already had.\n"
+                    "Refusing to guess: stamping it would mark every migration as "
+                    "applied without running any of them.\n"
+                    "If this is an empty or throwaway database, drop it and run "
+                    "db-init again. If it holds data you need, restore it into a "
+                    "staging copy and migrate that first.",
+                    err=True,
+                )
+                sys.exit(1)
+
+            upgrade()
+
             seed_default_roles()
-            ensure_user_schema()
-            ensure_member_schema()
             backfill_legacy_admin_roles()
             backfill_member_user_links()
             db.session.commit()
-            click.echo("Database tables created successfully.")
+            click.echo("Database schema is ready.")
         except Exception as e:
-            click.echo(f"Error creating tables: {e}", err=True)
+            click.echo(f"Error preparing database: {e}", err=True)
             sys.exit(1)
 
     @app.cli.command("i18n-init")
@@ -2375,14 +1745,33 @@ def create_app():
     @app.cli.command("create-admin")
     @click.argument("email")
     @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+    @click.option(
+        "--superadmin/--no-superadmin",
+        default=None,
+        help="Force the super administrator role on or off. The default takes it "
+             "only when the installation has no super administrator yet.",
+    )
     @with_appcontext
-    def create_admin(email, password):
-        """Creates or promotes an admin user."""
+    def create_admin(email, password, superadmin):
+        """Creates or promotes an admin user.
+
+        On a fresh installation this is the bootstrap: with no super
+        administrator in the database, the first account created here takes that
+        role, because otherwise nobody could ever install an update. On an
+        installation that already has one, it creates an ordinary administrator
+        and the existing super administrator decides whether to promote them.
+        """
         normalized_email = (email or "").strip().lower()
         seed_default_roles()
         admin_role = get_role("admin", label="Admin", description="Can access the admin workspace.")
+        superadmin_role = get_role(ROLE_SUPERADMIN)
         user = db.session.execute(db.select(User).filter_by(email=normalized_email)).scalar_one_or_none()
         created = user is None
+
+        if superadmin is None:
+            # The bootstrap: with nobody able to install an update, the first
+            # account created here has to be able to, or nothing ever can.
+            superadmin = count_users_with_permission(Permission.SYSTEM_UPDATE) == 0
 
         if created:
             user = User(email=normalized_email)
@@ -2390,6 +1779,8 @@ def create_app():
 
         before_user = snapshot_user_for_audit(user)
         user.grant_role(admin_role)
+        if superadmin:
+            user.grant_role(superadmin_role)
         user.set_password(password)
         db.session.flush()
         log_audit_event(
@@ -2400,14 +1791,2359 @@ def create_app():
             target_member=user.member,
             before=before_user,
             after=snapshot_user_for_audit(user),
-            metadata={"granted_role": "admin", "source": "create_admin_cli", "created_user": created},
+            metadata={
+                "granted_role": ROLE_SUPERADMIN if superadmin else ROLE_ADMIN,
+                "source": "create_admin_cli",
+                "created_user": created,
+            },
         )
         db.session.commit()
 
+        what = "super admin" if superadmin else "admin"
         if created:
-            click.echo(click.style(f"Created admin user: {normalized_email}", fg="green"))
+            click.echo(click.style(f"Created {what} user: {normalized_email}", fg="green"))
         else:
-            click.echo(click.style(f"Granted admin access to: {normalized_email}", fg="green"))
+            click.echo(click.style(f"Granted {what} access to: {normalized_email}", fg="green"))
+
+    @app.cli.command("grant-superadmin")
+    @click.argument("email")
+    @with_appcontext
+    def grant_superadmin(email):
+        """Grants super administrator access to an existing account.
+
+        The recovery path, for when the last super administrator leaves the
+        association or erases their account. It needs shell access on the
+        server, which is the right bar: anyone with that can already read this
+        database and change this code, so the command hands out nothing they
+        could not take anyway.
+        """
+        normalized_email = (email or "").strip().lower()
+        seed_default_roles()
+        user = db.session.execute(db.select(User).filter_by(email=normalized_email)).scalar_one_or_none()
+        if user is None:
+            click.echo(click.style(f"No account found for {normalized_email}", fg="red"), err=True)
+            sys.exit(1)
+        if user.deleted_at is not None:
+            click.echo(
+                click.style(
+                    f"{normalized_email} was erased and cannot sign in; create a new account instead.",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+        if user.has_role(ROLE_SUPERADMIN):
+            click.echo(f"{normalized_email} is already a super admin.")
+            return
+
+        before_user = snapshot_user_for_audit(user)
+        user.grant_role(get_role(ROLE_ADMIN))
+        user.grant_role(get_role(ROLE_SUPERADMIN))
+        db.session.flush()
+        log_audit_event(
+            category="access",
+            event_type="superadmin_role_granted",
+            actor_user=None,
+            target_user=user,
+            target_member=user.member,
+            before=before_user,
+            after=snapshot_user_for_audit(user),
+            metadata={"granted_role": ROLE_SUPERADMIN, "source": "grant_superadmin_cli"},
+        )
+        db.session.commit()
+        click.echo(click.style(f"Granted super admin access to: {normalized_email}", fg="green"))
+
+    @app.cli.command("import-forum-people")
+    @click.argument("export_file", type=click.Path(exists=True, dir_okay=False))
+    # Deliberately not click.Path(exists=True): this command is run as the
+    # application user against a directory somebody unpacked as root, and a
+    # folder inside /root is unreadable rather than absent. Click cannot tell
+    # the difference and reports "does not exist" about a directory that
+    # plainly does, which sends people looking for the wrong problem.
+    @click.option("--avatar-dir", type=click.Path(file_okay=False),
+                  help="Directory holding the old forum's avatar files.")
+    @click.option("--dry-run", is_flag=True,
+                  help="Report what would happen and write nothing.")
+    @click.option("--year-groups", is_flag=True,
+                  help="List every year group found, and everyone left without one.")
+    @click.option("--sample", type=int, default=0, metavar="N",
+                  help="Show N people in full, spread across the import, to check "
+                       "the result looks right before running it for real.")
+    @with_appcontext
+    def import_forum_people_command(export_file, avatar_dir, dry_run, year_groups, sample):
+        """Imports people from the old forum's export. See docs/forum-import.md.
+
+        Safe to run more than once: people are matched on the old forum's own
+        user id, so a second run updates rather than duplicates. Run it with
+        --dry-run first; the report is the same either way.
+        """
+        if avatar_dir:
+            _check_avatar_dir_is_readable(avatar_dir)
+
+        people = load_people(export_file)
+        report = import_forum_people(people, avatar_dir=avatar_dir, dry_run=dry_run)
+
+        if dry_run:
+            db.session.rollback()
+        else:
+            db.session.commit()
+
+        click.echo(
+            f"seen={report['seen']} created={report['created']} "
+            f"updated={report['updated']} skipped={report['skipped']} "
+            f"avatars={report['avatars_stored']} "
+            f"year_groups_derived={report['year_groups_derived']}"
+        )
+        if report["year_groups_disagreeing"]:
+            click.echo(
+                f"  {report['year_groups_disagreeing']} people have a year group that "
+                f"differs from the one their username spells; the exported field was "
+                f"kept (usually somebody who went on to the master's)."
+            )
+        if year_groups:
+            _echo_year_groups(report)
+        else:
+            unplaced = len(report["unknown_year_group"])
+            click.echo(
+                f"{len(report['year_group_counts'])} distinct year groups; "
+                f"{unplaced} people without one. Re-run with --year-groups to list them."
+            )
+
+        _echo_reclaim_outlook(report)
+        if sample:
+            _echo_sample(report, sample)
+
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        if dry_run:
+            click.echo(click.style("Dry run: nothing was written.", fg="cyan"))
+        elif report["created"] or report["updated"]:
+            click.echo(click.style("Imported.", fg="green"))
+
+    def _check_avatar_dir_is_readable(avatar_dir):
+        """Fail before importing 740 people with none of their avatars.
+
+        Says which of the three things is actually wrong, because they look
+        identical from the error Click would otherwise give and lead to three
+        different fixes.
+        """
+        path = Path(avatar_dir)
+        whoami = getpass.getuser()
+
+        if not path.exists():
+            # Either genuinely absent, or somewhere this user cannot traverse.
+            # A parent that cannot be entered is the common case on a server,
+            # and is not what "does not exist" leads somebody to check.
+            unreadable_parent = next(
+                (
+                    parent for parent in path.parents
+                    if parent.exists() and not os.access(parent, os.R_OK | os.X_OK)
+                ),
+                None,
+            )
+            if unreadable_parent is not None:
+                raise click.ClickException(
+                    f"{avatar_dir} cannot be reached as {whoami}: {unreadable_parent} "
+                    f"is not readable by that user. Move the avatars somewhere it can "
+                    f"read, such as /var/tmp, rather than running this as root -- "
+                    f"avatars written by root are files the application cannot manage."
+                )
+            raise click.ClickException(f"No such directory: {avatar_dir}")
+
+        if not path.is_dir():
+            raise click.ClickException(f"Not a directory: {avatar_dir}")
+
+        if not os.access(path, os.R_OK | os.X_OK):
+            raise click.ClickException(
+                f"{avatar_dir} is not readable by {whoami}. Fix the permissions "
+                f"rather than running this as root."
+            )
+
+        # An empty directory imports every person with no picture and reports
+        # 677 missing files, which reads as data loss rather than a wrong path.
+        if not any(path.iterdir()):
+            raise click.ClickException(
+                f"{avatar_dir} is empty. Point --avatar-dir at the directory that "
+                f"holds the avatar files themselves."
+            )
+
+    def _put_the_stale_ledger_aside(path):
+        """Renamed rather than deleted. It is the only record of a run that
+        happened, and the forum it describes may still be somewhere."""
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        moved = path.with_name(f"{path.name}.stale-{stamp}")
+        path.rename(moved)
+        return moved
+
+    def _forum_label():
+        """What to call this board on the worksheet. Never a reason to fail.
+
+        It names the key the page keeps decisions under, so it wants to be the
+        same from one run to the next -- but reading a dump and serving files
+        needs no database, and dying with a connection traceback because the
+        label could not be looked up is a poor trade for a string.
+        """
+        try:
+            return get_forum_service().settings.get("forum_base_url", "") or "the old board"
+        except Exception as exc:  # noqa: BLE001 -- a label, not the job
+            click.echo(click.style(
+                f"(Cannot reach the portal's database for the forum's address, "
+                f"so the page is filed under 'the old board': {exc})",
+                fg="yellow"), err=True)
+            return "the old board"
+
+    def _load_mybb_dump(dump_file):
+        """The old board's tables, read once, with the prefix resolved."""
+        import sys
+        from pathlib import Path as _Path
+
+        sys.path.insert(0, str(_Path(app.root_path).parent / "scripts"))
+        from mybb_export import find_prefix, find_table, read_dump, rows_of  # noqa: E402
+
+        # How it was read is printed, because reading it wrongly is silent and
+        # ruinous: a latin1 board read as UTF-8 loses every umlaut in every
+        # post, and the import then reports a clean run.
+        dump = read_dump(dump_file, on_note=lambda note: click.echo(f"Dump read as {note}."))
+        # With the prefix, so "users" cannot match mybb_tapatalk_users -- a
+        # plugin table with no uid column, which silently made every post
+        # anonymous rather than failing.
+        prefix, _rejected = find_prefix(dump)
+        return {
+            name: list(rows_of(dump, find_table(dump, name, prefix)))
+            for name in ("posts", "threads", "attachments", "users", "forums")
+        }
+
+    def _report_site_settings(rows):
+        """Print the settings check.
+
+        Returns (nothing_would_be_refused, there_is_something_to_change). A
+        setting that is merely unwanted -- mail going out, titles being
+        rewritten -- is reported and changed, but is not a reason to stop. Only
+        the ones that make Discourse refuse a post are.
+        """
+        wrong = [row for row in rows if row["ok"] is False]
+        blocking = [row for row in wrong if row.get("blocks", True)]
+        unreadable = [row for row in rows if row["ok"] is None]
+
+        click.echo(f"\n{'setting':<30} {'now':<22} {'needs to be':<22} ")
+        for row in rows:
+            mark = {True: "ok", False: "CHANGE", None: "?"}[row["ok"]]
+            if row["ok"] is False and not row.get("blocks", True):
+                mark = "change (not fatal)"
+            needed = row["needed"]
+            if row["compare"] == "at_most":
+                needed = f"{needed} or less"
+            elif row["compare"] == "at_least":
+                needed = f"{needed} or more"
+            elif row["compare"] == "includes":
+                needed = f"also allow {needed}"
+            colour = {True: "green", False: "red", None: "yellow"}[row["ok"]]
+            click.echo(
+                click.style(
+                    f"{row['setting']:<30} {str(row['now'])[:20]:<22} {str(needed)[:20]:<22} {mark}",
+                    fg=colour,
+                )
+            )
+
+        if not wrong and not unreadable:
+            click.echo(click.style("\nThe forum will accept this archive.", fg="green"))
+            return True, False
+
+        click.echo("")
+        for row in wrong + unreadable:
+            click.echo(f"  {row['setting']}: {row['why']}")
+        click.echo(
+            "\nRun the import with --adjust-settings and it will change these "
+            "itself and put them back when it is done. By hand it is Admin -> "
+            "Settings, where the search box takes the name verbatim, and then "
+            "remembering the 'now' column afterwards: these are loosened for "
+            "the import only, and leaving min_post_length at 2 or duplicate "
+            "titles allowed for ever is not what this forum wants."
+        )
+        if not blocking and not unreadable:
+            click.echo(click.style(
+                "\nNone of these would make the forum refuse a post, so the "
+                "import can run without them. It would go better with them.",
+                fg="yellow",
+            ))
+            return True, True
+        return False, True
+
+    def _author_finder(poster):
+        """Given the old board's name for somebody, this forum's name for them.
+
+        Discourse caps a username at twenty characters and adjusts anything
+        longer as it creates the account, so four of this board's names -- the
+        Niedergrottenthalers and Tschurtschenthalers -- exist there under names
+        nobody wrote down. The portal's own user id is the handle that survived:
+        every imported profile was published with it as its external id.
+        """
+        def find(username):
+            profile = db.session.execute(
+                db.select(ImportedForumProfile).filter_by(source_username=username)
+            ).scalars().first()
+            if profile is None:
+                return None
+            return poster.username_for_external_id(profile.user_id)
+
+        return find
+
+    def _check_the_key_can_post_as_others(poster, *, given):
+        """Stop before anything changes if every post is going to be refused.
+
+        The archive is posted as its authors. A key bound to one user -- which
+        is exactly what the portal's own key should be -- can act as nobody
+        else, and the first real run with one changed 23 settings, made 107
+        categories and then had every post refused. Asked of somebody the
+        forum is known to have, so that "no such person" cannot be mistaken
+        for "not allowed".
+        """
+        profile = db.session.execute(
+            db.select(ImportedForumProfile)
+            .where(ImportedForumProfile.user_id.is_not(None))
+            .order_by(ImportedForumProfile.id)
+        ).scalars().first()
+        if profile is None:
+            return
+        try:
+            somebody = poster.username_for_external_id(profile.user_id)
+        except ForumProviderError:
+            return
+        if not somebody or somebody.lower() == poster.admin_username.lower():
+            return
+        if poster.may_act_as(somebody) is not False:
+            return
+        whose = (
+            "the key given in DISCOURSE_MIGRATION_API_KEY"
+            if given else
+            "the portal's own key, because no DISCOURSE_MIGRATION_API_KEY was "
+            "given -- and that one is bound to a single user on purpose"
+        )
+        raise click.ClickException(
+            f"This key may not post as anybody but {poster.admin_username}: "
+            f"asked to act as {somebody}, who is on the forum, it was refused. "
+            f"It is {whose}. Posting the archive needs a key whose User Level "
+            f"is 'All Users' (Discourse: Admin -> API -> Keys -> New Key), "
+            f"passed as DISCOURSE_MIGRATION_API_KEY and revoked afterwards. "
+            f"Nothing has been changed."
+        )
+
+    def _warn_about_the_key(poster):
+        """Say so early if the key is the wrong shape.
+
+        Otherwise this surfaces much later as a 404 on an admin route, which
+        is what Discourse answers when it does not recognise a key -- the
+        request becomes anonymous, and admin routes are hidden rather than
+        refused. It reads as a missing feature.
+        """
+        complaint = poster._key_complaint()
+        if complaint:
+            click.echo(click.style(f"Warning: {complaint}.", fg="yellow"), err=True)
+
+    def _settings_journal_path(given=None):
+        """Where the record of what was changed goes."""
+        from datetime import datetime as _datetime
+
+        if given:
+            return Path(given)
+        stamp = _datetime.now().strftime("%Y%m%d-%H%M%S")
+        return Path.cwd() / f"forum-settings-{stamp}.json"
+
+    def _report_restore(results):
+        for row in results:
+            colour = (
+                "green" if row["outcome"] in ("restored", "already back")
+                else "yellow"
+            )
+            click.echo(click.style(
+                f"  {row['setting']:<30} {str(row['set_to'])[:18]:<20} -> "
+                f"{str(row['was'])[:18]:<20} {row['outcome']}",
+                fg=colour,
+            ))
+
+    @app.cli.command("restore-forum-settings")
+    @click.argument("journal", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--force", is_flag=True,
+                  help="Restore even settings somebody has changed since.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="Reads DISCOURSE_MIGRATION_API_KEY if not given.")
+    @with_appcontext
+    def restore_forum_settings_command(journal, force, api_key):
+        """Puts the forum's settings back after an import.
+
+        The import does this itself when it finishes. This is for when it did
+        not finish: a dropped connection, a full disk, somebody's Ctrl-C. The
+        file it takes is the one the import wrote before it changed anything,
+        so the forum can be put right by somebody who was not there.
+
+        A setting that no longer holds the value the import gave it was changed
+        by somebody else since, and is left alone unless you pass --force.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        try:
+            payload = read_settings_journal(journal)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise click.ClickException(f"{journal}: {exc}") from exc
+
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+
+        if payload.get("forum") and payload["forum"] != poster.base_url:
+            raise click.ClickException(
+                f"That file was written for {payload['forum']}, and this is "
+                f"{poster.base_url}. Restoring one forum's settings onto "
+                f"another would be a mess to unpick."
+            )
+
+        click.echo(f"Written {payload.get('written_at', 'at an unknown time')}.")
+        try:
+            results = restore_site_settings(poster, payload["changes"], force=force)
+        except ForumProviderError as exc:
+            raise click.ClickException(f"Could not restore: {exc}") from exc
+        _report_restore(results)
+        mark_journal_restored(journal, results)
+
+        stuck = [row for row in results if row["outcome"].startswith("left alone")]
+        if stuck:
+            click.echo(click.style(
+                f"\n{len(stuck)} settings were left alone. Look at them, and "
+                f"use --force if the import's value is the one to undo.",
+                fg="yellow",
+            ))
+        else:
+            click.echo(click.style("\nThe forum is back as it was.", fg="green"))
+
+    @app.cli.command("inspect-forum-attachments")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--thread", help="Only this thread's attachments (tid).")
+    @click.option("--name", help="Only files whose stored name contains this.")
+    @with_appcontext
+    def inspect_forum_attachments_command(dump_file, thread, name):
+        """What the old board recorded about each uploaded file.
+
+        Every upload is on disk as post_<pid>_<time>_<hash>.attach -- the
+        original bytes under a name that says nothing -- and the name somebody
+        chose, with its type, is in the database. So a file that arrives on the
+        new forum looking wrong cannot be checked by looking in the uploads
+        folder; this is how to look it up.
+
+        The on-disk file is the original bytes, so `file` on the path in the
+        left column says what it really is, whatever the name claims.
+        """
+        tables = _load_mybb_dump(dump_file)
+        wanted = None
+        if thread:
+            wanted = {
+                row.get("pid") for row in tables["posts"]
+                if row.get("tid") == str(thread)
+            }
+
+        rows = [
+            row for row in tables["attachments"]
+            if (wanted is None or row.get("pid") in wanted)
+            and (not name or name.lower() in (row.get("filename") or "").lower())
+        ]
+        if not rows:
+            raise click.ClickException("No attachments match that.")
+
+        for row in sorted(rows, key=lambda row: int(row.get("pid") or 0)):
+            size = int(row.get("filesize") or 0)
+            click.echo(
+                f"\npid {row.get('pid')}  {size / 1024:.1f} KB  "
+                f"type={row.get('filetype') or '?'}"
+            )
+            click.echo(f"  on disk:  {row.get('attachname')}")
+            click.echo(f"  name:     {row.get('filename')}")
+        click.echo(f"\n{len(rows)} attachments.")
+
+    @app.cli.command("inspect-forum-post")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--pid", required=True, help="The old board's post id.")
+    @with_appcontext
+    def inspect_forum_post_command(dump_file, pid):
+        """One post, as it is on the old board and as it would be sent.
+
+        For when the forum refuses a post and its reason does not match what
+        the archive appears to contain -- "Body is too short (minimum is 2
+        characters)" against a post that plainly has more than two. Guessing at
+        that twice is what this exists to stop: here is the message, its
+        conversion, and every length either end could be counting.
+        """
+        tables = _load_mybb_dump(dump_file)
+        post = next(
+            (row for row in tables["posts"] if str(row.get("pid")) == str(pid)), None
+        )
+        if post is None:
+            raise click.ClickException(f"There is no post {pid} in that dump.")
+
+        raw = post.get("message") or ""
+        body = bbcode_to_markdown(raw)
+        thread = next(
+            (row for row in tables["threads"] if row.get("tid") == post.get("tid")), None
+        )
+        author = next(
+            (row for row in tables["users"] if row.get("uid") == post.get("uid")), None
+        )
+        files = [row for row in tables["attachments"] if row.get("pid") == str(pid)]
+
+        click.echo(f"pid {pid}  tid {post.get('tid')}  uid {post.get('uid')}"
+                   f"  ({(author or {}).get('username') or 'no longer in the users table'})")
+        if thread:
+            click.echo(f"thread: {thread.get('subject')}"
+                       f"{'  (this is its opening post)' if thread.get('firstpost') == str(pid) else ''}")
+        click.echo(f"files:  {len(files)}")
+        click.echo(f"\nAs the old board holds it ({len(raw)} characters):")
+        click.echo(repr(raw))
+        click.echo(f"\nAs it would be sent ({len(body)} characters, "
+                   f"{len(body.strip())} stripped, {len(set(body))} distinct):")
+        click.echo(repr(body))
+        if not body.strip():
+            click.echo(click.style(
+                "\nNothing at all after conversion: this is sent as a marked "
+                "empty post.", fg="cyan"))
+
+    @app.cli.command("check-forum-settings")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="Reads DISCOURSE_MIGRATION_API_KEY if not given.")
+    @with_appcontext
+    def check_forum_settings_command(dump_file, api_key):
+        """Will the forum accept the old board? Asks it before anything is posted.
+
+        Discourse's defaults are written for somebody typing into a box today:
+        a title has to be 15 characters, a post 20, and two threads may not
+        share a name. The archive does not look like that -- half its subjects
+        are shorter than 15 characters and ninety-one of them are called
+        "Klausuren" -- so the import would be refused post by post, hours in.
+
+        This measures the archive, asks the forum what it currently allows, and
+        prints what to change. The 'now' column is what to put back afterwards.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        tables = _load_mybb_dump(dump_file)
+        requirements = plan_site_settings(
+            tables["threads"], tables["posts"], tables["attachments"]
+        )
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+
+        total_bytes = sum(int(row.get("filesize") or 0) for row in tables["attachments"])
+        click.echo(
+            f"{len(tables['threads'])} threads, {len(tables['posts'])} posts, "
+            f"{len(tables['attachments'])} attachments "
+            f"({total_bytes / 1024 ** 3:.1f} GB -- the forum needs room for that "
+            f"on top of what it already holds)."
+        )
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
+        try:
+            rows = check_site_settings(poster, requirements)
+        except ForumProviderError as exc:
+            raise click.ClickException(
+                f"Could not read the forum's settings: {exc}"
+            ) from exc
+        ready, _anything = _report_site_settings(rows)
+
+        # A rehearsal is only worth running on a thread that exercises the
+        # things that break, and there is no way to pick one by eye out of 720.
+        candidates = rehearsal_threads(
+            tables["threads"], tables["posts"], tables["attachments"]
+        )
+        if candidates:
+            click.echo("\nThreads worth rehearsing with (--thread), hardest first:")
+            click.echo(f"  {'tid':<8} {'posts':>5} {'people':>7} {'files':>6}  subject")
+            for row in candidates:
+                click.echo(
+                    f"  {row['tid']:<8} {row['posts']:>5} {row['authors']:>7} "
+                    f"{row['attachments']:>6}  {row['subject'][:44]}"
+                )
+
+        if not ready:
+            raise SystemExit(1)
+
+    @app.cli.command("migrate-forum-thread")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--thread", required=True, help="The old forum's thread id (tid).")
+    @click.option("--uploads", required=True, type=click.Path(file_okay=False),
+                  help="The old forum's uploads folder, holding the .attach files.")
+    @click.option("--category", type=int, help="Discourse category id to post into.")
+    @click.option("--dry-run", is_flag=True, help="Show what would be posted and send nothing.")
+    @click.option("--adjust-settings", is_flag=True,
+                  help="Loosen the settings this needs, and put them back after.")
+    @click.option("--settings-file", type=click.Path(dir_okay=False),
+                  help="Where to write the record of what was changed.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="An 'All Users' Discourse API key. Reads "
+                       "DISCOURSE_MIGRATION_API_KEY if not given, which keeps it "
+                       "out of the shell history and out of ps.")
+    @with_appcontext
+    def migrate_forum_thread_command(dump_file, thread, uploads, category, dry_run,
+                                     adjust_settings, settings_file, api_key):
+        """Moves ONE old thread onto the forum, to find out whether it can be.
+
+        A rehearsal for the content migration, not the migration. It answers
+        the two questions the real importer depends on and cannot be reasoned
+        out: whether Discourse keeps the dates it is given when posting on
+        somebody else's behalf, and whether an imported person -- never signed
+        in, trust level 0, unreachable address -- is allowed to post at all.
+
+        Not idempotent. Running it twice posts the thread twice.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+        if not dry_run and not category:
+            raise click.ClickException("--category is required for a real run.")
+
+        tables = _load_mybb_dump(dump_file)
+        posts = [row for row in tables["posts"] if row.get("tid") == str(thread)]
+        if not posts:
+            raise click.ClickException(f"No posts found for thread {thread}.")
+        posts.sort(key=lambda row: int(row.get("dateline") or 0))
+
+        threads = {row["tid"]: row for row in tables["threads"]}
+        this_thread = threads.get(str(thread), {"tid": thread})
+        pids = {row.get("pid") for row in posts}
+        attachments_by_post = {}
+        for row in tables["attachments"]:
+            attachments_by_post.setdefault(row.get("pid"), []).append(row)
+        # The name the old forum knew each author by is the name they have here,
+        # because that is exactly what the profile import published.
+        usernames_by_uid = {
+            row.get("uid"): row.get("username") for row in tables["users"]
+        }
+
+        # Posting as each author needs a key Discourse will let act as anybody.
+        # The portal's own key is deliberately not that: it only ever acts as
+        # one user, and widening it would leave something able to impersonate
+        # every member of the forum running all year for the sake of an
+        # afternoon's migration.
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
+        poster.find_author = _author_finder(poster)
+
+        # Ask the forum whether it will take this thread before posting any of
+        # it. A run that gets three posts in and is then refused for a title
+        # two characters too short leaves half a thread behind, and this spike
+        # is not idempotent.
+        requirements = plan_site_settings(
+            [this_thread], posts,
+            [row for pid in pids for row in attachments_by_post.get(pid, [])],
+        )
+        try:
+            ready, anything = _report_site_settings(
+                check_site_settings(poster, requirements)
+            )
+        except ForumProviderError as exc:
+            # Not every key can read the settings. Worth saying, not worth
+            # refusing over: the run itself will still report what happened.
+            click.echo(click.style(f"Could not read the site settings: {exc}", fg="yellow"))
+            ready, anything = True, False
+
+        changes = []
+        journal = None
+        decision = what_to_do_about_settings(
+            ready=ready, anything=anything,
+            adjust_settings=adjust_settings, dry_run=dry_run,
+        )
+        if dry_run and anything:
+            click.echo(click.style(
+                "Nothing is sent by a dry run, so none of the above stops it. "
+                "It is what the real run will need.", fg="cyan",
+            ))
+        if decision == LOOSEN:
+            journal = _settings_journal_path(settings_file)
+            # Said before anything is touched rather than after, because the
+            # run that most needs this printed is the one that never gets as
+            # far as printing anything else.
+            click.echo(click.style(
+                f"\nLoosening the settings above. What they were goes in\n"
+                f"  {journal}\n"
+                f"If this run does not finish, put them back with:\n"
+                f"  flask restore-forum-settings {journal}",
+                fg="cyan",
+            ))
+            changes = loosen_site_settings(poster, requirements, journal)
+            click.echo(f"Changed {len(changes)} settings.")
+        elif decision == REFUSE:
+            raise click.ClickException(
+                "The forum would refuse part of this thread. Run it again with "
+                "--adjust-settings to have it change these itself and put them "
+                "back, or change them by hand first."
+            )
+
+        try:
+            report = migrate_thread(
+                poster, this_thread, posts,
+                attachments_by_post, usernames_by_uid, uploads, category,
+                dry_run=dry_run,
+                fallback_username=service.settings["discourse_api_username"],
+            )
+        finally:
+            if changes:
+                click.echo("\nPutting the settings back:")
+                try:
+                    results = restore_site_settings(poster, changes)
+                    _report_restore(results)
+                    # So the next run is not blocked by a journal whose whole
+                    # purpose has already been served.
+                    mark_journal_restored(journal, results)
+                except ForumProviderError as exc:
+                    # Never swallowed: a forum left wide open has to be said
+                    # out loud, with the one command that fixes it.
+                    click.echo(click.style(
+                        f"COULD NOT RESTORE THE SETTINGS: {exc}\n"
+                        f"The forum is still loosened. Run:\n"
+                        f"  flask restore-forum-settings {journal}",
+                        fg="red",
+                    ), err=True)
+
+        click.echo(f"\n{report['thread']}")
+        click.echo(f"{'date asked for':<12} {'recorded':<12} {'author':<22} files  result")
+        for person in report["posts"]:
+            click.echo(
+                f"{(person['asked_for'] or '')[:10]:<12} "
+                f"{(person['recorded'] or '-')[:10]:<12} "
+                f"{(person['author'] or '?'):<22} {person['attachments']:>5}  {person['result']}"
+            )
+
+        kept, explanation = dates_survived(report)
+        click.echo("")
+        if dry_run:
+            click.echo(
+                "Whether Discourse keeps these dates is what the real run "
+                "answers; a dry run cannot."
+            )
+        elif kept is True:
+            click.echo(click.style(f"Dates survived: {explanation}", fg="green"))
+        elif kept is False:
+            click.echo(click.style(f"Dates did NOT survive: {explanation}", fg="red"))
+            click.echo("The importer needs a different shape; nothing else here matters yet.")
+        else:
+            click.echo(click.style(f"Undetermined: {explanation}", fg="yellow"))
+
+        # Every one of them. On a dry run this list *is* the output -- it is
+        # the set of files to copy across -- and a truncated list of files to
+        # copy is worse than no list, because it looks complete.
+        if report["problems"]:
+            click.echo(click.style(
+                f"\n{len(report['problems'])} problems:", fg="yellow"), err=True)
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        if report.get("topic_id"):
+            click.echo(f"\nTopic {report['topic_id']} — go and look at it.")
+
+    @app.cli.command("serve-forum-worksheet")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--uploads", required=True, type=click.Path(exists=True, file_okay=False),
+                  help="The old board's uploads folder.")
+    @click.option("--port", default=8765, show_default=True)
+    @click.option("--host", default="127.0.0.1", show_default=True,
+                  help="Use 0.0.0.0 to reach it from another machine, having "
+                       "read what that means below.")
+    @with_appcontext
+    def serve_forum_worksheet_command(dump_file, uploads, port, host):
+        """Serves the category worksheet, with the old board's files in it.
+
+        One address, nothing to configure: the page is at / and every
+        attachment is under /files/, so each document on the worksheet has an
+        open button and two of them sit side by side. Deciding whether this
+        year's exam and 2016's are the same course means looking at them.
+
+        The files need serving because of what they are on disk: every upload
+        is post_<pid>_<time>_<hash>.attach, the original bytes under a name
+        that says nothing and an extension no browser will render. The name
+        somebody chose and the type it really is are columns in the database,
+        so those are read from the dump and each file is served under them.
+
+        \b
+        It answers to anybody who can reach it, with thirteen years of exam
+        papers and no password. Two ways to use it:
+
+        \b
+          * --host 127.0.0.1 (the default) and an SSH tunnel from your machine:
+                ssh -N -L 8765:127.0.0.1:8765 you@server
+            then open http://127.0.0.1:8765/ in your browser. Nothing is
+            exposed to the network at all.
+          * --host 0.0.0.0, and it is reachable at the server's address from
+            anywhere that can route to it. Simpler, and it means anybody on
+            that network can read the archive while it runs.
+
+        Either way, stop it when the curating is done. It is a tool for an
+        afternoon, not a service.
+        """
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from urllib.parse import unquote
+
+        tables = _load_mybb_dump(dump_file)
+        rows = category_worksheet(
+            tables["forums"], tables["threads"], tables["posts"],
+            tables["attachments"], users=tables["users"],
+        )
+        if not rows:
+            raise click.ClickException("No forum in that dump holds any threads.")
+        page = render_worksheet(
+            rows, _forum_label(), _sortable, uploads_base="/files/",
+        ).encode("utf-8")
+
+        uploads_dir = Path(uploads).resolve()
+        known = {}
+        for row in tables["attachments"]:
+            attachname = (row.get("attachname") or "").strip()
+            if attachname:
+                known[attachname] = (
+                    (row.get("filename") or attachname).strip(),
+                    row.get("filetype") or "application/octet-stream",
+                )
+
+        class Worksheet(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802 -- http.server's spelling
+                path = unquote(self.path.split("?")[0])
+                if path in ("/", "/index.html"):
+                    self._send(page, "text/html; charset=utf-8")
+                    return
+                if not path.startswith("/files/"):
+                    self.send_error(404, "Only / and /files/ are here")
+                    return
+                wanted = path[len("/files/"):]
+                entry = known.get(wanted)
+                # Served only if the dump says it exists, which is also what
+                # makes ".." pointless: nothing outside the board is in the
+                # index, so nothing outside it can be asked for.
+                on_disk = (uploads_dir / wanted).resolve() if entry else None
+                if entry is None or not on_disk.is_file() \
+                        or uploads_dir not in on_disk.parents:
+                    self.send_error(404, "Not one of the old board's files")
+                    return
+                filename, content_type = entry
+                # Inline, because the point is to look at it rather than to
+                # collect it, and a viewer that downloads is not a viewer.
+                self._send(
+                    on_disk.read_bytes(), content_type,
+                    f"inline; filename*=UTF-8''{quote_plus(filename)}",
+                )
+
+            def _send(self, body, content_type, disposition=None):
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                if disposition:
+                    self.send_header("Content-Disposition", disposition)
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        click.echo(f"{len(rows)} old forums, {len(known)} files from {uploads_dir}.")
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            click.echo(click.style(
+                f"Reachable from the network on {host}:{port}, with no password "
+                f"and the whole archive behind it. Stop it when you are done.",
+                fg="yellow",
+            ))
+            click.echo(f"Open http://<this machine>:{port}/ in your browser.")
+        else:
+            click.echo(f"Tunnel it:  ssh -N -L {port}:127.0.0.1:{port} you@<this machine>")
+            click.echo(f"Then open:  http://127.0.0.1:{port}/")
+        try:
+            ThreadingHTTPServer((host, port), Worksheet).serve_forever()
+        except KeyboardInterrupt:
+            click.echo("\nStopped.")
+
+    @app.cli.command("forum-category-worksheet")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--out", type=click.Path(dir_okay=False),
+                  default="forum-categories.html", show_default=True,
+                  help="Where to write the worksheet.")
+    @click.option("--csv", "as_csv", is_flag=True,
+                  help="Write a plain CSV instead of the page.")
+    @with_appcontext
+    def forum_category_worksheet_command(dump_file, out, as_csv):
+        """Where each of the old board's forums should end up, for you to decide.
+
+        The new forum is not the old one rearranged. It is somewhere students
+        look things up, and most of a decade-old board is lectures that no
+        longer run in that form. So every old forum needs one of two answers:
+        which current lecture it belongs to, or that it is archive.
+
+        That is a curriculum question and this cannot answer it. What it can do
+        is lay out the evidence -- how much is in each forum, and when it
+        stopped -- and put every year's version of the same course on adjacent
+        lines, so the question takes a minute instead of an afternoon.
+
+        Fill in two columns and keep the file:
+
+        \b
+          target  the category its threads should end up in.
+                  Left empty means archive.
+          access  who should be able to see it, once the groups exist.
+        """
+        tables = _load_mybb_dump(dump_file)
+        rows = category_worksheet(
+            tables["forums"], tables["threads"], tables["posts"],
+            tables["attachments"], users=tables["users"],
+        )
+        if not rows:
+            raise click.ClickException("No forum in that dump holds any threads.")
+
+        if as_csv:
+            fields = ["old_fid", "old_path", "lecture", "threads", "posts",
+                      "first_post", "last_post", "target", "access"]
+            with open(out, "w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle, fieldnames=fields, extrasaction="ignore"
+                )
+                writer.writeheader()
+                writer.writerows(rows)
+        else:
+            Path(out).write_text(
+                render_worksheet(rows, _forum_label(), _sortable),
+                encoding="utf-8",
+            )
+
+        quiet_since = sorted(row["last_post"] for row in rows)
+        click.echo(
+            f"{len(rows)} forums hold threads, written to {out}.\n"
+            f"The oldest stopped in {quiet_since[0][:4]}, the newest is from "
+            f"{quiet_since[-1][:4]}."
+        )
+        stale = [row for row in rows if row["last_post"] < "2022"]
+        if stale:
+            click.echo(
+                f"{len(stale)} of them have had nothing posted since 2021, "
+                f"which is where I would start reading."
+            )
+        if as_csv:
+            click.echo(
+                "Open it in a spreadsheet. Same-named courses are on adjacent "
+                "lines; fill in 'target' where a forum belongs to a lecture "
+                "that still runs, and leave it empty for what is archive."
+            )
+        else:
+            click.echo(
+                "Copy it to your own machine and open it in a browser. Write "
+                "the curriculum down the left, then work through the old "
+                "forums: each one shows what is in it, and every version of a "
+                "course sits together so they can be assigned at once. What "
+                "you decide is kept in the browser as you go; Export JSON when "
+                "it is done."
+            )
+
+    @app.cli.command("dump-forum-settings")
+    @click.option("--out", type=click.Path(dir_okay=False),
+                  default="forum-settings.json", show_default=True,
+                  help="Where to write every setting the forum reports.")
+    @click.option("--limits", is_flag=True,
+                  help="Print the settings that constrain what can be posted.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="Reads DISCOURSE_MIGRATION_API_KEY if not given.")
+    @with_appcontext
+    def dump_forum_settings_command(out, limits, api_key):
+        """Everything this Discourse will tell you about itself.
+
+        The same call the import already makes, keeping the parts it throws
+        away: each setting's description, its default, and which ones exist at
+        all. Two runs were spent on limits that were in this list the whole
+        time -- a third level of categories the forum would not make, and a
+        fifty-character cap on their names -- so this is the list to read
+        before guessing at the next one.
+
+        Values of settings Discourse marks secret, and of anything whose name
+        mentions a password or a key, are left out. The file is meant to be
+        readable and shareable.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
+
+        try:
+            poster.site_settings()
+        except ForumProviderError as exc:
+            raise click.ClickException(f"Could not read the settings: {exc}") from exc
+
+        everything, interesting = settings_inventory(poster.last_settings_rows)
+        Path(out).write_text(
+            json.dumps({"forum": poster.base_url, "settings": everything},
+                       indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        click.echo(f"{len(everything)} settings written to {out}.")
+        click.echo(
+            f"{len(interesting)} of them constrain what can be posted."
+            + ("" if limits else " Pass --limits to see them.")
+        )
+
+        if limits:
+            click.echo("")
+            for entry in interesting:
+                click.echo(f"{entry['setting']:<42} {str(entry['value'])[:34]}")
+
+    @app.cli.command("check-forum-uploads")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--uploads", required=True, type=click.Path(file_okay=False),
+                  help="Where the .attach files have been put so far.")
+    @click.option("--missing-to", type=click.Path(dir_okay=False),
+                  help="Write the paths still needed to this file, one per "
+                       "line, ready to drive a copy.")
+    @with_appcontext
+    def check_forum_uploads_command(dump_file, uploads, missing_to):
+        """Which of the old board's files are here, and which are still to come.
+
+        Nine gigabytes fetched a directory at a time over several sittings is
+        not something anybody can hold in their head, and the import reports a
+        missing file per post -- the right shape for one thread and the wrong
+        one for 2,347.
+
+        Size is checked as well as presence. The usual way a file goes wrong
+        here is not absence: a web server asked for something it has not got
+        answers with a page saying so, and a fetch that does not check writes
+        that page to disk under the name of the file it wanted.
+        """
+        tables = _load_mybb_dump(dump_file)
+        report = audit_uploads(tables["attachments"], uploads)
+
+        click.echo(
+            f"{report['expected']} attachments on the old board.\n"
+            f"  here:    {report['present']:>5}  "
+            f"({report['bytes_present'] / 1024 ** 3:.2f} GB)\n"
+            f"  missing: {len(report['missing']):>5}  "
+            f"({report['bytes_missing'] / 1024 ** 3:.2f} GB still to fetch)"
+        )
+
+        if report["wrong_size"]:
+            click.echo(click.style(
+                f"\n{len(report['wrong_size'])} files are here but the wrong "
+                f"size. Fetch these again -- a file of the wrong size is "
+                f"usually an error page wearing its name:", fg="red",
+            ))
+            for row in report["wrong_size"][:20]:
+                click.echo(
+                    f"  {row['name']}  {row['on_disk']} bytes, "
+                    f"should be {row['recorded']}"
+                )
+            if len(report["wrong_size"]) > 20:
+                click.echo(f"  ... and {len(report['wrong_size']) - 20} more")
+
+        if missing_to:
+            wanted = report["missing"] + [row["name"] for row in report["wrong_size"]]
+            Path(missing_to).write_text("\n".join(wanted) + "\n", encoding="utf-8")
+            click.echo(f"\n{len(wanted)} paths written to {missing_to}.")
+
+        if not report["missing"] and not report["wrong_size"]:
+            click.echo(click.style("\nEverything is here.", fg="green"))
+        else:
+            raise SystemExit(1)
+
+    @app.cli.command("import-forum-content")
+    @click.argument("dump_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--uploads", required=True, type=click.Path(file_okay=False),
+                  help="The old forum's uploads folder.")
+    @click.option("--ledger", type=click.Path(dir_okay=False),
+                  default="forum-import-ledger.jsonl", show_default=True,
+                  help="What has already been posted. Keep it; it is how a "
+                       "stopped run carries on instead of starting again.")
+    @click.option("--dry-run", is_flag=True, help="Report and send nothing.")
+    @click.option("--limit", type=int, default=0, metavar="N",
+                  help="Stop after N threads, for a first careful run.")
+    @click.option("--keep-duplicate-titles", is_flag=True,
+                  help="Post the old subjects unchanged. Discourse refuses a "
+                       "second topic with a title it already has, so this "
+                       "loses every thread after the first of each name.")
+    @click.option("--allow-missing-attachments", is_flag=True,
+                  help="Post even where a file is not on this machine. Those "
+                       "files are then lost: the post is written down as done "
+                       "and never revisited.")
+    @click.option("--adjust-settings", is_flag=True,
+                  help="Loosen the settings this needs, and put them back after.")
+    @click.option("--settings-file", type=click.Path(dir_okay=False),
+                  help="Where to write the record of what was changed.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="An 'All Users' Discourse API key.")
+    @click.option("--mapping", type=click.Path(exists=True, dir_okay=False),
+                  help="The worksheet's JSON: the lectures that still run, and "
+                       "the archive for everything else. Without it the old "
+                       "board's own categories are recreated, which is a test "
+                       "shape rather than one to keep.")
+    @click.option("--categories-only", is_flag=True,
+                  help="Make the categories and post nothing, to try a "
+                       "structure against a forum that already holds content.")
+    @click.option("--reset-ledger", is_flag=True,
+                  help="If the ledger turns out to describe a forum that has "
+                       "since been reset, move it aside and start again "
+                       "instead of stopping.")
+    @with_appcontext
+    def import_forum_content_command(dump_file, uploads, ledger, dry_run, limit,
+                                     keep_duplicate_titles,
+                                     allow_missing_attachments, adjust_settings,
+                                     settings_file, api_key, mapping,
+                                     categories_only, reset_ledger):
+        """Moves the whole old board across, keeping the categories it had.
+
+        The old structure is recreated rather than reorganised. That is a
+        deliberately dull choice for a first full run: it makes the result
+        comparable with the old board post for post, and rearranging it
+        afterwards is something Discourse does well and a migration script
+        does badly.
+
+        Safe to run again. Every post that lands is written to the ledger
+        before the next is attempted, so a run that stops -- and one this long
+        will stop -- carries on rather than posting everything twice.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        tables = _load_mybb_dump(dump_file)
+        if not tables.get("forums"):
+            raise click.ClickException(
+                "No forums table in that dump, so there is nothing to make the "
+                "categories from."
+            )
+
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
+        # So that a post whose author's name was too long for Discourse is
+        # retried under the name Discourse gave them, rather than lost.
+        poster.find_author = _author_finder(poster)
+        if not categories_only:
+            _check_the_key_can_post_as_others(poster, given=bool(api_key))
+
+        # Three levels only where the forum says it can do three. Where it
+        # cannot, the setting is absent rather than false, and the refusal
+        # arrives one category at a time long after every setting has been
+        # changed -- so the shape is decided here instead.
+        try:
+            live = poster.site_settings()
+        except ForumProviderError:
+            live = {}
+        max_depth = (
+            DEEPEST_CATEGORY_NESTING if "max_category_nesting" in live
+            else MAX_CATEGORY_NESTING
+        )
+
+        placement = None
+        titles = None
+        gatekeeper = None
+        if mapping:
+            worksheet = json.loads(Path(mapping).read_text(encoding="utf-8"))
+            placement = read_mapping(
+                worksheet, tables["forums"], tables["threads"],
+            )
+            # Applied once the categories exist and before a single post goes
+            # into them, because a category nobody has restricted is one
+            # anybody can read -- and an archive that was public for the two
+            # hours of a run has been public.
+            gatekeeper = _category_gatekeeper(
+                service, owned_roots(worksheet), dry_run=dry_run,
+                authors_group=None if categories_only else ARCHIVE_GROUP,
+                mapping_file=mapping,
+            )
+            plan = mapping_plan(placement["paths"], tables["threads"])
+            titles = titles_for(
+                tables["forums"], tables["threads"], placement["archived"]
+            )
+            live_count = sum(
+                1 for row in plan
+                if row["depth"] == 2 and row["path"][0] != ARCHIVE_ROOT
+            )
+            click.echo(
+                f"Mapping read: {live_count} lectures that still run, and an "
+                f"archive of everything else."
+            )
+            for problem in placement["problems"]:
+                click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        else:
+            plan = category_plan(tables["forums"], tables["threads"], max_depth)
+
+        requirements = plan_site_settings(
+            tables["threads"], tables["posts"], tables["attachments"]
+        )
+        if "max_category_nesting" in live:
+            requirements.append(category_nesting_requirement(plan))
+
+        # Posts whose author is not in the users table -- people deleted from
+        # the old board over thirteen years. They are attributed to the
+        # fallback, which is worth knowing the size of before a run rather
+        # than a thread at a time during one.
+        known = {row.get("uid") for row in tables["users"]}
+        orphaned = sum(1 for row in tables["posts"] if row.get("uid") not in known)
+
+        click.echo(
+            f"{len(tables['threads'])} threads, {len(tables['posts'])} posts, "
+            f"{len(tables['attachments'])} attachments, into {len(plan)} "
+            f"categories {max_depth} levels deep."
+        )
+        if orphaned:
+            click.echo(
+                f"{orphaned} of those posts were written by somebody no longer "
+                f"in the old board's user table, and will be attributed to "
+                f"{service.settings['discourse_api_username']}."
+            )
+        try:
+            ready, anything = _report_site_settings(
+                check_site_settings(poster, requirements)
+            )
+        except ForumProviderError as exc:
+            click.echo(click.style(f"Could not read the site settings: {exc}", fg="yellow"))
+            ready, anything = True, False
+
+        changes = []
+        journal = None
+        decision = what_to_do_about_settings(
+            ready=ready, anything=anything, adjust_settings=adjust_settings,
+            # A categories-only run sends no posts, so what the forum would
+            # refuse about a post cannot stop it -- the same reasoning as a dry
+            # run, and the reason this mode exists is to try a structure
+            # against a forum whose settings nobody wants touched.
+            dry_run=dry_run or categories_only,
+        )
+        if decision == LOOSEN:
+            journal = _settings_journal_path(settings_file)
+            click.echo(click.style(
+                f"\nLoosening the settings above. What they were goes in\n"
+                f"  {journal}\n"
+                f"If this run does not finish, put them back with:\n"
+                f"  flask restore-forum-settings {journal}",
+                fg="cyan",
+            ))
+            changes = loosen_site_settings(poster, requirements, journal)
+            click.echo(f"Changed {len(changes)} settings.")
+        elif decision == REFUSE:
+            raise click.ClickException(
+                "The forum would refuse part of this archive. Run it again "
+                "with --adjust-settings, or change them by hand first."
+            )
+
+        record = Ledger(ledger)
+        if record.posts:
+            # Checked, not trusted. A ledger from before the forum was reset
+            # still says every post is done, so an import would skip all 1,517
+            # of them and report a clean run against an empty archive.
+            describes, why = ledger_describes(poster, record)
+            if not describes:
+                record.close()
+                if not reset_ledger:
+                    raise click.ClickException(
+                        f"{ledger} does not describe this forum: {why}.\n\n"
+                        f"Left alone it would skip every post it lists and "
+                        f"leave the forum empty, reporting a clean run. Either "
+                        f"point --ledger at a new file, or pass --reset-ledger "
+                        f"to move this one aside and start a fresh record."
+                    )
+                moved = _put_the_stale_ledger_aside(Path(ledger))
+                click.echo(click.style(
+                    f"{ledger} was about a forum that is gone ({why}); moved "
+                    f"to {moved.name} and starting a fresh record.", fg="yellow",
+                ))
+                record = Ledger(ledger)
+        if record.posts:
+            click.echo(click.style(
+                f"Carrying on: {len(record.posts)} posts are already on the "
+                f"forum according to {ledger}.", fg="cyan",
+            ))
+
+        def say(thread, report, summary):
+            done = summary["posted"] + summary["already_there"]
+            click.echo(
+                f"  [{summary['threads']:>4}] {str(thread.get('subject'))[:48]:<50} "
+                f"{done:>5} posts, {summary['waiting']:>4} waiting, "
+            f"{summary['failed']:>3} failed"
+            )
+
+        try:
+            summary = migrate_board(
+                poster, tables, uploads, record,
+                dry_run=dry_run, limit=limit,
+                fallback_username=service.settings["discourse_api_username"],
+                on_thread=say,
+                require_attachments=not allow_missing_attachments,
+                max_depth=max_depth,
+                keep_duplicate_titles=keep_duplicate_titles,
+                plan=plan, titles=titles, categories_only=categories_only,
+                after_categories=gatekeeper,
+            )
+        finally:
+            record.close()
+            if gatekeeper is not None:
+                gatekeeper.close()
+            if changes:
+                click.echo("\nPutting the settings back:")
+                try:
+                    results = restore_site_settings(poster, changes)
+                    _report_restore(results)
+                    # So the next run is not blocked by a journal whose whole
+                    # purpose has already been served.
+                    mark_journal_restored(journal, results)
+                except ForumProviderError as exc:
+                    click.echo(click.style(
+                        f"COULD NOT RESTORE THE SETTINGS: {exc}\n"
+                        f"The forum is still loosened. Run:\n"
+                        f"  flask restore-forum-settings {journal}",
+                        fg="red",
+                    ), err=True)
+
+        # Said first, and said even when nothing was posted: a categories-only
+        # run that reports "0 threads: 0 posted" reads as though it did nothing
+        # at all, when making the categories is the whole of what it was for.
+        click.echo(
+            f"\n{summary.get('categories_there', 0)} categories on the forum, "
+            f"{summary.get('categories_made', 0)} of them made by this run."
+        )
+        if categories_only:
+            click.echo(
+                "Nothing was posted and no setting was changed. Look at the "
+                "categories, and delete them if the shape is not right -- an "
+                "empty category deletes cleanly."
+            )
+        else:
+            click.echo(
+                f"{summary['threads']} threads: {summary['posted']} posted, "
+                f"{summary['already_there']} already there, "
+                f"{summary['waiting']} waiting, "
+                f"{summary['not_attempted']} not attempted, "
+                f"{summary['failed']} failed."
+            )
+        if summary.get("renamed"):
+            click.echo(
+                f"{summary['renamed']} of the board's threads share a subject "
+                f"with another, so their titles carry the lecture as well -- "
+                f"Discourse will not take two topics with the same name. That "
+                f"count is for the whole board, not only what this run posted."
+            )
+        if summary["waiting"]:
+            click.echo(
+                f"{summary['waiting']} posts were left alone because a file they "
+                f"carry is not on this machine or the forum would not take it. "
+                f"Nothing is lost -- fix that and run the same command again."
+            )
+        if summary["not_attempted"]:
+            click.echo(
+                f"{summary['not_attempted']} posts are in threads whose opening "
+                f"post was refused, so there was no topic to put them in. The "
+                f"reason is against the post that failed."
+            )
+        if summary["problems"]:
+            click.echo(click.style(
+                f"\n{len(summary['problems'])} problems:", fg="yellow"), err=True)
+            for problem in summary["problems"]:
+                click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+            left = sum(summary.get(key, 0)
+                       for key in ("waiting", "failed", "not_attempted"))
+            if left:
+                click.echo(
+                    f"\nFix what they say and run the same command again. What has "
+                    f"landed is in {ledger} and will not be posted twice."
+                )
+            else:
+                # The five posts whose authors left the old board are reported
+                # on every run and need nothing doing; telling somebody to fix
+                # them and run again sends them round in a circle.
+                click.echo(click.style(
+                    "\nEverything is on the forum. The lines above are notes, "
+                    "not things left to do.", fg="green"))
+
+    @app.cli.command("dump-portal-settings")
+    @click.option("--out", type=click.Path(dir_okay=False), default="portal-settings.json",
+                  show_default=True)
+    @click.option("--with-secrets", is_flag=True,
+                  help="Also export the Stripe keys, the Discourse credentials "
+                       "and the SMTP passwords. The file is then a password "
+                       "list: it is written 0600 and it is not encrypted.")
+    @with_appcontext
+    def dump_portal_settings_command(out, with_secrets):
+        """Everything an administrator typed, as a file.
+
+        A fresh install starts with a blank settings page, and filling it in is
+        forty minutes of copying values that all have to be exactly right and
+        none of which announce themselves when they are wrong. This makes
+        rebuilding the portal a restore rather than a reconstruction.
+
+        Not included: anything in .env. SECRET_KEY and the database password
+        belong to the machine rather than to the configuration, and putting an
+        old database password onto a new install would break the thing it was
+        restoring. Copy .env separately if you want it.
+        """
+        payload = export_settings(with_secrets=with_secrets)
+        path = Path(out)
+        try:
+            # Created empty and closed to this user alone before a single
+            # secret is written into it, rather than written and then tightened
+            # -- in between, the file would be readable by anybody.
+            if with_secrets:
+                path.touch(mode=0o600, exist_ok=True)
+                path.chmod(0o600)
+            path.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+        except OSError as exc:
+            raise click.ClickException(
+                f"Could not write {path}: {exc.strerror}.\n\n"
+                f"This runs as the application user, which owns very little of "
+                f"this machine -- /root in particular is not writable by it. "
+                f"Write it somewhere that user can reach, such as "
+                f"--out /var/tmp/portal-settings.json, and move it afterwards."
+            )
+
+        for section, values in payload["settings"].items():
+            click.echo(f"  {section:<14} {len(values)} settings")
+        click.echo(f"  {'mail accounts':<14} {len(payload['mail_accounts'])}")
+        click.echo(f"\nWritten: {path}")
+
+        if with_secrets:
+            click.echo(click.style(
+                "\nThis file holds the Stripe secret key, the Discourse "
+                "credentials and every SMTP password, in the clear. Anywhere "
+                "you copy it inherits that: encrypt it (gpg -c) before it "
+                "leaves this machine, and delete it once the new install has "
+                "it.", fg="yellow",
+            ))
+        elif payload["held_back"]:
+            click.echo(
+                f"\n{len(payload['held_back'])} credentials were left out and "
+                f"have to be entered by hand on the new install: "
+                + ", ".join(payload["held_back"])
+                + "\nRun again with --with-secrets to include them."
+            )
+
+    @app.cli.command("restore-portal-settings")
+    @click.argument("settings_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--dry-run", is_flag=True, help="Say what would change and change nothing.")
+    @with_appcontext
+    def restore_portal_settings_command(settings_file, dry_run):
+        """Put an exported settings file back onto a fresh install.
+
+        Never removes anything: a setting the file does not mention is left as
+        it is. The file is a record of one machine rather than a description of
+        every machine, and a restore that blanked what it did not know about
+        would be one nobody could run twice.
+        """
+        try:
+            payload = json.loads(Path(settings_file).read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise click.ClickException(
+                f"Could not read {settings_file}: {exc.strerror}. This runs as "
+                f"the application user; a file exported with --with-secrets is "
+                f"readable only by whoever wrote it."
+            )
+        except ValueError as exc:
+            raise click.ClickException(f"{settings_file} is not valid JSON: {exc}")
+        try:
+            report = import_settings(payload, dry_run=dry_run)
+        except ValueError as exc:
+            raise click.ClickException(str(exc))
+
+        click.echo(
+            f"{len(report['set'])} settings set, "
+            f"{len(report['already'])} already right, "
+            f"{len(report['accounts'])} mail accounts"
+        )
+        for key in report["set"]:
+            click.echo(f"  {key}")
+        if report["skipped"]:
+            click.echo(click.style(
+                f"\n{len(report['skipped'])} were exported without their value "
+                f"and have to be entered by hand: "
+                + ", ".join(report["skipped"]), fg="yellow",
+            ))
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+
+        if dry_run:
+            click.echo(click.style("\nNothing was changed.", fg="cyan"))
+            return
+        db.session.commit()
+        click.echo(click.style(
+            "\nCheck the settings pages before relying on this, and remember "
+            "the forum needs its Connect secret to match on both sides.",
+            fg="cyan",
+        ))
+
+    @app.cli.command("create-backup")
+    @click.option("--out", "out_path", type=click.Path(dir_okay=False),
+                  help="Where to write it. Default: the backups folder, where the admin page lists it.")
+    @click.option("--passphrase-stdin", is_flag=True,
+                  help="Read the passphrase from standard input instead of asking.")
+    @click.option("--created-by", default=None, help="Who asked for it, for the record.")
+    @with_appcontext
+    def create_backup_command(out_path, passphrase_stdin, created_by):
+        """Write an encrypted backup of everything this installation holds.
+
+        The accounts and memberships, every setting and credential, uploaded
+        pictures waiting for review, and the SECRET_KEY, Stripe keys and mail
+        accounts from .env. Restore it with ``install.sh --restore FILE``.
+        """
+        from .services import backup as backup_service
+
+        if passphrase_stdin:
+            passphrase = sys.stdin.readline().rstrip("\n")
+        else:
+            passphrase = click.prompt("Passphrase", hide_input=True, confirmation_prompt=True)
+
+        keep_in_folder = out_path is None
+        destination = Path(out_path) if out_path else backup_service.new_backup_path()
+        recorder = backup_service.StatusRecorder(created_by)
+        try:
+            result = backup_service.create_backup(destination, passphrase, created_by=created_by, progress=recorder)
+        except backup_service.BackupError as exc:
+            recorder.fail(str(exc))
+            raise click.ClickException(str(exc))
+        except Exception as exc:  # noqa: BLE001 -- the page must not be left saying "running"
+            recorder.fail(f"The backup failed: {exc}")
+            raise
+        if keep_in_folder:
+            backup_service.prune_backups(keep=backup_service.BACKUPS_KEPT)
+        recorder.finish(result)
+
+        actor = db.session.execute(db.select(User).filter_by(email=created_by)).scalar_one_or_none() if created_by else None
+        log_audit_event(category="system", event_type="backup_created", actor_user=actor, target_user=actor,
+                        metadata={"file": result["file"], "size": result["size"], "sha256": result["sha256"]})
+        db.session.commit()
+        click.echo(f"Backup written: {destination} ({result['size']} bytes, {result['rows']} rows, "
+                   f"{result['files']} files)")
+        click.echo(f"SHA-256: {result['sha256']}")
+
+    @app.cli.command("restore-backup")
+    @click.argument("backup_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--passphrase-stdin", is_flag=True,
+                  help="Read the passphrase from standard input instead of asking.")
+    @click.option("--yes", is_flag=True, help="Do not ask before replacing everything.")
+    @click.option("--env-out", type=click.Path(dir_okay=False),
+                  help="Write the restored .env values here (JSON) for the installer to apply, "
+                       "instead of writing .env directly.")
+    @with_appcontext
+    def restore_backup_command(backup_file, passphrase_stdin, yes, env_out):
+        """Replace everything on this installation with a backup.
+
+        Every account, setting and file here is replaced by the backup's --
+        including any account made while installing. Afterwards every
+        background job is paused until an administrator resumes them on the
+        Backup & Restore page, because a copy restored onto a test machine
+        would otherwise start emailing members and pushing to the real forum.
+
+        Normally run through ``install.sh --restore FILE``, which also applies
+        the .env values and restarts the portal.
+        """
+        from .services import backup as backup_service
+        from .services.background_jobs import clear_heartbeats, pause
+
+        env_path = backup_service.env_file_path()
+        if not env_out and not os.access(env_path if env_path.exists() else env_path.parent, os.W_OK):
+            raise click.ClickException(
+                f"{env_path} cannot be written by this user. Run the restore through "
+                "`install.sh --restore FILE`, or pass --env-out."
+            )
+
+        if passphrase_stdin:
+            passphrase = sys.stdin.readline().rstrip("\n")
+        else:
+            passphrase = click.prompt("Passphrase", hide_input=True)
+
+        try:
+            checked = backup_service.inspect_backup(backup_file, passphrase)
+            backup_service.check_restorable(checked["manifest"])
+        except backup_service.BackupError as exc:
+            raise click.ClickException(str(exc))
+        manifest, contents = checked["manifest"], checked["contents"]
+        click.echo(f"Backup made {manifest['created_at']}"
+                   + (f" by {manifest['created_by']}" if manifest.get("created_by") else ""))
+        click.echo(f"  {sum(contents['tables'].values())} rows in {len(contents['tables'])} tables, "
+                   f"{len(contents['files'])} files, database version {manifest['schema_revision']}")
+        if not yes:
+            click.confirm("Replace EVERYTHING on this installation with this backup?", abort=True)
+
+        def report(step, message):
+            click.echo(f"  {message}")
+
+        try:
+            result = backup_service.restore_backup(backup_file, passphrase, progress=report)
+        except backup_service.BackupError as exc:
+            raise click.ClickException(str(exc))
+
+        seed_default_roles()
+        backfill_legacy_admin_roles()
+        backfill_member_user_links()
+        clear_heartbeats()
+        pause("restore", backup_created_at=manifest["created_at"])
+        log_audit_event(category="system", event_type="backup_restored",
+                        metadata={"backup_created_at": manifest["created_at"],
+                                  "backup_created_by": manifest.get("created_by"),
+                                  "schema_revision": manifest["schema_revision"]})
+        db.session.commit()
+
+        if env_out:
+            Path(env_out).write_text(json.dumps(result["env"]))
+            os.chmod(env_out, 0o600)
+        else:
+            backup_service.apply_env_values(env_path, result["env"])
+        click.echo(click.style(
+            "Restored. Background jobs are paused: sign in with an account from the backup and "
+            "resume them under Settings > Maintenance > Backup & Restore.", fg="cyan",
+        ))
+
+    @app.cli.command("forum-permissions")
+    @click.argument("mapping_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--dry-run", is_flag=True,
+                  help="Say what would change and change nothing.")
+    @click.option("--staff-group", default=STAFF_GROUP, show_default=True,
+                  help="The group that may post everywhere, including the "
+                       "archive. Discourse's own, unless you have another.")
+    @click.option("--verbose", is_flag=True,
+                  help="A line per category rather than only the ones that "
+                       "were open.")
+    @click.option("--enforce", is_flag=True,
+                  help="Also overwrite categories somebody has already given "
+                       "permissions to. Without it those are reported and left "
+                       "alone, because the forum is where that decision lives.")
+    @click.option("--api-key", envvar="DISCOURSE_MIGRATION_API_KEY",
+                  help="An 'All Users' Discourse API key.")
+    @with_appcontext
+    def forum_permissions_command(mapping_file, dry_run, staff_group,
+                                  verbose, enforce, api_key):
+        """Members only: who may read, reply and post in each category.
+
+        A Discourse category with no group permission on it is public. Not
+        "visible once you are logged in" -- public, to anybody and to every
+        crawler. So the categories this import makes are open until something
+        says otherwise, and what goes in them is thirteen years of exams and
+        transcripts with students' names on them.
+
+        The import does this itself once the categories exist and before it
+        posts anything. This command is the same work on its own, for a forum
+        that was imported before it did, for a structure that has been changed
+        by hand since, and for checking -- with --dry-run -- what the position
+        actually is.
+
+        Live lectures: members may start topics and reply, because students
+        keep adding to them. The archive: members may read and search it and
+        nothing else. Categories that are not part of this mapping, including
+        Discourse's own, are left exactly as they are and counted.
+        """
+        service = get_forum_service()
+        if not service.is_enabled() or service.config_errors:
+            raise click.ClickException("The forum integration is not configured.")
+
+        settings = dict(service.settings)
+        if api_key:
+            settings["discourse_api_key"] = api_key
+        poster = ContentPoster(settings)
+        _warn_about_the_key(poster)
+
+        worksheet = json.loads(Path(mapping_file).read_text(encoding="utf-8"))
+        roots = owned_roots(worksheet)
+        click.echo(
+            f"{len(roots)} top-level categories belong to this mapping: "
+            + ", ".join(sorted(roots))
+        )
+        _say_what_is_not_set_up(service)
+
+        _make_the_groups(service, staff_group=staff_group, dry_run=dry_run)
+        report = _restrict_the_categories(
+            poster, service, roots, dry_run=dry_run, staff_group=staff_group,
+            verbose=verbose, enforce=enforce,
+        )
+        if report is None:
+            raise click.ClickException("Nothing was restricted.")
+
+        if dry_run:
+            click.echo(click.style(
+                "\nNothing was changed. Run it again without --dry-run.",
+                fg="cyan",
+            ))
+        else:
+            click.echo(click.style(
+                "\nCategory permissions are not the same thing as a private "
+                "forum: with login_required off, anonymous visitors still see "
+                "the site and anything still public on it.", fg="cyan",
+            ))
+
+    @app.cli.command("publish-forum-profiles")
+    @click.option("--dry-run", is_flag=True,
+                  help="Report what would be published and send nothing.")
+    @click.option("--limit", type=int, default=0, metavar="N",
+                  help="Publish at most N people, for a first careful run.")
+    @click.option("--only-new", is_flag=True,
+                  help="Skip people already published, to resume an interrupted run.")
+    @click.option("--sample", type=int, default=0, metavar="N",
+                  help="Show N of them in full.")
+    @click.option("--groups-only", is_flag=True,
+                  help="Publish nobody; only make the groups and put people in "
+                       "them. Repairs a run whose groups came out empty.")
+    @with_appcontext
+    def publish_forum_profiles_command(dry_run, limit, only_new, sample, groups_only):
+        """Publishes imported people to the forum so they can be found there.
+
+        The old board is the association's register of everyone who was ever a
+        member, and people use it to find somebody from an earlier cohort. This
+        recreates that: a profile per imported person, with their name, year
+        group and the face they had, grouped by cohort.
+
+        These are not usable accounts. Nobody can sign in to one.
+        """
+        service = get_forum_service()
+        if not service.is_enabled():
+            raise click.ClickException(
+                "The forum integration is switched off, so there is nowhere to "
+                "publish to. Turn it on in the admin settings first."
+            )
+        # config_errors is empty for a disabled integration, so it is not on its
+        # own enough to know the settings are usable.
+        if service.config_errors:
+            raise click.ClickException(
+                "The forum integration is not fully configured: "
+                + "; ".join(service.config_errors)
+            )
+        provider = service.provider
+        if provider is None:
+            raise click.ClickException("No forum provider is configured.")
+
+        # The profile field is a nicety: it puts the year group on the profile
+        # page. The cohort groups are the mechanism, and they do not depend on
+        # it -- so a forum that will not hand over its user fields is a reason
+        # to say so and carry on, not to publish nobody.
+        year_group_field = None
+        try:
+            if groups_only:
+                # Nothing is published, so no profile field is written.
+                pass
+            elif dry_run:
+                # Read-only: says whether the field is there without making one.
+                year_group_field = provider.find_user_field(YEAR_GROUP_FIELD_NAME)
+                click.echo(
+                    f"Year group field: {year_group_field or 'not present, would be created'}"
+                )
+            else:
+                year_group_field, created = provider.ensure_user_field(
+                    YEAR_GROUP_FIELD_NAME, "Which year group they studied with."
+                )
+                click.echo(
+                    f"Year group field: {year_group_field}"
+                    f"{' (created)' if created else ''}"
+                )
+        except ForumProviderError as exc:
+            click.echo(click.style(f"Year group field: unavailable -- {exc}", fg="yellow"))
+            click.echo(
+                "Publishing without it. Names, avatars and cohort groups are "
+                "unaffected, and re-running later fills the field in."
+            )
+
+        # The groups are made before anybody is published, and were not always:
+        # Discourse's SSO add_groups matches the names it is given against the
+        # groups that already exist and ignores the rest without complaining, so
+        # making them afterwards -- "only for a cohort that has somebody in it"
+        # -- produced a register of thirty-four empty groups and a report that
+        # said otherwise, because a report counts what was sent.
+        profiles = profiles_to_publish(only_unsynced=only_new)
+        if limit:
+            profiles = profiles[:limit]
+        plan = groups_for_profiles(profiles)
+        click.echo(
+            f"{len(plan)} groups: "
+            + ", ".join(f"{name} ({len(members)})"
+                        for name, members in sorted(plan.items()))[:400]
+        )
+
+        def say_group(name, size, created):
+            if created:
+                click.echo(f"  created group {name} ({size})")
+
+        if not dry_run and not groups_only:
+            _report_group_problems(
+                sync_profile_groups(provider, plan, add_members=False,
+                                    on_group=say_group)
+            )
+
+        report = {"seen": 0, "published": 0, "failed": 0, "with_avatar": 0,
+                  "groups": plan, "problems": [], "people": []}
+        if not groups_only:
+            settings_client = _forum_settings_client(service)
+            if settings_client is not None:
+                # Everything the forum has to allow before these people can be
+                # published, done here rather than remembered: a forum rebuilt
+                # from scratch comes back with Discourse's defaults, and the
+                # step nobody can forget is the one nobody has to do.
+                _mind_the_avatar_setting(settings_client, dry_run=dry_run)
+                _mind_the_address_and_name(settings_client, dry_run=dry_run)
+                _mind_the_username_length(
+                    settings_client, username_room_needed(profiles), dry_run=dry_run
+                )
+            report = publish_imported_profiles(
+                provider,
+                dry_run=dry_run,
+                limit=limit or None,
+                only_unsynced=only_new,
+                year_group_field=year_group_field,
+                # A dry run sends nothing and is over in seconds, so thirty
+                # progress lines would be thirty lines of noise.
+                on_progress=None if dry_run else _profile_progress_reporter(),
+            )
+
+        if report.get("stopped"):
+            # Nobody got through, so filling the groups would only be thirty-four
+            # more refusals about people the forum has never heard of.
+            for problem in report["problems"][:3]:
+                click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+            raise click.ClickException(report["stopped"])
+
+        if not dry_run:
+            # Membership is set here as well as in the SSO payload, because the
+            # payload is not a way to make somebody a member -- it only works
+            # for a group that was already there -- and this is the one step
+            # that can be run on its own to repair a register that came out
+            # empty. Eight calls per hundred people, against two per person.
+            filled = sync_profile_groups(provider, plan, add_members=True)
+            click.echo(
+                f"groups: {filled['groups']} there, {filled['created']} made, "
+                f"{filled['members']} memberships set, "
+                f"{filled['already_in']} already in place"
+            )
+            _report_group_problems(filled)
+            db.session.commit()
+
+        click.echo(
+            f"seen={report['seen']} published={report['published']} "
+            f"failed={report['failed']} with_avatar={report['with_avatar']}"
+        )
+        if sample:
+            _echo_profile_sample(report, sample)
+        for problem in report["problems"][:20]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        if dry_run:
+            click.echo(click.style("Dry run: nothing was sent.", fg="cyan"))
+
+    def _forum_settings_client(service):
+        """Something that can read and write the forum's own settings.
+
+        The provider talks Connect and nothing else, and this needs the admin
+        settings API, so it borrows the same credentials the provider uses.
+        Returns None rather than raising: not being able to read a setting is a
+        reason to say so and publish anyway.
+        """
+        settings = getattr(service, "settings", None)
+        if not settings:
+            click.echo(click.style(
+                "Avatars: this forum integration does not expose its settings, "
+                "so the setting that governs them cannot be checked.", fg="yellow"))
+            return None
+        return ContentPoster(dict(settings))
+
+    def _make_the_groups(service, *, staff_group=STAFF_GROUP, dry_run=False):
+        """Make sure every group this arrangement needs is on the forum.
+
+        First, always. A Connect payload's ``add_groups`` is not a way to make
+        a group: Discourse matches the names against what it already has and
+        drops the rest without a word, so a person published before the group
+        existed is in no group at all and re-sending the payload changes
+        nothing. Thirty-four empty groups on a finished run is what that looks
+        like from the outside.
+        """
+        settings = getattr(service, "settings", {}) or {}
+        wanted = groups_wanted(
+            settings, staff_group=staff_group,
+            # Every group anything here names has to exist before a soul is put
+            # in one: a Connect payload cannot make a group, only fill one that
+            # is already there, and it says nothing when it cannot.
+            extra=list(member_category_groups(settings).values())
+            + access_groups(settings, "forum_lecture_groups")
+            + access_groups(settings, "forum_archive_groups"),
+        )
+        if dry_run:
+            click.echo(f"groups: would make sure {len(wanted)} exist: "
+                       f"{', '.join(wanted)}")
+            return wanted
+
+        provider = service.provider
+        if not hasattr(provider, "ensure_group"):
+            # A provider that cannot make groups is a provider this cannot be
+            # done through, which is worth a line rather than a traceback in
+            # the middle of a two-hour import.
+            click.echo(click.style(
+                "This forum provider cannot make groups, so they have to exist "
+                "already. Make them on the forum before publishing anybody.",
+                fg="yellow",
+            ), err=True)
+            return wanted
+
+        made = []
+        for name in wanted:
+            try:
+                _group, created = provider.ensure_group(name)
+            except ForumProviderError as exc:
+                click.echo(click.style(f"  ! group {name}: {exc}", fg="yellow"),
+                           err=True)
+                continue
+            if created:
+                made.append(name)
+        click.echo(
+            f"groups: {len(wanted)} needed, {len(made)} made"
+            + (f" ({', '.join(made)})" if made else "")
+        )
+        return wanted
+
+    def _say_what_is_not_set_up(service):
+        """Before the run, not deduced from its results afterwards."""
+        missing = what_is_not_set_up(getattr(service, "settings", {}) or {})
+        if not missing:
+            return
+        click.echo(click.style(
+            f"\n{len(missing)} things are not decided yet, under "
+            f"Admin -> Settings -> Forum:", fg="yellow",
+        ))
+        for name, why in missing:
+            click.echo(click.style(f"  {name}\n    {why}", fg="yellow"))
+        click.echo("")
+
+    def _no_lecture_groups():
+        return (
+            "No group is named as being allowed to read the lecture material, "
+            "so there is nobody to grant it to and every category would stay "
+            "public.\n\nSet 'Groups That May Read The Lecture Material' under "
+            "Admin -> Settings -> Forum. It is empty to begin with on purpose: "
+            "the obvious answer, everybody who has paid, is the wrong one. "
+            "Lecturers and company representatives are paying members of this "
+            "association too, and the material is a decade of exams about the "
+            "lectures they give."
+        )
+
+    def _restrict_the_categories(poster, service, roots, *, dry_run=False,
+                                 staff_group=STAFF_GROUP, verbose=False,
+                                 enforce=False):
+        """Give every category this import owns to the members, and nobody else.
+
+        A category with no group permission on it is public -- not "visible
+        once you are logged in", public. So this is not a hardening step to do
+        afterwards: it is the difference between an archive of exams with
+        students' names in it being members-only and being indexed.
+        """
+        settings = getattr(service, "settings", {}) or {}
+        lecture = access_groups(settings, "forum_lecture_groups")
+        archive = access_groups(settings, "forum_archive_groups", lecture)
+        portal_staff = (settings.get("forum_staff_group") or "").strip()
+        if not lecture:
+            click.echo(click.style(_no_lecture_groups(), fg="yellow"), err=True)
+            return None
+
+        try:
+            categories = poster.categories()
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Could not read the categories, so none were restricted: {exc}",
+                fg="yellow",
+            ), err=True)
+            return None
+
+        plan, untouched = permission_plan(
+            categories, roots, lecture_groups=lecture, archive_groups=archive,
+            staff_groups=(staff_group, portal_staff),
+        )
+        if not plan:
+            click.echo(click.style(
+                "None of the categories on this forum belong to this mapping, "
+                "so nothing was restricted. Check that the categories were made "
+                "before this ran.", fg="yellow",
+            ), err=True)
+            return None
+
+        def say(name, grants, *, changed, was_public):
+            if verbose or (changed and was_public):
+                mark = "public until now" if was_public else "changed"
+                click.echo(f"  {name}: {describe(grants)}"
+                           + (f"  ({mark})" if changed else "  (already)"))
+
+        report = apply_permissions(
+            poster, plan, dry_run=dry_run, enforce=enforce, on_category=say,
+        )
+        report["category_ids"] = list(plan)
+        click.echo(
+            f"permissions: {report['categories']} categories, "
+            f"{report['set']} set, {report['already']} already right"
+            + (f", {report['opened']} of them public until now"
+               if report["opened"] else "")
+            + (f", {report['decided_elsewhere']} decided on the forum and "
+               f"left alone" if report["decided_elsewhere"] else "")
+        )
+        if untouched:
+            click.echo(
+                f"  {len(untouched)} categories are not part of this mapping "
+                f"and were left alone: "
+                + ", ".join(name for _id, name in untouched[:5])
+                + (" ..." if len(untouched) > 5 else "")
+            )
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+        return report
+
+    def _category_gatekeeper(service, roots, *, dry_run=False, authors_group=None,
+                             mapping_file=None):
+        """What the import calls once the categories are there.
+
+        Bound here rather than written into ``migrate_board`` so that the board
+        importer stays a thing that moves posts, and who may read them stays a
+        question answered in one place.
+
+        With ``authors_group``, that group may also post in every category for
+        as long as the run lasts, and ``close()`` takes it away again. The
+        authors are posted as, and Discourse checks each of them against the
+        category: the first run with the categories restricted before posting
+        had every post refused, because the old forum's people are not in the
+        groups the material is granted to -- and should not be.
+        """
+        opened = {}
+
+        def restrict(poster):
+            _make_the_groups(service, dry_run=dry_run)
+            report = _restrict_the_categories(poster, service, roots, dry_run=dry_run)
+            if dry_run or not authors_group or not report:
+                return
+            ids = report.get("category_ids") or []
+            result = let_authors_post(poster, ids, authors_group, allow=True)
+            opened.update(poster=poster, ids=ids)
+            click.echo(
+                f"authors: {authors_group} may post in {len(ids)} categories "
+                f"while this runs, so the archive can be posted as the people "
+                f"who wrote it. It is taken away again at the end."
+            )
+            for problem in result["problems"]:
+                click.echo(click.style(f"  ! {problem}", fg="yellow"), err=True)
+
+        def close():
+            if not opened:
+                return
+            result = let_authors_post(
+                opened["poster"], opened["ids"], authors_group, allow=False,
+            )
+            opened.clear()
+            if result["problems"]:
+                click.echo(click.style(
+                    f"COULD NOT TAKE POSTING AWAY FROM {authors_group} on "
+                    f"{len(result['problems'])} categories. Put them back with:\n"
+                    f"  flask forum-permissions {mapping_file or 'categories.json'} "
+                    f"--enforce", fg="red",
+                ), err=True)
+                for problem in result["problems"]:
+                    click.echo(click.style(f"  ! {problem}", fg="red"), err=True)
+            else:
+                click.echo(
+                    f"\nauthors: {authors_group} may no longer post in the "
+                    f"imported categories ({result['changed']} changed back)."
+                )
+
+        restrict.close = close
+        return restrict
+
+    def _mind_the_avatar_setting(client, *, dry_run):
+        """Make sure the avatars we send are the avatars people see.
+
+        Discourse will fetch the picture and then keep its letter unless
+        ``discourse_connect_overrides_avatar`` is on. Nothing fails, nothing is
+        logged, and the run reports ``with_avatar=676`` either way -- which is
+        how 739 profiles came out blank on a run that said it had sent them all.
+
+        Turned on and left on, because the portal is where a photograph is
+        uploaded and approved, and the same setting governs members: with it
+        off, an approved avatar is ignored there too.
+        """
+        try:
+            state = avatar_setting_state(client)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Avatars: could not read the setting that governs them -- {exc}. "
+                f"If the profiles come out with letters on them, that is why.",
+                fg="yellow"))
+            return None
+
+        if state is None:
+            click.echo("Avatars: this forum has no setting for them; sending them as they are.")
+            return None
+
+        name, value, in_use = state
+        if in_use:
+            click.echo(f"Avatars: {name} is on, so the pictures will be used.")
+            return None
+        if dry_run:
+            click.echo(click.style(
+                f"Avatars: {name} is {value}, so the forum would fetch every "
+                f"picture and then show a letter instead. The real run turns it "
+                f"on and leaves it on.", fg="cyan"))
+            return None
+        try:
+            changed = let_avatars_through(client)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Avatars: {name} is {value} and could not be changed -- {exc}. "
+                f"The profiles will come out with letters on them.", fg="yellow"))
+            return None
+        click.echo(
+            f"Avatars: {changed} was {value}, turned on and left on -- the "
+            f"portal is where avatars are uploaded and approved, so it is what "
+            f"the forum shows. Members are governed by the same setting."
+        )
+        return changed
+
+    def _mind_the_address_and_name(client, *, dry_run):
+        """Make the forum take the address and name the portal sends. Left on."""
+        try:
+            rows = portal_owned_settings_state(client)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Address and name: could not read the settings -- {exc}.", fg="yellow"))
+            return
+        for what, name, on, why in rows:
+            if name is None:
+                click.echo(f"Address and name: this forum has no setting for the {what}.")
+            elif on:
+                click.echo(f"Address and name: {name} is on.")
+            elif dry_run:
+                click.echo(click.style(
+                    f"Address and name: {name} is off, so {why}. The real run "
+                    f"turns it on and leaves it on.", fg="cyan"))
+        if dry_run:
+            return
+        try:
+            changed = let_the_portal_own_address_and_name(client)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Address and name: could not be turned on -- {exc}.", fg="yellow"))
+            return
+        for name in changed:
+            click.echo(f"Address and name: {name} turned on and left on -- the "
+                       f"portal is where both are kept.")
+
+    def _mind_the_username_length(client, needed, *, dry_run):
+        """Make the forum accept the names these people actually have.
+
+        Discourse stores twenty characters by default and shortens the rest as
+        it creates the account, without a word. Four of this board's people are
+        on the forum under names Discourse chose, and everything that addresses
+        them by name -- posting their old messages as them -- failed.
+
+        Raised and left raised: put back to twenty it would mangle the name of
+        the next student called Niedergrottenthaler, which is a limit that
+        punishes somebody for their surname.
+        """
+        try:
+            state = username_length_state(client, needed)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Usernames: could not read {USERNAME_LENGTH_SETTING} -- {exc}. "
+                f"Names longer than the forum allows will be shortened by it, "
+                f"quietly.", fg="yellow"))
+            return None
+
+        if state is None:
+            click.echo("Usernames: this forum publishes no limit on their length.")
+            return None
+
+        setting, value, big_enough = state
+        if big_enough:
+            click.echo(f"Usernames: {setting} is {value}, and {needed} is needed.")
+            return None
+        if dry_run:
+            click.echo(click.style(
+                f"Usernames: {setting} is {value} and {needed} is needed, so the "
+                f"forum would shorten the longer names without saying so. The "
+                f"real run raises it and leaves it raised.", fg="cyan"))
+            return None
+        try:
+            changed = make_room_for_usernames(client, needed)
+        except ForumProviderError as exc:
+            click.echo(click.style(
+                f"Usernames: {setting} is {value}, {needed} is needed, and it "
+                f"could not be changed -- {exc}. The longer names will be "
+                f"shortened by the forum.", fg="yellow"))
+            return None
+        click.echo(
+            f"Usernames: {setting} raised from {value} to {needed} and left "
+            f"there -- the portal's names are surname, initial and cohort, and "
+            f"this board has surnames that need every character of it."
+        )
+        return changed
+
+    def _report_group_problems(report):
+        renamed = report.get("renamed") or {}
+        if renamed:
+            click.echo(
+                f"  {len(renamed)} known on the forum by another name, and put "
+                f"in their groups under it:"
+            )
+            for old, new in sorted(renamed.items()):
+                click.echo(f"    {old} -> {new}")
+        for problem in report["problems"]:
+            click.echo(click.style(f"  ! group {problem}", fg="yellow"), err=True)
+
+    def _profile_progress_reporter(every=25):
+        """A line every ``every`` people, and a commit with it.
+
+        Seven hundred profiles against the forum's rate limit is half an hour.
+        The first real run printed one line and then nothing until it finished,
+        which reads exactly like a command that has hung -- and the obvious way
+        to find out, asking the forum how full the group is, spends the same
+        admin rate limit the run is spending and so slows down the thing it is
+        checking on.
+
+        The commit is here rather than only at the end for the same reason the
+        run is resumable at all: an interrupted run that never wrote down who it
+        had already published has to start over, and ``--only-new`` would have
+        nothing to skip.
+        """
+        started = time.monotonic()
+        state = {"reported": 0}
+
+        def report_progress(done, total, running):
+            if done < total and done - state["reported"] < every:
+                return
+            state["reported"] = done
+            db.session.commit()
+            elapsed = time.monotonic() - started
+            left = ""
+            # Not in the first minute: an estimate drawn from the first few of
+            # seven hundred calls is a guess dressed up as a number.
+            if done and done < total and elapsed >= 60:
+                remaining = elapsed / done * (total - done)
+                left = f", about {round(remaining / 60)} min left"
+            click.echo(
+                f"  {done}/{total} -- published {running['published']}, "
+                f"failed {running['failed']}{left}"
+            )
+
+        return report_progress
+
+    def _echo_profile_sample(report, wanted):
+        people = report.get("people") or []
+        if not people:
+            return
+        wanted = max(1, min(wanted, len(people)))
+        step = len(people) / wanted
+        click.echo(f"\nA sample of {wanted}, spread across the run:")
+        for index in range(wanted):
+            person = people[int(index * step)]
+            click.echo(f"  {person['username']}  ({person['result']})")
+            click.echo(f"      shown as   : {person['name']}")
+            click.echo(f"      year group : {person['year_group'] or '-'}")
+            click.echo(f"      groups     : {person['groups']}")
+            click.echo(f"      avatar     : {person['avatar']}")
+            if person.get("avatar_url"):
+                # The forum fetches this itself, from its own container. When it
+                # cannot, nothing says so and the profile just keeps its letter,
+                # so the URL is printed to make that one curl away.
+                click.echo(f"      the forum fetches it from: {person['avatar_url']}")
+
+    def _echo_reclaim_outlook(report):
+        """How many can get their old account back without asking anybody.
+
+        Worth knowing before the import rather than in October: everyone in the
+        second number is somebody who will have to be linked up by hand, and
+        that is a size worth seeing while there is still time to do something
+        about it.
+        """
+        people = report.get("people") or []
+        if not people:
+            return
+        blocked = [person for person in people if person["can_reclaim"] != "yes"]
+        click.echo(
+            f"{len(people) - len(blocked)} of {len(people)} can reclaim their account "
+            f"from their university address alone."
+        )
+        if not blocked:
+            return
+        reasons = {}
+        for person in blocked:
+            reasons[person["note"]] = reasons.get(person["note"], 0) + 1
+        for reason, count in sorted(reasons.items(), key=lambda item: -item[1]):
+            click.echo(f"    {count:4}  {reason}")
+        click.echo("    These need linking by hand if they come back.")
+
+    def _echo_sample(report, wanted):
+        """A few people in full, spread across the import.
+
+        Spread rather than random, and rather than the first N: the export is
+        ordered by the old forum's user id, so the first rows are all from 2014
+        and would show nothing about how the recent cohorts turn out. Spreading
+        it also makes the rehearsal and the real run show the same people, which
+        is what makes them comparable.
+        """
+        people = report.get("people") or []
+        if not people:
+            return
+        wanted = max(1, min(wanted, len(people)))
+        step = len(people) / wanted
+        chosen = [people[int(index * step)] for index in range(wanted)]
+
+        click.echo(f"\nA sample of {len(chosen)}, spread across the import:")
+        for person in chosen:
+            year_group = person["year_group"] or "-"
+            if person["year_group"] and person["year_group_from"]:
+                year_group += f" (from the {person['year_group_from']})"
+            reclaim = person["can_reclaim"]
+            if person["note"]:
+                reclaim += f"  -- {person['note']}"
+
+            click.echo(f"  {person['source_username']}  ({person['action'] or 'no change'})")
+            click.echo(f"      year group : {year_group}")
+            click.echo(f"      address    : {person['source_email'] or '-'}")
+            click.echo(f"      avatar     : {person['avatar']}")
+            click.echo(f"      posts      : {person['post_count']}"
+                       f"    old group: {person['source_group'] or '-'}")
+            click.echo(f"      can reclaim: {reclaim}")
+
+    def _echo_year_groups(report):
+        """The year groups as a table, then everyone the rules could not place.
+
+        Sorted by name rather than by count, because the reason to read this is
+        to spot the one that looks wrong -- a typo sorts next to the value it
+        was meant to be, where by frequency it would sit alone at the bottom.
+        """
+        counts = report["year_group_counts"]
+        if counts:
+            widest = max(len(name) for name in counts)
+            total = sum(counts.values())
+            click.echo(f"\nYear groups ({len(counts)} distinct, {total} people):")
+            for name in sorted(counts):
+                count = counts[name]
+                bar = "#" * count
+                click.echo(f"  {name:<{widest}}  {count:>4}  {bar}")
+
+        unplaced = report["unknown_year_group"]
+        if not unplaced:
+            click.echo("\nEveryone has a year group.")
+            return
+
+        click.echo(click.style(
+            f"\n{len(unplaced)} people with no year group "
+            f"(nothing in the export's field, nothing readable in the username):",
+            fg="yellow",
+        ))
+        for person in sorted(unplaced, key=lambda p: (p["joined_on"] or "", p["source_username"])):
+            joined = (person["joined_on"] or "")[:4] or "????"
+            click.echo(
+                f"  uid {person['source_user_id']:>5}  "
+                f"{person['source_username']:<24}  registered {joined}"
+            )
+        click.echo(
+            "\nTo fix any of these, set year_group on that person in the export "
+            "JSON and run the import again -- it updates rather than duplicates."
+        )
 
     @app.cli.command("sync-member-billing")
     @click.argument("email")
@@ -2449,7 +4185,8 @@ def create_app():
             click.echo(f"  stripe_cancel_at: {stripe_subscription.get('cancel_at') or '-'}")
             click.echo(f"  stripe_canceled_at: {stripe_subscription.get('canceled_at') or '-'}")
             click.echo(f"  stripe_trial_end: {stripe_subscription.get('trial_end') or '-'}")
-            click.echo(f"  stripe_current_period_end: {stripe_subscription.get('current_period_end') or '-'}")
+            _period_start, period_end = subscription_period_bounds(stripe_subscription)
+            click.echo(f"  stripe_current_period_end: {period_end or '-'}")
             click.echo(f"  stripe_cancellation_reason: {cancellation_details.get('reason') or '-'}")
             click.echo(f"  derived_cancel_scheduled: {subscription_has_scheduled_cancellation(stripe_subscription)}")
         if member.user and member.user.forum_account:
@@ -2467,6 +4204,8 @@ def create_app():
     @with_appcontext
     def reconcile_billing(reconcile_all, lookahead_days):
         """Reconciles local billing state with Stripe for Stripe-managed memberships."""
+        if _stand_down_while_paused("billing-reconcile"):
+            return
         today = get_membership_today()
         cutoff = today + timedelta(days=max(0, lookahead_days))
         stripe_linked_filter = or_(Member.stripe_customer_id.is_not(None), Member.stripe_subscription_id.is_not(None))
@@ -2586,11 +4325,152 @@ def create_app():
         if result and result.error:
             sys.exit(1)
 
+    def _sync_the_ones_that_drifted():
+        """The daily sweep: only what the forum is now wrong about.
+
+        Everything that changes a membership is an event somebody causes, and
+        each of those syncs the forum where it happens. A membership ending
+        because its last day passed is not an event: nobody does anything, so
+        nothing tells the forum, and the person goes on reading the archive
+        until somebody happens to touch their record.
+        """
+        drifted = members_whose_forum_state_has_drifted()
+        if not drifted:
+            click.echo("Nothing has drifted: the forum agrees with this portal.")
+            return
+
+        click.echo(f"{len(drifted)} members the forum is out of date about:")
+        synced, failed = 0, 0
+        for member, was, should_be in drifted:
+            result, _service = sync_member_forum_state(member)
+            if result is not None and result.error:
+                failed += 1
+                click.echo(click.style(
+                    f"  ! member {member.id}: {was} -> {should_be} failed: "
+                    f"{result.error}", fg="yellow"), err=True)
+                continue
+            synced += 1
+            click.echo(f"  member {member.id}: {was} -> {should_be}")
+        db.session.commit()
+        flush_marked_notification_channels()
+        click.echo(click.style(
+            f"{synced} brought up to date"
+            + (f", {failed} could not be" if failed else ""),
+            fg="green" if not failed else "yellow",
+        ))
+
+    @app.cli.command("forum-explain")
+    @click.argument("who")
+    @with_appcontext
+    def forum_explain_command(who):
+        """Everything the portal and the forum hold about one person, side by side.
+
+        WHO is an email address or a forum username. For "why did this not
+        reach the forum": what the portal would send on the next sync, what the
+        forum actually has, any other forum account holding the same address,
+        and the queued work still waiting for this person. Reads only; changes
+        nothing on either side.
+        """
+        from .db_models import ExternalWorkItem
+
+        needle = who.strip()
+        user = db.session.execute(
+            db.select(User).where(
+                (func.lower(User.email) == needle.lower())
+                | (User.forum_username == needle)
+            )
+        ).scalars().first()
+        if user is None:
+            raise click.ClickException(f"Nobody here with the address or forum name {who}.")
+
+        service = get_forum_service()
+        member = user.member
+        account = user.forum_account
+        click.echo(click.style("In the portal", bold=True))
+        click.echo(f"  account          {user.id}  {user.email}"
+                   f"  ({'verified' if user.email_is_verified else 'address NOT verified'})")
+        click.echo(f"  forum username   {user.forum_username or '-'}")
+        click.echo(f"  roles            {', '.join(sorted(r.slug for r in user.roles)) or 'none'}")
+        click.echo(f"  switched off     {'YES' if user.is_disabled else 'no'}")
+        click.echo(f"  membership       {'none' if member is None else member.payment_status}")
+        if account is not None:
+            click.echo(f"  forum link       external_id={account.external_id}  "
+                       f"remote_user_id={account.remote_user_id}  state={account.state}")
+            if account.last_error:
+                click.echo(click.style(f"  last error       {account.last_error}", fg="yellow"))
+
+        if not service.is_ready():
+            click.echo(click.style("\nThe forum integration is not ready, so nothing is sent.", fg="yellow"))
+            return
+
+        desired = service.get_desired_state(member) if member is not None else None
+        payload = service.provider.build_sso_payload(user, member, desired, nonce="preview")
+        click.echo(click.style("\nWhat the next sync sends", bold=True))
+        for key in ("external_id", "username", "email", "name", "require_activation",
+                    "add_groups", "remove_groups", "admin", "moderator"):
+            if key in payload:
+                click.echo(f"  {key:<18} {payload[key]}")
+        if "admin" not in payload:
+            click.echo("  admin/moderator    not sent -- the portal does not manage "
+                       "them (Settings -> Forum)")
+
+        click.echo(click.style("\nWhat the forum has", bold=True))
+        remote = {}
+        try:
+            remote = service.provider.get_remote_user_by_external_id(
+                account.external_id if account is not None else str(user.id)
+            ) or {}
+        except ForumProviderError as exc:
+            click.echo(f"  no forum account for this person yet ({exc})")
+        if remote:
+            click.echo(f"  account          {remote.get('id')}  {remote.get('username')}")
+            click.echo(f"  admin            {remote.get('admin')}")
+            click.echo(f"  moderator        {remote.get('moderator')}")
+            groups = [g.get("name") for g in remote.get("groups") or [] if not g.get("automatic")]
+            click.echo(f"  groups           {', '.join(sorted(filter(None, groups))) or '-'}")
+
+        try:
+            others = service.provider._request(
+                "GET", "/admin/users/list/all.json?show_emails=true&filter="
+                + quote(user.email or needle),
+            )
+        except ForumProviderError:
+            others = []
+        others = [row for row in (others or []) if row.get("id") != remote.get("id")]
+        if others:
+            click.echo(click.style(
+                "\nOther forum accounts with this address -- Discourse gives an "
+                "address to one account only:", fg="yellow"))
+            for row in others:
+                click.echo(f"  {row.get('id')}  {row.get('username')}  "
+                           f"active={row.get('active')}  posts={row.get('post_count')}")
+
+        items = db.session.execute(
+            db.select(ExternalWorkItem)
+            .where(ExternalWorkItem.user_id == user.id)
+            .order_by(ExternalWorkItem.created_at.desc())
+        ).scalars().all()
+        if items:
+            click.echo(click.style("\nQueued work for this person", bold=True))
+            for item in items[:10]:
+                click.echo(f"  {format_datetime_display(item.created_at)}  {item.kind:<24} "
+                           f"{item.status:<10} attempts={item.attempts}"
+                           + (f"  {item.last_error[:80]}" if item.last_error else ""))
+
     @app.cli.command("sync-forum-members")
     @click.option("--only-active", is_flag=True, help="Only synchronize active members.")
+    @click.option("--only-changed", is_flag=True,
+                  help="Only the members whose forum state no longer matches "
+                       "what this portal says it should be. Cheap enough to "
+                       "run daily, which is what catches a membership that "
+                       "ended simply because its last day passed.")
     @with_appcontext
-    def sync_forum_members(only_active):
+    def sync_forum_members(only_active, only_changed):
         """Synchronizes forum state for many linked members."""
+        if _stand_down_while_paused("forum-drift"):
+            return
+        if only_changed:
+            return _sync_the_ones_that_drifted()
         query = db.select(Member).where(Member.user_id.is_not(None))
         if only_active:
             query = query.where(Member.is_active.is_(True))
@@ -2612,6 +4492,8 @@ def create_app():
     @with_appcontext
     def deliver_notifications_command():
         """Delivers queued admin and user notification emails."""
+        if _stand_down_while_paused("notifications"):
+            return
         email_summary = process_email_delivery_jobs(app)
         db.session.commit()
         summary = get_notification_service().deliver_pending_notifications()
@@ -2660,2561 +4542,179 @@ def create_app():
             db.session.commit()
         click.echo(click.style(f"Deleted {deleted_count} stale pending signup(s).", fg="green"))
 
-    def populate_member_profile_form(form, member):
-        for field_name in DIRECT_MEMBER_PROFILE_FIELDS:
-            getattr(form, field_name).data = getattr(member, field_name)
+    @app.cli.command("system-check")
+    @with_appcontext
+    def system_check():
+        """Report whether this installation is healthy.
 
-    def populate_identity_change_form(form, member, pending_request=None):
-        if pending_request is not None:
-            form.salutation.data = pending_request.requested_salutation
-            form.title.data = pending_request.requested_title
-            form.first_name.data = pending_request.requested_first_name
-            form.last_name.data = pending_request.requested_last_name
-            form.year_group.data = pending_request.requested_year_group
-            form.member_note.data = pending_request.member_note
+        The same facts the admin Maintenance tab shows, for anyone who does have
+        shell access.
+        """
+        health = collect_system_health()
+
+        click.echo("Schema:")
+        schema = health["schema"]
+        click.echo(f"  applied revision : {schema['applied'] or 'unknown'}")
+        click.echo(f"  expected revision: {schema['expected'] or 'unknown'}")
+        click.echo(f"  up to date       : {'yes' if schema['up_to_date'] else 'NO'}")
+
+        click.echo("Membership:")
+        for key, value in health["membership"].items():
+            click.echo(f"  {key.replace('_', ' '):26s}: {value}")
+
+        click.echo("Background work:")
+        for key, value in health["queues"].items():
+            click.echo(f"  {key.replace('_', ' '):26s}: {value}")
+
+        for problem in health["problems"]:
+            click.echo(f"PROBLEM: {problem}", err=True)
+        for warning in health["warnings"]:
+            click.echo(f"WARNING: {warning}")
+
+        if health["healthy"]:
+            click.echo("Everything looks healthy.")
+        else:
+            sys.exit(1)
+
+    @app.cli.command("process-external-work")
+    @click.option("--limit", default=50, show_default=True, type=int,
+                  help="Maximum number of work items to process in this run.")
+    @with_appcontext
+    def process_external_work(limit):
+        """Perform queued work against other systems (currently Discourse sync).
+
+        Items are claimed under a lease, so running this while another copy is
+        already running is safe -- a second worker simply finds nothing to claim.
+        """
+        if _stand_down_while_paused("external-work"):
             return
+        completed, failed = process_pending(limit=limit)
+        outstanding = pending_count()
+        click.echo(f"External work: {completed} completed, {failed} failed, {outstanding} still queued.")
 
-        form.salutation.data = member.salutation
-        form.title.data = member.title
-        form.first_name.data = member.first_name
-        form.last_name.data = member.last_name
-        form.year_group.data = member.year_group
+        stuck = failed_items(limit=10)
+        if stuck:
+            click.echo("Items that exhausted their retries:")
+            for item in stuck:
+                click.echo(f"  #{item.id} {item.kind} member_id={item.member_id}: {item.last_error}")
 
-    def decorate_pending_identity_requests(requests_):
-        for request_record in requests_:
-            request_record.current_forum_username = (
-                request_record.member.user.forum_username if request_record.member and request_record.member.user else None
-            )
-            request_record.suggested_forum_username = generate_unique_forum_username(
-                request_record.requested_first_name,
-                request_record.requested_last_name,
-                request_record.requested_year_group,
-                exclude_user_id=request_record.member.user.id if request_record.member and request_record.member.user else None,
-            )
-            request_record.username_would_change = bool(
-                request_record.current_forum_username
-                and request_record.current_forum_username != request_record.suggested_forum_username
-            )
-        return requests_
+    @app.cli.command("cleanup-logs")
+    @click.option("--audit-days", default=AUDIT_LOG_RETENTION_DAYS, show_default=True, type=int,
+                  help="Delete audit logs older than this many days. 0 keeps them forever.")
+    @click.option("--notification-days", default=NOTIFICATION_RETENTION_DAYS, show_default=True, type=int,
+                  help="Delete notification records older than this many days. 0 keeps them forever.")
+    @with_appcontext
+    def cleanup_logs(audit_days, notification_days):
+        """Prunes old audit logs and notification delivery records.
 
-    def render_account_dashboard(profile_form=None, identity_form=None):
-        member = get_current_member_for_user(current_user)
-        if member is None:
-            return redirect(url_for("create_membership_profile"))
+        Retention is generous by design: pass 0 for either window to keep those
+        records forever. Only truly old rows are removed, so recent history is
+        always preserved.
+        """
+        if _stand_down_while_paused("cleanup-logs"):
+            return
+        audit_deleted = 0
+        if audit_days > 0:
+            cutoff = get_now_utc() - timedelta(days=audit_days)
+            audit_deleted = db.session.query(AuditLog).filter(AuditLog.created_at < cutoff).delete(synchronize_session=False)
 
-        has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
-        if has_stripe_reference:
-            try:
-                billing_changed, _stripe_subscription, _forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
-                if billing_changed:
-                    db.session.commit()
-            except stripe.StripeError as exc:
-                app.logger.warning("Could not refresh Stripe billing state for member_id=%s: %s", member.id, exc)
-        elif sync_member_active_state(member):
-            db.session.commit()
+        events_deleted = 0
+        batches_deleted = 0
+        if notification_days > 0:
+            cutoff = get_now_utc() - timedelta(days=notification_days)
+            # Delete old events first, then only batches that no longer have events
+            # so the foreign key from events to batches is never violated.
+            events_deleted = db.session.query(NotificationEvent).filter(
+                NotificationEvent.queued_at < cutoff
+            ).delete(synchronize_session=False)
+            batches_deleted = db.session.query(NotificationBatch).filter(
+                NotificationBatch.created_at < cutoff,
+                ~NotificationBatch.events.any(),
+            ).delete(synchronize_session=False)
 
-        pending_request = member.open_identity_change_request
-        profile_form = profile_form or MemberProfileForm(prefix="profile")
-        identity_form = identity_form or IdentityChangeRequestForm(prefix="identity")
-
-        if not profile_form.is_submitted():
-            populate_member_profile_form(profile_form, member)
-        if not identity_form.is_submitted():
-            populate_identity_change_form(identity_form, member, pending_request=pending_request)
-
-        suggested_username_from_request = None
-        if pending_request is not None and member.user is not None:
-            suggested_username_from_request = generate_unique_forum_username(
-                pending_request.requested_first_name,
-                pending_request.requested_last_name,
-                pending_request.requested_year_group,
-                exclude_user_id=member.user.id,
-            )
-
-        forum_context = build_forum_context(member)
-
-        return render_template(
-            "account/index.html",
-            member=member,
-            profile_form=profile_form,
-            identity_form=identity_form,
-            pending_request=pending_request,
-            suggested_username_from_request=suggested_username_from_request,
-            can_manage_billing=bool(member.stripe_customer_id),
-            can_resume_payment=can_resume_payment(member),
-            forum_context=forum_context,
-        )
-
-    @app.route("/", methods=["GET"])
-    def index():
-        form = MembershipForm()
-        public_settings = get_settings_map(["invoice_payments_enabled"])
-        return render_template(
-            "index.html",
-            form=form,
-            invoice_payments_enabled=public_settings.get("invoice_payments_enabled") == "True",
-            stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
-        )
-
-    @app.route("/process-membership", methods=["POST"])
-    @limiter.limit(RATELIMIT_MEMBERSHIP)
-    def process_membership():
-        form = MembershipForm()
-        settings = get_settings_map(["invoice_payments_enabled"])
-
-        if form.validate_on_submit():
-            form_data = form.data
-            form_data.pop("csrf_token", None)
-            form_data.pop("submit", None)
-            password = form_data.pop("password")
-            form_data.pop("confirm_password", None)
-
-            payment_method = form_data.pop("payment_method", "checkout")
-            form_data["email_private"] = form_data["email_private"].strip().lower()
-            email_address = form_data["email_private"]
-
-            existing_member = db.session.execute(db.select(Member).filter_by(email_private=email_address)).scalar_one_or_none()
-            existing_user = db.session.execute(db.select(User).filter_by(email=email_address)).scalar_one_or_none()
-
-            if existing_member and sync_member_active_state(existing_member):
-                db.session.commit()
-
-            if existing_member is not None:
-                if existing_member.user_id:
-                    flash(_("An account with this email address already exists. Please log in to manage or resume your membership."), "warning")
-                    return redirect(url_for("login"))
-                flash(_("A membership profile with this email address already exists without a linked login. Please contact the club so we can resolve it."), "warning")
-                return redirect(url_for("index"))
-
-            if existing_user is not None:
-                flash(_("An account with this email address already exists. Please log in instead."), "warning")
-                return redirect(url_for("login"))
-
-            if settings.get("invoice_payments_enabled") != "True":
-                payment_method = "checkout"
-
-            member = Member(
-                created_at=get_now_utc(),
-                payment_status="pending_checkout",
-                is_active=False,
-                pending_checkout_started_at=get_now_utc(),
-            )
-            apply_member_profile(member, {**form_data, "terms_accepted": True})
-
-            user = User(
-                email=email_address,
-                forum_username=generate_unique_forum_username(
-                    member.first_name,
-                    member.last_name,
-                    member.year_group,
-                ),
-            )
-            user.set_password(password)
-            member.user = user
-
-            db.session.add(user)
-            db.session.add(member)
-            db.session.flush()
-            log_audit_event(
-                category="membership",
-                event_type="public_membership_signup_started",
-                actor_user=user,
-                target_user=user,
-                target_member=member,
-                before=None,
-                after={"user": snapshot_user_for_audit(user), "member": snapshot_member_for_audit(member)},
-                metadata={"payment_method": payment_method},
-            )
-            db.session.commit()
-            login_user(user)
-
-            try:
-                try:
-                    send_email_verification_email(app, user)
-                except Exception as email_exc:
-                    app.logger.warning("Could not send verification email for user_id=%s: %s", user.id, email_exc)
-
-                if payment_method == "checkout":
-                    session, _cycle = create_checkout_session_for_member(member)
-                    db.session.commit()
-                    return redirect(session.url, code=303)
-
-                if payment_method == "invoice":
-                    _subscription, cycle = create_invoice_membership_for_member(member)
-                    forum_result = None
-                    if cycle["free_period"]:
-                        forum_result, _forum_service = sync_member_forum_state(member)
-                    db.session.commit()
-                    if cycle["free_period"]:
-                        send_member_welcome_email(app, member)
-                        if forum_result and forum_result.error:
-                            app.logger.warning("Forum sync reported an issue after invoice activation for member_id=%s: %s", member.id, forum_result.error)
-                    return redirect(
-                        url_for(
-                            "thank_you",
-                            method="invoice",
-                            phase=cycle["thank_you_phase"],
-                        )
-                    )
-
-            except stripe.StripeError as e:
-                error_body = getattr(e, "json_body", {}) or {}
-                error_details = error_body.get("error", {}) if isinstance(error_body, dict) else {}
-                app.logger.error(
-                    "Stripe Error during membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s member_id=%s",
-                    type(e).__name__,
-                    str(e),
-                    error_details.get("message"),
-                    error_details.get("code"),
-                    error_details.get("param"),
-                    getattr(e, "request_id", None),
-                    getattr(e, "http_status", None),
-                    payment_method,
-                    email_address,
-                    member.id,
-                )
-                flash(_("Your account was created, but payment could not be started. Please log in and resume your membership from your account page."), "warning")
-            except Exception:
-                app.logger.exception(
-                    "Unexpected error during membership signup for email=%s payment_method=%s member_id=%s",
-                    email_address,
-                    payment_method,
-                    member.id,
-                )
-                flash(_("Your account was created, but an unexpected error occurred while starting billing. Please log in and resume your membership from your account page."), "warning")
-
-            return redirect(url_for("account"))
-
-        app.logger.warning(f"Form validation failed. Errors: {form.errors}")
-        flash(_("Please correct the errors below and try again."), "danger")
-        return render_template(
-            "index.html",
-            form=form,
-            invoice_payments_enabled=get_settings_map(["invoice_payments_enabled"]).get("invoice_payments_enabled") == "True",
-            stripe_key=get_stripe_settings_map().get("stripe_publishable_key") or STRIPE_PUBLISHABLE_KEY,
-        )
-
-    @app.route("/thank-you")
-    def thank_you():
-        method = request.args.get("method", "checkout")
-        phase = request.args.get("phase", "prorated")
-        return render_template("thank_you.html", method=method, phase=phase)
-
-    @app.route("/cancel")
-    def cancel():
-        return render_template("cancel.html")
-
-    @app.route("/legal")
-    def legal_texts():
-        return render_template("legal_texts.html")
-
-    @app.route("/__health", methods=["GET"])
-    def health_check():
-        return jsonify(
-            {
-                "status": "ok",
-                "app": "jaeronautics",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "host": request.host,
-            }
-        )
-
-    @app.route("/account", methods=["GET"])
-    @login_required
-    def account():
-        if not request.args.get("rt"):
-            redirect_args = {"rt": str(int(datetime.now(timezone.utc).timestamp() * 1000))}
-            if request.args.get("refresh_billing") == "1":
-                redirect_args["refresh_billing"] = "1"
-            return redirect(url_for("account", **redirect_args))
-        return render_account_dashboard()
-
-    @app.route("/account/create-membership", methods=["GET", "POST"])
-    @login_required
-    def create_membership_profile():
-        if current_user.member is not None:
-            return redirect(url_for("account"))
-
-        form = CreateMembershipProfileForm()
-        if request.method == "GET":
-            form.email_private.data = current_user.email
-
-        if form.validate_on_submit():
-            settings = {s.key: s.value for s in Setting.query.all()}
-            form_data = form.data
-            form_data.pop("csrf_token", None)
-            form_data.pop("submit", None)
-
-            payment_method = form_data.pop("payment_method", "checkout")
-            if settings.get("invoice_payments_enabled") != "True":
-                payment_method = "checkout"
-
-            member_email = (current_user.email or "").strip().lower()
-            existing_member = db.session.execute(db.select(Member).filter_by(email_private=member_email)).scalar_one_or_none()
-            if existing_member is not None:
-                if existing_member.user_id == current_user.id:
-                    return redirect(url_for("account"))
-                flash(_("A membership profile with this email address already exists. Please contact the club so we can resolve it."), "warning")
-                return redirect(url_for("admin_dashboard" if current_user.has_role("admin") else "index"))
-
-            member = Member(
-                created_at=get_now_utc(),
-                payment_status="pending_checkout",
-                is_active=False,
-                pending_checkout_started_at=get_now_utc(),
-            )
-            apply_member_profile(member, {**form_data, "email_private": member_email, "terms_accepted": True})
-            member.user = current_user
-            current_user.email = member_email
-            if not current_user.forum_username:
-                current_user.forum_username = generate_unique_forum_username(
-                    member.first_name,
-                    member.last_name,
-                    member.year_group,
-                    exclude_user_id=current_user.id,
-                )
-
-            before_user = snapshot_user_for_audit(current_user)
-            db.session.add(member)
-            db.session.flush()
-            log_audit_event(
-                category="membership",
-                event_type="linked_membership_created",
-                actor_user=current_user,
-                target_user=current_user,
-                target_member=member,
-                before={"user": before_user, "member": None},
-                after={"user": snapshot_user_for_audit(current_user), "member": snapshot_member_for_audit(member)},
-                metadata={"payment_method": payment_method},
-            )
-            db.session.commit()
-
-            try:
-                if not current_user.email_is_verified:
-                    send_email_verification_email(app, current_user)
-            except Exception as email_exc:
-                app.logger.warning("Could not send verification email for linked membership user_id=%s: %s", current_user.id, email_exc)
-
-            try:
-                if payment_method == "checkout":
-                    session, _cycle = create_checkout_session_for_member(member)
-                    db.session.commit()
-                    return redirect(session.url, code=303)
-
-                if payment_method == "invoice":
-                    _subscription, cycle = create_invoice_membership_for_member(member)
-                    forum_result = None
-                    if cycle["free_period"]:
-                        forum_result, _forum_service = sync_member_forum_state(member)
-                    db.session.commit()
-                    if cycle["free_period"]:
-                        send_member_welcome_email(app, member)
-                        if forum_result and forum_result.error:
-                            app.logger.warning("Forum sync reported an issue after invoice activation for member_id=%s: %s", member.id, forum_result.error)
-                    return redirect(
-                        url_for(
-                            "thank_you",
-                            method="invoice",
-                            phase=cycle["thank_you_phase"],
-                        )
-                    )
-            except stripe.StripeError as exc:
-                error_body = getattr(exc, "json_body", {}) or {}
-                error_details = error_body.get("error", {}) if isinstance(error_body, dict) else {}
-                app.logger.error(
-                    "Stripe Error during linked membership signup: type=%s message=%s user_message=%s code=%s param=%s request_id=%s http_status=%s payment_method=%s email=%s member_id=%s user_id=%s",
-                    type(exc).__name__,
-                    str(exc),
-                    error_details.get("message"),
-                    error_details.get("code"),
-                    error_details.get("param"),
-                    getattr(exc, "request_id", None),
-                    getattr(exc, "http_status", None),
-                    payment_method,
-                    member_email,
-                    member.id,
-                    current_user.id,
-                )
-                flash(_("Your membership profile was created, but payment could not be started. You can resume it from your account page."), "warning")
-            except Exception:
-                app.logger.exception(
-                    "Unexpected error during linked membership signup for user_id=%s email=%s payment_method=%s member_id=%s",
-                    current_user.id,
-                    member_email,
-                    payment_method,
-                    member.id,
-                )
-                flash(_("Your membership profile was created, but billing could not be started right now. You can resume it from your account page."), "warning")
-
-            return redirect(url_for("account"))
-
-        return render_template("account/create_membership.html", form=form)
-
-    @app.route("/account/profile", methods=["POST"])
-    @login_required
-    def save_member_profile():
-        member = get_current_member_for_user(current_user)
-        if member is None:
-            flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
-
-        profile_form = MemberProfileForm(prefix="profile")
-        identity_form = IdentityChangeRequestForm(prefix="identity")
-        if profile_form.validate_on_submit():
-            before_user = snapshot_user_for_audit(current_user)
-            before_member = snapshot_member_for_audit(member, fields=DIRECT_MEMBER_PROFILE_FIELDS)
-            try:
-                email_changed = sync_member_primary_email(member, profile_form.email_private.data)
-            except ValueError as exc:
-                flash(str(exc), "danger")
-                return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
-
-            for field_name in DIRECT_MEMBER_PROFILE_FIELDS:
-                if field_name == "email_private":
-                    continue
-                setattr(member, field_name, normalize_optional_member_value(field_name, getattr(profile_form, field_name).data))
-
-            log_audit_event(
-                category="profile",
-                event_type="contact_details_updated",
-                actor_user=current_user,
-                target_user=current_user,
-                target_member=member,
-                before={"user": before_user, "member": before_member},
-                after={"user": snapshot_user_for_audit(current_user), "member": snapshot_member_for_audit(member, fields=DIRECT_MEMBER_PROFILE_FIELDS)},
-                metadata={"email_changed": email_changed},
-            )
-            forum_result = None
-            if member.user is not None and (member.user.forum_account is not None or member_has_active_access(member)):
-                forum_result, _forum_service = sync_member_forum_state(member)
-            db.session.commit()
-            if email_changed:
-                try:
-                    send_email_verification_email(app, current_user)
-                    flash(_("Your profile was updated. Please verify your new email address using the link we sent you."), "success")
-                except Exception as exc:
-                    app.logger.warning("Could not send verification email after profile update for user_id=%s: %s", current_user.id, exc)
-                    flash(_("Your profile was updated."), "success")
-            else:
-                flash(_("Your profile was updated."), "success")
-            if forum_result and forum_result.error:
-                flash(_("Your forum profile could not be synchronized right now. Please try again later."), "warning")
-            return redirect(url_for("account"))
-
-        flash(_("Please correct the profile form and try again."), "danger")
-        return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
-
-    @app.route("/account/identity-request", methods=["POST"])
-    @login_required
-    def submit_identity_change_request():
-        member = get_current_member_for_user(current_user)
-        if member is None:
-            flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
-
-        identity_form = IdentityChangeRequestForm(prefix="identity")
-        profile_form = MemberProfileForm(prefix="profile")
-        if identity_form.validate_on_submit():
-            form_data = identity_form.data
-            form_data.pop("csrf_token", None)
-            form_data.pop("submit", None)
-
-            if not has_identity_changes(member, form_data):
-                flash(_("There are no identity changes to request."), "warning")
-                return redirect(url_for("account"))
-
-            try:
-                request_record = create_identity_change_request(member, current_user, form_data)
-                db.session.flush()
-                log_audit_event(
-                    category="profile_change_request",
-                    event_type="identity_request_submitted",
-                    actor_user=current_user,
-                    target_user=current_user,
-                    target_member=member,
-                    before=snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS),
-                    after={
-                        "requested_salutation": request_record.requested_salutation,
-                        "requested_title": request_record.requested_title,
-                        "requested_first_name": request_record.requested_first_name,
-                        "requested_last_name": request_record.requested_last_name,
-                        "requested_year_group": request_record.requested_year_group,
-                    },
-                    metadata={"request_id": request_record.id, "member_note": request_record.member_note},
-                )
-                queue_curated_admin_notification(
-                    ADMIN_GENERAL_CHANNEL,
-                    "identity_change_request_created",
-                    _("A new identity change request was submitted by %(email)s.", email=member.email_private),
-                    payload={
-                        "member_email": member.email_private,
-                        "request_id": request_record.id,
-                        "member_note": request_record.member_note,
-                    },
-                    target_user=current_user,
-                    target_member=member,
-                    object_type="member_profile_change_request",
-                    object_id=request_record.id,
-                )
-                db.session.commit()
-                flush_marked_notification_channels()
-                flash(_("Your identity change request has been submitted for admin review."), "success")
-                return redirect(url_for("account"))
-            except ValueError as exc:
-                flash(str(exc), "warning")
-                return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
-
-        flash(_("Please correct the identity change form and try again."), "danger")
-        return render_account_dashboard(profile_form=profile_form, identity_form=identity_form)
-    @app.route("/account/identity-request/<int:request_id>/cancel", methods=["POST"])
-    @login_required
-    def cancel_identity_change_request(request_id):
-        member = get_current_member_for_user(current_user)
-        request_record = db.session.get(MemberProfileChangeRequest, request_id)
-        if request_record is None or member is None or request_record.member_id != member.id or request_record.status != "pending":
-            flash(_("The selected change request could not be canceled."), "warning")
-            return redirect(url_for("account"))
-
-        request_record.status = "canceled"
-        request_record.reviewed_by = current_user
-        request_record.reviewed_at = get_now_utc()
-        log_audit_event(
-            category="profile_change_request",
-            event_type="identity_request_canceled",
-            actor_user=current_user,
-            target_user=current_user,
-            target_member=member,
-            before={"request_id": request_record.id, "status": "pending"},
-            after={"request_id": request_record.id, "status": request_record.status},
-            metadata={"member_note": request_record.member_note},
-        )
         db.session.commit()
-        flash(_("Your pending identity change request was canceled."), "success")
-        return redirect(url_for("account"))
+        click.echo(click.style(
+            f"Deleted {audit_deleted} audit log(s), {events_deleted} notification event(s), "
+            f"{batches_deleted} notification batch(es).",
+            fg="green",
+        ))
 
-    @app.route("/account/billing", methods=["POST"])
-    @login_required
-    def manage_member_billing():
-        member = get_current_member_for_user(current_user)
-        if member is None:
-            flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
 
-        try:
-            portal_session = get_portal_session(member)
-            return redirect(portal_session.url, code=303)
-        except ValueError as exc:
-            flash(str(exc), "warning")
-        except stripe.StripeError as exc:
-            app.logger.error("Could not create Stripe portal session for member_id=%s: %s", member.id, exc)
-            flash(_("Could not open the Stripe customer portal right now. Please try again later."), "danger")
-        return redirect(url_for("account"))
 
-    @app.route("/account/resume-payment", methods=["POST"])
-    @login_required
-    def resume_member_payment():
-        member = get_current_member_for_user(current_user)
-        if member is None:
-            flash(_("No membership profile is linked to this account yet."), "warning")
-            return redirect(url_for("index"))
-        if not can_resume_payment(member):
-            flash(_("This membership cannot be resumed from here. Use billing management instead if a Stripe customer already exists."), "warning")
-            return redirect(url_for("account"))
 
-        try:
-            session, _cycle = create_checkout_session_for_member(member)
-            db.session.commit()
-            return redirect(session.url, code=303)
-        except stripe.StripeError as exc:
-            app.logger.error("Could not resume Checkout for member_id=%s: %s", member.id, exc)
-            flash(_("Could not restart the Stripe Checkout session right now. Please try again later."), "danger")
-        except Exception:
-            app.logger.exception("Unexpected error while resuming payment for member_id=%s", member.id)
-            flash(_("Could not restart the membership payment right now."), "danger")
-        return redirect(url_for("account"))
 
-    @app.route("/account/resend-verification", methods=["POST"])
-    @login_required
-    def resend_verification_email():
-        if current_user.email_is_verified:
-            flash(_("Your email address is already verified."), "info")
-            return redirect(url_for("account"))
 
-        try:
-            if send_email_verification_email(app, current_user):
-                flash(_("We sent you a new verification email."), "success")
-            else:
-                flash(_("We could not send a verification email because no sender account is configured yet."), "warning")
-        except Exception as exc:
-            app.logger.warning("Could not resend verification email for user_id=%s: %s", current_user.id, exc)
-            flash(_("We could not send a verification email right now."), "danger")
-        return redirect(url_for("account"))
-    @app.route("/forum", methods=["GET"])
-    def forum_entry():
-        token = (request.args.get("token") or "").strip()
-        token_user = None
-        token_verified_email = False
-        if token:
-            try:
-                token_data = read_token(token, "forum-entry", TOKEN_MAX_AGE_FORUM_ENTRY)
-                token_user = db.session.get(User, int(token_data.get("user_id")))
-            except (BadSignature, SignatureExpired, ValueError, TypeError):
-                token_user = None
-                flash(_("This forum access link is invalid or has expired."), "warning")
 
-            if token_user is not None and not token_user.email_is_verified:
-                token_user.email_verified_at = get_now_utc()
-                db.session.commit()
-                token_verified_email = True
 
-            if token_user is not None and current_user.is_authenticated and current_user.id != token_user.id:
-                flash(
-                    _("This forum link belongs to a different account. Please log out and sign in with the account that received the email."),
-                    "warning",
-                )
-                return redirect(url_for(get_member_portal_target(current_user)))
 
-            if token_user is not None and not current_user.is_authenticated:
-                issued_at_raw = token_data.get("issued_at") if isinstance(token_data, dict) else None
-                auto_login_allowed = False
-                try:
-                    issued_at = int(issued_at_raw) if issued_at_raw is not None else None
-                    if issued_at is not None:
-                        age_seconds = int(get_now_utc().timestamp()) - issued_at
-                        auto_login_allowed = 0 <= age_seconds <= TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN
-                except (TypeError, ValueError):
-                    auto_login_allowed = False
 
-                if auto_login_allowed:
-                    login_user(token_user)
-                else:
-                    flash(
-                        _("Your email address has been verified. Please log in to continue to the forum.") if token_verified_email else _("Please log in to continue to the forum."),
-                        "success" if token_verified_email else "warning",
-                    )
-                    return redirect(url_for("login", next=url_for("forum_entry"), forum_login_source="welcome_email"))
 
-            if token_user is not None and token_verified_email:
-                flash(_("Your email address has been verified."), "success")
 
-        if not current_user.is_authenticated:
-            flash(_("Please log in to continue to the forum."), "warning")
-            return redirect(url_for("login", next=url_for("forum_entry")))
 
-        member = get_current_member_for_user(current_user)
-        if member is None:
-            flash(_("A linked membership profile is required before you can access the forum."), "warning")
-            return redirect(url_for("create_membership_profile"))
 
-        forum_result, service = sync_member_forum_state(member)
-        if forum_result and forum_result.changed:
-            db.session.commit()
 
-        forum_context = build_forum_context(member)
-        if forum_context["can_enter_forum"]:
-            try:
-                return redirect(
-                    service.build_forum_redirect(destination_path=service.settings.get("forum_onboarding_path")),
-                    code=303,
-                )
-            except ForumProviderError as exc:
-                app.logger.warning("Could not hand off to Discourse for member_id=%s: %s", member.id, exc)
-                flash(_("The forum could not be opened right now. Please try again later."), "danger")
 
-        return render_template("account/forum.html", member=member, forum_context=forum_context)
 
-    @app.route("/forum/avatar", methods=["POST"])
-    @login_required
-    def upload_forum_avatar():
-        member = get_current_member_for_user(current_user)
-        if member is None:
-            flash(_("A linked membership profile is required before you can upload a forum profile picture."), "warning")
-            return redirect(url_for("create_membership_profile"))
 
-        forum_service = get_forum_service()
-        if not forum_service.is_enabled():
-            flash(_("The forum integration is not enabled yet."), "warning")
-            return redirect(url_for("account"))
 
-        if not member_has_active_access(member):
-            flash(_("Your membership must be active before you can upload a forum profile picture."), "warning")
-            return redirect(url_for("account"))
 
-        upload_request_limit = forum_service.get_upload_request_limit()
-        if request.content_length and request.content_length > upload_request_limit:
-            flash(
-                _("The selected image is too large to upload. Please keep it below %(size)s.", size=format_bytes_human(upload_request_limit)),
-                "danger",
-            )
-            return redirect(url_for("forum_entry"))
 
-        upload = request.files.get("avatar")
-        crop_options = {
-            "crop_mode": request.form.get("crop_mode"),
-            "crop_zoom": request.form.get("crop_zoom"),
-            "crop_center_x": request.form.get("crop_center_x"),
-            "crop_center_y": request.form.get("crop_center_y"),
-        }
-        try:
-            submission = forum_service.create_avatar_submission(upload, current_user, member, crop_options=crop_options)
-            forum_result = forum_service.sync_member(member)
-            log_audit_event(
-                category="forum",
-                event_type="avatar_uploaded",
-                actor_user=current_user,
-                target_user=current_user,
-                target_member=member,
-                before=None,
-                after=snapshot_forum_avatar_submission_for_audit(submission),
-                metadata={"forum_state": forum_result.desired_state if forum_result else None},
-            )
-            queue_curated_admin_notification(
-                ADMIN_GENERAL_CHANNEL,
-                "forum_avatar_uploaded",
-                _("A new forum avatar approval request was submitted by %(email)s.", email=member.email_private),
-                payload={
-                    "member_email": member.email_private,
-                    "forum_username": current_user.forum_username,
-                    "submission_id": submission.id,
-                },
-                target_user=current_user,
-                target_member=member,
-                object_type="forum_avatar_submission",
-                object_id=submission.id,
-            )
-            db.session.commit()
-            flush_marked_notification_channels()
-            flash(_("Your profile picture was uploaded and is now waiting for admin approval."), "success")
-        except ForumProviderError as exc:
-            db.session.rollback()
-            flash(str(exc), "danger")
-        return redirect(url_for("forum_entry"))
-    @app.route("/forum/avatar/public/<token>", methods=["GET"])
-    def forum_avatar_public_file(token):
-        submission = db.session.execute(
-            db.select(ForumAvatarSubmission).where(ForumAvatarSubmission.public_token == token)
-        ).scalar_one_or_none()
-        if submission is None or not submission.storage_path:
-            abort(404)
 
-        storage_path = Path(submission.storage_path)
-        if not storage_path.exists():
-            abort(404)
 
-        return send_file(storage_path, mimetype=submission.content_type or "application/octet-stream", conditional=True)
 
-    @app.route("/forum/discourse/connect", methods=["GET"])
-    def forum_discourse_connect():
-        if not current_user.is_authenticated:
-            next_url = request.full_path[:-1] if request.full_path.endswith("?") else request.full_path
-            return redirect(url_for("login", next=next_url))
 
-        member = get_current_member_for_user(current_user)
-        if member is None:
-            flash(_("A linked membership profile is required before you can access the forum."), "warning")
-            return redirect(url_for("create_membership_profile"))
 
-        if not member_has_active_access(member):
-            flash(_("Your membership is not active, so forum access is unavailable right now."), "warning")
-            return redirect(url_for("forum_entry"))
 
-        forum_result, service = sync_member_forum_state(member)
-        if forum_result and forum_result.changed:
-            db.session.commit()
-
-        try:
-            redirect_url = service.handle_provider_request(request.args, current_user, member)
-            return redirect(redirect_url, code=303)
-        except ForumProviderError as exc:
-            app.logger.warning("DiscourseConnect handoff failed for member_id=%s: %s", member.id, exc)
-            flash(_("The forum sign-in could not be completed right now."), "danger")
-            return redirect(url_for("forum_entry"))
-
-    @app.route("/forgot-password", methods=["GET", "POST"])
-    @limiter.limit(RATELIMIT_REGISTER, methods=["POST"])
-    def forgot_password():
-        if current_user.is_authenticated:
-            return redirect(url_for(get_member_portal_target(current_user)))
-
-        form = EmailRequestForm()
-        if form.validate_on_submit():
-            email_address = form.email.data.strip().lower()
-            user = db.session.execute(db.select(User).filter_by(email=email_address)).scalar_one_or_none()
-            if user is not None:
-                try:
-                    rotate_password_reset_nonce(user)
-                    db.session.commit()
-                    send_password_reset_email(app, user)
-                except Exception as exc:
-                    db.session.rollback()
-                    app.logger.warning("Could not send password reset email for user_id=%s: %s", user.id, exc)
-            flash(_("If an account with that email address exists and email sending is configured, a password reset link is available."), "info")
-            return redirect(url_for("login"))
-        return render_template(
-            "account/email_request.html",
-            form=form,
-            title=_("Reset Password"),
-            heading=_("Reset your password"),
-            description=_("Enter the email address of your Joanneum Aeronautics account and we will send you a reset link."),
-        )
-
-    @app.route("/reset-password/<token>", methods=["GET", "POST"])
-    def reset_password(token):
-        try:
-            token_data = read_token(token, "reset-password", TOKEN_MAX_AGE_PASSWORD_RESET)
-            user = db.session.get(User, int(token_data.get("user_id")))
-        except (BadSignature, SignatureExpired, ValueError, TypeError):
-            token_data = None
-            user = None
-
-        token_nonce = (token_data or {}).get("nonce") if token_data else None
-        if user is None or not token_nonce or token_nonce != user.password_reset_nonce:
-            flash(_("This password reset link is invalid or has expired."), "danger")
-            return redirect(url_for("forgot_password"))
-
-        form = SetPasswordForm()
-        if form.validate_on_submit():
-            user.set_password(form.password.data)
-            db.session.commit()
-            flash(_("Your password has been updated. You can log in now."), "success")
-            return redirect(url_for("login"))
-        return render_template(
-            "account/set_password.html",
-            form=form,
-            title=_("Choose a New Password"),
-            heading=_("Choose a new password"),
-            description=_("Set a new password for your Joanneum Aeronautics account."),
-        )
-
-    @app.route("/verify-email/<token>")
-    def verify_email(token):
-        try:
-            token_data = read_token(token, "verify-email", TOKEN_MAX_AGE_VERIFY_EMAIL)
-            user = db.session.get(User, int(token_data.get("user_id")))
-        except (BadSignature, SignatureExpired, ValueError, TypeError):
-            user = None
-
-        if user is None:
-            flash(_("This verification link is invalid or has expired."), "danger")
-            return redirect(url_for("login"))
-
-        if not user.email_is_verified:
-            user.email_verified_at = get_now_utc()
-            db.session.commit()
-        flash(_("Your email address has been verified."), "success")
-        if current_user.is_authenticated and current_user.id == user.id:
-            return redirect(url_for(get_member_portal_target(current_user)))
-        return redirect(url_for("login"))
-
-    def get_admin_dashboard_metrics():
-        return {
-            "total_accounts": db.session.scalar(db.select(func.count()).select_from(User)) or 0,
-            "linked_members": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.user_id.is_not(None))) or 0,
-            "active_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.is_active.is_(True))) or 0,
-            "pending_checkouts": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.payment_status == "pending_checkout")) or 0,
-            "pending_identity_requests": db.session.scalar(db.select(func.count()).select_from(MemberProfileChangeRequest).where(MemberProfileChangeRequest.status == "pending")) or 0,
-            "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(Member.cancel_at_period_end.is_(True))) or 0,
-            "forum_onboarding_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ONBOARDING)) or 0,
-            "forum_active_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ACTIVE)) or 0,
-            "forum_sync_errors": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_SYNC_ERROR)) or 0,
-            "pending_forum_avatars": db.session.scalar(db.select(func.count()).select_from(ForumAvatarSubmission).where(ForumAvatarSubmission.status == FORUM_AVATAR_STATUS_PENDING)) or 0,
-        }
-
-    def get_recent_audit_logs(limit=10, category=None):
-        query = db.select(AuditLog).options(
-            selectinload(AuditLog.actor_user),
-            selectinload(AuditLog.target_user),
-            selectinload(AuditLog.target_member),
-        )
-        if category:
-            query = query.where(AuditLog.category == category)
-        return db.session.execute(query.order_by(AuditLog.created_at.desc()).limit(limit)).scalars().all()
-
-    def build_account_directory_query(search_term, role_filter, membership_filter, active_filter):
-        query = (
-            db.select(User)
-            .options(selectinload(User.member), selectinload(User.roles))
-            .outerjoin(Member, Member.user_id == User.id)
-        )
-
-        if search_term:
-            pattern = f"%{search_term}%"
-            query = query.where(
-                or_(
-                    User.email.ilike(pattern),
-                    User.forum_username.ilike(pattern),
-                    Member.email_private.ilike(pattern),
-                    Member.first_name.ilike(pattern),
-                    Member.last_name.ilike(pattern),
-                )
-            )
-
-        if role_filter == "admin":
-            query = query.where(User.roles.any(Role.slug == "admin"))
-        elif role_filter == "member":
-            query = query.where(User.member.has(), ~User.roles.any(Role.slug == "admin"))
-        elif role_filter == "admin_member":
-            query = query.where(User.roles.any(Role.slug == "admin"), User.member.has())
-        elif role_filter == "no_membership":
-            query = query.where(~User.member.has())
-
-        if membership_filter == "none":
-            query = query.where(~User.member.has())
-        elif membership_filter == "inactive":
-            query = query.where(User.member.has(Member.is_active.is_(False)))
-        elif membership_filter != "all":
-            query = query.where(User.member.has(Member.payment_status == membership_filter))
-
-        if active_filter == "active":
-            query = query.where(User.member.has(Member.is_active.is_(True)))
-        elif active_filter == "inactive":
-            query = query.where(User.member.has(Member.is_active.is_(False)))
-
-        return query.order_by(User.email.asc()).distinct()
-
-    def build_settings_page_context(edit_mail_account_id=None):
-        test_email_form = TestEmailForm()
-        mail_account_form = MailAccountForm(prefix="mail")
-        editing_mail_account = None
-        sender_choices = []
-        template_choices = get_email_template_choices(app)
-        mail_account_records = get_db_mail_accounts()
-        general_settings = get_settings_map([
-            "invoice_payments_enabled",
-            "automatic_emails_enabled",
-            "welcome_email_sender",
-            "automatic_email_template",
-        ])
-        notification_settings = normalize_notification_settings(get_notification_settings_map())
-        forum_settings = normalize_forum_settings(get_forum_settings_map())
-        stripe_settings = get_stripe_settings_map()
-        forum_service = ForumService(forum_settings)
-        notification_service = NotificationService(app)
-        try:
-            mail_accounts = load_mail_accounts_config()
-            sender_choices = [(account_key, account_key) for account_key in mail_accounts.keys()]
-        except Exception as exc:
-            app.logger.error(f"Could not load email accounts for admin settings: {exc}")
-
-        if edit_mail_account_id:
-            editing_mail_account = db.session.get(MailAccount, edit_mail_account_id)
-            if editing_mail_account is not None:
-                mail_account_form.mail_account_id.data = str(editing_mail_account.id)
-                mail_account_form.account_key.data = editing_mail_account.account_key
-                mail_account_form.host.data = editing_mail_account.host
-                mail_account_form.port.data = editing_mail_account.port
-                mail_account_form.username.data = editing_mail_account.username
-                mail_account_form.starttls.data = editing_mail_account.starttls
-
-        test_email_form.sender.choices = sender_choices
-        test_email_form.template.choices = template_choices
-        return {
-            "test_email_form": test_email_form,
-            "mail_account_form": mail_account_form,
-            "mail_account_records": mail_account_records,
-            "editing_mail_account": editing_mail_account,
-            "sender_choices": sender_choices,
-            "template_choices": template_choices,
-            "general_settings": general_settings,
-            "notification_settings": notification_settings,
-            "notification_health": notification_service.get_health_snapshot(),
-            "forum_settings": forum_settings,
-            "stripe_settings": stripe_settings,
-            "forum_service": forum_service,
-            "forum_endpoint_urls": {
-                "entry": build_public_url("forum_entry"),
-                "connect": build_public_url("forum_discourse_connect"),
-                "logout": build_public_url("forum_logout"),
-            },
-            "public_base_url": app.config.get("PUBLIC_BASE_URL") or "",
-            "forum_provider_choices": [("discourse", _("Discourse"))],
-            "forum_auth_strategy_choices": [
-                ("discourse_connect", _("DiscourseConnect")),
-                ("oauth2_provider", _("OAuth2 Provider (reserved)")),
-            ],
-        }
-
-    @app.route("/admin", methods=["GET"])
-    @login_required
-    @admin_required
-    def admin_dashboard():
-        metrics = get_admin_dashboard_metrics()
-        pending_request_preview = db.session.execute(
-            db.select(MemberProfileChangeRequest)
-            .options(selectinload(MemberProfileChangeRequest.member))
-            .where(MemberProfileChangeRequest.status == "pending")
-            .order_by(MemberProfileChangeRequest.created_at.asc())
-            .limit(5)
-        ).scalars().all()
-        recent_logs = get_recent_audit_logs(limit=10)
-        return render_template(
-            "admin_dashboard.html",
-            active_admin_section="dashboard",
-            metrics=metrics,
-            pending_request_preview=pending_request_preview,
-            recent_logs=recent_logs,
-        )
 
     app.add_url_rule("/admin", endpoint="admin", view_func=admin_dashboard, methods=["GET"])
 
-    @app.route("/admin/accounts", methods=["GET"])
-    @login_required
-    @admin_required
-    def admin_accounts():
-        search_term = (request.args.get("q") or "").strip()
-        role_filter = request.args.get("role", "all")
-        membership_filter = request.args.get("membership_status", "all")
-        active_filter = request.args.get("active", "all")
-        page = request.args.get("page", 1, type=int)
 
-        pagination = db.paginate(
-            build_account_directory_query(search_term, role_filter, membership_filter, active_filter),
-            page=page,
-            per_page=ADMIN_DIRECTORY_PAGE_SIZE,
-            error_out=False,
-        )
-        return render_template(
-            "admin_accounts.html",
-            active_admin_section="accounts",
-            pagination=pagination,
-            search_term=search_term,
-            role_filter=role_filter,
-            membership_filter=membership_filter,
-            active_filter=active_filter,
-        )
 
-    @app.route("/admin/accounts/<int:user_id>", methods=["GET"])
-    @login_required
-    @admin_required
-    def admin_account_detail(user_id):
-        user = db.session.execute(
-            db.select(User)
-            .options(selectinload(User.member), selectinload(User.roles))
-            .filter_by(id=user_id)
-        ).scalar_one_or_none()
-        if user is None:
-            flash(_("The selected account could not be found."), "warning")
-            return redirect(url_for("admin_accounts"))
 
-        conditions = [AuditLog.target_user_id == user.id, AuditLog.actor_user_id == user.id]
-        if user.member is not None:
-            conditions.append(AuditLog.target_member_id == user.member.id)
 
-        recent_logs = db.session.execute(
-            db.select(AuditLog)
-            .options(
-                selectinload(AuditLog.actor_user),
-                selectinload(AuditLog.target_user),
-                selectinload(AuditLog.target_member),
-            )
-            .where(or_(*conditions))
-            .order_by(AuditLog.created_at.desc())
-            .limit(15)
-        ).scalars().all()
 
-        return render_template(
-            "admin_account_detail.html",
-            active_admin_section="accounts",
-            user_record=user,
-            member=user.member,
-            forum_account=user.forum_account,
-            forum_context=build_forum_context(user.member),
-            latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
-            recent_logs=recent_logs,
-            can_grant_admin=not user.has_role("admin"),
-            can_revoke_admin=user.has_role("admin") and current_user.id != user.id and count_users_with_role("admin") > 1,
-            admin_count=count_users_with_role("admin"),
-        )
 
-    @app.route("/admin/accounts/<int:user_id>/billing-sync", methods=["POST"])
-    @login_required
-    @admin_required
-    def admin_sync_billing_account(user_id):
-        user = db.session.execute(
-            db.select(User)
-            .options(selectinload(User.member), selectinload(User.forum_account))
-            .filter_by(id=user_id)
-        ).scalar_one_or_none()
-        if user is None:
-            flash(_("The selected account could not be found."), "warning")
-            return redirect(url_for("admin_accounts"))
 
-        next_url = request.form.get("next") or url_for("admin_account_detail", user_id=user.id)
-        if user.member is None:
-            flash(_("This account does not have a linked membership profile yet."), "warning")
-            return redirect(next_url)
-        if not (user.member.stripe_customer_id or user.member.stripe_subscription_id):
-            flash(_("No Stripe billing reference is stored for this membership yet."), "warning")
-            return redirect(next_url)
 
-        before_member = snapshot_member_for_audit(user.member)
-        try:
-            changed, stripe_subscription, forum_result = refresh_member_billing_state(user.member, force_stripe_sync=True, sync_forum=True)
-        except stripe.StripeError as exc:
-            db.session.rollback()
-            app.logger.error("Manual Stripe billing sync failed for member_id=%s: %s", user.member.id, exc)
-            queue_curated_admin_notification(
-                ADMIN_ERROR_CHANNEL,
-                "manual_billing_sync_failed",
-                _("A manual Stripe billing sync failed for %(email)s.", email=user.member.email_private),
-                payload={
-                    "member_email": user.member.email_private,
-                    "user_id": user.id,
-                    "member_id": user.member.id,
-                    "error": str(exc),
-                },
-                target_user=user,
-                target_member=user.member,
-                object_type="member",
-                object_id=user.member.id,
-                commit=True,
-            )
-            flash(_("Stripe billing sync failed right now. Please try again later."), "danger")
-            return redirect(next_url)
 
-        log_audit_event(
-            category="billing",
-            event_type="manual_billing_sync",
-            actor_user=current_user,
-            target_user=user,
-            target_member=user.member,
-            before=before_member,
-            after=snapshot_member_for_audit(user.member),
-            metadata={
-                "changed": changed,
-                "stripe_status": stripe_subscription.get("status") if stripe_subscription else None,
-                "stripe_cancel_at_period_end": stripe_subscription.get("cancel_at_period_end") if stripe_subscription else None,
-                "stripe_cancel_at": stripe_subscription.get("cancel_at") if stripe_subscription else None,
-                "forum_sync_error": forum_result.error if forum_result else None,
-            },
-        )
-        db.session.commit()
 
-        if changed:
-            flash(_("Billing state synchronized successfully."), "success")
-        else:
-            flash(_("Billing already matches the current Stripe state."), "info")
-        if forum_result and forum_result.error:
-            flash(_("Forum sync completed with an issue: %(message)s", message=forum_result.error), "warning")
-        return redirect(next_url)
 
-    @app.route("/admin/forum", methods=["GET"])
-    @login_required
-    @admin_required
-    def admin_forum():
-        page = request.args.get("page", 1, type=int)
-        pending_avatar_pagination = db.paginate(
-            db.select(ForumAvatarSubmission)
-            .options(
-                selectinload(ForumAvatarSubmission.user),
-                selectinload(ForumAvatarSubmission.member),
-                selectinload(ForumAvatarSubmission.reviewed_by),
-            )
-            .where(ForumAvatarSubmission.status == FORUM_AVATAR_STATUS_PENDING)
-            .order_by(ForumAvatarSubmission.uploaded_at.asc()),
-            page=page,
-            per_page=20,
-            error_out=False,
-        )
-        sync_error_accounts = db.session.execute(
-            db.select(ForumAccount)
-            .options(selectinload(ForumAccount.user), selectinload(ForumAccount.member))
-            .where(or_(ForumAccount.state == FORUM_STATE_SYNC_ERROR, ForumAccount.last_error.is_not(None)))
-            .order_by(ForumAccount.updated_at.desc())
-            .limit(25)
-        ).scalars().all()
-        return render_template(
-            "admin_forum.html",
-            active_admin_section="forum",
-            metrics=get_admin_dashboard_metrics(),
-            pending_avatar_pagination=pending_avatar_pagination,
-            sync_error_accounts=sync_error_accounts,
-        )
 
-    @app.route("/admin/accounts/<int:user_id>/forum-resync", methods=["POST"])
-    @login_required
-    @admin_required
-    def admin_resync_forum_account(user_id):
-        user = db.session.execute(
-            db.select(User)
-            .options(selectinload(User.member), selectinload(User.forum_account))
-            .filter_by(id=user_id)
-        ).scalar_one_or_none()
-        if user is None:
-            flash(_("The selected account could not be found."), "warning")
-            return redirect(url_for("admin_accounts"))
 
-        if user.member is None:
-            flash(_("This account does not have a linked membership profile yet."), "warning")
-            return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
 
-        before_state = snapshot_forum_account_for_audit(user.forum_account)
-        result, _service = sync_member_forum_state(user.member)
-        log_audit_event(
-            category="forum",
-            event_type="manual_forum_resync",
-            actor_user=current_user,
-            target_user=user,
-            target_member=user.member,
-            before=before_state,
-            after=snapshot_forum_account_for_audit(user.forum_account),
-            metadata={
-                "desired_state": result.desired_state if result else None,
-                "error": result.error if result else None,
-            },
-        )
-        db.session.commit()
 
-        if result and result.error:
-            flash(_("Forum sync completed with an issue: %(message)s", message=result.error), "warning")
-        else:
-            flash(_("Forum state synchronized successfully."), "success")
-        return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
 
-    @app.route("/admin/forum/submissions/<int:submission_id>/approve", methods=["POST"])
-    @login_required
-    @admin_required
-    def approve_forum_avatar_submission(submission_id):
-        submission = db.session.execute(
-            db.select(ForumAvatarSubmission)
-            .options(
-                selectinload(ForumAvatarSubmission.user),
-                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
-            )
-            .where(ForumAvatarSubmission.id == submission_id)
-        ).scalar_one_or_none()
-        if submission is None:
-            flash(_("The selected avatar submission could not be found."), "warning")
-            return redirect(url_for("admin_forum"))
 
-        forum_service = get_forum_service()
-        before_submission = snapshot_forum_avatar_submission_for_audit(submission)
-        before_account = snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None)
-        review_note = (request.form.get("review_note") or "").strip() or None
 
-        try:
-            result = forum_service.approve_avatar_submission(submission, reviewer=current_user, review_note=review_note)
-        except ForumProviderError as exc:
-            flash(str(exc), "danger")
-            return redirect(url_for("admin_forum"))
 
-        event_type = "avatar_approved" if not result.error else "avatar_approval_failed"
-        log_audit_event(
-            category="forum",
-            event_type=event_type,
-            actor_user=current_user,
-            target_user=submission.user,
-            target_member=submission.member,
-            before={"submission": before_submission, "forum_account": before_account},
-            after={
-                "submission": snapshot_forum_avatar_submission_for_audit(submission),
-                "forum_account": snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None),
-            },
-            metadata={"review_note": review_note, "error": result.error, "desired_state": result.desired_state},
-        )
-        db.session.commit()
 
-        if result.error:
-            flash(_("The avatar review was saved, but syncing it to the forum failed: %(message)s", message=result.error), "warning")
-        else:
-            flash(_("The avatar was approved and the forum access was updated."), "success")
-        return redirect(url_for("admin_forum"))
 
-    @app.route("/admin/forum/submissions/<int:submission_id>/reject", methods=["POST"])
-    @login_required
-    @admin_required
-    def reject_forum_avatar_submission(submission_id):
-        submission = db.session.execute(
-            db.select(ForumAvatarSubmission)
-            .options(
-                selectinload(ForumAvatarSubmission.user),
-                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
-            )
-            .where(ForumAvatarSubmission.id == submission_id)
-        ).scalar_one_or_none()
-        if submission is None:
-            flash(_("The selected avatar submission could not be found."), "warning")
-            return redirect(url_for("admin_forum"))
 
-        forum_service = get_forum_service()
-        before_submission = snapshot_forum_avatar_submission_for_audit(submission)
-        before_account = snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None)
-        review_note = (request.form.get("review_note") or "").strip() or None
 
-        try:
-            result = forum_service.reject_avatar_submission(submission, reviewer=current_user, review_note=review_note)
-        except ForumProviderError as exc:
-            flash(str(exc), "danger")
-            return redirect(url_for("admin_forum"))
 
-        log_audit_event(
-            category="forum",
-            event_type="avatar_rejected",
-            actor_user=current_user,
-            target_user=submission.user,
-            target_member=submission.member,
-            before={"submission": before_submission, "forum_account": before_account},
-            after={
-                "submission": snapshot_forum_avatar_submission_for_audit(submission),
-                "forum_account": snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None),
-            },
-            metadata={"review_note": review_note, "error": result.error if result else None},
-        )
-        queue_user_status_notification(
-            "forum_avatar_rejected",
-            _("Your forum profile picture was rejected."),
-            recipient_email=(submission.user.email if submission.user is not None else (submission.member.email_private if submission.member is not None else None)),
-            payload={
-                "first_name": submission.member.first_name if submission.member is not None else None,
-                "review_note": review_note,
-            },
-            target_user=submission.user,
-            target_member=submission.member,
-            object_type="forum_avatar_submission",
-            object_id=submission.id,
-        )
-        db.session.commit()
-        flash(_("The avatar submission was rejected."), "success")
-        return redirect(url_for("admin_forum"))
 
-    @app.route("/admin/settings/test-forum-connection", methods=["POST"])
-    @login_required
-    @admin_required
-    def test_forum_connection():
-        service = get_forum_service()
-        try:
-            success, message = service.test_connection()
-        except ForumProviderError as exc:
-            success = False
-            message = str(exc)
 
-        log_audit_event(
-            category="forum",
-            event_type="forum_connection_tested",
-            actor_user=current_user,
-            target_user=current_user,
-            before=None,
-            after={"ready": service.is_ready(), "enabled": service.is_enabled()},
-            metadata={"success": success, "message": message},
-        )
-        db.session.commit()
-        flash(message, "success" if success else "danger")
-        return redirect(f"{url_for('admin_settings')}#settings-forum")
 
-    @app.route("/admin/accounts/<int:user_id>/grant-admin", methods=["POST"])
-    @login_required
-    @admin_required
-    def grant_admin_access(user_id):
-        user = db.session.get(User, user_id)
-        if user is None:
-            flash(_("The selected account could not be found."), "warning")
-            return redirect(url_for("admin_accounts"))
 
-        if not user.has_role("admin"):
-            admin_role = get_role("admin", label="Admin", description="Can access the admin workspace.")
-            before_user = snapshot_user_for_audit(user)
-            user.grant_role(admin_role)
-            log_audit_event(
-                category="access",
-                event_type="admin_role_granted",
-                actor_user=current_user,
-                target_user=user,
-                target_member=user.member,
-                before=before_user,
-                after=snapshot_user_for_audit(user),
-                metadata={"granted_role": "admin"},
-            )
-            db.session.commit()
-            flash(_("Admin access granted."), "success")
-        else:
-            flash(_("This account already has admin access."), "info")
-
-        return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
-
-    @app.route("/admin/accounts/<int:user_id>/revoke-admin", methods=["POST"])
-    @login_required
-    @admin_required
-    def revoke_admin_access(user_id):
-        user = db.session.get(User, user_id)
-        if user is None:
-            flash(_("The selected account could not be found."), "warning")
-            return redirect(url_for("admin_accounts"))
-
-        if not user.has_role("admin"):
-            flash(_("This account does not currently have admin access."), "info")
-            return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
-
-        if current_user.id == user.id:
-            flash(_("You cannot remove your own admin access from the UI."), "danger")
-            return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
-
-        if count_users_with_role("admin") <= 1:
-            flash(_("You cannot remove the last remaining admin account."), "danger")
-            return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
-
-        before_user = snapshot_user_for_audit(user)
-        user.revoke_role("admin")
-        log_audit_event(
-            category="access",
-            event_type="admin_role_revoked",
-            actor_user=current_user,
-            target_user=user,
-            target_member=user.member,
-            before=before_user,
-            after=snapshot_user_for_audit(user),
-            metadata={"revoked_role": "admin"},
-        )
-        db.session.commit()
-        flash(_("Admin access revoked."), "success")
-        return redirect(request.form.get("next") or url_for("admin_account_detail", user_id=user.id))
-
-    @app.route("/admin/approvals", methods=["GET"])
-    @login_required
-    @admin_required
-    def admin_approvals():
-        pending_identity_requests = db.session.execute(
-            db.select(MemberProfileChangeRequest)
-            .options(
-                selectinload(MemberProfileChangeRequest.member).selectinload(Member.user),
-                selectinload(MemberProfileChangeRequest.requested_by),
-                selectinload(MemberProfileChangeRequest.reviewed_by),
-            )
-            .where(MemberProfileChangeRequest.status == "pending")
-            .order_by(MemberProfileChangeRequest.created_at.asc())
-        ).scalars().all()
-        decorate_pending_identity_requests(pending_identity_requests)
-
-        history_page = request.args.get("page", 1, type=int)
-        history_pagination = db.paginate(
-            db.select(MemberProfileChangeRequest)
-            .options(
-                selectinload(MemberProfileChangeRequest.member).selectinload(Member.user),
-                selectinload(MemberProfileChangeRequest.requested_by),
-                selectinload(MemberProfileChangeRequest.reviewed_by),
-            )
-            .where(MemberProfileChangeRequest.status != "pending")
-            .order_by(MemberProfileChangeRequest.reviewed_at.desc(), MemberProfileChangeRequest.created_at.desc()),
-            page=history_page,
-            per_page=APPROVAL_HISTORY_PAGE_SIZE,
-            error_out=False,
-        )
-        recent_logs = db.session.execute(
-            db.select(AuditLog)
-            .options(
-                selectinload(AuditLog.actor_user),
-                selectinload(AuditLog.target_user),
-                selectinload(AuditLog.target_member),
-            )
-            .where(AuditLog.category.in_(["profile", "profile_change_request"]))
-            .order_by(AuditLog.created_at.desc())
-            .limit(20)
-        ).scalars().all()
-        return render_template(
-            "admin_approvals.html",
-            active_admin_section="approvals",
-            pending_identity_requests=pending_identity_requests,
-            history_pagination=history_pagination,
-            recent_logs=recent_logs,
-        )
-
-    @app.route("/admin/settings", methods=["GET", "POST"])
-    @login_required
-    @admin_required
-    def admin_settings():
-        edit_mail_account_id = request.args.get("edit_mail_account", type=int)
-        context = build_settings_page_context(edit_mail_account_id=edit_mail_account_id)
-
-        if edit_mail_account_id and context["editing_mail_account"] is None:
-            flash(_("The selected mail account could not be found."), "warning")
-            return redirect(url_for("admin_settings"))
-
-        if request.method == "POST" and "save_settings" in request.form:
-            valid_senders = {choice for choice, _label in context["sender_choices"]}
-            valid_templates = {choice for choice, _label in context["template_choices"]}
-            valid_forum_providers = {choice for choice, _label in context["forum_provider_choices"]}
-            valid_forum_auth_strategies = {choice for choice, _label in context["forum_auth_strategy_choices"]}
-            tracked_setting_keys = [
-                "invoice_payments_enabled",
-                "automatic_emails_enabled",
-                "welcome_email_sender",
-                "automatic_email_template",
-                *STRIPE_SETTING_KEYS,
-                *FORUM_SETTING_KEYS,
-                *NOTIFICATION_SETTING_KEYS,
-            ]
-            before_settings = {
-                key: db.session.get(Setting, key).value if db.session.get(Setting, key) is not None else None
-                for key in tracked_setting_keys
-            }
-            settings_section = (request.form.get("settings_section") or "general").strip().lower()
-            if settings_section not in {"general", "notifications", "billing", "forum", "mail", "test"}:
-                settings_section = "general"
-            settings_redirect = f"{url_for('admin_settings')}#settings-{settings_section}"
-            welcome_sender = request.form.get("welcome_email_sender")
-            auto_email_template = request.form.get("automatic_email_template")
-            notification_sender = request.form.get("notification_sender")
-            stripe_publishable_key = ((request.form.get("stripe_publishable_key") if settings_section == "billing" else before_settings.get("stripe_publishable_key")) or "").strip()
-            stripe_price_id = ((request.form.get("stripe_price_id") if settings_section == "billing" else before_settings.get("stripe_price_id")) or "").strip()
-            forum_provider = (request.form.get("forum_provider") or before_settings.get("forum_provider") or "discourse").strip() or "discourse"
-            forum_auth_strategy = (request.form.get("forum_auth_strategy") or before_settings.get("forum_auth_strategy") or "discourse_connect").strip() or "discourse_connect"
-            forum_avatar_max_bytes = (request.form.get("forum_avatar_max_bytes") or before_settings.get("forum_avatar_max_bytes") or "").strip()
-            forum_avatar_allowed_types = (request.form.get("forum_avatar_allowed_types") or before_settings.get("forum_avatar_allowed_types") or "").strip()
-
-            if welcome_sender and welcome_sender not in valid_senders:
-                flash(_("Invalid sender account selected."), "danger")
-                return redirect(settings_redirect)
-
-            if auto_email_template and auto_email_template not in valid_templates:
-                flash(_("Invalid email template selected."), "danger")
-                return redirect(settings_redirect)
-
-            if notification_sender and notification_sender not in valid_senders:
-                flash(_("Invalid sender account selected."), "danger")
-                return redirect(settings_redirect)
-
-            if forum_provider not in valid_forum_providers:
-                flash(_("Invalid forum provider selected."), "danger")
-                return redirect(settings_redirect)
-
-            if forum_auth_strategy not in valid_forum_auth_strategies:
-                flash(_("Invalid forum authentication strategy selected."), "danger")
-                return redirect(settings_redirect)
-
-            if forum_avatar_max_bytes:
-                try:
-                    if int(forum_avatar_max_bytes) <= 0:
-                        raise ValueError
-                except ValueError:
-                    flash(_("The forum avatar size limit must be a positive number of bytes."), "danger")
-                    return redirect(settings_redirect)
-
-            invoice_enabled = (request.form.get("invoice_payments_enabled") == "on") if settings_section == "general" else str(before_settings.get("invoice_payments_enabled") or "False") == "True"
-            emails_enabled = (request.form.get("automatic_emails_enabled") == "on") if settings_section == "general" else str(before_settings.get("automatic_emails_enabled") or "False") == "True"
-            forum_enabled = (request.form.get("forum_integration_enabled") == "on") if settings_section == "forum" else str(before_settings.get("forum_integration_enabled") or "False") == "True"
-            notification_admin_general_enabled = (request.form.get("notification_admin_general_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_admin_general_enabled") or "True") == "True"
-            notification_admin_error_enabled = (request.form.get("notification_admin_error_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_admin_error_enabled") or "True") == "True"
-            notification_user_status_enabled = (request.form.get("notification_user_status_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_user_status_enabled") or "True") == "True"
-
-            set_setting_value("invoice_payments_enabled", str(invoice_enabled))
-            set_setting_value("automatic_emails_enabled", str(emails_enabled))
-            set_setting_value("welcome_email_sender", welcome_sender if settings_section == "general" else before_settings.get("welcome_email_sender"))
-            set_setting_value("automatic_email_template", auto_email_template if settings_section == "general" else before_settings.get("automatic_email_template"))
-            set_setting_value("notification_admin_general_enabled", str(notification_admin_general_enabled))
-            set_setting_value("notification_admin_error_enabled", str(notification_admin_error_enabled))
-            set_setting_value("notification_user_status_enabled", str(notification_user_status_enabled))
-            set_setting_value("notification_sender", (notification_sender if settings_section == "notifications" else before_settings.get("notification_sender")) or None)
-            set_setting_value("stripe_publishable_key", stripe_publishable_key or None)
-            set_setting_value("stripe_price_id", stripe_price_id or None)
-            set_setting_value("forum_integration_enabled", str(forum_enabled))
-            set_setting_value("forum_provider", forum_provider)
-            set_setting_value("forum_auth_strategy", forum_auth_strategy)
-            set_setting_value("forum_base_url", ((request.form.get("forum_base_url") if settings_section == "forum" else before_settings.get("forum_base_url")) or "").strip() or None)
-            set_setting_value("discourse_api_username", ((request.form.get("discourse_api_username") if settings_section == "forum" else before_settings.get("discourse_api_username")) or "").strip() or None)
-            set_setting_value("forum_onboarding_group", ((request.form.get("forum_onboarding_group") if settings_section == "forum" else before_settings.get("forum_onboarding_group")) or "").strip() or None)
-            set_setting_value("forum_member_group", ((request.form.get("forum_member_group") if settings_section == "forum" else before_settings.get("forum_member_group")) or "").strip() or None)
-            set_setting_value("forum_inactive_group", ((request.form.get("forum_inactive_group") if settings_section == "forum" else before_settings.get("forum_inactive_group")) or "").strip() or None)
-            set_setting_value("forum_onboarding_path", ((request.form.get("forum_onboarding_path") if settings_section == "forum" else before_settings.get("forum_onboarding_path")) or "").strip() or "/")
-            set_setting_value("forum_avatar_max_bytes", forum_avatar_max_bytes or None)
-            set_setting_value("forum_avatar_allowed_types", forum_avatar_allowed_types or None)
-
-            existing_api_key = before_settings.get("discourse_api_key")
-            submitted_api_key = ((request.form.get("discourse_api_key") if settings_section == "forum" else "") or "").strip()
-            set_setting_value("discourse_api_key", submitted_api_key or existing_api_key)
-
-            existing_connect_secret = before_settings.get("discourse_connect_secret")
-            submitted_connect_secret = ((request.form.get("discourse_connect_secret") if settings_section == "forum" else "") or "").strip()
-            set_setting_value("discourse_connect_secret", submitted_connect_secret or existing_connect_secret)
-
-            existing_stripe_secret = before_settings.get("stripe_secret_key")
-            submitted_stripe_secret = ((request.form.get("stripe_secret_key") if settings_section == "billing" else "") or "").strip()
-            set_setting_value("stripe_secret_key", submitted_stripe_secret or existing_stripe_secret)
-
-            existing_webhook_secret = before_settings.get("stripe_webhook_secret")
-            submitted_webhook_secret = ((request.form.get("stripe_webhook_secret") if settings_section == "billing" else "") or "").strip()
-            set_setting_value("stripe_webhook_secret", submitted_webhook_secret or existing_webhook_secret)
-
-            after_settings = {
-                key: db.session.get(Setting, key).value if db.session.get(Setting, key) is not None else None
-                for key in tracked_setting_keys
-            }
-            changed_keys = sorted(
-                key for key in after_settings.keys()
-                if before_settings.get(key) != after_settings.get(key)
-            )
-            logged_before_settings, logged_after_settings = redact_settings_states_for_audit(before_settings, after_settings)
-            log_audit_event(
-                category="settings",
-                event_type="settings_updated",
-                actor_user=current_user,
-                target_user=current_user,
-                before=logged_before_settings,
-                after=logged_after_settings,
-                metadata={"changed_keys": changed_keys},
-            )
-            db.session.commit()
-            flash(_("Settings updated successfully!"), "success")
-            return redirect(settings_redirect)
-
-        return render_template(
-            "admin_settings.html",
-            active_admin_section="settings",
-            **context,
-        )
-
-    @app.route("/admin/logs", methods=["GET"])
-    @login_required
-    @admin_required
-    def admin_logs():
-        actor_user = aliased(User)
-        target_user = aliased(User)
-        target_member = aliased(Member)
-        search_term = (request.args.get("q") or "").strip()
-        category = request.args.get("category", "all")
-        page = request.args.get("page", 1, type=int)
-
-        query = (
-            db.select(AuditLog)
-            .options(
-                selectinload(AuditLog.actor_user),
-                selectinload(AuditLog.target_user),
-                selectinload(AuditLog.target_member),
-            )
-            .outerjoin(actor_user, AuditLog.actor_user_id == actor_user.id)
-            .outerjoin(target_user, AuditLog.target_user_id == target_user.id)
-            .outerjoin(target_member, AuditLog.target_member_id == target_member.id)
-        )
-
-        if search_term:
-            pattern = f"%{search_term}%"
-            query = query.where(
-                or_(
-                    actor_user.email.ilike(pattern),
-                    target_user.email.ilike(pattern),
-                    target_member.email_private.ilike(pattern),
-                    AuditLog.category.ilike(pattern),
-                    AuditLog.event_type.ilike(pattern),
-                )
-            )
-
-        if category != "all":
-            query = query.where(AuditLog.category == category)
-
-        pagination = db.paginate(
-            query.order_by(AuditLog.created_at.desc()),
-            page=page,
-            per_page=AUDIT_LOG_PAGE_SIZE,
-            error_out=False,
-        )
-        categories = db.session.execute(
-            db.select(AuditLog.category).distinct().order_by(AuditLog.category.asc())
-        ).scalars().all()
-        return render_template(
-            "admin_logs.html",
-            active_admin_section="logs",
-            pagination=pagination,
-            categories=categories,
-            category=category,
-            search_term=search_term,
-        )
-
-    @app.route("/admin/profile-requests/<int:request_id>/approve", methods=["POST"])
-    @login_required
-    @admin_required
-    def approve_profile_change_request(request_id):
-        request_record = db.session.get(MemberProfileChangeRequest, request_id)
-        if request_record is None or request_record.status != "pending":
-            flash(_("The selected change request could not be found."), "warning")
-            return redirect(url_for("admin_approvals"))
-
-        member = request_record.member
-        before_member = snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)
-        before_user = snapshot_user_for_audit(member.user)
-        previous_forum_username = member.user.forum_username if member.user is not None else None
-
-        member.salutation = request_record.requested_salutation
-        member.title = request_record.requested_title
-        member.first_name = request_record.requested_first_name
-        member.last_name = request_record.requested_last_name
-        member.year_group = request_record.requested_year_group
-
-        if member.user is not None and request.form.get("override_forum_username") == "1":
-            preferred_username = (request.form.get("forum_username_override") or "").strip()
-            if not preferred_username:
-                preferred_username = build_forum_username_base(member.first_name, member.last_name, member.year_group)
-            member.user.forum_username = generate_unique_forum_username(
-                member.first_name,
-                member.last_name,
-                member.year_group,
-                exclude_user_id=member.user.id,
-                preferred=preferred_username,
-            )
-
-        request_record.status = "approved"
-        request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
-        request_record.reviewed_by = current_user
-        request_record.reviewed_at = get_now_utc()
-        forum_result = None
-        if member.user is not None and (member.user.forum_account is not None or member_has_active_access(member)):
-            forum_result, _forum_service = sync_member_forum_state(member)
-        log_audit_event(
-            category="profile_change_request",
-            event_type="identity_request_approved",
-            actor_user=current_user,
-            target_user=member.user,
-            target_member=member,
-            before={"request_status": "pending", "user": before_user, "member": before_member},
-            after={"request_status": request_record.status, "user": snapshot_user_for_audit(member.user), "member": snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)},
-            metadata={
-                "request_id": request_record.id,
-                "member_note": request_record.member_note,
-                "admin_note": request_record.admin_note,
-                "previous_forum_username": previous_forum_username,
-                "new_forum_username": member.user.forum_username if member.user is not None else None,
-                "forum_sync_error": forum_result.error if forum_result else None,
-            },
-        )
-        queue_user_status_notification(
-            "identity_request_approved",
-            _("Your identity change request was approved."),
-            recipient_email=(member.user.email if member.user is not None else member.email_private),
-            payload={
-                "first_name": member.first_name,
-                "admin_note": request_record.admin_note,
-            },
-            target_user=member.user,
-            target_member=member,
-            object_type="member_profile_change_request",
-            object_id=request_record.id,
-        )
-        db.session.commit()
-        flash(_("Identity change request approved."), "success")
-        if forum_result and forum_result.error:
-            flash(_("The forum profile could not be synchronized right now. Please run a forum resync after checking the settings."), "warning")
-        return redirect(url_for("admin_approvals"))
-
-    @app.route("/admin/profile-requests/<int:request_id>/reject", methods=["POST"])
-    @login_required
-    @admin_required
-    def reject_profile_change_request(request_id):
-        request_record = db.session.get(MemberProfileChangeRequest, request_id)
-        if request_record is None or request_record.status != "pending":
-            flash(_("The selected change request could not be found."), "warning")
-            return redirect(url_for("admin_approvals"))
-
-        request_record.status = "rejected"
-        request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
-        request_record.reviewed_by = current_user
-        request_record.reviewed_at = get_now_utc()
-        log_audit_event(
-            category="profile_change_request",
-            event_type="identity_request_rejected",
-            actor_user=current_user,
-            target_user=request_record.member.user,
-            target_member=request_record.member,
-            before={"request_id": request_record.id, "status": "pending"},
-            after={"request_id": request_record.id, "status": request_record.status},
-            metadata={"member_note": request_record.member_note, "admin_note": request_record.admin_note},
-        )
-        queue_user_status_notification(
-            "identity_request_rejected",
-            _("Your identity change request was rejected."),
-            recipient_email=((request_record.member.user.email if request_record.member.user is not None else request_record.member.email_private) if request_record.member is not None else None),
-            payload={
-                "first_name": request_record.member.first_name if request_record.member is not None else None,
-                "admin_note": request_record.admin_note,
-            },
-            target_user=request_record.member.user if request_record.member is not None else None,
-            target_member=request_record.member,
-            object_type="member_profile_change_request",
-            object_id=request_record.id,
-        )
-        db.session.commit()
-        flash(_("Identity change request rejected."), "success")
-        return redirect(url_for("admin_approvals"))
-
-    @app.route("/admin/settings/mail-accounts", methods=["POST"])
-    @login_required
-    @admin_required
-    def save_mail_account():
-        form = MailAccountForm(prefix="mail")
-        account_id = int(form.mail_account_id.data) if form.mail_account_id.data else None
-
-        if not form.validate_on_submit():
-            flash(_("Please correct the mail account form and try again."), "danger")
-            for field_name, errors in form.errors.items():
-                if field_name == "csrf_token":
-                    for error in errors:
-                        flash(error, "danger")
-                    continue
-                label = getattr(form, field_name).label.text if hasattr(form, field_name) else field_name
-                for error in errors:
-                    flash(f"{label}: {error}", "danger")
-            redirect_kwargs = {"edit_mail_account": account_id} if account_id else {}
-            return redirect(url_for("admin_settings", **redirect_kwargs))
-
-        account_key = form.account_key.data.strip()
-        existing_account = db.session.execute(
-            db.select(MailAccount).filter_by(account_key=account_key)
-        ).scalar_one_or_none()
-
-        if existing_account is not None and existing_account.id != account_id:
-            flash(_("A mail account with this key already exists."), "danger")
-            target_id = account_id or existing_account.id
-            return redirect(url_for("admin_settings", edit_mail_account=target_id))
-
-        if account_id:
-            mail_account = db.session.get(MailAccount, account_id)
-            if mail_account is None:
-                flash(_("The selected mail account could not be found."), "warning")
-                return redirect(f"{url_for('admin_settings')}#settings-mail")
-        else:
-            if not form.password.data:
-                flash(_("A password is required for new mail accounts."), "danger")
-                return redirect(f"{url_for('admin_settings')}#settings-mail")
-            mail_account = MailAccount()
-            db.session.add(mail_account)
-
-        before_mail_account = snapshot_mail_account_for_audit(mail_account)
-        is_new_mail_account = mail_account.id is None
-        mail_account.account_key = account_key
-        mail_account.host = form.host.data.strip()
-        mail_account.port = int(form.port.data)
-        mail_account.username = form.username.data.strip()
-        if form.password.data:
-            mail_account.password = form.password.data
-        mail_account.starttls = bool(form.starttls.data)
-
-        try:
-            db.session.flush()
-            log_audit_event(
-                category="settings",
-                event_type="mail_account_created" if is_new_mail_account else "mail_account_updated",
-                actor_user=current_user,
-                target_user=current_user,
-                before=before_mail_account,
-                after=snapshot_mail_account_for_audit(mail_account),
-                metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key},
-            )
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            flash(_("A mail account with this key already exists."), "danger")
-            redirect_kwargs = {"edit_mail_account": account_id} if account_id else {}
-            return redirect(url_for("admin_settings", **redirect_kwargs))
-
-        flash(_("Mail account saved successfully."), "success")
-        return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-    @app.route("/admin/settings/mail-accounts/<int:mail_account_id>/delete", methods=["POST"])
-    @login_required
-    @admin_required
-    def delete_mail_account(mail_account_id):
-        mail_account = db.session.get(MailAccount, mail_account_id)
-        if mail_account is None:
-            flash(_("The selected mail account could not be found."), "warning")
-            return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-        before_mail_account = snapshot_mail_account_for_audit(mail_account)
-        welcome_sender_setting = Setting.query.get("welcome_email_sender")
-        removed_welcome_sender = False
-        if welcome_sender_setting and welcome_sender_setting.value == mail_account.account_key:
-            db.session.delete(welcome_sender_setting)
-            removed_welcome_sender = True
-
-        log_audit_event(
-            category="settings",
-            event_type="mail_account_deleted",
-            actor_user=current_user,
-            target_user=current_user,
-            before=before_mail_account,
-            after=None,
-            metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key, "removed_welcome_sender": removed_welcome_sender},
-        )
-        db.session.delete(mail_account)
-        db.session.commit()
-        flash(_("Mail account deleted successfully."), "success")
-        return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-    @app.route("/admin/settings/mail-accounts/import", methods=["POST"])
-    @login_required
-    @admin_required
-    def import_mail_accounts():
-        upload = request.files.get("mail_accounts_file")
-        overwrite_existing = request.form.get("overwrite_existing") == "1"
-
-        if upload is None or not upload.filename:
-            flash(_("Please choose a JSON file to import."), "warning")
-            return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-        try:
-            raw_payload = upload.stream.read()
-            payload = json.loads(raw_payload.decode("utf-8-sig"))
-            imported_accounts = normalize_imported_mail_accounts_payload(payload)
-        except UnicodeDecodeError:
-            flash(_("The uploaded file is not valid UTF-8 JSON."), "danger")
-            return redirect(f"{url_for('admin_settings')}#settings-mail")
-        except json.JSONDecodeError:
-            flash(_("The uploaded file is not valid JSON."), "danger")
-            return redirect(f"{url_for('admin_settings')}#settings-mail")
-        except ValueError as exc:
-            flash(str(exc), "danger")
-            return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-        created_count = 0
-        updated_count = 0
-        skipped_keys = []
-
-        try:
-            for imported_account in imported_accounts:
-                mail_account = db.session.execute(
-                    db.select(MailAccount).filter_by(account_key=imported_account["account_key"])
-                ).scalar_one_or_none()
-
-                if mail_account is not None and not overwrite_existing:
-                    skipped_keys.append(imported_account["account_key"])
-                    continue
-
-                before_mail_account = snapshot_mail_account_for_audit(mail_account)
-                is_new_mail_account = mail_account is None
-                if mail_account is None:
-                    mail_account = MailAccount()
-                    db.session.add(mail_account)
-
-                mail_account.account_key = imported_account["account_key"]
-                mail_account.host = imported_account["host"]
-                mail_account.port = imported_account["port"]
-                mail_account.username = imported_account["username"]
-                mail_account.password = imported_account["password"]
-                mail_account.starttls = imported_account["starttls"]
-                db.session.flush()
-
-                log_audit_event(
-                    category="settings",
-                    event_type="mail_account_created" if is_new_mail_account else "mail_account_updated",
-                    actor_user=current_user,
-                    target_user=current_user,
-                    before=before_mail_account,
-                    after=snapshot_mail_account_for_audit(mail_account),
-                    metadata={
-                        "mail_account_id": mail_account.id,
-                        "account_key": mail_account.account_key,
-                        "source": "json_import",
-                        "overwrite_existing": overwrite_existing,
-                    },
-                )
-
-                if is_new_mail_account:
-                    created_count += 1
-                else:
-                    updated_count += 1
-
-            log_audit_event(
-                category="settings",
-                event_type="mail_accounts_imported",
-                actor_user=current_user,
-                target_user=current_user,
-                before=None,
-                after={"created": created_count, "updated": updated_count, "skipped": len(skipped_keys)},
-                metadata={
-                    "overwrite_existing": overwrite_existing,
-                    "imported_keys": [account["account_key"] for account in imported_accounts],
-                    "skipped_keys": skipped_keys,
-                },
-            )
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            flash(_("Import failed because one of the account keys already exists."), "danger")
-            return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-        if created_count or updated_count:
-            flash(
-                _(
-                    "Mail account import finished. Created: %(created)s, updated: %(updated)s, skipped: %(skipped)s.",
-                    created=created_count,
-                    updated=updated_count,
-                    skipped=len(skipped_keys),
-                ),
-                "success",
-            )
-        else:
-            flash(_("No mail accounts were imported."), "info")
-
-        if skipped_keys:
-            flash(
-                _(
-                    "Skipped existing account keys: %(keys)s",
-                    keys=", ".join(skipped_keys),
-                ),
-                "warning",
-            )
-
-        return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-    @app.route("/admin/settings/mail-accounts/export", methods=["POST"])
-    @login_required
-    @admin_required
-    def export_mail_accounts():
-        confirm_password = request.form.get("export_password", "")
-        if not current_user.check_password(confirm_password):
-            flash(_("Please confirm your current password to export sender accounts."), "danger")
-            return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-        payload = build_mail_accounts_export_payload()
-        log_audit_event(
-            category="settings",
-            event_type="mail_accounts_exported",
-            actor_user=current_user,
-            target_user=current_user,
-            metadata={"count": len(payload["mail_accounts"]), "format": payload["format"], "version": payload["version"]},
-        )
-        db.session.commit()
-
-        export_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        response = current_app.response_class(
-            json.dumps(payload, indent=2),
-            mimetype="application/json",
-        )
-        response.headers["Content-Disposition"] = f'attachment; filename="jaeronautics-mail-accounts-{export_timestamp}.json"'
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        return response
-
-    @app.route("/admin/settings/mail-accounts/<int:mail_account_id>/test-connection", methods=["POST"])
-    @login_required
-    @admin_required
-    @limiter.limit(RATELIMIT_ADMIN_EMAIL)
-    def test_mail_account_connection(mail_account_id):
-        mail_account = db.session.get(MailAccount, mail_account_id)
-        if mail_account is None:
-            flash(_("The selected mail account could not be found."), "warning")
-            return redirect(f"{url_for('admin_settings')}#settings-mail")
-
-        success, message = probe_mail_account_connection(mail_account.to_config())
-        log_audit_event(
-            category="settings",
-            event_type="mail_account_connection_tested",
-            actor_user=current_user,
-            target_user=current_user,
-            before=snapshot_mail_account_for_audit(mail_account),
-            after=None,
-            metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key, "success": success, "message": message},
-        )
-        db.session.commit()
-
-        if success:
-            flash(_("Connection test succeeded for %(account_key)s.", account_key=mail_account.account_key), "success")
-        else:
-            flash(_("Connection test failed for %(account_key)s: %(message)s", account_key=mail_account.account_key, message=message), "danger")
-        return redirect(url_for("admin_settings", edit_mail_account=mail_account.id))
-
-    @app.route("/admin/settings/send-test-email", methods=["POST"])
-    @login_required
-    @admin_required
-    @limiter.limit(RATELIMIT_ADMIN_EMAIL)
-    def send_test_email():
-        form = TestEmailForm()
-
-        try:
-            mail_accounts = load_mail_accounts_config()
-            form.sender.choices = [(acc, acc) for acc in mail_accounts.keys()]
-
-            email_template_dir = os.path.join(app.root_path, "templates", "emails")
-            if os.path.isdir(email_template_dir):
-                form.template.choices = [(f, f) for f in os.listdir(email_template_dir) if f.endswith(".html")]
-        except Exception as exc:
-            app.logger.error(f"Could not load email accounts or templates for test form validation: {exc}")
-            form.sender.choices = []
-            form.template.choices = []
-
-        if form.validate_on_submit():
-            sender = form.sender.data
-            recipient = form.recipient.data
-            template = form.template.data
-
-            logo_path = os.path.join(app.root_path, "static", "logo_joanneum_aeronautics_negativ.png")
-            attachments = [{"path": logo_path, "cid": "logo"}]
-
-            success = send_mail(
-                from_account=sender,
-                to_email=recipient,
-                subject=f"Test: {template}",
-                template_name=template,
-                attachments=attachments,
-                first_name="Test User",
-                timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                now=datetime.now(timezone.utc),
-            )
-
-            if success:
-                flash(_("Test email sent successfully to %(recipient)s!", recipient=recipient), "success")
-            else:
-                flash(_("Failed to send test email. Please check the server logs."), "danger")
-        else:
-            flash(_("Invalid form submission. Please check the fields and try again."), "warning")
-
-        return redirect(f"{url_for('admin_settings')}#settings-test")
-
-    @app.route("/login", methods=["POST", "GET"])
-    @limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
-    def login():
-        next_url = request.values.get("next") or session.get("login_next")
-        safe_next_url = next_url if is_safe_next_url(next_url) else None
-        login_source = (request.values.get("forum_login_source") or session.get("login_source") or "").strip().lower()
-        if request.method == "GET":
-            session.pop("login_next", None)
-            session.pop("login_source", None)
-            if safe_next_url:
-                session["login_next"] = safe_next_url
-            if login_source:
-                session["login_source"] = login_source
-        else:
-            if safe_next_url:
-                session["login_next"] = safe_next_url
-            if login_source:
-                session["login_source"] = login_source
-
-        if current_user.is_authenticated:
-            destination = session.pop("login_next", None)
-            session.pop("login_source", None)
-            destination = destination if is_safe_next_url(destination) else None
-            return redirect(destination or url_for(get_member_portal_target(current_user)))
-        form = LoginForm()
-        next_parts = urlsplit(safe_next_url) if safe_next_url else None
-        forum_login_hint = bool(
-            next_parts
-            and next_parts.path.startswith("/forum")
-            and login_source != "welcome_email"
-        )
-        if form.validate_on_submit():
-            user = db.session.execute(db.select(User).filter_by(email=form.email.data.strip().lower())).scalar_one_or_none()
-            if user and user.check_password(form.password.data):
-                login_user(user)
-                destination = session.pop("login_next", None)
-                session.pop("login_source", None)
-                destination = destination if is_safe_next_url(destination) else None
-                return redirect(destination or url_for(get_member_portal_target(user)))
-            flash(_("Invalid email or password"), "danger")
-        return render_template(
-            "account/login.html",
-            form=form,
-            next_url=session.get("login_next"),
-            forum_login_hint=forum_login_hint,
-            forum_login_source=session.get("login_source"),
-        )
-
-
-
-    @app.route("/register", methods=["GET", "POST"])
-    def register():
-        flash(_("Accounts are created automatically when you sign up for a membership."), "info")
-        return redirect(url_for("index"))
-
-    @app.route("/logout", methods=["POST"])
-    @login_required
-    def logout():
-        user = current_user._get_current_object()
-        forum_logout_attempted, forum_logout_error = log_out_forum_session_if_possible(user)
-        logout_user()
-        session.pop("login_next", None)
-        session.pop("login_source", None)
-
-        next_url = request.form.get("next") or url_for("index")
-        if not is_safe_next_url(next_url):
-            next_url = url_for("index")
-
-        if forum_logout_error:
-            flash(_("You have been logged out here, but the forum session could not be ended automatically."), "warning")
-        elif forum_logout_attempted:
-            flash(_("You have been logged out from both the website and the forum."), "info")
-        else:
-            flash(_("You have been logged out."), "info")
-        return redirect(next_url)
-
-    @app.route("/forum/logout", methods=["GET"])
-    def forum_logout():
-        forum_logout_error = None
-        forum_logout_attempted = False
-        if current_user.is_authenticated:
-            user = current_user._get_current_object()
-            forum_logout_attempted, forum_logout_error = log_out_forum_session_if_possible(user)
-            logout_user()
-            session.pop("login_next", None)
-            session.pop("login_source", None)
-            if forum_logout_error:
-                flash(_("You have been logged out here, but the forum session could not be ended automatically."), "warning")
-            elif forum_logout_attempted:
-                flash(_("You have been logged out from the forum and this website. Sign in again if you want to continue with a different account."), "info")
-            else:
-                flash(_("You have been logged out. Sign in again if you want to continue."), "info")
-        else:
-            flash(_("You have been logged out from the forum. Sign in again if you want to continue."), "info")
-        return redirect(url_for("login", next=url_for("forum_entry")))
-
-    @app.route("/change-password", methods=["GET", "POST"])
-    @login_required
-    @limiter.limit(RATELIMIT_PASSWORD_CHANGE, methods=["POST"])
-    def change_password():
-        form = ChangePasswordForm()
-        if form.validate_on_submit():
-            if current_user.check_password(form.current_password.data):
-                current_user.set_password(form.new_password.data)
-                db.session.commit()
-                flash(_("Your password has been updated!"), "success")
-                return redirect(url_for(get_member_portal_target(current_user)))
-            flash(_("Invalid current password"), "danger")
-        return render_template("change_password.html", form=form)
-
-    @app.route("/stripe-webhook", methods=["POST"])
-    @csrf.exempt
-    def stripe_webhook():
-        payload = request.data
-        sig_header = request.headers.get("stripe-signature")
-
-        try:
-            stripe_settings = get_stripe_settings_map()
-            stripe.api_key = stripe_settings.get("stripe_secret_key") or STRIPE_SECRET_KEY
-            webhook_secret = stripe_settings.get("stripe_webhook_secret") or STRIPE_WEBHOOK_SECRET
-            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-        except ValueError as e:
-            app.logger.error(f"Webhook Error: Invalid payload: {e}")
-            return "Invalid payload", 400
-        except stripe.SignatureVerificationError as e:
-            app.logger.error(f"Webhook Error: Invalid signature: {e}")
-            return "Invalid signature", 400
-
-        event_type = event["type"]
-
-        if event_type == "checkout.session.completed":
-            session = event["data"]["object"]
-            metadata = session.get("metadata", {})
-            member_data_json = metadata.get("member_data")
-            if not member_data_json:
-                app.logger.error("Webhook received without member_data metadata.")
-                queue_curated_admin_notification(
-                    ADMIN_ERROR_CHANNEL,
-                    "stripe_webhook_missing_metadata",
-                    _("A Stripe checkout webhook arrived without member metadata."),
-                    payload={"event_type": event_type, "session_id": session.get("id")},
-                    severity="warning",
-                    commit=True,
-                )
-                return "Missing metadata", 400
-
-            try:
-                member_data = json.loads(member_data_json)
-                customer_id = session.get("customer")
-                subscription_id = session.get("subscription")
-                member = get_member_by_stripe_or_email(
-                    customer_id=customer_id,
-                    subscription_id=subscription_id,
-                    member_id=metadata.get("member_id"),
-                    user_id=metadata.get("user_id"),
-                    email=member_data.get("email_private"),
-                )
-                previously_active = member_has_active_access(member)
-                if member is None:
-                    member = Member(created_at=get_now_utc(), payment_status="pending_checkout", is_active=False)
-                    db.session.add(member)
-
-                apply_member_profile(member, {**member_data, "terms_accepted": True})
-                member.pending_checkout_started_at = member.pending_checkout_started_at or get_now_utc()
-                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
-
-                if member.user is not None:
-                    member.user.email = member.email_private
-                    if not member.user.forum_username:
-                        member.user.forum_username = generate_unique_forum_username(
-                            member.first_name,
-                            member.last_name,
-                            member.year_group,
-                            exclude_user_id=member.user.id,
-                        )
-
-                starts_on = parse_iso_date(metadata.get("membership_starts_on")) or get_membership_today()
-                ends_on = parse_iso_date(metadata.get("membership_ends_on")) or last_day_of_year(starts_on.year)
-                renewal_due_on = parse_iso_date(metadata.get("renewal_due_on")) or first_day_of_year(ends_on.year + 1)
-                activation_mode = metadata.get("activation_mode", "paid_now")
-                session_payment_status = session.get("payment_status")
-
-                if activation_mode == "free_period":
-                    set_member_membership_window(
-                        member,
-                        starts_on=starts_on,
-                        ends_on=ends_on,
-                        renewal_due_on=renewal_due_on,
-                        payment_status="free_period",
-                        is_active=True,
-                        cancel_at_period_end=False,
-                    )
-                    member.pending_checkout_started_at = None
-                elif session_payment_status == "paid":
-                    set_member_membership_window(
-                        member,
-                        starts_on=starts_on,
-                        ends_on=ends_on,
-                        renewal_due_on=renewal_due_on,
-                        payment_status="paid",
-                        is_active=True,
-                        cancel_at_period_end=False,
-                    )
-                    member.pending_checkout_started_at = None
-                else:
-                    set_member_membership_window(
-                        member,
-                        starts_on=starts_on,
-                        ends_on=ends_on,
-                        renewal_due_on=renewal_due_on,
-                        payment_status="processing",
-                        is_active=False,
-                        cancel_at_period_end=False,
-                    )
-
-                db.session.commit()
-
-                if member_has_active_access(member) and not previously_active:
-                    send_member_welcome_email(app, member)
-
-                app.logger.info(
-                    "SUCCESS: Membership checkout completed for %s. Session ID: %s",
-                    member.email_private,
-                    session.get("id"),
-                )
-            except Exception as exc:
-                app.logger.exception("FATAL DB ERROR on Webhook for session %s", session.get("id"))
-                db.session.rollback()
-                queue_curated_admin_notification(
-                    ADMIN_ERROR_CHANNEL,
-                    "stripe_webhook_processing_failed",
-                    _("A Stripe checkout webhook could not be processed."),
-                    payload={
-                        "event_type": event_type,
-                        "session_id": session.get("id"),
-                        "customer_id": session.get("customer"),
-                        "subscription_id": session.get("subscription"),
-                        "error": str(exc),
-                    },
-                    severity="critical",
-                    commit=True,
-                )
-                return "Database save failed", 500
-
-        elif event_type == "payment_intent.processing":
-            payment_intent = event["data"]["object"]
-            customer_id = payment_intent.get("customer")
-            member = get_member_by_stripe_or_email(
-                customer_id=customer_id,
-                email=payment_intent.get("receipt_email"),
-                fetch_customer_email=True,
-            )
-            if member and not member_has_active_access(member):
-                backfill_member_stripe_references(member, customer_id=customer_id)
-                member.payment_status = "processing"
-                db.session.commit()
-                app.logger.info("Payment is processing for Stripe Customer ID: %s", customer_id)
-
-        elif event_type in ["payment_intent.succeeded", "invoice.paid", "invoice.payment_succeeded"]:
-            data_object = event["data"]["object"]
-            customer_id = data_object.get("customer")
-            subscription_id = data_object.get("subscription")
-            customer_email = data_object.get("customer_email") or data_object.get("receipt_email")
-            member = get_member_by_stripe_or_email(
-                customer_id=customer_id,
-                subscription_id=subscription_id,
-                email=customer_email,
-                fetch_customer_email=True,
-            )
-            if member:
-                previous_status = member.payment_status
-                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
-
-                paid_timestamp = None
-                if event_type.startswith("invoice"):
-                    paid_timestamp = (data_object.get("status_transitions") or {}).get("paid_at") or data_object.get("created")
-                else:
-                    paid_timestamp = data_object.get("created")
-                paid_on = to_membership_date(paid_timestamp)
-
-                update_member_paid_coverage(member, paid_on)
-                member.pending_checkout_started_at = None
-                forum_result, _forum_service = sync_member_forum_state(member)
-                db.session.commit()
-                app.logger.info(
-                    "SUCCESS: Payment confirmed and member coverage updated for Stripe Customer ID: %s",
-                    customer_id,
-                )
-                if forum_result and forum_result.error:
-                    app.logger.warning("Forum sync reported an issue after payment success for member_id=%s: %s", member.id, forum_result.error)
-
-                if member_has_active_access(member) and previous_status in {"unpaid", "processing", "pending_checkout", "failed"}:
-                    send_member_welcome_email(app, member)
-            else:
-                app.logger.error(
-                    "Webhook for successful payment received, but no member found for Stripe reference customer=%s subscription=%s email=%s",
-                    customer_id,
-                    subscription_id,
-                    customer_email,
-                )
-                queue_curated_admin_notification(
-                    ADMIN_ERROR_CHANNEL,
-                    "stripe_webhook_member_not_found",
-                    _("A successful Stripe payment webhook could not be matched to a member."),
-                    payload={
-                        "event_type": event_type,
-                        "customer_id": customer_id,
-                        "subscription_id": subscription_id,
-                        "customer_email": customer_email,
-                    },
-                    severity="warning",
-                    commit=True,
-                )
-                return "Member not found", 400
-
-        elif event_type == "customer.subscription.updated":
-            subscription = event["data"]["object"]
-            customer_id = subscription.get("customer")
-            subscription_id = subscription.get("id")
-            member = get_member_by_stripe_or_email(
-                customer_id=customer_id,
-                subscription_id=subscription_id,
-                fetch_customer_email=True,
-            )
-            if member:
-                state_changed = sync_member_subscription_state_from_subscription(member, subscription)
-                forum_result, _forum_service = sync_member_forum_state(member)
-                if state_changed or (forum_result and forum_result.changed):
-                    db.session.commit()
-                app.logger.info(
-                    "Subscription updated for member_id=%s customer=%s subscription=%s status=%s cancel_at_period_end=%s cancel_at=%s",
-                    member.id,
-                    customer_id,
-                    subscription_id,
-                    subscription.get("status"),
-                    subscription.get("cancel_at_period_end"),
-                    subscription.get("cancel_at"),
-                )
-                if forum_result and forum_result.error:
-                    app.logger.warning("Forum sync reported an issue after subscription update for member_id=%s: %s", member.id, forum_result.error)
-            else:
-                app.logger.warning(
-                    "Subscription update webhook received, but no member was found for customer=%s subscription=%s status=%s cancel_at_period_end=%s cancel_at=%s",
-                    customer_id,
-                    subscription_id,
-                    subscription.get("status"),
-                    subscription.get("cancel_at_period_end"),
-                    subscription.get("cancel_at"),
-                )
-
-        elif event_type in ["payment_intent.payment_failed", "invoice.payment_failed"]:
-            data_object = event["data"]["object"]
-            customer_id = data_object.get("customer")
-            subscription_id = data_object.get("subscription")
-            customer_email = data_object.get("customer_email") or data_object.get("receipt_email")
-            member = get_member_by_stripe_or_email(
-                customer_id=customer_id,
-                subscription_id=subscription_id,
-                email=customer_email,
-                fetch_customer_email=True,
-            )
-            if member:
-                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
-                member.payment_status = "failed"
-                if not member_has_active_access(member):
-                    member.is_active = False
-                forum_result, _forum_service = sync_member_forum_state(member)
-                db.session.commit()
-                app.logger.warning("Payment failed for Stripe Customer ID: %s", customer_id)
-                if forum_result and forum_result.error:
-                    app.logger.warning("Forum sync reported an issue after payment failure for member_id=%s: %s", member.id, forum_result.error)
-            else:
-                app.logger.warning(
-                    "Webhook for failed payment received, but no Stripe Customer ID was provided."
-                )
-
-        elif event_type == "customer.subscription.deleted":
-            subscription = event["data"]["object"]
-            customer_id = subscription.get("customer")
-            subscription_id = subscription.get("id")
-            member = get_member_by_stripe_or_email(
-                customer_id=customer_id,
-                subscription_id=subscription_id,
-                fetch_customer_email=True,
-            )
-            if member:
-                backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
-                backfill_member_coverage_from_subscription(member, subscription)
-                member.cancel_at_period_end = False
-                cancellation_details = subscription.get("cancellation_details", {})
-                reason = cancellation_details.get("reason")
-                event_date = to_membership_date(event.get("created"))
-
-                if reason == "payment_failed":
-                    member.payment_status = "failed"
-                    member.is_active = False
-                    app.logger.warning(
-                        "Subscription for Stripe Customer ID: %s was canceled due to failed payment.",
-                        customer_id,
-                    )
-                else:
-                    member.payment_status = "canceled"
-                    member.is_active = member_has_active_access(member, event_date)
-                    app.logger.info(
-                        "Subscription canceled for Stripe Customer ID: %s. Coverage remains valid until the covered year ends.",
-                        customer_id,
-                    )
-
-                sync_member_active_state(member, event_date)
-                forum_result, _forum_service = sync_member_forum_state(member)
-                db.session.commit()
-                if forum_result and forum_result.error:
-                    app.logger.warning("Forum sync reported an issue after subscription deletion for member_id=%s: %s", member.id, forum_result.error)
-            else:
-                app.logger.warning(
-                    "Webhook for subscription cancellation received, but no member found for Stripe reference customer=%s subscription=%s",
-                    customer_id,
-                    subscription_id,
-                )
-
-        elif event_type == "charge.dispute.closed":
-            dispute = event["data"]["object"]
-            if dispute["status"] == "lost":
-                charge_id = dispute.get("charge")
-                try:
-                    apply_runtime_stripe_config()
-                    charge = stripe.Charge.retrieve(charge_id)
-                    customer_id = charge.get("customer")
-                    if customer_id:
-                        member = Member.query.filter_by(stripe_customer_id=customer_id).first()
-                        if member:
-                            member.is_active = False
-                            member.payment_status = "dispute_lost"
-                            db.session.commit()
-                            app.logger.error(
-                                "DISPUTE LOST for Stripe Customer ID: %s. Member has been deactivated.",
-                                customer_id,
-                            )
-                except Exception as e:
-                    app.logger.error(f"Error handling dispute for charge {charge_id}: {e}")
-
-        return "Success", 200
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash(_("Your session has expired or the form is invalid. Please try submitting again."), "warning")
-        return redirect(request.referrer or url_for("index"))
+        return redirect(request.referrer or url_for("public.index"))
 
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
-        flash(_("Too many requests from your IP address. Please wait a moment and try again."), "warning")
-        return redirect(request.referrer or url_for("index")), 429
+        # Rendered, not redirected. Browsers do not follow a Location header on
+        # a 429, so returning a redirect left the member on an unstyled
+        # "Redirecting..." page that never went anywhere and explained nothing.
+        return render_template("429.html"), 429
 
     @app.errorhandler(413)
     def request_entity_too_large(e):
         flash(_("The submitted data is too large to process. Please reduce the file size and try again."), "danger")
-        if request.path == url_for("upload_forum_avatar"):
-            return redirect(url_for("forum_entry"))
-        return redirect(request.referrer or url_for("index"))
+        if request.path == url_for("forum.upload_forum_avatar"):
+            return redirect(url_for("forum.forum_entry"))
+        return redirect(request.referrer or url_for("public.index"))
 
     @app.errorhandler(404)
     def page_not_found(e):
@@ -5266,10 +4766,8 @@ def create_app():
     return app
 
 
-application = create_app()
-
 if __name__ == "__main__":
-    application.run(debug=False)
+    create_app().run(debug=False)
 
 
 

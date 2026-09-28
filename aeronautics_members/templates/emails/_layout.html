@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+{#-
+    The one frame every email is drawn in, so they all look like they come
+    from the same place.
+
+    A table with inline colours rather than styled divs: Outlook ignores most
+    CSS on a div, and Gmail drops a stylesheet in some of its apps, so the
+    colours that make this readable -- light text on a dark card -- have to be
+    on the elements themselves. The stylesheet only adds what can be lost.
+
+    In dark mode some mail apps recolour the email: Gmail on the iPhone and
+    Outlook on Windows invert it, so this dark design arrives light there, with
+    dark text. That is left to happen on purpose. The known tricks for pinning
+    the dark colours in Gmail lock the backgrounds and then rely on a second
+    trick to keep the text light; the day Gmail stops honouring the second, the
+    email turns into dark text on a dark background. Inverted, it is always
+    readable -- and the header is an image, which no app recolours.
+
+    ``preview_text`` is the line an inbox shows beside the subject. It is
+    hidden in the email itself, where it used to sit visibly above a heading
+    that said the same thing.
+-#}
+<html lang="{{ email_lang|default('en') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="supported-color-schemes" content="dark">
+    <title>{{ subject|default('Joanneum Aeronautics') }}</title>
+    <style>
+        body { margin: 0; padding: 0; }
+        a { color: #00dfff; }
+        .content p { margin: 0 0 16px; }
+        .content h2 { margin: 0 0 18px; font-size: 22px; line-height: 1.3; color: #ffffff; }
+        .content h3 { margin: 0 0 12px; font-size: 18px; line-height: 1.3; color: #ffffff; }
+        .muted { color: #aab4bb; font-size: 14px; }
+        .link-fallback { word-break: break-all; font-size: 13px; }
+        .box { margin: 20px 0; padding: 16px 18px; border: 1px solid #34383b; background-color: #161718; }
+        .button { display: inline-block; background-color: #00dfff; color: #081114 !important; padding: 14px 26px; font-weight: 700; text-decoration: none; border-radius: 4px; }
+        {% block styles %}{% endblock %}
+        @media (max-width: 480px) { .content { padding: 24px 20px !important; } }
+    </style>
+</head>
+<body style="margin:0; padding:0; background-color:#161718;">
+    {% if preview_text %}
+        <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all;">{{ preview_text }}</div>
+    {% endif %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#161718" style="background-color:#161718;">
+        <tr>
+            <td align="center" style="padding:24px 12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1f2123"
+                       style="max-width:{{ email_width|default(640) }}px; background-color:#1f2123; border:1px solid #34383b;">
+                    <tr>
+                        {#- One image: band, logo and line together. Mail apps in dark
+                            mode recolour backgrounds -- Gmail on the iPhone and Outlook
+                            on Windows turn a dark email light -- but never an image, and
+                            a white logo on a background turned light simply vanished. -#}
+                        <td align="center" bgcolor="#000000" style="background-color:#000000; padding:0; line-height:0; font-size:0;">
+                            <img src="cid:logo" alt="Joanneum Aeronautics" width="{{ email_width|default(640) }}"
+                                 style="display:block; width:100%; max-width:{{ email_width|default(640) }}px; height:auto; border:0; color:#ffffff; font-size:18px; line-height:1.4;">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="content" style="padding:32px 34px; color:#ffffff; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:16px; line-height:1.6;">
+                            {% block content %}{% endblock %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding:20px 28px 26px; border-top:1px solid #34383b; color:#aab4bb; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:12px; line-height:1.5;">
+                            {% block footer %}&copy; {{ now.year }} Joanneum Aeronautics{% endblock %}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

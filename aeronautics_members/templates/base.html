@@ -1,17 +1,25 @@
 <!DOCTYPE html>
-<html lang="{{ get_locale() | string | replace('_', '-') }}">
+{#- Always dark, whatever the device is set to: Bootstrap's dark theme is
+    switched on here for good, never from the browser's preference. -#}
+<html lang="{{ get_locale() | string | replace('_', '-') }}" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
     <title>{% block title %}{{ _('Joanneum Aeronautics Membership') }}{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preload" href="{{ url_for('static', filename='fonts/inter-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/archivo-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='logo_joanneum_aeronautics_negativ.svg') }}" type="image/svg+xml">
+    {#- The "A with airplane" mark alone: the full logo is unreadable at tab size. -#}
+    <link rel="icon" href="{{ url_for('static', filename='favicon-32.png') }}" type="image/png" sizes="32x32">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 </head>
-<body class="bg-gray-100 app-shell">
-    <nav class="navbar navbar-expand-lg navbar-dark bg-light app-navbar">
+<body class="app-shell">
+    <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('index') }}" aria-label="{{ _('Joanneum Aeronautics') }}">
+            <a class="navbar-brand" href="{{ url_for('public.index') }}" aria-label="{{ _('Joanneum Aeronautics') }}">
                 <img src="{{ url_for('static', filename='logo_joanneum_aeronautics_negativ.svg') }}" alt="{{ _('Joanneum Aeronautics') }}">
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="{{ _('Toggle navigation') }}">
@@ -20,27 +28,28 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-lg-center">
                     {% if current_user.is_authenticated %}
-                        {% if current_user.member %}
+                        {# Everybody signed in has an account, membership or not;
+                           the page shows the part they have. #}
+                        <li class="nav-item">
+                            <a class="nav-link{% if (request.endpoint or '').startswith(('account.', 'forum.')) or request.endpoint == 'auth.change_password' %} active" aria-current="page{% endif %}" href="{{ url_for('account.account') }}">{{ _('My Account') }}</a>
+                        </li>
+                        {% if current_user.can('admin.access') %}
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('account') }}">{{ _('My Account') }}</a>
-                            </li>
-                        {% endif %}
-                        {% if current_user.has_role('admin') %}
-                            <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('admin_dashboard') }}">{{ _('Admin') }}</a>
+                                <a class="nav-link{% if (request.endpoint or '').startswith('admin.') %} active" aria-current="page{% endif %}" href="{{ url_for('admin.admin_dashboard') }}">{{ _('Admin') }}</a>
                             </li>
                         {% endif %}
                         <li class="nav-item">
-                            <form method="POST" action="{{ url_for('logout') }}" class="d-flex align-items-center mb-0">
+                            <form method="POST" action="{{ url_for('auth.logout') }}" class="d-flex align-items-center mb-0">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="nav-link btn btn-link border-0 bg-transparent p-0">{{ _('Logout') }}</button>
+                                <button type="submit" class="nav-link btn btn-link border-0 bg-transparent">{{ _('Logout') }}</button>
                             </form>
                         </li>
                     {% else %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('login') }}">{{ _('Login') }}</a>
+                            <a class="nav-link{% if request.endpoint == 'auth.login' %} active" aria-current="page{% endif %}" href="{{ url_for('auth.login') }}">{{ _('Login') }}</a>
                         </li>
                     {% endif %}
+                    {% if config.BABEL_SUPPORTED_LOCALES|length > 1 %}
                     <li class="nav-item dropdown language-selector">
                         <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownMenuLink" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             {{ get_locale() }}
@@ -53,6 +62,7 @@
                             {% endfor %}
                         </ul>
                     </li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -62,7 +72,14 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
+                    {% if category == 'success' %}
+                    <div class="alert alert-success d-flex align-items-center gap-2" role="status">
+                        <svg class="success-check" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 13l6.5 6.5L22 6"/></svg>
+                        <span>{{ message }}</span>
+                    </div>
+                    {% else %}
                     <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endif %}
                 {% endfor %}
             {% endif %}
         {% endwith %}
@@ -70,7 +87,32 @@
         {% block content %}{% endblock %}
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {#
+      One quiet line on every page. Every address comes from the
+      configuration (config.py, .env), so they change without touching this
+      template.
+    #}
+    <footer class="site-footer">
+        <div class="container">
+            <ul class="site-footer-links">
+                <li><a href="{{ footer.impressum_url }}" target="_blank" rel="noopener">{{ _('Impressum') }}</a></li>
+                <li><a href="{{ footer.privacy_url }}" target="_blank" rel="noopener">{{ _('Privacy') }}</a></li>
+                <li>
+                    {% if footer.statutes_url %}
+                        <a href="{{ footer.statutes_url }}" target="_blank" rel="noopener">{{ _('Statutes') }}</a>
+                    {% else %}
+                        <a href="{{ url_for('public.legal_texts') }}">{{ _('Statutes') }}</a>
+                    {% endif %}
+                </li>
+                <li><a href="mailto:{{ footer.contact_email }}">{{ _('Contact') }}</a></li>
+                <li><a href="{{ footer.website_url }}" target="_blank" rel="noopener">{{ _('Website') }} <span aria-hidden="true">&#8599;</span></a></li>
+            </ul>
+            <p class="site-footer-copyright">&copy; {{ footer.year }} Joanneum Aeronautics</p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='submit-once.js') }}"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

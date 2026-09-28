@@ -1,0 +1,164 @@
+{#- Backup & Restore card on the Maintenance tab. Data: backup_page (services/backup.describe_backup_page). -#}
+{% set bp = backup_page %}
+{% set status = bp.status or {} %}
+
+{% macro check_icon(state) -%}
+    {%- if state == 'ok' -%}
+        <svg class="success-check" width="22" height="22" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 13l6.5 6.5L22 6"/></svg>
+    {%- elif state == 'failed' -%}
+        <svg class="checklist-cross" width="22" height="22" viewBox="0 0 26 26" aria-hidden="true"><path d="M6 6l14 14M20 6L6 20"/></svg>
+    {%- elif state in ('running', 'waiting') -%}
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+    {%- else -%}
+        <span class="checklist-dot" aria-hidden="true"></span>
+    {%- endif -%}
+{%- endmacro %}
+
+{% macro checklist_row(label, state, detail) -%}
+    <li class="checklist-item checklist-{{ state }}">
+        <span class="checklist-icon">{{ check_icon(state) }}</span>
+        <span>
+            <span class="checklist-label">{{ label }}</span>
+            <span class="checklist-detail">{{ detail }}</span>
+        </span>
+    </li>
+{%- endmacro %}
+
+<div class="card mt-4" id="backup-restore">
+    <div class="card-header d-flex justify-content-between align-items-center gap-2">
+        <h4 class="mb-0">{{ _('Backup & Restore') }}</h4>
+        {% if bp.paused %}
+            <span class="status-label status-pending">{{ _('Background jobs paused') }}</span>
+        {% endif %}
+    </div>
+    <div class="card-body">
+
+        {% if bp.paused %}
+            {#- Restored and not yet declared the real one. -#}
+            <div class="alert alert-warning">
+                {{ _('This portal was restored from a backup made on %(date)s. Its background jobs are paused: it sends no emails, does not sync the forum and does not check payments on its own, so a copy on a test machine cannot reach members or the live forum.', date=bp.paused.get('backup_created_at')|datetime_display) }}
+            </div>
+            <h6 class="text-muted text-uppercase small">{{ _('Background timers') }}</h6>
+            <ul class="checklist mb-4">
+                {% for entry in bp.jobs %}
+                    {{ checklist_row(entry.job.label, entry.state if entry.state != 'waiting' else 'scheduled', entry.detail) }}
+                {% endfor %}
+            </ul>
+            <form method="POST" action="{{ url_for('admin.admin_resume_background_jobs') }}" class="mb-4" data-busy-text="{{ _('Resuming…') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" name="confirm" value="resume" id="confirm-resume" required>
+                    <label class="form-check-label" for="confirm-resume">
+                        {{ _('This is the server members use. Send emails, sync the forum and check payments from here.') }}
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary">{{ _('Resume background jobs') }}</button>
+            </form>
+            <hr>
+        {% elif bp.checklist is not none %}
+            {#- Resumed: show, line by line, that everything really works. -#}
+            <h6 class="text-muted text-uppercase small">{{ _('Is everything working?') }}</h6>
+            <ul class="checklist mb-3" id="resume-checklist" data-url="{{ url_for('admin.admin_background_jobs_checklist') }}">
+                {% for item in bp.checklist %}
+                    {{ checklist_row(item.label, item.state, item.detail) }}
+                {% endfor %}
+            </ul>
+            <div class="d-flex flex-wrap gap-2 mb-4">
+                <form method="POST" action="{{ url_for('admin.admin_background_jobs_check_again') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-secondary">{{ _('Check again') }}</button>
+                </form>
+                <form method="POST" action="{{ url_for('admin.admin_background_jobs_dismiss_checklist') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-secondary">{{ _('Hide this list') }}</button>
+                </form>
+            </div>
+            <hr>
+        {% endif %}
+
+        <h6 class="text-muted text-uppercase small">{{ _('Make a backup') }}</h6>
+        <p class="small text-muted">
+            {{ _('One file with everything this installation holds: all accounts and memberships, every setting and credential, pictures waiting for review, and the secret key, Stripe keys and mail accounts from the server configuration. Restored onto a fresh install, it gives back this portal as it is now.') }}
+        </p>
+        <div class="alert alert-info small">
+            {{ _('The file is encrypted with the passphrase you choose here. The passphrase is not stored anywhere: without it the backup cannot be restored, by anyone. Keep it somewhere safe, apart from the file.') }}
+        </div>
+
+        {% set running = status.get('state') == 'running' %}
+        {% if status %}
+            <div id="backup-progress" class="mb-3" data-status-url="{{ url_for('admin.admin_backup_status') }}" data-state="{{ status.get('state') }}">
+                <ul class="checklist mb-2">
+                    {% for step in status.get('steps', []) %}
+                        {% set step_state = {'done': 'ok', 'running': 'running', 'failed': 'failed'}.get(step.state, 'pending') %}
+                        {{ checklist_row(step.label, step_state, '') }}
+                    {% endfor %}
+                </ul>
+                {% if status.get('state') == 'completed' and status.get('result') %}
+                    <div class="alert alert-success small mb-2">
+                        {{ _('Last backup: %(file)s, %(rows)s rows and %(files)s files, checked after writing.', file=status.result.file, rows=status.result.rows, files=status.result.files) }}
+                    </div>
+                {% elif status.get('state') == 'failed' %}
+                    <div class="alert alert-danger small mb-2">{{ status.get('error') }}</div>
+                {% endif %}
+                <details {% if running %}open{% endif %}>
+                    <summary class="small text-muted">{{ _('Progress log') }}</summary>
+                    <pre class="mt-2 p-3 border small text-break update-log" id="backup-progress-log">{{ status.get('log', [])|join('\n') }}</pre>
+                </details>
+            </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('admin.admin_start_backup') }}" class="row g-3 align-items-end mb-4" data-busy-text="{{ _('Starting…') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-5">
+                <label class="form-label" for="backup-passphrase">{{ _('Passphrase') }}</label>
+                <input class="form-control" type="password" id="backup-passphrase" name="passphrase" autocomplete="new-password"
+                       minlength="{{ bp.min_passphrase_length }}" required placeholder="{{ _('At least %(count)s characters', count=bp.min_passphrase_length) }}">
+            </div>
+            <div class="col-md-5">
+                <label class="form-label" for="backup-passphrase-confirm">{{ _('Passphrase again') }}</label>
+                <input class="form-control" type="password" id="backup-passphrase-confirm" name="passphrase_confirm" autocomplete="new-password"
+                       minlength="{{ bp.min_passphrase_length }}" required>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-primary" {% if running %}disabled{% endif %}>{{ _('Back up') }}</button>
+            </div>
+        </form>
+
+        {% if bp.backups %}
+            <div class="table-responsive mb-4">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr><th>{{ _('Backup') }}</th><th>{{ _('Made') }}</th><th>{{ _('Size') }}</th><th class="text-end">{{ _('Action') }}</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in bp.backups %}
+                            <tr>
+                                <td class="text-break">{{ entry.name }}</td>
+                                <td class="text-nowrap">{{ entry.modified|datetime_display }}</td>
+                                <td class="text-nowrap">{{ entry.size_display }}</td>
+                                <td class="text-end text-nowrap">
+                                    <a class="btn btn-sm btn-primary" href="{{ url_for('admin.admin_download_backup', name=entry.name) }}">{{ _('Download') }}</a>
+                                    <form method="POST" action="{{ url_for('admin.admin_delete_backup', name=entry.name) }}" class="d-inline"
+                                          data-confirm="{{ _('Delete %(name)s from the server?', name=entry.name) }}">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">{{ _('Delete') }}</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted">{{ _('The newest %(count)s backups are kept on the server; older ones are removed when a new one is made. Download a backup to keep it somewhere else.', count=bp.kept) }}</p>
+        {% endif %}
+
+        <h6 class="text-muted text-uppercase small">{{ _('Restore') }}</h6>
+        <p class="small text-muted mb-2">
+            {{ _('Restoring replaces everything on an installation with the backup, including any account made while installing. Copy the file to the server and run the installer with it; this works on a fresh install and on an existing one:') }}
+        </p>
+        <pre class="p-3 border small text-break update-log mb-2">sudo ./install.sh --restore /path/to/{{ (bp.backups[0].name if bp.backups else 'portal-backup.jabackup') }}</pre>
+        <p class="small text-muted mb-0">
+            {{ _('It asks for the passphrase, restores, restarts the portal and leaves every background job paused until you resume them here.') }}
+        </p>
+    </div>
+</div>

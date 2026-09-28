@@ -3,43 +3,31 @@
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-xl-8 col-lg-10">
-        <div class="card shadow-sm border-0">
+        <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
                 <h3 class="mb-0">{{ _('Forum Access') }}</h3>
-                <div class="d-flex gap-2 flex-wrap">
-                    <a href="{{ url_for('account') }}" class="btn btn-sm btn-secondary">{{ _('Back to Account') }}</a>
-                    {% if current_user.is_authenticated %}
-                        <form method="POST" action="{{ url_for('logout') }}" class="mb-0">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="next" value="{{ url_for('login', next=url_for('forum_entry')) }}">
-                            <button type="submit" class="btn btn-sm btn-outline-light">{{ _('Log Out Everywhere') }}</button>
-                        </form>
-                    {% endif %}
-                </div>
+                <a href="{{ url_for('account.account') }}" class="btn btn-sm btn-secondary">{{ _('Back to Account') }}</a>
             </div>
             <div class="card-body">
                 <p class="text-muted">{{ _('Use this page to complete the steps required before member content becomes visible in the forum.') }}</p>
                 <dl class="row">
                     <dt class="col-sm-4">{{ _('Forum Username') }}</dt>
-                    <dd class="col-sm-8">{{ current_user.forum_username or _('Not set') }}</dd>
+                    <dd class="col-sm-8">{% if forum_context.reconnect_waiting %}{{ _('Your old one, once reconnected') }}{% else %}{{ current_user.forum_username or _('Not set') }}{% endif %}</dd>
                     <dt class="col-sm-4">{{ _('Status') }}</dt>
                     <dd class="col-sm-8">{{ forum_context.status_message }}</dd>
                 </dl>
 
                 {% if forum_context.forum_error %}
-                    <div class="alert alert-warning">{{ forum_context.forum_error }}</div>
+                    <div class="alert alert-warning">{{ _('The forum could not be updated just now. We will try again automatically.') }}</div>
                 {% endif %}
 
-                {% if forum_context.status_key == 'inactive_membership' %}
-                    <div class="alert alert-secondary mb-0">{{ _('Your forum access will become available again once your membership is active.') }}</div>
-                {% elif forum_context.status_key == 'disabled' %}
-                    <div class="alert alert-secondary mb-0">{{ _('The forum integration is not configured yet.') }}</div>
-                {% elif forum_context.status_key == 'active' %}
-                    <div class="alert alert-success">{{ _('Your forum access is ready. If you are not redirected automatically, use the button below.') }}</div>
+                {#- The status line above says where things stand; nothing below repeats it. -#}
+                {% if forum_context.status_key == 'active' %}
+                    <p>{{ _('If you are not taken to the forum automatically, use the button below.') }}</p>
                     <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
-                {% else %}
-                    {% if forum_context.latest_submission and forum_context.latest_submission.review_note %}
-                        <div class="alert alert-secondary">{{ forum_context.latest_submission.review_note }}</div>
+                {% elif forum_context.status_key in ['needs_avatar', 'pending_avatar', 'rejected_avatar'] %}
+                    {% if forum_context.status_key == 'rejected_avatar' and forum_context.latest_submission.review_note %}
+                        <div class="alert alert-secondary">{{ _('Reason: %(note)s', note=forum_context.latest_submission.review_note) }}</div>
                     {% endif %}
                     {% set upload_id_prefix = 'forum-avatar-page' %}
                     {% include 'account/_forum_avatar_upload.html' %}

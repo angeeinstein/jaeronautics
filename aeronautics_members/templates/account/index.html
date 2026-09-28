@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_form_errors.html" import form_errors %}
 {% block title %}{{ _('My Account') }}{% endblock %}
 {% block content %}
 <div class="row g-4 mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
+        <div class="card">
             <div class="card-body">
                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
                     <div>
@@ -11,31 +12,83 @@
                         <p class="text-muted mb-0">{{ current_user.email }}</p>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
-                        {% if not current_user.email_is_verified %}
-                            <form method="POST" action="{{ url_for('resend_verification_email') }}" class="mb-0">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-secondary">{{ _('Resend Verification Email') }}</button>
-                            </form>
-                        {% endif %}
-                        <a href="{{ url_for('change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
+                        <a href="{{ url_for('auth.change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
                         {% if forum_context.can_enter_forum %}
                             <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
                         {% endif %}
                         {% if can_manage_billing %}
-                            <form method="POST" action="{{ url_for('manage_member_billing') }}" class="mb-0">
+                            <form method="POST" action="{{ url_for('account.manage_member_billing') }}" class="mb-0" data-busy-text="{{ _('Opening billing…') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-primary">{{ _('Manage Billing') }}</button>
                             </form>
                         {% elif can_resume_payment %}
-                            <form method="POST" action="{{ url_for('resume_member_payment') }}" class="mb-0">
+                            <form method="POST" action="{{ url_for('account.resume_member_payment') }}" class="mb-0" data-busy-text="{{ _('Taking you to payment…') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-primary">{{ _('Resume Payment') }}</button>
                             </form>
                         {% endif %}
                     </div>
                 </div>
-                {% if not current_user.email_is_verified %}
-                    <div class="alert alert-warning mt-4 mb-0">{{ _('Your email address is not verified yet.') }}</div>
+                {#
+                    Both addresses, always, with what is outstanding on each.
+                    There are two, they are confirmed separately, and one
+                    generic "verify your email" left people confirming the
+                    private one and stopping -- with nothing to say the
+                    university one still mattered. For a returning student it
+                    matters most of all: it is the only evidence that can give
+                    them their old forum account back.
+                #}
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center gap-2">
+                            <div>
+                                <div class="text-muted small">{{ _('Private Email') }}</div>
+                                <div>{{ current_user.email }}</div>
+                            </div>
+                            {% if current_user.email_is_verified %}
+                                <span class="status-label status-active">{{ _('Confirmed') }}</span>
+                            {% else %}
+                                <span class="status-label status-pending">{{ _('Not confirmed') }}</span>
+                            {% endif %}
+                        </div>
+                        {% if not current_user.email_is_verified %}
+                            <form method="POST" action="{{ url_for('account.resend_verification_email') }}" class="mt-2 mb-0" data-busy-text="{{ _('Sending…') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-secondary">{{ _('Send confirmation email again') }}</button>
+                            </form>
+                        {% endif %}
+                    </div>
+
+                    {% if member and member.email_work %}
+                        <div class="col-md-6">
+                            <div class="d-flex justify-content-between align-items-center gap-2">
+                                <div>
+                                    <div class="text-muted small">{{ _('University or Company Email') }}</div>
+                                    <div>{{ member.email_work }}</div>
+                                </div>
+                                {% if member.email_work_is_verified %}
+                                    <span class="status-label status-active">{{ _('Confirmed') }}</span>
+                                {% else %}
+                                    <span class="status-label status-pending">{{ _('Not confirmed') }}</span>
+                                {% endif %}
+                            </div>
+                            {% if not member.email_work_is_verified %}
+                                <form method="POST" action="{{ url_for('account.resend_work_email_verification') }}" class="mt-2 mb-0" data-busy-text="{{ _('Sending…') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-secondary">{{ _('Send confirmation email again') }}</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if not current_user.email_is_verified or (member and member.email_work and not member.email_work_is_verified) %}
+                    <div class="alert alert-warning mt-3 mb-0">
+                        {{ _('Both email addresses need confirming. We send a separate email to each.') }}
+                        {% if member and member.email_work and not member.email_work_is_verified %}
+                            {{ _('Confirming your university or company address is what restores your account from the old forum, if you had one.') }}
+                        {% endif %}
+                    </div>
                 {% endif %}
             </div>
         </div>
@@ -44,12 +97,12 @@
 
 <div class="row g-4">
     <div class="col-xl-4">
-        <div class="card shadow-sm border-0 mb-4">
+        <div class="card mb-4">
             <div class="card-header"><h4 class="mb-0">{{ _('Membership Overview') }}</h4></div>
             <div class="card-body">
                 {% set membership_status_labels = {
-                    'paid': _('Active'),
-                    'free_period': _('Active'),
+                    'paid': _('Paid'),
+                    'free_period': _('Free until year end'),
                     'cancel_scheduled': _('Renewal Canceled'),
                     'canceled': _('Ended'),
                     'pending_checkout': _('Payment Setup Incomplete'),
@@ -59,26 +112,26 @@
                 } %}
                 <dl class="row mb-0">
                     <dt class="col-sm-5">{{ _('Status') }}</dt>
-                    <dd class="col-sm-7">{{ membership_status_labels.get(member.payment_status, member.payment_status|replace('_', ' ')|title) }}</dd>
+                    <dd class="col-sm-7">{% if payment_arriving %}{{ _('Payment Received') }}{% else %}{{ membership_status_labels.get(member.payment_status, member.payment_status|replace('_', ' ')|title) }}{% endif %}</dd>
                     <dt class="col-sm-5">{{ _('Membership Active') }}</dt>
-                    <dd class="col-sm-7">{% if member.is_active %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
+                    <dd class="col-sm-7">{% if has_access %}{{ _('Yes') }}{% else %}{{ _('No') }}{% endif %}</dd>
                     <dt class="col-sm-5">{{ _('Membership Starts') }}</dt>
-                    <dd class="col-sm-7">{{ member.membership_starts_on.strftime('%Y-%m-%d') if member.membership_starts_on else _('Not set') }}</dd>
+                    <dd class="col-sm-7">{{ member.membership_starts_on|date_display if member.membership_starts_on else _('Not set') }}</dd>
                     <dt class="col-sm-5">{{ _('Membership Ends') }}</dt>
-                    <dd class="col-sm-7">{{ member.membership_ends_on.strftime('%Y-%m-%d') if member.membership_ends_on else _('Not set') }}</dd>
+                    <dd class="col-sm-7">{{ member.membership_ends_on|date_display if member.membership_ends_on else _('Not set') }}</dd>
                     <dt class="col-sm-5">{{ _('Renews On') }}</dt>
                     <dd class="col-sm-7">
                         {% if member.cancel_at_period_end %}
                             {{ _('Not scheduled') }}
                         {% else %}
-                            {{ member.renewal_due_on.strftime('%Y-%m-%d') if member.renewal_due_on else _('Not set') }}
+                            {{ member.renewal_due_on|date_display if member.renewal_due_on else _('Not set') }}
                         {% endif %}
                     </dd>
                     <dt class="col-sm-5">{{ _('Automatic Renewal') }}</dt>
                     <dd class="col-sm-7">
                         {% if member.cancel_at_period_end %}
                             {% if member.membership_ends_on %}
-                                {{ _('No, your membership will end on %(date)s unless you renew again.', date=member.membership_ends_on.strftime('%Y-%m-%d')) }}
+                                {{ _('No, your membership will end on %(date)s unless you renew again.', date=member.membership_ends_on|date_display) }}
                             {% else %}
                                 {{ _('No, automatic renewal is turned off.') }}
                             {% endif %}
@@ -87,70 +140,91 @@
                         {% endif %}
                     </dd>
                     <dt class="col-sm-5">{{ _('Forum Username') }}</dt>
-                    <dd class="col-sm-7">{{ current_user.forum_username or _('Not set') }}</dd>
+                    <dd class="col-sm-7">{% if forum_context.reconnect_waiting %}{{ _('Your old one, once reconnected') }}{% else %}{{ current_user.forum_username or _('Not set') }}{% endif %}</dd>
                 </dl>
                 {% if member.cancel_at_period_end %}
                     <div class="alert alert-warning mt-4 mb-0">
                         {% if member.membership_ends_on %}
-                            {{ _('Your membership stays active until %(date)s, but it will not renew automatically.', date=member.membership_ends_on.strftime('%Y-%m-%d')) }}
+                            {{ _('Your membership stays active until %(date)s, but it will not renew automatically.', date=member.membership_ends_on|date_display) }}
                         {% else %}
                             {{ _('Your membership remains active, but it will not renew automatically.') }}
                         {% endif %}
                     </div>
+                {% elif payment_needs_attention %}
+                    <div class="alert alert-warning mt-4 mb-0">{{ _('Your last payment failed. Please update your payment method under Manage Billing; Stripe will then try again.') }}</div>
+                {% elif can_rejoin %}
+                    {#
+                        The only way back for somebody whose membership has
+                        ended: the billing portal reopens a subscription only
+                        until it has actually ended, and a cancelled one cannot
+                        be restarted.
+                    #}
+                    <div class="alert alert-secondary mt-4 mb-0">
+                        <p class="mb-2">{{ _('Your membership has ended. You can rejoin at any time; you pay for the rest of the current year, as when you first joined.') }}</p>
+                        <form method="POST" action="{{ url_for('account.rejoin_membership') }}" class="mb-0" data-busy-text="{{ _('Taking you to payment…') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            {% if invoice_payments_enabled %}
+                                <div class="mb-2">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="payment_method" id="rejoin-checkout" value="checkout" checked>
+                                        <label class="form-check-label" for="rejoin-checkout">{{ _('Card or SEPA Direct Debit') }}</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="payment_method" id="rejoin-invoice" value="invoice">
+                                        <label class="form-check-label" for="rejoin-invoice">{{ _('Invoice') }}</label>
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">{{ _('Rejoin') }}</button>
+                        </form>
+                    </div>
+                {% elif member.payment_status == 'processing' and not member.is_active %}
+                    <div class="alert alert-info mt-4 mb-0">{{ _('Your payment is being processed. A SEPA direct debit usually takes a few business days to clear; your membership starts then, and we will email you.') }}</div>
+                {% elif payment_arriving %}
+                    <div class="alert alert-info mt-4 mb-0">{{ _('Payment received. Your membership is being activated, which usually takes a few seconds. Reload this page in a moment.') }}</div>
                 {% elif can_resume_payment %}
                     <div class="alert alert-info mt-4 mb-0">{{ _('Your account is ready, but the membership payment is not finished yet. Use the resume button above to continue.') }}</div>
-                {% elif not can_manage_billing %}
-                    <div class="alert alert-secondary mt-4 mb-0">{{ _('Stripe billing access will become available after a successful payment setup.') }}</div>
                 {% endif %}
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
+        <div class="card">
             <div class="card-header"><h4 class="mb-0">{{ _('Forum Access') }}</h4></div>
             <div class="card-body">
                 <p class="mb-2"><strong>{{ _('Status') }}:</strong> {{ forum_context.status_message }}</p>
-                <p class="mb-3"><strong>{{ _('Forum Username') }}:</strong> {{ current_user.forum_username or _('Not set') }}</p>
+                <p class="mb-3"><strong>{{ _('Forum Username') }}:</strong> {% if forum_context.reconnect_waiting %}{{ _('Your old one, once reconnected') }}{% else %}{{ current_user.forum_username or _('Not set') }}{% endif %}</p>
 
                 {% if forum_context.forum_error %}
-                    <div class="alert alert-warning">{{ forum_context.forum_error }}</div>
+                    <div class="alert alert-warning">{{ _('The forum could not be updated just now. We will try again automatically.') }}</div>
                 {% endif %}
 
+                {#- The status line above says where things stand; nothing below repeats it. -#}
                 {% if forum_context.status_key == 'active' %}
-                    <div class="alert alert-success">{{ _('Your forum access is active and ready to open.') }}</div>
                     <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
                 {% elif forum_context.status_key in ['needs_avatar', 'pending_avatar', 'rejected_avatar'] %}
-                    {% if forum_context.status_key == 'pending_avatar' %}
-                        <div class="alert alert-info">{{ _('Your profile picture is waiting for admin approval.') }}</div>
-                    {% elif forum_context.status_key == 'rejected_avatar' %}
-                        <div class="alert alert-warning">{{ _('Your last profile picture was rejected. Please upload a new one.') }}</div>
-                    {% else %}
-                        <div class="alert alert-secondary">{{ _('Please upload a profile picture before your forum access can be completed.') }}</div>
-                    {% endif %}
-
-                    {% if forum_context.latest_submission and forum_context.latest_submission.review_note %}
-                        <div class="alert alert-secondary">{{ forum_context.latest_submission.review_note }}</div>
+                    {% if forum_context.status_key == 'rejected_avatar' and forum_context.latest_submission.review_note %}
+                        <div class="alert alert-secondary">{{ _('Reason: %(note)s', note=forum_context.latest_submission.review_note) }}</div>
                     {% endif %}
 
                     {% set upload_id_prefix = 'forum-avatar' %}
                     {% include 'account/_forum_avatar_upload.html' %}
-                {% else %}
-                    <div class="alert alert-secondary mb-0">{{ forum_context.status_message }}</div>
                 {% endif %}
             </div>
         </div>
     </div>
     <div class="col-xl-8">
-        <div class="card shadow-sm border-0 mb-4">
+        <div class="card mb-4">
             <div class="card-header"><h4 class="mb-0">{{ _('Contact Details') }}</h4></div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('save_member_profile') }}">
+                {{ form_errors(profile_form) }}
+                <form method="POST" action="{{ url_for('account.save_member_profile') }}">
                     {{ profile_form.hidden_tag() }}
                     <div class="row g-3">
                         <div class="col-md-8">{{ profile_form.street.label(class="form-label") }}{{ profile_form.street(class="form-control") }}</div>
                         <div class="col-md-4">{{ profile_form.house_number.label(class="form-label") }}{{ profile_form.house_number(class="form-control") }}</div>
                         <div class="col-md-4">{{ profile_form.postal_code.label(class="form-label") }}{{ profile_form.postal_code(class="form-control") }}</div>
                         <div class="col-md-4">{{ profile_form.city.label(class="form-label") }}{{ profile_form.city(class="form-control") }}</div>
-                        <div class="col-md-4">{{ profile_form.country.label(class="form-label") }}{{ profile_form.country(class="form-control") }}</div>
+                        <div class="col-md-4">{{ profile_form.country.label(class="form-label") }}{{ profile_form.country(class="form-select") }}</div>
                         <div class="col-md-6">{{ profile_form.phone_private.label(class="form-label") }}{{ profile_form.phone_private(class="form-control") }}</div>
                         <div class="col-md-6">{{ profile_form.email_private.label(class="form-label") }}{{ profile_form.email_private(class="form-control", autocomplete="email") }}</div>
                         <div class="col-md-6">{{ profile_form.phone_work.label(class="form-label") }}{{ profile_form.phone_work(class="form-control") }}</div>
@@ -163,41 +237,105 @@
             </div>
         </div>
 
-        <div class="card shadow-sm border-0">
-            <div class="card-header"><h4 class="mb-0">{{ _('Identity Details') }}</h4></div>
+        <div class="card">
+            <div class="card-header"><h4 class="mb-0">{{ _('Name and Membership Type') }}</h4></div>
             <div class="card-body">
-                <div class="alert alert-secondary">{{ _('First name, last name, salutation, title, and year group require admin approval before they change.') }}</div>
+                <div class="alert alert-secondary">{{ _('Changes here are checked by an admin before they take effect.') }}</div>
                 {% if pending_request %}
                     <div class="border p-3 mb-4">
                         <h5>{{ _('Pending Change Request') }}</h5>
                         <p class="mb-2"><strong>{{ _('Requested Name:') }}</strong> {{ pending_request.requested_title or '' }} {{ pending_request.requested_first_name }} {{ pending_request.requested_last_name }}</p>
                         <p class="mb-2"><strong>{{ _('Requested Salutation:') }}</strong> {{ pending_request.requested_salutation }}</p>
-                        <p class="mb-2"><strong>{{ _('Requested Year Group:') }}</strong> {{ pending_request.requested_year_group }}</p>
+                        <p class="mb-2"><strong>{{ _('Requested Category:') }}</strong> {{ member_category_label(pending_request.requested_member_category) }}</p>
+                        <p class="mb-2"><strong>{{ _('Requested Year Group:') }}</strong> {{ pending_request.requested_year_group or _('None') }}</p>
                         {% if pending_request.member_note %}
                             <p class="mb-2"><strong>{{ _('Your Note:') }}</strong> {{ pending_request.member_note }}</p>
                         {% endif %}
                         {% if suggested_username_from_request and current_user.forum_username and suggested_username_from_request != current_user.forum_username %}
                             <p class="mb-3"><strong>{{ _('If approved, the forum username could become:') }}</strong> {{ suggested_username_from_request }}</p>
                         {% endif %}
-                        <form method="POST" action="{{ url_for('cancel_identity_change_request', request_id=pending_request.id) }}" class="mb-0">
+                        <form method="POST" action="{{ url_for('account.cancel_identity_change_request', request_id=pending_request.id) }}" class="mb-0">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-secondary">{{ _('Cancel Request') }}</button>
                         </form>
                     </div>
                 {% else %}
-                    <form method="POST" action="{{ url_for('submit_identity_change_request') }}">
+                    {{ form_errors(identity_form) }}
+                    <form method="POST" action="{{ url_for('account.submit_identity_change_request') }}">
                         {{ identity_form.hidden_tag() }}
                         <div class="row g-3">
                             <div class="col-md-4">{{ identity_form.salutation.label(class="form-label") }}{{ identity_form.salutation(class="form-select") }}</div>
                             <div class="col-md-8">{{ identity_form.title.label(class="form-label") }}{{ identity_form.title(class="form-control") }}</div>
                             <div class="col-md-6">{{ identity_form.first_name.label(class="form-label") }}{{ identity_form.first_name(class="form-control") }}</div>
                             <div class="col-md-6">{{ identity_form.last_name.label(class="form-label") }}{{ identity_form.last_name(class="form-control") }}</div>
-                            <div class="col-md-6">{{ identity_form.year_group.label(class="form-label") }}{{ identity_form.year_group(class="form-control", oninput="this.value = this.value.toUpperCase()") }}</div>
+                            <div class="col-md-6" data-member-kind
+                                 data-year-group-categories="{{ year_group_categories }}"
+                                 data-year-group-required="{{ year_group_required_categories }}">
+                                {{ identity_form.member_category.label(class="form-label") }}
+                                {{ identity_form.member_category(class="form-select") }}
+                                <div class="mt-3" data-year-group-field>
+                                    {{ identity_form.year_group.label(class="form-label") }}{{ identity_form.year_group(class="form-control") }}
+                                </div>
+                            </div>
                             <div class="col-12">{{ identity_form.member_note.label(class="form-label") }}{{ identity_form.member_note(class="form-control", rows="4", placeholder=_('Optional note for the admin, for example if you need to correct a typo.')) }}</div>
                         </div>
                         <div class="mt-4">{{ identity_form.submit(class="btn btn-primary") }}</div>
                     </form>
                 {% endif %}
+            </div>
+        </div>
+
+        {#- Last on the page, as the least used part of it, and as wide as
+            the forms above it rather than running under both columns. -#}
+        <div class="card mt-4" id="account-privacy">
+            <div class="card-header"><h4 class="mb-0">{{ _('Your Data') }}</h4></div>
+            <div class="card-body">
+                <p>{{ _('You can download everything we store about you, or ask us to delete it.') }}</p>
+                <a href="{{ url_for('account.export_my_data') }}" class="btn btn-secondary">
+                    {{ _('Download my data (JSON)') }}
+                </a>
+
+                <hr class="my-4">
+
+                <h5>{{ _('Delete my account') }}</h5>
+                <p class="mb-2">
+                    {{ _('We will erase your name, address and contact details, and your login will stop working. This cannot be undone.') }}
+                </p>
+                <p class="mb-3">
+                    {{ _('We keep a record of the membership fees you paid — without your personal details — because bookkeeping law requires it.') }}
+                </p>
+                {#
+                  Leaving and deleting are two different decisions, and doing them in
+                  the wrong order costs the member the rest of a year they have already
+                  paid for. So when there is still something to lose, say so here rather
+                  than only on the confirmation page they reach after committing.
+                #}
+                {% if member and member.stripe_subscription_id and not member.cancel_at_period_end %}
+                    <div class="alert alert-warning">
+                        <strong>{{ _('You have an active membership subscription.') }}</strong>
+                        {% if member.membership_ends_on %}
+                            {{ _('You have already paid for your membership until %(date)s.', date=member.membership_ends_on|date_display) }}
+                        {% endif %}
+                        {{ _('If you cancel your membership first, it keeps running until then and simply does not renew. Deleting your account now cancels it immediately, and the remaining time is not refunded.') }}
+                        {% if can_manage_billing %}
+                            <form method="POST" action="{{ url_for('account.manage_member_billing') }}" class="mt-2 mb-0" data-busy-text="{{ _('Opening billing…') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-primary">{{ _('Cancel my membership instead') }}</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                {% elif member and member.cancel_at_period_end and member.membership_ends_on %}
+                    <p class="mb-3">
+                        {{ _('Your membership is already set to end on %(date)s. If you delete your account before then, you lose the remaining time without a refund.', date=member.membership_ends_on|date_display) }}
+                    </p>
+                {% endif %}
+                <form method="POST" action="{{ url_for('account.request_account_deletion') }}" class="mb-0" data-busy-text="{{ _('Sending…') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-outline-danger">{{ _('Email me a deletion link') }}</button>
+                </form>
+                <p class="form-text mb-0">
+                    {{ _('We send a confirmation link to your email address; nothing is deleted until you open it.') }}
+                </p>
             </div>
         </div>
     </div>
@@ -206,4 +344,5 @@
 
 {% block extra_scripts %}
     <script src="{{ url_for('static', filename='forum-avatar-upload.js') }}"></script>
+    <script src="{{ url_for('static', filename='member-kind-toggle.js') }}"></script>
 {% endblock %}

@@ -1,0 +1,25 @@
+# Ruff configuration.
+#
+# We enable the pyflakes ("F") rules only: they catch real bugs (undefined
+# names, unused imports/variables, f-string mistakes) without imposing stylistic
+# churn on the existing codebase. Style rules can be layered on later.
+
+line-length = 120
+target-version = "py311"
+
+[lint]
+select = ["F"]
+
+[lint.per-file-ignores]
+# app.py re-exports many names that the blueprint modules import from it, so
+# ruff sees them as "unused" here. It also uses try/except import fallbacks that
+# confuse redefinition analysis. These are intentional during the blueprint
+# migration.
+"aeronautics_members/app.py" = ["F401", "F811"]
+# These modules use the same try/except import fallback pattern.
+"aeronautics_members/forum_service.py" = ["F401"]
+"aeronautics_members/notification_service.py" = ["F401"]
+"aeronautics_members/mail_utils.py" = ["F401"]
+"aeronautics_members/db_models.py" = ["F401"]
+# wsgi.py exposes `application` as the gunicorn entrypoint (wsgi:application).
+"wsgi.py" = ["F401"]

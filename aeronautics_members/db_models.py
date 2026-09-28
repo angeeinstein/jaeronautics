@@ -5,9 +5,14 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import UniqueConstraint
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from .member_categories import DEFAULT_CATEGORY, MemberCategory, category_label
+from .permissions import Permission, permissions_for
+
 
 db = SQLAlchemy()
 
+ROLE_ADMIN = "admin"
+ROLE_SUPERADMIN = "superadmin"
 
 
 def utcnow():
@@ -47,9 +52,31 @@ class User(UserMixin, db.Model):
     forum_username = db.Column(db.String(255), unique=True, nullable=True)
     email_verified_at = db.Column(db.DateTime, nullable=True)
     password_reset_nonce = db.Column(db.String(255), nullable=True)
+    # Rotated whenever the address changes or a verification link is used, so a
+    # verification token issued for an older address cannot be replayed.
+    email_verification_nonce = db.Column(db.String(255), nullable=True)
+    # Switched off by an administrator. Separate from the membership on
+    # purpose: the two answer different questions and genuinely disagree. A
+    # member can be paid up for the year and barred from signing in, and a
+    # perfectly good account can sit here with no membership yet or a lapsed
+    # one. Folding them together would mean suspending somebody by cancelling
+    # what they paid for, or letting a subscription decide who is barred.
+    #
+    # Reversible, which is what separates it from deleted_at: the record is
+    # untouched, only access stops.
+    disabled_at = db.Column(db.DateTime, nullable=True)
+    disabled_reason = db.Column(db.String(255), nullable=True)
+    disabled_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # Set when the person's data was erased. The row survives because the
+    # membership ledger and the audit trail reference it and must stay readable;
+    # what made it a person is gone. See services/privacy.py.
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     member = db.relationship("Member", back_populates="user", uselist=False)
     forum_account = db.relationship("ForumAccount", back_populates="user", uselist=False)
+    imported_forum_profile = db.relationship(
+        "ImportedForumProfile", back_populates="user", uselist=False
+    )
     roles = db.relationship("Role", secondary="user_roles", back_populates="users")
     requested_profile_changes = db.relationship(
         "MemberProfileChangeRequest",
@@ -98,10 +125,69 @@ class User(UserMixin, db.Model):
         return self.email_verified_at is not None
 
     @property
+    def is_disabled(self):
+        return self.disabled_at is not None
+
+    @property
+    def can_sign_in(self):
+        """Whether this account may be used at all, ignoring the membership.
+
+        A membership decides what a signed-in member may reach, not whether
+        they may sign in -- somebody between subscriptions still has an
+        account.
+        """
+        return (
+            self.deleted_at is None
+            and self.disabled_at is None
+            and bool(self.password_hash)
+        )
+
+    @property
+    def account_status(self):
+        """One word for the state of the account itself, for screens and filters.
+
+        Deliberately answers a different question from the membership status
+        beside it. The order is by finality: erased cannot be undone, disabled
+        is a decision, and the rest describe an account nobody has switched
+        off and nobody can yet use.
+        """
+        if self.deleted_at is not None:
+            return "erased"
+        if self.disabled_at is not None:
+            return "disabled"
+        if self.imported_forum_profile is not None and not self.password_hash:
+            return "archived"
+        if not self.password_hash:
+            return "no_password"
+        return "active"
+
+    @property
+    def permissions(self):
+        """Everything this account may do, from the roles it holds."""
+        return permissions_for(role.slug for role in self.roles)
+
+    def can(self, permission):
+        """The access check. Nothing outside permissions.py asks about roles.
+
+        An erased account can do nothing: its rows survive as the record, and
+        ``load_user`` already refuses the session, but a check that reached here
+        with one must not answer yes.
+        """
+        if self.deleted_at is not None:
+            return False
+        return permission in self.permissions
+
+    @property
     def is_admin(self):
-        return self.has_role("admin")
+        return self.can(Permission.ADMIN_ACCESS)
 
     def has_role(self, slug):
+        """Whether this role is granted. About the grant, not about access.
+
+        Use :meth:`can` to decide what somebody may do. This is for the places
+        where the role itself is the subject: revoking it, counting holders, and
+        showing which badges an account carries.
+        """
         return any(role.slug == slug for role in self.roles)
 
     def grant_role(self, role):
@@ -115,9 +201,11 @@ class User(UserMixin, db.Model):
 
     @property
     def role(self):
-        if self.has_role("admin"):
-            return "admin"
-        return "user"
+        """One role name for display. The most capable one the account holds."""
+        held = [role.slug for role in self.roles]
+        if not held:
+            return "user"
+        return max(held, key=lambda slug: len(permissions_for([slug])))
 
 
 class Member(db.Model):
@@ -138,19 +226,46 @@ class Member(db.Model):
     phone_private = db.Column(db.String(50), nullable=False)
     email_private = db.Column(db.String(255), nullable=False, unique=True)
     phone_work = db.Column(db.String(50), nullable=True)
+    # The university or company address. Not a login and never mail from the
+    # portal's own workflows: it proves current affiliation, and for a student
+    # that is what says they are one. It outlives nothing -- when they graduate
+    # it stops working, which is exactly why email_private exists as well.
     email_work = db.Column(db.String(255), nullable=True)
-    year_group = db.Column(db.String(50), nullable=False)
+    email_work_verified_at = db.Column(db.DateTime, nullable=True)
+    # Rotated when email_work changes, so a link issued for the previous
+    # address cannot verify a new one.
+    email_work_verification_nonce = db.Column(db.String(255), nullable=True)
+    # What kind of member this is: student, alumni, staff, partner, honorary.
+    # The rules about who is asked for a year group, and what each kind is
+    # called, live in member_categories.py rather than here.
+    member_category = db.Column(
+        db.String(20), nullable=False,
+        default=DEFAULT_CATEGORY, server_default=DEFAULT_CATEGORY,
+    )
+    # Null where the category has none to give. It cannot stand in for the
+    # category: an alumnus has a year group, and so may a lecturer who studied
+    # here, so the two say different things about a person.
+    year_group = db.Column(db.String(50), nullable=True)
     terms_accepted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     pending_checkout_started_at = db.Column(db.DateTime, nullable=True)
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
+    # The last Checkout session started for this member. Kept so resuming an
+    # abandoned signup returns to the session that is already open instead of
+    # creating a second one -- two open sessions can both be completed, which
+    # buys the association two subscriptions for one member.
+    stripe_checkout_session_id = db.Column(db.String(255), nullable=True)
     payment_status = db.Column(db.String(50), nullable=False, default="unpaid")
     is_active = db.Column(db.Boolean, nullable=False, default=False)
     membership_starts_on = db.Column(db.Date, nullable=True)
     membership_ends_on = db.Column(db.Date, nullable=True)
     renewal_due_on = db.Column(db.Date, nullable=True)
     cancel_at_period_end = db.Column(db.Boolean, nullable=False, default=False)
+    # Erasure marker. The profile columns above are overwritten with placeholders
+    # rather than dropped, because they are NOT NULL and because the membership
+    # periods, invoices and audit entries that must be kept all point here.
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
     user = db.relationship("User", back_populates="member", uselist=False)
     forum_account = db.relationship("ForumAccount", back_populates="member", uselist=False)
@@ -167,19 +282,34 @@ class Member(db.Model):
         order_by="desc(ForumAvatarSubmission.uploaded_at)",
         cascade="all, delete-orphan",
     )
+    membership_periods = db.relationship(
+        "MembershipPeriod",
+        back_populates="member",
+        order_by="desc(MembershipPeriod.ends_on)",
+        cascade="all, delete-orphan",
+    )
 
-    def __repr__(self):
-        return f"<Member {self.first_name} {self.last_name}>"
+    @property
+    def email_work_is_verified(self):
+        return self.email_work_verified_at is not None
+
+    @property
+    def is_student(self):
+        """Whether this member is a current student.
+
+        Reads the category, not the year group. Those came apart once alumni
+        existed: an alumnus has a year group and is not a student.
+        """
+        return self.member_category == MemberCategory.STUDENT
+
+    @property
+    def category_label(self):
+        """The readable name of this member's category, for screens and emails."""
+        return category_label(self.member_category)
 
     @property
     def full_address(self):
         return f"{self.street} {self.house_number}, {self.postal_code} {self.city}, {self.country}"
-
-    @property
-    def has_current_coverage(self):
-        if not self.membership_ends_on:
-            return self.is_active
-        return self.membership_ends_on >= date.today()
 
     @property
     def open_identity_change_request(self):
@@ -187,6 +317,69 @@ class Member(db.Model):
             (request for request in self.profile_change_requests if request.status == "pending"),
             None,
         )
+
+    def __repr__(self):
+        return f"<Member {self.first_name} {self.last_name}>"
+
+
+class MembershipPeriod(db.Model):
+    """A window of membership coverage, and the reason the member has it.
+
+    The Member row carries ``payment_status``, ``is_active`` and the coverage
+    dates, but those are a *summary*: several code paths write them, and they
+    record only the current state, never why it is what it is. That is how a
+    member could be marked paid without any payment having happened -- nothing in
+    the row could contradict it.
+
+    This table is the evidence behind that summary. Each row says which window
+    was granted, on what grounds, and -- for a payment -- which Stripe invoice
+    proves it. A grant that turns out to be invalid (a lost dispute, a refund) is
+    revoked rather than deleted, so the history of what was believed and when
+    stays intact.
+
+    The Member fields remain as a cached projection of these rows, because most
+    reads want "is this member active" without a join; ``services/periods.py``
+    owns recomputing them so the two cannot drift silently.
+    """
+
+    __tablename__ = "membership_periods"
+
+    # Why coverage was granted.
+    REASON_PAID = "paid"
+    REASON_FREE_PERIOD = "free_period"
+    REASON_ADMIN_GRANT = "admin_grant"
+
+    id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=False, index=True)
+
+    starts_on = db.Column(db.Date, nullable=False)
+    ends_on = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(30), nullable=False)
+
+    # Evidence. A paid period should carry the invoice that paid for it; this is
+    # also the idempotency key, so a redelivered webhook cannot grant twice.
+    stripe_invoice_id = db.Column(db.String(255), nullable=True, unique=True)
+    stripe_subscription_id = db.Column(db.String(255), nullable=True)
+    granted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    note = db.Column(db.String(500), nullable=True)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_reason = db.Column(db.String(255), nullable=True)
+
+    member = db.relationship("Member", back_populates="membership_periods")
+    granted_by = db.relationship("User", foreign_keys=[granted_by_user_id])
+
+    @property
+    def is_revoked(self):
+        return self.revoked_at is not None
+
+    def covers(self, day):
+        return not self.is_revoked and self.starts_on <= day <= self.ends_on
+
+    def __repr__(self):
+        state = " revoked" if self.is_revoked else ""
+        return f"<MembershipPeriod member_id={self.member_id} {self.starts_on}..{self.ends_on} {self.reason}{state}>"
 
 
 class ForumAccount(db.Model):
@@ -202,12 +395,99 @@ class ForumAccount(db.Model):
     last_synced_email = db.Column(db.String(255), nullable=True)
     last_synced_username = db.Column(db.String(255), nullable=True)
     last_synced_at = db.Column(db.DateTime, nullable=True)
+    # When the forum first had this account with a confirmed address -- the
+    # moment Discourse activates it and sends its welcome message. Set, it
+    # asks the forum not to welcome them again when it reactivates the
+    # account, as it does after an email change is confirmed.
+    activated_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     user = db.relationship("User", back_populates="forum_account")
     member = db.relationship("Member", back_populates="forum_account")
+
+
+class ImportedForumProfile(db.Model):
+    """A person carried over from the old forum, who is not a member.
+
+    Roughly 500-600 of these exist: students from the last decade whose posts
+    should keep a name and a face beside them. They are not members and mostly
+    never will be again, but some may come back, so this is deliberately *not*
+    a status like "alumni" -- a label about somebody's past contradicts their
+    being able to rejoin. Two facts already say everything needed, and neither
+    is stored here:
+
+    * whether they can sign in -- ``users.password_hash IS NULL`` says no;
+    * whether they are a member -- the coverage ledger says.
+
+    This table holds only what the old forum knew and this database otherwise
+    has nowhere to put: a display name, a year group, an avatar. ``Member``
+    cannot hold them, because it requires a postal address, a phone number and
+    a unique private email address, none of which exist for somebody who left
+    in 2016.
+
+    ``source_user_id`` is the old forum's own key, which makes re-running the
+    import idempotent rather than duplicating six hundred people.
+    """
+
+    __tablename__ = "imported_forum_profiles"
+    __table_args__ = (
+        UniqueConstraint("source_system", "source_user_id", name="uq_imported_forum_source"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
+
+    source_system = db.Column(db.String(40), nullable=False, default="mybb")
+    source_user_id = db.Column(db.String(64), nullable=False)
+    source_username = db.Column(db.String(255), nullable=False)
+    # Kept as history, never as identity. The old addresses are university
+    # accounts, disabled when a student leaves, and the university may reissue
+    # one to a later student of the same name -- so this must never reach
+    # users.email, where the sign-in and password-reset paths would find it.
+    source_email = db.Column(db.String(255), nullable=True)
+
+    display_name = db.Column(db.String(200), nullable=False)
+    year_group = db.Column(db.String(50), nullable=True)
+    avatar_path = db.Column(db.String(255), nullable=True)
+    # Lets the forum fetch this avatar. Discourse pulls the image itself, as an
+    # unauthenticated server somewhere else, so the admin-only route cannot
+    # serve it -- and the staging directory also holds avatars waiting for
+    # review, so nothing there may be reachable by guessing a filename. An
+    # unguessable token per profile is the same answer ForumAvatarSubmission
+    # already uses, and is only minted for profiles actually being published.
+    avatar_public_token = db.Column(db.String(64), unique=True, nullable=True)
+    # When this person was last published to the forum, so a re-run can tell
+    # what it already did from what it has yet to do.
+    forum_synced_at = db.Column(db.DateTime, nullable=True)
+    post_count = db.Column(db.Integer, nullable=True)
+    joined_on = db.Column(db.Date, nullable=True)
+    last_posted_on = db.Column(db.Date, nullable=True)
+
+    # What the old forum said about them, kept as history and nothing more.
+    #
+    # "Banned" there did not mean misconduct: the reasons in its ban log read
+    # "non active student", "Not active student/exchange semester", "Is now a
+    # Lecturer". It was how a member who stopped studying was deactivated, and
+    # this is the only surviving record of who left and why.
+    #
+    # Deliberately NOT mapped onto users.disabled_at. That column means an
+    # administrator here made a decision, with a person and a date attached;
+    # a MyBB group is a fact about a system that is being switched off.
+    # Writing one into the other would invent an admin action that never
+    # happened -- and a returning student claiming such an account would
+    # inherit a dead one.
+    source_group = db.Column(db.String(64), nullable=True)
+    source_group_reason = db.Column(db.String(255), nullable=True)
+
+    imported_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    # Set when a returning student takes the account over, by an administrator
+    # who recognises them. Never by matching an email address: that match is
+    # the takeover route, not a convenience.
+    claimed_at = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", back_populates="imported_forum_profile")
 
 
 class ForumAvatarSubmission(db.Model):
@@ -251,7 +531,15 @@ class MemberProfileChangeRequest(db.Model):
     requested_title = db.Column(db.String(50), nullable=True)
     requested_first_name = db.Column(db.String(100), nullable=False)
     requested_last_name = db.Column(db.String(100), nullable=False)
-    requested_year_group = db.Column(db.String(50), nullable=False)
+    # The category being asked for, so "I have graduated, make me alumni" is a
+    # request an admin approves like any other identity change.
+    requested_member_category = db.Column(
+        db.String(20), nullable=False,
+        default=DEFAULT_CATEGORY, server_default=DEFAULT_CATEGORY,
+    )
+    # Nullable because the requested category may be one with no year group.
+    # Approving assigns both straight across.
+    requested_year_group = db.Column(db.String(50), nullable=True)
 
     status = db.Column(db.String(20), nullable=False, default="pending")
     member_note = db.Column(db.Text, nullable=True)
@@ -375,6 +663,101 @@ class EmailDeliveryJob(db.Model):
 
     target_user = db.relationship("User", foreign_keys=[target_user_id])
     target_member = db.relationship("Member", foreign_keys=[target_member_id])
+
+
+class ExternalWorkItem(db.Model):
+    """Work to be carried out against another system, recorded before it is done.
+
+    Forum synchronisation and similar calls used to run inline, in the middle of
+    the request or webhook that caused them. Two problems followed. The remote
+    call sat inside the handler with its own network timeout, so a slow Discourse
+    made Stripe's webhook time out; and when the call failed after the local
+    change had already been committed, the two systems simply disagreed and
+    nothing remembered that they did.
+
+    A row here is written in the *same transaction* as the change that requires
+    it, so either both happen or neither does. A worker then claims the row,
+    performs the call, and records success or a retry. Nothing is lost if the
+    worker dies holding a claim: the lease expires and the item is picked up
+    again, exactly as with the webhook inbox.
+
+    ``dedupe_key`` collapses repeated requests for the same outcome -- five
+    membership changes in a minute need one forum sync, not five.
+    """
+
+    __tablename__ = "external_work_items"
+
+    KIND_FORUM_SYNC = "forum_sync"
+    # Queued when an erasure could not reach Discourse. The local data is already
+    # gone at that point, so this has to keep retrying on its own.
+    KIND_FORUM_ANONYMISE = "forum_anonymise"
+    # Queued when a returning student reclaims their old forum account. Signing
+    # up made them a Discourse user before they reconnected, and the claim
+    # moves them onto the archived one -- leaving that first account behind,
+    # still holding their real address, which then blocks the address from
+    # reaching the account they actually use. It carries the remote id in its
+    # payload because the local row it belonged to is deleted by then.
+    KIND_FORUM_DISCARD_REPLACED = "forum_discard_replaced"
+
+    STATUS_PENDING = "pending"
+    STATUS_PROCESSING = "processing"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(60), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_PENDING, index=True)
+
+    member_id = db.Column(db.Integer, db.ForeignKey("member.id"), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    payload = db.Column(db.JSON, nullable=True)
+
+    # Set while an item is outstanding and cleared once it finishes, so a unique
+    # index can hold at most one open item per outcome without blocking history.
+    dedupe_key = db.Column(db.String(255), nullable=True, unique=True)
+    reason = db.Column(db.String(255), nullable=True)
+
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    # Honoured by the worker so a failing item backs off instead of spinning.
+    not_before = db.Column(db.DateTime, nullable=True)
+    claimed_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    member = db.relationship("Member", foreign_keys=[member_id])
+    user = db.relationship("User", foreign_keys=[user_id])
+
+    def __repr__(self):
+        return f"<ExternalWorkItem {self.kind} {self.status} member_id={self.member_id}>"
+
+
+class ProcessedStripeEvent(db.Model):
+    """Durable inbox for incoming Stripe webhook events.
+
+    This is more than a "seen it" marker: the row records whether the work the
+    event describes actually *finished*. A row claimed but never completed (for
+    example because the process was killed mid-handler) holds an expired lease,
+    which lets a later redelivery take it over instead of being waved through as
+    a duplicate. Only ``status == "completed"`` suppresses reprocessing.
+    """
+
+    __tablename__ = "processed_stripe_events"
+
+    STATUS_PROCESSING = "processing"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.String(255), unique=True, nullable=False)
+    event_type = db.Column(db.String(120), nullable=True)
+    # Null until the handler finishes; set when the event reaches "completed".
+    processed_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_PROCESSING)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    claimed_at = db.Column(db.DateTime, nullable=True, default=utcnow)
+    last_error = db.Column(db.Text, nullable=True)
 
 
 class Setting(db.Model):

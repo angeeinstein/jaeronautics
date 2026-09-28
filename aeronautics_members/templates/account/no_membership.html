@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ _('My Account') }}{% endblock %}
+{% block content %}
+{#
+  My Account for somebody signed in without a membership -- in practice a
+  staff account. Everybody signed in has an account, so everybody gets this
+  page; it shows the part they have. It used to forward straight to the
+  membership form, which ends at the payment page, and the only other way to
+  change a staff password was a card in the admin settings.
+#}
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+                    <div>
+                        <h2 class="mb-1">{{ _('My Account') }}</h2>
+                        <p class="text-muted mb-0">{{ current_user.email }}</p>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{{ url_for('auth.change_password') }}" class="btn btn-secondary">{{ _('Change Password') }}</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><h4 class="mb-0">{{ _('Membership') }}</h4></div>
+            <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                <div>
+                    <p class="mb-1">{{ _('This account has no membership.') }}</p>
+                    {% if current_user.can('admin.access') %}
+                        <small class="text-muted">{{ _('An account used only to run the portal does not need one. If you are also a member of the association, you can start your membership with this login.') }}</small>
+                    {% else %}
+                        <small class="text-muted">{{ _('You can start your membership with this login.') }}</small>
+                    {% endif %}
+                </div>
+                <a href="{{ url_for('account.create_membership_profile') }}" class="btn btn-primary text-nowrap">{{ _('Become a member') }}</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -20,7 +20,19 @@ from wtforms.validators import (
     NumberRange,
     Optional,
     Regexp,
+    StopValidation,
+    ValidationError,
 )
+
+from .member_categories import (
+    DEFAULT_CATEGORY,
+    category_choices,
+    checks_institutional_domain,
+    requires_institutional_email,
+    requires_year_group,
+    shows_year_group,
+)
+from .services.institutional_email import is_institutional_email, normalize_email
 
 COUNTRIES = [
     ("", _l("-- Select a Country --")),
@@ -96,10 +108,135 @@ COUNTRIES = [
 ]
 
 SALUTATION_CHOICES = [("", _l("-- Select --")), ("Mr", _l("Mr")), ("Ms", _l("Ms")), ("Diverse", _l("Diverse"))]
+
+
+def resolve_member_category(form):
+    """Which category's rules this form is being validated under.
+
+    Most forms carry the choice as a field. The profile form does not -- it
+    edits an address and a phone number, not what kind of member somebody is --
+    so its route sets ``form.member_category_value`` from the membership being
+    edited. Without that fallback a student could move their university address
+    to a private one through the profile page and walk straight past the check
+    the signup form applies.
+    """
+    field = getattr(form, "member_category", None)
+    if field is not None and hasattr(field, "data"):
+        return field.data
+    return getattr(form, "member_category_value", None)
+
+
 YEAR_GROUP_VALIDATOR = Regexp(
     r"^[A-Z]+[0-9]{2}$",
-    message=_l("Invalid format. Please use uppercase letters followed by two numbers, like LAV25."),
+    message=_l("Invalid format. Please use letters followed by two numbers, like LAV25."),
 )
+
+
+class YearGroupRequirement:
+    """Applies the year group rules for whichever member category was chosen.
+
+    Runs first in the chain and decides whether the rest of it should run at
+    all, because ``Optional()`` cannot be used here: it raises StopValidation
+    on an empty field, which would skip an inline ``validate_year_group`` too,
+    and the requirement depends on another field's value rather than this
+    one's.
+
+    Which categories are asked, and which must answer, is not decided here --
+    see member_categories.py.
+    """
+
+    def __call__(self, form, field):
+        category = resolve_member_category(form)
+        value = (field.data or "").strip()
+
+        if not shows_year_group(category):
+            # Not asked of this category. Anything in the box is a leftover
+            # from before the choice was switched, not something the member is
+            # claiming, so drop it rather than refusing the form over a field
+            # they cannot even see.
+            field.data = None
+            raise StopValidation()
+
+        if not value:
+            if requires_year_group(category):
+                raise ValidationError(_("Please enter your year group, for example LAV25."))
+            # Offered but not required -- an alumnus who does not remember.
+            field.data = None
+            raise StopValidation()
+
+        # Year groups are written in capitals (LAV25); "lav25" means the same.
+        field.data = value.upper()
+        return  # let Length and the format check run
+
+
+YEAR_GROUP_FIELD_VALIDATORS = [YearGroupRequirement(), Length(max=50), YEAR_GROUP_VALIDATOR]
+
+
+class InstitutionalEmailRequirement:
+    """The university or company address, per member category.
+
+    A student must give one, and it must be on a domain the association
+    recognises -- that address is the only thing here that says they are a
+    student *now*. Nobody else is required to, and nobody else's domain is
+    checked: a partner's company address is one no list could anticipate.
+
+    Runs first in the chain for the same reason as the year group: the rule
+    depends on another field, and ``Optional()`` would stop an inline check.
+    """
+
+    def __call__(self, form, field):
+        category = resolve_member_category(form)
+        value = normalize_email(field.data)
+
+        if not value:
+            if requires_institutional_email(category):
+                raise ValidationError(
+                    _("Please enter your university email address. We use it to "
+                      "confirm that you currently study here.")
+                )
+            field.data = None
+            raise StopValidation()
+
+        field.data = value
+        if checks_institutional_domain(category) and not is_institutional_email(value):
+            raise ValidationError(
+                _("Please use your university address, for example "
+                  "name@edu.fh-joanneum.at. Your private address goes in the "
+                  "field above.")
+            )
+
+
+class PrivateEmailRequirement:
+    """The login must not be an address one of our institutions owns.
+
+    A university or company address is tied to a role that ends. The whole
+    reason two addresses are collected is that the association still needs to
+    reach somebody after theirs stops working -- so using one as the login is
+    the single mistake on this form that locks a member out of their own
+    account, and it is the one the form cannot otherwise notice: a university
+    address here is perfectly well-formed, just wrong.
+
+    This exists so the explanation can be an error rather than a hint. Nothing
+    is printed under the field for the many people who get it right; the one
+    who does not gets told exactly what is wrong, at the moment it matters.
+    """
+
+    def __call__(self, form, field):
+        if not normalize_email(field.data):
+            return  # DataRequired has already said what to do about empty
+        if is_institutional_email(field.data):
+            raise ValidationError(
+                _("This looks like a university or company address. Please use a "
+                  "private one here: it is your login, and it has to keep working "
+                  "after you leave. The university address goes in the field below.")
+            )
+
+
+PRIVATE_EMAIL_FIELD_VALIDATORS = [DataRequired(), Email(), PrivateEmailRequirement()]
+
+INSTITUTIONAL_EMAIL_FIELD_VALIDATORS = [
+    InstitutionalEmailRequirement(), Email(), Length(max=255),
+]
 PHONE_VALIDATOR = Regexp(r"^\+?[0-9\s\-\(\)]*$", message=_l("Invalid phone number format"))
 
 
@@ -114,10 +251,18 @@ class MembershipForm(FlaskForm):
     city = StringField(_l("City"), validators=[DataRequired()])
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
-    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    email_private = StringField(
+        _l("Private Email"), validators=PRIVATE_EMAIL_FIELD_VALIDATORS
+    )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
-    email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
-    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    email_work = StringField(
+        _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
+    )
+    member_category = SelectField(
+        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        validators=[DataRequired()],
+    )
+    year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     password = PasswordField(_l("Password"), validators=[DataRequired(), Length(min=8, max=128)])
     confirm_password = PasswordField(_l("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
     payment_method = RadioField(
@@ -144,10 +289,18 @@ class CreateMembershipProfileForm(FlaskForm):
     city = StringField(_l("City"), validators=[DataRequired()])
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
-    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    email_private = StringField(
+        _l("Private Email"), validators=PRIVATE_EMAIL_FIELD_VALIDATORS
+    )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
-    email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
-    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    email_work = StringField(
+        _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
+    )
+    member_category = SelectField(
+        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        validators=[DataRequired()],
+    )
+    year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     payment_method = RadioField(
         _l("Payment Method"),
         choices=[("checkout", _l("Card or SEPA Direct Debit")), ("invoice", _l("Invoice"))],
@@ -199,9 +352,13 @@ class MemberProfileForm(FlaskForm):
     city = StringField(_l("City"), validators=[DataRequired()])
     country = SelectField(_l("Country"), choices=COUNTRIES, validators=[DataRequired()])
     phone_private = StringField(_l("Private Phone"), validators=[DataRequired(), PHONE_VALIDATOR])
-    email_private = StringField(_l("Private Email"), validators=[DataRequired(), Email()])
+    email_private = StringField(
+        _l("Private Email"), validators=PRIVATE_EMAIL_FIELD_VALIDATORS
+    )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
-    email_work = StringField(_l("Work Email"), validators=[Optional(), Email()])
+    email_work = StringField(
+        _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
+    )
     submit = SubmitField(_("Save Profile Changes"))
 
 
@@ -210,7 +367,11 @@ class IdentityChangeRequestForm(FlaskForm):
     title = StringField(_l("Title"), validators=[Optional()])
     first_name = StringField(_l("First Name"), validators=[DataRequired()])
     last_name = StringField(_l("Last Name"), validators=[DataRequired()])
-    year_group = StringField(_l("Year Group"), validators=[DataRequired(), Length(max=50), YEAR_GROUP_VALIDATOR])
+    member_category = SelectField(
+        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        validators=[DataRequired()],
+    )
+    year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     member_note = TextAreaField(_l("Why should this be changed?"), validators=[Optional(), Length(max=1000)])
     submit = SubmitField(_("Submit Change Request"))
 

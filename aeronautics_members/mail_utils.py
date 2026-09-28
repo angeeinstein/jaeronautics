@@ -1,11 +1,14 @@
 import os
 import json
 import ast
+import re
 import smtplib
 import ssl
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
+from html.parser import HTMLParser
 
 from flask import current_app, has_app_context, render_template
 from dotenv import load_dotenv
@@ -93,6 +96,92 @@ def probe_mail_account_connection(config):
 
 
 
+# The header of every email: the black band with the logo and the turquoise
+# line, as one image. Mail apps in dark mode recolour backgrounds and text but
+# never images, so a logo drawn onto its own background looks the same in every
+# one of them -- where a white logo on a band an app had turned light vanished.
+# Made from logo_joanneum_aeronautics_negativ.png at twice its shown size (640
+# wide), for phone screens; 25 KB, where attaching the logo file itself sent
+# nearly 300 KB with every email.
+EMAIL_LOGO_FILE = "email_header.png"
+
+
+def email_logo_attachment():
+    """The logo as the inline image the templates reference (``cid:logo``), or None."""
+    if not has_app_context():
+        return None
+    path = os.path.join(current_app.root_path, "static", EMAIL_LOGO_FILE)
+    return {"path": path, "cid": "logo"} if os.path.exists(path) else None
+
+
+class _PlainTextFromHtml(HTMLParser):
+    """Reads the text out of one of our emails, for the plain-text part.
+
+    Enough for the emails this portal writes, not a general converter: blocks
+    become line breaks, a link keeps its address in brackets, and what the
+    reader never sees -- the stylesheet, the hidden inbox preview -- is left out.
+    """
+
+    BLOCKS = {"p", "div", "br", "tr", "h1", "h2", "h3", "h4", "table", "ul"}
+    SKIPPED = {"head", "style", "title", "script"}
+
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self.skipping = 0
+        self.hidden = []
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag in self.SKIPPED:
+            self.skipping += 1
+        elif tag == "div":
+            hide = "display:none" in (attributes.get("style") or "").replace(" ", "")
+            self.hidden.append(hide)
+            if hide:
+                self.skipping += 1
+            else:
+                self.parts.append("\n")
+        elif tag == "a":
+            self.links.append((attributes.get("href"), len(self.parts)))
+        elif tag == "li":
+            self.parts.append("\n- ")
+        elif tag in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self.SKIPPED:
+            self.skipping = max(0, self.skipping - 1)
+        elif tag == "div":
+            if self.hidden and self.hidden.pop():
+                self.skipping = max(0, self.skipping - 1)
+            else:
+                self.parts.append("\n")
+        elif tag == "a" and self.links:
+            href, start = self.links.pop()
+            text = "".join(self.parts[start:]).strip()
+            if href and not href.startswith("cid:") and href != text and not self.skipping:
+                self.parts.append(f" ({href})")
+        elif tag in self.BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self.skipping:
+            self.parts.append(re.sub(r"\s+", " ", data))
+
+    def text(self):
+        lines = [line.strip() for line in "".join(self.parts).splitlines()]
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip() + "\n"
+
+
+def html_to_text(html):
+    parser = _PlainTextFromHtml()
+    parser.feed(html)
+    parser.close()
+    return parser.text()
+
+
 def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, **template_vars):
     """
     Sends an email using pre-configured SMTP accounts.
@@ -128,13 +217,27 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
         message["To"] = primary_recipient
 
         if template_name:
+            # Every template's footer carries the year. Supplied here rather
+            # than by each caller: three that forgot it could not be rendered
+            # at all, so those emails were never sent.
+            template_vars.setdefault("now", datetime.now(timezone.utc))
+            template_vars.setdefault("subject", subject)
             html_body = render_template(f"emails/{template_name}", **template_vars)
+            logo = email_logo_attachment()
+            if logo and not any((a or {}).get("cid") == "logo" for a in attachments or []):
+                attachments = [*(attachments or []), logo]
         elif body:
             html_body = body
         else:
             raise ValueError("Either 'template_name' or 'body' must be provided.")
 
-        message.attach(MIMEText(html_body, "html"))
+        # A plain-text part beside the HTML. Mail filters -- a university's
+        # among them -- count an HTML-only message against it, and some
+        # readers show nothing else.
+        alternative = MIMEMultipart("alternative")
+        alternative.attach(MIMEText(html_to_text(html_body), "plain", "utf-8"))
+        alternative.attach(MIMEText(html_body, "html", "utf-8"))
+        message.attach(alternative)
 
         if attachments:
             for attachment in attachments:
