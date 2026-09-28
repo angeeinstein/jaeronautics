@@ -79,12 +79,23 @@ except Exception:
     MEMBERSHIP_TIMEZONE = timezone.utc
     MEMBERSHIP_TIMEZONE_NAME = "UTC"
 RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "redis://127.0.0.1:6379/0")
+# Two limits guard each form that takes a password or an address. The tight
+# one counts attempts for one email address from one network: it is what stops
+# somebody guessing a password. The loose one counts everything from that
+# network, whatever the address: it only stops a flood. A lecture hall behind
+# one campus address shares that second budget, so it is set for an intake
+# evening, not for one person.
 RATELIMIT_LOGIN = os.getenv("RATELIMIT_LOGIN", "10 per 15 minute")
-RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "20 per hour")
-# Keyed by IP, so a whole lecture hall on one campus NAT shares a single
-# budget. Ten an hour is easily reached by legitimate members at a signup
-# drive; this is generous enough for that while still bounding abuse.
-RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "40 per hour")
+RATELIMIT_LOGIN_PER_IP = os.getenv("RATELIMIT_LOGIN_PER_IP", "300 per 15 minute")
+# The "forgot password" form (the name is historical).
+RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "5 per hour")
+RATELIMIT_REGISTER_PER_IP = os.getenv("RATELIMIT_REGISTER_PER_IP", "300 per hour")
+# The signup form. Per address too: an address that already has an account is
+# signed in by it when the password matches, so it is also a password check.
+RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "10 per 15 minute")
+RATELIMIT_MEMBERSHIP_PER_IP = os.getenv("RATELIMIT_MEMBERSHIP_PER_IP", "300 per hour")
+# Changing a password (signed in: counted per account) and setting a new one
+# from a reset link (counted per link).
 RATELIMIT_PASSWORD_CHANGE = os.getenv("RATELIMIT_PASSWORD_CHANGE", "5 per 15 minute")
 RATELIMIT_ADMIN_EMAIL = os.getenv("RATELIMIT_ADMIN_EMAIL", "5 per 10 minute")
 # Data exports assemble a member's whole record, so they are cheap to request

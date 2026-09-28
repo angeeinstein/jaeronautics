@@ -1,5 +1,6 @@
 import csv
 import getpass
+import hashlib
 import json
 import os
 import secrets
@@ -403,14 +404,65 @@ csrf = CSRFProtect()
 migrate = Migrate()
 
 
+# Stripe's own defaults are an 80-second timeout and two automatic retries: a
+# Stripe having a bad minute could hold a page for four. Five seconds to
+# connect and fifteen to answer is ample for an API that normally answers in a
+# fraction of one, and a single retry -- Stripe makes retried requests safe
+# with idempotency keys -- keeps the worst case at about half a minute, inside
+# the web server's 60-second limit.
+STRIPE_TIMEOUT_SECONDS = (5, 15)
+STRIPE_NETWORK_RETRIES = 1
+
+
+def configure_stripe_http_client():
+    stripe.default_http_client = stripe.new_default_http_client(timeout=STRIPE_TIMEOUT_SECONDS)
+    stripe.max_network_retries = STRIPE_NETWORK_RETRIES
+
+
 def get_rate_limit_identity():
+    """Whom a limit counts against unless a route says otherwise.
+
+    The account, for somebody signed in: a whole lecture hall behind one campus
+    address would otherwise share one budget for resending a confirmation or
+    downloading their data. The network address for everybody else.
+    """
+    if current_user and current_user.is_authenticated:
+        return f"user:{current_user.get_id()}"
+    return rate_limit_network()
+
+
+def rate_limit_network():
+    """The network address alone -- the loose, flood-stopping limits."""
     return request.remote_addr or "unknown"
+
+
+def rate_limit_network_and_address():
+    """The network address plus the email address typed into the form.
+
+    The tight limit on a form that takes a password: ten wrong guesses at one
+    account lock that account's guessing from that network, and nobody else's.
+    The address is hashed so the limiter's store holds no email addresses.
+    """
+    address = (request.form.get("email") or request.form.get("email_private") or "").strip().lower()
+    digest = hashlib.sha256(address.encode("utf-8")).hexdigest()[:16] if address else "-"
+    return f"{rate_limit_network()}|{digest}"
+
+
+def rate_limit_network_and_path():
+    """The network address plus the page -- for a reset link, the link itself."""
+    return f"{rate_limit_network()}|{request.path}"
 
 
 limiter = Limiter(
     key_func=get_rate_limit_identity,
     storage_uri=RATELIMIT_STORAGE_URI,
     default_limits=[],
+    # If Redis, which keeps the counts, is unreachable, count in each worker's
+    # memory instead of failing the request: logging in and signing up must
+    # not stop working because the limiter lost its store. Limits still apply,
+    # just per worker, until Redis is back.
+    in_memory_fallback_enabled=True,
+    swallow_errors=True,
 )
 
 
@@ -1603,6 +1655,7 @@ def create_app(config_overrides=None):
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
     stripe.api_key = STRIPE_SECRET_KEY
+    configure_stripe_http_client()
 
     @app.cli.command("db-init")
     @with_appcontext

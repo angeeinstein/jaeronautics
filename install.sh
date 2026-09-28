@@ -1963,7 +1963,11 @@ User=${APP_USER}
 Group=${APP_GROUP}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
-ExecStart=${INSTALL_DIR}/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:${APP_PORT} wsgi:application
+# Threads, so a page waiting on Stripe or the forum holds one thread rather
+# than a whole worker: three workers of one request each meant three slow
+# forum calls stalled the entire site. Twelve requests at once now, and the
+# outside calls themselves time out well inside the 60 seconds.
+ExecStart=${INSTALL_DIR}/.venv/bin/gunicorn --workers 3 --threads 4 --timeout 60 --graceful-timeout 30 --bind 127.0.0.1:${APP_PORT} wsgi:application
 Restart=always
 RestartSec=5
 TimeoutStartSec=60

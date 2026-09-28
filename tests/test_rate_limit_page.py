@@ -43,15 +43,24 @@ def test_the_page_explains_what_happened_and_what_to_do(app):
 
 
 def test_signup_limits_allow_a_shared_campus_network():
-    """Keyed by IP, so a lecture hall behind one NAT shares the budget."""
-    from aeronautics_members.config import RATELIMIT_MEMBERSHIP, RATELIMIT_REGISTER
+    """The per-network limits are what a lecture hall behind one NAT shares.
 
-    def per_hour(value):
-        match = re.match(r"\s*(\d+)\s*per\s*hour", value)
+    The tight limits count one email address from one network; see
+    test_rate_limits.py for both working together.
+    """
+    from aeronautics_members.config import (
+        RATELIMIT_LOGIN_PER_IP,
+        RATELIMIT_MEMBERSHIP_PER_IP,
+        RATELIMIT_REGISTER_PER_IP,
+    )
+
+    def count(value):
+        match = re.match(r"\s*(\d+)\s*per", value)
         return int(match.group(1)) if match else None
 
-    assert per_hour(RATELIMIT_MEMBERSHIP) and per_hour(RATELIMIT_MEMBERSHIP) >= 25, RATELIMIT_MEMBERSHIP
-    assert per_hour(RATELIMIT_REGISTER) and per_hour(RATELIMIT_REGISTER) >= 15, RATELIMIT_REGISTER
+    assert (count(RATELIMIT_MEMBERSHIP_PER_IP) or 0) >= 200, RATELIMIT_MEMBERSHIP_PER_IP
+    assert (count(RATELIMIT_REGISTER_PER_IP) or 0) >= 200, RATELIMIT_REGISTER_PER_IP
+    assert (count(RATELIMIT_LOGIN_PER_IP) or 0) >= 200, RATELIMIT_LOGIN_PER_IP
 
 
 def test_the_app_still_registers_a_rate_limit_handler():

@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from ..config import (
     RATELIMIT_MEMBERSHIP,
+    RATELIMIT_MEMBERSHIP_PER_IP,
     STRIPE_PUBLISHABLE_KEY,
 )
 from ..services.audit import (
@@ -72,6 +73,8 @@ from ..app import (
     can_resume_payment,
     get_member_portal_target,
     limiter,
+    rate_limit_network,
+    rate_limit_network_and_address,
 )
 
 public_bp = Blueprint("public", __name__)
@@ -108,7 +111,8 @@ def join():
 
 
 @public_bp.route("/process-membership", methods=["POST"])
-@limiter.limit(RATELIMIT_MEMBERSHIP)
+@limiter.limit(RATELIMIT_MEMBERSHIP_PER_IP, key_func=rate_limit_network)
+@limiter.limit(RATELIMIT_MEMBERSHIP, key_func=rate_limit_network_and_address)
 def process_membership():
     form = MembershipForm()
 

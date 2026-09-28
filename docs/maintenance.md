@@ -251,6 +251,45 @@ sudo -u jaeronautics env PYTHONPATH=/var/www/jaeronautics \
      sync-forum-members --only-changed
 ```
 
+### When the forum was down for hours
+
+A forum update that fails is retried after 1 minute, 15 minutes, 1 hour and
+6 hours, and then given up — Maintenance shows "Forum tasks failed". Nothing is
+lost: the next change for that member puts the task back in the queue, and
+**Retry** next to the count sends all of them again at once. Use it once the
+forum is reachable again.
+
+## Rate Limits
+
+Every form that takes a password or an email address has two limits:
+
+| Setting | Default | Counts |
+| --- | --- | --- |
+| `RATELIMIT_LOGIN` | 10 per 15 minutes | Login attempts for one email address from one network |
+| `RATELIMIT_LOGIN_PER_IP` | 300 per 15 minutes | All login attempts from one network |
+| `RATELIMIT_REGISTER` | 5 per hour | "Forgot password" for one email address from one network |
+| `RATELIMIT_REGISTER_PER_IP` | 300 per hour | All "forgot password" requests from one network |
+| `RATELIMIT_MEMBERSHIP` | 10 per 15 minutes | Signups for one email address from one network |
+| `RATELIMIT_MEMBERSHIP_PER_IP` | 300 per hour | All signups from one network |
+
+The tight one stops somebody guessing one account's password; the loose one
+only stops a flood. A lecture hall on the campus network shares one address,
+so the loose limits are set for an intake evening. Signed-in actions (resending
+a confirmation, downloading your data) are counted per account, not per network.
+
+The counts live in Redis. If Redis is unreachable, the limits fall back to each
+web worker's memory rather than failing the request, so logging in keeps
+working; they go back to Redis once it is reachable again.
+
+## Slow Stripe or Forum
+
+The web server runs 3 workers with 4 threads each, so up to twelve requests are
+served at once and a page waiting on Stripe or the forum holds one thread, not
+the whole site. Calls out give up in time to show an error rather than hang: a
+forum call made while somebody waits on a page after 8 seconds (20 from the
+background worker), a Stripe call after 5 seconds to connect and 15 to answer,
+retried once.
+
 ## Backup and Restore
 
 One file holds everything that makes this installation different from a fresh

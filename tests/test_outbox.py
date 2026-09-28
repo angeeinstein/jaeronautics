@@ -455,3 +455,67 @@ class TestReleasingTheAddress:
 
         assert provider.release_address(8801, None, "x@imported.invalid") is False
         assert calls == []
+
+
+class TestAnItemThatGaveUp:
+    """After about seven hours of failing -- a forum down that long -- an item
+    stops retrying. It used to stay stopped for good: every later change for
+    that member was folded into it, and nothing ever ran it again."""
+
+    def _give_up(self, monkeypatch, email):
+        monkeypatch.setitem(outbox._HANDLERS, "test_kind",
+                            lambda item: (_ for _ in ()).throw(RuntimeError("still down")))
+        member = make_member(email=email)
+        item = outbox.enqueue("test_kind", member=member, dedupe_key=f"test_kind:{email}")
+        db.session.commit()
+        for _ in range(len(outbox.RETRY_DELAYS) + 1):
+            row = _item(item.id)
+            row.not_before = None
+            db.session.commit()
+            outbox.process_pending()
+        assert _item(item.id).status == ExternalWorkItem.STATUS_FAILED
+        return member, item
+
+    def test_a_new_change_puts_it_back_in_the_queue(self, app, monkeypatch, handler_calls):
+        member, item = self._give_up(monkeypatch, "revive@example.com")
+        monkeypatch.setitem(outbox._HANDLERS, "test_kind", lambda item: handler_calls.append(item.id))
+
+        again = outbox.enqueue("test_kind", member=member, dedupe_key="test_kind:revive@example.com")
+        db.session.commit()
+        outbox.process_pending()
+
+        assert again.id == item.id
+        assert handler_calls == [item.id]
+        assert _item(item.id).status == ExternalWorkItem.STATUS_COMPLETED
+
+    def test_it_gets_its_retries_back(self, app, monkeypatch):
+        member, item = self._give_up(monkeypatch, "fresh@example.com")
+
+        outbox.enqueue("test_kind", member=member, dedupe_key="test_kind:fresh@example.com")
+        db.session.commit()
+        outbox.process_pending()
+
+        row = _item(item.id)
+        assert row.status == ExternalWorkItem.STATUS_PENDING  # failed once more, will retry
+        assert row.attempts == 1
+
+    def test_an_admin_can_retry_them_all(self, app, client, monkeypatch, handler_calls):
+        from conftest import app_module
+        from aeronautics_members.db_models import User
+
+        _member, item = self._give_up(monkeypatch, "button@example.com")
+        monkeypatch.setitem(outbox._HANDLERS, "test_kind", lambda item: handler_calls.append(item.id))
+        boss = User(email="boss@example.org")
+        boss.set_password("x")
+        db.session.add(boss)
+        boss.grant_role(app_module.get_role("superadmin"))
+        db.session.commit()
+        with client.session_transaction() as session:
+            session["_user_id"] = str(boss.id)
+
+        assert "admin/forum-tasks/retry" in client.get("/admin/settings").get_data(as_text=True)
+        client.post("/admin/forum-tasks/retry")
+        outbox.process_pending()
+
+        assert handler_calls == [item.id]
+        assert outbox.failed_items() == []

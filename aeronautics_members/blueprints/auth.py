@@ -9,8 +9,10 @@ from flask import Blueprint, current_app
 
 from ..config import (
     RATELIMIT_LOGIN,
+    RATELIMIT_LOGIN_PER_IP,
     RATELIMIT_PASSWORD_CHANGE,
     RATELIMIT_REGISTER,
+    RATELIMIT_REGISTER_PER_IP,
 )
 from ..services.forum_import import claim_archived_account
 from ._email_cooldown import remember_sent, sent_just_now
@@ -65,6 +67,9 @@ from ..app import (
     is_safe_next_url,
     get_member_portal_target,
     limiter,
+    rate_limit_network,
+    rate_limit_network_and_address,
+    rate_limit_network_and_path,
     urlsplit,
 )
 
@@ -72,7 +77,8 @@ auth_bp = Blueprint("auth", __name__)
 
 
 @auth_bp.route("/forgot-password", methods=["GET", "POST"])
-@limiter.limit(RATELIMIT_REGISTER, methods=["POST"])
+@limiter.limit(RATELIMIT_REGISTER_PER_IP, methods=["POST"], key_func=rate_limit_network)
+@limiter.limit(RATELIMIT_REGISTER, methods=["POST"], key_func=rate_limit_network_and_address)
 def forgot_password():
     if current_user.is_authenticated:
         return redirect(url_for(get_member_portal_target(current_user)))
@@ -105,7 +111,7 @@ def forgot_password():
 
 
 @auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
-@limiter.limit(RATELIMIT_PASSWORD_CHANGE, methods=["POST"])
+@limiter.limit(RATELIMIT_PASSWORD_CHANGE, methods=["POST"], key_func=rate_limit_network_and_path)
 def reset_password(token):
     try:
         token_data = read_token(token, "reset-password", TOKEN_MAX_AGE_PASSWORD_RESET)
@@ -245,7 +251,8 @@ def verify_work_email(token):
 
 
 @auth_bp.route("/login", methods=["POST", "GET"])
-@limiter.limit(RATELIMIT_LOGIN, methods=["POST"])
+@limiter.limit(RATELIMIT_LOGIN_PER_IP, methods=["POST"], key_func=rate_limit_network)
+@limiter.limit(RATELIMIT_LOGIN, methods=["POST"], key_func=rate_limit_network_and_address)
 def login():
     next_url = request.values.get("next") or session.get("login_next")
     safe_next_url = next_url if is_safe_next_url(next_url) else None

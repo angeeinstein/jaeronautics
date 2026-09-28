@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode
 from urllib.request import Request, urlopen
 
-from flask import current_app
+from flask import current_app, has_request_context
 from werkzeug.utils import secure_filename
 
 try:
@@ -517,6 +517,19 @@ def detect_image_type(raw_bytes):
     return None
 
 
+# How long one call to Discourse may take. Somebody waiting on a page gets a
+# short one: the forum normally answers in well under a second, and a forum
+# that has not answered in eight will not be answering soon -- better to show
+# "try again" than to hold the page (and a server thread) for twenty. The
+# background worker and the command line can afford to wait longer.
+DISCOURSE_TIMEOUT_PAGE = 8
+DISCOURSE_TIMEOUT_BACKGROUND = 20
+
+
+def _discourse_timeout():
+    return DISCOURSE_TIMEOUT_PAGE if has_request_context() else DISCOURSE_TIMEOUT_BACKGROUND
+
+
 class ForumProviderError(Exception):
     pass
 
@@ -608,7 +621,7 @@ class DiscourseConnectProvider(ForumProvider):
 
         request = Request(url, data=body, headers=headers, method=method)
         try:
-            with urlopen(request, timeout=20) as response:
+            with urlopen(request, timeout=_discourse_timeout()) as response:
                 raw_body = response.read().decode("utf-8")
                 if not raw_body:
                     return {}

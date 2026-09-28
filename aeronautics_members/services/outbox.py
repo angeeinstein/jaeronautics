@@ -72,6 +72,12 @@ def enqueue(kind, *, member=None, user=None, payload=None, dedupe_key=None, reas
             existing.not_before = None
             if reason:
                 existing.reason = reason[:255]
+            if existing.status == ExternalWorkItem.STATUS_FAILED:
+                # It gave up earlier -- the forum was down, most likely -- but
+                # there is a new reason to do it now. Left failed, the new
+                # change would be folded into an item nothing ever runs again,
+                # and this member's forum would stop hearing about them.
+                revive(existing)
             return existing
 
     item = ExternalWorkItem(
@@ -144,6 +150,31 @@ def enqueue_forum_discard_replaced(user, remote_user_id, reason=None, external_i
         ),
         reason=reason,
     )
+
+
+def revive(item):
+    """Put an item that ran out of retries back in the queue, with fresh retries."""
+    item.status = ExternalWorkItem.STATUS_PENDING
+    item.attempts = 0
+    item.not_before = None
+    item.claimed_at = None
+    return item
+
+
+def retry_failed(kinds=None):
+    """Revive every item that ran out of retries. Returns how many.
+
+    For an administrator once the cause -- usually the forum being down for
+    hours -- has been dealt with, rather than waiting for each member to change
+    again.
+    """
+    query = db.select(ExternalWorkItem).where(ExternalWorkItem.status == ExternalWorkItem.STATUS_FAILED)
+    if kinds:
+        query = query.where(ExternalWorkItem.kind.in_(list(kinds)))
+    items = db.session.execute(query).scalars().all()
+    for item in items:
+        revive(item)
+    return len(items)
 
 
 def claim_next(kinds=None, now=None, user_id=None):

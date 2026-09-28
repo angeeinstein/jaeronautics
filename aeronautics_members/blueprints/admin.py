@@ -79,7 +79,7 @@ from ..services import (
     ServiceError,
 )
 from ..services import backup as backup_service
-from ..services import background_jobs, resume_checks, reviews
+from ..services import background_jobs, outbox, resume_checks, reviews
 from ..services.system_update import (
     describe_update_state,
     request_update,
@@ -105,6 +105,7 @@ from flask import (
 )
 from flask_babel import (
     _,
+    ngettext,
 )
 from flask_login import (
     current_user,
@@ -1539,6 +1540,34 @@ def admin_resolve_undelivered_email(job_id, action):
         )
     db.session.commit()
     flash(message, "success" if changed else "warning")
+    return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")
+
+
+@admin_bp.route("/admin/forum-tasks/retry", methods=["POST"])
+@login_required
+@requires(Permission.SYSTEM_UPDATE)
+def admin_retry_failed_forum_tasks():
+    """Put forum tasks that gave up retrying back in the queue.
+
+    They give up after about seven hours of failing -- in practice a forum that
+    was down that long. Once it is back, this sends them again rather than
+    leaving each member's forum out of date until something else changes.
+    """
+    count = outbox.retry_failed()
+    if count:
+        log_audit_event(
+            category="system",
+            event_type="forum_tasks_retried",
+            actor_user=current_user,
+            metadata={"count": count},
+        )
+    db.session.commit()
+    flash(
+        ngettext("%(num)s forum task will be tried again within a few minutes.",
+                 "%(num)s forum tasks will be tried again within a few minutes.", count)
+        if count else _("No forum tasks are waiting to be retried."),
+        "success" if count else "info",
+    )
     return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")
 
 

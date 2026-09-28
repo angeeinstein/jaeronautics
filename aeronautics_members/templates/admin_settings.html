@@ -598,7 +598,18 @@
                                 <h6 class="text-muted text-uppercase small">{{ _('Background work') }}</h6>
                                 <dl class="row mb-0 small">
                                     <dt class="col-7">{{ _('Forum tasks queued') }}</dt><dd class="col-5">{{ system_health.queues.external_work_pending }}</dd>
-                                    <dt class="col-7">{{ _('Forum tasks failed') }}</dt><dd class="col-5">{{ system_health.queues.external_work_failed }}</dd>
+                                    <dt class="col-7">{{ _('Forum tasks failed') }}</dt>
+                                    <dd class="col-5">
+                                        {{ system_health.queues.external_work_failed }}
+                                        {% if system_health.queues.external_work_failed %}
+                                            {# They gave up after hours of failing; once the forum is
+                                               reachable again, this sends them again. #}
+                                            <form method="POST" action="{{ url_for('admin.admin_retry_failed_forum_tasks') }}" class="d-inline ms-2" data-busy-text="{{ _('Queuing…') }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-primary">{{ _('Retry') }}</button>
+                                            </form>
+                                        {% endif %}
+                                    </dd>
                                     <dt class="col-7">{{ _('Stripe events handled') }}</dt><dd class="col-5">{{ system_health.queues.webhook_events_completed }}</dd>
                                     <dt class="col-7">{{ _('Emails queued') }}</dt>
                                     <dd class="col-5">
