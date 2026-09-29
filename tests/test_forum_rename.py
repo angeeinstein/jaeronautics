@@ -11,11 +11,18 @@ A rename is now asked for as one, through Discourse's own rename. Posts stay
 with the account, which is what they belong to, and Discourse rewrites
 @mentions and quotes of the old name itself.
 """
+from datetime import datetime
+
 import pytest
 
 from conftest import db, make_member
 from aeronautics_members.blueprints import admin as admin_module
-from aeronautics_members.db_models import ExternalWorkItem, ForumAccount, NotificationEvent
+from aeronautics_members.db_models import (
+    ExternalWorkItem,
+    ForumAccount,
+    ImportedForumProfile,
+    NotificationEvent,
+)
 from aeronautics_members.forum_service import (
     ForumProviderError,
     ForumService,
@@ -36,10 +43,13 @@ class FakeDiscourse:
         self.renames = []
         self.down = False
         self.refuse = False
+        self.external_id = None  # whose account this is; set by the fixture
 
     def get_remote_user_by_external_id(self, external_id):
         if self.down:
             raise ForumProviderError("GET /u/by-external failed: connection refused")
+        if external_id != self.external_id:
+            raise ForumProviderError(f"GET /u/by-external/{external_id}.json failed (404): not found")
         return {"id": 7, "username": self.name}
 
     def change_username(self, current, new):
@@ -70,13 +80,14 @@ def forum(app, monkeypatch):
 
 
 @pytest.fixture
-def member(app):
+def member(app, forum):
     member = make_member(email="huber@example.com", first_name="Anna", last_name="Huber",
                          year_group="LAV25")
     member.user.forum_username = OLD
     db.session.add(ForumAccount(user=member.user, member=member, external_id=str(member.user.id),
                                 state="active"))
     db.session.commit()
+    forum.external_id = str(member.user.id)
     return member
 
 
@@ -140,6 +151,24 @@ def test_somebody_not_on_the_forum_yet_simply_arrives_under_the_new_name(client,
     _approve(client, member)
 
     assert forum.renames == []
+    assert db.session.get(type(member.user), member.user.id).forum_username == NEW
+
+
+def test_a_returning_student_on_their_reclaimed_account_is_renamed_there(client, forum, member):
+    """Found on the Azure forum: the reclaim worked, the later rename did not.
+
+    After a reclaim the membership sits on the archived row, and its forum
+    account is the old one with the history -- which is the one renamed.
+    """
+    db.session.add(ImportedForumProfile(
+        user=member.user, source_user_id="412", source_username=OLD, display_name="Anna Huber",
+        year_group="LAV15", claimed_at=datetime(2026, 9, 20),
+    ))
+    db.session.commit()
+
+    _approve(client, member)
+
+    assert forum.renames == [(OLD, NEW)]
     assert db.session.get(type(member.user), member.user.id).forum_username == NEW
 
 
