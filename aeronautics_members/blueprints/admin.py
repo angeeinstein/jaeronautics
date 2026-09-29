@@ -155,6 +155,8 @@ from ..notification_service import (
 from ..app import (
     ADMIN_DIRECTORY_PAGE_SIZE,
     AUDIT_LOG_PAGE_SIZE,
+    ACCOUNT_SORT_DEFAULT,
+    ACCOUNT_SORT_KEYS,
     build_account_directory_query,
     build_forum_context,
     build_settings_page_context,
@@ -229,11 +231,15 @@ def admin_accounts():
     kind_filter = request.args.get("kind", "all")
     account_filter = request.args.get("account", "all")
     page = request.args.get("page", 1, type=int)
+    sort = request.args.get("sort", ACCOUNT_SORT_DEFAULT[0])
+    direction = request.args.get("dir", ACCOUNT_SORT_DEFAULT[1])
+    if sort not in ACCOUNT_SORT_KEYS or direction not in ("asc", "desc"):
+        sort, direction = ACCOUNT_SORT_DEFAULT
 
     pagination = db.paginate(
         build_account_directory_query(
             search_term, role_filter, membership_filter, active_filter,
-            kind_filter, account_filter,
+            kind_filter, account_filter, sort=sort, direction=direction,
         ),
         page=page,
         per_page=ADMIN_DIRECTORY_PAGE_SIZE,
@@ -253,6 +259,9 @@ def admin_accounts():
         active_filter=active_filter,
         kind_filter=kind_filter,
         account_filter=account_filter,
+        sort=sort,
+        sort_dir=direction,
+        sort_is_default=(sort, direction) == ACCOUNT_SORT_DEFAULT,
     )
 
 

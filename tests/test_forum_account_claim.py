@@ -585,7 +585,7 @@ class TestSeeingTheArchiveInTheAdmin:
         return client
 
     def _rows(self, response):
-        return response.get_data(as_text=True).count('class="btn btn-secondary btn-sm"')
+        return response.get_data(as_text=True).count('class="account-row"')
 
     def test_they_appear_in_the_ordinary_account_list(self, app, admin_client):
         _archived()
