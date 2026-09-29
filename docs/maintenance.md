@@ -215,7 +215,17 @@ subscription ending would have cancelled theirs.
 | --- | --- | --- |
 | the membership | `purpose: membership` in the metadata (every checkout since this change), the old checkout metadata (`activation_mode`, `membership_starts_on`), a subscription the portal already knows, or the membership's price or **product** | handled as always |
 | something else | `purpose` set to anything else, everything on it for another product, or a payment that paid no invoice | ignored, logged, answered 200 |
-| cannot tell | Stripe could not be asked, or the object carries nothing to go on | handled as the membership, and an administrator is told (`stripe_event_scope_unclear`) |
+| Stripe unreachable | telling needed Stripe, and it could not be asked (no connection, outage, rate limit, key problem, anything unforeseen) | answered 503, so Stripe delivers the event again later -- for up to three days |
+| nothing to go on | no metadata, no known subscription, no price or product -- or Stripe says what was asked about does not exist | ignored, and an administrator is told (`stripe_event_scope_unclear`) |
+
+Only the first row is acted on. That costs the membership nothing: its
+invoices and subscriptions always carry the portal's metadata in the event
+itself, so they are recognised without asking Stripe and never come with
+nothing to go on. What does need asking -- a payment, to find its invoice --
+is reported a second time by the invoice event, which does the work. A
+membership invoice made by hand in the Stripe dashboard is the one exception:
+it arrives with nothing to go on, and the administrator notice is the prompt
+to grant that member's period by hand.
 
 The product counts rather than the price, so subscriptions from before a fee
 change -- still on last year's price -- are still recognised. The same sorting

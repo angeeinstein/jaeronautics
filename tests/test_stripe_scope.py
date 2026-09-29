@@ -16,7 +16,7 @@ from datetime import date
 import pytest
 import stripe
 
-from conftest import Member, clock, db, make_member
+from conftest import Member, clock, db, make_member, webhook_inbox
 from aeronautics_members.db_models import MembershipPeriod, NotificationEvent, Setting
 from aeronautics_members.services import billing, stripe_scope
 from test_webhook import post_event
@@ -195,16 +195,80 @@ class TestTheMembershipIsStillRecognised:
         assert db.session.get(Member, student.id).payment_status == "processing"
 
 
-class TestWhenItCannotBeTold:
-    def test_it_is_handled_as_the_membership_and_an_administrator_is_told(self, client, monkeypatch, student):
-        monkeypatch.setattr(stripe_scope, "_membership_product_id", lambda price_id: None)
+class TestWhenStripeCannotBeAsked:
+    """Decided later rather than guessed now: Stripe delivers the event again."""
 
-        post_event(client, monkeypatch, _paid_invoice(
-            "in_unclear", subscription="sub_unknown", lines=[_line("price_other", "prod_other")],
+    def _outage(self, monkeypatch):
+        def unreachable(*a, **k):
+            raise stripe.APIConnectionError("Stripe is down")
+
+        monkeypatch.setattr(stripe.Price, "retrieve", staticmethod(unreachable))
+
+    def test_the_event_is_refused_and_left_for_stripe_to_deliver_again(self, client, monkeypatch, student):
+        self._outage(monkeypatch)
+
+        response = post_event(client, monkeypatch, _paid_invoice(
+            "in_during_outage", subscription="sub_unknown", lines=[_line("price_2025", "prod_x")],
         ))
 
+        assert response.status_code == 503
+        assert _periods(db.session.get(Member, student.id)) == []
+        assert webhook_inbox.stripe_event_already_processed("evt_in_during_outage") is False
+
+    def test_the_redelivery_is_decided_once_stripe_answers(self, client, monkeypatch, student):
+        self._outage(monkeypatch)
+        event = _paid_invoice("in_retried", subscription="sub_unknown",
+                              lines=[_line("price_member_2025", MEMBER_PRODUCT)])
+        post_event(client, monkeypatch, event)
+
+        monkeypatch.setattr(
+            stripe.Price, "retrieve",
+            staticmethod(lambda price_id, **_: {"id": price_id, "product": MEMBER_PRODUCT}),
+        )
+        response = post_event(client, monkeypatch, event)
+
+        assert response.status_code == 200
         assert len(_periods(db.session.get(Member, student.id))) == 1
+
+    def test_something_nobody_foresaw_is_asked_again_too(self, client, monkeypatch, student):
+        """Not taken for "nothing to go on", which would drop it for good."""
+        def surprise(**_):
+            raise RuntimeError("unexpected")
+
+        monkeypatch.setattr(stripe.InvoicePayment, "list", staticmethod(surprise))
+
+        response = post_event(client, monkeypatch, {
+            "id": "evt_pi_surprise", "type": "payment_intent.succeeded", "created": 1_790_000_000,
+            "data": {"object": {"id": "pi_x", "customer": "cus_student", "created": 1_790_000_000}},
+        })
+
+        assert response.status_code == 503
+
+
+class TestWhenThereIsNothingToGoOn:
+    def test_it_is_left_alone_and_an_administrator_is_told(self, client, monkeypatch, student):
+        """A membership payment never looks like this: its invoices carry the
+        portal's metadata. One made by hand in Stripe might, and then an
+        administrator grants it."""
+        response = post_event(client, monkeypatch, _paid_invoice("in_bare", subscription="sub_unknown"))
+
+        assert response.status_code == 200
+        assert _periods(db.session.get(Member, student.id)) == []
         assert _unclear_notices() == 1
+
+    def test_stripe_saying_it_does_not_exist_is_nothing_to_go_on(self, client, monkeypatch, student):
+        def missing(**_):
+            raise stripe.InvalidRequestError("No such payment", "payment")
+
+        monkeypatch.setattr(stripe.InvoicePayment, "list", staticmethod(missing))
+
+        response = post_event(client, monkeypatch, {
+            "id": "evt_pi_missing", "type": "payment_intent.succeeded", "created": 1_790_000_000,
+            "data": {"object": {"id": "pi_gone", "customer": "cus_student", "created": 1_790_000_000}},
+        })
+
+        assert response.status_code == 200
+        assert _periods(db.session.get(Member, student.id)) == []
 
 
 class TestLookingUpTheMembershipsSubscription:

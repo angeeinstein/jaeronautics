@@ -10,18 +10,27 @@ student with a year of association membership for paying their team fee.
 
 So each object is sorted before anything acts on it:
 
-``ours``     it says so (the portal's own metadata), the portal already knows
-             its subscription, or it is for the membership's price or product.
-``foreign``  it says it is something else, or everything on it is for another
-             product, or it is a payment with no invoice (the membership is
-             always billed through a subscription, so always has one).
-``unclear``  none of the above could be told -- Stripe could not be asked, or
-             the object carries nothing to go on.
+``ours``         it says so (the portal's own metadata), the portal already
+                 knows its subscription, or it is for the membership's price
+                 or product.
+``foreign``      it says it is something else, or everything on it is for
+                 another product, or it is a payment with no invoice (the
+                 membership is always billed through a subscription, so always
+                 has one).
+``unreachable``  telling needed Stripe, and Stripe could not be asked.
+``unclear``      the object carries nothing to go on.
 
-Only ``foreign`` is ignored. ``unclear`` is handled as the membership, as
-everything was before, and an administrator is told: a membership payment
-that is wrongly ignored leaves a paying student without access, which is the
-worse of the two mistakes.
+Only ``ours`` is acted on. ``unreachable`` is answered with an error, so
+Stripe delivers the event again later, when it can be asked. ``foreign`` and
+``unclear`` are left alone, ``unclear`` with an administrator told.
+
+That is safe for the membership because nothing of the membership's ever
+needs Stripe asked, or comes without something to go on: its invoices and
+subscriptions carry the portal's metadata in the event itself. What does need
+asking -- a payment, to find its invoice -- is reported for the membership a
+second time anyway, by the invoice event that does the work. Handling the
+doubtful ones as the membership instead, as this module first did, protected
+nothing real and let a team fee through whenever Stripe was slow to answer.
 
 What the teams, or anything else sold later, must do to be recognised: set
 ``purpose`` in the metadata of their Checkout session, subscription and
@@ -42,7 +51,14 @@ MEMBERSHIP_PURPOSE = "membership"
 
 OURS = "ours"
 FOREIGN = "foreign"
+UNREACHABLE = "unreachable"
 UNCLEAR = "unclear"
+
+# Stripe answering that what was asked for does not exist, or cannot be asked
+# that way: asking again will not change it, so there is nothing to go on.
+# Anything else that goes wrong while asking -- no connection, an outage, a rate
+# limit, a key problem, something nobody foresaw -- is asked again later.
+ANSWERED_ERRORS = (stripe.InvalidRequestError,)
 
 # The reason given for a payment that paid no invoice. Named, because one
 # event treats it more gently than the rest; see the webhook.
@@ -72,8 +88,24 @@ class Scope:
         return self.verdict == FOREIGN
 
     @property
+    def is_unreachable(self):
+        return self.verdict == UNREACHABLE
+
+    @property
     def is_unclear(self):
         return self.verdict == UNCLEAR
+
+
+class _Unreachable(Exception):
+    """Raised inside the sorting when Stripe could not be asked."""
+
+
+def _asking_stripe_failed(exc, what):
+    """Turn a failed lookup into "ask again later" or "nothing to go on"."""
+    if not isinstance(exc, ANSWERED_ERRORS):
+        current_app.logger.warning("Could not ask Stripe about %s: %s", what, exc)
+        raise _Unreachable(f"Stripe could not be asked about {what}") from exc
+    current_app.logger.warning("Stripe could not say anything about %s: %s", what, exc)
 
 
 def _get(obj, key, default=None):
@@ -126,8 +158,8 @@ def _membership_product_id(price_id):
             settings = get_stripe_settings_map()
             stripe.api_key = settings.get("stripe_secret_key") or stripe.api_key
             price = stripe.Price.retrieve(price_id)
-        except Exception as exc:  # noqa: BLE001 -- "could not tell", never "foreign"
-            current_app.logger.warning("Could not look up the membership price %s: %s", price_id, exc)
+        except Exception as exc:  # noqa: BLE001 -- never taken for "foreign"
+            _asking_stripe_failed(exc, f"the membership price {price_id}")
             return None
         _product_of_price[price_id] = _id_of(_get(price, "product"))
     return _product_of_price[price_id]
@@ -216,8 +248,8 @@ def scope_of_checkout_session(session):
     try:
         items = stripe.checkout.Session.list_line_items(_get(session, "id"), limit=100)
     except Exception as exc:  # noqa: BLE001
-        current_app.logger.warning("Could not read the items of Checkout session %s: %s", _get(session, "id"), exc)
-        return Scope(UNCLEAR, "a Checkout session whose items could not be read")
+        _asking_stripe_failed(exc, f"the items of Checkout session {_get(session, 'id')}")
+        return Scope(UNCLEAR, "a Checkout session whose items Stripe would not list")
     pairs = [_price_pair(_get(item, "price")) for item in _get(items, "data", []) or []]
     return _from_prices(pairs) or Scope(UNCLEAR, "a Checkout session with nothing to tell it by")
 
@@ -243,13 +275,29 @@ def scope_of_payment_intent(payment_intent):
         if isinstance(invoice, str):
             invoice = stripe.Invoice.retrieve(invoice)
     except Exception as exc:  # noqa: BLE001
-        current_app.logger.warning(
-            "Could not find the invoice of payment %s: %s", _get(payment_intent, "id"), exc,
-        )
-        return Scope(UNCLEAR, "a payment whose invoice could not be looked up")
+        _asking_stripe_failed(exc, f"the invoice of payment {_get(payment_intent, 'id')}")
+        return Scope(UNCLEAR, "a payment whose invoice Stripe would not find")
     if not invoice:
         return Scope(FOREIGN, NO_INVOICE)
     return scope_of_invoice(invoice)
+
+
+def _unless_unreachable(sort):
+    """Report a Stripe that could not be asked as such, whichever lookup it was."""
+    def sorted_or_unreachable(obj):
+        try:
+            return sort(obj)
+        except _Unreachable as exc:
+            return Scope(UNREACHABLE, str(exc))
+    sorted_or_unreachable.__name__ = sort.__name__
+    sorted_or_unreachable.__doc__ = sort.__doc__
+    return sorted_or_unreachable
+
+
+scope_of_subscription = _unless_unreachable(scope_of_subscription)
+scope_of_invoice = _unless_unreachable(scope_of_invoice)
+scope_of_checkout_session = _unless_unreachable(scope_of_checkout_session)
+scope_of_payment_intent = _unless_unreachable(scope_of_payment_intent)
 
 
 def scope_of_event(event):
