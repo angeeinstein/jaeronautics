@@ -624,38 +624,9 @@ textarea.form-control {
     opacity: 1;
 }
 
-@media (max-width: 767.98px) {
-    /* Opaque, or the columns scrolling under it would show through; the
-       stripes and the hover still come from Bootstrap's inset shadow. */
-    .table .account-sticky {
-        position: sticky;
-        left: 0;
-        z-index: 1;
-        background-color: var(--ja-surface);
-        min-width: 10.5rem;
-    }
-
-    .table thead .account-sticky {
-        z-index: 2;
-    }
-
-    .account-sticky::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        right: -8px;
-        bottom: 0;
-        width: 8px;
-        pointer-events: none;
-        background: linear-gradient(to right, rgba(0, 0, 0, 0.35), transparent);
-    }
-
-    .account-sticky-email {
-        max-width: 11rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
+/* The phone's first column: name over address, the address on one line. */
+.account-person-email {
+    white-space: nowrap;
 }
 
 .pagination {
