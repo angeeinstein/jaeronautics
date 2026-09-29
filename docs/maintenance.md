@@ -201,6 +201,34 @@ been verified end to end against real Stripe. **Decision: left as it is.**
 Revisit only if members actually ask, and test the two points above in the
 sandbox before changing anything.
 
+## Selling Anything Else Through the Same Stripe Account
+
+The portal receives every event of the association's Stripe account, and it
+used to take every paid invoice for a membership payment -- matched to a member
+by customer or email. The teams' fees, or a payment link for an event, would
+then have given the payer a year of association membership, and a team
+subscription ending would have cancelled theirs.
+
+`services/stripe_scope.py` sorts each event before anything acts on it:
+
+| Verdict | When | What happens |
+| --- | --- | --- |
+| the membership | `purpose: membership` in the metadata (every checkout since this change), the old checkout metadata (`activation_mode`, `membership_starts_on`), a subscription the portal already knows, or the membership's price or **product** | handled as always |
+| something else | `purpose` set to anything else, everything on it for another product, or a payment that paid no invoice | ignored, logged, answered 200 |
+| cannot tell | Stripe could not be asked, or the object carries nothing to go on | handled as the membership, and an administrator is told (`stripe_event_scope_unclear`) |
+
+The product counts rather than the price, so subscriptions from before a fee
+change -- still on last year's price -- are still recognised. The same sorting
+keeps a team subscription from being taken for the membership when the portal
+looks one up (rejoining, the nightly reconcile, account deletion).
+
+**Anything sold later must be recognisable as not the membership:** set
+`purpose` (e.g. `team:drones`) in the metadata of its Checkout session,
+subscription and payment intent, and give it a product of its own in Stripe --
+not a second price under the membership's product. A payment link made in the
+dashboard carries no metadata, so for those the separate product is what tells
+them apart.
+
 ## Keeping the Forum's Idea of a Membership Current
 
 The forum holds its own copy of who may read what, as group memberships. Every

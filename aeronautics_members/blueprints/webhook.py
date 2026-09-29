@@ -55,6 +55,7 @@ from ..services.notifications import (
 from ..services.settings import (
     get_stripe_settings_map,
 )
+from ..services.stripe_scope import NO_INVOICE, scope_of_event
 from ..services.webhook_inbox import (
     claim_stripe_event,
     complete_stripe_event,
@@ -123,6 +124,37 @@ def process_stripe_event(event):
     Idempotency (claim/release of the event id) is handled by the caller.
     """
     event_type = event["type"]
+
+    # The account sells more than the membership, or will: a team's fee, a
+    # payment link. Anything that is clearly something else is left alone
+    # here, before it can be matched to a member by their email address and
+    # extend their membership. See services/stripe_scope.py.
+    scope = scope_of_event(event)
+    if scope.is_foreign and not (
+        # A SEPA debit starting is reported before, or without, its invoice
+        # being easy to find, and marking a member "processing" by mistake
+        # costs nothing; missing it hides the "your payment is on its way"
+        # page from somebody who has just paid.
+        event_type == "payment_intent.processing" and scope.reason == NO_INVOICE
+    ):
+        current_app.logger.info(
+            "Ignoring Stripe event %s (%s): not the membership -- %s.",
+            event.get("id"), event_type, scope.reason,
+        )
+        return "Not a membership event", 200
+    if scope.is_unclear:
+        current_app.logger.warning(
+            "Stripe event %s (%s) could not be told apart from the membership (%s); handled as the membership.",
+            event.get("id"), event_type, scope.reason,
+        )
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "stripe_event_scope_unclear",
+            _("A Stripe event could not be clearly assigned to the membership and was handled as a membership payment. If it was for something else, check the member it was matched to."),
+            payload={"event_id": event.get("id"), "event_type": event_type, "reason": scope.reason},
+            severity="warning",
+            commit=True,
+        )
 
     if event_type == "checkout.session.completed":
         session = event["data"]["object"]

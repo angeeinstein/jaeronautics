@@ -49,6 +49,7 @@ from .membership import (
 )
 from .periods import active_periods, grant_period
 from .settings import get_stripe_settings_map
+from .stripe_scope import scope_of_subscription
 
 
 
@@ -196,6 +197,9 @@ def build_prorated_line_item(cycle, price_details):
 
 def build_membership_metadata(member, cycle, activation_mode):
     return {
+        # What this is, for the day the account sells something else too; see
+        # services/stripe_scope.py.
+        "purpose": "membership",
         "membership_starts_on": cycle["coverage_start"].isoformat(),
         "membership_ends_on": cycle["coverage_end"].isoformat(),
         "renewal_due_on": cycle["renewal_due_on"].isoformat(),
@@ -297,7 +301,7 @@ def get_latest_stripe_subscription_for_member(member):
 
     apply_runtime_stripe_config()
     try:
-        subscription_list = stripe.Subscription.list(customer=member.stripe_customer_id, status="all", limit=1)
+        subscription_list = stripe.Subscription.list(customer=member.stripe_customer_id, status="all", limit=20)
     except stripe.StripeError as exc:
         if getattr(exc, "code", None) != "resource_missing":
             raise
@@ -309,7 +313,11 @@ def get_latest_stripe_subscription_for_member(member):
         member.stripe_customer_id = None
         return None
     subscriptions = subscription_list.get("data", []) if hasattr(subscription_list, "get") else []
-    return subscriptions[0] if subscriptions else None
+    # Newest first. A team fee on the same customer is not the membership.
+    for subscription in subscriptions:
+        if not scope_of_subscription(subscription).is_foreign:
+            return subscription
+    return None
 
 
 # A membership has ended, rather than never started or still running: the
@@ -358,6 +366,8 @@ def find_live_stripe_subscription(member):
             return None  # the customer itself is gone, and everything with it
         raise
     for subscription in listing.get("data", []) if hasattr(listing, "get") else []:
+        if scope_of_subscription(subscription).is_foreign:
+            continue  # a team fee running is not the membership running
         if subscription.get("status") in LIVE_SUBSCRIPTION_STATUSES:
             return subscription
     return None
