@@ -26,13 +26,13 @@ except ImportError:  # pragma: no cover - optional until dependencies are instal
         pass
 
 try:
-    from .db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
+    from .db_models import ExternalWorkItem, ForumAccount, ForumAvatarSubmission, Member, User, db
     from .member_categories import CATEGORY_ORDER
     from .permissions import Permission
     from .security_utils import build_public_url
     from .services.membership import member_has_active_access
 except ImportError:
-    from db_models import ForumAccount, ForumAvatarSubmission, Member, User, db
+    from db_models import ExternalWorkItem, ForumAccount, ForumAvatarSubmission, Member, User, db
     from member_categories import CATEGORY_ORDER
     from permissions import Permission
     from security_utils import build_public_url
@@ -232,6 +232,18 @@ def _portal_owned_rows(values):
     return rows
 
 
+def _rename_waiting(user):
+    return db.session.execute(
+        db.select(ExternalWorkItem.id).where(
+            ExternalWorkItem.kind == ExternalWorkItem.KIND_FORUM_RENAME,
+            ExternalWorkItem.user_id == user.id,
+            ExternalWorkItem.status.in_([
+                ExternalWorkItem.STATUS_PENDING, ExternalWorkItem.STATUS_PROCESSING,
+            ]),
+        )
+    ).first() is not None
+
+
 def _record_the_name_the_forum_gave(user, remote_user):
     """Keep the portal's idea of somebody's forum name equal to the forum's.
 
@@ -251,6 +263,12 @@ def _record_the_name_the_forum_gave(user, remote_user):
     actual = (remote_user or {}).get("username")
     actual = actual.strip() if isinstance(actual, str) else ""
     if not actual or user is None or user.forum_username == actual:
+        return False
+    if _rename_waiting(user):
+        # The forum still has the old name because the rename has not reached
+        # it yet. Following the forum here is what undid every approved rename:
+        # the approval set the new name, the sync that followed brought the old
+        # one straight back, and nothing said so.
         return False
 
     taken = db.session.execute(
@@ -1053,6 +1071,21 @@ class DiscourseConnectProvider(ForumProvider):
         response = self._request("GET", f"/admin/users/list/all.json?{urlencode({'email': email})}")
         return [row for row in response if isinstance(row, dict)] if isinstance(response, list) else []
 
+    def change_username(self, current_username, new_username):
+        """Rename somebody on the forum. Returns the name it now has.
+
+        Their posts stay theirs -- a post belongs to the account, not to the
+        name -- and Discourse rewrites @mentions and quotes of the old name to
+        the new one in the background.
+        """
+        response = self._request(
+            "PUT",
+            f"/u/{quote(str(current_username))}/preferences/username.json",
+            data={"new_username": new_username},
+        )
+        renamed = (response or {}).get("username") if isinstance(response, dict) else None
+        return renamed or new_username
+
     def get_remote_user_by_external_id(self, external_id):
         response = self._request("GET", f"/u/by-external/{quote(str(external_id))}.json")
         if isinstance(response, dict) and isinstance(response.get("user"), dict):
@@ -1696,6 +1729,41 @@ class ForumService:
                 user.forum_account.last_error = str(exc)
                 user.forum_account.last_synced_at = datetime.now(timezone.utc)
             return False, str(exc)
+
+    def rename_user(self, user):
+        """Give the forum account the portal's name for it.
+
+        Returns ``(renamed_to, error, lasting)``: ``lasting`` when asking again
+        will not help -- the forum refuses the name -- rather than the forum
+        being unreachable.
+        """
+        forum_account = user.forum_account if user is not None else None
+        wanted = (user.forum_username or "").strip() if user is not None else ""
+        if forum_account is None or not wanted:
+            # Not on the forum yet: they arrive there under the new name.
+            return None, None, False
+        if not self.is_ready() or not hasattr(self.provider, "change_username"):
+            return None, "The forum integration is not ready.", False
+        try:
+            remote_user = self.provider.get_remote_user_by_external_id(forum_account.external_id)
+        except ForumProviderError as exc:
+            if "failed (404)" in str(exc):
+                return None, None, False
+            return None, str(exc), False
+        current = (remote_user or {}).get("username")
+        if not current or current == wanted:
+            return current, None, False
+        # What the forum calls them now: what the portal goes back to if the
+        # forum refuses the new name.
+        forum_account.last_synced_username = current
+        try:
+            renamed_to = self.provider.change_username(current, wanted)
+        except ForumProviderError as exc:
+            lasting = any(code in str(exc) for code in ("failed (422)", "failed (400)", "failed (403)"))
+            forum_account.last_error = str(exc)
+            return None, str(exc), lasting
+        forum_account.last_synced_username = renamed_to
+        return renamed_to, None, False
 
     def anonymize_user(self, user):
         """Anonymise the member's forum identity. Returns (done, error)."""

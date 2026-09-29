@@ -698,6 +698,11 @@ class ExternalWorkItem(db.Model):
     # reaching the account they actually use. It carries the remote id in its
     # payload because the local row it belonged to is deleted by then.
     KIND_FORUM_DISCARD_REPLACED = "forum_discard_replaced"
+    # Queued when an administrator gives somebody a new forum username. The
+    # forum takes a rename only as a rename -- the sync that carries every
+    # other change leaves the username alone, on purpose, so that returning
+    # students keep the one their old posts are under.
+    KIND_FORUM_RENAME = "forum_rename"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"

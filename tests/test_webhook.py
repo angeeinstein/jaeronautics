@@ -230,7 +230,7 @@ class TestIdempotency:
         event = {
             "id": "evt_missing_meta",
             "type": "checkout.session.completed",
-            "data": {"object": {"id": "cs_x", "metadata": {}}},
+            "data": {"object": {"id": "cs_x", "metadata": {"purpose": "membership"}}},
         }
 
         resp = post_event(client, monkeypatch, event)
@@ -388,6 +388,17 @@ def member_id_for(email):
     return db.session.execute(db.select(Member.id).filter_by(email_private=email)).scalar_one()
 
 
+def _a_membership_payment(monkeypatch):
+    """The payment behind a dispute paid a membership invoice, as Stripe reports it."""
+    monkeypatch.setattr(
+        webhook_module.stripe.InvoicePayment, "list",
+        staticmethod(lambda **_: {"data": [{"invoice": {
+            "id": "in_disputed",
+            "parent": {"subscription_details": {"metadata": {"purpose": "membership"}}},
+        }}]}),
+    )
+
+
 class TestDisputeLost:
     def test_unreachable_stripe_fails_instead_of_acknowledging(self, client, monkeypatch, stub_side_effects):
         # Swallowing the error and returning 200 would drop the event for good,
@@ -396,9 +407,10 @@ class TestDisputeLost:
             raise RuntimeError("stripe unreachable")
 
         monkeypatch.setattr(webhook_module.stripe.Charge, "retrieve", staticmethod(boom))
+        _a_membership_payment(monkeypatch)
         event = {
             "id": "evt_dispute_err", "type": "charge.dispute.closed",
-            "data": {"object": {"status": "lost", "charge": "ch_1"}},
+            "data": {"object": {"status": "lost", "charge": "ch_1", "payment_intent": "pi_1"}},
         }
 
         resp = post_event(client, monkeypatch, event)
@@ -415,9 +427,10 @@ class TestDisputeLost:
             webhook_module.stripe.Charge, "retrieve",
             staticmethod(lambda *a, **k: {"customer": "cus_d"}),
         )
+        _a_membership_payment(monkeypatch)
         event = {
             "id": "evt_dispute_ok", "type": "charge.dispute.closed",
-            "data": {"object": {"status": "lost", "charge": "ch_2"}},
+            "data": {"object": {"status": "lost", "charge": "ch_2", "payment_intent": "pi_2"}},
         }
 
         resp = post_event(client, monkeypatch, event)
@@ -610,9 +623,10 @@ class TestCoverageLedger:
         db.session.commit()
         monkeypatch.setattr(webhook_module.stripe.Charge, "retrieve",
                             staticmethod(lambda *a, **k: {"customer": "cus_dl"}))
+        _a_membership_payment(monkeypatch)
         event = {
             "id": "evt_dl", "type": "charge.dispute.closed",
-            "data": {"object": {"status": "lost", "charge": "ch_dl"}},
+            "data": {"object": {"status": "lost", "charge": "ch_dl", "payment_intent": "pi_dl"}},
         }
 
         assert post_event(client, monkeypatch, event).status_code == 200

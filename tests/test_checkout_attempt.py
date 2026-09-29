@@ -241,7 +241,9 @@ def test_an_unmatched_checkout_is_reported_not_invented(client, monkeypatch):
         "id": "evt_no_member",
         "type": "checkout.session.completed",
         "data": {"object": {"id": "cs_orphan", "customer": "cus_orphan",
-                            "subscription": "sub_orphan", "metadata": {}}},
+                            "subscription": "sub_orphan",
+                            # The portal's own session, for a member since gone.
+                            "metadata": {"purpose": "membership", "member_id": "999"}}},
     }
 
     response = post_event(client, monkeypatch, event)

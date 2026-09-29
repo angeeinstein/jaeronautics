@@ -55,6 +55,7 @@ from ..services.notifications import (
 from ..services.settings import (
     get_stripe_settings_map,
 )
+from ..services.stripe_scope import NO_INVOICE, scope_of_event
 from ..services.webhook_inbox import (
     claim_stripe_event,
     complete_stripe_event,
@@ -123,6 +124,45 @@ def process_stripe_event(event):
     Idempotency (claim/release of the event id) is handled by the caller.
     """
     event_type = event["type"]
+
+    # The account sells more than the membership, or will: a team's fee, a
+    # payment link. Only what is recognisably the membership's is acted on;
+    # see services/stripe_scope.py for why the doubtful ones are safe to leave.
+    scope = scope_of_event(event)
+    if scope.is_unreachable:
+        # Answered with an error so the event is not marked done, and Stripe
+        # delivers it again later -- by then it can be asked.
+        current_app.logger.warning(
+            "Stripe event %s (%s) left for Stripe to deliver again: %s.",
+            event.get("id"), event_type, scope.reason,
+        )
+        return "Could not ask Stripe what this is; deliver it again later", 503
+    if scope.is_foreign and not (
+        # A SEPA debit starting is reported before, or without, its invoice
+        # being easy to find, and marking a member "processing" by mistake
+        # costs nothing; missing it hides the "your payment is on its way"
+        # page from somebody who has just paid.
+        event_type == "payment_intent.processing" and scope.reason == NO_INVOICE
+    ):
+        current_app.logger.info(
+            "Ignoring Stripe event %s (%s): not the membership -- %s.",
+            event.get("id"), event_type, scope.reason,
+        )
+        return "Not a membership event", 200
+    if scope.is_unclear:
+        current_app.logger.warning(
+            "Ignoring Stripe event %s (%s): nothing to tell whether it is the membership -- %s.",
+            event.get("id"), event_type, scope.reason,
+        )
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "stripe_event_scope_unclear",
+            _("A Stripe event could not be told apart from the membership and was left alone. If it was a membership payment -- made by hand in Stripe, say -- grant the period to the member yourself."),
+            payload={"event_id": event.get("id"), "event_type": event_type, "reason": scope.reason},
+            severity="warning",
+            commit=True,
+        )
+        return "Not recognisably a membership event", 200
 
     if event_type == "checkout.session.completed":
         session = event["data"]["object"]

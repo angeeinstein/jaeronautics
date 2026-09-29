@@ -201,6 +201,62 @@ been verified end to end against real Stripe. **Decision: left as it is.**
 Revisit only if members actually ask, and test the two points above in the
 sandbox before changing anything.
 
+## Selling Anything Else Through the Same Stripe Account
+
+The portal receives every event of the association's Stripe account, and it
+used to take every paid invoice for a membership payment -- matched to a member
+by customer or email. The teams' fees, or a payment link for an event, would
+then have given the payer a year of association membership, and a team
+subscription ending would have cancelled theirs.
+
+`services/stripe_scope.py` sorts each event before anything acts on it:
+
+| Verdict | When | What happens |
+| --- | --- | --- |
+| the membership | `purpose: membership` in the metadata (every checkout since this change), the old checkout metadata (`activation_mode`, `membership_starts_on`), a subscription the portal already knows, or the membership's price or **product** | handled as always |
+| something else | `purpose` set to anything else, everything on it for another product, or a payment that paid no invoice | ignored, logged, answered 200 |
+| Stripe unreachable | telling needed Stripe, and it could not be asked (no connection, outage, rate limit, key problem, anything unforeseen) | answered 503, so Stripe delivers the event again later -- for up to three days |
+| nothing to go on | no metadata, no known subscription, no price or product -- or Stripe says what was asked about does not exist | ignored, and an administrator is told (`stripe_event_scope_unclear`) |
+
+Only the first row is acted on. That costs the membership nothing: its
+invoices and subscriptions always carry the portal's metadata in the event
+itself, so they are recognised without asking Stripe and never come with
+nothing to go on. What does need asking -- a payment, to find its invoice --
+is reported a second time by the invoice event, which does the work. A
+membership invoice made by hand in the Stripe dashboard is the one exception:
+it arrives with nothing to go on, and the administrator notice is the prompt
+to grant that member's period by hand.
+
+The product counts rather than the price, so subscriptions from before a fee
+change -- still on last year's price -- are still recognised. The same sorting
+keeps a team subscription from being taken for the membership when the portal
+looks one up (rejoining, the nightly reconcile, account deletion).
+
+**Anything sold later must be recognisable as not the membership:** set
+`purpose` (e.g. `team:drones`) in the metadata of its Checkout session,
+subscription and payment intent, and give it a product of its own in Stripe --
+not a second price under the membership's product. A payment link made in the
+dashboard carries no metadata, so for those the separate product is what tells
+them apart.
+
+## Renaming Somebody on the Forum
+
+Approving a name change with *also change the forum username* ticked queues a
+`forum_rename` job, run straight away and retried if the forum is down. It uses
+Discourse's own rename, because the sync that carries every other change leaves
+the username alone on purpose: `auth overrides username` is off so that
+returning students keep the name their old posts are under. Until 2026-09-29
+the approval relied on that sync, and the portal then followed the forum's
+answer -- the old name -- straight back, so no rename ever happened.
+
+- **Posts stay theirs.** A post belongs to the account, not to the name, so
+  every post shows the new name at once. Discourse rewrites @mentions and
+  quotes of the old name in the background.
+- **A name the forum refuses** (taken there by an account the portal does not
+  know, such as an archived one) is not retried: the portal goes back to the
+  name the forum has and sends an administrator notice, `forum_rename_refused`.
+- **Somebody not on the forum yet** simply arrives there under the new name.
+
 ## Keeping the Forum's Idea of a Membership Current
 
 The forum holds its own copy of who may read what, as group memberships. Every
