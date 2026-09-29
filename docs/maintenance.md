@@ -281,6 +281,33 @@ The counts live in Redis. If Redis is unreachable, the limits fall back to each
 web worker's memory rather than failing the request, so logging in keeps
 working; they go back to Redis once it is reachable again.
 
+### Checking them from outside
+
+`scripts/edge-check.ps1` (PowerShell 7, from any PC) goes the whole way --
+Cloudflare, the tunnel, nginx, the application -- and checks that many
+readers at once are answered quickly, that the eleventh login or signup for
+one address is refused while forty different addresses from one network are
+not, and that a flood of anonymous forum page loads is cut off. It creates
+nothing: the addresses are at example.com and the signup forms are incomplete.
+
+    pwsh ./scripts/edge-check.ps1
+
+It spends the running network's allowance for a quarter of an hour. The forum
+side should be cut off after about fifty loads in ten seconds -- Discourse's
+own per-address limit for visitors who are not signed in; signed-in people
+are counted per person, and the portal's calls come in signed in as `system`.
+
+Its first run on Azure found a real fault: after half a minute of thirty
+readers, every request hung for thirty seconds, the CPU sat idle and no log
+said why -- except `dmesg`: `nf_conntrack: table full, dropping packet`. nginx
+opened a new connection to gunicorn for every request, the kernel tracks each
+closed one for a while, and on a 1 GiB VM its table holds 7,168. nginx now
+keeps a few connections to gunicorn open and reuses them (the `upstream`
+block, `--keep-alive 75` on gunicorn, longer than nginx's 60 s so nginx always
+closes first), and the installer sizes the table to 65,536 wherever the
+kernel tracks connections at all. If a load test ever hangs with an idle CPU
+again, `sudo dmesg -T | grep -i conntrack` is the first thing to look at.
+
 ## Slow Stripe or Forum
 
 The web server runs 3 workers with 4 threads each, so up to twelve requests are
