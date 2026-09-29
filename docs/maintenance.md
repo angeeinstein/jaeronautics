@@ -297,6 +297,17 @@ side should be cut off after about fifty loads in ten seconds -- Discourse's
 own per-address limit for visitors who are not signed in; signed-in people
 are counted per person, and the portal's calls come in signed in as `system`.
 
+Its first run on Azure found a real fault: after half a minute of thirty
+readers, every request hung for thirty seconds, the CPU sat idle and no log
+said why -- except `dmesg`: `nf_conntrack: table full, dropping packet`. nginx
+opened a new connection to gunicorn for every request, the kernel tracks each
+closed one for a while, and on a 1 GiB VM its table holds 7,168. nginx now
+keeps a few connections to gunicorn open and reuses them (the `upstream`
+block, `--keep-alive 75` on gunicorn, longer than nginx's 60 s so nginx always
+closes first), and the installer sizes the table to 65,536 wherever the
+kernel tracks connections at all. If a load test ever hangs with an idle CPU
+again, `sudo dmesg -T | grep -i conntrack` is the first thing to look at.
+
 ## Slow Stripe or Forum
 
 The web server runs 3 workers with 4 threads each, so up to twelve requests are

@@ -1967,7 +1967,7 @@ EnvironmentFile=${ENV_FILE}
 # than a whole worker: three workers of one request each meant three slow
 # forum calls stalled the entire site. Twelve requests at once now, and the
 # outside calls themselves time out well inside the 60 seconds.
-ExecStart=${INSTALL_DIR}/.venv/bin/gunicorn --workers 3 --threads 4 --timeout 60 --graceful-timeout 30 --bind 127.0.0.1:${APP_PORT} wsgi:application
+ExecStart=${INSTALL_DIR}/.venv/bin/gunicorn --workers 3 --threads 4 --timeout 60 --graceful-timeout 30 --keep-alive 75 --bind 127.0.0.1:${APP_PORT} wsgi:application
 Restart=always
 RestartSec=5
 TimeoutStartSec=60
@@ -2435,10 +2435,27 @@ EOF
 render_nginx_config() {
     step "Writing nginx configuration"
     local static_dir="${INSTALL_DIR}/aeronautics_members/static"
+    # One connection to gunicorn per request used to be opened and closed. On
+    # the Azure portal VM that filled the kernel's connection-tracking table
+    # (7,168 entries on 1 GiB) after half a minute of an intake-sized load, and
+    # from then on new connections were dropped without a word: every request
+    # hung, the CPU sat idle, nothing was logged but "nf_conntrack: table full"
+    # in dmesg. Kept-alive connections are a handful, reused. nginx closes an
+    # idle one after 60 s, before gunicorn's --keep-alive 75 would, so nginx
+    # never sends a request down a connection gunicorn is closing.
+    local upstream_name="${SERVICE_NAME//[^A-Za-z0-9_]/_}_app"
+    local upstream_block
+    upstream_block="upstream ${upstream_name} {
+    server 127.0.0.1:${APP_PORT};
+    keepalive 32;
+    keepalive_timeout 60s;
+}"
     mkdir -p "$(dirname "${NGINX_CONF_PATH}")"
 
     if [[ "${ENABLE_SSL}" == "1" ]] && cert_paths_exist; then
         cat > "${NGINX_CONF_PATH}" <<EOF
+${upstream_block}
+
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -2482,13 +2499,18 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_pass http://127.0.0.1:${APP_PORT};
+        # Kept-alive connections to gunicorn (see the upstream above).
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_pass http://${upstream_name};
         proxy_read_timeout 120s;
     }
 }
 EOF
     else
         cat > "${NGINX_CONF_PATH}" <<EOF
+${upstream_block}
+
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -2520,7 +2542,10 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_pass http://127.0.0.1:${APP_PORT};
+        # Kept-alive connections to gunicorn (see the upstream above).
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_pass http://${upstream_name};
         proxy_read_timeout 120s;
     }
 }
@@ -2735,6 +2760,25 @@ obtain_ssl_certificate() {
         warn "Automatic HTTPS setup failed. Leaving the deployment on HTTP."
         ENABLE_SSL="0"
     fi
+}
+
+configure_connection_tracking() {
+    # Only where the kernel tracks connections at all (a firewall loaded the
+    # module). Its default size follows memory -- 7,168 entries on a 1 GiB VM,
+    # which an intake evening can fill -- so it is set here, loaded early at
+    # boot so the setting has something to apply to, and applied now.
+    if [[ ! -e /proc/sys/net/netfilter/nf_conntrack_max ]]; then
+        return
+    fi
+    step "Sizing the connection-tracking table"
+    printf '%s\n' "nf_conntrack" > "/etc/modules-load.d/${SERVICE_NAME}-conntrack.conf"
+    cat > "/etc/sysctl.d/60-${SERVICE_NAME}-conntrack.conf" <<EOF
+# Written by the ${APP_NAME} installer. See configure_connection_tracking.
+net.netfilter.nf_conntrack_max = 65536
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 30
+EOF
+    sysctl -p "/etc/sysctl.d/60-${SERVICE_NAME}-conntrack.conf" >/dev/null \
+        || warn "Could not size the connection-tracking table; see /etc/sysctl.d/60-${SERVICE_NAME}-conntrack.conf"
 }
 
 reload_services() {
@@ -2955,6 +2999,7 @@ install_or_update() {
     obtain_ssl_certificate
     render_nginx_config
     write_cloudflare_tunnel_files
+    configure_connection_tracking
     reload_services
     configure_firewall
     write_state_file
