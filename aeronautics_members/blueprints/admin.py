@@ -124,6 +124,7 @@ from sqlalchemy.orm import (
 from ..db_models import (
     AuditLog,
     EmailDeliveryJob,
+    ExternalWorkItem,
     ForumAvatarSubmission,
     ImportedForumProfile,
     MailAccount,
@@ -1086,6 +1087,11 @@ def approve_profile_change_request(request_id):
             exclude_user_id=member.user.id,
             preferred=preferred_username,
         )
+        if member.user.forum_username != previous_forum_username:
+            # A rename has to be asked for as one: the sync below leaves the
+            # forum's username alone on purpose. Queued first, so that sync
+            # does not take the old name back from the forum meanwhile.
+            outbox.enqueue_forum_rename(member.user, reason="Forum username changed on approval.")
 
     request_record.status = "approved"
     request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
@@ -1125,7 +1131,15 @@ def approve_profile_change_request(request_id):
         object_id=request_record.id,
     )
     db.session.commit()
+    rename_pending = False
+    if member.user is not None:
+        # Done now rather than on the next worker pass, so the member sees the
+        # new name when they next look. Left queued if the forum is down.
+        outbox.process_pending(limit=5, kinds=[ExternalWorkItem.KIND_FORUM_RENAME], user_id=member.user.id)
+        rename_pending = outbox.pending_count(kinds=[ExternalWorkItem.KIND_FORUM_RENAME], user_id=member.user.id) > 0
     flash(_("Change request approved."), "success")
+    if rename_pending:
+        flash(_("The forum could not be renamed just now; it will be tried again automatically."), "warning")
     if forum_result and forum_result.error:
         flash(_("The forum profile could not be synchronized right now. Please run a forum resync after checking the settings."), "warning")
     return redirect(url_for("admin.admin_reviews"))

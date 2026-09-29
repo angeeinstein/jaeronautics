@@ -110,6 +110,23 @@ def enqueue_forum_sync(member, reason=None):
     )
 
 
+def enqueue_forum_rename(user, reason=None):
+    """Queue giving somebody's forum account the portal's name for it.
+
+    Keyed by user: whatever the name is when it runs is the one it asks for,
+    so two renames in a row end with the second.
+    """
+    if user is None:
+        return None
+    return enqueue(
+        ExternalWorkItem.KIND_FORUM_RENAME,
+        member=user.member,
+        user=user,
+        dedupe_key=f"{ExternalWorkItem.KIND_FORUM_RENAME}:user:{user.id}",
+        reason=reason,
+    )
+
+
 def enqueue_forum_anonymise(user, reason=None):
     """Queue a Discourse anonymisation for one account.
 

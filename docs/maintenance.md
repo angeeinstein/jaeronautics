@@ -239,6 +239,24 @@ not a second price under the membership's product. A payment link made in the
 dashboard carries no metadata, so for those the separate product is what tells
 them apart.
 
+## Renaming Somebody on the Forum
+
+Approving a name change with *also change the forum username* ticked queues a
+`forum_rename` job, run straight away and retried if the forum is down. It uses
+Discourse's own rename, because the sync that carries every other change leaves
+the username alone on purpose: `auth overrides username` is off so that
+returning students keep the name their old posts are under. Until 2026-09-29
+the approval relied on that sync, and the portal then followed the forum's
+answer -- the old name -- straight back, so no rename ever happened.
+
+- **Posts stay theirs.** A post belongs to the account, not to the name, so
+  every post shows the new name at once. Discourse rewrites @mentions and
+  quotes of the old name in the background.
+- **A name the forum refuses** (taken there by an account the portal does not
+  know, such as an archived one) is not retried: the portal goes back to the
+  name the forum has and sends an administrator notice, `forum_rename_refused`.
+- **Somebody not on the forum yet** simply arrives there under the new name.
+
 ## Keeping the Forum's Idea of a Membership Current
 
 The forum holds its own copy of who may read what, as group memberships. Every

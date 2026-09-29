@@ -330,6 +330,49 @@ def _handle_forum_sync_work(item):
         raise ExternalServiceError(f"Forum sync failed for member_id={member.id}: {result.error}")
 
 
+def _handle_forum_rename_work(item):
+    """Outbox handler: give a forum account the name an administrator chose.
+
+    Retried while the forum cannot be reached. A name the forum refuses --
+    taken there by an account the portal does not know, an archived one from
+    the old board say -- will be refused again, so that is not retried: the
+    portal goes back to the name the forum has, and an administrator is told.
+    """
+    user = item.user
+    if user is None or getattr(user, "deleted_at", None) is not None:
+        return
+    member = user.member
+    if member is not None and member.deleted_at is not None:
+        return
+    wanted = user.forum_username
+    renamed_to, error, lasting = get_forum_service().rename_user(user)
+    if error and not lasting:
+        db.session.commit()
+        raise ExternalServiceError(f"Forum rename failed for user_id={user.id}: {error}")
+    if error:
+        current_name = (user.forum_account.last_synced_username if user.forum_account else None)
+        current_app.logger.warning(
+            "The forum refused to rename user_id=%s to %r: %s", user.id, wanted, error,
+        )
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "forum_rename_refused",
+            _("The forum refused a new username. The member keeps their old one."),
+            payload={"wanted": wanted, "kept": current_name, "reason": error},
+            target_user=user,
+            target_member=member,
+            commit=False,
+        )
+        if current_name:
+            user.forum_username = current_name
+        db.session.commit()
+        return
+    if renamed_to and renamed_to != user.forum_username:
+        # The forum adjusted it (too long, say); the forum's is the real one.
+        user.forum_username = renamed_to
+    db.session.commit()
+
+
 def _handle_forum_anonymise_work(item):
     """Outbox handler: retry a Discourse anonymisation an erasure could not do.
 
@@ -469,6 +512,7 @@ def finish_forum_cleanup_for(user):
 
 register_handler(ExternalWorkItem.KIND_FORUM_SYNC, _handle_forum_sync_work)
 register_handler(ExternalWorkItem.KIND_FORUM_ANONYMISE, _handle_forum_anonymise_work)
+register_handler(ExternalWorkItem.KIND_FORUM_RENAME, _handle_forum_rename_work)
 register_handler(
     ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED, _handle_forum_discard_replaced_work
 )
