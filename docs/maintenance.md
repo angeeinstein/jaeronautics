@@ -281,6 +281,22 @@ The counts live in Redis. If Redis is unreachable, the limits fall back to each
 web worker's memory rather than failing the request, so logging in keeps
 working; they go back to Redis once it is reachable again.
 
+### Checking them from outside
+
+`scripts/edge-check.ps1` (PowerShell 7, from any PC) goes the whole way --
+Cloudflare, the tunnel, nginx, the application -- and checks that many
+readers at once are answered quickly, that the eleventh login or signup for
+one address is refused while forty different addresses from one network are
+not, and that a flood of anonymous forum page loads is cut off. It creates
+nothing: the addresses are at example.com and the signup forms are incomplete.
+
+    pwsh ./scripts/edge-check.ps1
+
+It spends the running network's allowance for a quarter of an hour. The forum
+side should be cut off after about fifty loads in ten seconds -- Discourse's
+own per-address limit for visitors who are not signed in; signed-in people
+are counted per person, and the portal's calls come in signed in as `system`.
+
 ## Slow Stripe or Forum
 
 The web server runs 3 workers with 4 threads each, so up to twelve requests are
