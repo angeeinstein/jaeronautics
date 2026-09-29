@@ -266,20 +266,25 @@ Every form that takes a password or an email address has two limits:
 | Setting | Default | Counts |
 | --- | --- | --- |
 | `RATELIMIT_LOGIN` | 10 per 15 minutes | Login attempts for one email address from one network |
-| `RATELIMIT_LOGIN_PER_IP` | 300 per 15 minutes | All login attempts from one network |
+| `RATELIMIT_LOGIN_PER_IP` | 1000 per 15 minutes | All login attempts from one network |
 | `RATELIMIT_REGISTER` | 5 per hour | "Forgot password" for one email address from one network |
-| `RATELIMIT_REGISTER_PER_IP` | 300 per hour | All "forgot password" requests from one network |
+| `RATELIMIT_REGISTER_PER_IP` | 1000 per hour | All "forgot password" requests from one network |
 | `RATELIMIT_MEMBERSHIP` | 10 per 15 minutes | Signups for one email address from one network |
-| `RATELIMIT_MEMBERSHIP_PER_IP` | 300 per hour | All signups from one network |
+| `RATELIMIT_MEMBERSHIP_PER_IP` | 1000 per hour | All signups from one network |
 
 The tight one stops somebody guessing one account's password; the loose one
 only stops a flood. A lecture hall on the campus network shares one address,
-so the loose limits are set for an intake evening. Signed-in actions (resending
+so the loose limits are set for an intake evening -- 250 students on the
+university Wi-Fi, several tries each. Signed-in actions (resending
 a confirmation, downloading your data) are counted per account, not per network.
 
 The counts live in Redis. If Redis is unreachable, the limits fall back to each
 web worker's memory rather than failing the request, so logging in keeps
 working; they go back to Redis once it is reachable again.
+
+Change them in `config.py`, not in `.env`: the installer rewrites `.env` on
+every update and keeps only the keys it knows, so a value set there is gone
+after the next update.
 
 ### Checking them from outside
 

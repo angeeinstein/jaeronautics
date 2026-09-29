@@ -84,16 +84,19 @@ RATELIMIT_STORAGE_URI = os.getenv("RATELIMIT_STORAGE_URI", "redis://127.0.0.1:63
 # somebody guessing a password. The loose one counts everything from that
 # network, whatever the address: it only stops a flood. A lecture hall behind
 # one campus address shares that second budget, so it is set for an intake
-# evening, not for one person.
+# evening, not for one person: 250 students on the university Wi-Fi, each
+# logging in more than once and resubmitting a form that came back with a
+# mistake, all counted against one address. Raised from 300 for that; the
+# per-address limits above are what stop guessing, and Cloudflare is in front.
 RATELIMIT_LOGIN = os.getenv("RATELIMIT_LOGIN", "10 per 15 minute")
-RATELIMIT_LOGIN_PER_IP = os.getenv("RATELIMIT_LOGIN_PER_IP", "300 per 15 minute")
+RATELIMIT_LOGIN_PER_IP = os.getenv("RATELIMIT_LOGIN_PER_IP", "1000 per 15 minute")
 # The "forgot password" form (the name is historical).
 RATELIMIT_REGISTER = os.getenv("RATELIMIT_REGISTER", "5 per hour")
-RATELIMIT_REGISTER_PER_IP = os.getenv("RATELIMIT_REGISTER_PER_IP", "300 per hour")
+RATELIMIT_REGISTER_PER_IP = os.getenv("RATELIMIT_REGISTER_PER_IP", "1000 per hour")
 # The signup form. Per address too: an address that already has an account is
 # signed in by it when the password matches, so it is also a password check.
 RATELIMIT_MEMBERSHIP = os.getenv("RATELIMIT_MEMBERSHIP", "10 per 15 minute")
-RATELIMIT_MEMBERSHIP_PER_IP = os.getenv("RATELIMIT_MEMBERSHIP_PER_IP", "300 per hour")
+RATELIMIT_MEMBERSHIP_PER_IP = os.getenv("RATELIMIT_MEMBERSHIP_PER_IP", "1000 per hour")
 # Changing a password (signed in: counted per account) and setting a new one
 # from a reset link (counted per link).
 RATELIMIT_PASSWORD_CHANGE = os.getenv("RATELIMIT_PASSWORD_CHANGE", "5 per 15 minute")
