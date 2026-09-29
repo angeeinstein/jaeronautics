@@ -296,7 +296,7 @@ class TestTheAdminScreens:
         return client
 
     def _rows(self, response):
-        return response.get_data(as_text=True).count('class="btn btn-secondary btn-sm"')
+        return response.get_data(as_text=True).count('class="account-row"')
 
     def test_the_account_page_shows_both_states(self, app, admin_client):
         member = _paid_member()

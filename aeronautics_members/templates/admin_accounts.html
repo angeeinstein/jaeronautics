@@ -2,6 +2,17 @@
 {% set page_title = _('Accounts') %}
 {% set page_description = _('Browse all accounts and linked memberships.') %}
 {% block admin_content %}
+{#
+  A column header that sorts the list: first click ascending, the next
+  descending. The filters travel along, and the page goes back to the first.
+#}
+{% macro sort_header(key, label, classes='') -%}
+    {%- set is_sorted = sort == key -%}
+    {%- set next_dir = 'desc' if is_sorted and sort_dir == 'asc' else 'asc' -%}
+    <th class="{{ classes }}" aria-sort="{% if is_sorted %}{{ 'ascending' if sort_dir == 'asc' else 'descending' }}{% else %}none{% endif %}">
+        <a class="sort-link{% if not is_sorted %} is-idle{% endif %}" href="{{ url_for('admin.admin_accounts', q=search_term or None, role=role_filter, membership_status=membership_filter, kind=kind_filter, account=account_filter, active=active_filter, sort=key, dir=next_dir) }}">{{ label }} <span class="sort-arrow" aria-hidden="true">{% if is_sorted %}{{ '▲' if sort_dir == 'asc' else '▼' }}{% else %}↕{% endif %}</span></a>
+    </th>
+{%- endmacro %}
 <div class="card mb-4">
     <div class="card-body">
         <form method="GET" action="{{ url_for('admin.admin_accounts') }}" class="row g-3 align-items-end" data-live-filter="#account-results" role="search">
@@ -61,6 +72,10 @@
                     <option value="inactive" {% if active_filter == 'inactive' %}selected{% endif %}>{{ _('Inactive') }}</option>
                 </select>
             </div>
+            {% if not sort_is_default %}
+                <input type="hidden" name="sort" value="{{ sort }}">
+                <input type="hidden" name="dir" value="{{ sort_dir }}">
+            {% endif %}
             <div class="col d-flex align-items-center justify-content-end gap-3">
                 {# Filters apply by themselves (live-filter.js); this button is
                    only for a browser without JavaScript. #}
@@ -80,35 +95,63 @@
     </div>
     <div class="card-body">
         {% if pagination.items %}
+            {#
+              On a phone the table scrolls sideways; the name stays put in the
+              first column and the right edge fades while there is more to see
+              (accounts-table.js).
+            #}
+            <div class="account-table-scroll" data-scroll-fade>
             <div class="table-responsive">
-                <table class="table table-striped align-middle">
+                <table class="table table-striped table-hover align-middle">
                     <thead>
                         <tr>
-                            <th>{{ _('Email') }}</th>
-                            <th>{{ _('Member') }}</th>
-                            <th>{{ _('Account') }}</th>
-                            <th>{{ _('Forum Username') }}</th>
+                            {{ sort_header('member', _('Member'), 'account-sticky d-md-none') }}
+                            {{ sort_header('email', _('Email'), 'd-none d-md-table-cell') }}
+                            {{ sort_header('member', _('Member'), 'd-none d-md-table-cell') }}
+                            {{ sort_header('account', _('Account')) }}
+                            {{ sort_header('forum', _('Forum Username')) }}
+                            {# One person can hold several roles: nothing to sort by. #}
                             <th>{{ _('Roles') }}</th>
-                            <th>{{ _('Subscription') }}</th>
-                            <th>{{ _('Membership Active') }}</th>
-                            <th class="text-end">{{ _('Actions') }}</th>
+                            {{ sort_header('subscription', _('Subscription')) }}
+                            {{ sort_header('active', _('Membership Active')) }}
                         </tr>
                     </thead>
                     <tbody>
                         {% for user_record in pagination.items %}
                             {% set member = user_record.member %}
-                            <tr>
-                                {% set archive = user_record.imported_forum_profile %}
-                                {% set unclaimed_archive = archive and not member %}
-                                <td>
+                            {% set archive = user_record.imported_forum_profile %}
+                            {% set unclaimed_archive = archive and not member %}
+                            {% set detail_url = url_for('admin.admin_account_detail', user_id=user_record.id) %}
+                            {#
+                              The whole row opens the account (accounts-table.js).
+                              The address is a real link as well, for the keyboard,
+                              a screen reader and a middle click.
+                            #}
+                            <tr class="account-row" data-href="{{ detail_url }}">
+                                <td class="account-sticky d-md-none">
+                                    <a class="account-row-link" href="{{ detail_url }}">
+                                        <span class="d-block fw-semibold">
+                                            {% if member %}{{ member.first_name }} {{ member.last_name }}
+                                            {% elif unclaimed_archive %}{{ archive.display_name }}{% if archive.year_group %} ({{ archive.year_group }}){% endif %}
+                                            {% else %}<span class="text-muted fw-normal">{{ _('No membership') }}</span>{% endif %}
+                                        </span>
+                                        <span class="d-block small text-muted account-sticky-email">
+                                            {% if unclaimed_archive %}{{ archive.source_email or archive.source_username }}{% else %}{{ user_record.email }}{% endif %}
+                                        </span>
+                                    </a>
+                                    {% if unclaimed_archive %}<span class="status-label status-info">{{ _('Old forum') }}</span>{% endif %}
+                                </td>
+                                <td class="d-none d-md-table-cell">
+                                    <a class="account-row-link" href="{{ detail_url }}">
                                     {% if unclaimed_archive %}
                                         {{ archive.source_email or archive.source_username }}
-                                        <span class="status-label status-info ms-1">{{ _('Old forum') }}</span>
                                     {% else %}
                                         {{ user_record.email }}
                                     {% endif %}
+                                    </a>
+                                    {% if unclaimed_archive %}<span class="status-label status-info ms-1">{{ _('Old forum') }}</span>{% endif %}
                                 </td>
-                                <td>
+                                <td class="d-none d-md-table-cell">
                                     {% if member %}
                                         {{ member.first_name }} {{ member.last_name }}
                                     {% elif unclaimed_archive %}
@@ -158,20 +201,11 @@
                                         <span class="text-muted">-</span>
                                     {% endif %}
                                 </td>
-                                <td class="text-end text-nowrap">
-                                    {#
-                                      Just the link. Changing roles from a list means
-                                      deciding without the context that makes the
-                                      decision safe -- what else the account holds, and
-                                      whether anybody else could still do the job. That
-                                      lives on the account itself.
-                                    #}
-                                    <a class="btn btn-secondary btn-sm" href="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">{{ _('View') }}</a>
-                                </td>
                             </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
             </div>
 
             {% if pagination.pages > 1 %}
@@ -180,7 +214,7 @@
                         {% for page_num in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
                             {% if page_num %}
                                 <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('admin.admin_accounts', q=search_term, role=role_filter, membership_status=membership_filter, kind=kind_filter, account=account_filter, active=active_filter, page=page_num) }}">{{ page_num }}</a>
+                                    <a class="page-link" href="{{ url_for('admin.admin_accounts', q=search_term, role=role_filter, membership_status=membership_filter, kind=kind_filter, account=account_filter, active=active_filter, sort=None if sort_is_default else sort, dir=None if sort_is_default else sort_dir, page=page_num) }}">{{ page_num }}</a>
                                 </li>
                             {% else %}
                                 <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
@@ -198,4 +232,5 @@
 {% endblock %}
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='live-filter.js') }}"></script>
+<script src="{{ url_for('static', filename='accounts-table.js') }}"></script>
 {% endblock %}

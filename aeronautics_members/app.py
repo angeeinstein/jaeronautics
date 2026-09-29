@@ -39,7 +39,7 @@ from flask_limiter.errors import RateLimitExceeded
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from sqlalchemy import func, inspect, or_, text as sql_text
+from sqlalchemy import and_, case, func, inspect, or_, text as sql_text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased, selectinload
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -1182,9 +1182,64 @@ def get_admin_dashboard_metrics():
 
 
 
+# The columns the account list can be sorted by, and the default. Roles are not
+# among them: one person can hold several, so there is no single value to sort.
+ACCOUNT_SORT_KEYS = ("email", "member", "account", "forum", "subscription", "active")
+ACCOUNT_SORT_DEFAULT = ("email", "asc")
+
+
+def _account_sort_expressions():
+    """What each column sorts by -- what it shows, not merely what is stored.
+
+    An unclaimed archive shows the address and name the old forum recorded, so
+    that is what it sorts by too; the portal account behind it has a
+    placeholder address nobody would recognise.
+    """
+    unclaimed_archive = and_(Member.id.is_(None), ImportedForumProfile.id.is_not(None))
+    return {
+        "email": func.lower(case(
+            (unclaimed_archive, func.coalesce(ImportedForumProfile.source_email,
+                                              ImportedForumProfile.source_username)),
+            else_=User.email,
+        )),
+        # Surname first. An archive has no surname column, but the old board's
+        # usernames are surname-first (HuberA_L15), which sorts the same way.
+        "member": [
+            func.lower(func.coalesce(Member.last_name, ImportedForumProfile.source_username)),
+            func.lower(Member.first_name),
+        ],
+        # Usable accounts first, then the ones nobody has signed in to, then
+        # switched off, then erased.
+        "account": case(
+            (User.deleted_at.is_not(None), 3),
+            (User.disabled_at.is_not(None), 2),
+            (User.password_hash.is_(None), 1),
+            else_=0,
+        ),
+        "forum": func.lower(User.forum_username),
+        "subscription": Member.payment_status,
+        # Active first on the first click: that is the question being asked.
+        "active": case((Member.is_active.is_(True), 0), (Member.is_active.is_(False), 1), else_=None),
+    }
+
+
+def account_sort_order(sort, direction):
+    """ORDER BY for the account list. Empty values go last either way round."""
+    expressions = _account_sort_expressions()[sort]
+    if not isinstance(expressions, list):
+        expressions = [expressions]
+    order = []
+    for expression in expressions:
+        order.append(expression.is_(None))
+        order.append(expression.desc() if direction == "desc" else expression.asc())
+    # A stable order within equal values, so paging never repeats or skips.
+    order += [User.email.asc(), User.id.asc()]
+    return order
+
+
 def build_account_directory_query(
     search_term, role_filter, membership_filter, active_filter,
-    kind_filter="all", account_filter="all",
+    kind_filter="all", account_filter="all", sort="email", direction="asc",
 ):
     query = (
         db.select(User)
@@ -1268,7 +1323,13 @@ def build_account_directory_query(
     elif account_filter == "no_sign_in":
         query = query.where(User.password_hash.is_(None), User.deleted_at.is_(None))
 
-    return query.order_by(User.email.asc()).distinct()
+    if sort not in ACCOUNT_SORT_KEYS:
+        sort, direction = ACCOUNT_SORT_DEFAULT
+    # No DISTINCT: both joins are one to one (member.user_id and
+    # imported_forum_profiles.user_id are unique) and the role filters are
+    # subqueries, so no account appears twice -- and DISTINCT beside an ORDER
+    # BY on expressions is refused by some databases.
+    return query.order_by(*account_sort_order(sort, direction))
 
 
 def build_settings_page_context(edit_mail_account_id=None):
