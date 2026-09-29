@@ -152,3 +152,15 @@ def test_the_portal_limiter_falls_back_to_memory():
 
     assert limiter._in_memory_fallback_enabled is True
     assert limiter._swallow_errors is True
+
+
+@pytest.mark.parametrize("setting", [
+    "RATELIMIT_LOGIN_PER_IP", "RATELIMIT_REGISTER_PER_IP", "RATELIMIT_MEMBERSHIP_PER_IP",
+])
+def test_a_whole_campus_behind_one_address_fits_under_the_network_limits(setting):
+    """250 students on the university Wi-Fi, several tries each, one address."""
+    from limits import parse
+
+    from aeronautics_members import config
+
+    assert parse(getattr(config, setting)).amount >= 1000
