@@ -25,6 +25,7 @@ from ..config import (
 from ..services.diagnostics import collect_system_health
 from ..services.audit import (
     get_recent_audit_logs,
+    serialize_audit_value,
     log_audit_event,
     redact_settings_states_for_audit,
     snapshot_forum_account_for_audit,
@@ -528,6 +529,42 @@ def admin_resync_forum_account(user_id):
     return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
 
+@admin_bp.route("/admin/accounts/<int:user_id>/picture-replacement", methods=["POST"])
+@login_required
+@requires(Permission.FORUM_MODERATE)
+def admin_picture_replacement(user_id):
+    """Allow a member one new profile picture, or withdraw that.
+
+    Members cannot change an approved picture themselves, on purpose; somebody
+    who wants to asks an admin. Their current picture, and their forum access
+    with it, stay until the new one is approved -- which uses the permission up.
+    Nobody is emailed: the admin has usually just spoken to them.
+    """
+    member = db.session.execute(
+        locked(db.select(Member).filter_by(user_id=user_id))
+    ).scalar_one_or_none()
+    back = url_for("admin.admin_account_detail", user_id=user_id)
+    if member is None:
+        flash(_("This account does not have a linked membership profile yet."), "warning")
+        return redirect(back)
+
+    allow = request.form.get("allow") == "1"
+    before = member.avatar_replacement_allowed_at
+    member.avatar_replacement_allowed_at = get_now_utc() if allow else None
+    log_audit_event(
+        category="forum",
+        event_type="avatar_replacement_allowed" if allow else "avatar_replacement_withdrawn",
+        actor_user=current_user,
+        target_user=member.user,
+        target_member=member,
+        before={"avatar_replacement_allowed_at": serialize_audit_value(before)},
+        after={"avatar_replacement_allowed_at": serialize_audit_value(member.avatar_replacement_allowed_at)},
+    )
+    db.session.commit()
+    flash(_("New picture allowed.") if allow else _("Permission withdrawn."), "success")
+    return redirect(back)
+
+
 @admin_bp.route("/admin/reviews/pictures/<int:submission_id>/approve", methods=["POST"])
 @login_required
 @requires(Permission.FORUM_MODERATE)
@@ -554,6 +591,11 @@ def approve_forum_avatar_submission(submission_id):
     review_note = (request.form.get("review_note") or "").strip() or None
     account = submission.user.forum_account if submission.user else None
     was_active = account is not None and account.state == FORUM_STATE_ACTIVE
+    # A replacement an admin allowed: the member already has a picture.
+    replacing = submission.member is not None and (
+        forum_service.get_current_approved_submission(submission.member) is not None
+        or forum_service.get_reclaimed_avatar(submission.member) is not None
+    )
 
     try:
         result = forum_service.approve_avatar_submission(submission, reviewer=current_user, review_note=review_note)
@@ -578,7 +620,22 @@ def approve_forum_avatar_submission(submission_id):
     # The moment their forum access becomes complete, which they were waiting
     # for -- and until now only heard about if the picture was rejected. Not
     # for somebody replacing a picture: their access was complete already.
-    if not result.error and result.desired_state == FORUM_STATE_ACTIVE and not was_active:
+    if not result.error and replacing:
+        # The one replacement allowed is used; the next one needs asking again.
+        submission.member.avatar_replacement_allowed_at = None
+        queue_user_status_notification(
+            "forum_avatar_replaced",
+            _("Your new profile picture was approved."),
+            recipient_email=(submission.user.email if submission.user is not None else None),
+            payload={
+                "first_name": submission.member.first_name,
+            },
+            target_user=submission.user,
+            target_member=submission.member,
+            object_type="forum_avatar_submission",
+            object_id=submission.id,
+        )
+    elif not result.error and result.desired_state == FORUM_STATE_ACTIVE and not was_active:
         queue_user_status_notification(
             "forum_avatar_approved",
             _("Your profile picture was approved."),

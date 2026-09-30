@@ -192,6 +192,17 @@ def upload_forum_avatar():
         flash(_("Your membership must be active before you can upload a forum profile picture."), "warning")
         return redirect(url_for("account.account"))
 
+    # An approved picture stays unless an admin has allowed a new one. The page
+    # only offers the upload then; this is for a request that did not come
+    # from the page.
+    has_picture = (
+        forum_service.get_current_approved_submission(member) is not None
+        or forum_service.get_reclaimed_avatar(member) is not None
+    )
+    if has_picture and member.avatar_replacement_allowed_at is None:
+        flash(_("To change your picture, please ask an admin."), "info")
+        return redirect(url_for("account.account"))
+
     upload_request_limit = forum_service.get_upload_request_limit()
     if request.content_length and request.content_length > upload_request_limit:
         flash(

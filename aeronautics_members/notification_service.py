@@ -546,6 +546,20 @@ class NotificationService:
                     ],
                 },
             )
+        if event.event_type == "forum_avatar_replaced":
+            return (
+                _("Your new profile picture is live"),
+                {
+                    "preview_text": _("Your new profile picture was approved."),
+                    "action_url": build_public_url("forum.forum_entry"),
+                    "action_label": _("Open Forum"),
+                    "heading": _("Your new profile picture was approved"),
+                    "body_lines": [
+                        greeting,
+                        _("It now shows on the forum."),
+                    ],
+                },
+            )
         if event.event_type == "forum_avatar_rejected":
             return (
                 _("Please upload a new profile picture"),

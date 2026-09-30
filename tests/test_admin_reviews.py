@@ -78,6 +78,12 @@ def quiet_forum(monkeypatch):
     from aeronautics_members.blueprints import admin as admin_module
 
     class FakeForum:
+        def get_current_approved_submission(self, member):
+            return None
+
+        def get_reclaimed_avatar(self, member):
+            return None
+
         def approve_avatar_submission(self, submission, reviewer=None, review_note=None):
             submission.status = "approved"
             submission.reviewed_by = reviewer

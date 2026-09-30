@@ -1679,15 +1679,23 @@ class ForumService:
         if not self.is_ready():
             raise ForumProviderError("Forum integration is not configured yet.")
 
+        # The account has to exist on the forum before a picture can be set on
+        # it, so it is synced first -- in the state the member is actually in.
+        # For a first picture that is onboarding; for somebody replacing one,
+        # allowed by an admin, it is full access, which their current picture
+        # still gives them. Always sending onboarding here took a member who
+        # was replacing a picture out of the members' group, and left them out
+        # if the upload then failed.
+        current_state = self.get_desired_state(submission.member)
         try:
-            self.provider.sync_user(forum_account, submission.user, submission.member, FORUM_STATE_ONBOARDING)
+            self.provider.sync_user(forum_account, submission.user, submission.member, current_state)
             self.provider.set_avatar(forum_account, submission.user, submission)
         except ForumProviderError as exc:
             submission.sync_error = str(exc)
             forum_account.last_error = str(exc)
             forum_account.state = FORUM_STATE_SYNC_ERROR
             forum_account.last_synced_at = datetime.now(timezone.utc)
-            return ForumSyncResult(changed=True, desired_state=FORUM_STATE_ONBOARDING, forum_account=forum_account, error=str(exc))
+            return ForumSyncResult(changed=True, desired_state=current_state, forum_account=forum_account, error=str(exc))
 
         previous_approved = db.session.execute(
             db.select(ForumAvatarSubmission)

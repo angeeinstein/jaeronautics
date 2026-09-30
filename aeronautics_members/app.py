@@ -1434,6 +1434,12 @@ def build_forum_context(member):
     # -- so nothing else in this function would notice it.
     reclaimed_avatar = service.get_reclaimed_avatar(member) if member else None
     reconnect_waiting = old_forum_account_waiting(member)
+    # An approved picture is kept: members cannot change it on their own. An
+    # admin can allow one replacement, and until the new picture is approved
+    # the old one -- and the forum access that comes with it -- stays.
+    has_picture = approved_submission is not None or reclaimed_avatar is not None
+    replacement_allowed = bool(has_picture and member and member.avatar_replacement_allowed_at)
+    replacement_pending = replacement_allowed and pending_submission is not None
 
     status_key = "disabled"
     status_message = _("The forum integration is not enabled yet.")
@@ -1466,6 +1472,7 @@ def build_forum_context(member):
         status_key = "active"
         status_message = _("Your forum access is ready.")
         can_enter_forum = service.is_ready()
+        can_upload_avatar = replacement_allowed
     elif reclaimed_avatar is not None:
         # They came back to an account that already has a face on it -- the one
         # they uploaded to the old forum, which is live on their profile right
@@ -1474,7 +1481,7 @@ def build_forum_context(member):
         status_key = "active"
         status_message = _("Your forum access is ready, with the profile picture from the old forum.")
         can_enter_forum = service.is_ready()
-        can_upload_avatar = True  # still free to replace it
+        can_upload_avatar = replacement_allowed
     elif reconnect_waiting:
         # Their old account comes back once they confirm the university
         # address -- with its username and, usually, its picture. Asking for a
@@ -1506,6 +1513,9 @@ def build_forum_context(member):
         "status_key": status_key,
         "status_message": status_message,
         "can_upload_avatar": can_upload_avatar,
+        "has_picture": has_picture,
+        "replacement_allowed": replacement_allowed,
+        "replacement_pending": replacement_pending,
         "can_enter_forum": can_enter_forum,
         "reconnect_waiting": reconnect_waiting,
         "entry_url": url_for("forum.forum_entry"),

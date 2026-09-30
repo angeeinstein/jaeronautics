@@ -201,6 +201,15 @@
                 {#- The status line above says where things stand; nothing below repeats it. -#}
                 {% if forum_context.status_key == 'active' %}
                     <a href="{{ forum_context.entry_url }}" class="btn btn-primary">{{ _('Open Forum') }}</a>
+                    {% if forum_context.replacement_allowed %}
+                        <hr>
+                        <p class="mb-2">{% if forum_context.replacement_pending %}{{ _('New picture under review.') }}{% else %}{{ _('Upload your new picture.') }}{% endif %}</p>
+                        {% if forum_context.latest_submission and forum_context.latest_submission.status == 'rejected' and forum_context.latest_submission.review_note %}
+                            <div class="alert alert-secondary">{{ _('Reason: %(note)s', note=forum_context.latest_submission.review_note) }}</div>
+                        {% endif %}
+                        {% set upload_id_prefix = 'forum-avatar' %}
+                        {% include 'account/_forum_avatar_upload.html' %}
+                    {% endif %}
                 {% elif forum_context.status_key in ['needs_avatar', 'pending_avatar', 'rejected_avatar'] %}
                     {% if forum_context.status_key == 'rejected_avatar' and forum_context.latest_submission.review_note %}
                         <div class="alert alert-secondary">{{ _('Reason: %(note)s', note=forum_context.latest_submission.review_note) }}</div>

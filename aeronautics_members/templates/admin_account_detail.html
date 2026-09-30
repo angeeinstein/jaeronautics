@@ -311,6 +311,20 @@
                         <input type="hidden" name="next" value="{{ url_for('admin.admin_account_detail', user_id=user_record.id) }}">
                         <button type="submit" class="btn btn-primary">{{ _('Resync Forum') }}</button>
                     </form>
+                    {#- Members cannot change an approved picture; on request, an admin allows one new one. -#}
+                    {% if forum_context.has_picture %}
+                        <form method="POST" action="{{ url_for('admin.admin_picture_replacement', user_id=user_record.id) }}" class="mt-3 mb-0">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            {% if member.avatar_replacement_allowed_at %}
+                                <input type="hidden" name="allow" value="0">
+                                <span class="text-muted me-2">{{ _('New picture allowed since %(date)s.', date=member.avatar_replacement_allowed_at|datetime_display) }}</span>
+                                <button type="submit" class="btn btn-secondary btn-sm">{{ _('Withdraw') }}</button>
+                            {% else %}
+                                <input type="hidden" name="allow" value="1">
+                                <button type="submit" class="btn btn-secondary">{{ _('Allow New Picture') }}</button>
+                            {% endif %}
+                        </form>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>

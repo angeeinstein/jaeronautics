@@ -1152,9 +1152,14 @@ class TestWhatAReconnectedMemberIsAskedToDo:
 
         assert self._context(member)["status_key"] == "active"
 
-    def test_they_may_still_replace_it(self, app, tmp_path):
-        """Keeping a decade-old photograph should be a choice, not a sentence."""
+    def test_they_may_replace_it_once_an_admin_allows(self, app, tmp_path):
+        """Keeping a decade-old photograph should be a choice, not a sentence --
+        made by asking, as for anybody wanting to change an approved picture."""
         member = self._reconnected_with_an_avatar(tmp_path)
+        assert self._context(member)["can_upload_avatar"] is False
+
+        member.avatar_replacement_allowed_at = datetime(2026, 10, 1)
+        db.session.commit()
 
         assert self._context(member)["can_upload_avatar"] is True
 

@@ -235,6 +235,9 @@ class Member(db.Model):
     # Rotated when email_work changes, so a link issued for the previous
     # address cannot verify a new one.
     email_work_verification_nonce = db.Column(db.String(255), nullable=True)
+    # Set by an admin to let this member replace an approved profile picture,
+    # which they cannot do on their own. Cleared when the new one is approved.
+    avatar_replacement_allowed_at = db.Column(db.DateTime, nullable=True)
     # What kind of member this is: student, alumni, staff, partner, honorary.
     # The rules about who is asked for a year group, and what each kind is
     # called, live in member_categories.py rather than here.
