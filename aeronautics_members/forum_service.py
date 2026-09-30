@@ -364,12 +364,19 @@ if Image is not None:
     Image.MAX_IMAGE_PIXELS = MAX_AVATAR_PIXELS
 
 
-# The formats an upload may be decoded as. Pillow otherwise tries every decoder
-# it has -- PSD, FITS, and dozens more nobody uploads a profile photo in -- and
-# those rarely used decoders are where its memory-safety bugs keep turning up.
-# The file never gets as far as one of them now: Image.open refuses anything
-# whose header is not in this list before decoding a single pixel.
-UPLOAD_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP")
+# The formats an upload may be decoded as, told by the file's content, not its
+# name. Pillow otherwise tries every decoder it has -- PSD, FITS, and dozens
+# more nobody uploads a profile photo in -- and those rarely used decoders are
+# where its memory-safety bugs keep turning up. The file never gets as far as
+# one of them now: Image.open refuses anything whose header is not in this
+# list before decoding a single pixel.
+#
+# AVIF is what newer phones save; Pillow reads it itself. HEIC, the iPhone's
+# own format, would need a separate decoder library and is left out: an
+# iPhone picking from its photo library converts to JPEG for an upload field
+# that does not ask for HEIC. Whatever comes in is converted to one of the
+# output formats below before it is stored or sent to the forum.
+UPLOAD_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP", "AVIF")
 
 
 def _load_image_for_processing(raw_bytes, formats=UPLOAD_IMAGE_FORMATS):
@@ -395,7 +402,7 @@ def _load_image_for_processing(raw_bytes, formats=UPLOAD_IMAGE_FORMATS):
     except Image.DecompressionBombError as exc:
         raise too_large from exc
     except (UnidentifiedImageError, OSError) as exc:
-        raise ForumProviderError("Please upload a valid JPG, PNG, or WebP image.") from exc
+        raise ForumProviderError("Please upload a valid JPG, PNG, WebP or AVIF image.") from exc
 
 
 def _clamp_float(value, default, minimum, maximum):

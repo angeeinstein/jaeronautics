@@ -87,7 +87,7 @@ def _image_bytes(fmt, **save_options):
     return buffer.getvalue()
 
 
-@pytest.mark.parametrize("fmt", ["JPEG", "PNG", "WEBP"])
+@pytest.mark.parametrize("fmt", ["JPEG", "PNG", "WEBP", "AVIF"])
 def test_the_formats_a_phone_uploads_still_work(fmt):
     data, content_type, _extension = forum_service.normalize_avatar_image(
         _image_bytes(fmt), allowed_extensions=["jpg", "png", "webp"], max_output_bytes=512 * 1024,
@@ -123,7 +123,7 @@ def test_a_psd_is_refused(monkeypatch):
     monkeypatch.setattr(forum_service.Image, "open", spying_open)
     with pytest.raises(ForumProviderError):
         forum_service._load_image_for_processing(psd)
-    assert opened == [["JPEG", "PNG", "WEBP"]]
+    assert opened == [list(forum_service.UPLOAD_IMAGE_FORMATS)]
 
 
 def test_the_old_forum_import_may_still_read_gifs():
@@ -136,3 +136,13 @@ def test_the_old_forum_import_may_still_read_gifs():
         input_formats=IMPORTED_AVATAR_FORMATS,
     )
     assert data
+
+
+def test_an_avif_is_stored_in_one_of_the_output_formats():
+    """The forum and the admin review get what they always did."""
+    _data, content_type, extension = forum_service.normalize_avatar_image(
+        _image_bytes("AVIF"), allowed_extensions=["jpg", "png", "webp"], max_output_bytes=512 * 1024,
+    )
+    assert extension in {"jpg", "png", "webp"}
+    assert content_type != "image/avif"
+
