@@ -38,7 +38,7 @@ from .forum import (
 from .forum_import import imported_email_for, old_forum_account_waiting
 from .identity import rotate_email_verification_nonce
 from .membership import format_membership_date_display, sync_member_active_state
-from .outbox import enqueue_forum_sync, pending_count, process_pending, register_handler
+from .outbox import enqueue_forum_sync, pending_count, register_handler, try_now_for
 from .notifications import (
     EMAIL_JOB_STATUS_CANCELED,
     EMAIL_JOB_STATUS_EXHAUSTED,
@@ -512,7 +512,7 @@ def finish_forum_cleanup_for(user):
     if user is None:
         return True
     kinds = [ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED]
-    process_pending(limit=5, kinds=kinds, user_id=user.id)
+    try_now_for(user.id, kinds)
     return pending_count(kinds=kinds, user_id=user.id) == 0
 
 

@@ -79,7 +79,9 @@ from ..app import (
     format_bytes_human,
     get_current_member_for_user,
     get_member_portal_target,
+    limiter,
 )
+from ..config import RATELIMIT_FORUM_CONNECT
 
 forum_bp = Blueprint("forum", __name__)
 
@@ -284,6 +286,7 @@ def forum_imported_avatar_public_file(token):
 
 
 @forum_bp.route("/forum/discourse/connect", methods=["GET"])
+@limiter.limit(RATELIMIT_FORUM_CONNECT)
 def forum_discourse_connect():
     if not current_user.is_authenticated:
         next_url = request.full_path[:-1] if request.full_path.endswith("?") else request.full_path

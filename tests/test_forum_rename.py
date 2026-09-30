@@ -28,7 +28,7 @@ from aeronautics_members.forum_service import (
     ForumService,
     _record_the_name_the_forum_gave,
 )
-from aeronautics_members.services import workflows
+from aeronautics_members.services import outbox, workflows
 from test_admin_reviews import _login, _name_change, _staff
 
 OLD = "HuberA_L25"
@@ -127,7 +127,7 @@ def test_a_forum_that_is_down_is_tried_again_and_the_name_is_not_taken_back(clie
     forum.down = False
     item.not_before = None
     db.session.commit()
-    workflows.process_pending(kinds=[ExternalWorkItem.KIND_FORUM_RENAME])
+    outbox.process_pending(kinds=[ExternalWorkItem.KIND_FORUM_RENAME])
 
     assert forum.renames == [(OLD, NEW)]
 

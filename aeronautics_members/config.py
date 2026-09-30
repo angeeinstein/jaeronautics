@@ -108,6 +108,11 @@ RATELIMIT_ACCOUNT_DELETION = os.getenv("RATELIMIT_ACCOUNT_DELETION", "5 per hour
 # "Send the confirmation again": a cap on top of the per-browser minute between
 # two of them (blueprints/_email_cooldown.py).
 RATELIMIT_EMAIL_RESEND = os.getenv("RATELIMIT_EMAIL_RESEND", "10 per hour")
+# Going to the forum through the portal, per account. Every click asks the
+# forum to bring the account up to date, and retries anything still waiting
+# for this person, so it is the one button that makes the forum do work.
+# A person signs in to the forum a few times a day; this only stops a loop.
+RATELIMIT_FORUM_CONNECT = os.getenv("RATELIMIT_FORUM_CONNECT", "20 per 10 minute")
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
 
 # Domains that prove somebody is currently a student or staff. An admin can
