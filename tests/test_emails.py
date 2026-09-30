@@ -237,3 +237,32 @@ class TestTheTestEmail:
         body = text.get_payload(decode=True).decode()
         for phrase in expected:
             assert phrase in body, (template, phrase)
+
+
+def test_a_mail_server_that_stops_answering_does_not_hold_the_request(app, monkeypatch):
+    """Found by the pre-deployment audit: the real send had no timeout, so a
+    server that accepted the connection and went quiet held the request --
+    a signup, a Stripe webhook -- for as long as the socket stayed open."""
+    import socket
+    import time
+
+    silent = socket.socket()
+    silent.bind(("127.0.0.1", 0))
+    silent.listen(1)  # accepts, never greets
+    port = silent.getsockname()[1]
+    monkeypatch.setattr(
+        mail_utils, "load_mail_accounts_config",
+        lambda required=False: {"office": {"host": "127.0.0.1", "port": port, "starttls": True,
+                                           "user": "office@example.org", "pass": "p"}},
+    )
+    monkeypatch.setattr(mail_utils, "SMTP_SEND_TIMEOUT_SECONDS", 1)
+
+    started = time.monotonic()
+    try:
+        sent, error = mail_utils.send_mail("office", "someone@example.com", "Hello", body="Hi",
+                                           return_error=True)
+    finally:
+        silent.close()
+
+    assert sent is False and error
+    assert time.monotonic() - started < 10
