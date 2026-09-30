@@ -11,7 +11,9 @@ from .permissions import Permission, roles_with
 
 try:
     from .db_models import (
+        ForumAvatarSubmission,
         MailAccount,
+        MemberProfileChangeRequest,
         NotificationBatch,
         NotificationChannelState,
         NotificationEvent,
@@ -24,7 +26,9 @@ try:
     from .security_utils import build_public_url
 except ImportError:
     from db_models import (
+        ForumAvatarSubmission,
         MailAccount,
+        MemberProfileChangeRequest,
         NotificationBatch,
         NotificationChannelState,
         NotificationEvent,
@@ -56,16 +60,38 @@ DEFAULT_NOTIFICATION_SETTINGS = {
     "notification_user_status_enabled": "True",
     "notification_sender": "",
 }
+# Members' own emails go out at once. Admin emails are throttled per kind of
+# event rather than per channel: one error that keeps coming back must not hold
+# up a different one, and a hundred members hitting the same problem are one
+# kind, not a hundred -- the kind is the event_type, never the message text,
+# which names the member.
 CHANNEL_COOLDOWN_LADDERS = {
-    ADMIN_GENERAL_CHANNEL: [0, 60, 240, 720],
-    ADMIN_ERROR_CHANNEL: [0, 15, 60, 240],
     USER_STATUS_CHANNEL: [0],
 }
-CHANNEL_DAILY_CAPS = {
-    ADMIN_GENERAL_CHANNEL: 3,
-    ADMIN_ERROR_CHANNEL: 4,
-    USER_STATUS_CHANNEL: None,
+CHANNEL_DAILY_CAPS = {}
+# The first two of a kind go out at once: the second is what says it is
+# recurring. After that they are collected and summarised, further apart each
+# time, and a kind that has been quiet for a day starts afresh.
+IMMEDIATE_EMAILS_PER_KIND = 2
+KIND_SUMMARY_MINUTES = {
+    ADMIN_ERROR_CHANNEL: [60, 240, 1440],
+    # Review items are members waiting on a decision; they are also read on
+    # the reviews page, so every half hour is enough.
+    ADMIN_GENERAL_CHANNEL: [30],
 }
+# However many kinds are firing at once -- the forum down, say -- no more than
+# this many admin emails an hour. What does not fit goes into the next one.
+ADMIN_EMAILS_PER_HOUR = 10
+ADMIN_CHANNELS = (ADMIN_GENERAL_CHANNEL, ADMIN_ERROR_CHANNEL)
+# Review items wait this long before the email, so ten photos uploaded in the
+# same minute arrive as one email rather than ten. Errors do not wait. The
+# notification timer, every two minutes, sends what the wait held back.
+KIND_COLLECT_WINDOW = {
+    ADMIN_GENERAL_CHANNEL: timedelta(minutes=1),
+}
+# A photo or change request left undecided this long gets a daily reminder.
+REVIEW_REMINDER_AFTER = timedelta(hours=24)
+REVIEW_REMINDER_EVENT = "reviews_still_waiting"
 CHANNEL_AUDIENCE = {
     ADMIN_GENERAL_CHANNEL: "admin",
     ADMIN_ERROR_CHANNEL: "admin",
@@ -250,6 +276,8 @@ class NotificationService:
         state = self._get_or_create_channel_state(channel)
         now = datetime.now(timezone.utc)
         state.last_activity_at = now
+        if channel in ADMIN_CHANNELS:
+            self._note_kind_activity(channel, event_type, now)
         db.session.info.setdefault("notification_channels_to_flush", set()).add(channel)
         return event
 
@@ -263,6 +291,8 @@ class NotificationService:
             "deferred_channels": [],
         }
         selected_channels = list(channels or NOTIFICATION_CHANNELS)
+        if ADMIN_GENERAL_CHANNEL in selected_channels:
+            self._queue_review_reminder(now)
         for channel in selected_channels:
             if channel == USER_STATUS_CHANNEL:
                 channel_result = self._deliver_user_status_events(now)
@@ -294,11 +324,15 @@ class NotificationService:
             stage = min(stage, len(ladder) - 1)
             failure_backoff_until = ensure_utc_datetime(state.failure_backoff_until)
             last_sent_at = ensure_utc_datetime(state.last_sent_at)
+            throttled = self._throttled_kinds(channel, now) if channel in ADMIN_CHANNELS else {}
+            if throttled:
+                next_gate = max(next_gate, min(throttled.values()))
             health[channel] = {
                 "enabled": self.is_enabled(channel),
                 "pending_count": pending_counts.get(channel, 0),
                 "cooldown_stage": stage,
                 "cooldown_minutes": ladder[stage],
+                "throttled_kinds": sorted(kind.replace("_", " ").capitalize() for kind in throttled),
                 "next_allowed_at": next_gate if next_gate > now else None,
                 "rolling_sent_count": state.rolling_sent_count,
                 "daily_cap": CHANNEL_DAILY_CAPS.get(channel),
@@ -313,9 +347,24 @@ class NotificationService:
         if not pending_events or not self.is_enabled(channel):
             return {}
 
+        # The channel's own gate is only a mail server that just failed.
         state, next_gate = self._refresh_channel_state(channel, now)
-        if next_gate > now:
+        if next_gate > now or self._hourly_admin_gate(now) > now:
             return {"deferred": True}
+
+        collect = KIND_COLLECT_WINDOW.get(channel)
+        oldest = {}
+        for event in pending_events:
+            queued = ensure_utc_datetime(event.queued_at) or now
+            oldest[event.event_type] = min(oldest.get(event.event_type, queued), queued)
+        due_kinds = {
+            kind for kind, first_queued in oldest.items()
+            if self._kind_is_due(channel, kind, now)
+            and (collect is None or first_queued <= now - collect)
+        }
+        if not due_kinds:
+            return {"deferred": True}
+        pending_events = [event for event in pending_events if event.event_type in due_kinds]
 
         recipients = self.get_admin_recipient_emails()
         if not recipients:
@@ -343,6 +392,8 @@ class NotificationService:
                 event.processed_at = now
                 event.delivery_error = None
             self._record_success(state, channel, now)
+            for kind in due_kinds:
+                self._record_kind_sent(channel, kind, now)
             db.session.commit()
             return {"sent_batches": 1, "sent_events": len(pending_events)}
 
@@ -492,6 +543,20 @@ class NotificationService:
                         greeting,
                         _("Your profile picture was approved, so your forum access is now "
                           "complete: you can read and write in the members' area."),
+                    ],
+                },
+            )
+        if event.event_type == "forum_avatar_replaced":
+            return (
+                _("Your new profile picture is live"),
+                {
+                    "preview_text": _("Your new profile picture was approved."),
+                    "action_url": build_public_url("forum.forum_entry"),
+                    "action_label": _("Open Forum"),
+                    "heading": _("Your new profile picture was approved"),
+                    "body_lines": [
+                        greeting,
+                        _("It now shows on the forum."),
                     ],
                 },
             )
@@ -689,6 +754,109 @@ class NotificationService:
         state.failure_backoff_until = now + timedelta(minutes=wait_minutes)
         if state.next_allowed_at is None or state.next_allowed_at < state.failure_backoff_until:
             state.next_allowed_at = state.failure_backoff_until
+
+    # -- Throttling per kind of admin event --------------------------------
+
+    @staticmethod
+    def _kind_key(channel, kind):
+        return f"{channel}:{kind or 'other'}"[:80]
+
+    def _note_kind_activity(self, channel, kind, now):
+        """An event of this kind happened. A kind quiet for a day starts afresh."""
+        state = self._get_or_create_channel_state(self._kind_key(channel, kind))
+        last = ensure_utc_datetime(state.last_activity_at)
+        if last is None or last <= now - QUIET_RESET_WINDOW:
+            state.cooldown_stage = 0
+            state.next_allowed_at = None
+        state.last_activity_at = now
+
+    def _kind_is_due(self, channel, kind, now):
+        state = db.session.get(NotificationChannelState, self._kind_key(channel, kind))
+        if state is None or (state.cooldown_stage or 0) < IMMEDIATE_EMAILS_PER_KIND:
+            return True
+        gate = ensure_utc_datetime(state.next_allowed_at)
+        return gate is None or gate <= now
+
+    def _record_kind_sent(self, channel, kind, now):
+        state = self._get_or_create_channel_state(self._kind_key(channel, kind))
+        state.cooldown_stage = (state.cooldown_stage or 0) + 1
+        state.last_sent_at = now
+        if state.cooldown_stage < IMMEDIATE_EMAILS_PER_KIND:
+            state.next_allowed_at = None
+        else:
+            ladder = KIND_SUMMARY_MINUTES[channel]
+            step = min(state.cooldown_stage - IMMEDIATE_EMAILS_PER_KIND, len(ladder) - 1)
+            state.next_allowed_at = now + timedelta(minutes=ladder[step])
+
+    def _throttled_kinds(self, channel, now):
+        """Kinds with something waiting for their next summary, and when it goes."""
+        waiting = {
+            kind for kind in db.session.execute(
+                db.select(NotificationEvent.event_type).where(
+                    NotificationEvent.channel == channel, NotificationEvent.status == "pending"
+                )
+            ).scalars()
+        }
+        throttled = {}
+        for kind in waiting:
+            if not self._kind_is_due(channel, kind, now):
+                state = db.session.get(NotificationChannelState, self._kind_key(channel, kind))
+                throttled[kind] = ensure_utc_datetime(state.next_allowed_at)
+        return throttled
+
+    def _hourly_admin_gate(self, now):
+        """When the next admin email may go, under the overall hourly limit."""
+        window_start = now - timedelta(hours=1)
+        sent = [
+            ensure_utc_datetime(sent_at)
+            for sent_at in db.session.execute(
+                db.select(NotificationBatch.sent_at)
+                .where(
+                    NotificationBatch.channel.in_(ADMIN_CHANNELS),
+                    NotificationBatch.status == "sent",
+                    NotificationBatch.sent_at.is_not(None),
+                    NotificationBatch.sent_at >= window_start,
+                )
+                .order_by(NotificationBatch.sent_at.asc())
+            ).scalars().all()
+        ]
+        if len(sent) < ADMIN_EMAILS_PER_HOUR:
+            return now
+        return sent[-ADMIN_EMAILS_PER_HOUR] + timedelta(hours=1)
+
+    def _queue_review_reminder(self, now):
+        """Once a day, while a photo or change request has waited over a day."""
+        cutoff = now - REVIEW_REMINDER_AFTER
+        waiting = (
+            db.session.scalar(
+                db.select(func.count(ForumAvatarSubmission.id)).where(
+                    ForumAvatarSubmission.status == "pending",
+                    ForumAvatarSubmission.uploaded_at <= cutoff,
+                )
+            ) or 0
+        ) + (
+            db.session.scalar(
+                db.select(func.count(MemberProfileChangeRequest.id)).where(
+                    MemberProfileChangeRequest.status == "pending",
+                    MemberProfileChangeRequest.created_at <= cutoff,
+                )
+            ) or 0
+        )
+        if not waiting:
+            return
+        last = db.session.scalar(
+            db.select(func.max(NotificationEvent.queued_at)).where(
+                NotificationEvent.event_type == REVIEW_REMINDER_EVENT
+            )
+        )
+        last = ensure_utc_datetime(last)
+        if last is not None and last > now - REVIEW_REMINDER_AFTER:
+            return
+        self.queue_admin_general(
+            REVIEW_REMINDER_EVENT,
+            _("%(count)s item(s) waiting for more than a day.", count=waiting),
+        )
+        db.session.commit()
 
     def get_admin_recipient_emails(self):
         """Who the admin digests go to.

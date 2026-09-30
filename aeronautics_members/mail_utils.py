@@ -17,6 +17,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# How long one step of a real send may wait on the mail server. Without it a
+# server that accepts the connection and then goes quiet holds the request --
+# a signup, a Stripe webhook -- for as long as the socket stays open, and a
+# few of those take every worker the portal has. A normal send finishes in
+# well under a second; a stuck one now fails like any other send error, which
+# the callers already record and retry.
+SMTP_SEND_TIMEOUT_SECONDS = 20
+
+
 def load_mail_accounts_config(required=False):
     if has_app_context():
         try:
@@ -254,12 +263,14 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
 
         context = ssl.create_default_context()
         if config.get("starttls", False):
-            with smtplib.SMTP(config["host"], config["port"]) as server:
+            with smtplib.SMTP(config["host"], config["port"], timeout=SMTP_SEND_TIMEOUT_SECONDS) as server:
                 server.starttls(context=context)
                 server.login(config["user"], config["pass"])
                 server.sendmail(config["user"], recipients, message.as_string())
         else:
-            with smtplib.SMTP_SSL(config["host"], config["port"], context=context) as server:
+            with smtplib.SMTP_SSL(
+                config["host"], config["port"], context=context, timeout=SMTP_SEND_TIMEOUT_SECONDS,
+            ) as server:
                 server.login(config["user"], config["pass"])
                 server.sendmail(config["user"], recipients, message.as_string())
 

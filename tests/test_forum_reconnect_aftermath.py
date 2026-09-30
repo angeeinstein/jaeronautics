@@ -463,6 +463,49 @@ class TestOpeningTheForumStraightAway:
 
         assert finish_forum_cleanup_for(member.user) is False
 
+    def test_their_click_retries_at_once_despite_the_backoff(self, app, monkeypatch):
+        """Told "try again in a minute", they must not find the queue has
+        pushed their retry a quarter of an hour out."""
+        from datetime import timedelta
+
+        from aeronautics_members.services.clock import get_now_utc
+        from aeronautics_members.services.workflows import finish_forum_cleanup_for
+
+        handled = []
+        self._handler(monkeypatch, handled)
+        member = make_member(email="backedoff@example.com")
+        item = self._pending_discard(member.user, 44)
+        item.attempts = 2
+        item.not_before = get_now_utc() + timedelta(minutes=15)
+        db.session.commit()
+
+        assert finish_forum_cleanup_for(member.user) is True
+        assert handled == [44]
+
+    def test_clicking_does_not_use_up_the_queues_attempts(self, app, monkeypatch):
+        """The queue gives up after a few attempts; clicks must not spend them."""
+        from datetime import timedelta
+
+        from aeronautics_members.services.clock import get_now_utc
+        from aeronautics_members.services.workflows import finish_forum_cleanup_for
+
+        self._handler(monkeypatch, [], fail=True)
+        member = make_member(email="impatient@example.com")
+        item = self._pending_discard(member.user, 55)
+        item.attempts = 2
+        later = get_now_utc() + timedelta(minutes=15)
+        item.not_before = later
+        db.session.commit()
+
+        for _ in range(10):
+            assert finish_forum_cleanup_for(member.user) is False
+
+        item = db.session.get(ExternalWorkItem, item.id)
+        assert item.status == ExternalWorkItem.STATUS_PENDING
+        assert item.attempts == 2
+        assert item.not_before.replace(tzinfo=None) == later.replace(tzinfo=None)
+        assert "forum unreachable" in item.last_error
+
     def test_the_forum_sign_in_waits_rather_than_showing_the_rejection(self, app, client, monkeypatch):
         from datetime import date
 

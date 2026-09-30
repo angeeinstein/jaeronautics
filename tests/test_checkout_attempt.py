@@ -199,6 +199,36 @@ class TestOneAttemptAtATime:
         assert str(clock.get_membership_today().year) in key
 
 
+class TestTheIdempotencyKeyFollowsTheRequest:
+    """Found on the test server: after a member's stale Stripe customer was
+    cleaned up, the same key went out with a request naming their address
+    instead of the customer, and Stripe refused it for 24 hours -- "Keys for
+    idempotent requests can only be used with the same parameters"."""
+
+    PARAMS = {"line_items": [{"price": "price_1", "quantity": 1}], "customer": "cus_old"}
+
+    def _key(self, member, params):
+        cycle = {"current_year": 2026}
+        return billing.checkout_idempotency_key(member, cycle, params)
+
+    def test_the_same_request_twice_gets_the_same_key(self, app):
+        member = make_member(email="twice@example.com")
+
+        assert self._key(member, dict(self.PARAMS)) == self._key(member, dict(self.PARAMS))
+
+    def test_a_changed_request_gets_a_new_key(self, app):
+        member = make_member(email="changed@example.com")
+        changed = {**self.PARAMS, "customer": None, "customer_email": "changed@example.com"}
+
+        assert self._key(member, self.PARAMS) != self._key(member, changed)
+
+    def test_a_different_member_never_shares_a_key(self, app):
+        one = make_member(email="one@example.com")
+        two = make_member(email="two@example.com")
+
+        assert self._key(one, self.PARAMS) != self._key(two, self.PARAMS)
+
+
 class TestTheWebhookDoesNotOverwriteTheProfile:
     """A profile edited while checkout was open must survive completion."""
 

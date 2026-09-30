@@ -306,6 +306,56 @@ def process_pending(limit=25, kinds=None, now=None, user_id=None):
     return completed, failed
 
 
+def try_now_for(user_id, kinds):
+    """Run somebody's waiting work at once, because they are waiting on it.
+
+    The queue backs off after a failure -- a minute, then a quarter of an
+    hour -- which is right for the worker and wrong for a person clicking
+    "try again": they were told a minute, and after the second failure
+    nothing would have happened for fifteen. So their own click runs their
+    own items, whatever the schedule says.
+
+    Without touching it. A failure here neither counts as an attempt nor
+    moves the next retry: the queue gives up after a handful of attempts,
+    and an impatient person must not be able to use those up by clicking.
+    How often this can run at all is the rate limit on the route that
+    calls it.
+    """
+    now = get_now_utc()
+    query = db.select(ExternalWorkItem).where(
+        ExternalWorkItem.user_id == user_id,
+        ExternalWorkItem.kind.in_(list(kinds)),
+        ExternalWorkItem.status == ExternalWorkItem.STATUS_PENDING,
+    )
+    for candidate in db.session.execute(query).scalars().all():
+        claimed = db.session.execute(
+            db.update(ExternalWorkItem)
+            .where(
+                ExternalWorkItem.id == candidate.id,
+                ExternalWorkItem.status == ExternalWorkItem.STATUS_PENDING,
+            )
+            .values(status=ExternalWorkItem.STATUS_PROCESSING, claimed_at=now)
+        ).rowcount
+        db.session.commit()
+        if claimed != 1:
+            continue  # the worker got there first
+        db.session.refresh(candidate)
+        handler = _HANDLERS.get(candidate.kind)
+        try:
+            if handler is None:
+                raise RuntimeError(f"No handler registered for work kind {candidate.kind!r}")
+            handler(candidate)
+        except Exception as exc:
+            db.session.rollback()
+            item = db.session.get(ExternalWorkItem, candidate.id)
+            item.status = ExternalWorkItem.STATUS_PENDING
+            item.claimed_at = None
+            item.last_error = str(exc)[:2000]
+            db.session.commit()
+        else:
+            complete(candidate)
+
+
 def pending_count(kinds=None, user_id=None):
     query = db.select(db.func.count(ExternalWorkItem.id)).where(
         ExternalWorkItem.status.in_(

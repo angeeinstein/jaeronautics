@@ -30,7 +30,7 @@ from pathlib import Path
 from flask import current_app
 
 from ..db_models import ImportedForumProfile, User, db
-from ..forum_service import get_forum_storage_dir, normalize_avatar_image
+from ..forum_service import UPLOAD_IMAGE_FORMATS, get_forum_storage_dir, normalize_avatar_image
 from . import ValidationError
 from .clock import get_now_utc
 from .outbox import enqueue_forum_discard_replaced, enqueue_forum_sync
@@ -56,6 +56,7 @@ PROGRAMME_NAMES = frozenset({"LAV", "MAV", "ATM"})
 
 AVATAR_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
 AVATAR_MAX_BYTES = 512 * 1024
+IMPORTED_AVATAR_FORMATS = UPLOAD_IMAGE_FORMATS + ("GIF",)
 
 
 def imported_email_for(source_system, source_user_id):
@@ -141,6 +142,9 @@ def _store_avatar(user_id, avatar_dir, avatar_file, *, dry_run=False):
             source.read_bytes(),
             allowed_extensions=AVATAR_EXTENSIONS,
             max_output_bytes=AVATAR_MAX_BYTES,
+            # The old forum took GIFs; these files come from the export an
+            # administrator supplies, not from a stranger's upload.
+            input_formats=IMPORTED_AVATAR_FORMATS,
         )
     except Exception as exc:  # noqa: BLE001 -- one bad image must not stop 600 people
         return None, f"avatar could not be read ({avatar_file}): {exc}"
@@ -290,12 +294,17 @@ def _user_foreign_key_columns():
                 yield table, foreign_key.parent
 
 
-def claim_archived_account(user):
+def claim_archived_account(user, profile=None):
     """Give a returning student their old forum identity back. Returns the profile.
 
     Called once the address is verified, because the verification is the proof:
     the archived account named this address, and only somebody who can read it
     could have got here.
+
+    Or with ``profile`` named by an administrator, for whom the address cannot
+    be the proof: it changed with a married name, it no longer works, or the
+    old forum never had one. The administrator recognising the person is the
+    proof then, and everything after finding the profile is the same.
 
     The membership moves onto the *archived* row rather than the archive moving
     onto the new one. Discourse knows people by ``external_id = str(user.id)``,
@@ -310,7 +319,10 @@ def claim_archived_account(user):
     if user.imported_forum_profile is not None:
         return None  # already an archived account
 
-    profile = find_claimable_profile_for_user(user)
+    if profile is None:
+        profile = find_claimable_profile_for_user(user)
+    elif profile.claimed_at is not None:
+        return None  # somebody has it already
     if profile is None:
         return None
 
@@ -513,6 +525,16 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
                 source_system=source_system, source_user_id=source_user_id
             )
         ).scalar_one_or_none()
+
+        if profile is not None and profile.user is not None and profile.user.deleted_at is not None:
+            # Erased at their request. The export still holds them, and
+            # updating the row from it would bring back everything the
+            # erasure removed.
+            report["skipped"] += 1
+            record["action"] = "skip"
+            record["note"] = "erased; not imported again"
+            record["can_reclaim"] = "no"
+            continue
 
         year_group = (entry.get("year_group") or "").strip() or None
         if year_group is None:

@@ -24,6 +24,7 @@ from ..security_utils import build_public_url
 from .billing import (
     apply_runtime_stripe_config,
     get_latest_stripe_subscription_for_member,
+    record_paid_invoices_missing_from_ledger,
     sync_member_subscription_state_from_subscription,
 )
 from ..forum_service import ForumProviderError
@@ -37,7 +38,7 @@ from .forum import (
 from .forum_import import imported_email_for, old_forum_account_waiting
 from .identity import rotate_email_verification_nonce
 from .membership import format_membership_date_display, sync_member_active_state
-from .outbox import enqueue_forum_sync, pending_count, process_pending, register_handler
+from .outbox import enqueue_forum_sync, pending_count, register_handler, try_now_for
 from .notifications import (
     EMAIL_JOB_STATUS_CANCELED,
     EMAIL_JOB_STATUS_EXHAUSTED,
@@ -157,6 +158,8 @@ def refresh_member_billing_state(member, force_stripe_sync=False, sync_forum=Fal
         stripe_subscription = get_latest_stripe_subscription_for_member(member)
         if stripe_subscription and sync_member_subscription_state_from_subscription(member, stripe_subscription):
             changed = True
+        if stripe_subscription and record_paid_invoices_missing_from_ledger(member, stripe_subscription):
+            changed = True
         # The lookup may have cleared a dead subscription/customer reference.
         if bool(member.stripe_customer_id or member.stripe_subscription_id) != has_stripe_reference:
             changed = True
@@ -198,8 +201,11 @@ def sync_member_primary_email(member, new_email):
     if member.user is not None and member.user.email != new_email:
         member.user.email = new_email
         member.user.email_verified_at = None
-        # Invalidate any verification/forum link issued for the previous address.
+        # Invalidate any verification/forum link issued for the previous address,
+        # and any password-reset link sent there: whoever still reads the old
+        # mailbox must not be able to take the account back through it.
         rotate_email_verification_nonce(member.user)
+        member.user.password_reset_nonce = None
 
     if email_changed and member.stripe_customer_id:
         try:
@@ -506,7 +512,7 @@ def finish_forum_cleanup_for(user):
     if user is None:
         return True
     kinds = [ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED]
-    process_pending(limit=5, kinds=kinds, user_id=user.id)
+    try_now_for(user.id, kinds)
     return pending_count(kinds=kinds, user_id=user.id) == 0
 
 

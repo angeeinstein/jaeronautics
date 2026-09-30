@@ -171,7 +171,15 @@ class TestTheApprovalEmail:
             lambda event_type, *a, **k: queued.append(event_type),
         )
 
+        replacing = {"now": False}
+
         class FakeForum:
+            def get_current_approved_submission(self, member):
+                return object() if replacing["now"] else None
+
+            def get_reclaimed_avatar(self, member):
+                return None
+
             def approve_avatar_submission(self, submission, reviewer=None, review_note=None):
                 submission.status = "approved"
                 return types.SimpleNamespace(error=None, desired_state="active", changed=True, forum_account=None)
@@ -183,6 +191,8 @@ class TestTheApprovalEmail:
         db.session.commit()
 
         def run(state):
+            # An active account already has a picture: this one replaces it.
+            replacing["now"] = state == "active"
             member = make_member(email=f"photo-{state}@example.com")
             db.session.add(ForumAccount(user=member.user, member=member, provider="discourse",
                                         external_id=str(member.user.id), state=state))
@@ -200,8 +210,9 @@ class TestTheApprovalEmail:
     def test_it_is_sent_when_access_becomes_complete(self, approve):
         assert approve("onboarding") == ["forum_avatar_approved"]
 
-    def test_not_to_somebody_replacing_a_picture(self, approve):
-        assert approve("active") == []
+    def test_somebody_replacing_a_picture_is_told_the_new_one_is_live(self, approve):
+        """Not "your access is complete" -- they had it -- but that the new picture shows."""
+        assert approve("active") == ["forum_avatar_replaced"]
 
 
 def test_the_layout_is_not_offered_as_a_template(app):
@@ -237,3 +248,32 @@ class TestTheTestEmail:
         body = text.get_payload(decode=True).decode()
         for phrase in expected:
             assert phrase in body, (template, phrase)
+
+
+def test_a_mail_server_that_stops_answering_does_not_hold_the_request(app, monkeypatch):
+    """Found by the pre-deployment audit: the real send had no timeout, so a
+    server that accepted the connection and went quiet held the request --
+    a signup, a Stripe webhook -- for as long as the socket stayed open."""
+    import socket
+    import time
+
+    silent = socket.socket()
+    silent.bind(("127.0.0.1", 0))
+    silent.listen(1)  # accepts, never greets
+    port = silent.getsockname()[1]
+    monkeypatch.setattr(
+        mail_utils, "load_mail_accounts_config",
+        lambda required=False: {"office": {"host": "127.0.0.1", "port": port, "starttls": True,
+                                           "user": "office@example.org", "pass": "p"}},
+    )
+    monkeypatch.setattr(mail_utils, "SMTP_SEND_TIMEOUT_SECONDS", 1)
+
+    started = time.monotonic()
+    try:
+        sent, error = mail_utils.send_mail("office", "someone@example.com", "Hello", body="Hi",
+                                           return_error=True)
+    finally:
+        silent.close()
+
+    assert sent is False and error
+    assert time.monotonic() - started < 10

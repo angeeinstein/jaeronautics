@@ -31,6 +31,7 @@ from ..services.identity import (
     rotate_password_reset_nonce,
     send_password_reset_email,
     user_for_email_token,
+    user_for_login_address,
 )
 from flask import (
     flash,
@@ -85,11 +86,15 @@ def forgot_password():
 
     form = EmailRequestForm()
     if form.validate_on_submit():
-        email_address = form.email.data.strip().lower()
-        user = db.session.execute(db.select(User).filter_by(email=email_address)).scalar_one_or_none()
+        # A university address finds the account too, but the link always
+        # goes to the private address: that is the mailbox the account
+        # belongs to. The message below says the same either way.
+        user = user_for_login_address(form.email.data)
         # Asked again within the minute: nothing is sent. Every request makes a
         # new link and kills the last one, so a double click left the email
         # that arrives first -- the one people open -- saying "invalid".
+        # Keyed on the account, so asking once per address is still once.
+        email_address = user.email if user is not None else None
         if user is not None and not sent_just_now("password-reset", email_address):
             try:
                 rotate_password_reset_nonce(user)
@@ -99,14 +104,14 @@ def forgot_password():
             except Exception as exc:
                 db.session.rollback()
                 current_app.logger.warning("Could not send password reset email for user_id=%s: %s", user.id, exc)
-        flash(_("If an account exists for this address, we have sent a password reset link to it."), "info")
+        flash(_("If we found your account, we've emailed you a reset link."), "info")
         return redirect(url_for("auth.login"))
     return render_template(
         "account/email_request.html",
         form=form,
         title=_("Reset Password"),
         heading=_("Reset your password"),
-        description=_("Enter the private email address you log in with, and we will send you a link to reset your password."),
+        description=_("We'll email you a reset link."),
     )
 
 
@@ -283,7 +288,7 @@ def login():
         and login_source != "welcome_email"
     )
     if form.validate_on_submit():
-        user = db.session.execute(db.select(User).filter_by(email=form.email.data.strip().lower())).scalar_one_or_none()
+        user = user_for_login_address(form.email.data)
         if user and user.is_disabled and user.check_password(form.password.data):
             # Told apart from a wrong password on purpose. The credentials were
             # right, so "invalid email or password" would send somebody into

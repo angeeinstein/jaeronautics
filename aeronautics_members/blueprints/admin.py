@@ -25,6 +25,7 @@ from ..config import (
 from ..services.diagnostics import collect_system_health
 from ..services.audit import (
     get_recent_audit_logs,
+    serialize_audit_value,
     log_audit_event,
     redact_settings_states_for_audit,
     snapshot_forum_account_for_audit,
@@ -112,6 +113,7 @@ from flask_login import (
     login_required,
 )
 from sqlalchemy import (
+    func,
     or_,
 )
 from sqlalchemy.exc import (
@@ -139,10 +141,13 @@ from ..forms import (
     TestEmailForm,
 )
 from ..forum_service import (
+    FORUM_AVATAR_STATUS_PENDING,
     FORUM_SETTING_KEYS,
     FORUM_STATE_ACTIVE,
     ForumProviderError,
 )
+from ..services.forum_import import claim_archived_account
+from ..services.locking import lock_administration, locked
 from ..mail_utils import (
     load_mail_accounts_config,
     probe_mail_account_connection,
@@ -324,6 +329,7 @@ def admin_account_detail(user_id):
         forum_context=build_forum_context(user.member),
         latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
         recent_logs=recent_logs,
+        **_reconnect_context(user),
         # The role editor. Every assignable role, whether this account holds it,
         # and what refusing would say -- worked out server-side so the form and
         # the guard cannot disagree about what is possible.
@@ -526,19 +532,148 @@ def admin_resync_forum_account(user_id):
     return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
 
+RECONNECT_RESULT_LIMIT = 15
+
+
+def _reconnect_context(user):
+    """The old-forum search on an account page, for reconnecting by hand.
+
+    Only for an account that is not an old-forum account already, and only
+    for admins who decide identity changes.
+    """
+    can_reconnect = (
+        user.imported_forum_profile is None
+        and user.deleted_at is None
+        and current_user.can(Permission.APPROVALS_REVIEW)
+    )
+    query = (request.args.get("reconnect_q") or "").strip()
+    results = []
+    if can_reconnect and len(query) >= 2:
+        like = f"%{query.lower()}%"
+        results = db.session.execute(
+            db.select(ImportedForumProfile)
+            .join(User, User.id == ImportedForumProfile.user_id)
+            .where(
+                ImportedForumProfile.claimed_at.is_(None),
+                User.deleted_at.is_(None),
+                or_(
+                    func.lower(ImportedForumProfile.source_username).like(like),
+                    func.lower(ImportedForumProfile.display_name).like(like),
+                    func.lower(ImportedForumProfile.source_email).like(like),
+                ),
+            )
+            .order_by(ImportedForumProfile.source_username)
+            .limit(RECONNECT_RESULT_LIMIT)
+        ).scalars().all()
+    return {"can_reconnect": can_reconnect, "reconnect_query": query, "reconnect_results": results}
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/reconnect", methods=["POST"])
+@login_required
+@requires(Permission.APPROVALS_REVIEW)
+def admin_reconnect_old_forum_account(user_id):
+    """Reconnect a member to their old forum account by hand.
+
+    The ordinary way is confirming the university address the old forum had.
+    That fails when the address changed with a married name, no longer works,
+    or the old forum never had one -- and the student ends up with an empty
+    new forum account beside their old one. An admin who recognises them
+    picks the old account here instead; the reconnection itself is the same.
+    """
+    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
+    profile = db.session.execute(
+        locked(db.select(ImportedForumProfile).filter_by(id=request.form.get("profile_id", type=int)))
+    ).scalar_one_or_none()
+    if user is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+    back = url_for("admin.admin_account_detail", user_id=user_id)
+    if user.imported_forum_profile is not None:
+        flash(_("This account is an old forum account already."), "warning")
+        return redirect(back)
+    if profile is None or profile.claimed_at is not None:
+        flash(_("That old forum account is taken already."), "warning")
+        return redirect(back)
+
+    old_username = profile.source_username
+    claimed = claim_archived_account(user, profile=profile)
+    if claimed is None:
+        db.session.rollback()
+        flash(_("Could not reconnect this account. See the log for why."), "danger")
+        return redirect(back)
+
+    archived = claimed.user
+    log_audit_event(
+        category="forum",
+        event_type="forum_account_reconnected_by_admin",
+        actor_user=current_user,
+        target_user=archived,
+        target_member=archived.member,
+        metadata={
+            "old_forum_username": old_username,
+            "source_user_id": claimed.source_user_id,
+            "retired_user_id": user_id,
+        },
+    )
+    db.session.commit()
+    flash(_("Reconnected to %(username)s.", username=old_username), "success")
+    # The account now lives on the old forum's row; the one it came from is gone.
+    return redirect(url_for("admin.admin_account_detail", user_id=archived.id))
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/picture-replacement", methods=["POST"])
+@login_required
+@requires(Permission.FORUM_MODERATE)
+def admin_picture_replacement(user_id):
+    """Allow a member one new profile picture, or withdraw that.
+
+    Members cannot change an approved picture themselves, on purpose; somebody
+    who wants to asks an admin. Their current picture, and their forum access
+    with it, stay until the new one is approved -- which uses the permission up.
+    Nobody is emailed: the admin has usually just spoken to them.
+    """
+    member = db.session.execute(
+        locked(db.select(Member).filter_by(user_id=user_id))
+    ).scalar_one_or_none()
+    back = url_for("admin.admin_account_detail", user_id=user_id)
+    if member is None:
+        flash(_("This account does not have a linked membership profile yet."), "warning")
+        return redirect(back)
+
+    allow = request.form.get("allow") == "1"
+    before = member.avatar_replacement_allowed_at
+    member.avatar_replacement_allowed_at = get_now_utc() if allow else None
+    log_audit_event(
+        category="forum",
+        event_type="avatar_replacement_allowed" if allow else "avatar_replacement_withdrawn",
+        actor_user=current_user,
+        target_user=member.user,
+        target_member=member,
+        before={"avatar_replacement_allowed_at": serialize_audit_value(before)},
+        after={"avatar_replacement_allowed_at": serialize_audit_value(member.avatar_replacement_allowed_at)},
+    )
+    db.session.commit()
+    flash(_("New picture allowed.") if allow else _("Permission withdrawn."), "success")
+    return redirect(back)
+
+
 @admin_bp.route("/admin/reviews/pictures/<int:submission_id>/approve", methods=["POST"])
 @login_required
 @requires(Permission.FORUM_MODERATE)
 def approve_forum_avatar_submission(submission_id):
+    # Locked: another admin deciding the same picture waits here, then finds
+    # it decided (services/locking.py).
     submission = db.session.execute(
-        db.select(ForumAvatarSubmission)
-        .options(
-            selectinload(ForumAvatarSubmission.user),
-            selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+        locked(
+            db.select(ForumAvatarSubmission)
+            .options(
+                selectinload(ForumAvatarSubmission.user),
+                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+            )
+            .where(ForumAvatarSubmission.id == submission_id)
         )
-        .where(ForumAvatarSubmission.id == submission_id)
     ).scalar_one_or_none()
-    if submission is None:
+    if submission is None or submission.status != FORUM_AVATAR_STATUS_PENDING:
         flash(_("That profile picture is no longer waiting for review."), "warning")
         return redirect(url_for("admin.admin_reviews"))
 
@@ -548,6 +683,11 @@ def approve_forum_avatar_submission(submission_id):
     review_note = (request.form.get("review_note") or "").strip() or None
     account = submission.user.forum_account if submission.user else None
     was_active = account is not None and account.state == FORUM_STATE_ACTIVE
+    # A replacement an admin allowed: the member already has a picture.
+    replacing = submission.member is not None and (
+        forum_service.get_current_approved_submission(submission.member) is not None
+        or forum_service.get_reclaimed_avatar(submission.member) is not None
+    )
 
     try:
         result = forum_service.approve_avatar_submission(submission, reviewer=current_user, review_note=review_note)
@@ -572,7 +712,22 @@ def approve_forum_avatar_submission(submission_id):
     # The moment their forum access becomes complete, which they were waiting
     # for -- and until now only heard about if the picture was rejected. Not
     # for somebody replacing a picture: their access was complete already.
-    if not result.error and result.desired_state == FORUM_STATE_ACTIVE and not was_active:
+    if not result.error and replacing:
+        # The one replacement allowed is used; the next one needs asking again.
+        submission.member.avatar_replacement_allowed_at = None
+        queue_user_status_notification(
+            "forum_avatar_replaced",
+            _("Your new profile picture was approved."),
+            recipient_email=(submission.user.email if submission.user is not None else None),
+            payload={
+                "first_name": submission.member.first_name,
+            },
+            target_user=submission.user,
+            target_member=submission.member,
+            object_type="forum_avatar_submission",
+            object_id=submission.id,
+        )
+    elif not result.error and result.desired_state == FORUM_STATE_ACTIVE and not was_active:
         queue_user_status_notification(
             "forum_avatar_approved",
             _("Your profile picture was approved."),
@@ -598,15 +753,19 @@ def approve_forum_avatar_submission(submission_id):
 @login_required
 @requires(Permission.FORUM_MODERATE)
 def reject_forum_avatar_submission(submission_id):
+    # Locked: another admin deciding the same picture waits here, then finds
+    # it decided (services/locking.py).
     submission = db.session.execute(
-        db.select(ForumAvatarSubmission)
-        .options(
-            selectinload(ForumAvatarSubmission.user),
-            selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+        locked(
+            db.select(ForumAvatarSubmission)
+            .options(
+                selectinload(ForumAvatarSubmission.user),
+                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+            )
+            .where(ForumAvatarSubmission.id == submission_id)
         )
-        .where(ForumAvatarSubmission.id == submission_id)
     ).scalar_one_or_none()
-    if submission is None:
+    if submission is None or submission.status != FORUM_AVATAR_STATUS_PENDING:
         flash(_("That profile picture is no longer waiting for review."), "warning")
         return redirect(url_for("admin.admin_reviews"))
 
@@ -687,7 +846,8 @@ def update_account_disabled(user_id):
     the same kind of decision as granting a role and wants the same people
     making it.
     """
-    user = db.session.get(User, user_id)
+    lock_administration()
+    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
     if user is None:
         flash(_("The selected account could not be found."), "warning")
         return redirect(url_for("admin.admin_accounts"))
@@ -761,7 +921,8 @@ def update_account_roles(user_id):
     update -- and a per-role endpoint has to re-derive that each time. It also
     means a role added to permissions.py is assignable with no new route.
     """
-    user = db.session.get(User, user_id)
+    lock_administration()
+    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
     if user is None:
         flash(_("The selected account could not be found."), "warning")
         return redirect(url_for("admin.admin_accounts"))
@@ -1068,7 +1229,9 @@ def admin_logs():
 @login_required
 @requires(Permission.APPROVALS_REVIEW)
 def approve_profile_change_request(request_id):
-    request_record = db.session.get(MemberProfileChangeRequest, request_id)
+    request_record = db.session.execute(
+        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
+    ).scalar_one_or_none()
     if request_record is None or request_record.status != "pending":
         flash(_("That change request is no longer waiting for review."), "warning")
         return redirect(url_for("admin.admin_reviews"))
@@ -1158,7 +1321,9 @@ def approve_profile_change_request(request_id):
 @login_required
 @requires(Permission.APPROVALS_REVIEW)
 def reject_profile_change_request(request_id):
-    request_record = db.session.get(MemberProfileChangeRequest, request_id)
+    request_record = db.session.execute(
+        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
+    ).scalar_one_or_none()
     if request_record is None or request_record.status != "pending":
         flash(_("That change request is no longer waiting for review."), "warning")
         return redirect(url_for("admin.admin_reviews"))
@@ -1697,10 +1862,13 @@ def admin_delete_account(user_id):
     states the consequences instead, and the subscription is cancelled here so
     the association stops charging someone it no longer has a record of.
     """
+    lock_administration()
     user = db.session.execute(
-        db.select(User)
-        .options(selectinload(User.member), selectinload(User.roles), selectinload(User.forum_account))
-        .filter_by(id=user_id)
+        locked(
+            db.select(User)
+            .options(selectinload(User.member), selectinload(User.roles), selectinload(User.forum_account))
+            .filter_by(id=user_id)
+        )
     ).scalar_one_or_none()
     if user is None:
         flash(_("The selected account could not be found."), "warning")

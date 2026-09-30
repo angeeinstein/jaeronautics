@@ -12,7 +12,10 @@ fails, so there the lifecycle *is* usable evidence.
 """
 from datetime import date
 
-from conftest import billing, clock, db, make_member
+import pytest
+
+from conftest import billing, clock, db, make_member, periods
+from aeronautics_members.services import membership
 from aeronautics_members.db_models import Member
 
 CUR = date.today().year
@@ -115,8 +118,13 @@ class TestInvoiceBilledNotTreatedAsPaid:
 
 
 class TestAutomaticPaymentStillTrusted:
+    """For somebody who has been a member -- an October joiner whose free
+    period ran out, say -- an automatically charged subscription going
+    "active" is the renewal, and a missed invoice.paid must not expire them."""
+
     def test_checkout_subscription_active_is_paid(self, app):
-        member = _invoice_member("auto@example.com", sub_id="sub_a", cus="cus_a")
+        member = _invoice_member("auto@example.com", status="free_period", active=True,
+                                 sub_id="sub_a", cus="cus_a")
         billing.sync_member_subscription_state_from_subscription(
             member, _subscription("active", "paid_now", "charge_automatically", "sub_a", "cus_a"))
         db.session.commit()
@@ -128,13 +136,87 @@ class TestAutomaticPaymentStillTrusted:
     def test_missing_collection_method_defaults_to_automatic(self, app):
         # Stripe always returns collection_method, but older fixtures/objects may
         # omit it; the Checkout flow is the default, so assume automatic.
-        member = _invoice_member("auto2@example.com", sub_id="sub_b", cus="cus_b")
+        member = _invoice_member("auto2@example.com", status="free_period", active=True,
+                                 sub_id="sub_b", cus="cus_b")
         sub = _subscription("active", "paid_now", "charge_automatically", "sub_b", "cus_b")
         del sub["collection_method"]
         billing.sync_member_subscription_state_from_subscription(member, sub)
         db.session.commit()
 
         assert db.session.get(Member, member.id).payment_status == "paid"
+
+
+class TestNothingPaidIsNotAMembership:
+    """Found by the pre-deployment audit. The subscription's lifecycle and the
+    dates from the signup's metadata were taken as payment: a SEPA debit still
+    being collected, or a subscription cancelled because it was never paid,
+    made somebody a member with nothing behind it."""
+
+    def _checkout_member(self, email, status="processing"):
+        return _invoice_member(email, status=status, active=False, sub_id="sub_s", cus="cus_s")
+
+    def test_a_sepa_debit_still_being_collected_is_not_a_membership(self, app):
+        member = self._checkout_member("sepa@example.com")
+
+        billing.sync_member_subscription_state_from_subscription(
+            member, _subscription("trialing", "paid_now", "charge_automatically", "sub_s", "cus_s"))
+        db.session.commit()
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "processing"
+        assert refreshed.is_active is False
+        assert membership.member_has_active_access(refreshed) is False
+
+    def test_the_same_debit_confirmed_is_one(self, app):
+        member = self._checkout_member("sepa-paid@example.com")
+        periods.grant_calendar_year(member, CUR, "paid", stripe_invoice_id="in_sepa")
+        member.payment_status = "paid"
+        db.session.commit()
+
+        billing.sync_member_subscription_state_from_subscription(
+            member, _subscription("trialing", "paid_now", "charge_automatically", "sub_s", "cus_s"))
+        db.session.commit()
+
+        assert membership.member_has_active_access(db.session.get(Member, member.id)) is True
+
+    @pytest.mark.parametrize("cancelled", ["canceled", "cancel_scheduled"])
+    def test_cancelling_before_paying_is_not_a_membership(self, app, cancelled):
+        member = self._checkout_member(f"{cancelled}@example.com", status="pending_checkout")
+        sub = _subscription("canceled" if cancelled == "canceled" else "trialing",
+                            "paid_now", "charge_automatically", "sub_s", "cus_s")
+        sub["cancel_at_period_end"] = cancelled == "cancel_scheduled"
+
+        billing.sync_member_subscription_state_from_subscription(member, sub)
+        db.session.commit()
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "pending_checkout"
+        assert membership.member_has_active_access(refreshed) is False
+
+    def test_cancelling_after_paying_keeps_the_year(self, app):
+        member = self._checkout_member("paid-cancel@example.com", status="paid")
+        periods.grant_calendar_year(member, CUR, "paid", stripe_invoice_id="in_pc")
+        db.session.commit()
+        sub = _subscription("trialing", "paid_now", "charge_automatically", "sub_s", "cus_s")
+        sub["cancel_at_period_end"] = True
+
+        billing.sync_member_subscription_state_from_subscription(member, sub)
+        db.session.commit()
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "cancel_scheduled"
+        assert membership.member_has_active_access(refreshed) is True
+
+    def test_the_october_free_period_still_starts_without_payment(self, app):
+        member = self._checkout_member("october@example.com", status="pending_checkout")
+
+        billing.sync_member_subscription_state_from_subscription(
+            member, _subscription("trialing", "free_period", "charge_automatically", "sub_s", "cus_s"))
+        db.session.commit()
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "free_period"
+        assert refreshed.is_active is True
 
 
 class TestSubscriptionPeriodBounds:

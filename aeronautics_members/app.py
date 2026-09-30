@@ -55,6 +55,7 @@ try:
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        MembershipPeriod,
         NotificationBatch,
         NotificationEvent,
         ProcessedStripeEvent,
@@ -116,6 +117,7 @@ except ImportError:
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        MembershipPeriod,
         NotificationBatch,
         NotificationEvent,
         ProcessedStripeEvent,
@@ -1432,6 +1434,12 @@ def build_forum_context(member):
     # -- so nothing else in this function would notice it.
     reclaimed_avatar = service.get_reclaimed_avatar(member) if member else None
     reconnect_waiting = old_forum_account_waiting(member)
+    # An approved picture is kept: members cannot change it on their own. An
+    # admin can allow one replacement, and until the new picture is approved
+    # the old one -- and the forum access that comes with it -- stays.
+    has_picture = approved_submission is not None or reclaimed_avatar is not None
+    replacement_allowed = bool(has_picture and member and member.avatar_replacement_allowed_at)
+    replacement_pending = replacement_allowed and pending_submission is not None
 
     status_key = "disabled"
     status_message = _("The forum integration is not enabled yet.")
@@ -1440,7 +1448,7 @@ def build_forum_context(member):
 
     if member is None or member.user is None:
         status_key = "no_membership"
-        status_message = _("A linked membership profile is required before forum access can be prepared.")
+        status_message = _("You need a membership for the forum.")
     elif not service.is_enabled():
         status_key = "disabled"
         status_message = _("The forum integration is not enabled yet.")
@@ -1459,11 +1467,12 @@ def build_forum_context(member):
         status_message = _("Your forum access starts as soon as your payment has cleared.")
     elif not member_has_active_access(member):
         status_key = "inactive_membership"
-        status_message = _("Your forum access is currently unavailable because your membership is not active.")
+        status_message = _("Forum access needs an active membership.")
     elif approved_submission is not None:
         status_key = "active"
         status_message = _("Your forum access is ready.")
         can_enter_forum = service.is_ready()
+        can_upload_avatar = replacement_allowed
     elif reclaimed_avatar is not None:
         # They came back to an account that already has a face on it -- the one
         # they uploaded to the old forum, which is live on their profile right
@@ -1472,7 +1481,7 @@ def build_forum_context(member):
         status_key = "active"
         status_message = _("Your forum access is ready, with the profile picture from the old forum.")
         can_enter_forum = service.is_ready()
-        can_upload_avatar = True  # still free to replace it
+        can_upload_avatar = replacement_allowed
     elif reconnect_waiting:
         # Their old account comes back once they confirm the university
         # address -- with its username and, usually, its picture. Asking for a
@@ -1504,6 +1513,9 @@ def build_forum_context(member):
         "status_key": status_key,
         "status_message": status_message,
         "can_upload_avatar": can_upload_avatar,
+        "has_picture": has_picture,
+        "replacement_allowed": replacement_allowed,
+        "replacement_pending": replacement_pending,
         "can_enter_forum": can_enter_forum,
         "reconnect_waiting": reconnect_waiting,
         "entry_url": url_for("forum.forum_entry"),
@@ -4304,6 +4316,21 @@ def create_app(config_overrides=None):
                     Member.membership_ends_on.is_(None),
                     Member.renewal_due_on.is_(None),
                     Member.membership_ends_on <= cutoff,
+                    # The cached dates run past what the ledger covers: a paid
+                    # year whose invoice.paid never arrived, or one still being
+                    # collected. Without this, a renewal repaired only in the
+                    # cache has a date far in the future and is never looked
+                    # at again.
+                    and_(
+                        Member.membership_ends_on >= today,
+                        ~db.select(MembershipPeriod.id)
+                        .where(
+                            MembershipPeriod.member_id == Member.id,
+                            MembershipPeriod.revoked_at.is_(None),
+                            MembershipPeriod.ends_on >= Member.membership_ends_on,
+                        )
+                        .exists(),
+                    ),
                 )
             )
 

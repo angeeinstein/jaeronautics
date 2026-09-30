@@ -22,6 +22,7 @@ from ..services.forum import (
 from ..services.identity import (
     TOKEN_MAX_AGE_FORUM_ENTRY,
     TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN,
+    email_verification_claims_match,
     mark_email_verified_from_token,
     read_token,
     send_email_verification_email,
@@ -78,7 +79,9 @@ from ..app import (
     format_bytes_human,
     get_current_member_for_user,
     get_member_portal_target,
+    limiter,
 )
+from ..config import RATELIMIT_FORUM_CONNECT
 
 forum_bp = Blueprint("forum", __name__)
 
@@ -123,6 +126,13 @@ def forum_entry():
             except (TypeError, ValueError):
                 auto_login_allowed = False
 
+            # Signing somebody in on a link alone is only fair while the link
+            # still speaks for the account: sent to the address it holds now,
+            # with the current nonce. After an email change, a link lying in
+            # the old mailbox must not open the account any more.
+            if auto_login_allowed and not email_verification_claims_match(token_data, token_user):
+                auto_login_allowed = False
+
             if auto_login_allowed:
                 login_user(token_user)
             else:
@@ -141,7 +151,7 @@ def forum_entry():
 
     member = get_current_member_for_user(current_user)
     if member is None:
-        flash(_("A linked membership profile is required before you can access the forum."), "warning")
+        flash(_("You need a membership for the forum."), "warning")
         return redirect(url_for("account.create_membership_profile"))
 
     forum_result, service = sync_member_forum_state(member)
@@ -180,6 +190,17 @@ def upload_forum_avatar():
 
     if not member_has_active_access(member):
         flash(_("Your membership must be active before you can upload a forum profile picture."), "warning")
+        return redirect(url_for("account.account"))
+
+    # An approved picture stays unless an admin has allowed a new one. The page
+    # only offers the upload then; this is for a request that did not come
+    # from the page.
+    has_picture = (
+        forum_service.get_current_approved_submission(member) is not None
+        or forum_service.get_reclaimed_avatar(member) is not None
+    )
+    if has_picture and member.avatar_replacement_allowed_at is None:
+        flash(_("To change your picture, please ask an admin."), "info")
         return redirect(url_for("account.account"))
 
     upload_request_limit = forum_service.get_upload_request_limit()
@@ -266,7 +287,7 @@ def forum_imported_avatar_public_file(token):
             ImportedForumProfile.avatar_public_token == token
         )
     ).scalar_one_or_none()
-    if profile is None or not profile.avatar_path:
+    if profile is None or not profile.avatar_path or profile.user.deleted_at is not None:
         abort(404)
 
     path = Path(profile.avatar_path)
@@ -276,6 +297,7 @@ def forum_imported_avatar_public_file(token):
 
 
 @forum_bp.route("/forum/discourse/connect", methods=["GET"])
+@limiter.limit(RATELIMIT_FORUM_CONNECT)
 def forum_discourse_connect():
     if not current_user.is_authenticated:
         next_url = request.full_path[:-1] if request.full_path.endswith("?") else request.full_path
@@ -283,11 +305,11 @@ def forum_discourse_connect():
 
     member = get_current_member_for_user(current_user)
     if member is None:
-        flash(_("A linked membership profile is required before you can access the forum."), "warning")
+        flash(_("You need a membership for the forum."), "warning")
         return redirect(url_for("account.create_membership_profile"))
 
     if not member_has_active_access(member):
-        flash(_("Your membership is not active, so forum access is unavailable right now."), "warning")
+        flash(_("Forum access needs an active membership."), "warning")
         return redirect(url_for("forum.forum_entry"))
 
     # DiscourseConnect asserts this address to the forum, which associates forum

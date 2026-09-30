@@ -13,7 +13,7 @@
                     {% if forum_login_hint %}
                         <div class="alert alert-warning mb-4">
                             <h5 class="mb-2">{{ _('Forum access is for active members') }}</h5>
-                            <p class="mb-2">{{ _('Already a member? Log in below with the account you created during membership signup.') }}</p>
+                            <p class="mb-2">{{ _('Already a member? Log in below.') }}</p>
                             <p class="mb-3 fw-semibold">{{ _('Not a member yet? Start with the membership signup first. Your website account and forum access are created from that process.') }}</p>
                             <a href="{{ url_for('public.join') }}" class="btn btn-primary">{{ _('Become a Member') }}</a>
                         </div>
@@ -29,7 +29,6 @@
                         <div class="mb-4">
                             {{ form.email.label(class="form-label") }}
                             {{ form.email(class="form-control form-control-lg", placeholder=_('your.email@example.com'), autocomplete="email") }}
-                            <div class="form-text">{{ _('Your private email address, not the university one.') }}</div>
                         </div>
                         <div class="mb-4">
                             {{ form.password.label(class="form-label") }}

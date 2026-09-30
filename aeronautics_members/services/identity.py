@@ -18,7 +18,7 @@ from itsdangerous import URLSafeTimedSerializer
 from sqlalchemy import func
 
 from ..config import SECRET_KEY
-from ..db_models import User, db
+from ..db_models import Member, User, db
 from ..security_utils import build_public_url
 from .clock import get_now_utc
 from .notifications import send_account_action_email
@@ -204,7 +204,55 @@ def mark_work_email_verified_from_token(token_data, member):
     if member.email_work_is_verified:
         return False
     member.email_work_verified_at = get_now_utc()
+    _unconfirm_elsewhere(member)
     return True
+
+
+def _unconfirm_elsewhere(member):
+    """The latest confirmation of a university address wins.
+
+    A confirmed university address signs in, so it must lead to one account.
+    The university reissues addresses, and a student may set up a second
+    account; whoever confirmed the address last is the one reading that
+    mailbox now. The other account keeps its private address to sign in with.
+    """
+    address = (member.email_work or "").strip().lower()
+    others = db.session.execute(
+        db.select(Member).where(
+            func.lower(Member.email_work) == address,
+            Member.id != member.id,
+            Member.email_work_verified_at.is_not(None),
+        )
+    ).scalars()
+    for other in others:
+        other.email_work_verified_at = None
+
+
+def user_for_login_address(address):
+    """The account an address signs in to, or None.
+
+    The private address, as always, or a confirmed university address --
+    which is what most people type. Unconfirmed, it proves nothing and signs
+    in nowhere. Confirmed on more than one account (from before the latest
+    confirmation won) it is ambiguous and signs in nowhere either; the
+    private address still works.
+    """
+    address = (address or "").strip().lower()
+    if not address:
+        return None
+    user = db.session.execute(db.select(User).filter_by(email=address)).scalar_one_or_none()
+    if user is not None:
+        return user
+    holders = db.session.execute(
+        db.select(Member).where(
+            func.lower(Member.email_work) == address,
+            Member.email_work_verified_at.is_not(None),
+            Member.deleted_at.is_(None),
+        )
+    ).scalars().all()
+    if len(holders) != 1:
+        return None
+    return holders[0].user
 
 
 def send_work_email_verification_email(app, member):
@@ -233,8 +281,7 @@ def send_work_email_verification_email(app, member):
               "It shows that you study or work here."),
             _("If you were on the old forum with this address, confirming it also "
               "gives you your old forum account and your posts back."),
-            _("You keep signing in with your private address, and that is where we "
-              "write to you."),
+            _("We'll keep writing to your private address."),
         ],
         note=_("The link is valid for 7 days."),
         failure_event_type="work_verification_email_failed",

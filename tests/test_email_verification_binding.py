@@ -104,3 +104,63 @@ class TestDiscourseActivation:
 
     def test_verified_email_skips_discourse_activation(self, app):
         assert self._payload(verified=True)["require_activation"] == "false"
+
+
+class TestOldLinksDieWithTheOldAddress:
+    """Found by the pre-deployment audit: after an account's address changed,
+    a reset link or a fresh welcome link still in the old mailbox could still
+    take the account -- the one a verification link could not."""
+
+    def test_a_reset_link_sent_to_the_old_address_stops_working(self, app, client):
+        member = make_member(email="before@example.com")
+        token = identity.build_password_reset_token(member.user)
+        db.session.commit()
+
+        workflows.sync_member_primary_email(member, "after@example.com")
+        db.session.commit()
+
+        resp = client.post(f"/reset-password/{token}",
+                           data={"password": "A-new-password-1", "confirm_password": "A-new-password-1"})
+
+        assert resp.status_code == 302
+        assert "/forgot-password" in resp.headers["Location"]
+        assert db.session.get(User, member.user.id).check_password("initial-password")
+
+    def test_a_reset_link_still_works_while_the_address_is_unchanged(self, app, client):
+        member = make_member(email="same@example.com")
+        token = identity.build_password_reset_token(member.user)
+        db.session.commit()
+
+        resp = client.get(f"/reset-password/{token}")
+
+        assert resp.status_code == 200
+
+    def _welcome_link(self, user):
+        from aeronautics_members.services.forum import build_forum_entry_url
+
+        url = build_forum_entry_url(user, include_token=True)
+        db.session.commit()
+        return "/forum?" + url.split("?", 1)[1]
+
+    def test_a_fresh_welcome_link_signs_in(self, app, client):
+        member = make_member(email="welcome@example.com")
+        link = self._welcome_link(member.user)
+
+        client.get(link)
+
+        with client.session_transaction() as session:
+            assert session.get("_user_id") == str(member.user.id)
+
+    def test_a_welcome_link_sent_to_the_old_address_does_not_sign_in(self, app, client):
+        member = make_member(email="welcome-old@example.com")
+        link = self._welcome_link(member.user)
+
+        workflows.sync_member_primary_email(member, "welcome-new@example.com")
+        db.session.commit()
+
+        resp = client.get(link)
+
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+        with client.session_transaction() as session:
+            assert session.get("_user_id") is None

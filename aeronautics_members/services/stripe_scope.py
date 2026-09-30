@@ -266,6 +266,20 @@ def _invoice_of_payment_intent(payment_intent):
     return _get(payments[0], "invoice") if payments else None
 
 
+def invoice_id_of_charge(charge):
+    """The invoice a charge paid, where the API version still names it, or None."""
+    invoice = _get(charge, "invoice")
+    return _id_of(invoice) if invoice else None
+
+
+def invoice_id_of_payment_intent(payment_intent_id):
+    """The id of the invoice a payment paid, or None. Raises when Stripe cannot be asked."""
+    if not payment_intent_id:
+        return None
+    invoice = _invoice_of_payment_intent({"id": payment_intent_id})
+    return _id_of(invoice) if invoice else None
+
+
 def scope_of_payment_intent(payment_intent):
     found = _from_metadata(_get(payment_intent, "metadata"))
     if found:

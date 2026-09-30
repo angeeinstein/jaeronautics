@@ -158,13 +158,10 @@
                                                     <td>{{ _('Yes') if admin_general_state.get('enabled') else _('No') }}</td>
                                                     <td>{{ admin_general_state.get('pending_count', 0) }}</td>
                                                     <td>
-                                                        {% if admin_general_state.get('cooldown_minutes') %}
-                                                            {{ _('Stage %(stage)s · every %(minutes)s min', stage=admin_general_state.get('cooldown_stage', 0), minutes=admin_general_state.get('cooldown_minutes')) }}
+                                                        {% if admin_general_state.get('throttled_kinds') %}
+                                                            {{ _('Held back: %(kinds)s', kinds=admin_general_state.get('throttled_kinds')|join(', ')) }}
                                                         {% else %}
                                                             {{ _('Immediate') }}
-                                                        {% endif %}
-                                                        {% if admin_general_state.get('daily_cap') %}
-                                                            <div class="small text-muted">{{ _('Rolling 24h cap: %(count)s', count=admin_general_state.get('daily_cap')) }}</div>
                                                         {% endif %}
                                                     </td>
                                                     <td>{% if admin_general_state.get('next_allowed_at') %}{{ admin_general_state.get('next_allowed_at')|datetime_display }}{% else %}{{ _('Now') }}{% endif %}</td>
@@ -184,13 +181,10 @@
                                                     <td>{{ _('Yes') if admin_error_state.get('enabled') else _('No') }}</td>
                                                     <td>{{ admin_error_state.get('pending_count', 0) }}</td>
                                                     <td>
-                                                        {% if admin_error_state.get('cooldown_minutes') %}
-                                                            {{ _('Stage %(stage)s · every %(minutes)s min', stage=admin_error_state.get('cooldown_stage', 0), minutes=admin_error_state.get('cooldown_minutes')) }}
+                                                        {% if admin_error_state.get('throttled_kinds') %}
+                                                            {{ _('Held back: %(kinds)s', kinds=admin_error_state.get('throttled_kinds')|join(', ')) }}
                                                         {% else %}
                                                             {{ _('Immediate') }}
-                                                        {% endif %}
-                                                        {% if admin_error_state.get('daily_cap') %}
-                                                            <div class="small text-muted">{{ _('Rolling 24h cap: %(count)s', count=admin_error_state.get('daily_cap')) }}</div>
                                                         {% endif %}
                                                     </td>
                                                     <td>{% if admin_error_state.get('next_allowed_at') %}{{ admin_error_state.get('next_allowed_at')|datetime_display }}{% else %}{{ _('Now') }}{% endif %}</td>

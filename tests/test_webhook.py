@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from conftest import Member, ProcessedStripeEvent, clock, db, make_member, outbox, periods, webhook_inbox
+from aeronautics_members.services import membership
 from aeronautics_members.blueprints import webhook as webhook_module
 from aeronautics_members.db_models import ExternalWorkItem, Setting
 
@@ -222,6 +223,40 @@ class TestIdempotency:
         assert resp.data != b"Already processed"
         refreshed = db.session.get(Member, member.id)
         assert refreshed.is_active is True
+        assert stub_side_effects == [member.id]
+
+    def test_a_retry_while_the_event_is_unfinished_asks_stripe_to_come_back(
+            self, client, monkeypatch, stub_side_effects):
+        """Found by the pre-deployment audit: a worker dies holding the claim,
+        and Stripe's retry arrives inside the lease. Answering 200 "Already
+        processed" told Stripe to stop retrying, and the event was never
+        applied. It has to ask for another try instead."""
+        member = make_member(email="inflight@example.com")
+        event = checkout_event(member, member.user, activation_mode="free_period",
+                               event_id="evt_inflight")
+        assert webhook_inbox.claim_stripe_event("evt_inflight", "checkout.session.completed") is True
+        row = db.session.execute(
+            db.select(ProcessedStripeEvent).filter_by(event_id="evt_inflight")
+        ).scalar_one()
+        row.claimed_at = clock.get_now_utc() - timedelta(minutes=1)
+        db.session.commit()
+
+        early = post_event(client, monkeypatch, event)
+
+        assert early.status_code == 409, "not a 2xx: Stripe must retry"
+        assert stub_side_effects == []
+
+        # The later retry, once the dead worker's lease has run out, applies it.
+        row = db.session.execute(
+            db.select(ProcessedStripeEvent).filter_by(event_id="evt_inflight")
+        ).scalar_one()
+        row.claimed_at = clock.get_now_utc() - webhook_inbox.STRIPE_EVENT_LEASE - timedelta(minutes=1)
+        db.session.commit()
+
+        later = post_event(client, monkeypatch, event)
+
+        assert later.status_code == 200
+        assert db.session.get(Member, member.id).is_active is True
         assert stub_side_effects == [member.id]
 
     def test_failed_event_is_not_recorded(self, client, monkeypatch, stub_side_effects):
@@ -439,6 +474,99 @@ class TestDisputeLost:
         refreshed = db.session.get(Member, member.id)
         assert refreshed.is_active is False
         assert refreshed.payment_status == "dispute_lost"
+
+
+class TestNewerStripeInvoiceShape:
+    """Newer Stripe API versions -- the one this account uses -- dropped
+    ``invoice.subscription``; the reference is under
+    ``parent.subscription_details``. Found by the pre-deployment audit: paid
+    periods were recorded with no subscription, and a lost chargeback, which
+    revoked by subscription, left them standing."""
+
+    def _paid_invoice(self, member_cus, invoice_id, sub_id, year):
+        paid_at = int(datetime(year, 3, 1, 12, tzinfo=timezone.utc).timestamp())
+        return {
+            "id": f"evt_{invoice_id}", "type": "invoice.paid",
+            "data": {"object": {
+                "id": invoice_id, "customer": member_cus,
+                "parent": {"subscription_details": {"subscription": sub_id,
+                                                    "metadata": {"purpose": "membership"}}},
+                "status_transitions": {"paid_at": paid_at}, "created": paid_at,
+            }},
+        }
+
+    def _lose_dispute(self, client, monkeypatch, cus, disputed_invoice, event_id="evt_lost"):
+        monkeypatch.setattr(webhook_module.stripe.Charge, "retrieve",
+                            staticmethod(lambda *a, **k: {"customer": cus, "payment_intent": "pi_x"}))
+        monkeypatch.setattr(
+            webhook_module.stripe.InvoicePayment, "list",
+            staticmethod(lambda **_: {"data": [{"invoice": {
+                "id": disputed_invoice,
+                "parent": {"subscription_details": {"metadata": {"purpose": "membership"}}},
+            }}]}),
+        )
+        event = {"id": event_id, "type": "charge.dispute.closed",
+                 "data": {"object": {"status": "lost", "charge": "ch_x", "payment_intent": "pi_x"}}}
+        return post_event(client, monkeypatch, event)
+
+    def test_the_paid_period_records_its_subscription(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="newshape@example.com", stripe_customer_id="cus_n",
+                             stripe_subscription_id="sub_n", payment_status="unpaid")
+
+        resp = post_event(client, monkeypatch, self._paid_invoice("cus_n", "in_n", "sub_n", TODAY.year))
+
+        assert resp.status_code == 200
+        (period,) = db.session.get(Member, member.id).membership_periods
+        assert period.stripe_subscription_id == "sub_n"
+        assert period.stripe_invoice_id == "in_n"
+
+    def test_a_lost_chargeback_takes_the_access_away(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="newshape2@example.com", stripe_customer_id="cus_m",
+                             stripe_subscription_id="sub_m", payment_status="unpaid")
+        post_event(client, monkeypatch, self._paid_invoice("cus_m", "in_m", "sub_m", TODAY.year))
+        assert membership.member_has_active_access(db.session.get(Member, member.id))
+
+        assert self._lose_dispute(client, monkeypatch, "cus_m", "in_m").status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert all(p.is_revoked for p in refreshed.membership_periods)
+        assert membership.member_has_active_access(refreshed) is False
+        assert refreshed.payment_status == "dispute_lost"
+
+    def test_a_period_recorded_without_its_subscription_is_still_revoked(
+            self, client, monkeypatch, stub_side_effects):
+        """Periods granted before this fix carry no subscription. When the
+        disputed invoice cannot be matched either, they still go."""
+        member = make_member(email="nolink@example.com", stripe_customer_id="cus_o",
+                             stripe_subscription_id="sub_o", payment_status="paid",
+                             is_active=True, membership_ends_on=YEAR_END)
+        periods.grant_calendar_year(member, TODAY.year, "paid", stripe_invoice_id="in_old_shape")
+        db.session.commit()
+
+        assert self._lose_dispute(client, monkeypatch, "cus_o", "in_unmatched").status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert all(p.is_revoked for p in refreshed.membership_periods)
+        assert membership.member_has_active_access(refreshed) is False
+
+    def test_a_dispute_over_last_year_leaves_this_year_alone(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="twoyears@example.com", stripe_customer_id="cus_t",
+                             stripe_subscription_id="sub_t", payment_status="paid",
+                             is_active=True, membership_ends_on=YEAR_END)
+        periods.grant_calendar_year(member, TODAY.year - 1, "paid",
+                                    stripe_invoice_id="in_last", stripe_subscription_id="sub_t")
+        periods.grant_calendar_year(member, TODAY.year, "paid",
+                                    stripe_invoice_id="in_this", stripe_subscription_id="sub_t")
+        db.session.commit()
+
+        assert self._lose_dispute(client, monkeypatch, "cus_t", "in_last").status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        by_invoice = {p.stripe_invoice_id: p for p in refreshed.membership_periods}
+        assert by_invoice["in_last"].is_revoked
+        assert not by_invoice["in_this"].is_revoked
+        assert membership.member_has_active_access(refreshed) is True
+        assert refreshed.payment_status == "paid"
 
 
 class TestSubscriptionDeleted:
@@ -692,3 +820,43 @@ class TestExternalWorkIsQueued:
         db.session.commit()
         assert outbox.process_pending() == (1, 0)
         assert ran == [item.id]
+
+
+class TestAFailedFirstPayment:
+    """Found by the pre-deployment audit: a failed first payment left a stale
+    is_active in place, and with nothing in the ledger that was enough for
+    access -- the failure handler only switched it off when access had
+    already gone."""
+
+    def test_it_takes_away_what_was_never_paid_for(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="bounced@example.com", stripe_customer_id="cus_f",
+                             stripe_subscription_id="sub_f", payment_status="processing",
+                             is_active=True, membership_ends_on=YEAR_END)
+        event = {
+            "id": "evt_first_bounce", "type": "invoice.payment_failed",
+            "data": {"object": {"id": "in_f", "customer": "cus_f", "subscription": "sub_f"}},
+        }
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "failed"
+        assert refreshed.is_active is False
+        assert membership.member_has_active_access(refreshed) is False
+
+    def test_a_paid_year_still_running_is_kept(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="paidyear@example.com", stripe_customer_id="cus_g",
+                             stripe_subscription_id="sub_g", payment_status="paid",
+                             is_active=True, membership_ends_on=YEAR_END)
+        periods.grant_calendar_year(member, TODAY.year, "paid", stripe_invoice_id="in_g0")
+        db.session.commit()
+        event = {
+            "id": "evt_later_bounce", "type": "invoice.payment_failed",
+            "data": {"object": {"id": "in_g1", "customer": "cus_g", "subscription": "sub_g"}},
+        }
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.is_active is True
+        assert membership.member_has_active_access(refreshed) is True

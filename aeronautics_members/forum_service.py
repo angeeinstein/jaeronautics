@@ -364,7 +364,22 @@ if Image is not None:
     Image.MAX_IMAGE_PIXELS = MAX_AVATAR_PIXELS
 
 
-def _load_image_for_processing(raw_bytes):
+# The formats an upload may be decoded as, told by the file's content, not its
+# name. Pillow otherwise tries every decoder it has -- PSD, FITS, and dozens
+# more nobody uploads a profile photo in -- and those rarely used decoders are
+# where its memory-safety bugs keep turning up. The file never gets as far as
+# one of them now: Image.open refuses anything whose header is not in this
+# list before decoding a single pixel.
+#
+# AVIF is what newer phones save; Pillow reads it itself. HEIC, the iPhone's
+# own format, would need a separate decoder library and is left out: an
+# iPhone picking from its photo library converts to JPEG for an upload field
+# that does not ask for HEIC. Whatever comes in is converted to one of the
+# output formats below before it is stored or sent to the forum.
+UPLOAD_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP", "AVIF")
+
+
+def _load_image_for_processing(raw_bytes, formats=UPLOAD_IMAGE_FORMATS):
     if Image is None or ImageOps is None:
         raise ForumProviderError("Avatar processing is unavailable because Pillow is not installed on the server yet.")
 
@@ -372,7 +387,7 @@ def _load_image_for_processing(raw_bytes):
         "The uploaded image is too large to process safely. Please choose a smaller image."
     )
     try:
-        with Image.open(BytesIO(raw_bytes)) as image:
+        with Image.open(BytesIO(raw_bytes), formats=list(formats)) as image:
             # Image.open only parses the header, so the dimensions are known
             # before any pixel data is decoded. Checking here is the difference
             # between rejecting a bomb and being flattened by one: the previous
@@ -387,7 +402,7 @@ def _load_image_for_processing(raw_bytes):
     except Image.DecompressionBombError as exc:
         raise too_large from exc
     except (UnidentifiedImageError, OSError) as exc:
-        raise ForumProviderError("Please upload a valid JPG, PNG, or WebP image.") from exc
+        raise ForumProviderError("Please upload a valid JPG, PNG, WebP or AVIF image.") from exc
 
 
 def _clamp_float(value, default, minimum, maximum):
@@ -480,8 +495,9 @@ def _resize_image(image, scale_factor):
     return image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
 
 
-def normalize_avatar_image(raw_bytes, allowed_extensions, max_output_bytes, crop_options=None):
-    image = _load_image_for_processing(raw_bytes)
+def normalize_avatar_image(raw_bytes, allowed_extensions, max_output_bytes, crop_options=None,
+                           input_formats=UPLOAD_IMAGE_FORMATS):
+    image = _load_image_for_processing(raw_bytes, formats=input_formats)
     image = _apply_avatar_crop(image, crop_options)
 
     width, height = image.size
@@ -1663,15 +1679,23 @@ class ForumService:
         if not self.is_ready():
             raise ForumProviderError("Forum integration is not configured yet.")
 
+        # The account has to exist on the forum before a picture can be set on
+        # it, so it is synced first -- in the state the member is actually in.
+        # For a first picture that is onboarding; for somebody replacing one,
+        # allowed by an admin, it is full access, which their current picture
+        # still gives them. Always sending onboarding here took a member who
+        # was replacing a picture out of the members' group, and left them out
+        # if the upload then failed.
+        current_state = self.get_desired_state(submission.member)
         try:
-            self.provider.sync_user(forum_account, submission.user, submission.member, FORUM_STATE_ONBOARDING)
+            self.provider.sync_user(forum_account, submission.user, submission.member, current_state)
             self.provider.set_avatar(forum_account, submission.user, submission)
         except ForumProviderError as exc:
             submission.sync_error = str(exc)
             forum_account.last_error = str(exc)
             forum_account.state = FORUM_STATE_SYNC_ERROR
             forum_account.last_synced_at = datetime.now(timezone.utc)
-            return ForumSyncResult(changed=True, desired_state=FORUM_STATE_ONBOARDING, forum_account=forum_account, error=str(exc))
+            return ForumSyncResult(changed=True, desired_state=current_state, forum_account=forum_account, error=str(exc))
 
         previous_approved = db.session.execute(
             db.select(ForumAvatarSubmission)

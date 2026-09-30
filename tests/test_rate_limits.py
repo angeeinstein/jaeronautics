@@ -164,3 +164,28 @@ def test_a_whole_campus_behind_one_address_fits_under_the_network_limits(setting
     from aeronautics_members import config
 
     assert parse(getattr(config, setting)).amount >= 1000
+
+
+def test_going_to_the_forum_in_a_loop_is_stopped_per_account(limited_app):
+    """Every click through to the forum makes the forum do work, and retries
+    what is waiting for that person at once. A loop must not become a flood;
+    a second person on the same campus address is not held up by it."""
+    from flask import g
+
+    def clicks_as(member, times):
+        g.pop("_login_user", None)
+        client = limited_app.test_client()
+        with client.session_transaction() as session:
+            session["_user_id"] = str(member.user.id)
+        return [
+            client.get("/forum/discourse/connect", environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
+            for _ in range(times)
+        ]
+
+    looping = make_member(email="looping@example.com")
+    other = make_member(email="other@example.com")
+
+    statuses = clicks_as(looping, 21)
+    assert 429 not in statuses[:20]
+    assert statuses[20] == 429
+    assert 429 not in clicks_as(other, 3)

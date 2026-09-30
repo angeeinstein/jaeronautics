@@ -96,8 +96,10 @@ from flask_login import (
 from ..db_models import (
     Member,
     MemberProfileChangeRequest,
+    User,
     db,
 )
+from ..services.locking import lock_administration, locked
 from ..forms import (
     CreateMembershipProfileForm,
     IdentityChangeRequestForm,
@@ -379,7 +381,10 @@ def submit_identity_change_request():
 @login_required
 def cancel_identity_change_request(request_id):
     member = get_current_member_for_user(current_user)
-    request_record = db.session.get(MemberProfileChangeRequest, request_id)
+    # Locked, as an admin's decision on it is: whichever comes second finds it settled.
+    request_record = db.session.execute(
+        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
+    ).scalar_one_or_none()
     if request_record is None or member is None or request_record.member_id != member.id or request_record.status != "pending":
         flash(_("The selected change request could not be canceled."), "warning")
         return redirect(url_for("account.account"))
@@ -417,7 +422,7 @@ def manage_member_billing():
         flash(str(exc), "warning")
     except stripe.StripeError as exc:
         current_app.logger.error("Could not create Stripe portal session for member_id=%s: %s", member.id, exc)
-        flash(_("Could not open the Stripe customer portal right now. Please try again later."), "danger")
+        flash(_("Billing page unavailable. Please try again later."), "danger")
     return redirect(url_for("account.account"))
 
 
@@ -438,7 +443,7 @@ def resume_member_payment():
         return redirect(session.url, code=303)
     except stripe.StripeError as exc:
         current_app.logger.error("Could not resume Checkout for member_id=%s: %s", member.id, exc)
-        flash(_("Could not restart the Stripe Checkout session right now. Please try again later."), "danger")
+        flash(_("Payment page unavailable. Please try again later."), "danger")
     except Exception:
         current_app.logger.exception("Unexpected error while resuming payment for member_id=%s", member.id)
         flash(_("Could not restart the membership payment right now."), "danger")
@@ -523,7 +528,7 @@ def resend_verification_email():
             remember_sent("verify-email", current_user.email)
             flash(_("We sent you a new confirmation email. Not in your inbox? Please check your spam folder."), "success")
         else:
-            flash(_("We could not send a verification email because no sender account is configured yet."), "warning")
+            flash(_("Email isn't set up yet. Please contact us."), "warning")
     except Exception as exc:
         current_app.logger.warning("Could not resend verification email for user_id=%s: %s", current_user.id, exc)
         flash(_("We could not send a verification email right now."), "danger")
@@ -562,7 +567,7 @@ def resend_work_email_verification():
                 "success",
             )
         else:
-            flash(_("We could not send a confirmation email because no sender account is configured yet."), "warning")
+            flash(_("Email isn't set up yet. Please contact us."), "warning")
     except Exception as exc:  # noqa: BLE001 -- the reason belongs in the log, not the page
         db.session.rollback()
         current_app.logger.warning(
@@ -618,8 +623,7 @@ def request_account_deletion():
 
     if not sent:
         flash(
-            _("We could not send the confirmation email because no sender account is "
-              "configured yet. Please contact the board instead."),
+            _("Email isn't set up yet. Please contact us."),
             "warning",
         )
         return redirect(url_for("account.account"))
@@ -661,6 +665,11 @@ def confirm_account_deletion(token):
         flash(_("This deletion link does not belong to the account you are signed in to."), "warning")
         return redirect(url_for("account.account"))
 
+    if request.method == "POST":
+        # Read afresh under the lock: an admin may be erasing this account, or
+        # taking away the other admin, in the same moment.
+        lock_administration()
+        db.session.execute(locked(db.select(User).filter_by(id=current_user.id))).scalar_one()
     impact = describe_deletion_impact(current_user, actor_user=current_user)
 
     if request.method == "GET":

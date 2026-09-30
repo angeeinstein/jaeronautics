@@ -95,16 +95,33 @@ def claim_stripe_event(event_id, event_type=None):
         and (now - claimed_at) < STRIPE_EVENT_LEASE
     )
     if lease_active:
-        # Another delivery is genuinely still working on it; Stripe will retry.
+        # Another delivery is still working on it. The caller answers with a
+        # retry request rather than a 2xx, so Stripe comes back.
         return False
 
-    # Failed, or abandoned by a process that died holding the claim: take it over.
-    existing.status = ProcessedStripeEvent.STATUS_PROCESSING
-    existing.attempts = (existing.attempts or 0) + 1
-    existing.claimed_at = now
-    if existing.event_type is None:
-        existing.event_type = event_type
+    # Failed, or abandoned by a process that died holding the claim: take it
+    # over. Conditionally, on the claim still being the one just read, so two
+    # retries arriving together cannot both take it over.
+    taken = db.session.execute(
+        db.update(ProcessedStripeEvent)
+        .where(
+            ProcessedStripeEvent.id == existing.id,
+            ProcessedStripeEvent.status == existing.status,
+            ProcessedStripeEvent.attempts.is_(None) if existing.attempts is None
+            else ProcessedStripeEvent.attempts == existing.attempts,
+        )
+        .values(
+            status=ProcessedStripeEvent.STATUS_PROCESSING,
+            attempts=(existing.attempts or 0) + 1,
+            claimed_at=now,
+            event_type=existing.event_type or event_type,
+        )
+        .execution_options(synchronize_session=False)
+    ).rowcount
     db.session.commit()
+    if not taken:
+        return False
+    db.session.refresh(existing)
     current_app.logger.info(
         "Retrying Stripe webhook event %s (%s), attempt %s.",
         event_id,

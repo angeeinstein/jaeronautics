@@ -1152,9 +1152,14 @@ class TestWhatAReconnectedMemberIsAskedToDo:
 
         assert self._context(member)["status_key"] == "active"
 
-    def test_they_may_still_replace_it(self, app, tmp_path):
-        """Keeping a decade-old photograph should be a choice, not a sentence."""
+    def test_they_may_replace_it_once_an_admin_allows(self, app, tmp_path):
+        """Keeping a decade-old photograph should be a choice, not a sentence --
+        made by asking, as for anybody wanting to change an approved picture."""
         member = self._reconnected_with_an_avatar(tmp_path)
+        assert self._context(member)["can_upload_avatar"] is False
+
+        member.avatar_replacement_allowed_at = datetime(2026, 10, 1)
+        db.session.commit()
 
         assert self._context(member)["can_upload_avatar"] is True
 
@@ -1222,3 +1227,25 @@ class TestWhatAReconnectedMemberIsAskedToDo:
         member.user.disabled_at = datetime.now(timezone.utc)
 
         assert self._forum_state(member) == FORUM_STATE_INACTIVE
+
+
+class TestTheOldCohortStays:
+    """Somebody who studied as LAV21 and comes back for the master's as MAV24
+    belongs to both years. The old cohort group is never taken away: the
+    sync only ever adds a cohort, and removes none."""
+
+    def test_a_new_year_group_adds_a_cohort_and_removes_none(self, app):
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+
+        member = make_member(email="master@example.com", year_group="MAV24")
+        provider = DiscourseConnectProvider(settings={
+            "forum_member_group": "members", "forum_onboarding_group": "onboarding",
+            "forum_inactive_group": "inactive", "forum_staff_group": "",
+        })
+
+        fields = provider._build_group_fields("active", user=member.user, member=member)
+
+        assert "mav24" in fields["add_groups"].split(",")
+        removed = fields.get("remove_groups", "").split(",")
+        assert "lav21" not in removed
+        assert not any(group[:3].isalpha() and group[3:].isdigit() for group in removed)

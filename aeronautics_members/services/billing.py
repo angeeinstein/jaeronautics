@@ -14,6 +14,8 @@ merely outstanding -- so for those, payment must come from an actual paid
 invoice, never from the status.
 """
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -42,12 +44,13 @@ from .membership import (
     PAYMENT_EVIDENCE_STATUSES,
     build_membership_cycle,
     format_membership_date_display,
+    has_payment_evidence,
     invoice_coverage_year,
     member_has_active_access,
     set_member_membership_window,
     sync_member_active_state,
 )
-from .periods import active_periods, grant_period
+from .periods import active_periods, coverage_end, grant_calendar_year, grant_period
 from .settings import get_stripe_settings_map
 from .stripe_scope import scope_of_subscription
 
@@ -451,6 +454,34 @@ def checkout_completed_but_not_yet_confirmed(member):
     return session.get("status") == "complete"
 
 
+def checkout_idempotency_key(member, cycle, checkout_params):
+    """The key that makes a repeated Checkout request return the same session.
+
+    A double-submitted form or a retried request sends the same thing twice,
+    and must get the one session back rather than open a second -- two open
+    sessions can both be paid. Stripe remembers a key for 24 hours.
+
+    The request's content is part of the key. Stripe refuses a key reused with
+    different parameters, and those change for legitimate reasons: a member's
+    old Stripe customer was cleaned up, their address was corrected, the
+    price was changed. With the member and year alone as the key, every one
+    of those locked the member out of paying for a day ("Keys for idempotent
+    requests can only be used with the same parameters"), which is how it was
+    found on the test server.
+
+    Somebody rejoining carries their ended subscription in the key as well:
+    they may have joined earlier the same year with an identical request, and
+    that key would hand back the first, completed session.
+    """
+    fingerprint = hashlib.sha256(
+        json.dumps(checkout_params, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()[:16]
+    key = f"checkout:member:{member.id}:{cycle['current_year']}:{fingerprint}"
+    if member.stripe_subscription_id:
+        key += f":after:{member.stripe_subscription_id}"
+    return key
+
+
 def create_checkout_session_for_member(member):
     """Start (or resume) the member's Checkout session for the current year.
 
@@ -479,16 +510,6 @@ def create_checkout_session_for_member(member):
     if prorated_line_item is not None:
         line_items.insert(0, prorated_line_item)
 
-    # Scoped to the member and the membership year, so a double-submitted form
-    # or a retried request returns the session that already exists rather than
-    # opening a second one. Stripe keeps a key for 24 hours, which is also how
-    # long a Checkout session stays open. Somebody rejoining carries their
-    # ended subscription in the key as well: they may have joined earlier the
-    # same year, and that key would hand back the first, completed session.
-    idempotency_key = f"checkout:member:{member.id}:{cycle['current_year']}"
-    if member.stripe_subscription_id:
-        idempotency_key += f":after:{member.stripe_subscription_id}"
-
     # One or the other: Stripe refuses both. An existing customer is kept, so
     # a returning member is one customer in Stripe, not two.
     customer_id = reusable_stripe_customer_id(member)
@@ -496,8 +517,7 @@ def create_checkout_session_for_member(member):
         {"customer": customer_id} if customer_id else {"customer_email": member.email_private}
     )
 
-    checkout_session = stripe.checkout.Session.create(
-        idempotency_key=idempotency_key,
+    checkout_params = dict(
         # Identifiers only. The profile itself is deliberately NOT sent: Stripe
         # caps a metadata value at 500 characters, and a perfectly ordinary
         # profile -- a double-barrelled surname, a title, two long university
@@ -527,6 +547,10 @@ def create_checkout_session_for_member(member):
             phase=cycle["thank_you_phase"],
         ),
         cancel_url=build_public_url("public.cancel"),
+    )
+    checkout_session = stripe.checkout.Session.create(
+        idempotency_key=checkout_idempotency_key(member, cycle, checkout_params),
+        **checkout_params,
     )
     member.pending_checkout_started_at = get_now_utc()
     member.stripe_checkout_session_id = checkout_session.get("id")
@@ -715,8 +739,24 @@ def sync_member_subscription_state_from_subscription(member, subscription):
                 changed = True
 
     coverage_is_current = bool(member.membership_ends_on and member.membership_ends_on >= get_membership_today())
+    # Nothing in the subscription's lifecycle proves a payment, so every branch
+    # below that would make somebody a member needs this as well. The dates
+    # above are no help: they come from the signup's metadata, written before
+    # anything was paid.
+    evidence = has_payment_evidence(member)
 
-    if subscription_status == "canceled":
+    if not evidence and (
+        subscription_status == "canceled"
+        or cancel_at_period_end
+        or (subscription_status in {"active", "trialing"} and activation_mode != "free_period")
+    ):
+        # A SEPA debit still being collected (the subscription is already
+        # "trialing"), or a subscription cancelled because its first payment
+        # never arrived. Neither is a membership. The payment webhooks settle
+        # it: invoice.paid records the period, a failure records the failure.
+        desired_status = None
+        desired_active = False
+    elif subscription_status == "canceled":
         desired_status = "canceled"
         desired_active = coverage_is_current
     elif cancel_at_period_end:
@@ -767,6 +807,60 @@ def sync_member_subscription_state_from_subscription(member, subscription):
         changed = True
 
     return changed
+
+
+def record_paid_invoices_missing_from_ledger(member, subscription):
+    """Record paid years the ledger missed. Returns how many periods were added.
+
+    The safety net above advances the cached dates when an invoice.paid
+    webhook never arrived -- but access is decided by the ledger, and nothing
+    wrote the year into it. The member then showed paid through December and
+    lost access three weeks into January, when the renewal grace ran out; and
+    the nightly run, seeing a date far in the future, never looked at them
+    again.
+
+    So when the cached end runs past what the ledger covers, ask Stripe for
+    the subscription's paid invoices and record each one exactly as
+    invoice.paid would have: keyed on the invoice, so nothing is granted twice,
+    and a year revoked for a lost chargeback is not granted again. Only a paid
+    invoice counts -- the subscription being active is not evidence, and
+    neither is an unpaid invoice.
+
+    Asks Stripe nothing when the ledger already agrees, which is almost always:
+    the account page runs this on every visit.
+    """
+    if member is None or not subscription or getattr(member, "deleted_at", None) is not None:
+        return 0
+    cached_end = member.membership_ends_on
+    ledger_end = coverage_end(member)
+    if cached_end is None or (ledger_end is not None and ledger_end >= cached_end):
+        return 0
+    subscription_id = subscription.get("id")
+    if not subscription_id:
+        return 0
+
+    listing = stripe.Invoice.list(subscription=subscription_id, status="paid", limit=10)
+    recorded = 0
+    for invoice in (listing.get("data") or []):
+        if (invoice.get("amount_paid") or 0) <= 0:
+            # The EUR 0 invoice that opens an October free period. Not a payment.
+            continue
+        paid_at = (invoice.get("status_transitions") or {}).get("paid_at") or invoice.get("created")
+        year = invoice_coverage_year(invoice) or (to_membership_date(paid_at).year if paid_at else None)
+        if year is None:
+            continue
+        period = grant_calendar_year(
+            member, year, MembershipPeriod.REASON_PAID,
+            stripe_invoice_id=invoice.get("id"),
+            stripe_subscription_id=subscription_id,
+        )
+        if period.id is None:
+            recorded += 1
+            current_app.logger.warning(
+                "Recorded paid invoice %s for member_id=%s (year %s): its invoice.paid webhook never did.",
+                invoice.get("id"), member.id, year,
+            )
+    return recorded
 
 
 def cancel_member_subscription(member, *, reason=None):
