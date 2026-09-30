@@ -24,6 +24,7 @@ from ..security_utils import build_public_url
 from .billing import (
     apply_runtime_stripe_config,
     get_latest_stripe_subscription_for_member,
+    record_paid_invoices_missing_from_ledger,
     sync_member_subscription_state_from_subscription,
 )
 from ..forum_service import ForumProviderError
@@ -156,6 +157,8 @@ def refresh_member_billing_state(member, force_stripe_sync=False, sync_forum=Fal
     if has_stripe_reference and force_stripe_sync:
         stripe_subscription = get_latest_stripe_subscription_for_member(member)
         if stripe_subscription and sync_member_subscription_state_from_subscription(member, stripe_subscription):
+            changed = True
+        if stripe_subscription and record_paid_invoices_missing_from_ledger(member, stripe_subscription):
             changed = True
         # The lookup may have cleared a dead subscription/customer reference.
         if bool(member.stripe_customer_id or member.stripe_subscription_id) != has_stripe_reference:

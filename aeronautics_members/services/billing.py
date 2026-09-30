@@ -48,7 +48,7 @@ from .membership import (
     set_member_membership_window,
     sync_member_active_state,
 )
-from .periods import active_periods, grant_period
+from .periods import active_periods, coverage_end, grant_calendar_year, grant_period
 from .settings import get_stripe_settings_map
 from .stripe_scope import scope_of_subscription
 
@@ -784,6 +784,60 @@ def sync_member_subscription_state_from_subscription(member, subscription):
         changed = True
 
     return changed
+
+
+def record_paid_invoices_missing_from_ledger(member, subscription):
+    """Record paid years the ledger missed. Returns how many periods were added.
+
+    The safety net above advances the cached dates when an invoice.paid
+    webhook never arrived -- but access is decided by the ledger, and nothing
+    wrote the year into it. The member then showed paid through December and
+    lost access three weeks into January, when the renewal grace ran out; and
+    the nightly run, seeing a date far in the future, never looked at them
+    again.
+
+    So when the cached end runs past what the ledger covers, ask Stripe for
+    the subscription's paid invoices and record each one exactly as
+    invoice.paid would have: keyed on the invoice, so nothing is granted twice,
+    and a year revoked for a lost chargeback is not granted again. Only a paid
+    invoice counts -- the subscription being active is not evidence, and
+    neither is an unpaid invoice.
+
+    Asks Stripe nothing when the ledger already agrees, which is almost always:
+    the account page runs this on every visit.
+    """
+    if member is None or not subscription or getattr(member, "deleted_at", None) is not None:
+        return 0
+    cached_end = member.membership_ends_on
+    ledger_end = coverage_end(member)
+    if cached_end is None or (ledger_end is not None and ledger_end >= cached_end):
+        return 0
+    subscription_id = subscription.get("id")
+    if not subscription_id:
+        return 0
+
+    listing = stripe.Invoice.list(subscription=subscription_id, status="paid", limit=10)
+    recorded = 0
+    for invoice in (listing.get("data") or []):
+        if (invoice.get("amount_paid") or 0) <= 0:
+            # The EUR 0 invoice that opens an October free period. Not a payment.
+            continue
+        paid_at = (invoice.get("status_transitions") or {}).get("paid_at") or invoice.get("created")
+        year = invoice_coverage_year(invoice) or (to_membership_date(paid_at).year if paid_at else None)
+        if year is None:
+            continue
+        period = grant_calendar_year(
+            member, year, MembershipPeriod.REASON_PAID,
+            stripe_invoice_id=invoice.get("id"),
+            stripe_subscription_id=subscription_id,
+        )
+        if period.id is None:
+            recorded += 1
+            current_app.logger.warning(
+                "Recorded paid invoice %s for member_id=%s (year %s): its invoice.paid webhook never did.",
+                invoice.get("id"), member.id, year,
+            )
+    return recorded
 
 
 def cancel_member_subscription(member, *, reason=None):

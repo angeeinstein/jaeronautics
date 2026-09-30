@@ -55,6 +55,7 @@ try:
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        MembershipPeriod,
         NotificationBatch,
         NotificationEvent,
         ProcessedStripeEvent,
@@ -116,6 +117,7 @@ except ImportError:
         MailAccount,
         Member,
         MemberProfileChangeRequest,
+        MembershipPeriod,
         NotificationBatch,
         NotificationEvent,
         ProcessedStripeEvent,
@@ -4304,6 +4306,21 @@ def create_app(config_overrides=None):
                     Member.membership_ends_on.is_(None),
                     Member.renewal_due_on.is_(None),
                     Member.membership_ends_on <= cutoff,
+                    # The cached dates run past what the ledger covers: a paid
+                    # year whose invoice.paid never arrived, or one still being
+                    # collected. Without this, a renewal repaired only in the
+                    # cache has a date far in the future and is never looked
+                    # at again.
+                    and_(
+                        Member.membership_ends_on >= today,
+                        ~db.select(MembershipPeriod.id)
+                        .where(
+                            MembershipPeriod.member_id == Member.id,
+                            MembershipPeriod.revoked_at.is_(None),
+                            MembershipPeriod.ends_on >= Member.membership_ends_on,
+                        )
+                        .exists(),
+                    ),
                 )
             )
 
