@@ -274,7 +274,7 @@ def forum_imported_avatar_public_file(token):
             ImportedForumProfile.avatar_public_token == token
         )
     ).scalar_one_or_none()
-    if profile is None or not profile.avatar_path:
+    if profile is None or not profile.avatar_path or profile.user.deleted_at is not None:
         abort(404)
 
     path = Path(profile.avatar_path)

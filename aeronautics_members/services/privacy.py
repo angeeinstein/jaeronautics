@@ -48,6 +48,7 @@ from ..db_models import (
     AuditLog,
     EmailDeliveryJob,
     ExternalWorkItem,
+    ForumAccount,
     MembershipPeriod,
     NotificationEvent,
     User,
@@ -422,6 +423,7 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
 
     # 2. The forum is a separate system and may be down. Erasure must not depend
     #    on it, so a failure is queued for retry rather than aborting.
+    _link_published_archive_to_forum(user)
     if user.forum_account is not None:
         anonymised, deferred = anonymise_forum_account(user)
         summary["forum_anonymised"] = anonymised
@@ -432,6 +434,10 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
         summary["periods_retained"] = len(member.membership_periods)
         summary["avatar_files_deleted"] = _erase_member_rows(member)
         _erase_member_profile(member, now)
+
+    # Somebody from the old forum -- still archived, or a returning student
+    # who reclaimed the account -- also has what that board knew about them.
+    summary["avatar_files_deleted"] += _erase_imported_profile(user)
 
     # Runs whether or not there is a membership profile: an account with none
     # still has password resets and verification emails addressed to it.
@@ -460,6 +466,54 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
     )
 
     return summary
+
+
+def _link_published_archive_to_forum(user):
+    """Give a published old-forum profile the forum link erasure works through.
+
+    An archived person is published to the forum under their account's id, but
+    nobody ever signs in as them, so no forum account row is made -- and
+    without one, erasure would leave their name and face on the forum. The
+    row is what the anonymisation, and its retry when the forum is down, go by.
+    """
+    profile = user.imported_forum_profile
+    if profile is None or profile.forum_synced_at is None or user.forum_account is not None:
+        return
+    db.session.add(ForumAccount(user=user, external_id=str(user.id)))
+
+
+def _erase_imported_profile(user):
+    """Blank what the old forum knew about this person. Returns files deleted.
+
+    The row stays, holding only the old forum's own key: a later run of the
+    import finds it by that key and knows the person was erased, rather than
+    creating them all over again from the export.
+    """
+    profile = user.imported_forum_profile
+    if profile is None:
+        return 0
+
+    files_deleted = 0
+    if profile.avatar_path and os.path.exists(profile.avatar_path):
+        try:
+            os.remove(profile.avatar_path)
+            files_deleted = 1
+        except OSError:
+            pass  # as for uploaded avatars: the row is cleared regardless
+    # Clearing the token is what closes the public address the forum fetched
+    # the image from.
+    profile.avatar_path = None
+    profile.avatar_public_token = None
+    profile.source_email = None
+    profile.source_username = ERASED_TEXT
+    profile.display_name = ERASED_TEXT
+    profile.year_group = None
+    profile.source_group = None
+    profile.source_group_reason = None
+    profile.post_count = None
+    profile.joined_on = None
+    profile.last_posted_on = None
+    return files_deleted
 
 
 def _erase_member_profile(member, now):

@@ -518,6 +518,16 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
             )
         ).scalar_one_or_none()
 
+        if profile is not None and profile.user is not None and profile.user.deleted_at is not None:
+            # Erased at their request. The export still holds them, and
+            # updating the row from it would bring back everything the
+            # erasure removed.
+            report["skipped"] += 1
+            record["action"] = "skip"
+            record["note"] = "erased; not imported again"
+            record["can_reclaim"] = "no"
+            continue
+
         year_group = (entry.get("year_group") or "").strip() or None
         if year_group is None:
             year_group = derive_year_group(source_username)

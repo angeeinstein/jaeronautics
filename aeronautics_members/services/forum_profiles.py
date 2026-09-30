@@ -25,7 +25,7 @@ import secrets
 
 from flask import current_app
 
-from ..db_models import ImportedForumProfile, db
+from ..db_models import ImportedForumProfile, User, db
 from ..forum_service import (  # noqa: F401 -- re-exported for the import commands
     AVATAR_OVERRIDE_SETTINGS,
     YEAR_GROUP_FIELD_NAME,
@@ -109,7 +109,14 @@ def build_profile_payload(profile, avatar_url=None, year_group_field=None):
 
 
 def profiles_to_publish(only_unsynced=False):
-    query = db.select(ImportedForumProfile).order_by(ImportedForumProfile.id)
+    # An erased person is not published again: their profile is blank by then,
+    # and their forum account has been anonymised.
+    query = (
+        db.select(ImportedForumProfile)
+        .join(User, User.id == ImportedForumProfile.user_id)
+        .where(User.deleted_at.is_(None))
+        .order_by(ImportedForumProfile.id)
+    )
     if only_unsynced:
         query = query.where(ImportedForumProfile.forum_synced_at.is_(None))
     return db.session.execute(query).scalars().all()
