@@ -139,10 +139,12 @@ from ..forms import (
     TestEmailForm,
 )
 from ..forum_service import (
+    FORUM_AVATAR_STATUS_PENDING,
     FORUM_SETTING_KEYS,
     FORUM_STATE_ACTIVE,
     ForumProviderError,
 )
+from ..services.locking import lock_administration, locked
 from ..mail_utils import (
     load_mail_accounts_config,
     probe_mail_account_connection,
@@ -530,15 +532,19 @@ def admin_resync_forum_account(user_id):
 @login_required
 @requires(Permission.FORUM_MODERATE)
 def approve_forum_avatar_submission(submission_id):
+    # Locked: another admin deciding the same picture waits here, then finds
+    # it decided (services/locking.py).
     submission = db.session.execute(
-        db.select(ForumAvatarSubmission)
-        .options(
-            selectinload(ForumAvatarSubmission.user),
-            selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+        locked(
+            db.select(ForumAvatarSubmission)
+            .options(
+                selectinload(ForumAvatarSubmission.user),
+                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+            )
+            .where(ForumAvatarSubmission.id == submission_id)
         )
-        .where(ForumAvatarSubmission.id == submission_id)
     ).scalar_one_or_none()
-    if submission is None:
+    if submission is None or submission.status != FORUM_AVATAR_STATUS_PENDING:
         flash(_("That profile picture is no longer waiting for review."), "warning")
         return redirect(url_for("admin.admin_reviews"))
 
@@ -598,15 +604,19 @@ def approve_forum_avatar_submission(submission_id):
 @login_required
 @requires(Permission.FORUM_MODERATE)
 def reject_forum_avatar_submission(submission_id):
+    # Locked: another admin deciding the same picture waits here, then finds
+    # it decided (services/locking.py).
     submission = db.session.execute(
-        db.select(ForumAvatarSubmission)
-        .options(
-            selectinload(ForumAvatarSubmission.user),
-            selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+        locked(
+            db.select(ForumAvatarSubmission)
+            .options(
+                selectinload(ForumAvatarSubmission.user),
+                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+            )
+            .where(ForumAvatarSubmission.id == submission_id)
         )
-        .where(ForumAvatarSubmission.id == submission_id)
     ).scalar_one_or_none()
-    if submission is None:
+    if submission is None or submission.status != FORUM_AVATAR_STATUS_PENDING:
         flash(_("That profile picture is no longer waiting for review."), "warning")
         return redirect(url_for("admin.admin_reviews"))
 
@@ -687,7 +697,8 @@ def update_account_disabled(user_id):
     the same kind of decision as granting a role and wants the same people
     making it.
     """
-    user = db.session.get(User, user_id)
+    lock_administration()
+    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
     if user is None:
         flash(_("The selected account could not be found."), "warning")
         return redirect(url_for("admin.admin_accounts"))
@@ -761,7 +772,8 @@ def update_account_roles(user_id):
     update -- and a per-role endpoint has to re-derive that each time. It also
     means a role added to permissions.py is assignable with no new route.
     """
-    user = db.session.get(User, user_id)
+    lock_administration()
+    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
     if user is None:
         flash(_("The selected account could not be found."), "warning")
         return redirect(url_for("admin.admin_accounts"))
@@ -1068,7 +1080,9 @@ def admin_logs():
 @login_required
 @requires(Permission.APPROVALS_REVIEW)
 def approve_profile_change_request(request_id):
-    request_record = db.session.get(MemberProfileChangeRequest, request_id)
+    request_record = db.session.execute(
+        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
+    ).scalar_one_or_none()
     if request_record is None or request_record.status != "pending":
         flash(_("That change request is no longer waiting for review."), "warning")
         return redirect(url_for("admin.admin_reviews"))
@@ -1158,7 +1172,9 @@ def approve_profile_change_request(request_id):
 @login_required
 @requires(Permission.APPROVALS_REVIEW)
 def reject_profile_change_request(request_id):
-    request_record = db.session.get(MemberProfileChangeRequest, request_id)
+    request_record = db.session.execute(
+        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
+    ).scalar_one_or_none()
     if request_record is None or request_record.status != "pending":
         flash(_("That change request is no longer waiting for review."), "warning")
         return redirect(url_for("admin.admin_reviews"))
@@ -1697,10 +1713,13 @@ def admin_delete_account(user_id):
     states the consequences instead, and the subscription is cancelled here so
     the association stops charging someone it no longer has a record of.
     """
+    lock_administration()
     user = db.session.execute(
-        db.select(User)
-        .options(selectinload(User.member), selectinload(User.roles), selectinload(User.forum_account))
-        .filter_by(id=user_id)
+        locked(
+            db.select(User)
+            .options(selectinload(User.member), selectinload(User.roles), selectinload(User.forum_account))
+            .filter_by(id=user_id)
+        )
     ).scalar_one_or_none()
     if user is None:
         flash(_("The selected account could not be found."), "warning")

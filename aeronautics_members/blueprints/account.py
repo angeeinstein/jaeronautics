@@ -96,8 +96,10 @@ from flask_login import (
 from ..db_models import (
     Member,
     MemberProfileChangeRequest,
+    User,
     db,
 )
+from ..services.locking import lock_administration, locked
 from ..forms import (
     CreateMembershipProfileForm,
     IdentityChangeRequestForm,
@@ -379,7 +381,10 @@ def submit_identity_change_request():
 @login_required
 def cancel_identity_change_request(request_id):
     member = get_current_member_for_user(current_user)
-    request_record = db.session.get(MemberProfileChangeRequest, request_id)
+    # Locked, as an admin's decision on it is: whichever comes second finds it settled.
+    request_record = db.session.execute(
+        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
+    ).scalar_one_or_none()
     if request_record is None or member is None or request_record.member_id != member.id or request_record.status != "pending":
         flash(_("The selected change request could not be canceled."), "warning")
         return redirect(url_for("account.account"))
@@ -660,6 +665,11 @@ def confirm_account_deletion(token):
         flash(_("This deletion link does not belong to the account you are signed in to."), "warning")
         return redirect(url_for("account.account"))
 
+    if request.method == "POST":
+        # Read afresh under the lock: an admin may be erasing this account, or
+        # taking away the other admin, in the same moment.
+        lock_administration()
+        db.session.execute(locked(db.select(User).filter_by(id=current_user.id))).scalar_one()
     impact = describe_deletion_impact(current_user, actor_user=current_user)
 
     if request.method == "GET":
