@@ -79,3 +79,60 @@ def test_corrupt_upload_gets_a_useful_message():
     with pytest.raises(ForumProviderError) as excinfo:
         forum_service._load_image_for_processing(b"this is not an image")
     assert "valid" in str(excinfo.value).lower()
+
+
+def _image_bytes(fmt, **save_options):
+    buffer = BytesIO()
+    Image.new("RGB", (8, 8), (200, 30, 30)).save(buffer, format=fmt, **save_options)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("fmt", ["JPEG", "PNG", "WEBP"])
+def test_the_formats_a_phone_uploads_still_work(fmt):
+    data, content_type, _extension = forum_service.normalize_avatar_image(
+        _image_bytes(fmt), allowed_extensions=["jpg", "png", "webp"], max_output_bytes=512 * 1024,
+    )
+    assert data and content_type.startswith("image/")
+
+
+@pytest.mark.parametrize("fmt", ["GIF", "BMP", "TIFF", "PPM"])
+def test_other_formats_are_refused_before_any_decoder_runs(fmt):
+    """Pillow would otherwise try each of its decoders in turn -- PSD and FITS
+    included, where its memory-safety bugs have been found. Only the three
+    formats the upload form asks for are ever handed to one."""
+    with pytest.raises(ForumProviderError) as excinfo:
+        forum_service.normalize_avatar_image(
+            _image_bytes(fmt), allowed_extensions=["png"], max_output_bytes=512 * 1024,
+        )
+    assert "valid" in str(excinfo.value).lower()
+
+
+def test_a_psd_is_refused(monkeypatch):
+    """The format of the published advisory. A minimal header is enough to
+    show it is turned away at the door: without the allowlist Pillow opens it."""
+    psd = (b"8BPS" + (1).to_bytes(2, "big") + b"\0" * 6 + (3).to_bytes(2, "big")
+           + (1).to_bytes(4, "big") + (1).to_bytes(4, "big") + (8).to_bytes(2, "big")
+           + (3).to_bytes(2, "big") + b"\0" * 64)
+    opened = []
+    real_open = Image.open
+
+    def spying_open(fp, mode="r", formats=None):
+        opened.append(formats)
+        return real_open(fp, mode, formats)
+
+    monkeypatch.setattr(forum_service.Image, "open", spying_open)
+    with pytest.raises(ForumProviderError):
+        forum_service._load_image_for_processing(psd)
+    assert opened == [["JPEG", "PNG", "WEBP"]]
+
+
+def test_the_old_forum_import_may_still_read_gifs():
+    """Old forum avatars were often GIFs, and those files come from the export
+    an administrator supplies, not from an upload."""
+    from aeronautics_members.services.forum_import import IMPORTED_AVATAR_FORMATS
+
+    data, _content_type, _extension = forum_service.normalize_avatar_image(
+        _image_bytes("GIF"), allowed_extensions=["png"], max_output_bytes=512 * 1024,
+        input_formats=IMPORTED_AVATAR_FORMATS,
+    )
+    assert data

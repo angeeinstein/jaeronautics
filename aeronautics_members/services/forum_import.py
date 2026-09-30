@@ -30,7 +30,7 @@ from pathlib import Path
 from flask import current_app
 
 from ..db_models import ImportedForumProfile, User, db
-from ..forum_service import get_forum_storage_dir, normalize_avatar_image
+from ..forum_service import UPLOAD_IMAGE_FORMATS, get_forum_storage_dir, normalize_avatar_image
 from . import ValidationError
 from .clock import get_now_utc
 from .outbox import enqueue_forum_discard_replaced, enqueue_forum_sync
@@ -56,6 +56,7 @@ PROGRAMME_NAMES = frozenset({"LAV", "MAV", "ATM"})
 
 AVATAR_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
 AVATAR_MAX_BYTES = 512 * 1024
+IMPORTED_AVATAR_FORMATS = UPLOAD_IMAGE_FORMATS + ("GIF",)
 
 
 def imported_email_for(source_system, source_user_id):
@@ -141,6 +142,9 @@ def _store_avatar(user_id, avatar_dir, avatar_file, *, dry_run=False):
             source.read_bytes(),
             allowed_extensions=AVATAR_EXTENSIONS,
             max_output_bytes=AVATAR_MAX_BYTES,
+            # The old forum took GIFs; these files come from the export an
+            # administrator supplies, not from a stranger's upload.
+            input_formats=IMPORTED_AVATAR_FORMATS,
         )
     except Exception as exc:  # noqa: BLE001 -- one bad image must not stop 600 people
         return None, f"avatar could not be read ({avatar_file}): {exc}"

@@ -364,7 +364,15 @@ if Image is not None:
     Image.MAX_IMAGE_PIXELS = MAX_AVATAR_PIXELS
 
 
-def _load_image_for_processing(raw_bytes):
+# The formats an upload may be decoded as. Pillow otherwise tries every decoder
+# it has -- PSD, FITS, and dozens more nobody uploads a profile photo in -- and
+# those rarely used decoders are where its memory-safety bugs keep turning up.
+# The file never gets as far as one of them now: Image.open refuses anything
+# whose header is not in this list before decoding a single pixel.
+UPLOAD_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP")
+
+
+def _load_image_for_processing(raw_bytes, formats=UPLOAD_IMAGE_FORMATS):
     if Image is None or ImageOps is None:
         raise ForumProviderError("Avatar processing is unavailable because Pillow is not installed on the server yet.")
 
@@ -372,7 +380,7 @@ def _load_image_for_processing(raw_bytes):
         "The uploaded image is too large to process safely. Please choose a smaller image."
     )
     try:
-        with Image.open(BytesIO(raw_bytes)) as image:
+        with Image.open(BytesIO(raw_bytes), formats=list(formats)) as image:
             # Image.open only parses the header, so the dimensions are known
             # before any pixel data is decoded. Checking here is the difference
             # between rejecting a bomb and being flattened by one: the previous
@@ -480,8 +488,9 @@ def _resize_image(image, scale_factor):
     return image.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
 
 
-def normalize_avatar_image(raw_bytes, allowed_extensions, max_output_bytes, crop_options=None):
-    image = _load_image_for_processing(raw_bytes)
+def normalize_avatar_image(raw_bytes, allowed_extensions, max_output_bytes, crop_options=None,
+                           input_formats=UPLOAD_IMAGE_FORMATS):
+    image = _load_image_for_processing(raw_bytes, formats=input_formats)
     image = _apply_avatar_crop(image, crop_options)
 
     width, height = image.size
