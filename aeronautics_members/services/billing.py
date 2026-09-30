@@ -42,6 +42,7 @@ from .membership import (
     PAYMENT_EVIDENCE_STATUSES,
     build_membership_cycle,
     format_membership_date_display,
+    has_payment_evidence,
     invoice_coverage_year,
     member_has_active_access,
     set_member_membership_window,
@@ -715,8 +716,24 @@ def sync_member_subscription_state_from_subscription(member, subscription):
                 changed = True
 
     coverage_is_current = bool(member.membership_ends_on and member.membership_ends_on >= get_membership_today())
+    # Nothing in the subscription's lifecycle proves a payment, so every branch
+    # below that would make somebody a member needs this as well. The dates
+    # above are no help: they come from the signup's metadata, written before
+    # anything was paid.
+    evidence = has_payment_evidence(member)
 
-    if subscription_status == "canceled":
+    if not evidence and (
+        subscription_status == "canceled"
+        or cancel_at_period_end
+        or (subscription_status in {"active", "trialing"} and activation_mode != "free_period")
+    ):
+        # A SEPA debit still being collected (the subscription is already
+        # "trialing"), or a subscription cancelled because its first payment
+        # never arrived. Neither is a membership. The payment webhooks settle
+        # it: invoice.paid records the period, a failure records the failure.
+        desired_status = None
+        desired_active = False
+    elif subscription_status == "canceled":
         desired_status = "canceled"
         desired_active = coverage_is_current
     elif cancel_at_period_end:

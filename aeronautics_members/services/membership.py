@@ -122,6 +122,23 @@ def build_membership_cycle(join_date, annual_amount_cents):
     }
 
 
+def has_payment_evidence(member):
+    """Whether anything real stands behind this member's membership.
+
+    A recorded period that was not revoked -- written only by a paid invoice, a
+    paid Checkout, a free October period or an administrator -- or a status
+    only those events set. What a subscription merely *looks* like is not
+    evidence: a SEPA debit still being collected leaves the subscription
+    "trialing" exactly as a paid one does, and a subscription cancelled for
+    never being paid is "canceled" exactly like one cancelled after a paid year.
+    """
+    if member is None:
+        return False
+    if any(period.revoked_at is None for period in (member.membership_periods or [])):
+        return True
+    return member.payment_status in PAYMENT_EVIDENCE_STATUSES
+
+
 def member_has_active_access(member, on_date=None):
     """Whether the member may use member-only features right now.
 

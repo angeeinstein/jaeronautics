@@ -482,8 +482,12 @@ def process_stripe_event(event):
         if member:
             backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
             member.payment_status = "failed"
-            if not member_has_active_access(member):
-                member.is_active = False
+            # Decided afresh rather than kept: a first payment that failed must
+            # not carry forward an is_active nothing ever paid for. A member
+            # with a paid year still running keeps it -- the ledger says so.
+            member.is_active = False
+            if member_has_active_access(member):
+                member.is_active = True
             enqueue_forum_sync(member, reason="Payment failed.")
             db.session.commit()
             current_app.logger.warning("Payment failed for Stripe Customer ID: %s", customer_id)

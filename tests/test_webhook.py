@@ -820,3 +820,43 @@ class TestExternalWorkIsQueued:
         db.session.commit()
         assert outbox.process_pending() == (1, 0)
         assert ran == [item.id]
+
+
+class TestAFailedFirstPayment:
+    """Found by the pre-deployment audit: a failed first payment left a stale
+    is_active in place, and with nothing in the ledger that was enough for
+    access -- the failure handler only switched it off when access had
+    already gone."""
+
+    def test_it_takes_away_what_was_never_paid_for(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="bounced@example.com", stripe_customer_id="cus_f",
+                             stripe_subscription_id="sub_f", payment_status="processing",
+                             is_active=True, membership_ends_on=YEAR_END)
+        event = {
+            "id": "evt_first_bounce", "type": "invoice.payment_failed",
+            "data": {"object": {"id": "in_f", "customer": "cus_f", "subscription": "sub_f"}},
+        }
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "failed"
+        assert refreshed.is_active is False
+        assert membership.member_has_active_access(refreshed) is False
+
+    def test_a_paid_year_still_running_is_kept(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="paidyear@example.com", stripe_customer_id="cus_g",
+                             stripe_subscription_id="sub_g", payment_status="paid",
+                             is_active=True, membership_ends_on=YEAR_END)
+        periods.grant_calendar_year(member, TODAY.year, "paid", stripe_invoice_id="in_g0")
+        db.session.commit()
+        event = {
+            "id": "evt_later_bounce", "type": "invoice.payment_failed",
+            "data": {"object": {"id": "in_g1", "customer": "cus_g", "subscription": "sub_g"}},
+        }
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.is_active is True
+        assert membership.member_has_active_access(refreshed) is True
