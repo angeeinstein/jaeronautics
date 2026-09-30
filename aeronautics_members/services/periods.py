@@ -143,15 +143,41 @@ def revoke_period(period, reason):
     return True
 
 
+def revoke_periods_for_payment(member, invoice_id, subscription_id, reason):
+    """Revoke the coverage one disputed payment bought.
+
+    A chargeback that was lost took back one payment, so the year that payment
+    paid for goes -- and only that one: a member disputing last year's charge
+    keeps the year they paid for again since. When the payment cannot be
+    matched to a recorded invoice, fall back to everything paid under the
+    subscription, which errs on the side of the money Stripe took back.
+    """
+    if invoice_id:
+        paid_by_it = [
+            period
+            for period in active_periods(member, on_date=None, include_future=True)
+            if period.reason == MembershipPeriod.REASON_PAID and period.stripe_invoice_id == invoice_id
+        ]
+        if paid_by_it:
+            return sum(1 for period in paid_by_it if revoke_period(period, reason))
+    return revoke_periods_for_subscription(member, subscription_id, reason)
+
+
 def revoke_periods_for_subscription(member, subscription_id, reason):
     """Revoke coverage granted on the strength of one subscription.
 
     Used when a charge is disputed and lost: the money came back, so the coverage
-    it bought is no longer supported.
+    it bought is no longer supported. A paid period recorded without its
+    subscription counts as this one's: newer Stripe API versions moved the
+    reference on an invoice, and periods granted from those carry none.
     """
     revoked = 0
     for period in active_periods(member, on_date=None, include_future=True):
-        if subscription_id and period.stripe_subscription_id != subscription_id:
+        if (
+            subscription_id
+            and period.stripe_subscription_id
+            and period.stripe_subscription_id != subscription_id
+        ):
             continue
         if period.reason != MembershipPeriod.REASON_PAID:
             continue

@@ -40,7 +40,8 @@ from ..services.outbox import enqueue_forum_sync
 from ..services.periods import (
     grant_calendar_year,
     grant_period,
-    revoke_periods_for_subscription,
+    has_coverage,
+    revoke_periods_for_payment,
 )
 from ..services.membership import (
     invoice_coverage_year,
@@ -55,7 +56,13 @@ from ..services.notifications import (
 from ..services.settings import (
     get_stripe_settings_map,
 )
-from ..services.stripe_scope import NO_INVOICE, scope_of_event
+from ..services.stripe_scope import (
+    NO_INVOICE,
+    invoice_id_of_charge,
+    invoice_id_of_payment_intent,
+    invoice_subscription_id,
+    scope_of_event,
+)
 from ..services.webhook_inbox import (
     claim_stripe_event,
     complete_stripe_event,
@@ -338,7 +345,8 @@ def process_stripe_event(event):
     elif event_type in ["payment_intent.succeeded", "invoice.paid", "invoice.payment_succeeded"]:
         data_object = event["data"]["object"]
         customer_id = data_object.get("customer")
-        subscription_id = data_object.get("subscription")
+        # Newer API versions moved an invoice's subscription under parent.
+        subscription_id = invoice_subscription_id(data_object)
         customer_email = data_object.get("customer_email") or data_object.get("receipt_email")
         member = get_member_by_stripe_or_email(
             customer_id=customer_id,
@@ -462,7 +470,8 @@ def process_stripe_event(event):
     elif event_type in ["payment_intent.payment_failed", "invoice.payment_failed"]:
         data_object = event["data"]["object"]
         customer_id = data_object.get("customer")
-        subscription_id = data_object.get("subscription")
+        # Newer API versions moved an invoice's subscription under parent.
+        subscription_id = invoice_subscription_id(data_object)
         customer_email = data_object.get("customer_email") or data_object.get("receipt_email")
         member = get_member_by_stripe_or_email(
             customer_id=customer_id,
@@ -532,6 +541,12 @@ def process_stripe_event(event):
             try:
                 apply_runtime_stripe_config()
                 charge = stripe.Charge.retrieve(charge_id)
+                # Which invoice the money paid, so the year it bought is the one
+                # revoked. Older API versions name it on the charge; newer ones
+                # only through the invoice's payment record.
+                disputed_invoice_id = invoice_id_of_charge(charge) or invoice_id_of_payment_intent(
+                    dispute.get("payment_intent") or charge.get("payment_intent")
+                )
             except Exception as exc:
                 # Swallowing this and reporting success would drop the event for
                 # good: the member stays active on a charge we lost. Fail so the
@@ -543,18 +558,25 @@ def process_stripe_event(event):
             if customer_id:
                 member = Member.query.filter_by(stripe_customer_id=customer_id).first()
                 if member:
-                    member.is_active = False
-                    member.payment_status = "dispute_lost"
                     # The payment was reversed, so revoke the coverage it bought
                     # rather than leaving an unsupported grant on the record.
-                    revoke_periods_for_subscription(
-                        member, member.stripe_subscription_id,
+                    revoke_periods_for_payment(
+                        member, disputed_invoice_id, member.stripe_subscription_id,
                         reason=f"Chargeback lost for charge {charge_id}.",
                     )
+                    # A dispute over an earlier year's payment leaves the year
+                    # paid for since; only when nothing covers today any more
+                    # does the membership end here.
+                    still_covered = has_coverage(member)
+                    if not still_covered:
+                        member.is_active = False
+                        member.payment_status = "dispute_lost"
                     db.session.commit()
                     current_app.logger.error(
-                        "DISPUTE LOST for Stripe Customer ID: %s. Member has been deactivated.",
-                        customer_id,
+                        "DISPUTE LOST for Stripe Customer ID: %s (invoice %s). %s",
+                        customer_id, disputed_invoice_id or "unknown",
+                        "Another paid period still covers today." if still_covered
+                        else "Member has been deactivated.",
                     )
                     # Revoke forum access to match the local state change. Queued
                     # so a forum outage cannot leave the revocation undone.
