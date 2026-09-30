@@ -1668,6 +1668,13 @@ def create_app(config_overrides=None):
             member_category_label=category_label,
         )
 
+    @app.template_global("test_free_period_start")
+    def test_free_period_start_global():
+        from .services.membership import free_period_start_test_override
+
+        override = free_period_start_test_override()
+        return f"{override[1]:02d}.{override[0]:02d}." if override else None
+
     @app.template_global("background_jobs_paused")
     def background_jobs_paused_global():
         from .services.background_jobs import is_paused
