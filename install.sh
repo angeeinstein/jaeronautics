@@ -2106,11 +2106,13 @@ EOF
 [Unit]
 Description=Joanneum Aeronautics notification delivery timer
 
+# Every two minutes: review emails wait a minute to collect what arrives
+# together, and this is what sends them. A run with nothing due does nothing.
 [Timer]
-OnBootSec=5m
-OnActiveSec=5m
-OnUnitActiveSec=15m
-AccuracySec=1m
+OnBootSec=2min
+OnActiveSec=2min
+OnUnitActiveSec=2min
+AccuracySec=30s
 Persistent=true
 Unit=${SERVICE_NAME}-notifications.service
 

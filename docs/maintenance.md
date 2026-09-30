@@ -1228,17 +1228,41 @@ behind a login and there are no addresses for a scraper to harvest:
 Afterwards a page's HTML should contain no `__cf_email__` and no
 `/cdn-cgi/scripts/.../email-decode.min.js`.
 
+## How Often Admins Are Emailed
+
+Admin emails are throttled per kind of event (its `event_type`: "forum sync
+failed", "profile picture uploaded", …), not per channel and not per message —
+the message names the member, so a hundred members hitting one problem would
+otherwise be a hundred "new" errors.
+
+- The **first and second** of a kind go out at once; the second is what shows
+  it is coming back.
+- After that they are collected into summaries: **errors** after 1 hour, then
+  4 hours, then daily; **review items** every 30 minutes. Each summary lists
+  everything collected, with counts.
+- A kind that has been quiet for 24 hours starts afresh.
+- **Review items wait one minute** before any email, so photos uploaded
+  together arrive as one email. Errors do not wait.
+- However many kinds fire at once, at most **10 admin emails an hour**; what
+  does not fit goes into the next.
+- A photo or change request undecided for **more than a day** brings a daily
+  reminder.
+
+Emails to members are never throttled. The values are in
+`aeronautics_members/notification_service.py`; the admin settings page shows
+which kinds are currently held back and until when.
+
 ## When Queued Emails Stop Moving
 
 A failed welcome email is retried after 15 minutes and again after 24 hours,
 then marked `exhausted` and reported as a problem. The retries are driven by the
-`jaeronautics-notifications.timer`, which fires every 15 minutes.
+`jaeronautics-notifications.timer`, which fires every 2 minutes.
 
 The health panel used to show only how many emails were queued, and to warn
 only above twenty. That cannot distinguish three emails backing off normally
 from three emails nobody is delivering — which is the failure that actually
 happens, because it looks like nothing at all. It now also counts emails whose
-`next_attempt_at` passed more than an hour ago (four missed runs) and reports
+`next_attempt_at` passed more than an hour ago (many missed runs) and reports
 that as a problem naming the timer:
 
 ```bash
