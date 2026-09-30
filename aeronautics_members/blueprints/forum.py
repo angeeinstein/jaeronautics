@@ -22,6 +22,7 @@ from ..services.forum import (
 from ..services.identity import (
     TOKEN_MAX_AGE_FORUM_ENTRY,
     TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN,
+    email_verification_claims_match,
     mark_email_verified_from_token,
     read_token,
     send_email_verification_email,
@@ -121,6 +122,13 @@ def forum_entry():
                     age_seconds = int(get_now_utc().timestamp()) - issued_at
                     auto_login_allowed = 0 <= age_seconds <= TOKEN_MAX_AGE_FORUM_ENTRY_AUTO_LOGIN
             except (TypeError, ValueError):
+                auto_login_allowed = False
+
+            # Signing somebody in on a link alone is only fair while the link
+            # still speaks for the account: sent to the address it holds now,
+            # with the current nonce. After an email change, a link lying in
+            # the old mailbox must not open the account any more.
+            if auto_login_allowed and not email_verification_claims_match(token_data, token_user):
                 auto_login_allowed = False
 
             if auto_login_allowed:

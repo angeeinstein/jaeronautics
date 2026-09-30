@@ -198,8 +198,11 @@ def sync_member_primary_email(member, new_email):
     if member.user is not None and member.user.email != new_email:
         member.user.email = new_email
         member.user.email_verified_at = None
-        # Invalidate any verification/forum link issued for the previous address.
+        # Invalidate any verification/forum link issued for the previous address,
+        # and any password-reset link sent there: whoever still reads the old
+        # mailbox must not be able to take the account back through it.
         rotate_email_verification_nonce(member.user)
+        member.user.password_reset_nonce = None
 
     if email_changed and member.stripe_customer_id:
         try:
