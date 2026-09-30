@@ -175,7 +175,7 @@ class TestWhileASepaDebitClears:
 
         body = client.get("/account", follow_redirects=True).get_data(as_text=True)
 
-        assert "usually takes a few business days" in body
+        assert "SEPA takes a few days" in body
         assert "starts as soon as your payment has cleared" in body
         assert "not active" not in body
 
@@ -288,7 +288,7 @@ class TestThePhotoUpload:
     def test_says_what_photo_is_wanted(self, app, client, forum, monkeypatch):
         body = self._page(client, forum, monkeypatch)
 
-        assert "real photo of yourself" in body
+        assert "A real photo of you" in body
         assert "optimized down to the avatar limit" not in body
 
     def test_a_rejection_gives_its_reason_as_a_reason(self, app, client, forum, monkeypatch):

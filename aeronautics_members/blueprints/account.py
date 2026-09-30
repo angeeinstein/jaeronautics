@@ -417,7 +417,7 @@ def manage_member_billing():
         flash(str(exc), "warning")
     except stripe.StripeError as exc:
         current_app.logger.error("Could not create Stripe portal session for member_id=%s: %s", member.id, exc)
-        flash(_("Could not open the Stripe customer portal right now. Please try again later."), "danger")
+        flash(_("Billing page unavailable. Please try again later."), "danger")
     return redirect(url_for("account.account"))
 
 
@@ -438,7 +438,7 @@ def resume_member_payment():
         return redirect(session.url, code=303)
     except stripe.StripeError as exc:
         current_app.logger.error("Could not resume Checkout for member_id=%s: %s", member.id, exc)
-        flash(_("Could not restart the Stripe Checkout session right now. Please try again later."), "danger")
+        flash(_("Payment page unavailable. Please try again later."), "danger")
     except Exception:
         current_app.logger.exception("Unexpected error while resuming payment for member_id=%s", member.id)
         flash(_("Could not restart the membership payment right now."), "danger")
@@ -523,7 +523,7 @@ def resend_verification_email():
             remember_sent("verify-email", current_user.email)
             flash(_("We sent you a new confirmation email. Not in your inbox? Please check your spam folder."), "success")
         else:
-            flash(_("We could not send a verification email because no sender account is configured yet."), "warning")
+            flash(_("Email isn't set up yet. Please contact us."), "warning")
     except Exception as exc:
         current_app.logger.warning("Could not resend verification email for user_id=%s: %s", current_user.id, exc)
         flash(_("We could not send a verification email right now."), "danger")
@@ -562,7 +562,7 @@ def resend_work_email_verification():
                 "success",
             )
         else:
-            flash(_("We could not send a confirmation email because no sender account is configured yet."), "warning")
+            flash(_("Email isn't set up yet. Please contact us."), "warning")
     except Exception as exc:  # noqa: BLE001 -- the reason belongs in the log, not the page
         db.session.rollback()
         current_app.logger.warning(
@@ -618,8 +618,7 @@ def request_account_deletion():
 
     if not sent:
         flash(
-            _("We could not send the confirmation email because no sender account is "
-              "configured yet. Please contact the board instead."),
+            _("Email isn't set up yet. Please contact us."),
             "warning",
         )
         return redirect(url_for("account.account"))

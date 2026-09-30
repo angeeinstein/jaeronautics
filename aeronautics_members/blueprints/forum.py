@@ -149,7 +149,7 @@ def forum_entry():
 
     member = get_current_member_for_user(current_user)
     if member is None:
-        flash(_("A linked membership profile is required before you can access the forum."), "warning")
+        flash(_("You need a membership for the forum."), "warning")
         return redirect(url_for("account.create_membership_profile"))
 
     forum_result, service = sync_member_forum_state(member)
@@ -291,11 +291,11 @@ def forum_discourse_connect():
 
     member = get_current_member_for_user(current_user)
     if member is None:
-        flash(_("A linked membership profile is required before you can access the forum."), "warning")
+        flash(_("You need a membership for the forum."), "warning")
         return redirect(url_for("account.create_membership_profile"))
 
     if not member_has_active_access(member):
-        flash(_("Your membership is not active, so forum access is unavailable right now."), "warning")
+        flash(_("Forum access needs an active membership."), "warning")
         return redirect(url_for("forum.forum_entry"))
 
     # DiscourseConnect asserts this address to the forum, which associates forum

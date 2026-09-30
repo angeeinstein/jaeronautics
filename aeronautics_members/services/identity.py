@@ -281,8 +281,7 @@ def send_work_email_verification_email(app, member):
               "It shows that you study or work here."),
             _("If you were on the old forum with this address, confirming it also "
               "gives you your old forum account and your posts back."),
-            _("You keep signing in with your private address, and that is where we "
-              "write to you."),
+            _("We'll keep writing to your private address."),
         ],
         note=_("The link is valid for 7 days."),
         failure_event_type="work_verification_email_failed",

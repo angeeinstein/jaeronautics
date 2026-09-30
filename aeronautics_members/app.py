@@ -1442,7 +1442,7 @@ def build_forum_context(member):
 
     if member is None or member.user is None:
         status_key = "no_membership"
-        status_message = _("A linked membership profile is required before forum access can be prepared.")
+        status_message = _("You need a membership for the forum.")
     elif not service.is_enabled():
         status_key = "disabled"
         status_message = _("The forum integration is not enabled yet.")
@@ -1461,7 +1461,7 @@ def build_forum_context(member):
         status_message = _("Your forum access starts as soon as your payment has cleared.")
     elif not member_has_active_access(member):
         status_key = "inactive_membership"
-        status_message = _("Your forum access is currently unavailable because your membership is not active.")
+        status_message = _("Forum access needs an active membership.")
     elif approved_submission is not None:
         status_key = "active"
         status_message = _("Your forum access is ready.")

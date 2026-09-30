@@ -128,7 +128,7 @@ def resolve_member_category(form):
 
 YEAR_GROUP_VALIDATOR = Regexp(
     r"^[A-Z]+[0-9]{2}$",
-    message=_l("Invalid format. Please use letters followed by two numbers, like LAV25."),
+    message=_l("Letters and two digits, e.g. LAV25."),
 )
 
 
@@ -226,9 +226,7 @@ class PrivateEmailRequirement:
             return  # DataRequired has already said what to do about empty
         if is_institutional_email(field.data):
             raise ValidationError(
-                _("This looks like a university or company address. Please use a "
-                  "private one here: it is your login, and it has to keep working "
-                  "after you leave. The university address goes in the field below.")
+                _("This looks like a university address. Please use a private one – it must keep working after you leave.")
             )
 
 
