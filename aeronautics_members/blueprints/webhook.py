@@ -60,6 +60,7 @@ from ..services.webhook_inbox import (
     claim_stripe_event,
     complete_stripe_event,
     release_stripe_event,
+    stripe_event_already_processed,
 )
 from ..services.workflows import (
     send_member_welcome_email,
@@ -100,8 +101,20 @@ def stripe_webhook():
     # Claim the event up front so two concurrent duplicate deliveries cannot
     # both proceed; the loser gets a duplicate-key rejection and is skipped.
     if not claim_stripe_event(event_id, event_type):
-        current_app.logger.info("Ignoring duplicate Stripe webhook event %s (%s).", event_id, event_type)
-        return "Already processed", 200
+        if stripe_event_already_processed(event_id):
+            current_app.logger.info("Ignoring duplicate Stripe webhook event %s (%s).", event_id, event_type)
+            return "Already processed", 200
+        # Claimed but not finished: another delivery is working on it, or one
+        # died holding the claim. A 2xx here would tell Stripe to stop
+        # retrying, and if that other delivery never finishes, nothing ever
+        # applies the event. Ask for a retry instead; by then it has either
+        # completed (and gets the 200 above) or its lease has run out and the
+        # retry takes it over.
+        current_app.logger.warning(
+            "Stripe webhook event %s (%s) is still being processed; asking Stripe to retry.",
+            event_id, event_type,
+        )
+        return "Event is still being processed; retry later", 409
 
     try:
         body, status = process_stripe_event(event)

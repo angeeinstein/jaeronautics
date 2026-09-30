@@ -95,3 +95,39 @@ def test_long_error_is_truncated(app):
     webhook_inbox.claim_stripe_event("evt_7", "invoice.paid")
     webhook_inbox.release_stripe_event("evt_7", error="x" * 5000)
     assert len(_row("evt_7").last_error) == 2000
+
+
+def test_an_expired_claim_is_taken_over_only_once(app):
+    """Two retries arriving together after the lease ran out: only one may run it."""
+    webhook_inbox.claim_stripe_event("evt_8", "invoice.paid")
+    row = _row("evt_8")
+    row.claimed_at = clock.get_now_utc() - webhook_inbox.STRIPE_EVENT_LEASE - timedelta(minutes=1)
+    db.session.commit()
+
+    # The second retry read the same stale row, but the first got there first.
+    stale_attempts = row.attempts
+    assert webhook_inbox.claim_stripe_event("evt_8", "invoice.paid") is True
+    db.session.execute(
+        db.update(ProcessedStripeEvent).where(ProcessedStripeEvent.event_id == "evt_8")
+        .values(claimed_at=clock.get_now_utc() - webhook_inbox.STRIPE_EVENT_LEASE - timedelta(minutes=2),
+                attempts=stale_attempts)
+    )
+    db.session.commit()
+    real_execute = db.session.execute
+    first = {"done": False}
+
+    def racing_execute(statement, *args, **kwargs):
+        # Just before the second retry's takeover lands, the first one's does.
+        if not first["done"] and getattr(statement, "is_update", False):
+            first["done"] = True
+            real_execute(
+                db.update(ProcessedStripeEvent).where(ProcessedStripeEvent.event_id == "evt_8")
+                .values(attempts=stale_attempts + 1, claimed_at=clock.get_now_utc())
+            )
+        return real_execute(statement, *args, **kwargs)
+
+    db.session.execute = racing_execute
+    try:
+        assert webhook_inbox.claim_stripe_event("evt_8", "invoice.paid") is False
+    finally:
+        db.session.execute = real_execute

@@ -224,6 +224,40 @@ class TestIdempotency:
         assert refreshed.is_active is True
         assert stub_side_effects == [member.id]
 
+    def test_a_retry_while_the_event_is_unfinished_asks_stripe_to_come_back(
+            self, client, monkeypatch, stub_side_effects):
+        """Found by the pre-deployment audit: a worker dies holding the claim,
+        and Stripe's retry arrives inside the lease. Answering 200 "Already
+        processed" told Stripe to stop retrying, and the event was never
+        applied. It has to ask for another try instead."""
+        member = make_member(email="inflight@example.com")
+        event = checkout_event(member, member.user, activation_mode="free_period",
+                               event_id="evt_inflight")
+        assert webhook_inbox.claim_stripe_event("evt_inflight", "checkout.session.completed") is True
+        row = db.session.execute(
+            db.select(ProcessedStripeEvent).filter_by(event_id="evt_inflight")
+        ).scalar_one()
+        row.claimed_at = clock.get_now_utc() - timedelta(minutes=1)
+        db.session.commit()
+
+        early = post_event(client, monkeypatch, event)
+
+        assert early.status_code == 409, "not a 2xx: Stripe must retry"
+        assert stub_side_effects == []
+
+        # The later retry, once the dead worker's lease has run out, applies it.
+        row = db.session.execute(
+            db.select(ProcessedStripeEvent).filter_by(event_id="evt_inflight")
+        ).scalar_one()
+        row.claimed_at = clock.get_now_utc() - webhook_inbox.STRIPE_EVENT_LEASE - timedelta(minutes=1)
+        db.session.commit()
+
+        later = post_event(client, monkeypatch, event)
+
+        assert later.status_code == 200
+        assert db.session.get(Member, member.id).is_active is True
+        assert stub_side_effects == [member.id]
+
     def test_failed_event_is_not_recorded(self, client, monkeypatch, stub_side_effects):
         # A checkout that cannot be matched to a member returns 400 and must NOT
         # be marked processed, so Stripe's retry can still be handled later.
