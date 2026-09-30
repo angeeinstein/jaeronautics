@@ -1227,3 +1227,25 @@ class TestWhatAReconnectedMemberIsAskedToDo:
         member.user.disabled_at = datetime.now(timezone.utc)
 
         assert self._forum_state(member) == FORUM_STATE_INACTIVE
+
+
+class TestTheOldCohortStays:
+    """Somebody who studied as LAV21 and comes back for the master's as MAV24
+    belongs to both years. The old cohort group is never taken away: the
+    sync only ever adds a cohort, and removes none."""
+
+    def test_a_new_year_group_adds_a_cohort_and_removes_none(self, app):
+        from aeronautics_members.forum_service import DiscourseConnectProvider
+
+        member = make_member(email="master@example.com", year_group="MAV24")
+        provider = DiscourseConnectProvider(settings={
+            "forum_member_group": "members", "forum_onboarding_group": "onboarding",
+            "forum_inactive_group": "inactive", "forum_staff_group": "",
+        })
+
+        fields = provider._build_group_fields("active", user=member.user, member=member)
+
+        assert "mav24" in fields["add_groups"].split(",")
+        removed = fields.get("remove_groups", "").split(",")
+        assert "lav21" not in removed
+        assert not any(group[:3].isalpha() and group[3:].isdigit() for group in removed)

@@ -113,6 +113,7 @@ from flask_login import (
     login_required,
 )
 from sqlalchemy import (
+    func,
     or_,
 )
 from sqlalchemy.exc import (
@@ -145,6 +146,7 @@ from ..forum_service import (
     FORUM_STATE_ACTIVE,
     ForumProviderError,
 )
+from ..services.forum_import import claim_archived_account
 from ..services.locking import lock_administration, locked
 from ..mail_utils import (
     load_mail_accounts_config,
@@ -327,6 +329,7 @@ def admin_account_detail(user_id):
         forum_context=build_forum_context(user.member),
         latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
         recent_logs=recent_logs,
+        **_reconnect_context(user),
         # The role editor. Every assignable role, whether this account holds it,
         # and what refusing would say -- worked out server-side so the form and
         # the guard cannot disagree about what is possible.
@@ -527,6 +530,95 @@ def admin_resync_forum_account(user_id):
     else:
         flash(_("Forum state synchronized successfully."), "success")
     return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
+
+
+RECONNECT_RESULT_LIMIT = 15
+
+
+def _reconnect_context(user):
+    """The old-forum search on an account page, for reconnecting by hand.
+
+    Only for an account that is not an old-forum account already, and only
+    for admins who decide identity changes.
+    """
+    can_reconnect = (
+        user.imported_forum_profile is None
+        and user.deleted_at is None
+        and current_user.can(Permission.APPROVALS_REVIEW)
+    )
+    query = (request.args.get("reconnect_q") or "").strip()
+    results = []
+    if can_reconnect and len(query) >= 2:
+        like = f"%{query.lower()}%"
+        results = db.session.execute(
+            db.select(ImportedForumProfile)
+            .join(User, User.id == ImportedForumProfile.user_id)
+            .where(
+                ImportedForumProfile.claimed_at.is_(None),
+                User.deleted_at.is_(None),
+                or_(
+                    func.lower(ImportedForumProfile.source_username).like(like),
+                    func.lower(ImportedForumProfile.display_name).like(like),
+                    func.lower(ImportedForumProfile.source_email).like(like),
+                ),
+            )
+            .order_by(ImportedForumProfile.source_username)
+            .limit(RECONNECT_RESULT_LIMIT)
+        ).scalars().all()
+    return {"can_reconnect": can_reconnect, "reconnect_query": query, "reconnect_results": results}
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/reconnect", methods=["POST"])
+@login_required
+@requires(Permission.APPROVALS_REVIEW)
+def admin_reconnect_old_forum_account(user_id):
+    """Reconnect a member to their old forum account by hand.
+
+    The ordinary way is confirming the university address the old forum had.
+    That fails when the address changed with a married name, no longer works,
+    or the old forum never had one -- and the student ends up with an empty
+    new forum account beside their old one. An admin who recognises them
+    picks the old account here instead; the reconnection itself is the same.
+    """
+    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
+    profile = db.session.execute(
+        locked(db.select(ImportedForumProfile).filter_by(id=request.form.get("profile_id", type=int)))
+    ).scalar_one_or_none()
+    if user is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+    back = url_for("admin.admin_account_detail", user_id=user_id)
+    if user.imported_forum_profile is not None:
+        flash(_("This account is an old forum account already."), "warning")
+        return redirect(back)
+    if profile is None or profile.claimed_at is not None:
+        flash(_("That old forum account is taken already."), "warning")
+        return redirect(back)
+
+    old_username = profile.source_username
+    claimed = claim_archived_account(user, profile=profile)
+    if claimed is None:
+        db.session.rollback()
+        flash(_("Could not reconnect this account. See the log for why."), "danger")
+        return redirect(back)
+
+    archived = claimed.user
+    log_audit_event(
+        category="forum",
+        event_type="forum_account_reconnected_by_admin",
+        actor_user=current_user,
+        target_user=archived,
+        target_member=archived.member,
+        metadata={
+            "old_forum_username": old_username,
+            "source_user_id": claimed.source_user_id,
+            "retired_user_id": user_id,
+        },
+    )
+    db.session.commit()
+    flash(_("Reconnected to %(username)s.", username=old_username), "success")
+    # The account now lives on the old forum's row; the one it came from is gone.
+    return redirect(url_for("admin.admin_account_detail", user_id=archived.id))
 
 
 @admin_bp.route("/admin/accounts/<int:user_id>/picture-replacement", methods=["POST"])

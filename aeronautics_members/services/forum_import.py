@@ -294,12 +294,17 @@ def _user_foreign_key_columns():
                 yield table, foreign_key.parent
 
 
-def claim_archived_account(user):
+def claim_archived_account(user, profile=None):
     """Give a returning student their old forum identity back. Returns the profile.
 
     Called once the address is verified, because the verification is the proof:
     the archived account named this address, and only somebody who can read it
     could have got here.
+
+    Or with ``profile`` named by an administrator, for whom the address cannot
+    be the proof: it changed with a married name, it no longer works, or the
+    old forum never had one. The administrator recognising the person is the
+    proof then, and everything after finding the profile is the same.
 
     The membership moves onto the *archived* row rather than the archive moving
     onto the new one. Discourse knows people by ``external_id = str(user.id)``,
@@ -314,7 +319,10 @@ def claim_archived_account(user):
     if user.imported_forum_profile is not None:
         return None  # already an archived account
 
-    profile = find_claimable_profile_for_user(user)
+    if profile is None:
+        profile = find_claimable_profile_for_user(user)
+    elif profile.claimed_at is not None:
+        return None  # somebody has it already
     if profile is None:
         return None
 
