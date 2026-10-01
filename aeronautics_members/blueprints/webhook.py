@@ -317,6 +317,13 @@ def process_stripe_event(event):
                     note="Prorated membership paid during Checkout.",
                 )
                 member.pending_checkout_started_at = None
+            elif has_coverage(member):
+                # Stripe does not order its events. For SEPA the invoice can be
+                # paid -- and recorded by invoice.paid -- before this event,
+                # which still says "unpaid", arrives. The money is in; putting
+                # the member back to "processing" showed a paid, active member
+                # as still waiting.
+                member.pending_checkout_started_at = None
             else:
                 set_member_membership_window(
                     member,
