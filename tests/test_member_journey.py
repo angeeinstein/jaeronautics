@@ -573,3 +573,36 @@ def test_the_tab_icon_is_the_square_mark(app, client):
         assert f"/static/{name}" in body
         assert (static / name).is_file()
     assert "logo_joanneum_aeronautics_negativ.svg\" type=\"image/svg+xml\"" not in body
+
+
+class TestTheConfirmationReminder:
+    """It said "Both email addresses need confirming" to members who had given
+    only one -- every alumnus, partner and lecturer without a university address."""
+
+    def _page(self, client):
+        return client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+    def test_one_address_is_called_one(self, app, client, forum):
+        _paid_member(client, verified=False)
+
+        body = self._page(client)
+
+        assert "Both email addresses" not in body
+        assert "Please confirm your email address." in body
+
+    def test_two_waiting_addresses_are_called_both(self, app, client, forum):
+        member = _paid_member(client, verified=False)
+        member.email_work = "journey@edu.fh-joanneum.at"
+        db.session.commit()
+
+        assert "Both email addresses need confirming." in self._page(client)
+
+    def test_only_the_university_address_waiting(self, app, client, forum):
+        member = _paid_member(client, verified=True)
+        member.email_work = "journey@edu.fh-joanneum.at"
+        db.session.commit()
+
+        body = self._page(client)
+
+        assert "Please confirm your university email address." in body
+        assert "Both email addresses" not in body

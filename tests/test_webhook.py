@@ -860,3 +860,106 @@ class TestAFailedFirstPayment:
         refreshed = db.session.get(Member, member.id)
         assert refreshed.is_active is True
         assert membership.member_has_active_access(refreshed) is True
+
+
+class TestALostDisputeEndsTheSubscription:
+    """Found while testing with Stripe's dispute card: after a lost chargeback
+    the access went, but the subscription went on, and Stripe would charge the
+    same card -- reported as not authorised -- again on 1 January."""
+
+    def _lose(self, client, monkeypatch, cancel):
+        member = make_member(email="charged-back@example.com", stripe_customer_id="cus_cb",
+                             stripe_subscription_id="sub_cb", payment_status="paid",
+                             is_active=True, membership_ends_on=YEAR_END)
+        periods.grant_calendar_year(member, TODAY.year, "paid", stripe_invoice_id="in_cb",
+                                    stripe_subscription_id="sub_cb")
+        db.session.commit()
+        monkeypatch.setattr(webhook_module, "cancel_member_subscription", cancel)
+        monkeypatch.setattr(webhook_module.stripe.Charge, "retrieve",
+                            staticmethod(lambda *a, **k: {"customer": "cus_cb", "payment_intent": "pi_cb"}))
+        monkeypatch.setattr(
+            webhook_module.stripe.InvoicePayment, "list",
+            staticmethod(lambda **_: {"data": [{"invoice": {
+                "id": "in_cb", "parent": {"subscription_details": {"metadata": {"purpose": "membership"}}},
+            }}]}),
+        )
+        event = {"id": "evt_cb", "type": "charge.dispute.closed",
+                 "data": {"object": {"status": "lost", "charge": "ch_cb", "payment_intent": "pi_cb"}}}
+        return member, post_event(client, monkeypatch, event)
+
+    def test_the_subscription_is_cancelled(self, client, monkeypatch, stub_side_effects):
+        cancelled = []
+
+        def cancel(member, reason=None):
+            cancelled.append((member.stripe_subscription_id, reason))
+            member.stripe_subscription_id = None
+            return True
+
+        member, response = self._lose(client, monkeypatch, cancel)
+
+        assert response.status_code == 200
+        assert cancelled == [("sub_cb", "dispute_lost")]
+        assert db.session.get(Member, member.id).payment_status == "dispute_lost"
+
+    def test_if_stripe_cannot_cancel_an_admin_is_told_and_the_event_is_still_done(
+            self, client, monkeypatch, stub_side_effects):
+        def cancel(member, reason=None):
+            raise RuntimeError("stripe unreachable")
+
+        member, response = self._lose(client, monkeypatch, cancel)
+
+        assert response.status_code == 200, "the revocation is done; no retry of the whole event"
+        assert db.session.get(Member, member.id).payment_status == "dispute_lost"
+        from aeronautics_members.db_models import NotificationEvent
+        assert db.session.query(NotificationEvent).filter_by(
+            event_type="dispute_subscription_not_cancelled").count() == 1
+
+    def test_stripe_reporting_the_cancellation_keeps_it_dispute_lost(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="still-lost@example.com", stripe_customer_id="cus_sl",
+                             stripe_subscription_id="sub_sl", payment_status="dispute_lost", is_active=False)
+        event = {"id": "evt_sl", "type": "customer.subscription.deleted",
+                 "data": {"object": {"id": "sub_sl", "customer": "cus_sl", "status": "canceled",
+                                     "metadata": {"purpose": "membership"},
+                                     "cancellation_details": {"reason": "cancellation_requested"}}}}
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "dispute_lost"
+        assert refreshed.is_active is False
+
+
+class TestSepaEventsOutOfOrder:
+    """Found with Stripe's SEPA dispute IBAN: invoice.paid arrived before
+    checkout.session.completed, which for SEPA still says "unpaid" -- and the
+    member, paid and active, was shown as "Payment Processing" again."""
+
+    def test_a_late_unpaid_checkout_does_not_undo_a_recorded_payment(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="sepa-order@example.com", stripe_customer_id="cus_test_1",
+                             stripe_subscription_id="sub_test_1", payment_status="pending_checkout")
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        paid = {
+            "id": "evt_order_paid", "type": "invoice.paid",
+            "data": {"object": {"id": "in_order", "customer": "cus_test_1", "subscription": "sub_test_1",
+                                "status_transitions": {"paid_at": now_ts}, "created": now_ts}},
+        }
+        assert post_event(client, monkeypatch, paid).status_code == 200
+
+        late = checkout_event(member, member.user, activation_mode="paid_now", payment_status="unpaid",
+                              event_id="evt_order_checkout")
+        assert post_event(client, monkeypatch, late).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "paid"
+        assert membership.member_has_active_access(refreshed) is True
+
+    def test_in_the_usual_order_it_is_processing_until_paid(self, client, monkeypatch, stub_side_effects):
+        member = make_member(email="sepa-usual@example.com")
+
+        event = checkout_event(member, member.user, activation_mode="paid_now", payment_status="unpaid",
+                               event_id="evt_usual_checkout")
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.payment_status == "processing"
+        assert membership.member_has_active_access(refreshed) is False
