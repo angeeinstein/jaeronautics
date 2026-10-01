@@ -157,3 +157,15 @@ def test_a_rejected_new_picture_keeps_the_permission(app, client, tmp_path, monk
     client.post(f"/admin/reviews/pictures/{pending.id}/reject", data={"review_note": "Blurry"})
 
     assert db.session.get(Member, member.id).avatar_replacement_allowed_at is not None
+
+
+@pytest.mark.usefixtures("forum")
+def test_the_upload_hint_names_what_may_be_uploaded(app, client):
+    """It listed the formats pictures are stored in, which left AVIF out."""
+    member = _paid_member(client, verified=True)
+    member.avatar_replacement_allowed_at = datetime(2026, 10, 1)
+    db.session.commit()
+
+    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+
+    assert "JPG, PNG, WebP, AVIF" in body

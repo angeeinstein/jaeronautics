@@ -96,6 +96,7 @@ try:
         format_bytes_human,
         member_category_groups,
         normalize_forum_settings,
+        UPLOAD_IMAGE_FORMATS,
     )
     from .mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
     from .notification_service import (
@@ -158,6 +159,7 @@ except ImportError:
         format_bytes_human,
         member_category_groups,
         normalize_forum_settings,
+        UPLOAD_IMAGE_FORMATS,
     )
     from mail_utils import load_mail_accounts_config, probe_mail_account_connection, send_mail
     from notification_service import (
@@ -1520,6 +1522,11 @@ def build_forum_context(member):
         "reconnect_waiting": reconnect_waiting,
         "entry_url": url_for("forum.forum_entry"),
         "forum_error": forum_account.last_error if forum_account is not None else None,
+        # What may be uploaded -- not what pictures are stored as, which is
+        # what this line used to show, and which left AVIF out.
+        "avatar_input_formats": ", ".join(
+            {"JPEG": "JPG", "WEBP": "WebP"}.get(fmt, fmt) for fmt in UPLOAD_IMAGE_FORMATS
+        ),
         "avatar_max_bytes": avatar_max_bytes,
         "avatar_max_bytes_display": format_bytes_human(avatar_max_bytes),
         "avatar_upload_request_limit": avatar_upload_request_limit,

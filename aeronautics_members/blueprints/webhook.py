@@ -20,6 +20,7 @@ from ..services.billing import (
     apply_runtime_stripe_config,
     backfill_member_coverage_from_subscription,
     backfill_member_stripe_references,
+    cancel_member_subscription,
     get_member_by_stripe_or_email,
     is_free_period_trial_invoice,
     sync_member_subscription_state_from_subscription,
@@ -136,6 +137,40 @@ def stripe_webhook():
         # Only a handler that ran to completion may suppress redeliveries.
         complete_stripe_event(event_id)
     return body, status
+
+
+def _stop_charging_after_lost_dispute(member, charge_id):
+    """Cancel the subscription of somebody who lost a chargeback.
+
+    A lost dispute takes the year's access away, but the subscription went on:
+    on 1 January Stripe would charge the same card again -- one its holder had
+    just reported as not authorised -- and a payment that went through would
+    hand the year back. Cancelled now, so coming back is a decision to rejoin.
+
+    After the revocation is committed, and never failing the event: the
+    revocation is what matters and is done. If Stripe cannot be reached, an
+    admin is told to cancel it by hand instead of the event being processed
+    again.
+    """
+    if not member.stripe_subscription_id:
+        return
+    try:
+        cancel_member_subscription(member, reason="dispute_lost")
+        db.session.commit()
+    except Exception as exc:  # noqa: BLE001 -- reported, never retried here
+        db.session.rollback()
+        current_app.logger.error(
+            "Could not cancel the subscription of member_id=%s after a lost dispute: %s", member.id, exc
+        )
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL,
+            "dispute_subscription_not_cancelled",
+            _("A chargeback was lost, but the subscription could not be cancelled. Cancel it in Stripe."),
+            payload={"member_id": member.id, "charge_id": charge_id,
+                     "subscription_id": member.stripe_subscription_id},
+            target_member=member,
+            commit=True,
+        )
 
 
 def process_stripe_event(event):
@@ -521,7 +556,11 @@ def process_stripe_event(event):
                     customer_id,
                 )
             else:
-                member.payment_status = "canceled"
+                # A subscription cancelled because a chargeback was lost is
+                # still "dispute lost": that is what the member, and an admin
+                # looking at the account, need to read -- not a plain "canceled".
+                if member.payment_status != "dispute_lost":
+                    member.payment_status = "canceled"
                 member.is_active = member_has_active_access(member, event_date)
                 current_app.logger.info(
                     "Subscription canceled for Stripe Customer ID: %s. Coverage remains valid until the covered year ends.",
@@ -586,6 +625,7 @@ def process_stripe_event(event):
                     # so a forum outage cannot leave the revocation undone.
                     enqueue_forum_sync(member, reason="Chargeback lost.")
                     db.session.commit()
+                    _stop_charging_after_lost_dispute(member, charge_id)
                 else:
                     current_app.logger.warning(
                         "Lost dispute for Stripe customer %s, but no member holds that reference.",
