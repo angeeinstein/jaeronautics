@@ -17,6 +17,12 @@
         </div>
     </div>
 
+    {% if test_free_period_start() %}
+        <div class="alert alert-danger">
+            {{ _('Test setting active: the free period starts on %(date)s instead of 01.10. Remove TEST_FREE_PERIOD_START from .env before going live.', date=test_free_period_start()) }}
+        </div>
+    {% endif %}
+
     {% if background_jobs_paused() %}
         <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2">
             <span>{{ _('This portal was restored from a backup and its background jobs are paused: no emails, forum sync or payment checks run on their own.') }}</span>

@@ -17,6 +17,7 @@ sensibly) and new students arrive at the start of the academic year in October.
 keeps access until the coverage they bought runs out.
 """
 
+import os
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -52,6 +53,32 @@ RENEWAL_IN_FLIGHT_STATUSES = {"paid", "processing"}
 # Joining on or after this day gives the rest of the year free.
 FREE_PERIOD_START_MONTH = 10
 FREE_PERIOD_START_DAY = 1
+# For testing payments after 1 October, when every new signup is free and
+# nothing is charged: TEST_FREE_PERIOD_START=11-01 in .env makes signups
+# before that date pay the prorated fee again. Never set on the live portal;
+# the admin pages show a warning while it is, and the installer's rewrite of
+# .env on every update drops it.
+TEST_FREE_PERIOD_START_ENV = "TEST_FREE_PERIOD_START"
+
+
+def free_period_start_test_override():
+    """The "MM-DD" the free period starts on for testing, or None."""
+    raw = (os.getenv(TEST_FREE_PERIOD_START_ENV) or "").strip()
+    if not raw:
+        return None
+    try:
+        month, day = (int(part) for part in raw.split("-"))
+        date(2000, month, day)  # a real day of the year (2000 was a leap year)
+    except (TypeError, ValueError):
+        return None
+    return month, day
+
+
+def free_period_start(year):
+    """The day from which joining is free for the rest of ``year``."""
+    override = free_period_start_test_override()
+    month, day = override or (FREE_PERIOD_START_MONTH, FREE_PERIOD_START_DAY)
+    return date(year, month, day)
 
 
 def format_membership_date_display(value):
@@ -97,7 +124,7 @@ def build_membership_cycle(join_date, annual_amount_cents):
     current_year_end = last_day_of_year(current_year)
     total_days = (first_day_of_year(current_year + 1) - first_day_of_year(current_year)).days
     remaining_days = (current_year_end - join_date).days + 1
-    free_period = join_date >= date(current_year, FREE_PERIOD_START_MONTH, FREE_PERIOD_START_DAY)
+    free_period = join_date >= free_period_start(current_year)
     prorated_amount_cents = 0
     if not free_period:
         prorated_amount_cents = int(
