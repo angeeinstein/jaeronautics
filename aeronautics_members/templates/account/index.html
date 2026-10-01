@@ -82,10 +82,19 @@
                     {% endif %}
                 </div>
 
-                {% if not current_user.email_is_verified or (member and member.email_work and not member.email_work_is_verified) %}
+                {#- Only the addresses that are actually waiting: many members give no university address at all. -#}
+                {% set private_waiting = not current_user.email_is_verified %}
+                {% set work_waiting = member and member.email_work and not member.email_work_is_verified %}
+                {% if private_waiting or work_waiting %}
                     <div class="alert alert-warning mt-3 mb-0">
-                        {{ _('Both email addresses need confirming. We send a separate email to each.') }}
-                        {% if member and member.email_work and not member.email_work_is_verified %}
+                        {% if private_waiting and work_waiting %}
+                            {{ _('Both email addresses need confirming. We send a separate email to each.') }}
+                        {% elif private_waiting %}
+                            {{ _('Please confirm your email address. We sent you a link.') }}
+                        {% else %}
+                            {{ _('Please confirm your university email address. We sent a link to it.') }}
+                        {% endif %}
+                        {% if work_waiting %}
                             {{ _('This also restores your old forum account, if you had one.') }}
                         {% endif %}
                     </div>
