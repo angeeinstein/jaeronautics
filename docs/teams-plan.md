@@ -1,9 +1,17 @@
-# Teams: What Has Been Decided
+# Teams: Where the Discussion Stands
 
-A record of the discussion about the association's teams, so that nothing
-settled in conversation is lost before the work starts. **Nothing here is built
-yet.** Each point is marked as **decided**, **proposed** (suggested, not yet
-confirmed) or **open**.
+A record of the discussion about the association's teams, so that nothing said
+in conversation is lost before the work starts. **Nothing here is built yet.**
+
+**None of this is fixed.** These are notes from an early discussion with a lot
+still to think about and talk through, not a specification. Any point may change
+once the teams have been asked, once something is tried, or simply because a
+better idea comes up. Whoever picks this up — a person or an assistant — should
+treat it as a starting point to discuss again, not as a list of requirements to
+carry out because it is written down here. When in doubt, ask.
+
+Each point is marked as **agreed so far** (the current thinking in the
+discussion), **suggested** (raised but not really discussed) or **open**.
 
 Discussed October 2026, after the membership portal went live.
 
@@ -16,17 +24,17 @@ access to the office.
 
 ## Principles
 
-- **Modular** — *decided.* Teams are a feature that can be switched off, and are
+- **Modular** — *agreed so far.* Teams are a feature that can be switched off, and are
   off by default. When off there are no team pages, no buttons on the account
   page, no jobs and no team groups on the forum: the portal works exactly as it
   does without them. Teams live in their own module, pages and tables; the
   membership logic gets only a few well-defined hook points ("the membership
   ended").
-- **Configured in the portal, not in code** — *decided.* Teams are created and
+- **Configured in the portal, not in code** — *agreed so far.* Teams are created and
   set up by site admins, so different teams can work differently, and the
   software can serve another association.
-- **Called "Teams"** — *decided.* A fixed term, not configurable.
-- **Stripe keeps them apart** — *decided.* Each team has its own Stripe product,
+- **Called "Teams"** — *agreed so far.* A fixed term, not configurable.
+- **Stripe keeps them apart** — *agreed so far.* Each team has its own Stripe product,
   and its Checkout sessions and subscriptions carry `purpose: team:<name>` in
   their metadata. With teams switched off, the portal treats those as foreign
   and ignores them; `services/stripe_scope.py` already does this for anything
@@ -48,9 +56,9 @@ access to the office.
 
 ## Joining
 
-- **Requires an active association membership** — *decided.*
+- **Requires an active association membership** — *agreed so far.*
 - **Open teams:** a member clicks Join, pays, and is in.
-- **Teams by approval** — *decided.* Register, get invited to a meeting (online
+- **Teams by approval** — *agreed so far.* Register, get invited to a meeting (online
   or in person), be approved or not, and only then pay. The states:
   1. *Application received* — the member can withdraw it.
   2. *Invited* — the leads enter the meeting details, which the applicant gets
@@ -58,15 +66,15 @@ access to the office.
   3. *Approved* — an email with "Pay now".
   4. *Not accepted* — shown neutrally, with no reason.
   5. *Active*, later *Ended*.
-- **Applicants see their status on the account page** — *decided*, with the
+- **Applicants see their status on the account page** — *agreed so far*, with the
   states above.
-- **A checkbox at association signup** — *decided* in principle. For a team by
+- **A checkbox at association signup** — *agreed so far* in principle. For a team by
   approval it creates the application; for an open team, the team payment
   follows straight after the membership payment, on the thank-you page. It is a
   second Checkout, because the two fees are billed on different dates and so
   must be two subscriptions — which is also what lets someone leave a team and
   stay in the association.
-- **No manual adding by leads** — *decided.* The point of the portal is that
+- **No manual adding by leads** — *agreed so far.* The point of the portal is that
   teams no longer handle cash. Consequence: someone with neither a card nor a
   SEPA account cannot join a team through the portal.
 - **An approval that is never paid** — *open.* Should it lapse, e.g. after 14
@@ -75,10 +83,10 @@ access to the office.
 ## Payment
 
 - **Recurring** — the first team: €10 every 6 months, periods from 1 October
-  (*decided*). At signup the full fee is charged once for the current period,
+  (*agreed so far*). At signup the full fee is charged once for the current period,
   and the subscription starts with a "trial" up to the next period start, from
   where Stripe charges every 6 months. The same pattern the membership uses.
-- **No rule for late joiners** — *decided.* Whoever joins mid-period pays the
+- **No rule for late joiners** — *agreed so far.* Whoever joins mid-period pays the
   full fee for it; teams ask people to join at the start of the semester.
 - **One-time per period** — pay once for a semester or a year, without
   automatic renewal.
@@ -90,22 +98,22 @@ access to the office.
 ## When a team membership ends
 
 - **Not paid, recurring:** it ends when the payment finally fails.
-- **One-time payment, period over** — *decided.* On the last day of the period
+- **One-time payment, period over** — *agreed so far.* On the last day of the period
   the team membership becomes inactive: off the access list, out of the forum
-  group, onto the former members list. The leads are told — *proposed:* one
+  group, onto the former members list. The leads are told — *suggested:* one
   summary per team ("these 7 ended on 30 September"), not an email per person,
   since every period ends on the same day.
-- **An email to the member when it ends** — *proposed.* One short email with a
+- **An email to the member when it ends** — *suggested.* One short email with a
   renewal link, no reminder beforehand, so that nobody first finds out at a
   locked office door.
-- **Leaving on one's own** — *proposed:* at the end of the paid period, no
+- **Leaving on one's own** — *suggested:* at the end of the paid period, no
   refund.
 - **The association membership ends** — follows from the requirement: the team
   membership ends with it and the leads are told.
 - **Removal by a lead** — *open*, leaning towards **immediately**: it will only
   happen for misconduct, or for somebody who has vanished and cannot be reached.
   With a reason that goes into the audit log, and no refund.
-- **Rejoining after not paying** — *decided.* Whoever's team membership ended
+- **Rejoining after not paying** — *agreed so far.* Whoever's team membership ended
   because they did not pay may rejoin by simply paying, but only within a set
   time — about one period, not two years later. After that, or after being
   removed by a lead, it is a new application. If the leads do not want somebody
@@ -113,28 +121,28 @@ access to the office.
 
 ## Former members
 
-- **Visible to the leads** — *decided*, in their own list: name, from–to, and
+- **Visible to the leads** — *agreed so far*, in their own list: name, from–to, and
   why it ended (did not renew, left, removed, association membership ended).
 - **Contact details only while the person still has a portal account**;
   whoever erases their account disappears from the list as from everywhere
-  else — *proposed.*
+  else — *suggested.*
 - **How long they stay** — *open.* Data protection expects a limit; a few years,
   then removed automatically, is the likely answer.
 
 ## Team leads
 
-- **Appointed by site admins** — *decided.* "Lead" belongs to one team, not to
+- **Appointed by site admins** — *agreed so far.* "Lead" belongs to one team, not to
   the whole portal: a lead sees nothing outside their team. A team can have
   several leads, and a person can lead several teams. This is deliberately not
   one of the global roles in `permissions.py`, which apply portal-wide.
-- **Must be active association members** — *decided.* When their membership is
+- **Must be active association members** — *agreed so far.* When their membership is
   not active, their access to the team page pauses; the assignment stays, and
   comes back with the payment. The 21-day renewal grace applies as for anybody.
-- **Lead and team member are separate** — *proposed.* Lead is a function and
+- **Lead and team member are separate** — *suggested.* Lead is a function and
   needs only the association membership. A lead who also works in the team is a
   team member too and pays like everybody else. Exempting leads from the fee is
   a site admin's decision, never a lead's own.
-- **The last lead** — *proposed.* Never removed automatically, only paused.
+- **The last lead** — *suggested.* Never removed automatically, only paused.
   Site admins can open every team page at any time, so a team without an active
   lead is never unmanageable. When a team has no active lead, the site admins
   are notified and the team page says so. Removing the last lead by hand asks
@@ -142,7 +150,7 @@ access to the office.
 
 ### The team page
 
-Like the admin member pages, limited to the lead's own team — *decided*:
+Like the admin member pages, limited to the lead's own team — *agreed so far*:
 
 - **Members:** list, search, detail (name, contact, study programme and cohort,
   status, paid until).
@@ -154,24 +162,24 @@ Like the admin member pages, limited to the lead's own team — *decided*:
   meeting text, the access list recipients. Price, payment model and leads stay
   with the site admins.
 
-Not on it — *decided*: forum resync and other technical functions, billing
+Not on it — *agreed so far*: forum resync and other technical functions, billing
 details, and anything about the association membership itself.
 
 ## The office access list
 
-- **Content** — *decided:* name and university email. Both are in the portal
+- **Content** — *agreed so far:* name and university email. Both are in the portal
   already; no new fields.
 - **On demand:** a preview, then "send now" to the stored recipients, the leads
   in copy.
 - **Automatically:** on dates set per team, the list of current team members is
   emailed to the contact at the university.
-- **Telling the members** — *decided:* one sentence when joining: "Your name and
+- **Telling the members** — *agreed so far:* one sentence when joining: "Your name and
   university email are passed to FH JOANNEUM for access to the office." That is
   both the information they are owed and the basis for passing it on.
 
 ## Forum
 
-One group per team, optional, kept in step like `members` — *decided.* Nothing
+One group per team, optional, kept in step like `members` — *agreed so far.* Nothing
 more for now. Team categories, if wanted, are made in Discourse and granted to
 that group by hand.
 
@@ -192,12 +200,15 @@ The bylaws are being rewritten anyway. What teams need in them:
 
 - **Paying for drinks by NFC.** A terminal where members tap their university
   card and pay, e.g., €1 per drink — replacing a tally sheet, so it does not
-  need to be more secure than one. The tap logic exists from a separate project
-  and can be reused. Things to settle when it comes to it:
-  - **How it is charged.** €1 cannot be charged per tap: Stripe takes a fixed
-    fee of about €0.25 per payment, plus a minimum amount. So either a
-    prepaid balance topped up through Stripe, or a tab collected in one payment
-    per month or semester.
+  need to be more secure than one: everybody using it is an association member.
+  The logic exists from a separate project, a coffee payment system, and can be
+  reused. Things to settle when it comes to it:
+  - **How it is charged.** That system works with a **prepaid balance**, and
+    each tap is taken off it. That suits Stripe, which could not charge €1 per
+    tap anyway — a fixed fee of about €0.25 per payment, plus a minimum amount —
+    but can take a top-up of the balance.
+  - **A local action** on a tap, such as switching on a coffee machine, is
+    possible with that system but not needed at first.
   - **Linking a card to a member:** each member registers their card's ID once
     in the portal.
   - **The terminal's connection** to the portal, and what happens while it is
