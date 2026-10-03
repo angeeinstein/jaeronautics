@@ -63,7 +63,7 @@
                 <div class="col-md-6">
                     <label class="form-label" for="forum_group">{{ _('Forum group') }}</label>
                     <input class="form-control" id="forum_group" name="forum_group" maxlength="100" value="{{ value('forum_group', team.forum_group or '' if team else '') }}">
-                    <div class="form-text">{{ _('Optional. Not used yet.') }}</div>
+                    <div class="form-text">{{ _('Optional. Its active members are put in this forum group, which has to exist on the forum. Renamed later, people stay in the old one.') }}</div>
                 </div>
                 <div class="col-md-6 d-flex align-items-center">
                     {% set is_open = (form.get('applications_open') == 'on') if form else (team.applications_open if team else true) %}

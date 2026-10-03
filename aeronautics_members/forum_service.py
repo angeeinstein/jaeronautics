@@ -769,6 +769,14 @@ class DiscourseConnectProvider(ForumProvider):
             # rather than when somebody remembers.
             runs_the_place = bool(user is not None and user.can(Permission.FORUM_MODERATE))
             (add_groups if runs_the_place else remove_groups).append(staff_group)
+
+        # The groups of the teams somebody is in, and out of the rest. Nothing
+        # at all while teams are switched off.
+        from .services.teams import forum_groups_for
+
+        team_add, team_remove = forum_groups_for(user)
+        add_groups.extend(team_add)
+        remove_groups.extend(team_remove)
         if desired_state == FORUM_STATE_ACTIVE:
             if member_group:
                 add_groups.append(member_group)

@@ -275,7 +275,7 @@ name, picture and addresses from the association profile. A team membership is
 only added to that account and never asks for any of it again -- much like
 signing in everywhere with one account.
 
-Not yet: payment itself, the forum group.
+Not yet: payment itself.
 
 **The flow** — open team: join → active. Team by approval: applied → invited →
 approved → active, with rejected or withdrawn possible on the way. Without
@@ -316,9 +316,14 @@ the member pays. Every step goes into the audit log.
 
 ## Forum
 
-One group per team, optional, kept in step like `members` — *agreed so far.* Nothing
-more for now. Team categories, if wanted, are made in Discourse and granted to
-that group by hand.
+One group per team, optional, kept in step like `members` — *built.* A team
+names its group; its active members are in it and everybody else is not, sent
+with every forum sync in both directions. Becoming or stopping being a member
+-- joining, approval, leaving, removal, leaving the association, an archived
+team -- queues a sync. Nothing about team groups is sent while teams are off.
+The group has to exist on the forum. Renaming it later leaves people in the
+old one, which then has to be deleted on the forum. Team categories, if wanted,
+are made in Discourse and granted to that group by hand.
 
 ## For the overhaul of the bylaws
 

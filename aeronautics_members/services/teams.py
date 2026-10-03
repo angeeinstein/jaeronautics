@@ -257,6 +257,9 @@ def update_team(actor, team, **fields):
     after = _snapshot(team)
     if before != after:
         log_audit_event("teams", "team_updated", actor_user=actor, before=before, after=after)
+    if before["forum_group"] != after["forum_group"]:
+        _sync_forum([m.user for m in team.memberships if m.status == ACTIVE], team,
+                    f"forum group of team {team.slug} changed")
     return team
 
 
@@ -268,6 +271,8 @@ def set_team_archived(actor, team, archived):
     before = _snapshot(team)
     team.status = target
     team.archived_at = get_now_utc() if archived else None
+    _sync_forum([m.user for m in team.memberships if m.status == ACTIVE], team,
+                f"team {team.slug} {'archived' if archived else 'restored'}")
     log_audit_event(
         "teams", "team_archived" if archived else "team_restored",
         actor_user=actor, before=before, after=_snapshot(team),
@@ -506,6 +511,37 @@ def find_account(address):
 
 
 
+# --- The forum ---------------------------------------------------------------
+#
+# A team may name a forum group; its active members are in it, everybody else
+# is not. Sent with every forum sync, in both directions, like the other
+# groups -- so nobody keeps a team's group after leaving it. While teams are
+# switched off, nothing about team groups is sent at all.
+
+
+def forum_groups_for(user):
+    """(add, remove): the team groups for this person's next forum sync."""
+    if user is None or not teams_enabled():
+        return [], []
+    add, remove = [], []
+    for team in db.session.execute(db.select(Team).where(Team.forum_group.is_not(None))).scalars():
+        inside = team.status == STATUS_ACTIVE and active_team_membership(user, team) is not None
+        (add if inside else remove).append(team.forum_group)
+    add = list(dict.fromkeys(add))
+    # Two teams may share a group; being in either keeps somebody in it.
+    return add, [group for group in dict.fromkeys(remove) if group not in add]
+
+
+def _sync_forum(users, team, reason):
+    """Queue a forum sync for these people, if the team has a forum group."""
+    if not team.forum_group or not teams_enabled():
+        return
+    from .outbox import enqueue_forum_sync
+
+    for user in users:
+        enqueue_forum_sync(getattr(user, "member", None), reason=reason)
+
+
 # --- Joining and leaving ---------------------------------------------------
 #
 # Every change to one attempt is made under a lock on its row, and every new
@@ -719,6 +755,7 @@ def leave(user, team):
     membership.ended_at = get_now_utc()
     membership.end_reason = END_LEFT
     _audit("team_left", user, membership)
+    _sync_forum([user], team, f"left team {team.slug}")
     name = _member_name(user)
     _tell_leads(team, "team_member_left", f"{name} left {team.name}.", person_name=name)
     return membership
@@ -760,6 +797,7 @@ def _payment_step(membership, now):
     membership.status = ACTIVE
     membership.started_at = now
     _audit("team_payment_settled", None, membership, payment_mode=team.payment_mode)
+    _sync_forum([membership.user], team, f"joined team {team.slug}")
     return True
 
 
@@ -810,6 +848,7 @@ def remove(actor, team, membership_id, reason):
     membership.decided_by_user_id = getattr(actor, "id", None)
     _audit("team_member_removed", actor, membership)
     _tell_person("team_removed", membership)
+    _sync_forum([membership.user], team, f"removed from team {team.slug}")
     return membership
 
 
@@ -958,6 +997,7 @@ def end_lapsed_team_memberships():
         membership.end_reason = END_MEMBERSHIP_ENDED
         _audit("team_membership_lapsed", None, membership)
         if was_member:
+            _sync_forum([membership.user], membership.team, f"left team {membership.team.slug}")
             ended_by_team.setdefault(membership.team, []).append(_member_name(membership.user))
 
     for team, names in ended_by_team.items():
