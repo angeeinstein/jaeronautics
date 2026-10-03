@@ -812,7 +812,8 @@ def sync_member_subscription_state_from_stripe(member):
 #
 # Entered as a new price ID under Settings -> Billing. New members pay it at
 # once; every running membership subscription moves to it from its next
-# renewal, in the background (services/payments.py), and its member is told.
+# renewal, in the background (services/payments.py), and its member is told
+# two weeks before that renewal.
 
 
 def _membership_price_id_now(payload=None):
@@ -880,24 +881,19 @@ def change_membership_price(actor, new_price_id):
     return len(members)
 
 
-def _tell_member_about_new_fee(payload, result):
+def _tell_member_about_new_fee(payload, notice):
+    """The email, when it is due -- unless the member has left since."""
     from ..db_models import Member, db
-    from .membership import format_membership_date_display
     from .notifications import queue_user_status_notification
-    from .payments import fee_text
 
     member = db.session.get(Member, payload.get("member_id"))
     if member is None or member.deleted_at is not None or member.user is None:
         return
-    starts = to_membership_date(result["renews_at"]) if result.get("renews_at") else None
+    if member.stripe_subscription_id != payload.get("subscription_id") or member.cancel_at_period_end:
+        return  # cancelled, or on another subscription: the new fee never reaches them
     queue_user_status_notification(
         "membership_fee_changed", "The membership fee changes", member.user.email,
-        payload={
-            "first_name": member.first_name,
-            "old_fee": fee_text(result["old_price"]),
-            "new_fee": fee_text(result["new_price"]),
-            "from_date": format_membership_date_display(starts) if starts else None,
-        },
+        payload={"first_name": member.first_name, **notice},
         target_user=member.user, target_member=member,
     )
 
@@ -906,7 +902,7 @@ def _register_membership_price_moves():
     from .payments import PURPOSE_MEMBERSHIP, register_price_moves
 
     register_price_moves(PURPOSE_MEMBERSHIP, current_price=_membership_price_id_now,
-                         moved=_tell_member_about_new_fee)
+                         tell=_tell_member_about_new_fee)
 
 
 _register_membership_price_moves()

@@ -29,6 +29,7 @@ from flask_babel import get_locale
 
 from ..config import STRIPE_SECRET_KEY
 from ..db_models import ExternalWorkItem
+from .clock import get_now_utc
 from . import ExternalServiceError
 from .outbox import enqueue, register_handler
 from .settings import get_stripe_settings_map
@@ -294,8 +295,14 @@ def set_cancel_at_period_end(subscription_id, cancel):
 # people pay it at once. Running subscriptions are moved to it one by one, in
 # the background, from their next renewal: nothing is charged or refunded now,
 # the period under way stays as paid, and the next charge is the new amount.
-# Each person is told by email what changes and from when. Stripe itself does
-# not announce a price change; its own emails only confirm the charges.
+# Each person is told by email what changes and from when -- FEE_NOTICE_DAYS
+# before it does, not the day the fee was changed, which may be months ahead
+# and forgotten by then. Stripe itself does not announce a price change; its
+# own emails only confirm the charges (and, for SEPA, announce each debit).
+
+#: How many days before the new fee is first charged its email goes out. Sooner
+#: when the change is made later than that.
+FEE_NOTICE_DAYS = 14
 
 
 def interval_months(price):
@@ -320,22 +327,24 @@ def fee_text(price):
 
 
 class _PriceMoves:
-    def __init__(self, current_price, moved):
+    def __init__(self, current_price, tell):
         self.current_price = current_price
-        self.moved = moved
+        self.tell = tell
 
 
 _price_moves = {}
 
 
-def register_price_moves(purpose, *, current_price, moved):
+def register_price_moves(purpose, *, current_price, tell):
     """How a purpose takes part in moving to a new fee.
 
-    ``current_price(payload)`` names the price in force now: an item queued
-    for a price changed again since is left alone. ``moved(payload, result)``
-    tells the person, once Stripe has taken the change.
+    ``current_price(payload)`` names the price in force now: a move or an
+    email queued for a price changed again since is left alone.
+    ``tell(payload, notice)`` emails the person when the notice is due --
+    ``notice`` holds ``old_fee``, ``new_fee`` and ``from_date`` as text -- and
+    is where a purpose decides that somebody who has left since is not told.
     """
-    _price_moves[purpose] = _PriceMoves(current_price, moved)
+    _price_moves[purpose] = _PriceMoves(current_price, tell)
 
 
 def schedule_price_move(purpose, subscription_id, price_id, *, member=None, user=None, **details):
@@ -398,14 +407,61 @@ def move_to_price_at_renewal(subscription_id, price_id):
     return {"moved": True, "old_price": old_price, "new_price": new_price, "renews_at": renews_at}
 
 
+def _superseded(payload):
+    hooks = _price_moves.get(payload.get("purpose"))
+    return hooks is not None and hooks.current_price(payload) != payload.get("price_id")
+
+
 def _handle_price_move(item):
     payload = item.payload or {}
-    hooks = _price_moves.get(payload.get("purpose"))
-    if hooks is not None and hooks.current_price(payload) != payload.get("price_id"):
+    if _superseded(payload):
         return  # the fee has changed again since; a newer item carries it
     result = move_to_price_at_renewal(payload["subscription_id"], payload["price_id"])
-    if result["moved"] and hooks is not None:
-        hooks.moved(payload, result)
+    if result["moved"]:
+        schedule_fee_notice(payload, result, user=item.user, member=item.member)
+
+
+def schedule_fee_notice(payload, result, *, user=None, member=None):
+    """Queue the email about a new fee, due FEE_NOTICE_DAYS before it is charged.
+
+    One per subscription, like the move: a newer change replaces a notice
+    still waiting, so nobody is told twice.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from .clock import to_membership_date
+    from .membership import format_membership_date_display
+
+    renews_at = result.get("renews_at")
+    due = None
+    starts = None
+    if renews_at:
+        starts = to_membership_date(renews_at)
+        due = datetime.fromtimestamp(int(renews_at), timezone.utc) - timedelta(days=FEE_NOTICE_DAYS)
+    notice_payload = {
+        **payload,
+        "old_fee": fee_text(result["old_price"]),
+        "new_fee": fee_text(result["new_price"]),
+        "from_date": format_membership_date_display(starts) if starts else None,
+    }
+    item = enqueue(
+        ExternalWorkItem.KIND_FEE_CHANGE_NOTICE, member=member, user=user, payload=notice_payload,
+        dedupe_key=f"{ExternalWorkItem.KIND_FEE_CHANGE_NOTICE}:{payload['subscription_id']}",
+        reason=f"New {payload.get('purpose')} fee, the email",
+    )
+    item.payload = notice_payload
+    # After enqueue, which clears not_before on an item it reuses.
+    item.not_before = due if due is not None and due > get_now_utc() else None
+    return item
+
+
+def _handle_fee_notice(item):
+    payload = item.payload or {}
+    hooks = _price_moves.get(payload.get("purpose"))
+    if hooks is None or _superseded(payload):
+        return
+    hooks.tell(payload, {key: payload.get(key) for key in ("old_fee", "new_fee", "from_date")})
 
 
 register_handler(ExternalWorkItem.KIND_STRIPE_PRICE_MOVE, _handle_price_move)
+register_handler(ExternalWorkItem.KIND_FEE_CHANGE_NOTICE, _handle_fee_notice)

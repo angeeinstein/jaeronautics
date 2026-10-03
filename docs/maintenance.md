@@ -167,15 +167,20 @@ The same for the membership (Settings -> Billing) and for a team (its form,
    to the new price in the background -- through the external-work worker,
    one item per subscription, within minutes -- with no proration: nothing is
    charged or refunded now, the next charge is the new amount. Subscriptions
-   that are ending are left alone. Each person moved is emailed the new fee,
-   the old one, from when, and how to cancel or leave before then.
+   that are ending are left alone.
+4. Each person moved is emailed the new fee, the old one, from when, and how
+   to cancel or leave before then -- **14 days before their renewal**
+   (`FEE_NOTICE_DAYS` in `services/payments.py`), or at once when the renewal
+   is closer than that. The email waits in the same queue; whoever has
+   cancelled or left by then is not sent it, and a fee changed again before
+   it went out replaces it, so nobody is told twice.
 
 Stripe itself never announces a price change. For SEPA debits it does email
 the amount before every collection (two days ahead, under the mandate members
 accept at checkout), which covers the banking rule; the portal's own email is
-the real notice. Change a fee a few weeks before the next renewal, so people
-can decide in time -- and update the fee rules in `legal_texts.html` for the
-membership. A move that keeps failing shows under the health check's failed
+the real notice. Change a fee at least two weeks before the next renewal, so
+the email still goes out on time -- and update the fee rules in
+`legal_texts.html` for the membership. A move that keeps failing shows under the health check's failed
 external work. Archive the old price in Stripe once nobody is on it.
 
 ## Billing Shows Up in Stripe as a Trial
@@ -684,8 +689,8 @@ applying. Receipts and renewal emails come from Stripe. Payments are listed
 in the `payments` table, one per paid invoice.
 
 A new price applies to people joining at once, and running subscriptions
-move to it from their next renewal, their holders emailed; see *Changing a
-Fee*. A different interval is refused while subscriptions run. A team cannot
+move to it from their next renewal, their holders emailed two weeks before;
+see *Changing a Fee*. A different interval is refused while subscriptions run. A team cannot
 be switched back to free while subscriptions for it still run.
 
 **Every night** (with `reconcile-billing`): team memberships of people no

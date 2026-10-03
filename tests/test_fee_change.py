@@ -6,7 +6,7 @@ subscription is then moved in the background, through the outbox, with no
 proration: nothing is charged now, the next charge is the new amount, and its
 holder is emailed what changes and from when. Stripe is faked.
 """
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -21,6 +21,9 @@ from test_team_payments import _approved, _charging, fake_stripe as team_fake_st
 from test_teams_flow import _led, _login, switched_on  # noqa: F401
 
 RENEWAL = date(2027, 1, 1)
+#: When the email about a new fee for that renewal is due, and a moment after.
+#: Midnight on 1 January in Vienna is 23:00 UTC the day before.
+NOTICE_DUE = datetime(2026, 12, 17, 23, 0, tzinfo=timezone.utc)
 
 
 def _price(price_id, amount, months=12, product="prod_membership", active=True):
@@ -44,11 +47,11 @@ class FakeStripe:
         self.subscriptions = {}
         self.modified = []
 
-    def subscription(self, sub_id, price_id, status="active", **fields):
+    def subscription(self, sub_id, price_id, status="active", renews_on=RENEWAL, **fields):
         self.subscriptions[sub_id] = {
             "id": sub_id, "status": status, "cancel_at_period_end": False, "cancel_at": None,
             "items": {"data": [{"id": f"si_{sub_id}", "price": self.prices[price_id],
-                                "current_period_end": start_of_day_unix(RENEWAL)}]},
+                                "current_period_end": start_of_day_unix(renews_on)}]},
             **fields,
         }
 
@@ -98,8 +101,15 @@ def _paying_member(fake, email, sub_id, price_id="price_15", **sub_fields):
     return member
 
 
-def _run_worker():
-    return outbox.process_pending(limit=100, kinds=[ExternalWorkItem.KIND_STRIPE_PRICE_MOVE])
+def _run_worker(now=None):
+    return outbox.process_pending(
+        limit=100, now=now,
+        kinds=[ExternalWorkItem.KIND_STRIPE_PRICE_MOVE, ExternalWorkItem.KIND_FEE_CHANGE_NOTICE],
+    )
+
+
+def _when_the_notice_is_due():
+    return _run_worker(now=NOTICE_DUE + timedelta(hours=1))
 
 
 def _emails(event_type):
@@ -170,15 +180,18 @@ class TestANewMembershipFee:
         queued = db.session.query(ExternalWorkItem).filter_by(kind=ExternalWorkItem.KIND_STRIPE_PRICE_MOVE).all()
         assert sorted(item.payload["subscription_id"] for item in queued) == ["sub_a", "sub_b"]
 
-    def test_the_worker_moves_them_and_tells_each_member(self, app, stripe_fake):
+    def test_the_worker_moves_them_now_and_tells_each_member_two_weeks_ahead(self, app, stripe_fake):
         _membership_price("price_15")
         member = _paying_member(stripe_fake, "a@example.com", "sub_a")
         change_membership_price(None, "price_20")
         _membership_price("price_20")
 
         assert _run_worker() == (1, 0)
-
         assert stripe_fake.modified[0][0] == "sub_a"
+        assert not _emails("membership_fee_changed")
+        assert _run_worker(now=NOTICE_DUE - timedelta(hours=1)) == (0, 0)
+
+        assert _when_the_notice_is_due() == (1, 0)
         [email] = _emails("membership_fee_changed")
         assert email.recipient_email == member.user.email
         assert (email.payload["old_fee"], email.payload["new_fee"], email.payload["from_date"]) == (
@@ -193,9 +206,11 @@ class TestANewMembershipFee:
         _membership_price("price_25")
 
         _run_worker()
+        _when_the_notice_is_due()
 
         assert [kwargs["items"][0]["price"] for _sub, kwargs in stripe_fake.modified] == ["price_25"]
-        assert len(_emails("membership_fee_changed")) == 1
+        [email] = _emails("membership_fee_changed")
+        assert email.payload["new_fee"] == "€25.00 per year"
 
     def test_changed_back_before_the_worker_ran(self, app, stripe_fake):
         _membership_price("price_15")
@@ -204,8 +219,45 @@ class TestANewMembershipFee:
         # The setting was never saved with price_20, or was put back.
 
         _run_worker()
+        _when_the_notice_is_due()
 
         assert stripe_fake.modified == [] and not _emails("membership_fee_changed")
+
+    def test_a_renewal_closer_than_two_weeks_is_told_at_once(self, app, stripe_fake):
+        _membership_price("price_15")
+        _paying_member(stripe_fake, "a@example.com", "sub_a", renews_on=date.today() + timedelta(days=5))
+        change_membership_price(None, "price_20")
+        _membership_price("price_20")
+
+        _run_worker()
+        _run_worker()
+
+        assert len(_emails("membership_fee_changed")) == 1
+
+    def test_somebody_who_cancelled_meanwhile_is_not_told(self, app, stripe_fake):
+        _membership_price("price_15")
+        member = _paying_member(stripe_fake, "a@example.com", "sub_a")
+        change_membership_price(None, "price_20")
+        _membership_price("price_20")
+        _run_worker()
+        member.cancel_at_period_end = True
+        db.session.commit()
+
+        _when_the_notice_is_due()
+
+        assert not _emails("membership_fee_changed")
+
+    def test_a_waiting_email_is_not_a_queue_piling_up(self, app, stripe_fake):
+        from aeronautics_members.services.diagnostics import get_queue_summary
+
+        _membership_price("price_15")
+        for n in range(25):
+            _paying_member(stripe_fake, f"m{n}@example.com", f"sub_{n}")
+        change_membership_price(None, "price_20")
+        _membership_price("price_20")
+        _run_worker()
+
+        assert get_queue_summary()["external_work_pending"] == 0
 
     def test_the_same_price_moves_nobody_and_asks_nothing(self, app, stripe_fake):
         _membership_price("price_15")
@@ -285,6 +337,7 @@ class TestANewTeamFee:
         assert self._save(team, "price_team12") == 1
         db.session.commit()
         assert _run_worker() == (1, 0)
+        _when_the_notice_is_due()
 
         assert stripe_fake.modified[0][1]["items"][0]["price"] == "price_team12"
         [email] = _emails("team_fee_changed")

@@ -1190,7 +1190,7 @@ def admin_settings():
         flash(_("Settings updated successfully!"), "success")
         if moving_to_new_fee:
             flash(_("%(count)s running subscription(s) move to the new price from their next renewal, "
-                    "in the background over the next minutes. Each member is emailed.",
+                    "in the background over the next minutes. Each member is emailed two weeks before their renewal.",
                     count=moving_to_new_fee), "info")
         return redirect(settings_redirect)
 
@@ -1772,7 +1772,7 @@ def admin_resolve_undelivered_email(job_id, action):
 @login_required
 @requires(Permission.SYSTEM_UPDATE)
 def admin_retry_failed_forum_tasks():
-    """Put forum tasks that gave up retrying back in the queue.
+    """Put background tasks that gave up retrying back in the queue.
 
     They give up after about seven hours of failing -- in practice a forum that
     was down that long. Once it is back, this sends them again rather than
@@ -1788,9 +1788,9 @@ def admin_retry_failed_forum_tasks():
         )
     db.session.commit()
     flash(
-        ngettext("%(num)s forum task will be tried again within a few minutes.",
-                 "%(num)s forum tasks will be tried again within a few minutes.", count)
-        if count else _("No forum tasks are waiting to be retried."),
+        ngettext("%(num)s background task will be tried again within a few minutes.",
+                 "%(num)s background tasks will be tried again within a few minutes.", count)
+        if count else _("No background tasks are waiting to be retried."),
         "success" if count else "info",
     )
     return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")

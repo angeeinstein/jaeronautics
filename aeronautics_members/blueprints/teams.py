@@ -66,7 +66,7 @@ def _apply_payment(team, form):
 def _flash_moving(moving):
     if moving:
         flash(_("%(count)s running subscription(s) move to the new price from their next renewal, "
-                "in the background over the next minutes. Each member is emailed.", count=moving), "info")
+                "in the background over the next minutes. Each member is emailed two weeks before their renewal.", count=moving), "info")
 
 
 def _apply_logo(team, form, files):

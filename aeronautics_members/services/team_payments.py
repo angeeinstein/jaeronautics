@@ -121,7 +121,7 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
 
     A new price is a new fee: people joining pay it at once, and every running
     subscription moves to it from its next renewal, its holder told by email
-    (services/payments.py). Returns how many subscriptions will move.
+    two weeks before (services/payments.py). Returns how many will move.
     """
     payment_mode = (payment_mode or PAYMENT_NONE).strip()
     if payment_mode not in PAYMENT_MODES:
@@ -579,19 +579,14 @@ def _team_price_now(payload):
     return team.stripe_price_id if team is not None and charges(team) else None
 
 
-def _tell_about_new_fee(payload, result):
-    from .clock import to_membership_date
-
+def _tell_about_new_fee(payload, notice):
+    """The email, when it is due -- unless the person has left or is leaving."""
     membership = db.session.get(TeamMembership, payload.get("team_membership_id"))
     if membership is None or membership.status not in (APPROVED, ACTIVE):
         return
-    starts = to_membership_date(result["renews_at"]) if result.get("renews_at") else None
-    _tell_person(
-        "team_fee_changed", membership,
-        old_fee=payments.fee_text(result["old_price"]),
-        new_fee=payments.fee_text(result["new_price"]),
-        from_date=format_membership_date_display(starts) if starts else None,
-    )
+    if membership.stripe_subscription_id != payload.get("subscription_id") or membership.ends_on is not None:
+        return
+    _tell_person("team_fee_changed", membership, **notice)
 
 
-payments.register_price_moves(payments.PURPOSE_TEAM, current_price=_team_price_now, moved=_tell_about_new_fee)
+payments.register_price_moves(payments.PURPOSE_TEAM, current_price=_team_price_now, tell=_tell_about_new_fee)

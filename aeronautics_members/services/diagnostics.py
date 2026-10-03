@@ -113,11 +113,14 @@ def get_membership_summary():
 def get_queue_summary():
     """Whether background work is moving or piling up."""
     return {
+        # Due now: an item waiting for its date -- an email about a new fee,
+        # weeks before the renewal -- is not work piling up.
         "external_work_pending": _count(
             ExternalWorkItem,
             ExternalWorkItem.status.in_(
                 [ExternalWorkItem.STATUS_PENDING, ExternalWorkItem.STATUS_PROCESSING]
             ),
+            db.or_(ExternalWorkItem.not_before.is_(None), ExternalWorkItem.not_before <= get_now_utc()),
         ),
         "external_work_failed": _count(
             ExternalWorkItem, ExternalWorkItem.status == ExternalWorkItem.STATUS_FAILED
@@ -160,7 +163,7 @@ def collect_system_health():
         )
     if queues["external_work_failed"]:
         problems.append(
-            f"{queues['external_work_failed']} forum synchronisation task(s) gave up retrying."
+            f"{queues['external_work_failed']} background task(s) (forum, Stripe) gave up retrying."
         )
     if queues["webhook_events_failed"]:
         problems.append(
@@ -183,7 +186,7 @@ def collect_system_health():
     warnings = []
     if queues["external_work_pending"] > 20:
         warnings.append(
-            f"{queues['external_work_pending']} forum tasks are queued; the worker may not be running."
+            f"{queues['external_work_pending']} background tasks are queued; the worker may not be running."
         )
     if queues["emails_pending"] > 20:
         warnings.append(f"{queues['emails_pending']} emails are queued for delivery.")

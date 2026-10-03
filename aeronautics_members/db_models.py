@@ -709,6 +709,9 @@ class ExternalWorkItem(db.Model):
     # Queued when a fee changes: one running subscription moved to the new
     # price, from its next renewal (services/payments.py).
     KIND_STRIPE_PRICE_MOVE = "stripe_price_move"
+    # The email about that new fee, due some days before the renewal it takes
+    # effect at: ``not_before`` holds it until then.
+    KIND_FEE_CHANGE_NOTICE = "fee_change_notice"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"

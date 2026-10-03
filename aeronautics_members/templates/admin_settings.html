@@ -596,8 +596,8 @@
                             <div class="col-md-6">
                                 <h6 class="text-muted text-uppercase small">{{ _('Background work') }}</h6>
                                 <dl class="row mb-0 small">
-                                    <dt class="col-7">{{ _('Forum tasks queued') }}</dt><dd class="col-5">{{ system_health.queues.external_work_pending }}</dd>
-                                    <dt class="col-7">{{ _('Forum tasks failed') }}</dt>
+                                    <dt class="col-7">{{ _('Background tasks queued') }}</dt><dd class="col-5">{{ system_health.queues.external_work_pending }}</dd>
+                                    <dt class="col-7">{{ _('Background tasks failed') }}</dt>
                                     <dd class="col-5">
                                         {{ system_health.queues.external_work_failed }}
                                         {% if system_health.queues.external_work_failed %}
