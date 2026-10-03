@@ -89,14 +89,14 @@
         {% if former %}
             <div class="table-responsive">
                 <table class="table table-striped align-middle mb-0">
-                    <thead><tr><th>{{ _('Name') }}</th><th>{{ _('From') }}</th><th>{{ _('To') }}</th><th>{{ _('Why') }}</th></tr></thead>
+                    <thead><tr><th>{{ _('Name') }}</th><th>{{ _('In the team') }}</th><th>{{ _('Last active') }}</th><th>{{ _('Why it ended') }}</th></tr></thead>
                     <tbody>
-                        {% for membership in former %}
+                        {% for row in former %}
                             <tr>
-                                <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=membership.user_id) }}">{{ person_details(membership.user).name }}</a></td>
-                                <td>{{ membership.started_at|date_display }}</td>
-                                <td>{{ membership.ended_at|date_display }}</td>
-                                <td>{{ _(end_reasons.get(membership.end_reason, '-')) }}</td>
+                                <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=row.user_id) }}">{{ row.name }}</a></td>
+                                <td>{{ row.periods }}</td>
+                                <td>{{ row.last_active_shown or '-' }}</td>
+                                <td>{{ _(end_reasons.get(row.end_reason, '-')) }}</td>
                             </tr>
                         {% endfor %}
                     </tbody>

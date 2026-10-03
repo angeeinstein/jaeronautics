@@ -863,6 +863,43 @@ def team_memberships(team, statuses):
     ).scalars().all()
 
 
+def former_members(team):
+    """Everybody who was in the team and is not now, most recently active first.
+
+    One entry per person, with every period they were in it, kept for good:
+    who was in the team in which year is worth knowing long after.
+    """
+    from .membership import format_date_display
+
+    ended = team_memberships(team, {ENDED})
+    current = {membership.user_id for membership in team_memberships(team, {ACTIVE})}
+    people = {}
+    for membership in ended:
+        if membership.user_id not in current:
+            people.setdefault(membership.user_id, []).append(membership)
+
+    def began(membership):
+        return membership.started_at or membership.created_at
+
+    def period(membership):
+        start, end = began(membership).year, (membership.ended_at or began(membership)).year
+        return str(start) if start == end else f"{start}–{end}"
+
+    rows = []
+    for user_id, stints in people.items():
+        stints.sort(key=began)
+        last = stints[-1]
+        rows.append({
+            "user_id": user_id,
+            "name": _member_name(last.user),
+            "periods": ", ".join(dict.fromkeys(period(stint) for stint in stints)),
+            "last_active": last.ended_at,
+            "last_active_shown": format_date_display(last.ended_at) if last.ended_at else "",
+            "end_reason": last.end_reason,
+        })
+    return sorted(rows, key=lambda row: row["last_active"] or row["user_id"], reverse=True)
+
+
 def history_of(team, user):
     return db.session.execute(
         db.select(TeamMembership).filter_by(team_id=team.id, user_id=user.id).order_by(TeamMembership.id.desc())

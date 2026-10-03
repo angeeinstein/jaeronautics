@@ -454,3 +454,37 @@ def test_every_team_email_goes_out(app, event_type, subject):
     assert (ok, error) == (True, None)
     assert built_subject == subject
     assert "Hello Anna," in _parts(FakeSMTP.sent[-1], "text/plain")[0].get_payload(decode=True).decode()
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestFormerMembers:
+    """Kept for good: who was in the team in which year is worth knowing later."""
+
+    def _stint(self, user, team, start, end):
+        from datetime import datetime
+
+        db.session.add(TeamMembership(team=team, user=user, status=teams.ENDED, end_reason=teams.END_LEFT,
+                                      started_at=datetime(start, 10, 1), ended_at=datetime(end, 6, 30)))
+        db.session.commit()
+
+    def test_once_per_person_with_every_period(self, app):
+        team, _lead = _led()
+        anna = _person()
+        self._stint(anna, team, 2022, 2023)
+        self._stint(anna, team, 2025, 2026)
+
+        [row] = teams.former_members(team)
+
+        assert row["name"] == "Anna Berger"
+        assert row["periods"] == "2022–2023, 2025–2026"
+        assert row["last_active_shown"] == "30.06.2026"
+
+    def test_most_recently_active_first_and_not_whoever_is_back(self, app):
+        team, _lead = _led()
+        anna, ben, cara = _person(), _person("ben@example.com", "Ben", "Berg"), _person("cara@example.com", "Cara", "Cole")
+        self._stint(anna, team, 2020, 2021)
+        self._stint(ben, team, 2024, 2025)
+        self._stint(cara, team, 2022, 2023)
+        _in_team(cara, team)
+
+        assert [row["name"] for row in teams.former_members(team)] == ["Ben Berg", "Anna Berger"]

@@ -374,7 +374,7 @@ def team_manage(slug):
             team, {teams_service.APPLIED, teams_service.INVITED, teams_service.APPROVED}
         ),
         roster=teams_service.roster(team),
-        former=teams_service.team_memberships(team, {teams_service.ENDED}),
+        former=teams_service.former_members(team),
         status_labels=teams_service.STATUS_LABELS,
         end_reasons=teams_service.END_REASON_LABELS,
         person_details=teams_service.person_details,

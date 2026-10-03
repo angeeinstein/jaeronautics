@@ -137,8 +137,11 @@ access to the office.
 - **Contact details only while the person still has a portal account**;
   whoever erases their account disappears from the list as from everywhere
   else — *suggested.*
-- **How long they stay** — *open.* Data protection expects a limit; a few years,
-  then removed automatically, is the likely answer.
+- **How long they stay** — *agreed so far:* for good. Who was in the team in
+  which year is worth knowing long after, for questions about that time. The
+  list shows each person once, with every period they were in the team and
+  when they were last active, most recently active first; whoever is back in
+  the team is not on it.
 - **The leads' notes when someone erases their account** — *agreed so far:* not
   deleted automatically, since they may hold something that needs keeping for
   longer. How they are handled instead — reviewed by an admin, kept for a set
@@ -334,8 +337,9 @@ The bylaws are being rewritten anyway. What teams need in them:
 - team membership requires association membership;
 - the leads' access to their team members' data;
 - the insurance clause: team members are insured by the association "if they do
-  not have sufficient cover, which must be stated explicitly". Whether the
-  portal should ask that when someone joins a team is *open*.
+  not have sufficient cover, which must be stated explicitly". *Left out for
+  now:* the board first decides whether the association can provide that
+  insurance at all, or whether the clause is a leftover.
 
 ## Later ideas
 
