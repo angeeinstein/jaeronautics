@@ -191,7 +191,7 @@ def html_to_text(html):
     return parser.text()
 
 
-def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, **template_vars):
+def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, **template_vars):
     """
     Sends an email using pre-configured SMTP accounts.
 
@@ -215,8 +215,14 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
             for email in (bcc_emails or [])
             if str(email).strip()
         ]
+        # Copies everybody can see, unlike the blind ones.
+        cc_list = [
+            str(email).strip()
+            for email in (cc_emails or [])
+            if str(email).strip() and str(email).strip() != primary_recipient
+        ]
         recipients = []
-        for email in [primary_recipient, *bcc_list]:
+        for email in [primary_recipient, *cc_list, *bcc_list]:
             if email not in recipients:
                 recipients.append(email)
 
@@ -224,6 +230,8 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
         message["Subject"] = subject
         message["From"] = config["user"]
         message["To"] = primary_recipient
+        if cc_list:
+            message["Cc"] = ", ".join(dict.fromkeys(cc_list))
 
         if template_name:
             # Every template's footer carries the year. Supplied here rather
