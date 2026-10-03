@@ -1098,10 +1098,12 @@ def lapse_unpaid_approvals(now=None):
 def forget_for_erasure(user):
     """What erasing an account does to its teams.
 
-    Its memberships and applications end, its roles go, and what the person
-    wrote in their applications is blanked. The leads' notes stay -- whether
-    and how they should go is still open (docs/teams-plan.md).
+    Its memberships and applications end, its roles go, what the person
+    wrote in their applications is blanked and the leads' notes about them
+    are deleted. Notes they wrote about others as a lead stay.
     """
+    from ..db_models import TeamNote
+
     now = get_now_utc()
     for membership in db.session.execute(
         db.select(TeamMembership).filter_by(user_id=user.id)
@@ -1113,6 +1115,8 @@ def forget_for_erasure(user):
             membership.end_reason = END_ACCOUNT_ERASED
     for team_role in db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars():
         db.session.delete(team_role)
+    for note in db.session.execute(db.select(TeamNote).filter_by(user_id=user.id)).scalars():
+        db.session.delete(note)
 
 
 # --- The access list ---------------------------------------------------------

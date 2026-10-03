@@ -155,12 +155,9 @@ access to the office.
   How leads will use them is not known -- a to-do for the applicant, even a
   password -- so they are not handed over automatically. Everything else about
   a person's teams is in the export.
-- **The leads' notes when someone erases their account** — *agreed so far:* not
-  deleted automatically, since they may hold something that needs keeping for
-  longer. How they are handled instead — reviewed by an admin, kept for a set
-  time, or anonymised — is *open*. Note that a person who asks for erasure has a
-  right to it unless there is a reason to keep the data, so "kept forever" is
-  not an option either.
+- **The leads' notes when someone erases their account** — *agreed so far:*
+  deleted with the account, the simplest rule. Notes the person wrote about
+  others as a lead stay.
 
 ## Team leads
 
@@ -271,7 +268,7 @@ and their roles in the admin (`/admin/teams`), and the access rules, in
 - the nightly membership job ends team memberships and applications of people
   no longer in the association, and tells the leads in one message per team;
 - erasing an account ends its teams, removes its roles and blanks what it wrote
-  in applications; the leads' notes stay, as agreed.
+  in applications, and deletes the leads' notes about it.
 
 Then, also built:
 

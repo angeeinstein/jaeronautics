@@ -410,12 +410,15 @@ class TestFollowingTheAssociation:
 
         assert teams.end_lapsed_team_memberships() == 0
 
-    def test_erasing_an_account_ends_its_teams_and_keeps_the_notes(self, app):
+    def test_erasing_an_account_ends_its_teams_and_deletes_the_notes_about_it(self, app):
         team, lead = _led(application_prompt="Why?")
         anna = _person()
+        bob = _person("bob@example.com", "Bob", "Huber")
+        teams.join_or_apply(bob, team, "Me too.")
         membership = teams.join_or_apply(anna, team, "Because.")
         teams.add_note(lead, team, anna, "Seemed keen.")
         teams.grant_team_role(None, team, anna, teams.ROLE_LEAD)
+        teams.add_note(anna, team, bob, "Knows CATIA.")
         db.session.commit()
 
         privacy.erase_account(anna, initiated_by=privacy.INITIATED_BY_MEMBER)
@@ -424,7 +427,8 @@ class TestFollowingTheAssociation:
         db.session.refresh(membership)
         assert (membership.status, membership.application_text) == (teams.WITHDRAWN, None)
         assert db.session.query(TeamRole).filter_by(user_id=anna.id).count() == 0
-        assert db.session.query(TeamNote).filter_by(user_id=anna.id).count() == 1
+        assert db.session.query(TeamNote).filter_by(user_id=anna.id).count() == 0
+        assert db.session.query(TeamNote).filter_by(user_id=bob.id).count() == 1
 
 
 TEAM_EMAILS = [
