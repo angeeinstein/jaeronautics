@@ -691,6 +691,16 @@ class NotificationService:
                    "What you have paid for runs to its end.")],
                 teams_url, _("Open Teams"),
             ),
+            "team_ends_with_association": (
+                _("Your membership in %(team)s ends with your association membership", team=team),
+                _("It ends on %(day)s.", day=payload.get("ends_on")),
+                [_("You have cancelled your association membership, which ends on %(day)s. Teams are for "
+                   "members of the association, so your membership in %(team)s ends on the same day, and "
+                   "its fee is not charged again.", day=payload.get("ends_on"), team=team),
+                 _("If you keep your association membership after all, your team membership continues "
+                   "as before.")],
+                teams_url, _("Open Teams"),
+            ),
             "team_rejected": (
                 _("Your application to %(team)s", team=team),
                 _("Your application was not accepted."),
@@ -715,11 +725,12 @@ class NotificationService:
         if event.event_type in to_person:
             subject, preview, lines, url, label = to_person[event.event_type]
         elif event.event_type in {"team_application_received", "team_member_joined", "team_member_leaving",
-                                  "team_member_left", "team_members_lapsed"}:
+                                  "team_member_staying", "team_member_left", "team_members_lapsed"}:
             subject = {
                 "team_application_received": _("New application for %(team)s", team=team),
                 "team_member_joined": _("New member in %(team)s", team=team),
                 "team_member_leaving": _("A member is leaving %(team)s", team=team),
+                "team_member_staying": _("A member stays in %(team)s", team=team),
                 "team_member_left": _("A member left %(team)s", team=team),
                 "team_members_lapsed": _("Members left %(team)s", team=team),
             }[event.event_type]

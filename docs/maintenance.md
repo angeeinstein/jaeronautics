@@ -688,6 +688,14 @@ for six months afterwards the person may come back by paying, without
 applying. Receipts and renewal emails come from Stripe. Payments are listed
 in the `payments` table, one per paid invoice.
 
+Somebody who cancels their association membership -- on Stripe's billing page,
+say -- stays a member to the end of what they paid for. As soon as the portal
+hears of it, each of their team memberships is set to end on the same day:
+the team subscription stops then without renewing (no refund for time paid
+beyond it), and they and the leads are emailed. Taking the cancellation back
+lifts it again. Leaving a team on one's own is not touched. The nightly job
+does the same for anything a webhook missed.
+
 A new price applies to people joining at once, and running subscriptions
 move to it from their next renewal, their holders emailed two weeks before;
 see *Changing a Fee*. A different interval is refused while subscriptions run. A team cannot

@@ -140,7 +140,10 @@ maintenance guide.
   runs to the end of the paid period rather than ending at once. To build with
   payment; until then teams are free and leaving ends it at once.
 - **The association membership ends** — follows from the requirement: the team
-  membership ends with it and the leads are told.
+  membership ends with it and the leads are told. *Built:* once somebody
+  cancels their association membership, their team memberships are set to end
+  on the same day, the team subscription stops renewing, and they and the
+  leads are told; taking the cancellation back lifts it.
 - **Removal by a lead** — *agreed so far:* **immediately**. It will only
   happen for misconduct, or for somebody who has vanished and cannot be reached.
   With a reason that goes into the record (not sent to the person), and no

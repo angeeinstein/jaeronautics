@@ -886,6 +886,9 @@ class TeamMembership(db.Model):
     paid_until = db.Column(db.Date, nullable=True)
     payment_state = db.Column(db.String(20), nullable=True)
     ends_on = db.Column(db.Date, nullable=True)
+    # ``ends_on`` was set because the association membership is ending, not
+    # by leaving: taking that cancellation back lifts it again.
+    ends_with_association = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     started_at = db.Column(db.DateTime, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
     # Who approved, rejected or removed -- the last person to decide.

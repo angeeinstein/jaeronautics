@@ -4434,6 +4434,16 @@ def create_app(config_overrides=None):
                 error_count += 1
                 click.echo(click.style(f"Billing reconciliation failed for {member.email_private}: {exc}", fg="red"), err=True)
 
+        # Whoever has cancelled their association membership has their teams
+        # set to end on the same day, in case the webhook that says so was missed.
+        from .services.team_payments import follow_association_ends
+
+        following = follow_association_ends()
+        db.session.commit()
+        flush_marked_notification_channels()
+        if following:
+            click.echo(f"Brought {following} team membership(s) in line with a cancelled or resumed association membership.")
+
         # Teams follow the association: whoever is no longer a member leaves
         # their teams too. Here because this is the nightly membership job.
         from .services.teams import end_lapsed_team_memberships

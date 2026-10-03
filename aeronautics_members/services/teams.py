@@ -803,6 +803,9 @@ def stay(user, team):
     current = ongoing_membership(user, team)
     if current is None or current.status != ACTIVE or current.ends_on is None:
         raise ConflictError("You are not leaving this team.", code="team_not_leaving")
+    if current.ends_with_association:
+        raise ConflictError("This ends with your association membership. Keep that, and the team continues too.",
+                            code="team_ends_with_association")
     membership = _locked_membership(current.id, team)
     from . import payments
 

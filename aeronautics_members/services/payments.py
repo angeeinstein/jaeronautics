@@ -276,6 +276,28 @@ def cancel_subscription(subscription_id, *, reason=None):
     return True
 
 
+def cancel_on(subscription_id, unix_timestamp):
+    """Have a subscription stop at a given moment, without renewing before it or refunding."""
+    return _modify(subscription_id, cancel_at=int(unix_timestamp), proration_behavior="none")
+
+
+def clear_cancel_on(subscription_id):
+    """Take back :func:`cancel_on`: the subscription renews as before."""
+    return _modify(subscription_id, cancel_at="", proration_behavior="none")
+
+
+def _modify(subscription_id, **changes):
+    apply_runtime_stripe_config()
+    try:
+        return stripe.Subscription.modify(subscription_id, **changes)
+    except stripe.StripeError as exc:
+        raise ExternalServiceError(
+            "Stripe could not change the subscription.",
+            code="subscription_change_failed",
+            details={"stripe_code": getattr(exc, "code", None)},
+        ) from exc
+
+
 def set_cancel_at_period_end(subscription_id, cancel):
     """Have a subscription stop at the end of what is paid, or carry on after all."""
     apply_runtime_stripe_config()

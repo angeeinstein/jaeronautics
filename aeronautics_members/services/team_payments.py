@@ -49,6 +49,7 @@ from .teams import (
     ACTIVE,
     APPROVED,
     END_LEFT,
+    END_MEMBERSHIP_ENDED,
     END_PAYMENT_FAILED,
     ENDED,
     PAYMENT_NONE,
@@ -364,8 +365,15 @@ def _end(membership, reason, now):
         _tell_person("team_payment_ended", membership)
         _tell_leads(team, "team_member_left", f"{name} is no longer in {team.name}: the payment did not go through.",
                     person_name=name)
+    elif reason == END_MEMBERSHIP_ENDED:
+        _tell_leads(team, "team_member_left", f"{name} left {team.name} with their association membership.",
+                    person_name=name)
     else:
         _tell_leads(team, "team_member_left", f"{name} left {team.name}.", person_name=name)
+
+
+def _leaving_reason(membership):
+    return END_MEMBERSHIP_ENDED if membership.ends_with_association else END_LEFT
 
 
 def _activate(membership, now):
@@ -484,7 +492,7 @@ def _subscription_deleted(subscription):
     reason = (subscription.get("cancellation_details") or {}).get("reason")
     if membership.status == ACTIVE:
         failed = reason in ("payment_failed", "payment_disputed")
-        _end(membership, END_PAYMENT_FAILED if failed else END_LEFT, get_now_utc())
+        _end(membership, END_PAYMENT_FAILED if failed else _leaving_reason(membership), get_now_utc())
     elif membership.status == APPROVED:
         membership.payment_state = FAILED
 
@@ -560,7 +568,7 @@ def end_finished_team_memberships(today=None):
             continue
         if membership.ends_on is not None and membership.ends_on < today:
             stop_charging(membership, "leaving day passed")
-            _end(membership, END_LEFT, get_now_utc())
+            _end(membership, _leaving_reason(membership), get_now_utc())
             ended += 1
         elif membership.paid_until is not None and (today - membership.paid_until).days > OVERDUE_DAYS:
             stop_charging(membership, "long unpaid")
@@ -590,3 +598,106 @@ def _tell_about_new_fee(payload, notice):
 
 
 payments.register_price_moves(payments.PURPOSE_TEAM, current_price=_team_price_now, tell=_tell_about_new_fee)
+
+
+# --- Following the association membership ---------------------------------------------
+#
+# Somebody who cancels their association membership -- on Stripe's billing
+# page, most likely -- stays a member to the end of what they paid for, and
+# with it in their teams. Told nothing, their team would renew in between and
+# then end on the first night after the association, the time paid for beyond
+# that lost. So as soon as the cancellation is known, each of their team
+# memberships is set to end on the same day: its subscription stops then
+# without renewing, and they and the leads are told. Taking the cancellation
+# back lifts that again. An end somebody chose by leaving is left alone.
+
+
+def association_ends_on(member, today=None):
+    """The last day of an association membership set to end, or None while it renews."""
+    from .periods import coverage_end
+
+    if member is None or getattr(member, "deleted_at", None) is not None:
+        return None
+    if not (member.cancel_at_period_end or member.payment_status in ("canceled", "cancel_scheduled")):
+        return None
+    last_day = coverage_end(member)
+    today = today or get_membership_today()
+    return last_day if last_day is not None and last_day >= today else None
+
+
+def follow_association_end(member, today=None):
+    """Bring this member's team memberships in line with their association membership.
+
+    Returns how many changed. A team Stripe could not be told about is left as
+    it was, for the next run to try again.
+    """
+    from . import ExternalServiceError
+
+    user = getattr(member, "user", None)
+    if user is None:
+        return 0
+    ends = association_ends_on(member, today)
+    changed = 0
+    for found in db.session.execute(
+        db.select(TeamMembership).filter_by(user_id=user.id, status=ACTIVE)
+    ).scalars().all():
+        membership = _locked_membership(found.id)
+        if membership.status != ACTIVE:
+            continue
+        try:
+            if ends is not None:
+                changed += _end_with_association(membership, ends)
+            elif membership.ends_with_association:
+                changed += _continue_with_association(membership)
+        except ExternalServiceError as exc:
+            current_app.logger.warning(
+                "Team membership %s not brought in line with the association: %s", membership.id, exc,
+            )
+    return changed
+
+
+def _end_with_association(membership, ends):
+    if membership.ends_with_association and membership.ends_on == ends:
+        return 0
+    if membership.ends_on is not None and not membership.ends_with_association:
+        return 0  # leaving on their own; that subscription renews no more anyway
+    if membership.stripe_subscription_id:
+        payments.cancel_on(membership.stripe_subscription_id, start_of_day_unix(ends + timedelta(days=1)))
+    membership.ends_on = ends
+    membership.ends_with_association = True
+    _audit("team_ends_with_association", None, membership, ends_on=ends.isoformat())
+    day = format_membership_date_display(ends)
+    _tell_person("team_ends_with_association", membership, ends_on=day)
+    name = _member_name(membership.user)
+    _tell_leads(membership.team, "team_member_leaving",
+                f"{name} is leaving {membership.team.name} on {day}, with their association membership.",
+                person_name=name)
+    return 1
+
+
+def _continue_with_association(membership):
+    if membership.stripe_subscription_id:
+        payments.clear_cancel_on(membership.stripe_subscription_id)
+    membership.ends_on = None
+    membership.ends_with_association = False
+    _audit("team_continues_with_association", None, membership)
+    name = _member_name(membership.user)
+    _tell_leads(membership.team, "team_member_staying",
+                f"{name} stays in {membership.team.name}: their association membership continues.",
+                person_name=name)
+    return 1
+
+
+def follow_association_ends(today=None):
+    """Every night: the same for everybody in a team, in case a webhook was missed."""
+    from ..db_models import User
+
+    changed = 0
+    users = db.session.execute(
+        db.select(User).join(TeamMembership, TeamMembership.user_id == User.id)
+        .where(TeamMembership.status == ACTIVE).distinct()
+    ).scalars().all()
+    for user in users:
+        if user.member is not None:
+            changed += follow_association_end(user.member, today)
+    return changed

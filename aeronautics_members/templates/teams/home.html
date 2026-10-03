@@ -43,7 +43,9 @@
                         {% endif %}
                     {% endif %}
 
-                    {% if current and current.status == 'active' and current.stripe_subscription_id %}
+                    {% if current and current.status == 'active' and current.ends_with_association %}
+                        <div class="small">{{ _('Ends with your association membership on %(day)s.', day=current.ends_on|date_display) }}</div>
+                    {% elif current and current.status == 'active' and current.stripe_subscription_id %}
                         <div class="small">
                             {% if current.ends_on %}
                                 {{ _('You leave on %(day)s.', day=current.ends_on|date_display) }}
@@ -66,7 +68,8 @@
                     <div class="d-flex flex-wrap gap-2 mt-auto">
                         {% if current and current.status == 'active' %}
                             <a class="btn btn-primary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Open') }}</a>
-                            {% if current.ends_on %}
+                            {% if current.ends_with_association %}
+                            {% elif current.ends_on %}
                                 <form method="POST" action="{{ url_for('teams.team_stay', slug=team.slug) }}" class="mb-0">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-secondary">{{ _('Stay after all') }}</button>
