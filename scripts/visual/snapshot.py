@@ -180,6 +180,19 @@ def seed(app, app_module, subscriptions):
     ))
     db.session.commit()
 
+    # A team with a lead who is in it, and one whose lead has not joined yet.
+    from aeronautics_members.db_models import TeamMembership
+    from aeronautics_members.services import teams
+
+    team_fields = dict(description="We build and fly sounding rockets.", admission_mode="approval",
+                       applications_open=True, application_prompt="Why do you want to join?",
+                       max_members=None, forum_group=None)
+    rocket = teams.create_team(None, slug=None, name="Rocket Team", **team_fields)
+    teams.create_team(None, slug=None, name="Glider Team", **team_fields)
+    db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE))
+    teams.grant_team_role(None, rocket, active.user, teams.ROLE_LEAD)
+    db.session.commit()
+
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
     db.session.commit()
@@ -225,6 +238,9 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--reviews", "user": "admin@example.org", "path": "/admin/reviews"},
         {"name": "admin--logs", "user": "admin@example.org", "path": "/admin/logs"},
         {"name": "admin--settings", "user": "admin@example.org", "path": "/admin/settings"},
+        {"name": "admin--teams", "user": "admin@example.org", "path": "/admin/teams"},
+        {"name": "admin--team-detail", "user": "admin@example.org", "path": "/admin/teams/rocket-team"},
+        {"name": "admin--team-new", "user": "admin@example.org", "path": "/admin/teams/new"},
     ]
 
 

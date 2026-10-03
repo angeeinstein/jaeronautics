@@ -70,9 +70,10 @@ access to the office.
   mostly means telling the leads one wants to join; nearly everybody gets
   invited and approved. So the application text is optional, and the invite
   step can be skipped.
-- **A standing invitation** — *suggested.* A text per team ("we meet every
-  Tuesday at 18:00 in room …"). If set, applying moves straight to *Invited* and
-  sends it, so the leads do not have to invite each person by hand.
+- **A standing invitation** — *not now.* A text per team ("we meet every
+  Tuesday at 18:00 in room …") that would move applicants straight to
+  *Invited*. The application meetings are personal chats with a lead, so this
+  is not needed for now; it stays a possibility.
 - **No restrictions on applying again** after a rejection — *agreed so far.*
 - **Several teams at once** — *agreed so far.*
 - **Applicants see their status in the Teams area** (see *Where it lives*) —
@@ -193,8 +194,10 @@ details, and anything about the association membership itself.
   with their status.
 - **A page per team for all its members** — *agreed so far* as a place to grow
   into: `/teams/<name>` for every active member of that team, beside the
-  leads' `/teams/<name>/manage`. What goes on it is *open*. To begin with, the
-  description, who the leads are and one's own status. Later perhaps a prepaid
+  leads' `/teams/<name>/manage`. To begin with, the description, who the leads
+  are, one's own status, and **the whole team** — name, picture and university
+  email of every active member (*agreed so far*: the teams already share these
+  among themselves on SharePoint and Microsoft Teams). Later perhaps a prepaid
   balance for the drinks terminal, documents, dates. It should be built so that
   sections can be added without reworking the page.
 
@@ -231,6 +234,10 @@ Seen by the team's leads and by site admins, never by the person.
 **Access** — a lead's permissions count only for their own team, and only while
 they are an active member of the association and of the team. Site admins reach
 every team through a new global permission to manage teams.
+
+**Built so far** (step one): the switch and the label, the four tables, teams
+and their roles in the admin (`/admin/teams`), and the access rules, in
+`services/teams.py`. Members do not see anything of teams yet.
 
 **The flow** — open team: join → active. Team by approval: applied → invited →
 approved → active, with rejected or withdrawn possible on the way. Without

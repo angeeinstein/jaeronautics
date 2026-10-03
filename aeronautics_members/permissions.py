@@ -64,6 +64,11 @@ class Permission:
     SYSTEM_BACKUP = "system.backup"
     ROLES_MANAGE = "roles.manage"
 
+    # Creating teams, appointing their leads, and reaching every team's page.
+    # What a lead may do inside their own team is not a global permission: it
+    # is in services/teams.py, because it holds for one team only.
+    TEAMS_MANAGE = "teams.manage"
+
 
 # Roles, and what each one may do. This is the whole access model.
 #
@@ -82,6 +87,7 @@ ROLE_PERMISSIONS = {
         Permission.NOTIFICATIONS_MANAGE,
         Permission.NOTIFICATIONS_RECEIVE,
         Permission.SETTINGS_GENERAL,
+        Permission.TEAMS_MANAGE,
         # Somebody trusted to administer the members here is trusted to keep
         # order on the forum -- decided 2026-09-26. Nobody is made an admin
         # here who would not be trusted with that.
@@ -102,6 +108,7 @@ ROLE_PERMISSIONS = {
         Permission.SYSTEM_UPDATE,
         Permission.SYSTEM_BACKUP,
         Permission.ROLES_MANAGE,
+        Permission.TEAMS_MANAGE,
         Permission.FORUM_MODERATOR,
         # Everything on the forum as well. A Discourse admin can change any
         # site setting and make API keys, which is the forum's equivalent of
@@ -163,6 +170,7 @@ PERMISSION_LABELS = {
     Permission.SYSTEM_UPDATE: "Install a new version and roll one back",
     Permission.SYSTEM_BACKUP: "Make and download encrypted backups, and resume background jobs after a restore",
     Permission.ROLES_MANAGE: "Grant and revoke access for other people",
+    Permission.TEAMS_MANAGE: "Create teams, appoint their leads, and open every team's page",
 }
 
 

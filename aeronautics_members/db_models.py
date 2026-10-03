@@ -773,6 +773,118 @@ class Setting(db.Model):
     value = db.Column(db.String(255), nullable=False)
 
 
+# Teams: groups inside the association with their own members and leads. A
+# feature that can be switched off (services/teams.py), so nothing outside these
+# tables depends on them. Values that another association might need more of --
+# statuses, modes, roles -- are text rather than yes/no; what each one means is
+# in services/teams.py.
+
+
+class Team(db.Model):
+    __tablename__ = "teams"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # In URLs, and later in the Stripe marker and the forum group's default name.
+    slug = db.Column(db.String(60), unique=True, nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="active")
+    admission_mode = db.Column(db.String(20), nullable=False, default="approval")
+    applications_open = db.Column(db.Boolean, nullable=False, default=True)
+    # The question applicants are asked. Without one, no text is asked for.
+    application_prompt = db.Column(db.String(255), nullable=True)
+    max_members = db.Column(db.Integer, nullable=True)
+    forum_group = db.Column(db.String(100), nullable=True)
+    # "none" until payment is built.
+    payment_mode = db.Column(db.String(20), nullable=False, default="none")
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    archived_at = db.Column(db.DateTime, nullable=True)
+
+    roles = db.relationship("TeamRole", back_populates="team", cascade="all, delete-orphan")
+    memberships = db.relationship("TeamMembership", back_populates="team", cascade="all, delete-orphan")
+    notes = db.relationship("TeamNote", back_populates="team", cascade="all, delete-orphan")
+
+
+class TeamRole(db.Model):
+    """A role somebody holds in one team: ``lead`` now, others later.
+
+    Several per person are allowed. A role only counts while its holder is an
+    active member of the team and of the association; services/teams.py checks
+    that, so the row itself survives a lapse and needs nobody to restore it.
+    """
+
+    __tablename__ = "team_roles"
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", "role", name="uq_team_roles_team_user_role"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    role = db.Column(db.String(40), nullable=False)
+    granted_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    granted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    team = db.relationship("Team", back_populates="roles")
+    user = db.relationship("User", foreign_keys=[user_id])
+    granted_by = db.relationship("User", foreign_keys=[granted_by_user_id])
+
+
+class TeamMembership(db.Model):
+    """One attempt at being in a team, from applying to having left.
+
+    Whoever applies again gets a new row, so the history stays and former
+    members are simply the ended rows.
+    """
+
+    __tablename__ = "team_memberships"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, index=True)
+    application_text = db.Column(db.Text, nullable=True)
+    meeting_details = db.Column(db.Text, nullable=True)
+    applied_at = db.Column(db.DateTime, nullable=True)
+    invited_at = db.Column(db.DateTime, nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    started_at = db.Column(db.DateTime, nullable=True)
+    ended_at = db.Column(db.DateTime, nullable=True)
+    # Who approved, rejected or removed -- the last person to decide.
+    decided_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    end_reason = db.Column(db.String(40), nullable=True)
+    end_note = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    team = db.relationship("Team", back_populates="memberships")
+    user = db.relationship("User", foreign_keys=[user_id])
+    decided_by = db.relationship("User", foreign_keys=[decided_by_user_id])
+
+
+class TeamNote(db.Model):
+    """What the leads write down about a person, across all their attempts.
+
+    About the person in the team rather than one attempt, so notes from an
+    earlier application are still there when somebody applies again. Seen by
+    the team's leads and site admins, never by the person.
+    """
+
+    __tablename__ = "team_notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    author_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    team = db.relationship("Team", back_populates="notes")
+    user = db.relationship("User", foreign_keys=[user_id])
+    author = db.relationship("User", foreign_keys=[author_user_id])
+
+
 class MailAccount(db.Model):
     __tablename__ = "mail_accounts"
 

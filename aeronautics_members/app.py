@@ -1620,6 +1620,7 @@ def create_app(config_overrides=None):
     from .blueprints.auth import auth_bp
     from .blueprints.forum import forum_bp
     from .blueprints.public import public_bp
+    from .blueprints.teams import teams_bp
     from .blueprints.webhook import webhook_bp
 
     csrf.exempt(webhook_bp)
@@ -1629,6 +1630,7 @@ def create_app(config_overrides=None):
     app.register_blueprint(account_bp)
     app.register_blueprint(forum_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(teams_bp)
 
     @app.context_processor
     def inject_babel_globals():
@@ -1695,6 +1697,14 @@ def create_app(config_overrides=None):
         from .services.reviews import waiting_for_review_count
 
         return waiting_for_review_count(current_user)
+
+    # What teams are called here, as (singular, plural) -- "Teams" unless an
+    # admin chose another word.
+    @app.template_global("team_labels")
+    def team_labels_global():
+        from .services.teams import team_labels
+
+        return team_labels()
 
     # Dates and times on every page and email in one format and in Vienna
     # time: 31.12.2026, 31.12.2026 14:05.
