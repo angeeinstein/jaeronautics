@@ -588,3 +588,15 @@ class TestTheWelcomeMail:
 
         assert "PlainP_L25" in body
         assert "will be reconnected" not in body
+
+
+def test_the_placeholder_address_is_unique_per_person(app):
+    """Releasing a replaced forum account gives it this address, and Discourse
+    takes every address once only: two alike and the second reconnect fails."""
+    from aeronautics_members.services.forum_import import IMPORTED_EMAIL_DOMAIN, imported_email_for
+
+    first = imported_email_for("replaced", "1")
+    second = imported_email_for("replaced", "2")
+
+    assert first != second
+    assert first.endswith(f"@{IMPORTED_EMAIL_DOMAIN}")
