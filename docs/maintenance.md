@@ -153,6 +153,31 @@ by SEPA stops being a member meanwhile, access continues for up to
 It never follows a revoked year, so a lost chargeback still ends access. The
 welcome email is only sent for somebody's first year, not when a renewal clears.
 
+## Changing a Fee
+
+The same for the membership (Settings -> Billing) and for a team (its form,
+*Fee*):
+
+1. In Stripe, create a new recurring price **on the same product** as the old
+   one, with the **same interval** (yearly for the membership). Leave "Trial
+   period days" on the price empty.
+2. Enter the new price ID and save. The portal checks it with Stripe and
+   refuses one that does not fit.
+3. New members pay the new fee at once. Every running subscription is moved
+   to the new price in the background -- through the external-work worker,
+   one item per subscription, within minutes -- with no proration: nothing is
+   charged or refunded now, the next charge is the new amount. Subscriptions
+   that are ending are left alone. Each person moved is emailed the new fee,
+   the old one, from when, and how to cancel or leave before then.
+
+Stripe itself never announces a price change. For SEPA debits it does email
+the amount before every collection (two days ahead, under the mandate members
+accept at checkout), which covers the banking rule; the portal's own email is
+the real notice. Change a fee a few weeks before the next renewal, so people
+can decide in time -- and update the fee rules in `legal_texts.html` for the
+membership. A move that keeps failing shows under the health check's failed
+external work. Archive the old price in Stripe once nobody is on it.
+
 ## Billing Shows Up in Stripe as a Trial
 
 The association bills one shared calendar year, which is implemented by giving
@@ -658,9 +683,10 @@ for six months afterwards the person may come back by paying, without
 applying. Receipts and renewal emails come from Stripe. Payments are listed
 in the `payments` table, one per paid invoice.
 
-A new price applies to people joining from then on; running subscriptions
-keep theirs (change them in Stripe if needed). A team cannot be switched back
-to free while subscriptions for it still run.
+A new price applies to people joining at once, and running subscriptions
+move to it from their next renewal, their holders emailed; see *Changing a
+Fee*. A different interval is refused while subscriptions run. A team cannot
+be switched back to free while subscriptions for it still run.
 
 **Every night** (with `reconcile-billing`): team memberships of people no
 longer in the association end, approvals for a team that charges lapse when

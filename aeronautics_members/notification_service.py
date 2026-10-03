@@ -531,6 +531,25 @@ class NotificationService:
         note = (payload.get("review_note") or payload.get("admin_note") or "").strip()
         account_url = build_public_url("account.account")
 
+        if event.event_type == "membership_fee_changed":
+            new_fee, old_fee, from_date = payload.get("new_fee"), payload.get("old_fee"), payload.get("from_date")
+            return (
+                _("The membership fee changes"),
+                {
+                    "preview_text": _("From %(day)s the membership fee is %(fee)s.", day=from_date, fee=new_fee),
+                    "action_url": account_url,
+                    "action_label": _("Open My Account"),
+                    "heading": _("The membership fee changes"),
+                    "body_lines": [
+                        greeting,
+                        _("From %(day)s the membership fee is %(new)s (until now %(old)s). It is charged "
+                          "automatically, as before; nothing else changes.",
+                          day=from_date, new=new_fee, old=old_fee),
+                        _("If you do not want to continue, you can cancel before then on your account page, "
+                          "under Manage billing."),
+                    ],
+                },
+            )
         if event.event_type == "forum_avatar_approved":
             return (
                 _("Your forum access is complete"),
@@ -660,6 +679,16 @@ class NotificationService:
                 [_("Your membership in %(team)s has ended because the payment for it did not go through. "
                    "Within the next six months you can come back by simply paying again on the Teams page.",
                    team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_fee_changed": (
+                _("The fee for %(team)s changes", team=team),
+                _("From %(day)s the fee is %(fee)s.", day=payload.get("from_date"), fee=payload.get("new_fee")),
+                [_("From %(day)s the fee for %(team)s is %(new)s (until now %(old)s). It is charged "
+                   "automatically, as before; nothing else changes.",
+                   day=payload.get("from_date"), team=team, new=payload.get("new_fee"), old=payload.get("old_fee")),
+                 _("If you do not want to continue, you can leave on the Teams page before then. "
+                   "What you have paid for runs to its end.")],
                 teams_url, _("Open Teams"),
             ),
             "team_rejected": (

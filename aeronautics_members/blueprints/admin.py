@@ -1108,6 +1108,18 @@ def admin_settings():
         set_setting_value("notification_admin_error_enabled", str(notification_admin_error_enabled))
         set_setting_value("notification_user_status_enabled", str(notification_user_status_enabled))
         set_setting_value("notification_sender", (notification_sender if settings_section == "notifications" else before_settings.get("notification_sender")) or None)
+        moving_to_new_fee = 0
+        if settings_section == "billing" and stripe_price_id:
+            # A new fee: checked with Stripe, and every running subscription
+            # moves to it from its next renewal (services/billing.py).
+            from ..services.billing import change_membership_price
+
+            try:
+                moving_to_new_fee = change_membership_price(current_user, stripe_price_id)
+            except ServiceError as exc:
+                db.session.rollback()
+                flash(exc.message, "danger")
+                return redirect(settings_redirect)
         set_setting_value("stripe_publishable_key", stripe_publishable_key or None)
         set_setting_value("stripe_price_id", stripe_price_id or None)
         set_setting_value("forum_integration_enabled", str(forum_enabled))
@@ -1176,6 +1188,10 @@ def admin_settings():
         )
         db.session.commit()
         flash(_("Settings updated successfully!"), "success")
+        if moving_to_new_fee:
+            flash(_("%(count)s running subscription(s) move to the new price from their next renewal, "
+                    "in the background over the next minutes. Each member is emailed.",
+                    count=moving_to_new_fee), "info")
         return redirect(settings_redirect)
 
     return render_template(

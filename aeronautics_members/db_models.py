@@ -706,6 +706,9 @@ class ExternalWorkItem(db.Model):
     # other change leaves the username alone, on purpose, so that returning
     # students keep the one their old posts are under.
     KIND_FORUM_RENAME = "forum_rename"
+    # Queued when a fee changes: one running subscription moved to the new
+    # price, from its next renewal (services/payments.py).
+    KIND_STRIPE_PRICE_MOVE = "stripe_price_move"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"

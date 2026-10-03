@@ -53,12 +53,20 @@ def _apply_payment(team, form):
     if "payment_mode" in form:
         from ..services.team_payments import update_payment_settings
 
-        update_payment_settings(
+        moving = update_payment_settings(
             current_user, team,
             payment_mode=form.get("payment_mode"),
             stripe_price_id=form.get("stripe_price_id"),
             period_starts=form.get("period_starts"),
         )
+        return moving
+    return 0
+
+
+def _flash_moving(moving):
+    if moving:
+        flash(_("%(count)s running subscription(s) move to the new price from their next renewal, "
+                "in the background over the next minutes. Each member is emailed.", count=moving), "info")
 
 
 def _apply_logo(team, form, files):
@@ -125,7 +133,7 @@ def admin_team_new():
                 current_user, slug=request.form.get("slug"), **_team_form_fields(request.form)
             )
             _apply_access_list(team, request.form)
-            _apply_payment(team, request.form)
+            moving = _apply_payment(team, request.form)
             _apply_logo(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
@@ -133,6 +141,7 @@ def admin_team_new():
         else:
             db.session.commit()
             flash(_("Created."), "success")
+            _flash_moving(moving)
             return redirect(url_for("teams.admin_team_detail", slug=team.slug))
     return render_template(
         "admin_team_form.html",
@@ -161,7 +170,7 @@ def admin_team_detail(slug):
         try:
             teams_service.update_team(current_user, team, **_team_form_fields(request.form))
             _apply_access_list(team, request.form)
-            _apply_payment(team, request.form)
+            moving = _apply_payment(team, request.form)
             _apply_logo(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
@@ -169,6 +178,7 @@ def admin_team_detail(slug):
         else:
             db.session.commit()
             flash(_("Saved."), "success")
+            _flash_moving(moving)
             return redirect(url_for("teams.admin_team_detail", slug=team.slug))
 
     return render_template(

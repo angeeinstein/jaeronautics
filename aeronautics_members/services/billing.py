@@ -45,6 +45,7 @@ from .membership import (
     sync_member_active_state,
 )
 from .periods import active_periods, coverage_end, grant_calendar_year, grant_period
+from .settings import get_stripe_settings_map
 from .stripe_scope import scope_of_subscription
 from .payments import (  # noqa: F401 -- shared with the teams; imported from here too
     apply_runtime_stripe_config,
@@ -805,3 +806,107 @@ def sync_member_subscription_state_from_stripe(member):
         return False
 
     return sync_member_subscription_state_from_subscription(member, subscription)
+
+
+# --- A new membership fee -----------------------------------------------------------
+#
+# Entered as a new price ID under Settings -> Billing. New members pay it at
+# once; every running membership subscription moves to it from its next
+# renewal, in the background (services/payments.py), and its member is told.
+
+
+def _membership_price_id_now(payload=None):
+    return get_stripe_settings_map().get("stripe_price_id") or STRIPE_PRICE_ID or None
+
+
+def check_membership_price(new_price_id, old_price_id=None):
+    """The new price, if it can be the membership's; ValidationError otherwise."""
+    from . import ValidationError
+    from .payments import interval_months, retrieve_price
+
+    try:
+        price = retrieve_price(new_price_id)
+    except Exception as exc:  # noqa: BLE001 -- shown to the admin, nothing saved
+        current_app.logger.warning("Could not check Stripe price %s: %s", new_price_id, exc)
+        raise ValidationError(
+            _("Stripe does not know that price, or could not be asked. Check the ID and the Stripe keys."),
+            code="membership_price_unknown",
+        ) from None
+    if not price.get("active", True):
+        raise ValidationError(_("That price is archived in Stripe."), code="membership_price_unsuitable")
+    if interval_months(price) != 12 or price.get("unit_amount") in (None, 0):
+        raise ValidationError(_("The membership needs a yearly recurring price with a fixed amount."),
+                              code="membership_price_unsuitable")
+    if old_price_id:
+        try:
+            old_product = (retrieve_price(old_price_id) or {}).get("product")
+        except Exception:  # noqa: BLE001 -- the old one gone is no reason to refuse the new
+            old_product = None
+        new_product = price.get("product")
+        new_product = new_product if isinstance(new_product, str) else (new_product or {}).get("id")
+        old_product = old_product if isinstance(old_product, str) else (old_product or {}).get("id")
+        if old_product and new_product != old_product:
+            raise ValidationError(
+                _("Create the new price on the same product as the old one, so Stripe and the portal "
+                  "keep recognising it as the membership."),
+                code="membership_price_other_product",
+            )
+    return price
+
+
+def change_membership_price(actor, new_price_id):
+    """Check a new membership price and move every running subscription to it.
+
+    Returns how many subscriptions will move. Call before the setting is
+    saved, in the same transaction.
+    """
+    from ..db_models import Member, db
+    from .audit import log_audit_event
+    from .payments import PURPOSE_MEMBERSHIP, schedule_price_move
+
+    old_price_id = _membership_price_id_now()
+    if not new_price_id or new_price_id == old_price_id:
+        return 0
+    check_membership_price(new_price_id, old_price_id)
+    members = db.session.execute(
+        db.select(Member).where(Member.stripe_subscription_id.isnot(None), Member.deleted_at.is_(None))
+    ).scalars().all()
+    for member in members:
+        schedule_price_move(PURPOSE_MEMBERSHIP, member.stripe_subscription_id, new_price_id,
+                            member=member, member_id=member.id)
+    log_audit_event("billing", "membership_price_changed", actor_user=actor,
+                    before={"stripe_price_id": old_price_id}, after={"stripe_price_id": new_price_id},
+                    metadata={"subscriptions_to_move": len(members)})
+    return len(members)
+
+
+def _tell_member_about_new_fee(payload, result):
+    from ..db_models import Member, db
+    from .membership import format_membership_date_display
+    from .notifications import queue_user_status_notification
+    from .payments import fee_text
+
+    member = db.session.get(Member, payload.get("member_id"))
+    if member is None or member.deleted_at is not None or member.user is None:
+        return
+    starts = to_membership_date(result["renews_at"]) if result.get("renews_at") else None
+    queue_user_status_notification(
+        "membership_fee_changed", "The membership fee changes", member.user.email,
+        payload={
+            "first_name": member.first_name,
+            "old_fee": fee_text(result["old_price"]),
+            "new_fee": fee_text(result["new_price"]),
+            "from_date": format_membership_date_display(starts) if starts else None,
+        },
+        target_user=member.user, target_member=member,
+    )
+
+
+def _register_membership_price_moves():
+    from .payments import PURPOSE_MEMBERSHIP, register_price_moves
+
+    register_price_moves(PURPOSE_MEMBERSHIP, current_price=_membership_price_id_now,
+                         moved=_tell_member_about_new_fee)
+
+
+_register_membership_price_moves()

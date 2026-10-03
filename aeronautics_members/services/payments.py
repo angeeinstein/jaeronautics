@@ -28,7 +28,9 @@ from flask import current_app
 from flask_babel import get_locale
 
 from ..config import STRIPE_SECRET_KEY
+from ..db_models import ExternalWorkItem
 from . import ExternalServiceError
+from .outbox import enqueue, register_handler
 from .settings import get_stripe_settings_map
 
 PURPOSE_MEMBERSHIP = "membership"
@@ -284,3 +286,126 @@ def set_cancel_at_period_end(subscription_id, cancel):
             code="subscription_change_failed",
             details={"stripe_code": getattr(exc, "code", None)},
         ) from exc
+
+
+# --- A new fee ------------------------------------------------------------------------
+#
+# A fee changes by a new price in Stripe, entered where the old one was. New
+# people pay it at once. Running subscriptions are moved to it one by one, in
+# the background, from their next renewal: nothing is charged or refunded now,
+# the period under way stays as paid, and the next charge is the new amount.
+# Each person is told by email what changes and from when. Stripe itself does
+# not announce a price change; its own emails only confirm the charges.
+
+
+def interval_months(price):
+    """How many months a recurring price renews after: 6, 12 ... or 0."""
+    recurring = (price or {}).get("recurring") or {}
+    unit = {"month": 1, "year": 12}.get(recurring.get("interval"), 0)
+    return unit * int(recurring.get("interval_count") or 1)
+
+
+def interval_text(price):
+    months = interval_months(price)
+    if months == 12:
+        return "per year"
+    if months == 1:
+        return "per month"
+    return f"every {months} months"
+
+
+def fee_text(price):
+    """"€10.00 every 6 months"."""
+    return f"{format_amount(int(price['unit_amount']), price['currency'])} {interval_text(price)}"
+
+
+class _PriceMoves:
+    def __init__(self, current_price, moved):
+        self.current_price = current_price
+        self.moved = moved
+
+
+_price_moves = {}
+
+
+def register_price_moves(purpose, *, current_price, moved):
+    """How a purpose takes part in moving to a new fee.
+
+    ``current_price(payload)`` names the price in force now: an item queued
+    for a price changed again since is left alone. ``moved(payload, result)``
+    tells the person, once Stripe has taken the change.
+    """
+    _price_moves[purpose] = _PriceMoves(current_price, moved)
+
+
+def schedule_price_move(purpose, subscription_id, price_id, *, member=None, user=None, **details):
+    """Queue moving one subscription to ``price_id`` from its next renewal.
+
+    One item per subscription: a second change before the first ran replaces
+    what it moves to.
+    """
+    payload = {"purpose": purpose, "subscription_id": subscription_id, "price_id": price_id, **details}
+    item = enqueue(
+        ExternalWorkItem.KIND_STRIPE_PRICE_MOVE, member=member, user=user, payload=payload,
+        dedupe_key=f"{ExternalWorkItem.KIND_STRIPE_PRICE_MOVE}:{subscription_id}",
+        reason=f"New {purpose} fee",
+    )
+    item.payload = payload
+    return item
+
+
+def move_to_price_at_renewal(subscription_id, price_id):
+    """Put a running subscription on ``price_id`` from its next renewal.
+
+    Returns ``{"moved": False, "why": ...}`` when there is nothing to do -- the
+    subscription has ended or is ending, or is on that price already -- and
+    otherwise what was and what will be, for telling the person.
+    """
+    apply_runtime_stripe_config()
+    try:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+    except stripe.StripeError as exc:
+        if getattr(exc, "code", None) == "resource_missing":
+            return {"moved": False, "why": "gone"}
+        raise
+    if subscription.get("status") in ("canceled", "incomplete_expired"):
+        return {"moved": False, "why": "ended"}
+    if subscription_has_scheduled_cancellation(subscription):
+        return {"moved": False, "why": "ending"}
+    items = [item for item in ((subscription.get("items") or {}).get("data") or [])
+             if ((item.get("price") or {}).get("recurring"))]
+    if len(items) != 1:
+        raise ExternalServiceError(
+            f"Subscription {subscription_id} has {len(items)} recurring items; move it in Stripe by hand.",
+            code="subscription_price_ambiguous",
+        )
+    item = items[0]
+    old_price = item.get("price") or {}
+    if old_price.get("id") == price_id:
+        return {"moved": False, "why": "already"}
+    new_price = stripe.Price.retrieve(price_id)
+    if interval_months(new_price) != interval_months(old_price):
+        # A different interval restarts the billing cycle and charges at once.
+        raise ExternalServiceError(
+            f"Price {price_id} renews at another interval than subscription {subscription_id}.",
+            code="subscription_price_interval",
+        )
+    stripe.Subscription.modify(
+        subscription_id, items=[{"id": item.get("id"), "price": price_id}], proration_behavior="none",
+    )
+    _start, renews_at = subscription_period_bounds(subscription)
+    renews_at = subscription.get("trial_end") if subscription.get("status") == "trialing" else renews_at
+    return {"moved": True, "old_price": old_price, "new_price": new_price, "renews_at": renews_at}
+
+
+def _handle_price_move(item):
+    payload = item.payload or {}
+    hooks = _price_moves.get(payload.get("purpose"))
+    if hooks is not None and hooks.current_price(payload) != payload.get("price_id"):
+        return  # the fee has changed again since; a newer item carries it
+    result = move_to_price_at_renewal(payload["subscription_id"], payload["price_id"])
+    if result["moved"] and hooks is not None:
+        hooks.moved(payload, result)
+
+
+register_handler(ExternalWorkItem.KIND_STRIPE_PRICE_MOVE, _handle_price_move)

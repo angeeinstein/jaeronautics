@@ -117,7 +117,12 @@ def _evenly_spaced(starts):
 
 
 def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, period_starts):
-    """How a team charges. Checked against Stripe before it is saved."""
+    """How a team charges. Checked against Stripe before it is saved.
+
+    A new price is a new fee: people joining pay it at once, and every running
+    subscription moves to it from its next renewal, its holder told by email
+    (services/payments.py). Returns how many subscriptions will move.
+    """
     payment_mode = (payment_mode or PAYMENT_NONE).strip()
     if payment_mode not in PAYMENT_MODES:
         raise ValidationError("Choose how the team charges.", code="team_payment_mode_invalid")
@@ -165,6 +170,25 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
     else:
         team.fee_display = None
 
+    running = [membership for membership in team.memberships
+               if membership.stripe_subscription_id and membership.status in (APPROVED, ACTIVE)]
+    moving = (
+        payment_mode == PAYMENT_SUBSCRIPTION and charges(team) and team.stripe_price_id
+        and stripe_price_id != team.stripe_price_id and running
+    )
+    if moving:
+        try:
+            old_price = payments.retrieve_price(team.stripe_price_id)
+        except Exception:  # noqa: BLE001 -- the old one gone; the move checks again
+            old_price = None
+        if old_price is not None and payments.interval_months(old_price) != payments.interval_months(price):
+            # Stripe would restart every running subscription and charge it now.
+            raise ValidationError(
+                "The new price renews at another interval than the old one, and subscriptions are "
+                "running on it. Keep the interval, or end those memberships first.",
+                code="team_price_interval_changed",
+            )
+
     before = {"payment_mode": team.payment_mode, "stripe_price_id": team.stripe_price_id,
               "period_starts": team.period_starts}
     team.payment_mode = payment_mode
@@ -175,7 +199,14 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
     if before != after:
         log_audit_event("teams", "team_payment_settings_changed", actor_user=actor,
                         before=before, after=after, metadata={"team": team.slug})
-    return team
+    if not moving:
+        return 0
+    for membership in running:
+        payments.schedule_price_move(
+            payments.PURPOSE_TEAM, membership.stripe_subscription_id, stripe_price_id,
+            user=membership.user, team_id=team.id, team_membership_id=membership.id,
+        )
+    return len(running)
 
 
 # --- Periods ---------------------------------------------------------------------
@@ -211,12 +242,7 @@ def _last_day(unix_timestamp):
 
 def fee_text(team, price=None):
     """"€10.00 every 6 months", for pages and Checkout."""
-    price = price or payments.retrieve_price(team.stripe_price_id)
-    recurring = price.get("recurring") or {}
-    months = {"month": 1, "year": 12}.get(recurring.get("interval"), 0) * int(recurring.get("interval_count") or 1)
-    amount = payments.format_amount(int(price["unit_amount"]), price["currency"])
-    every = "every year" if months == 12 else f"every {months} months"
-    return f"{amount} {every}"
+    return payments.fee_text(price or payments.retrieve_price(team.stripe_price_id))
 
 
 # --- Paying ------------------------------------------------------------------------
@@ -541,3 +567,31 @@ def end_finished_team_memberships(today=None):
             _end(membership, END_PAYMENT_FAILED, get_now_utc())
             ended += 1
     return ended
+
+
+# --- A new fee -----------------------------------------------------------------------
+
+
+def _team_price_now(payload):
+    from ..db_models import Team
+
+    team = db.session.get(Team, payload.get("team_id"))
+    return team.stripe_price_id if team is not None and charges(team) else None
+
+
+def _tell_about_new_fee(payload, result):
+    from .clock import to_membership_date
+
+    membership = db.session.get(TeamMembership, payload.get("team_membership_id"))
+    if membership is None or membership.status not in (APPROVED, ACTIVE):
+        return
+    starts = to_membership_date(result["renews_at"]) if result.get("renews_at") else None
+    _tell_person(
+        "team_fee_changed", membership,
+        old_fee=payments.fee_text(result["old_price"]),
+        new_fee=payments.fee_text(result["new_price"]),
+        from_date=format_membership_date_display(starts) if starts else None,
+    )
+
+
+payments.register_price_moves(payments.PURPOSE_TEAM, current_price=_team_price_now, moved=_tell_about_new_fee)
