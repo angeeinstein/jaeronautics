@@ -601,6 +601,41 @@ people hold administrator accounts. At that point the answer changes to keeping
 the secrets in deployment configuration (`.env`, systemd credentials) rather
 than in rows that every backup copies.
 
+## Teams
+
+Groups inside the association with their own members and leads -- off until
+switched on. What was decided and why is in [teams-plan.md](teams-plan.md);
+this is how to use them.
+
+**Setting up** (site admins, Admin → Teams):
+
+1. Switch teams on. While off, members see nothing of them.
+2. **New Team**: a name, how people join (by approval of the leads, or open to
+   every member), optionally a logo, a question for applicants, a maximum size
+   and a forum group.
+3. **Give the lead role** by email address. A role counts only while its
+   holder is a member of the association *and* of the team, so the lead joins
+   the team like anybody else and an admin approves them.
+
+**Running a team** (its leads, Teams → Manage): applications (invite with the
+meeting details, approve, not accept), members, former members, notes about a
+person (never shown to them, not in their data export), removing somebody
+(immediately, with a reason that stays in the record), an export of the
+current members, and the team's own settings.
+
+**Access list.** In the team's settings: who receives it, on which days of the
+year (`15.10, 15.03`), and whether it goes out by itself on those days. The
+leads' page has *Preview and send* for sending it by hand. It marks who is new
+since the last list sent and lists who has left since.
+
+**Forum group.** Create the group in Discourse first, then name it in the
+team's settings; members are added and removed with each forum sync. Renaming
+it later leaves people in the old group -- delete that one in Discourse.
+
+**Every night** (with `reconcile-billing`): team memberships of people no
+longer in the association end, approvals for a team that charges lapse when
+unpaid after 14 days, and access lists due that day go out.
+
 ## Roles and Permissions
 
 **Access is decided by capability, never by role name.** A route says what it

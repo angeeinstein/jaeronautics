@@ -653,6 +653,13 @@ class NotificationService:
                 [_("Your application to %(team)s was not accepted this time.", team=team)],
                 teams_url, _("Open Teams"),
             ),
+            "team_approval_lapsed": (
+                _("Your approval for %(team)s has lapsed", team=team),
+                _("It was not paid for in time."),
+                [_("Your approval for %(team)s was not paid for within two weeks, so it has lapsed. "
+                   "You are welcome to apply again.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
             "team_removed": (
                 _("Your membership in %(team)s has ended", team=team),
                 _("Your membership in %(team)s has ended.", team=team),

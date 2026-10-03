@@ -331,6 +331,45 @@
     </div>
 </div>
 
+{% if team_memberships or team_roles %}
+{#- Which teams this person is in, has applied to or has left, and any roles. -#}
+<div class="card mt-4">
+    <div class="card-header"><h4 class="mb-0">{{ team_labels()[1] }}</h4></div>
+    <div class="card-body">
+        {% if team_roles %}
+            <p class="mb-3">
+                {% for team_role in team_roles %}
+                    <span class="status-label status-info me-1">{{ team_role_labels.get(team_role.role, team_role.role) }} · {{ team_role.team.name }}</span>
+                {% endfor %}
+            </p>
+        {% endif %}
+        {% if team_memberships %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead><tr><th>{{ _('Team') }}</th><th>{{ _('Status') }}</th><th>{{ _('Since') }}</th><th>{{ _('Until') }}</th></tr></thead>
+                    <tbody>
+                        {% for membership in team_memberships %}
+                            <tr>
+                                <td>
+                                    {% if teams_are_on and membership.team.status == 'active' %}
+                                        <a href="{{ url_for('teams.team_person', slug=membership.team.slug, user_id=user_record.id) }}">{{ membership.team.name }}</a>
+                                    {% else %}{{ membership.team.name }}{% endif %}
+                                </td>
+                                <td>
+                                    {{ _(team_status_labels.get(membership.status, membership.status)) }}{% if membership.end_reason %} · {{ _(team_end_reasons.get(membership.end_reason, membership.end_reason)) }}{% endif %}
+                                </td>
+                                <td>{{ (membership.started_at or membership.applied_at)|date_display or '-' }}</td>
+                                <td>{{ membership.ended_at|date_display or '-' }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 {% if can_reconnect %}
 {#
   Reconnecting by hand, for a returning student whose university address no

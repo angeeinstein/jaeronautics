@@ -92,8 +92,9 @@ access to the office.
 - **No manual adding by leads** — *agreed so far.* The point of the portal is that
   teams no longer handle cash. Consequence: someone with neither a card nor a
   SEPA account cannot join a team through the portal.
-- **An approval that is never paid** — *open.* Should it lapse, e.g. after 14
-  days?
+- **An approval that is never paid** — *agreed so far, built:* it lapses after
+  14 days and the person applies again; they are emailed that they can. Only
+  teams that charge have approvals waiting for a payment.
 
 ## Payment
 
@@ -118,11 +119,14 @@ access to the office.
   group, onto the former members list. The leads are told — *suggested:* one
   summary per team ("these 7 ended on 30 September"), not an email per person,
   since every period ends on the same day.
-- **An email to the member when it ends** — *suggested.* One short email with a
-  renewal link, no reminder beforehand, so that nobody first finds out at a
-  locked office door.
-- **Leaving on one's own** — *suggested:* at the end of the paid period, no
-  refund.
+- **An email to the member when it ends** — *agreed so far*, with the summary
+  to the leads. One short email with a renewal link, no reminder beforehand.
+  To build with payment. If the team pays by subscription rather than once per
+  period, Stripe's own renewal emails may make this one redundant -- decide
+  then.
+- **Leaving on one's own** — *agreed so far:* no refund, and the membership
+  runs to the end of the paid period rather than ending at once. To build with
+  payment; until then teams are free and leaving ends it at once.
 - **The association membership ends** — follows from the requirement: the team
   membership ends with it and the leads are told.
 - **Removal by a lead** — *agreed so far:* **immediately**. It will only
@@ -147,6 +151,10 @@ access to the office.
   list shows each person once, with every period they were in the team and
   when they were last active, most recently active first; whoever is back in
   the team is not on it.
+- **The leads' notes in a data export** — *agreed so far:* left out for now.
+  How leads will use them is not known -- a to-do for the applicant, even a
+  password -- so they are not handed over automatically. Everything else about
+  a person's teams is in the export.
 - **The leads' notes when someone erases their account** — *agreed so far:* not
   deleted automatically, since they may hold something that needs keeping for
   longer. How they are handled instead — reviewed by an admin, kept for a set

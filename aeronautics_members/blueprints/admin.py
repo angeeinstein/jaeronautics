@@ -192,6 +192,22 @@ def _role_removal_warning(user):
     return blockers[0][1] if blockers else None
 
 
+def _teams_context(user):
+    """Which teams this person is in or has been in, and their roles there."""
+    from ..services import teams as teams_service
+
+    if not current_user.can(Permission.TEAMS_MANAGE):
+        return {"team_memberships": [], "team_roles": []}
+    return {
+        "team_memberships": teams_service.memberships_of(user, include_archived=True),
+        "team_roles": teams_service.roles_of(user),
+        "team_status_labels": teams_service.STATUS_LABELS,
+        "team_end_reasons": teams_service.END_REASON_LABELS,
+        "team_role_labels": teams_service.TEAM_ROLE_LABELS,
+        "teams_are_on": teams_service.teams_enabled(),
+    }
+
+
 @admin_bp.route("/admin", methods=["GET"])
 @login_required
 @requires(Permission.ADMIN_ACCESS)
@@ -330,6 +346,7 @@ def admin_account_detail(user_id):
         latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
         recent_logs=recent_logs,
         **_reconnect_context(user),
+        **_teams_context(user),
         # The role editor. Every assignable role, whether this account holds it,
         # and what refusing would say -- worked out server-side so the form and
         # the guard cannot disagree about what is possible.

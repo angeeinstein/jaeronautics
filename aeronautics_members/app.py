@@ -4435,6 +4435,15 @@ def create_app(config_overrides=None):
         if lapsed:
             click.echo(f"Ended {lapsed} team membership(s) of people no longer in the association.")
 
+        # Approvals for teams that charge, not paid for in time, lapse.
+        from .services.teams import lapse_unpaid_approvals
+
+        unpaid = lapse_unpaid_approvals()
+        db.session.commit()
+        flush_marked_notification_channels()
+        if unpaid:
+            click.echo(f"{unpaid} team approval(s) lapsed unpaid.")
+
         # Then the teams' access lists due today, now that they are current.
         from .services.teams import send_due_access_lists
 

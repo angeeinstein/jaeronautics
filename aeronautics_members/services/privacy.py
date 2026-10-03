@@ -131,6 +131,7 @@ def export_account_data(user):
         "forum_avatar_submissions": [],
         "emails_sent_to_you": [],
         "account_history": [],
+        "teams": [],
     }
 
     if member is not None:
@@ -246,7 +247,47 @@ def export_account_data(user):
         ).scalars()
     ]
 
+    payload["teams"] = _team_data(user)
     return serialize_audit_value(payload)
+
+
+def _team_data(user):
+    """Every team attempt and role of this person -- not the leads' notes.
+
+    The notes are the leads' working notes about a person and may hold
+    anything; whether and how they belong in an export is still open
+    (docs/teams-plan.md), so they are left out rather than handed over
+    unread.
+    """
+    from ..db_models import TeamMembership, TeamRole
+
+    memberships = db.session.execute(
+        db.select(TeamMembership).filter_by(user_id=user.id).order_by(TeamMembership.id)
+    ).scalars().all()
+    roles = db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars().all()
+    return {
+        "memberships": [
+            {
+                "team": membership.team.name,
+                "status": membership.status,
+                "application_text": membership.application_text,
+                "meeting_details": membership.meeting_details,
+                "applied_at": membership.applied_at,
+                "invited_at": membership.invited_at,
+                "approved_at": membership.approved_at,
+                "payment_mode": membership.payment_mode,
+                "payment_settled_at": membership.payment_settled_at,
+                "started_at": membership.started_at,
+                "ended_at": membership.ended_at,
+                "end_reason": membership.end_reason,
+            }
+            for membership in memberships
+        ],
+        "roles": [
+            {"team": team_role.team.name, "role": team_role.role, "granted_at": team_role.granted_at}
+            for team_role in roles
+        ],
+    }
 
 
 def export_filename_for(user):

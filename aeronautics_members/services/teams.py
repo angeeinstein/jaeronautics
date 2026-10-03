@@ -554,6 +554,11 @@ END_LEFT = "left"
 END_REMOVED = "removed"
 END_MEMBERSHIP_ENDED = "membership_ended"
 END_ACCOUNT_ERASED = "account_erased"
+END_NOT_PAID = "not_paid_in_time"
+
+#: How long an approval waits for its payment before it lapses and the person
+#: has to apply again.
+APPROVAL_PAYMENT_DAYS = 14
 
 #: What applicants and members see for each state.
 STATUS_LABELS = {
@@ -571,6 +576,7 @@ END_REASON_LABELS = {
     END_REMOVED: "Removed",
     END_MEMBERSHIP_ENDED: "Association membership ended",
     END_ACCOUNT_ERASED: "Account erased",
+    END_NOT_PAID: "Not paid in time",
 }
 
 
@@ -586,13 +592,18 @@ def ongoing_membership(user, team):
     ).scalars().first()
 
 
-def memberships_of(user):
-    """Every attempt of this person, newest first, in teams still running."""
+def memberships_of(user, include_archived=False):
+    """Every attempt of this person, newest first; by default in teams still running."""
+    query = db.select(TeamMembership).join(Team).where(TeamMembership.user_id == user.id)
+    if not include_archived:
+        query = query.where(Team.status == STATUS_ACTIVE)
+    return db.session.execute(query.order_by(TeamMembership.id.desc())).scalars().all()
+
+
+def roles_of(user):
+    """The roles this person holds, in every team."""
     return db.session.execute(
-        db.select(TeamMembership)
-        .join(Team)
-        .where(TeamMembership.user_id == user.id, Team.status == STATUS_ACTIVE)
-        .order_by(TeamMembership.id.desc())
+        db.select(TeamRole).join(Team).where(TeamRole.user_id == user.id).order_by(Team.name, TeamRole.role)
     ).scalars().all()
 
 
@@ -1044,6 +1055,44 @@ def end_lapsed_team_memberships():
             names=sorted(names),
         )
     return sum(len(names) for names in ended_by_team.values())
+
+
+def lapse_unpaid_approvals(now=None):
+    """Approvals not paid for within APPROVAL_PAYMENT_DAYS lapse.
+
+    Run every night. Only teams that charge have approvals waiting for a
+    payment; a free team settles the step at once. The person is told they can
+    apply again.
+    """
+    from datetime import timedelta
+
+    if not teams_enabled():
+        return 0
+    now = now or get_now_utc()
+    cutoff = now - timedelta(days=APPROVAL_PAYMENT_DAYS)
+    lapsed = 0
+    for waiting in db.session.execute(
+        db.select(TeamMembership).where(TeamMembership.status == APPROVED)
+    ).scalars().all():
+        approved_at = waiting.approved_at
+        if approved_at is None:
+            continue
+        if approved_at.tzinfo is None:
+            from datetime import timezone
+
+            approved_at = approved_at.replace(tzinfo=timezone.utc)
+        if approved_at > cutoff:
+            continue
+        membership = _locked_membership(waiting.id)
+        if membership.status != APPROVED:
+            continue
+        membership.status = WITHDRAWN
+        membership.ended_at = now
+        membership.end_reason = END_NOT_PAID
+        _audit("team_approval_lapsed", None, membership)
+        _tell_person("team_approval_lapsed", membership)
+        lapsed += 1
+    return lapsed
 
 
 def forget_for_erasure(user):
