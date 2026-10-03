@@ -175,6 +175,34 @@ class TestJoining:
 
         assert teams.join_or_apply(anna, team).status == teams.APPLIED
 
+    def test_after_leaving_the_page_follows_the_latest_attempt(self, app, client):
+        team, lead = _led()
+        anna = _person()
+        _in_team(anna, team)
+        _login(client, anna.id)
+        client.post("/teams/rocket/leave")
+        client.post("/teams/rocket/join", data={"application_text": "Back again."})
+
+        body = client.get("/teams").get_data(as_text=True)
+        assert "Application received" in body and "Withdraw application" in body
+        assert "already in this team" not in body
+
+        teams.approve(lead, team, teams.ongoing_membership(anna, team).id)
+        db.session.commit()
+        body = client.get("/teams").get_data(as_text=True)
+        assert "Leave" in body and ">Ended<" not in body
+
+    def test_leaving_asks_first(self, app, client):
+        team, _lead = _led()
+        anna = _person()
+        _in_team(anna, team)
+        _login(client, anna.id)
+
+        body = client.get("/teams").get_data(as_text=True)
+
+        assert 'data-confirm="Leave Rocket?"' in body
+        assert body.count("confirm-submit.js") == 1
+
 
 @pytest.mark.usefixtures("switched_on")
 class TestTheTeamPage:

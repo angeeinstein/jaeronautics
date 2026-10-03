@@ -21,19 +21,31 @@
 {%- endmacro %}
 
 {# Upload, replace or remove a logo. The form around it needs enctype="multipart/form-data". #}
+{# The logo: what is there now beside the file picker. Remove and a new file
+   only mark what will happen; nothing changes until the form is saved
+   (team-logo-field.js). #}
 {% macro logo_field(team) -%}
+{%- set has_logo = team and team.logo_token -%}
 <label class="form-label" for="logo">{{ _('Logo') }}</label>
-{% if team and team.logo_token %}
-    <div class="d-flex align-items-center gap-3 mb-2">
-        {{ team_logo(team, 'large') }}
-        <div class="form-check mb-0">
-            <input class="form-check-input" type="checkbox" name="remove_logo" id="remove_logo">
-            <label class="form-check-label" for="remove_logo">{{ _('Remove') }}</label>
-        </div>
+<div class="team-logo-field" data-team-logo-field>
+    <div class="team-logo-preview" data-logo-preview>
+        {% if has_logo %}<span data-logo-current>{{ team_logo(team, 'large') }}</span>{% endif %}
+        <span class="text-muted small" data-logo-empty {% if has_logo %}hidden{% endif %}>{{ _('No logo') }}</span>
     </div>
-{% endif %}
-<input class="form-control" type="file" id="logo" name="logo" accept="image/png,image/jpeg,image/webp">
-<div class="form-text">{{ _('Optional. PNG, JPG or WebP. Shown on dark backgrounds, so a logo with its own background or in light colours works best.') }}</div>
+    <div class="team-logo-controls">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <input class="form-control team-logo-input" type="file" id="logo" name="logo" accept="image/png,image/jpeg,image/webp">
+            <button type="button" class="btn btn-outline-danger" data-logo-remove
+                    data-label-remove="{{ _('Remove') }}" data-label-undo="{{ _('Undo') }}" {% if not has_logo %}hidden{% endif %}>{{ _('Remove') }}</button>
+        </div>
+        <input type="hidden" name="remove_logo" value="" data-logo-remove-flag>
+        <div class="form-text" data-logo-note hidden
+             data-note-removed="{{ _('Removed when you save.') }}"
+             data-note-new="{{ _('Uploaded when you save.') }}"></div>
+        <div class="form-text">{{ _('Optional. PNG, JPG or WebP. Shown on dark backgrounds, so a logo with its own background or in light colours works best.') }}</div>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='team-logo-field.js') }}"></script>
 {%- endmacro %}
 
 {# Who receives the list of current members, on which days, and whether it

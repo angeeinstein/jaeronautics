@@ -283,7 +283,11 @@ def _sees_team_page(team):
 def teams_home():
     _teams_or_404()
     singular, plural = teams_service.team_labels()
-    mine = {membership.team_id: membership for membership in teams_service.memberships_of(current_user)}
+    mine = {}
+    for membership in teams_service.memberships_of(current_user):  # newest first
+        # The latest attempt per team: somebody who left and applied again is
+        # an applicant, not a former member.
+        mine.setdefault(membership.team_id, membership)
     ongoing = {
         team_id: membership for team_id, membership in mine.items()
         if membership.status in teams_service.ONGOING

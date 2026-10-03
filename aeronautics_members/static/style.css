@@ -1278,3 +1278,35 @@ textarea.form-control {
     height: 4rem;
     max-width: 12rem;
 }
+
+/* The logo field in a team's settings: the logo beside its controls. */
+.team-logo-field {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+}
+
+.team-logo-preview {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    /* Fixed, so the controls beside it stay put when the logo goes. */
+    width: 13rem;
+    height: 5rem;
+    padding: 0.5rem;
+    border: 1px dashed var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+}
+
+.team-logo-controls {
+    flex: 1 1 16rem;
+    min-width: 0;
+}
+
+.team-logo-input {
+    flex: 1 1 12rem;
+    max-width: 22rem;
+    min-width: 0;
+}
