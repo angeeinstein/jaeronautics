@@ -10,8 +10,8 @@ from datetime import date
 import pytest
 
 from conftest import db
-from aeronautics_members.db_models import AuditLog, NotificationEvent
-from aeronautics_members.services import ValidationError, teams
+from aeronautics_members.db_models import AuditLog, NotificationEvent, TeamMembership
+from aeronautics_members.services import ValidationError, privacy, teams
 from test_emails import FakeSMTP, _parts, outbox  # noqa: F401
 from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
 from test_teams_foundation import _in_team
@@ -197,3 +197,70 @@ class TestThePages:
         assert "Not a day of the year: 31.02" in response.get_data(as_text=True)
         db.session.refresh(team)
         assert team.description is None
+
+
+@pytest.mark.usefixtures("outbox", "switched_on")
+class TestComparedWithTheLastList:
+    """A help for whoever gives access, not the truth about who has it."""
+
+    def _text(self):
+        return _parts(FakeSMTP.sent[-1], "text/plain")[0].get_payload(decode=True).decode()
+
+    def test_the_first_list_marks_nobody(self, app):
+        team, lead = _led()
+        _with_members(_configured(team))
+
+        teams.send_access_list(lead, team, today=date(2026, 10, 15))
+
+        text = self._text()
+        assert "NEW" not in text and "Compared" not in text and "No longer" not in text
+
+    def test_the_next_marks_who_is_new_and_who_left(self, app):
+        from aeronautics_members.db_models import TeamAccessListSend
+
+        team, lead = _led()
+        _with_members(_configured(team))
+        teams.send_access_list(lead, team, today=date(2026, 10, 15))
+        anna = db.session.query(TeamMembership).join(TeamMembership.user).filter_by(email="anna@example.com").one().user
+        teams.leave(anna, team)
+        _in_team(_person("cara@example.com", "Cara", "Cole", email_work="cara@edu.example"), team)
+
+        teams.send_access_list(lead, team, today=date(2027, 3, 15))
+
+        text = self._text()
+        new_line = next(line for line in text.splitlines() if "Cara Cole" in line)
+        assert "NEW" in new_line
+        assert "NEW" not in next(line for line in text.splitlines() if "Ben Adler" in line)
+        assert "New: not on our list of 15.10.2026." in text
+        gone = text[text.index("No longer in the team"):]
+        assert "Anna Berger" in gone and "anna@edu.example" in gone
+        assert db.session.query(TeamAccessListSend).count() == 1, "only the newest is kept"
+
+    def test_somebody_who_erased_their_account_shows_once(self, app):
+        team, lead = _led()
+        _configured(team)
+        anna = _person("anna@example.com", "Anna", "Berger", email_work="anna@edu.example")
+        _in_team(anna, team)
+        teams.send_access_list(lead, team, today=date(2026, 10, 15))
+
+        privacy.erase_account(anna, initiated_by=privacy.INITIATED_BY_MEMBER)
+        db.session.commit()
+
+        teams.send_access_list(lead, team, today=date(2027, 3, 15))
+        assert "anna@edu.example" in self._text()[self._text().index("No longer in the team"):]
+
+        teams.send_access_list(lead, team, today=date(2027, 10, 15))
+        assert "anna@edu.example" not in self._text()
+
+    def test_the_preview_shows_the_same(self, app, client):
+        team, lead = _led()
+        _with_members(_configured(team))
+        teams.send_access_list(lead, team, today=date(2026, 10, 15))
+        _in_team(_person("cara@example.com", "Cara", "Cole"), team)
+        db.session.commit()
+        _login(client, lead.id)
+
+        body = client.get("/teams/rocket/manage/access-list").get_data(as_text=True)
+
+        assert "New: not on our list of 15.10.2026." in body
+        assert body.count('status-label status-info">New<') == 1

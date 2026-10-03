@@ -33,17 +33,27 @@
         <p>{{ message.intro }}</p>
         {% if message.rows %}
             <div class="table-responsive">
-                <table class="table table-striped align-middle mb-0">
+                <table class="table table-striped align-middle mb-2">
                     <thead><tr><th>{{ _('Name') }}</th><th>{{ _('University email') }}</th></tr></thead>
                     <tbody>
-                        {% for name, university_email in message.rows %}
-                            <tr><td>{{ name }}</td><td>{{ university_email or '-' }}</td></tr>
+                        {% for row in message.rows %}
+                            <tr>
+                                <td>{{ row.name }}{% if row.new %} <span class="status-label status-info">{{ _('New') }}</span>{% endif %}</td>
+                                <td>{{ row.email or '-' }}</td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            <p class="small text-muted">{{ _('%(count)s member(s).', count=message.rows|length) }}{% if message.compared_note %} {{ message.compared_note }}{% endif %}</p>
         {% else %}
-            <p class="text-muted mb-0">{{ _('The team has no members at the moment.') }}</p>
+            <p class="text-muted">{{ _('The team has no members at the moment.') }}</p>
+        {% endif %}
+        {% if message.gone %}
+            <h5 class="mt-4 text-muted">{{ _('No longer in the team') }}</h5>
+            <ul class="list-unstyled small text-muted mb-0">
+                {% for entry in message.gone %}<li>{{ entry.name }} · {{ entry.email or '-' }}</li>{% endfor %}
+            </ul>
         {% endif %}
     </div>
 </section>

@@ -301,6 +301,15 @@ the member pays. Every step goes into the audit log.
   ending the memberships of people who left the association, so the list is
   current — never twice on one day. A list that cannot be sent is reported to
   the admins and can then be sent from the team's page.
+- **Compared with our last list** — *agreed so far*, deliberately simple, since
+  the list is a help for whoever gives access and not the only source of truth:
+  people get access in other ways too. The main list says who should have
+  access now, with a NEW label for anybody not on our last list; below it,
+  small and grey, who was on the last list and is no longer in the team; and
+  one line naming the date compared with. Compared by account, so a changed
+  name or address is not mistaken for somebody new. Only the last list sent
+  is kept; somebody who erased their account shows up once as no longer in
+  the team, and is gone after the next list.
 - **No notice when joining** — *agreed so far:* that a team's members are listed
   for access to its rooms is obvious, and the university email goes back to the
   university. People here are open about who is in which team.

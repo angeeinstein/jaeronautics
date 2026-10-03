@@ -216,6 +216,14 @@ def seed(app, app_module, subscriptions):
     teams.add_note(active.user, rocket, bernd, "Met him at the open day. Knows CATIA.")
     teams.update_access_list(None, rocket, recipients="facility@uni.example\nporter@uni.example",
                              dates="15.10, 15.03", auto_send=True)
+    # As if a list went out in March: Carla has joined since, Dieter has left.
+    from aeronautics_members.db_models import TeamAccessListSend
+
+    db.session.add(TeamAccessListSend(team=rocket, sent_on=date(2026, 3, 15), automatic=True, entries=[
+        {"user_id": active.user.id, "name": "Anna Maximilian-Hofstetter-Wallensteiner",
+         "email": "anna.maximilian-hofstetter-wallensteiner@edu.fh-joanneum.at"},
+        {"user_id": 99999, "name": "Dieter Departed", "email": "dieter.departed@edu.fh-joanneum.at"},
+    ]))
     db.session.commit()
 
     reset_token = build_password_reset_token(new.user)

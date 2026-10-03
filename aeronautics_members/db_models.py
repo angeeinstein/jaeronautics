@@ -878,6 +878,27 @@ class TeamMembership(db.Model):
     decided_by = db.relationship("User", foreign_keys=[decided_by_user_id])
 
 
+class TeamAccessListSend(db.Model):
+    """The access list a team last sent, to mark who is new on the next one.
+
+    Only the latest is kept. It holds what was sent -- account, name and
+    university email -- so somebody who has left since, even by erasing their
+    account, shows up once as no longer in the team, and is gone after that.
+    """
+
+    __tablename__ = "team_access_list_sends"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    sent_on = db.Column(db.Date, nullable=False)
+    sent_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    automatic = db.Column(db.Boolean, nullable=False, default=False)
+    # [{"user_id": 7, "name": "Anna Berger", "email": "anna@edu..."}, ...]
+    entries = db.Column(db.JSON, nullable=False)
+
+    team = db.relationship("Team")
+
+
 class TeamNote(db.Model):
     """What the leads write down about a person, across all their attempts.
 

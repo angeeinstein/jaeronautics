@@ -1068,6 +1068,44 @@ def access_list_rows(team):
     return [(row["name"], row["university_email"] or "") for row in roster(team)]
 
 
+def last_access_list(team):
+    from ..db_models import TeamAccessListSend
+
+    return db.session.execute(
+        db.select(TeamAccessListSend).filter_by(team_id=team.id).order_by(TeamAccessListSend.id.desc())
+    ).scalars().first()
+
+
+def access_list_comparison(team):
+    """The list as it would go out now, against the last one sent.
+
+    Not the truth about who can open the door -- people get access in other
+    ways too -- only a help: who is new on our list, and who was on it last
+    time and is no longer in the team. Compared by account, so a changed name
+    or address is not mistaken for somebody new.
+    """
+    previous = last_access_list(team)
+    before = {entry["user_id"]: entry for entry in (previous.entries if previous else [])}
+    current = roster(team)
+    now_ids = {row["user"].id for row in current}
+    return {
+        "rows": [
+            {
+                "user_id": row["user"].id,
+                "name": row["name"],
+                "email": row["university_email"] or "",
+                "new": previous is not None and row["user"].id not in before,
+            }
+            for row in current
+        ],
+        "gone": sorted(
+            (entry for user_id, entry in before.items() if user_id not in now_ids),
+            key=lambda entry: (entry.get("name") or "").lower(),
+        ),
+        "compared_with": previous.sent_on if previous else None,
+    }
+
+
 def next_access_list_date(team, today=None):
     """The next day the list goes out by itself, or None."""
     from datetime import date
@@ -1101,15 +1139,21 @@ def access_list_message(team, today=None):
     from .membership import format_date_display
 
     today = today or get_membership_today()
-    rows = access_list_rows(team)
+    comparison = access_list_comparison(team)
+    rows = comparison["rows"]
     shown = format_date_display(today)
+    compared_with = comparison["compared_with"]
     return (
         f"{team.name}: current members ({shown})",
         {
             "preview_text": f"{len(rows)} current member(s) of {team.name}.",
             "heading": f"Current members of {team.name}",
-            "intro": f"The current members of {team.name}, as of {shown}:",
+            "intro": f"These members of {team.name} should have access, as of {shown}:",
             "rows": rows,
+            "gone": comparison["gone"],
+            "compared_note": (
+                f"New: not on our list of {format_date_display(compared_with)}." if compared_with else None
+            ),
             "team_badge_name": team.name,
         },
     )
@@ -1151,12 +1195,24 @@ def send_access_list(actor, team, *, today=None, automatic=False):
         raise ExternalServiceError(f"The list could not be sent: {error}", code="team_access_list_send_failed")
 
     team.access_list_last_sent_on = today
+    _remember_access_list(team, today, template_vars["rows"], automatic)
     log_audit_event(
         "teams", "team_access_list_sent", actor_user=actor,
         metadata={"team": team.slug, "members": len(template_vars["rows"]),
                   "recipients": len(recipients), "automatic": automatic},
     )
     return len(template_vars["rows"])
+
+
+def _remember_access_list(team, today, rows, automatic):
+    """Keep what was just sent, in place of what was sent before."""
+    from ..db_models import TeamAccessListSend
+
+    db.session.execute(db.delete(TeamAccessListSend).where(TeamAccessListSend.team_id == team.id))
+    db.session.add(TeamAccessListSend(
+        team=team, sent_on=today, automatic=automatic,
+        entries=[{"user_id": row["user_id"], "name": row["name"], "email": row["email"]} for row in rows],
+    ))
 
 
 def send_due_access_lists(today=None):

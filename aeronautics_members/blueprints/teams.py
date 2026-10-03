@@ -536,7 +536,7 @@ def team_access_list(slug):
         message=message,
         recipients=teams_service.parse_recipients(team.access_list_recipients),
         cc=teams_service.access_list_cc(team),
-        missing_university_email=sum(1 for _name, address in message["rows"] if not address),
+        missing_university_email=sum(1 for row in message["rows"] if not row["email"]),
     )
 
 
