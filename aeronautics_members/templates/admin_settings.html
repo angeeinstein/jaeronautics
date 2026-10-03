@@ -480,6 +480,11 @@
                                 <div class="col-md-6">{{ mail_account_form.username.label(class="form-label") }}{{ mail_account_form.username(class="form-control", placeholder=_('noreply@example.com')) }}</div>
                                 <div class="col-md-6">{{ mail_account_form.password.label(class="form-label") }}{{ mail_account_form.password(class="form-control", placeholder=editing_mail_account and _('Leave blank to keep the current password') or _('SMTP password')) }}</div>
                             </div>
+                            <div class="row g-3 mt-0">
+                                <div class="col-md-6">{{ mail_account_form.from_email.label(class="form-label") }}{{ mail_account_form.from_email(class="form-control", placeholder=_('Same as the username')) }}</div>
+                                <div class="col-md-6">{{ mail_account_form.from_name.label(class="form-label") }}{{ mail_account_form.from_name(class="form-control", placeholder=_('e.g. Joanneum Aeronautics')) }}</div>
+                            </div>
+                            <div class="form-text">{{ _('Optional. Needed where the login is not an email address, such as Brevo: the address emails come from, verified with the provider.') }}</div>
                             <div class="form-check mt-3">{{ mail_account_form.starttls(class="form-check-input") }}{{ mail_account_form.starttls.label(class="form-check-label") }}</div>
                             <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
                                 <button type="submit" class="btn btn-primary">{% if editing_mail_account %}{{ _('Update Mail Account') }}{% else %}{{ _('Add Mail Account') }}{% endif %}</button>
@@ -506,7 +511,7 @@
                                                 <td>{{ mail_account.account_key }}</td>
                                                 <td>{{ mail_account.host }}</td>
                                                 <td>{{ mail_account.port }}</td>
-                                                <td>{{ mail_account.username }}</td>
+                                                <td>{{ mail_account.username }}{% if mail_account.from_email %}<div class="small text-muted">{{ _('sends as') }} {% if mail_account.from_name %}{{ mail_account.from_name }} &lt;{{ mail_account.from_email }}&gt;{% else %}{{ mail_account.from_email }}{% endif %}</div>{% endif %}</td>
                                                 <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
                                                 <td class="text-end">
                                                     <div class="d-inline-flex flex-wrap justify-content-end gap-2">

@@ -481,6 +481,9 @@ def normalize_imported_mail_account_record(raw_record, fallback_key=None):
     if port < 1 or port > 65535:
         raise ValueError(f"Mail account '{account_key}' has an invalid SMTP port.")
 
+    from_email = (raw_record.get("from_email") or raw_record.get("from") or raw_record.get("sender") or "").strip().lower()
+    from_name = (raw_record.get("from_name") or raw_record.get("sender_name") or "").strip()
+
     return {
         "account_key": account_key,
         "host": host,
@@ -488,6 +491,8 @@ def normalize_imported_mail_account_record(raw_record, fallback_key=None):
         "username": username,
         "password": password,
         "starttls": starttls,
+        "from_email": from_email[:255] or None,
+        "from_name": from_name[:120] or None,
     }
 
 
@@ -535,6 +540,8 @@ def build_mail_accounts_export_payload():
                 "username": mail_account.username,
                 "password": mail_account.password,
                 "starttls": mail_account.starttls,
+                "from_email": mail_account.from_email,
+                "from_name": mail_account.from_name,
             }
             for mail_account in get_db_mail_accounts()
         ],

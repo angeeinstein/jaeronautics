@@ -1370,6 +1370,8 @@ def build_settings_page_context(edit_mail_account_id=None):
             mail_account_form.port.data = editing_mail_account.port
             mail_account_form.username.data = editing_mail_account.username
             mail_account_form.starttls.data = editing_mail_account.starttls
+            mail_account_form.from_email.data = editing_mail_account.from_email
+            mail_account_form.from_name.data = editing_mail_account.from_name
 
     test_email_form.sender.choices = sender_choices
     test_email_form.template.choices = template_choices

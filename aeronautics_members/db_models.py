@@ -931,6 +931,12 @@ class MailAccount(db.Model):
     username = db.Column(db.String(255), nullable=False)
     password = db.Column(db.String(255), nullable=False)
     starttls = db.Column(db.Boolean, nullable=False, default=False)
+    # Who the email is from, when that is not the login. Most providers sign in
+    # with the address they send from; Brevo and similar relays sign in with an
+    # account id of their own and send from a verified address. Empty: the
+    # login is the sender, as before.
+    from_email = db.Column(db.String(255), nullable=True)
+    from_name = db.Column(db.String(120), nullable=True)
 
     def to_config(self):
         config = {
@@ -941,5 +947,9 @@ class MailAccount(db.Model):
         }
         if self.starttls:
             config["starttls"] = True
+        if self.from_email:
+            config["from"] = self.from_email
+        if self.from_name:
+            config["from_name"] = self.from_name
         return config
 

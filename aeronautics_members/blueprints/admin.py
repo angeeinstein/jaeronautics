@@ -1428,6 +1428,8 @@ def save_mail_account():
     if form.password.data:
         mail_account.password = form.password.data
     mail_account.starttls = bool(form.starttls.data)
+    mail_account.from_email = (form.from_email.data or "").strip().lower() or None
+    mail_account.from_name = (form.from_name.data or "").strip() or None
 
     try:
         db.session.flush()
@@ -1533,6 +1535,8 @@ def import_mail_accounts():
             mail_account.username = imported_account["username"]
             mail_account.password = imported_account["password"]
             mail_account.starttls = imported_account["starttls"]
+            mail_account.from_email = imported_account["from_email"]
+            mail_account.from_name = imported_account["from_name"]
             db.session.flush()
 
             log_audit_event(

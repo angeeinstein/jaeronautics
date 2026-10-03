@@ -396,4 +396,6 @@ class MailAccountForm(FlaskForm):
     username = StringField(_l("SMTP Username"), validators=[DataRequired(), Length(max=255)])
     password = PasswordField(_l("SMTP Password"), validators=[Optional(), Length(max=255)])
     starttls = BooleanField(_l("Use STARTTLS"))
+    from_email = StringField(_l("Sender Address"), validators=[Optional(), Email(), Length(max=255)])
+    from_name = StringField(_l("Sender Name"), validators=[Optional(), Length(max=120)])
     submit = SubmitField(_l("Save Mail Account"))
