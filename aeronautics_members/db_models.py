@@ -802,10 +802,11 @@ class Team(db.Model):
     payment_mode = db.Column(db.String(20), nullable=False, default="none")
     # The list of current members for access to the team's rooms: who gets it
     # (addresses, one per line or comma), on which days of the year ("15.10,
-    # 15.03"), what people joining are told, and when it last went out.
+    # 15.03"), whether it goes out on those days by itself, and when it last
+    # went out.
     access_list_recipients = db.Column(db.Text, nullable=True)
     access_list_dates = db.Column(db.String(255), nullable=True)
-    access_list_notice = db.Column(db.String(255), nullable=True)
+    access_list_auto_send = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     access_list_last_sent_on = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)

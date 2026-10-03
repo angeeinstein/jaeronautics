@@ -35,3 +35,29 @@
 <input class="form-control" type="file" id="logo" name="logo" accept="image/png,image/jpeg,image/webp">
 <div class="form-text">{{ _('Optional. PNG, JPG or WebP. Shown on dark backgrounds, so a logo with its own background or in light colours works best.') }}</div>
 {%- endmacro %}
+
+{# Who receives the list of current members, on which days, and whether it
+   goes out by itself. For the admin form and the leads' settings alike. #}
+{% macro access_list_fields(team, form=None) -%}
+{%- set recipients = form.get('access_list_recipients') if form else (team.access_list_recipients if team else '') -%}
+{%- set dates = form.get('access_list_dates') if form else (team.access_list_dates if team else '') -%}
+{%- set auto_send = (form.get('access_list_auto_send') == 'on') if form else (team.access_list_auto_send if team else false) -%}
+<h5 class="mt-2">{{ _('Access list') }}</h5>
+<p class="small text-muted">{{ _('The current members, emailed to whoever gives access to the team’s rooms. The leads are copied in.') }}</p>
+<div class="row g-3">
+    <div class="col-md-6">
+        <label class="form-label" for="access_list_recipients">{{ _('Send to') }}</label>
+        <textarea class="form-control" id="access_list_recipients" name="access_list_recipients" rows="2"
+                  placeholder="{{ _('One address per line') }}">{{ recipients or '' }}</textarea>
+    </div>
+    <div class="col-md-6">
+        <label class="form-label" for="access_list_dates">{{ _('On these days, every year') }}</label>
+        <input class="form-control" id="access_list_dates" name="access_list_dates" maxlength="255"
+               placeholder="15.10, 15.03" value="{{ dates or '' }}">
+        <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" name="access_list_auto_send" id="access_list_auto_send" {% if auto_send %}checked{% endif %}>
+            <label class="form-check-label" for="access_list_auto_send">{{ _('Send by itself on these days') }}</label>
+        </div>
+    </div>
+</div>
+{%- endmacro %}

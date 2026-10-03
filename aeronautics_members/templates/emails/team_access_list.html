@@ -1,0 +1,35 @@
+{% extends "emails/_layout.html" %}
+{#- A team's current members, for whoever gives access to its rooms. -#}
+{% block content %}
+    {% if team_badge_name %}
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">
+            <tr>
+                {% if team_logo_cid %}
+                    <td style="padding-right:12px; vertical-align:middle;">
+                        <img src="cid:{{ team_logo_cid }}" alt="" height="48" style="display:block; height:48px; width:auto; max-width:160px; border:0;">
+                    </td>
+                {% endif %}
+                <td style="vertical-align:middle; color:#aab4bb; font-size:14px; font-weight:600;">{{ team_badge_name }}</td>
+            </tr>
+        </table>
+    {% endif %}
+    <h2>{{ heading }}</h2>
+    <p>{{ intro }}</p>
+    {% if rows %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; margin:8px 0 20px;">
+            <tr>
+                <th align="left" style="padding:8px 10px 8px 0; border-bottom:1px solid #34383b; color:#aab4bb; font-size:13px;">{{ _('Name') }}</th>
+                <th align="left" style="padding:8px 0; border-bottom:1px solid #34383b; color:#aab4bb; font-size:13px;">{{ _('University email') }}</th>
+            </tr>
+            {% for name, university_email in rows %}
+                <tr>
+                    <td style="padding:8px 10px 8px 0; border-bottom:1px solid #34383b;">{{ name }}</td>
+                    <td style="padding:8px 0; border-bottom:1px solid #34383b; word-break:break-all;">{{ university_email or '-' }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+        <p class="muted" style="color:#aab4bb;">{{ _('%(count)s member(s).', count=rows|length) }}</p>
+    {% else %}
+        <p class="muted" style="color:#aab4bb;">{{ _('The team has no members at the moment.') }}</p>
+    {% endif %}
+{% endblock %}

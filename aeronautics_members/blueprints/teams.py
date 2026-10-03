@@ -36,6 +36,15 @@ def _team_form_fields(form):
     }
 
 
+def _apply_access_list(team, form):
+    teams_service.update_access_list(
+        current_user, team,
+        recipients=form.get("access_list_recipients"),
+        dates=form.get("access_list_dates"),
+        auto_send=form.get("access_list_auto_send") == "on",
+    )
+
+
 def _apply_logo(team, form, files):
     """Replace or remove the logo, if the form asks for either."""
     upload = files.get("logo")
@@ -99,6 +108,7 @@ def admin_team_new():
             team = teams_service.create_team(
                 current_user, slug=request.form.get("slug"), **_team_form_fields(request.form)
             )
+            _apply_access_list(team, request.form)
             _apply_logo(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
@@ -133,6 +143,7 @@ def admin_team_detail(slug):
     if request.method == "POST":
         try:
             teams_service.update_team(current_user, team, **_team_form_fields(request.form))
+            _apply_access_list(team, request.form)
             _apply_logo(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
@@ -368,6 +379,8 @@ def team_manage(slug):
         end_reasons=teams_service.END_REASON_LABELS,
         person_details=teams_service.person_details,
         has_lead_in_force=teams_service.has_lead_in_force(team),
+        access_list_recipients=teams_service.parse_recipients(team.access_list_recipients),
+        next_access_list_date=teams_service.next_access_list_date(team),
     )
 
 
@@ -481,6 +494,7 @@ def team_lead_settings(slug):
                 application_prompt=request.form.get("application_prompt"),
                 applications_open=request.form.get("applications_open") == "on",
             ),
+            _apply_access_list(team, request.form),
             _apply_logo(team, request.form, request.files),
         ),
         _("Saved."),
@@ -505,4 +519,33 @@ def team_export(slug):
         "﻿" + buffer.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@teams_bp.route("/teams/<slug>/manage/access-list", methods=["GET"])
+@login_required
+def team_access_list(slug):
+    """The email exactly as it would go out, with a button to send it now."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.SEND_ACCESS_LIST)
+    subject, message = teams_service.access_list_message(team)
+    return render_template(
+        "teams/access_list.html",
+        team=team,
+        subject=subject,
+        message=message,
+        recipients=teams_service.parse_recipients(team.access_list_recipients),
+        cc=teams_service.access_list_cc(team),
+        missing_university_email=sum(1 for _name, address in message["rows"] if not address),
+    )
+
+
+@teams_bp.route("/teams/<slug>/manage/access-list/send", methods=["POST"])
+@login_required
+def team_access_list_send(slug):
+    return _lead_action(
+        slug, teams_service.TeamPermission.SEND_ACCESS_LIST,
+        lambda team: teams_service.send_access_list(current_user, team),
+        _("Sent."),
+        back=url_for("teams.team_manage", slug=slug),
     )

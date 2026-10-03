@@ -4435,6 +4435,15 @@ def create_app(config_overrides=None):
         if lapsed:
             click.echo(f"Ended {lapsed} team membership(s) of people no longer in the association.")
 
+        # Then the teams' access lists due today, now that they are current.
+        from .services.teams import send_due_access_lists
+
+        access_lists = send_due_access_lists()
+        db.session.commit()
+        flush_marked_notification_channels()
+        if access_lists:
+            click.echo(f"Sent {access_lists} team access list(s).")
+
         summary_color = "green" if error_count == 0 else "yellow"
         click.echo(click.style(
             f"Processed {len(member_ids)} Stripe-linked membership(s). Changed: {changed_count}. Unchanged: {unchanged_count}. Errors: {error_count}. Forum warnings: {forum_warning_count}.",

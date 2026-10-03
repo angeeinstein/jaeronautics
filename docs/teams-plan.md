@@ -275,7 +275,7 @@ name, picture and addresses from the association profile. A team membership is
 only added to that account and never asks for any of it again -- much like
 signing in everywhere with one account.
 
-Not yet: payment itself, the forum group, the office access list.
+Not yet: payment itself, the forum group.
 
 **The flow** — open team: join → active. Team by approval: applied → invited →
 approved → active, with rejected or withdrawn possible on the way. Without
@@ -284,15 +284,26 @@ the member pays. Every step goes into the audit log.
 
 ## The office access list
 
-- **Content** — *agreed so far:* name and university email. Both are in the portal
-  already; no new fields.
-- **On demand:** a preview, then "send now" to the stored recipients, the leads
-  in copy.
-- **Automatically:** on dates set per team, the list of current team members is
-  emailed to the contact at the university.
-- **Telling the members** — *agreed so far:* one sentence when joining: "Your name and
-  university email are passed to FH JOANNEUM for access to the office." That is
-  both the information they are owed and the basis for passing it on.
+*Built*, as discussed:
+
+- **Content** — name and university email of every current member, as a table
+  in the email, by surname. Both are in the portal already; no new fields.
+- **Configured per team**, by site admins or the team's leads: who receives it
+  (one address or several), on which days of the year (`15.10, 15.03`), and
+  whether it goes out by itself on those days — off until switched on.
+- **The leads are copied in, visibly**, as they would be if they wrote it
+  themselves. The team's logo, if it has one, sits below the association's
+  header, as in the other team emails.
+- **On demand:** the leads' page shows who receives it, when it goes out next
+  and when it last did; "Preview and send" shows the email as it would go out,
+  with a warning for members without a university email, and sends it.
+- **By itself:** the nightly membership job sends the lists due that day, after
+  ending the memberships of people who left the association, so the list is
+  current — never twice on one day. A list that cannot be sent is reported to
+  the admins and can then be sent from the team's page.
+- **No notice when joining** — *agreed so far:* that a team's members are listed
+  for access to its rooms is obvious, and the university email goes back to the
+  university. People here are open about who is in which team.
 
 ## Forum
 
@@ -306,7 +317,6 @@ The bylaws are being rewritten anyway. What teams need in them:
 
 - team fees per semester, collected separately from the membership fee — today
   they say all fees are added up and collected once a year;
-- passing name and university email to the university for office access;
 - team membership requires association membership;
 - the leads' access to their team members' data;
 - the insurance clause: team members are insured by the association "if they do

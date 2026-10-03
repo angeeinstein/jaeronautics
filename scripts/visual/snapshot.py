@@ -214,6 +214,8 @@ def seed(app, app_module, subscriptions):
     db.session.add(application)
     db.session.flush()
     teams.add_note(active.user, rocket, bernd, "Met him at the open day. Knows CATIA.")
+    teams.update_access_list(None, rocket, recipients="facility@uni.example\nporter@uni.example",
+                             dates="15.10, 15.03", auto_send=True)
     db.session.commit()
 
     reset_token = build_password_reset_token(new.user)
@@ -269,6 +271,7 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--team-page", "user": "active@example.org", "path": "/teams/rocket-team"},
         {"name": "teams--manage", "user": "active@example.org", "path": "/teams/rocket-team/manage"},
         {"name": "teams--person", "user": "active@example.org", "path": f"/teams/rocket-team/manage/people/{bernd.id}"},
+        {"name": "teams--access-list", "user": "active@example.org", "path": "/teams/rocket-team/manage/access-list"},
     ]
 
 

@@ -76,10 +76,11 @@ class TeamPermission:
     WRITE_NOTES = "team.write_notes"
     EXPORT = "team.export"
     EDIT_SETTINGS = "team.edit_settings"
+    SEND_ACCESS_LIST = "team.send_access_list"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
-        WRITE_NOTES, EXPORT, EDIT_SETTINGS,
+        WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
     })
 
 
@@ -888,7 +889,7 @@ def person_details(user):
 
 
 def roster(team):
-    """The active members, for the team's own page and the lead's list."""
+    """The active members, by surname, for the team's own page and the lead's list."""
     members = team_memberships(team, {ACTIVE})
     return sorted(
         (
@@ -902,8 +903,15 @@ def roster(team):
             }
             for membership in members
         ),
-        key=lambda row: row["name"].lower(),
+        key=_surname_first,
     )
+
+
+def _surname_first(row):
+    member = getattr(row["user"], "member", None)
+    if member is not None:
+        return ((member.last_name or "").lower(), (member.first_name or "").lower())
+    return (row["name"].lower(), "")
 
 
 EXPORT_COLUMNS = ("Name", "University email", "Private email", "Phone", "Cohort", "Member since")
@@ -979,3 +987,214 @@ def forget_for_erasure(user):
             membership.end_reason = END_ACCOUNT_ERASED
     for team_role in db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars():
         db.session.delete(team_role)
+
+
+# --- The access list ---------------------------------------------------------
+#
+# The team's current members, by name and university address, emailed to
+# whoever gives access to the team's rooms -- on a button, or by itself on the
+# days the team set. The leads are copied in, visibly, as they would be if
+# they wrote it themselves.
+
+_ADDRESS = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+
+
+def parse_recipients(text):
+    """Addresses from text separated by commas, semicolons or lines."""
+    addresses = [part.strip().lower() for part in re.split(r"[,;\s]+", text or "") if part.strip()]
+    invalid = [address for address in addresses if not _ADDRESS.match(address)]
+    if invalid:
+        raise ValidationError(
+            f"Not an email address: {', '.join(invalid)}", code="team_access_list_recipient_invalid",
+        )
+    return list(dict.fromkeys(addresses))
+
+
+def parse_dates(text):
+    """Days of the year from "15.10, 15.03" (or one per line), in calendar order."""
+    from datetime import date
+
+    found = set()
+    for part in re.split(r"[,;\s]+", text or ""):
+        part = part.strip().rstrip(".")
+        if not part:
+            continue
+        match = re.fullmatch(r"(\d{1,2})\.(\d{1,2})", part)
+        try:
+            day, month = int(match.group(1)), int(match.group(2))
+            date(2000, month, day)  # a real day; 2000 was a leap year
+        except (AttributeError, ValueError):
+            raise ValidationError(
+                f"Not a day of the year: {part}. Write day and month, like 15.10.",
+                code="team_access_list_date_invalid",
+            ) from None
+        found.add((month, day))
+    return [(day, month) for month, day in sorted(found)]
+
+
+def format_dates(dates):
+    return ", ".join(f"{day:02d}.{month:02d}" for day, month in dates)
+
+
+def update_access_list(actor, team, *, recipients, dates, auto_send):
+    recipients = parse_recipients(recipients)
+    dates = parse_dates(dates)
+    if auto_send and not (recipients and dates):
+        raise ValidationError(
+            "Sending by itself needs at least one recipient and one date.",
+            code="team_access_list_incomplete",
+        )
+    before = {
+        "recipients": team.access_list_recipients,
+        "dates": team.access_list_dates,
+        "auto_send": team.access_list_auto_send,
+    }
+    team.access_list_recipients = "\n".join(recipients) or None
+    team.access_list_dates = format_dates(dates) or None
+    team.access_list_auto_send = bool(auto_send)
+    after = {
+        "recipients": team.access_list_recipients,
+        "dates": team.access_list_dates,
+        "auto_send": team.access_list_auto_send,
+    }
+    if before != after:
+        log_audit_event("teams", "team_access_list_settings_changed", actor_user=actor,
+                        before=before, after=after, metadata={"team": team.slug})
+    return team
+
+
+def access_list_rows(team):
+    """(name, university email) of every current member, by surname."""
+    return [(row["name"], row["university_email"] or "") for row in roster(team)]
+
+
+def next_access_list_date(team, today=None):
+    """The next day the list goes out by itself, or None."""
+    from datetime import date
+
+    from .clock import get_membership_today
+
+    if not team.access_list_auto_send:
+        return None
+    today = today or get_membership_today()
+    candidates = []
+    for day, month in parse_dates(team.access_list_dates):
+        for year in (today.year, today.year + 1):
+            try:
+                candidate = date(year, month, day)
+            except ValueError:  # 29.02 outside a leap year
+                continue
+            if candidate >= today:
+                candidates.append(candidate)
+                break
+    return min(candidates) if candidates else None
+
+
+def access_list_cc(team):
+    """The leads in force, copied in."""
+    return [team_role.user.email for team_role in role_holders(team, ROLE_LEAD) if role_counts(team_role)]
+
+
+def access_list_message(team, today=None):
+    """Subject and template values of the email, for sending and for the preview."""
+    from .clock import get_membership_today
+    from .membership import format_date_display
+
+    today = today or get_membership_today()
+    rows = access_list_rows(team)
+    shown = format_date_display(today)
+    return (
+        f"{team.name}: current members ({shown})",
+        {
+            "preview_text": f"{len(rows)} current member(s) of {team.name}.",
+            "heading": f"Current members of {team.name}",
+            "intro": f"The current members of {team.name}, as of {shown}:",
+            "rows": rows,
+            "team_badge_name": team.name,
+        },
+    )
+
+
+def send_access_list(actor, team, *, today=None, automatic=False):
+    """Email the list now. Raises if there is nobody to send it to or sending fails."""
+    from ..mail_utils import send_mail
+    from . import ExternalServiceError
+    from .clock import get_membership_today
+    from .notifications import get_notification_service
+
+    today = today or get_membership_today()
+    recipients = parse_recipients(team.access_list_recipients)
+    if not recipients:
+        raise ValidationError("Add who receives the list first.", code="team_access_list_no_recipients")
+    sender = get_notification_service().get_sender_account()
+    if not sender:
+        raise ExternalServiceError("No sender address is set up for notifications.",
+                                   code="team_access_list_no_sender")
+
+    subject, template_vars = access_list_message(team, today)
+    attachments = None
+    logo = logo_file(team)
+    if logo is not None:
+        attachments = [{"path": str(logo), "cid": "teamlogo"}]
+        template_vars["team_logo_cid"] = "teamlogo"
+    ok, error = send_mail(
+        from_account=sender,
+        to_email=recipients[0],
+        cc_emails=[*recipients[1:], *access_list_cc(team)],
+        subject=subject,
+        template_name="team_access_list.html",
+        attachments=attachments,
+        return_error=True,
+        **template_vars,
+    )
+    if not ok:
+        raise ExternalServiceError(f"The list could not be sent: {error}", code="team_access_list_send_failed")
+
+    team.access_list_last_sent_on = today
+    log_audit_event(
+        "teams", "team_access_list_sent", actor_user=actor,
+        metadata={"team": team.slug, "members": len(template_vars["rows"]),
+                  "recipients": len(recipients), "automatic": automatic},
+    )
+    return len(template_vars["rows"])
+
+
+def send_due_access_lists(today=None):
+    """Send every list due today that has not gone out today. Returns how many went.
+
+    Run every night, after the memberships of people who left the association
+    have been ended, so the list is current. A list that cannot be sent is
+    reported to the admins, who can send it from the team's page once the
+    problem is fixed; it is not tried again by itself.
+    """
+    from ..notification_service import ADMIN_ERROR_CHANNEL
+    from . import ServiceError
+    from .clock import get_membership_today
+    from .notifications import queue_curated_admin_notification
+
+    if not teams_enabled():
+        return 0
+    today = today or get_membership_today()
+    sent = 0
+    for team in all_teams(include_archived=False):
+        if not team.access_list_auto_send or team.access_list_last_sent_on == today:
+            continue
+        try:
+            due = (today.day, today.month) in parse_dates(team.access_list_dates)
+        except ValidationError:
+            due = False
+        if not due:
+            continue
+        try:
+            send_access_list(None, team, today=today, automatic=True)
+        except ServiceError as error:
+            queue_curated_admin_notification(
+                ADMIN_ERROR_CHANNEL, "team_access_list_failed",
+                f"The access list of {team.name} could not be sent: {error.message}",
+                payload={"team": team.slug, "what_to_do": "Check the recipients and the mail setup, "
+                         "then send it from the team's page."},
+                object_type="team", object_id=team.id,
+            )
+            continue
+        sent += 1
+    return sent

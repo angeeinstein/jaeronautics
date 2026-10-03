@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ subject }}{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+        <div>
+            <h2 class="mb-1">{{ _('Access list') }}</h2>
+            <p class="text-muted mb-0">{{ team.name }}</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Back to the team') }}</a>
+            <form method="POST" action="{{ url_for('teams.team_access_list_send', slug=team.slug) }}" class="mb-0"
+                  data-busy-text="{{ _('Sending…') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-primary">{{ _('Send now') }}</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if missing_university_email %}
+    <div class="alert alert-warning">{{ _('%(count)s member(s) have no university email.', count=missing_university_email) }}</div>
+{% endif %}
+
+<section class="card" aria-labelledby="preview-heading">
+    <div class="card-header"><h4 class="mb-0" id="preview-heading">{{ _('The email') }}</h4></div>
+    <div class="card-body">
+        <dl class="row">
+            <dt class="col-sm-3">{{ _('To') }}</dt><dd class="col-sm-9">{{ recipients|join(', ') }}</dd>
+            <dt class="col-sm-3">{{ _('Copy') }}</dt><dd class="col-sm-9">{{ cc|join(', ') or '-' }}</dd>
+            <dt class="col-sm-3">{{ _('Subject') }}</dt><dd class="col-sm-9">{{ subject }}</dd>
+        </dl>
+        <p>{{ message.intro }}</p>
+        {% if message.rows %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead><tr><th>{{ _('Name') }}</th><th>{{ _('University email') }}</th></tr></thead>
+                    <tbody>
+                        {% for name, university_email in message.rows %}
+                            <tr><td>{{ name }}</td><td>{{ university_email or '-' }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">{{ _('The team has no members at the moment.') }}</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}
