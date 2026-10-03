@@ -78,6 +78,7 @@ CARRIED_ENV_KEYS = (
 STORAGE_PATH_COLUMNS = {
     "imported_forum_profiles": ("avatar_path",),
     "forum_avatar_submissions": ("storage_path",),
+    "teams": ("logo_path",),
 }
 
 _TYPE_TAG = "__backup_type__"

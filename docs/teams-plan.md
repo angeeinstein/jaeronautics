@@ -120,9 +120,10 @@ access to the office.
   refund.
 - **The association membership ends** — follows from the requirement: the team
   membership ends with it and the leads are told.
-- **Removal by a lead** — *open*, leaning towards **immediately**: it will only
+- **Removal by a lead** — *agreed so far:* **immediately**. It will only
   happen for misconduct, or for somebody who has vanished and cannot be reached.
-  With a reason that goes into the audit log, and no refund.
+  With a reason that goes into the record (not sent to the person), and no
+  refund.
 - **Rejoining after not paying** — *agreed so far.* Whoever's team membership ended
   because they did not pay may rejoin by simply paying, but only within a set
   time — about one period, not two years later. After that, or after being
@@ -256,7 +257,25 @@ and their roles in the admin (`/admin/teams`), and the access rules, in
 - erasing an account ends its teams, removes its roles and blanks what it wrote
   in applications; the leads' notes stay, as agreed.
 
-Not yet: payment, the forum group, the office access list.
+Then, also built:
+
+- **an optional logo** per team (*agreed so far*), uploaded by site admins or
+  the team's leads, stored as a PNG the portal makes from the upload. It shows
+  on the team's card for people choosing a team, on its pages, and in its
+  emails below the association's own header, which stays, so the emails
+  clearly come from the association;
+- **the payment step** (*agreed so far*): every approval, and joining an open
+  team, passes through it, even for a free team, so the flow is the same with
+  or without payment and payment can be added without changing it. A free team
+  settles it on the spot -- recorded, with no email of its own; a team that
+  charges would stay *approved* there until paid.
+
+**One identity.** The association account is the person: one login, and the
+name, picture and addresses from the association profile. A team membership is
+only added to that account and never asks for any of it again -- much like
+signing in everywhere with one account.
+
+Not yet: payment itself, the forum group, the office access list.
 
 **The flow** — open team: join → active. Team by approval: applied → invited →
 approved → active, with rejected or withdrawn possible on the way. Without

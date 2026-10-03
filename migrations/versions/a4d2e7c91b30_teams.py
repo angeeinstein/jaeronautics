@@ -31,11 +31,14 @@ def upgrade():
         sa.Column("application_prompt", sa.String(length=255), nullable=True),
         sa.Column("max_members", sa.Integer(), nullable=True),
         sa.Column("forum_group", sa.String(length=100), nullable=True),
+        sa.Column("logo_path", sa.String(length=500), nullable=True),
+        sa.Column("logo_token", sa.String(length=64), nullable=True),
         sa.Column("payment_mode", sa.String(length=20), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("archived_at", sa.DateTime(), nullable=True),
         sa.UniqueConstraint("slug"),
+        sa.UniqueConstraint("logo_token"),
     )
 
     op.create_table(
@@ -62,6 +65,8 @@ def upgrade():
         sa.Column("applied_at", sa.DateTime(), nullable=True),
         sa.Column("invited_at", sa.DateTime(), nullable=True),
         sa.Column("approved_at", sa.DateTime(), nullable=True),
+        sa.Column("payment_mode", sa.String(length=20), nullable=True),
+        sa.Column("payment_settled_at", sa.DateTime(), nullable=True),
         sa.Column("started_at", sa.DateTime(), nullable=True),
         sa.Column("ended_at", sa.DateTime(), nullable=True),
         sa.Column("decided_by_user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),

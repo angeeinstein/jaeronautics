@@ -1258,3 +1258,23 @@ textarea.form-control {
     border-top: 1px solid var(--ja-border);
     padding-top: 0.75rem;
 }
+
+.team-logo {
+    flex: 0 0 auto;
+    width: auto;
+    height: 2rem;
+    max-width: 8rem;
+    object-fit: contain;
+}
+
+.team-logo-small {
+    height: 1.5rem;
+    max-width: 5rem;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+}
+
+.team-logo-large {
+    height: 4rem;
+    max-width: 12rem;
+}

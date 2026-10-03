@@ -58,6 +58,8 @@ def build_app(db_path):
         "RATELIMIT_ENABLED": False,
         "SESSION_COOKIE_SECURE": False,
         "PUBLIC_BASE_URL": BASE,
+        # Beside the throwaway database, never the repository's storage.
+        "TEAM_LOGO_DIR": str(Path(db_path).parent / "team_logos"),
     })
     return app, app_module
 
@@ -190,6 +192,18 @@ def seed(app, app_module, subscriptions):
     rocket = teams.create_team(None, slug=None, name="Rocket Team", **team_fields)
     teams.create_team(None, slug=None, name="Glider Team", **team_fields)
     teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
+    # A made-up logo for one team; the other has none, as many will not.
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw
+
+    logo = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(logo)
+    draw.polygon([(20, 180), (100, 20), (180, 180)], fill=(0, 223, 255, 255))
+    draw.rectangle([(220, 70), (580, 130)], fill=(255, 255, 255, 255))
+    buffer = BytesIO()
+    logo.save(buffer, format="PNG")
+    teams.set_team_logo(None, rocket, buffer.getvalue())
     db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now))
     teams.grant_team_role(None, rocket, active.user, teams.ROLE_LEAD)
     carla = Member.query.filter_by(email_private="cancelling@example.org").one().user

@@ -23,6 +23,10 @@ every team, which is what keeps a team with no active lead manageable.
 """
 
 import re
+import secrets
+from pathlib import Path
+
+from flask import current_app
 
 from ..db_models import Setting, Team, TeamMembership, TeamRole, db
 from ..permissions import Permission
@@ -270,6 +274,81 @@ def set_team_archived(actor, team, archived):
     return team
 
 
+# --- The logo ----------------------------------------------------------------
+#
+# Optional: plenty of teams have none. Whatever is uploaded is decoded and
+# written out again as a PNG, so what is stored and served is a picture this
+# code made, never the uploaded file -- the same care as with profile pictures.
+
+LOGO_FORMATS = ("PNG", "JPEG", "WEBP")
+LOGO_MAX_BYTES = 5 * 1024 * 1024
+LOGO_MAX_SIDE = 512
+
+
+def logo_storage_dir():
+    configured = current_app.config.get("TEAM_LOGO_DIR")
+    return Path(configured) if configured else Path(current_app.root_path).parent / "storage" / "team_logos"
+
+
+def logo_file(team):
+    """The stored logo as a path, if there is one and it is still there."""
+    if team is None or not team.logo_path:
+        return None
+    path = Path(team.logo_path)
+    return path if path.is_file() else None
+
+
+def _delete_logo_file(path):
+    if not path:
+        return
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        current_app.logger.warning("Could not delete the old team logo %s", path)
+
+
+def set_team_logo(actor, team, raw_bytes):
+    from ..forum_service import ForumProviderError, _load_image_for_processing
+
+    if not raw_bytes:
+        raise ValidationError("Choose a picture.", code="team_logo_missing")
+    if len(raw_bytes) > LOGO_MAX_BYTES:
+        raise ValidationError("The logo may be at most 5 MB.", code="team_logo_too_large")
+    try:
+        image = _load_image_for_processing(raw_bytes, formats=LOGO_FORMATS)
+    except ForumProviderError:
+        raise ValidationError("Please upload a PNG, JPG or WebP picture.", code="team_logo_invalid") from None
+
+    image = image.convert("RGBA")
+    image.thumbnail((LOGO_MAX_SIDE, LOGO_MAX_SIDE))
+    directory = logo_storage_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_hex(16)
+    path = directory / f"{team.slug}-{token}.png"
+    image.save(path, format="PNG", optimize=True)
+
+    previous = team.logo_path
+    team.logo_path, team.logo_token = str(path), token
+    _delete_logo_file(previous)
+    log_audit_event("teams", "team_logo_changed", actor_user=actor, metadata={"team": team.slug})
+    return team
+
+
+def remove_team_logo(actor, team):
+    if not team.logo_path and not team.logo_token:
+        return team
+    _delete_logo_file(team.logo_path)
+    team.logo_path, team.logo_token = None, None
+    log_audit_event("teams", "team_logo_removed", actor_user=actor, metadata={"team": team.slug})
+    return team
+
+
+def team_by_logo_token(token):
+    if not token:
+        return None
+    return db.session.execute(db.select(Team).filter_by(logo_token=token)).scalar_one_or_none()
+
+
 # --- Who is in a team, and what they may do there --------------------------
 
 
@@ -443,7 +522,7 @@ END_ACCOUNT_ERASED = "account_erased"
 STATUS_LABELS = {
     APPLIED: "Application received",
     INVITED: "Invited",
-    APPROVED: "Approved",
+    APPROVED: "Approved, payment open",
     ACTIVE: "Member",
     ENDED: "Ended",
     REJECTED: "Not accepted",
@@ -525,6 +604,7 @@ def _tell_person(event_type, membership, **extra):
         "first_name": _first_name(user),
         "team_name": membership.team.name,
         "team_slug": membership.team.slug,
+        "team_logo_token": membership.team.logo_token,
         **extra,
     }
     queue_user_status_notification(
@@ -538,7 +618,7 @@ def _tell_leads(team, event_type, summary, **extra):
     from .notifications import queue_curated_admin_notification, queue_user_status_notification
 
     leads = [team_role.user for team_role in role_holders(team, ROLE_LEAD) if role_counts(team_role)]
-    payload = {"team_name": team.name, "team_slug": team.slug, **extra}
+    payload = {"team_name": team.name, "team_slug": team.slug, "team_logo_token": team.logo_token, **extra}
     if not leads:
         from ..notification_service import ADMIN_GENERAL_CHANNEL
 
@@ -574,19 +654,26 @@ def join_or_apply(user, team, application_text=None):
     now = get_now_utc()
     membership = TeamMembership(team=team, user=user, applied_at=now)
     if team.admission_mode == ADMISSION_OPEN:
-        membership.status = ACTIVE
-        membership.started_at = now
+        # Joining an open team is being approved at once; the payment step
+        # comes next, as after any approval.
+        membership.status = APPROVED
+        membership.approved_at = now
     else:
         membership.status = APPLIED
         if team.application_prompt:
             membership.application_text = (application_text or "").strip()[:5000] or None
     db.session.add(membership)
     db.session.flush()
+    if membership.status == APPROVED:
+        _payment_step(membership, now)
 
     name = _member_name(user)
     if membership.status == ACTIVE:
         _audit("team_joined", user, membership)
         _tell_leads(team, "team_member_joined", f"{name} joined {team.name}.", person_name=name)
+    elif membership.status == APPROVED:
+        # An open team that charges: the leads hear once the payment is in.
+        _audit("team_joined", user, membership)
     else:
         _audit("team_applied", user, membership)
         _tell_leads(team, "team_application_received", f"{name} applied to {team.name}.", person_name=name)
@@ -651,23 +738,45 @@ def invite(actor, team, membership_id, meeting_details):
     return membership
 
 
+def _payment_step(membership, now):
+    """The step between being approved and being a member, for every team.
+
+    Every approval -- and joining an open team, which is approval at once --
+    passes through here, whether or not the team charges anything, so the flow
+    is the same for every team and payment can be added without changing it.
+
+    A free team settles the step on the spot: the record says so, the person
+    becomes a member, and nobody is sent anything about a payment that did not
+    happen. Returns whether the person is now a member. A team that charges
+    stays *approved* here until its payment arrives -- which does not exist
+    yet: no team can be set to charge.
+    """
+    team = membership.team
+    membership.payment_mode = team.payment_mode
+    if team.payment_mode != PAYMENT_NONE:
+        return False
+    membership.payment_settled_at = now
+    membership.status = ACTIVE
+    membership.started_at = now
+    _audit("team_payment_settled", None, membership, payment_mode=team.payment_mode)
+    return True
+
+
 def approve(actor, team, membership_id):
-    """Accept an applicant. Without payment, they are a member straight away."""
+    """Accept an applicant. They become a member once the payment step is settled."""
     _lock_team(team)
     membership = _locked_membership(membership_id, team)
     _require_status(membership, {APPLIED, INVITED}, "This application has already been decided.")
     if is_full(team):
         raise ConflictError("The team is full.", code="team_full")
     now = get_now_utc()
+    membership.status = APPROVED
     membership.approved_at = now
     membership.decided_by_user_id = getattr(actor, "id", None)
-    if team.payment_mode == PAYMENT_NONE:
-        membership.status = ACTIVE
-        membership.started_at = now
-    else:
-        membership.status = APPROVED
     _audit("team_approved", actor, membership)
-    _tell_person("team_approved", membership)
+    if _payment_step(membership, now):
+        # One email: welcome. The payment step of a free team is not worth one.
+        _tell_person("team_approved", membership)
     return membership
 
 

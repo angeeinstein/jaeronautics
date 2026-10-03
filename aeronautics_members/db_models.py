@@ -795,6 +795,9 @@ class Team(db.Model):
     application_prompt = db.Column(db.String(255), nullable=True)
     max_members = db.Column(db.Integer, nullable=True)
     forum_group = db.Column(db.String(100), nullable=True)
+    # Optional. The file as stored, and the unguessable name it is served under.
+    logo_path = db.Column(db.String(500), nullable=True)
+    logo_token = db.Column(db.String(64), unique=True, nullable=True)
     # "none" until payment is built.
     payment_mode = db.Column(db.String(20), nullable=False, default="none")
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
@@ -849,6 +852,10 @@ class TeamMembership(db.Model):
     applied_at = db.Column(db.DateTime, nullable=True)
     invited_at = db.Column(db.DateTime, nullable=True)
     approved_at = db.Column(db.DateTime, nullable=True)
+    # The payment step every approval goes through, even for a free team: how
+    # it was settled (the team's payment mode at the time) and when.
+    payment_mode = db.Column(db.String(20), nullable=True)
+    payment_settled_at = db.Column(db.DateTime, nullable=True)
     started_at = db.Column(db.DateTime, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
     # Who approved, rejected or removed -- the last person to decide.

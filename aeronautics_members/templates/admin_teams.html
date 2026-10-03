@@ -1,4 +1,5 @@
 {% extends "admin_layout.html" %}
+{% from "teams/_status.html" import team_logo %}
 {% block admin_page_actions %}
     <a href="{{ url_for('teams.admin_team_new') }}" class="btn btn-primary">{{ _('New %(label)s', label=label_singular) }}</a>
 {% endblock %}
@@ -50,6 +51,7 @@
                         {% for team in teams %}
                             <tr>
                                 <td>
+                                    {{ team_logo(team, 'small') }}
                                     <a href="{{ url_for('teams.admin_team_detail', slug=team.slug) }}">{{ team.name }}</a>
                                     {% if team.status == 'archived' %}<span class="status-label status-neutral ms-1">{{ _("Archived") }}</span>{% endif %}
                                 </td>

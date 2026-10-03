@@ -9,7 +9,7 @@ docs/teams-plan.md.
 import csv
 import io
 
-from flask import Blueprint, Response, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_babel import gettext as _
 from flask_login import current_user, login_required
 
@@ -34,6 +34,25 @@ def _team_form_fields(form):
         "max_members": form.get("max_members"),
         "forum_group": form.get("forum_group"),
     }
+
+
+def _apply_logo(team, form, files):
+    """Replace or remove the logo, if the form asks for either."""
+    upload = files.get("logo")
+    if upload is not None and upload.filename:
+        teams_service.set_team_logo(current_user, team, upload.read())
+    elif form.get("remove_logo") == "on":
+        teams_service.remove_team_logo(current_user, team)
+
+
+@teams_bp.route("/teams/logo/<token>", methods=["GET"])
+def team_logo(token):
+    """A team's logo. Not secret, so not behind a login: the token only keeps
+    the address from being guessed while a logo is being replaced."""
+    path = teams_service.logo_file(teams_service.team_by_logo_token(token))
+    if path is None:
+        abort(404)
+    return send_file(path, mimetype="image/png", conditional=True, max_age=86400)
 
 
 def _render_admin_teams(**context):
@@ -80,6 +99,7 @@ def admin_team_new():
             team = teams_service.create_team(
                 current_user, slug=request.form.get("slug"), **_team_form_fields(request.form)
             )
+            _apply_logo(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
             flash(error.message, "danger")
@@ -113,6 +133,7 @@ def admin_team_detail(slug):
     if request.method == "POST":
         try:
             teams_service.update_team(current_user, team, **_team_form_fields(request.form))
+            _apply_logo(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
             flash(error.message, "danger")
@@ -453,11 +474,14 @@ def team_add_note(slug, user_id):
 def team_lead_settings(slug):
     return _lead_action(
         slug, teams_service.TeamPermission.EDIT_SETTINGS,
-        lambda team: teams_service.update_team_by_lead(
-            current_user, team,
-            description=request.form.get("description"),
-            application_prompt=request.form.get("application_prompt"),
-            applications_open=request.form.get("applications_open") == "on",
+        lambda team: (
+            teams_service.update_team_by_lead(
+                current_user, team,
+                description=request.form.get("description"),
+                application_prompt=request.form.get("application_prompt"),
+                applications_open=request.form.get("applications_open") == "on",
+            ),
+            _apply_logo(team, request.form, request.files),
         ),
         _("Saved."),
         back=url_for("teams.team_manage", slug=slug),

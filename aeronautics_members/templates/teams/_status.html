@@ -12,3 +12,26 @@
 <span class="team-avatar team-avatar-initials" aria-hidden="true">{{ (name or '?')[:1] }}</span>
 {%- endif -%}
 {%- endmacro %}
+
+{# A team's logo, if it has one. Decorative beside the name, so no alt text. #}
+{% macro team_logo(team, size='') -%}
+{%- if team.logo_token -%}
+<img class="team-logo{% if size %} team-logo-{{ size }}{% endif %}" src="{{ url_for('teams.team_logo', token=team.logo_token) }}" alt="">
+{%- endif -%}
+{%- endmacro %}
+
+{# Upload, replace or remove a logo. The form around it needs enctype="multipart/form-data". #}
+{% macro logo_field(team) -%}
+<label class="form-label" for="logo">{{ _('Logo') }}</label>
+{% if team and team.logo_token %}
+    <div class="d-flex align-items-center gap-3 mb-2">
+        {{ team_logo(team, 'large') }}
+        <div class="form-check mb-0">
+            <input class="form-check-input" type="checkbox" name="remove_logo" id="remove_logo">
+            <label class="form-check-label" for="remove_logo">{{ _('Remove') }}</label>
+        </div>
+    </div>
+{% endif %}
+<input class="form-control" type="file" id="logo" name="logo" accept="image/png,image/jpeg,image/webp">
+<div class="form-text">{{ _('Optional. PNG, JPG or WebP. Shown on dark backgrounds, so a logo with its own background or in light colours works best.') }}</div>
+{%- endmacro %}

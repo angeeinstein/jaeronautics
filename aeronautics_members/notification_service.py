@@ -682,6 +682,10 @@ class NotificationService:
                 "action_label": label,
                 "heading": subject,
                 "body_lines": [greeting, *lines],
+                # Under the association's header, so it is clear the email comes
+                # from the association, about this team.
+                "team_badge_name": payload.get("team_name"),
+                "team_logo_token": payload.get("team_logo_token"),
             },
         )
 
@@ -713,12 +717,24 @@ class NotificationService:
         if not sender_account:
             return False, "No notification sender account is configured."
 
+        template_vars = dict(template_vars)
+        attachments = None
+        logo_token = template_vars.pop("team_logo_token", None)
+        if logo_token:
+            from .services.teams import logo_file, team_by_logo_token
+
+            logo = logo_file(team_by_logo_token(logo_token))
+            if logo is not None:
+                attachments = [{"path": str(logo), "cid": "teamlogo"}]
+                template_vars["team_logo_cid"] = "teamlogo"
+
         return send_mail(
             from_account=sender_account,
             to_email=event.recipient_email,
             subject=subject,
             template_name="member_account_action.html",
             return_error=True,
+            attachments=attachments,
             **template_vars,
         )
 

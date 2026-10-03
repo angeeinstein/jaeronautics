@@ -1,12 +1,15 @@
 {% extends "base.html" %}
-{% from "teams/_status.html" import status_label, person_picture %}
+{% from "teams/_status.html" import status_label, person_picture, team_logo, logo_field %}
 {% block title %}{{ team.name }}{% endblock %}
 {% block content %}
 <div class="card mb-4">
     <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
-        <div>
-            <h2 class="mb-1">{{ team.name }}</h2>
-            <p class="text-muted mb-0">{{ _('Team management') }}</p>
+        <div class="d-flex align-items-center gap-3">
+            {{ team_logo(team, 'large') }}
+            <div>
+                <h2 class="mb-1">{{ team.name }}</h2>
+                <p class="text-muted mb-0">{{ _('Team management') }}</p>
+            </div>
         </div>
         <div class="d-flex flex-wrap gap-2">
             <a class="btn btn-secondary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Team page') }}</a>
@@ -107,7 +110,7 @@
 
 {% if TeamPermission.EDIT_SETTINGS in permissions %}
 <section class="card" aria-labelledby="settings-heading">
-    <form method="POST" action="{{ url_for('teams.team_lead_settings', slug=team.slug) }}">
+    <form method="POST" action="{{ url_for('teams.team_lead_settings', slug=team.slug) }}" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h4 class="mb-0" id="settings-heading">{{ _('Settings') }}</h4>
@@ -122,6 +125,9 @@
                 <label class="form-label" for="application_prompt">{{ _('Question for applicants') }}</label>
                 <input class="form-control" id="application_prompt" name="application_prompt" maxlength="255" value="{{ team.application_prompt or '' }}">
                 <div class="form-text">{{ _('Optional. Without one, applicants are not asked to write anything.') }}</div>
+            </div>
+            <div class="mb-3">
+                {{ logo_field(team) }}
             </div>
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" name="applications_open" id="applications_open" {% if team.applications_open %}checked{% endif %}>
