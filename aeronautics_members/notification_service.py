@@ -610,6 +610,9 @@ class NotificationService:
                     ],
                 },
             )
+        team_message = self._build_team_message(event, payload, greeting)
+        if team_message is not None:
+            return team_message
         return (
             _("An update on your Joanneum Aeronautics account"),
             {
@@ -618,6 +621,67 @@ class NotificationService:
                 "action_label": _("Open My Account"),
                 "heading": _("An update on your account"),
                 "body_lines": [greeting, event.summary],
+            },
+        )
+
+    def _build_team_message(self, event, payload, greeting):
+        """Emails about teams: to the person, or to the team's leads."""
+        team = payload.get("team_name") or _("your team")
+        slug = payload.get("team_slug")
+        if not event.event_type.startswith("team_") or not slug:
+            return None
+        teams_url = build_public_url("teams.teams_home")
+        manage_url = build_public_url("teams.team_manage", slug=slug)
+
+        to_person = {
+            "team_invited": (
+                _("Invitation from %(team)s", team=team),
+                _("The leads of %(team)s would like to meet you.", team=team),
+                [_("Thanks for applying to %(team)s. The leads would like to meet you:", team=team),
+                 payload.get("meeting_details")],
+                teams_url, _("Open Teams"),
+            ),
+            "team_approved": (
+                _("Welcome to %(team)s", team=team),
+                _("You are now a member of %(team)s.", team=team),
+                [_("You are now a member of %(team)s.", team=team)],
+                build_public_url("teams.team_page", slug=slug), _("Open Team Page"),
+            ),
+            "team_rejected": (
+                _("Your application to %(team)s", team=team),
+                _("Your application was not accepted."),
+                [_("Your application to %(team)s was not accepted this time.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_removed": (
+                _("Your membership in %(team)s has ended", team=team),
+                _("Your membership in %(team)s has ended.", team=team),
+                [_("Your membership in %(team)s has ended. If you think this is a mistake, "
+                   "please contact the team's leads.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+        }
+        if event.event_type in to_person:
+            subject, preview, lines, url, label = to_person[event.event_type]
+        elif event.event_type in {"team_application_received", "team_member_joined",
+                                  "team_member_left", "team_members_lapsed"}:
+            subject = {
+                "team_application_received": _("New application for %(team)s", team=team),
+                "team_member_joined": _("New member in %(team)s", team=team),
+                "team_member_left": _("A member left %(team)s", team=team),
+                "team_members_lapsed": _("Members left %(team)s", team=team),
+            }[event.event_type]
+            preview, lines, url, label = event.summary, [event.summary], manage_url, _("Open Team Management")
+        else:
+            return None
+        return (
+            subject,
+            {
+                "preview_text": preview,
+                "action_url": url,
+                "action_label": label,
+                "heading": subject,
+                "body_lines": [greeting, *lines],
             },
         )
 

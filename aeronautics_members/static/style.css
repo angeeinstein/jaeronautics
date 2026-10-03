@@ -1208,3 +1208,53 @@ textarea.form-control {
     font-size: 1.3rem;
     line-height: 1;
 }
+
+/* ---- Teams ------------------------------------------------------------------
+   The team's members as pictures and names, and the leads' notes. */
+
+.team-avatar {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    background-color: var(--ja-accent-soft);
+}
+
+.team-avatar-initials {
+    color: var(--ja-link);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.team-roster {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: 1rem;
+}
+
+.team-roster-person {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.team-roster-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* What somebody wrote, line breaks kept. */
+.team-meeting {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.team-note {
+    border-top: 1px solid var(--ja-border);
+    padding-top: 0.75rem;
+}

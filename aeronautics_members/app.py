@@ -1700,6 +1700,12 @@ def create_app(config_overrides=None):
 
     # What teams are called here, as (singular, plural) -- "Teams" unless an
     # admin chose another word.
+    @app.template_global("teams_switched_on")
+    def teams_switched_on_global():
+        from .services.teams import teams_enabled
+
+        return teams_enabled()
+
     @app.template_global("team_labels")
     def team_labels_global():
         from .services.teams import team_labels
@@ -4418,6 +4424,16 @@ def create_app(config_overrides=None):
                 )
                 error_count += 1
                 click.echo(click.style(f"Billing reconciliation failed for {member.email_private}: {exc}", fg="red"), err=True)
+
+        # Teams follow the association: whoever is no longer a member leaves
+        # their teams too. Here because this is the nightly membership job.
+        from .services.teams import end_lapsed_team_memberships
+
+        lapsed = end_lapsed_team_memberships()
+        db.session.commit()
+        flush_marked_notification_channels()
+        if lapsed:
+            click.echo(f"Ended {lapsed} team membership(s) of people no longer in the association.")
 
         summary_color = "green" if error_count == 0 else "yellow"
         click.echo(click.style(

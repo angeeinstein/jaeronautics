@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "teams/_status.html" import status_label, person_picture %}
+{% block title %}{{ team.name }}{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+        <div>
+            <h2 class="mb-1">{{ team.name }}</h2>
+            <p class="text-muted mb-0">{{ _('Team management') }}</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-secondary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Team page') }}</a>
+            {% if TeamPermission.EXPORT in permissions %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_export', slug=team.slug) }}">{{ _('Export members') }}</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if not has_lead_in_force %}
+    <div class="alert alert-warning">{{ _('This team has no active lead.') }}</div>
+{% endif %}
+
+<section class="card mb-4" aria-labelledby="applications-heading">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0" id="applications-heading">{{ _('Applications') }}</h4>
+        <span class="text-muted small">{{ applications|length }}</span>
+    </div>
+    <div class="card-body">
+        {% if applications %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead><tr><th>{{ _('Name') }}</th><th>{{ _('Status') }}</th><th>{{ _('Applied') }}</th></tr></thead>
+                    <tbody>
+                        {% for membership in applications %}
+                            <tr>
+                                <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=membership.user_id) }}">{{ person_details(membership.user).name }}</a></td>
+                                <td>{{ status_label(membership.status, status_labels) }}</td>
+                                <td>{{ membership.applied_at|date_display }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">{{ _('None waiting.') }}</p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="card mb-4" aria-labelledby="members-heading">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0" id="members-heading">{{ _('Members') }}</h4>
+        <span class="text-muted small">{{ roster|length }}{% if team.max_members %} / {{ team.max_members }}{% endif %}</span>
+    </div>
+    <div class="card-body">
+        {% if roster %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead><tr><th></th><th>{{ _('Name') }}</th><th>{{ _('University email') }}</th><th>{{ _('Cohort') }}</th><th>{{ _('Since') }}</th></tr></thead>
+                    <tbody>
+                        {% for row in roster %}
+                            <tr>
+                                <td>{{ person_picture(row.avatar_token, row.name) }}</td>
+                                <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=row.user.id) }}">{{ row.name }}</a>{% if row.is_lead %} <span class="status-label status-info">{{ _('Lead') }}</span>{% endif %}</td>
+                                <td>{{ row.university_email or '-' }}</td>
+                                <td>{{ row.cohort or '-' }}</td>
+                                <td>{{ row.membership.started_at|date_display }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">{{ _('Nobody yet.') }}</p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="card mb-4" aria-labelledby="former-heading">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0" id="former-heading">{{ _('Former members') }}</h4>
+        <span class="text-muted small">{{ former|length }}</span>
+    </div>
+    <div class="card-body">
+        {% if former %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead><tr><th>{{ _('Name') }}</th><th>{{ _('From') }}</th><th>{{ _('To') }}</th><th>{{ _('Why') }}</th></tr></thead>
+                    <tbody>
+                        {% for membership in former %}
+                            <tr>
+                                <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=membership.user_id) }}">{{ person_details(membership.user).name }}</a></td>
+                                <td>{{ membership.started_at|date_display }}</td>
+                                <td>{{ membership.ended_at|date_display }}</td>
+                                <td>{{ _(end_reasons.get(membership.end_reason, '-')) }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">{{ _('None.') }}</p>
+        {% endif %}
+    </div>
+</section>
+
+{% if TeamPermission.EDIT_SETTINGS in permissions %}
+<section class="card" aria-labelledby="settings-heading">
+    <form method="POST" action="{{ url_for('teams.team_lead_settings', slug=team.slug) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0" id="settings-heading">{{ _('Settings') }}</h4>
+            <button type="submit" class="btn btn-primary">{{ _('Save') }}</button>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label" for="description">{{ _('Description') }}</label>
+                <textarea class="form-control" id="description" name="description" rows="3">{{ team.description or '' }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="application_prompt">{{ _('Question for applicants') }}</label>
+                <input class="form-control" id="application_prompt" name="application_prompt" maxlength="255" value="{{ team.application_prompt or '' }}">
+                <div class="form-text">{{ _('Optional. Without one, applicants are not asked to write anything.') }}</div>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="applications_open" id="applications_open" {% if team.applications_open %}checked{% endif %}>
+                <label class="form-check-label" for="applications_open">{{ _('Accepting new members') }}</label>
+            </div>
+        </div>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

@@ -235,9 +235,28 @@ Seen by the team's leads and by site admins, never by the person.
 they are an active member of the association and of the team. Site admins reach
 every team through a new global permission to manage teams.
 
-**Built so far** (step one): the switch and the label, the four tables, teams
+**Built so far.** Step one: the switch and the label, the four tables, teams
 and their roles in the admin (`/admin/teams`), and the access rules, in
-`services/teams.py`. Members do not see anything of teams yet.
+`services/teams.py`. Step two, all only while teams are switched on:
+
+- the Teams area (`/teams`): join an open team, apply to one by approval (with
+  the team's question, if it has one), withdraw, leave;
+- the team's page (`/teams/<name>`) for its members: everybody's picture, name
+  and university email, and who leads it;
+- the leads' page (`/teams/<name>/manage`): applications, members, former
+  members, the team's own settings, and an export of the current members as
+  CSV; per person, their details, history and the leads' notes, and invite
+  (with the meeting details), approve, not accept, remove (with a reason that
+  stays in the record and is not sent to the person);
+- emails: to the person when invited, approved, not accepted or removed; to the
+  leads when somebody applies, joins, leaves, or leaves with their association
+  membership. A team with no lead in force sends those to the site admins;
+- the nightly membership job ends team memberships and applications of people
+  no longer in the association, and tells the leads in one message per team;
+- erasing an account ends its teams, removes its roles and blanks what it wrote
+  in applications; the leads' notes stay, as agreed.
+
+Not yet: payment, the forum group, the office access list.
 
 **The flow** — open team: join → active. Team by approval: applied → invited →
 approved → active, with rejected or withdrawn possible on the way. Without

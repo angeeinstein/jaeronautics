@@ -424,3 +424,449 @@ def find_account(address):
         raise NotFoundError("No account uses that address.", code="team_account_not_found")
     return user
 
+
+
+# --- Joining and leaving ---------------------------------------------------
+#
+# Every change to one attempt is made under a lock on its row, and every new
+# attempt under a lock on its team, so two clicks -- or a lead approving while
+# the applicant withdraws -- happen one after the other and the second one
+# finds what the first decided.
+
+#: Why an attempt ended.
+END_LEFT = "left"
+END_REMOVED = "removed"
+END_MEMBERSHIP_ENDED = "membership_ended"
+END_ACCOUNT_ERASED = "account_erased"
+
+#: What applicants and members see for each state.
+STATUS_LABELS = {
+    APPLIED: "Application received",
+    INVITED: "Invited",
+    APPROVED: "Approved",
+    ACTIVE: "Member",
+    ENDED: "Ended",
+    REJECTED: "Not accepted",
+    WITHDRAWN: "Withdrawn",
+}
+
+END_REASON_LABELS = {
+    END_LEFT: "Left",
+    END_REMOVED: "Removed",
+    END_MEMBERSHIP_ENDED: "Association membership ended",
+    END_ACCOUNT_ERASED: "Account erased",
+}
+
+
+def ongoing_membership(user, team):
+    """This person's attempt under way in this team, if any."""
+    if user is None or team is None:
+        return None
+    return db.session.execute(
+        db.select(TeamMembership)
+        .where(TeamMembership.team_id == team.id, TeamMembership.user_id == user.id,
+               TeamMembership.status.in_(ONGOING))
+        .order_by(TeamMembership.id.desc())
+    ).scalars().first()
+
+
+def memberships_of(user):
+    """Every attempt of this person, newest first, in teams still running."""
+    return db.session.execute(
+        db.select(TeamMembership)
+        .join(Team)
+        .where(TeamMembership.user_id == user.id, Team.status == STATUS_ACTIVE)
+        .order_by(TeamMembership.id.desc())
+    ).scalars().all()
+
+
+def active_member_count(team):
+    return db.session.scalar(
+        db.select(db.func.count()).select_from(TeamMembership).filter_by(team_id=team.id, status=ACTIVE)
+    ) or 0
+
+
+def is_full(team):
+    return team.max_members is not None and active_member_count(team) >= team.max_members
+
+
+def why_not_joinable(user, team):
+    """None if ``user`` may join or apply to ``team`` now, else the reason."""
+    if not teams_enabled() or team.status != STATUS_ACTIVE:
+        return "That team is not available."
+    if not is_active_association_member(user):
+        return "Teams are for members of the association."
+    if ongoing_membership(user, team) is not None:
+        return "You are already in this team or have applied."
+    if not team.applications_open:
+        return "This team is not taking new members at the moment."
+    if is_full(team):
+        return "This team is full."
+    return None
+
+
+def _member_name(user):
+    member = getattr(user, "member", None)
+    if member is not None and (member.first_name or member.last_name):
+        return f"{member.first_name} {member.last_name}".strip()
+    return user.email
+
+
+def _first_name(user):
+    member = getattr(user, "member", None)
+    return member.first_name if member is not None else None
+
+
+def _tell_person(event_type, membership, **extra):
+    from .notifications import queue_user_status_notification
+
+    user = membership.user
+    payload = {
+        "first_name": _first_name(user),
+        "team_name": membership.team.name,
+        "team_slug": membership.team.slug,
+        **extra,
+    }
+    queue_user_status_notification(
+        event_type, f"{membership.team.name}: {STATUS_LABELS.get(membership.status, membership.status)}",
+        user.email, payload=payload, target_user=user, object_type="team_membership", object_id=membership.id,
+    )
+
+
+def _tell_leads(team, event_type, summary, **extra):
+    """Email the team's leads; with none in force, the site admins instead."""
+    from .notifications import queue_curated_admin_notification, queue_user_status_notification
+
+    leads = [team_role.user for team_role in role_holders(team, ROLE_LEAD) if role_counts(team_role)]
+    payload = {"team_name": team.name, "team_slug": team.slug, **extra}
+    if not leads:
+        from ..notification_service import ADMIN_GENERAL_CHANNEL
+
+        queue_curated_admin_notification(
+            ADMIN_GENERAL_CHANNEL, event_type, f"{summary} (no active lead)",
+            payload={**payload, "what_to_do": "Appoint a lead, or handle it on the team's page."},
+            object_type="team", object_id=team.id, severity="info",
+        )
+        return
+    for lead in leads:
+        queue_user_status_notification(
+            event_type, summary, lead.email,
+            payload={**payload, "first_name": _first_name(lead)},
+            target_user=lead, object_type="team", object_id=team.id,
+        )
+
+
+def _audit(event_type, actor, membership, **metadata):
+    log_audit_event(
+        "teams", event_type, actor_user=actor, target_user=membership.user,
+        metadata={"team": membership.team.slug, "membership_id": membership.id,
+                  "status": membership.status, **metadata},
+    )
+
+
+def join_or_apply(user, team, application_text=None):
+    """Join an open team, or apply to one that approves its members."""
+    _lock_team(team)
+    reason = why_not_joinable(user, team)
+    if reason:
+        raise ConflictError(reason, code="team_not_joinable")
+
+    now = get_now_utc()
+    membership = TeamMembership(team=team, user=user, applied_at=now)
+    if team.admission_mode == ADMISSION_OPEN:
+        membership.status = ACTIVE
+        membership.started_at = now
+    else:
+        membership.status = APPLIED
+        if team.application_prompt:
+            membership.application_text = (application_text or "").strip()[:5000] or None
+    db.session.add(membership)
+    db.session.flush()
+
+    name = _member_name(user)
+    if membership.status == ACTIVE:
+        _audit("team_joined", user, membership)
+        _tell_leads(team, "team_member_joined", f"{name} joined {team.name}.", person_name=name)
+    else:
+        _audit("team_applied", user, membership)
+        _tell_leads(team, "team_application_received", f"{name} applied to {team.name}.", person_name=name)
+    return membership
+
+
+def _locked_membership(membership_id, team=None):
+    membership = db.session.execute(
+        locked(db.select(TeamMembership).where(TeamMembership.id == membership_id))
+    ).scalar_one_or_none()
+    if membership is None or (team is not None and membership.team_id != team.id):
+        raise NotFoundError("That application or membership does not exist.")
+    return membership
+
+
+def _require_status(membership, allowed, message):
+    if membership.status not in allowed:
+        raise ConflictError(message, code="team_membership_state_changed")
+
+
+def withdraw(user, team):
+    """The applicant takes their application back."""
+    current = ongoing_membership(user, team)
+    if current is None:
+        raise ConflictError("There is no application to withdraw.", code="team_nothing_to_withdraw")
+    membership = _locked_membership(current.id, team)
+    _require_status(membership, {APPLIED, INVITED, APPROVED}, "There is no application to withdraw.")
+    membership.status = WITHDRAWN
+    membership.ended_at = get_now_utc()
+    _audit("team_application_withdrawn", user, membership)
+    return membership
+
+
+def leave(user, team):
+    """The member leaves the team."""
+    current = ongoing_membership(user, team)
+    if current is None or current.status != ACTIVE:
+        raise ConflictError("You are not a member of this team.", code="team_not_a_member")
+    membership = _locked_membership(current.id, team)
+    _require_status(membership, {ACTIVE}, "You are not a member of this team.")
+    membership.status = ENDED
+    membership.ended_at = get_now_utc()
+    membership.end_reason = END_LEFT
+    _audit("team_left", user, membership)
+    name = _member_name(user)
+    _tell_leads(team, "team_member_left", f"{name} left {team.name}.", person_name=name)
+    return membership
+
+
+def invite(actor, team, membership_id, meeting_details):
+    meeting_details = (meeting_details or "").strip()
+    if not meeting_details:
+        raise ValidationError("Say when and where you would like to meet.", code="team_meeting_missing")
+    membership = _locked_membership(membership_id, team)
+    _require_status(membership, {APPLIED, INVITED}, "This application has already been decided.")
+    membership.status = INVITED
+    membership.invited_at = get_now_utc()
+    membership.meeting_details = meeting_details[:5000]
+    membership.decided_by_user_id = getattr(actor, "id", None)
+    _audit("team_invited", actor, membership)
+    _tell_person("team_invited", membership, meeting_details=membership.meeting_details)
+    return membership
+
+
+def approve(actor, team, membership_id):
+    """Accept an applicant. Without payment, they are a member straight away."""
+    _lock_team(team)
+    membership = _locked_membership(membership_id, team)
+    _require_status(membership, {APPLIED, INVITED}, "This application has already been decided.")
+    if is_full(team):
+        raise ConflictError("The team is full.", code="team_full")
+    now = get_now_utc()
+    membership.approved_at = now
+    membership.decided_by_user_id = getattr(actor, "id", None)
+    if team.payment_mode == PAYMENT_NONE:
+        membership.status = ACTIVE
+        membership.started_at = now
+    else:
+        membership.status = APPROVED
+    _audit("team_approved", actor, membership)
+    _tell_person("team_approved", membership)
+    return membership
+
+
+def reject(actor, team, membership_id):
+    membership = _locked_membership(membership_id, team)
+    _require_status(membership, {APPLIED, INVITED, APPROVED}, "This application has already been decided.")
+    membership.status = REJECTED
+    membership.ended_at = get_now_utc()
+    membership.decided_by_user_id = getattr(actor, "id", None)
+    _audit("team_rejected", actor, membership)
+    _tell_person("team_rejected", membership)
+    return membership
+
+
+def remove(actor, team, membership_id, reason):
+    """End somebody's team membership now, with a reason for the record.
+
+    The reason is for the leads and the audit log; the person is told only
+    that their membership has ended.
+    """
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValidationError("Give a reason; it stays in the record.", code="team_removal_reason_missing")
+    membership = _locked_membership(membership_id, team)
+    _require_status(membership, {ACTIVE}, "This person is no longer a member.")
+    membership.status = ENDED
+    membership.ended_at = get_now_utc()
+    membership.end_reason = END_REMOVED
+    membership.end_note = reason[:2000]
+    membership.decided_by_user_id = getattr(actor, "id", None)
+    _audit("team_member_removed", actor, membership)
+    _tell_person("team_removed", membership)
+    return membership
+
+
+# --- What the leads see ----------------------------------------------------
+
+
+def team_memberships(team, statuses):
+    return db.session.execute(
+        db.select(TeamMembership)
+        .where(TeamMembership.team_id == team.id, TeamMembership.status.in_(tuple(statuses)))
+        .order_by(TeamMembership.id.desc())
+    ).scalars().all()
+
+
+def history_of(team, user):
+    return db.session.execute(
+        db.select(TeamMembership).filter_by(team_id=team.id, user_id=user.id).order_by(TeamMembership.id.desc())
+    ).scalars().all()
+
+
+def notes_about(team, user):
+    from ..db_models import TeamNote
+
+    return db.session.execute(
+        db.select(TeamNote).filter_by(team_id=team.id, user_id=user.id).order_by(TeamNote.id.desc())
+    ).scalars().all()
+
+
+def add_note(actor, team, user, body):
+    from ..db_models import TeamNote
+
+    body = (body or "").strip()
+    if not body:
+        raise ValidationError("The note is empty.", code="team_note_empty")
+    if not history_of(team, user):
+        raise NotFoundError("That person has never been in this team.")
+    note = TeamNote(team=team, user=user, author_user_id=getattr(actor, "id", None), body=body[:5000])
+    db.session.add(note)
+    db.session.flush()
+    log_audit_event("teams", "team_note_added", actor_user=actor, target_user=user,
+                    metadata={"team": team.slug, "note_id": note.id})
+    return note
+
+
+def update_team_by_lead(actor, team, *, description, application_prompt, applications_open):
+    """The part of a team's settings that belongs to its leads."""
+    before = _snapshot(team)
+    team.description = (description or "").strip() or None
+    team.application_prompt = (application_prompt or "").strip()[:255] or None
+    team.applications_open = bool(applications_open)
+    after = _snapshot(team)
+    if before != after:
+        log_audit_event("teams", "team_updated", actor_user=actor, before=before, after=after)
+    return team
+
+
+def avatar_token_for(user):
+    """The public token of the approved forum picture, or None."""
+    from ..forum_service import FORUM_AVATAR_STATUS_APPROVED
+
+    for submission in user.forum_avatar_submissions or []:
+        if submission.status == FORUM_AVATAR_STATUS_APPROVED and submission.public_token:
+            return submission.public_token
+    return None
+
+
+def person_details(user):
+    """What a lead sees about a person: no address, nothing about payment."""
+    member = user.member
+    return {
+        "name": _member_name(user),
+        "university_email": member.email_work if member else None,
+        "private_email": user.email,
+        "phone": member.phone_private if member else None,
+        "cohort": member.year_group if member else None,
+    }
+
+
+def roster(team):
+    """The active members, for the team's own page and the lead's list."""
+    members = team_memberships(team, {ACTIVE})
+    return sorted(
+        (
+            {
+                "membership": membership,
+                "user": membership.user,
+                "avatar_token": avatar_token_for(membership.user),
+                "is_lead": any(team_role.user_id == membership.user_id and team_role.role == ROLE_LEAD
+                               for team_role in team.roles),
+                **person_details(membership.user),
+            }
+            for membership in members
+        ),
+        key=lambda row: row["name"].lower(),
+    )
+
+
+EXPORT_COLUMNS = ("Name", "University email", "Private email", "Phone", "Cohort", "Member since")
+
+
+def export_rows(team):
+    from .membership import format_date_display
+
+    for row in roster(team):
+        started = row["membership"].started_at
+        yield (
+            row["name"], row["university_email"] or "", row["private_email"] or "",
+            row["phone"] or "", row["cohort"] or "", format_date_display(started) if started else "",
+        )
+
+
+# --- Keeping teams in step with the association ----------------------------
+
+
+def end_lapsed_team_memberships():
+    """End team memberships and applications of people no longer in the association.
+
+    Run every night. Applications become withdrawn, memberships ended, both
+    with the same reason; the leads get one message per team naming everybody.
+    Roles are left alone: they stop counting by themselves, and come back if
+    the person returns and joins again.
+    """
+    if not teams_enabled():
+        return 0
+    ongoing = db.session.execute(
+        db.select(TeamMembership).where(TeamMembership.status.in_(ONGOING))
+    ).scalars().all()
+    ended_by_team = {}
+    now = get_now_utc()
+    for membership in ongoing:
+        if is_active_association_member(membership.user) or membership.user.disabled_at is not None:
+            continue
+        membership = _locked_membership(membership.id)
+        if membership.status not in ONGOING:
+            continue
+        was_member = membership.status == ACTIVE
+        membership.status = ENDED if was_member else WITHDRAWN
+        membership.ended_at = now
+        membership.end_reason = END_MEMBERSHIP_ENDED
+        _audit("team_membership_lapsed", None, membership)
+        if was_member:
+            ended_by_team.setdefault(membership.team, []).append(_member_name(membership.user))
+
+    for team, names in ended_by_team.items():
+        _tell_leads(
+            team, "team_members_lapsed",
+            f"{len(names)} member(s) of {team.name} left with their association membership: {', '.join(sorted(names))}.",
+            names=sorted(names),
+        )
+    return sum(len(names) for names in ended_by_team.values())
+
+
+def forget_for_erasure(user):
+    """What erasing an account does to its teams.
+
+    Its memberships and applications end, its roles go, and what the person
+    wrote in their applications is blanked. The leads' notes stay -- whether
+    and how they should go is still open (docs/teams-plan.md).
+    """
+    now = get_now_utc()
+    for membership in db.session.execute(
+        db.select(TeamMembership).filter_by(user_id=user.id)
+    ).scalars():
+        membership.application_text = None
+        if membership.status in ONGOING:
+            membership.status = ENDED if membership.status == ACTIVE else WITHDRAWN
+            membership.ended_at = now
+            membership.end_reason = END_ACCOUNT_ERASED
+    for team_role in db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars():
+        db.session.delete(team_role)

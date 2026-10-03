@@ -435,6 +435,11 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
         summary["avatar_files_deleted"] = _erase_member_rows(member)
         _erase_member_profile(member, now)
 
+    # Teams: memberships end, roles go, application texts are blanked.
+    from .teams import forget_for_erasure
+
+    forget_for_erasure(user)
+
     # Somebody from the old forum -- still archived, or a returning student
     # who reclaimed the account -- also has what that board knew about them.
     summary["avatar_files_deleted"] += _erase_imported_profile(user)

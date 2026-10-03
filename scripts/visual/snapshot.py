@@ -189,8 +189,17 @@ def seed(app, app_module, subscriptions):
                        max_members=None, forum_group=None)
     rocket = teams.create_team(None, slug=None, name="Rocket Team", **team_fields)
     teams.create_team(None, slug=None, name="Glider Team", **team_fields)
-    db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE))
+    teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
+    db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now))
     teams.grant_team_role(None, rocket, active.user, teams.ROLE_LEAD)
+    carla = Member.query.filter_by(email_private="cancelling@example.org").one().user
+    db.session.add(TeamMembership(team=rocket, user=carla, status=teams.ACTIVE, started_at=now))
+    bernd = Member.query.filter_by(email_private="returning@example.org").one().user
+    application = TeamMembership(team=rocket, user=bernd, status=teams.APPLIED, applied_at=now,
+                                 application_text="I built model rockets at school\nand would love to help.")
+    db.session.add(application)
+    db.session.flush()
+    teams.add_note(active.user, rocket, bernd, "Met him at the open day. Knows CATIA.")
     db.session.commit()
 
     reset_token = build_password_reset_token(new.user)
@@ -241,6 +250,11 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--teams", "user": "admin@example.org", "path": "/admin/teams"},
         {"name": "admin--team-detail", "user": "admin@example.org", "path": "/admin/teams/rocket-team"},
         {"name": "admin--team-new", "user": "admin@example.org", "path": "/admin/teams/new"},
+        {"name": "teams--home", "user": "active@example.org", "path": "/teams"},
+        {"name": "teams--home-applicant", "user": "returning@example.org", "path": "/teams"},
+        {"name": "teams--team-page", "user": "active@example.org", "path": "/teams/rocket-team"},
+        {"name": "teams--manage", "user": "active@example.org", "path": "/teams/rocket-team/manage"},
+        {"name": "teams--person", "user": "active@example.org", "path": f"/teams/rocket-team/manage/people/{bernd.id}"},
     ]
 
 
