@@ -66,8 +66,17 @@ access to the office.
   3. *Approved* — an email with "Pay now".
   4. *Not accepted* — shown neutrally, with no reason.
   5. *Active*, later *Ended*.
-- **Applicants see their status on the account page** — *agreed so far*, with the
-  states above.
+- **In practice the teams are short of members** — *agreed so far.* Applying
+  mostly means telling the leads one wants to join; nearly everybody gets
+  invited and approved. So the application text is optional, and the invite
+  step can be skipped.
+- **A standing invitation** — *suggested.* A text per team ("we meet every
+  Tuesday at 18:00 in room …"). If set, applying moves straight to *Invited* and
+  sends it, so the leads do not have to invite each person by hand.
+- **No restrictions on applying again** after a rejection — *agreed so far.*
+- **Several teams at once** — *agreed so far.*
+- **Applicants see their status in the Teams area** (see *Where it lives*) —
+  *agreed so far*, with the states above.
 - **A checkbox at association signup** — *agreed so far* in principle. For a team by
   approval it creates the application; for an open team, the team payment
   follows straight after the membership payment, on the thank-you page. It is a
@@ -128,6 +137,12 @@ access to the office.
   else — *suggested.*
 - **How long they stay** — *open.* Data protection expects a limit; a few years,
   then removed automatically, is the likely answer.
+- **The leads' notes when someone erases their account** — *agreed so far:* not
+  deleted automatically, since they may hold something that needs keeping for
+  longer. How they are handled instead — reviewed by an admin, kept for a set
+  time, or anonymised — is *open*. Note that a person who asks for erasure has a
+  right to it unless there is a reason to keep the data, so "kept forever" is
+  not an option either.
 
 ## Team leads
 
@@ -138,10 +153,14 @@ access to the office.
 - **Must be active association members** — *agreed so far.* When their membership is
   not active, their access to the team page pauses; the assignment stays, and
   comes back with the payment. The 21-day renewal grace applies as for anybody.
-- **Lead and team member are separate** — *suggested.* Lead is a function and
-  needs only the association membership. A lead who also works in the team is a
-  team member too and pays like everybody else. Exempting leads from the fee is
-  a site admin's decision, never a lead's own.
+- **A lead is a team member with a role** — *agreed so far.* The teams are small
+  (one has about ten members) and short of money, so leads are ordinary team
+  members who pay like everybody else and carry a role on top. A role only
+  counts while its holder is an active team member. The first lead of a new
+  team joins like anybody, and a site admin approves them.
+- **More roles later** — *agreed so far*, not built now: a treasurer, say, with
+  slightly different permissions. The database keeps roles as text and allows
+  several per person, so adding one changes no table.
 - **The last lead** — *suggested.* Never removed automatically, only paused.
   Site admins can open every team page at any time, so a team without an active
   lead is never unmanageable. When a team has no active lead, the site admins
@@ -152,8 +171,9 @@ access to the office.
 
 Like the admin member pages, limited to the lead's own team — *agreed so far*:
 
-- **Members:** list, search, detail (name, contact, study programme and cohort,
-  status, paid until).
+- **Members:** list, search, detail — name, university email, private email,
+  phone, cohort, status, paid until (*agreed so far*). No address, no payment
+  details.
 - **Applications:** queue, internal notes, invite with meeting details,
   approve, reject.
 - **Remove from a team** (see *Removal by a lead* above).
@@ -164,6 +184,58 @@ Like the admin member pages, limited to the lead's own team — *agreed so far*:
 
 Not on it — *agreed so far*: forum resync and other technical functions, billing
 details, and anything about the association membership itself.
+
+## Where it lives for members
+
+- **A Teams area of its own, separate from My Account** — *agreed so far*, so
+  that the association membership and the teams are not mixed up on one page.
+  It shows the teams one can join or apply to, and one's own team memberships
+  with their status.
+- **A page per team for all its members** — *agreed so far* as a place to grow
+  into: `/teams/<name>` for every active member of that team, beside the
+  leads' `/teams/<name>/manage`. What goes on it is *open*. To begin with, the
+  description, who the leads are and one's own status. Later perhaps a prepaid
+  balance for the drinks terminal, documents, dates. It should be built so that
+  sections can be added without reworking the page.
+
+## The foundation: data model
+
+*Suggested*, as discussed in October 2026. Built without regard to payment, and
+kept open where another association might need something different: values that
+could take more states later are text, not yes/no.
+
+**`teams`** — one row per team: `slug` (unique; for URLs, the Stripe marker and
+the forum group), name, description, `status` (`active`, `archived`),
+`admission_mode` (`open`, `approval`), applications open, the application
+question, the standing invitation, an optional maximum size, an optional forum
+group, and `payment_mode` (`none` for now).
+
+**`team_roles`** — who holds which role in which team: team, person, `role` as
+text (`lead` now, others later), when and by whom it was given. Several roles
+per person are possible. What each role may do is one table in the code, like
+the global roles in `permissions.py`, so a new role needs no database change.
+
+**`team_memberships`** — one row per attempt, not per person: team, person,
+`status` as text (`applied`, `invited`, `approved`, `active`, `ended`,
+`rejected`, `withdrawn`), when each step happened, the application text, the
+meeting details, who decided, and why it ended. Whoever applies again gets a new
+row, so the history stays and the former members list follows from the ended
+rows. At most one ongoing attempt per person and team, kept under row locks.
+
+**`team_membership_notes`** — the leads' internal notes: author, text, time.
+Seen by the team's leads and by site admins, never by the person.
+
+**Settings** — teams on or off (off by default), and the label ("Team" /
+"Teams").
+
+**Access** — a lead's permissions count only for their own team, and only while
+they are an active member of the association and of the team. Site admins reach
+every team through a new global permission to manage teams.
+
+**The flow** — open team: join → active. Team by approval: applied → invited →
+approved → active, with rejected or withdrawn possible on the way. Without
+payment, approval leads straight to active; with payment, *approved* is where
+the member pays. Every step goes into the audit log.
 
 ## The office access list
 
