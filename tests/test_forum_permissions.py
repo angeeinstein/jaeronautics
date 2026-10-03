@@ -925,3 +925,8 @@ class TestTheAuthorsMayPostWhileTheImportRuns:
         let_authors_post(forum, list(plan), "old_forum", allow=True)
 
         assert {category_id for category_id, _ in forum.written} <= set(plan)
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

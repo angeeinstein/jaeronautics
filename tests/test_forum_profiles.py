@@ -1202,3 +1202,8 @@ class TestTheForumTakesTheAddressAndName:
         names = [name for _what, name, _on, _why in portal_owned_settings_state(client)]
 
         assert names == ["auth_overrides_email", "auth_overrides_name"]
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

@@ -1571,3 +1571,8 @@ class TestAnAuthorWithAnUmlaut:
                                    topic_id=3)
 
         assert sent == [], "nothing is sent that Postgres would choke on"
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

@@ -498,3 +498,8 @@ class TestReadingTheDumpInTheEncodingItIsActuallyIn:
         mybb_export.read_dump(dump, on_note=said.append)
 
         assert said and "utf8mb4" in said[0]
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

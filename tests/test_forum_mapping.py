@@ -442,3 +442,8 @@ class TestALedgerFromABoardThatIsGone:
             ledger_describes(forum, ledger)
 
         assert max(forum.asked) - min(forum.asked) > 50
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

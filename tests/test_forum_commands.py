@@ -621,3 +621,8 @@ class TestAskingWhetherAKeyMayActAsSomebody:
 
         poster = self._poster(monkeypatch, ForumProviderError("500"))
         assert poster.may_act_as("HoferT_M13") is None
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

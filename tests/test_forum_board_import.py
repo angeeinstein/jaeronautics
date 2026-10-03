@@ -1440,3 +1440,8 @@ class TestRenamingWhatAnEarlierRunPosted:
         assert poster.titles[130] == "Exams (Aircraft Systems)"
         assert len(summary["problems"]) == 1
         assert ledger.title_for("13") is None, "tried again on the next run"
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

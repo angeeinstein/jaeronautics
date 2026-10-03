@@ -92,6 +92,10 @@ pip install --require-hashes -r requirements-dev.lock
 python -m pytest
 ```
 
+The tests of the old forum's one-off import (moving the board, the people,
+BBCode, the MyBB converter) are skipped by default; the import is done.
+`python -m pytest -m forum_import` runs them if it is ever needed again.
+
 - `tests/test_membership_cycle.py` covers the proration / calendar-year billing
   math and date helpers with no database.
 - `tests/test_webhook.py` drives the Stripe webhook end to end (signature
