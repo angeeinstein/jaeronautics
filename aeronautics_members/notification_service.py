@@ -647,6 +647,21 @@ class NotificationService:
                 [_("You are now a member of %(team)s.", team=team)],
                 build_public_url("teams.team_page", slug=slug), _("Open Team Page"),
             ),
+            "team_payment_due": (
+                _("%(team)s: one step left", team=team),
+                _("Pay the team fee to become a member."),
+                [_("The leads of %(team)s have accepted you. To become a member, pay the team fee "
+                   "on the Teams page within two weeks.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_payment_ended": (
+                _("Your membership in %(team)s has ended", team=team),
+                _("The payment for it did not go through."),
+                [_("Your membership in %(team)s has ended because the payment for it did not go through. "
+                   "Within the next six months you can come back by simply paying again on the Teams page.",
+                   team=team)],
+                teams_url, _("Open Teams"),
+            ),
             "team_rejected": (
                 _("Your application to %(team)s", team=team),
                 _("Your application was not accepted."),
@@ -670,11 +685,12 @@ class NotificationService:
         }
         if event.event_type in to_person:
             subject, preview, lines, url, label = to_person[event.event_type]
-        elif event.event_type in {"team_application_received", "team_member_joined",
+        elif event.event_type in {"team_application_received", "team_member_joined", "team_member_leaving",
                                   "team_member_left", "team_members_lapsed"}:
             subject = {
                 "team_application_received": _("New application for %(team)s", team=team),
                 "team_member_joined": _("New member in %(team)s", team=team),
+                "team_member_leaving": _("A member is leaving %(team)s", team=team),
                 "team_member_left": _("A member left %(team)s", team=team),
                 "team_members_lapsed": _("Members left %(team)s", team=team),
             }[event.event_type]

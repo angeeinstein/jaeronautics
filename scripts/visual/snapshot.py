@@ -190,7 +190,11 @@ def seed(app, app_module, subscriptions):
                        applications_open=True, application_prompt="Why do you want to join?",
                        max_members=None, forum_group=None)
     rocket = teams.create_team(None, slug=None, name="Rocket Team", **team_fields)
-    teams.create_team(None, slug=None, name="Glider Team", **team_fields)
+    glider = teams.create_team(None, slug=None, name="Glider Team", **team_fields)
+    # Both charge: set directly, as checking the price would ask Stripe.
+    for charging in (rocket, glider):
+        charging.payment_mode, charging.stripe_price_id = "subscription", "price_example"
+        charging.period_starts, charging.fee_display = "01.04, 01.10", "€10.00 every 6 months"
     teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
     # A made-up logo for one team; the other has none, as many will not.
     from io import BytesIO
@@ -204,11 +208,18 @@ def seed(app, app_module, subscriptions):
     buffer = BytesIO()
     logo.save(buffer, format="PNG")
     teams.set_team_logo(None, rocket, buffer.getvalue())
-    db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now))
+    db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now,
+                                  payment_mode="subscription", stripe_subscription_id="sub_example_1",
+                                  paid_until=date(2027, 3, 31), payment_state="paid"))
     teams.grant_team_role(None, rocket, active.user, teams.ROLE_LEAD)
     carla = Member.query.filter_by(email_private="cancelling@example.org").one().user
-    db.session.add(TeamMembership(team=rocket, user=carla, status=teams.ACTIVE, started_at=now))
+    db.session.add(TeamMembership(team=rocket, user=carla, status=teams.ACTIVE, started_at=now,
+                                  payment_mode="subscription", stripe_subscription_id="sub_example_2",
+                                  paid_until=date(2027, 3, 31), payment_state="paid", ends_on=date(2027, 3, 31)))
     bernd = Member.query.filter_by(email_private="returning@example.org").one().user
+    # Approved by the glider team, the fee not paid yet.
+    db.session.add(TeamMembership(team=glider, user=bernd, status=teams.APPROVED, applied_at=now,
+                                  approved_at=now, payment_mode="subscription"))
     application = TeamMembership(team=rocket, user=bernd, status=teams.APPLIED, applied_at=now,
                                  application_text="I built model rockets at school\nand would love to help.")
     db.session.add(application)

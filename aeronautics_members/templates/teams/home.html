@@ -27,6 +27,34 @@
                 <div class="card-body d-flex flex-column gap-3">
                     {% if team.logo_token %}<div>{{ team_logo(team, 'large') }}</div>{% endif %}
                     {% if team.description %}<p class="mb-0">{{ team.description }}</p>{% endif %}
+                    {% if charges(team) and team.fee_display and not (current and current.status == 'active') %}
+                        <p class="text-muted small mb-0">{{ _('Fee: %(fee)s.', fee=team.fee_display) }}</p>
+                    {% endif %}
+
+                    {% if current and current.status == 'approved' and charges(team) %}
+                        {% if current.payment_state == 'processing' or just_paid == team.slug %}
+                            <div class="alert alert-info mb-0">{{ _('Payment received. It is confirmed in a moment; by SEPA debit it can take a few days.') }}</div>
+                        {% else %}
+                            {% if current.payment_state == 'failed' %}
+                                <div class="alert alert-warning mb-0">{{ _('The payment did not go through. Please try again.') }}</div>
+                            {% endif %}
+                            {% set period = joining_period(team) %}
+                            <p class="mb-0">{{ _('One step left. Paying now covers until %(day)s; after that the fee is charged at the start of each period until you leave.', day=period.paid_until|date_display) }}</p>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if current and current.status == 'active' and current.stripe_subscription_id %}
+                        <div class="small">
+                            {% if current.ends_on %}
+                                {{ _('You leave on %(day)s.', day=current.ends_on|date_display) }}
+                            {% elif current.paid_until %}
+                                {{ _('Paid until %(day)s.', day=current.paid_until|date_display) }}
+                            {% endif %}
+                            {% if current.payment_state == 'failed' %}
+                                <div class="text-warning">{{ _('The last payment did not go through. Update your payment method under Account, Manage billing.') }}</div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
 
                     {% if current and current.status == 'invited' and current.meeting_details %}
                         <div>
@@ -38,12 +66,25 @@
                     <div class="d-flex flex-wrap gap-2 mt-auto">
                         {% if current and current.status == 'active' %}
                             <a class="btn btn-primary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Open') }}</a>
-                            <form method="POST" action="{{ url_for('teams.team_leave', slug=team.slug) }}" class="mb-0"
-                                  data-confirm="{{ _('Leave %(team)s?', team=team.name) }}">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn btn-secondary">{{ _('Leave') }}</button>
-                            </form>
+                            {% if current.ends_on %}
+                                <form method="POST" action="{{ url_for('teams.team_stay', slug=team.slug) }}" class="mb-0">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-secondary">{{ _('Stay after all') }}</button>
+                                </form>
+                            {% else %}
+                                <form method="POST" action="{{ url_for('teams.team_leave', slug=team.slug) }}" class="mb-0"
+                                      data-confirm="{{ _('Leave %(team)s? You stay until the paid period ends; there is no refund.', team=team.name) if current.stripe_subscription_id else _('Leave %(team)s?', team=team.name) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-secondary">{{ _('Leave') }}</button>
+                                </form>
+                            {% endif %}
                         {% elif current %}
+                            {% if current.status == 'approved' and charges(team) and current.payment_state != 'processing' and just_paid != team.slug %}
+                                <form method="POST" action="{{ url_for('teams.team_pay', slug=team.slug) }}" class="mb-0" data-busy-text="{{ _('Opening…') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-primary">{{ _('Pay and join') }}</button>
+                                </form>
+                            {% endif %}
                             <form method="POST" action="{{ url_for('teams.team_withdraw', slug=team.slug) }}" class="mb-0"
                                   data-confirm="{{ _('Withdraw your application?') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -9,7 +9,9 @@ docs/teams-plan.md.
 import csv
 import io
 
-from flask import Blueprint, Response, abort, flash, redirect, render_template, request, send_file, url_for
+from flask import (
+    Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file, url_for,
+)
 from flask_babel import gettext as _
 from flask_login import current_user, login_required
 
@@ -17,6 +19,7 @@ from ..app import requires
 from ..db_models import User, db
 from ..permissions import Permission
 from ..services import ServiceError
+from ..services import team_payments
 from ..services import teams as teams_service
 from ..services.audit import log_audit_event
 from ..services.clock import get_membership_today
@@ -43,6 +46,19 @@ def _apply_access_list(team, form):
         dates=form.get("access_list_dates"),
         auto_send=form.get("access_list_auto_send") == "on",
     )
+
+
+def _apply_payment(team, form):
+    """The fee, from the admins' form only; the leads' settings do not carry it."""
+    if "payment_mode" in form:
+        from ..services.team_payments import update_payment_settings
+
+        update_payment_settings(
+            current_user, team,
+            payment_mode=form.get("payment_mode"),
+            stripe_price_id=form.get("stripe_price_id"),
+            period_starts=form.get("period_starts"),
+        )
 
 
 def _apply_logo(team, form, files):
@@ -109,6 +125,7 @@ def admin_team_new():
                 current_user, slug=request.form.get("slug"), **_team_form_fields(request.form)
             )
             _apply_access_list(team, request.form)
+            _apply_payment(team, request.form)
             _apply_logo(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
@@ -144,6 +161,7 @@ def admin_team_detail(slug):
         try:
             teams_service.update_team(current_user, team, **_team_form_fields(request.form))
             _apply_access_list(team, request.form)
+            _apply_payment(team, request.form)
             _apply_logo(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
@@ -282,6 +300,9 @@ def teams_home():
         why_not_joinable=lambda team: teams_service.why_not_joinable(current_user, team),
         status_labels=teams_service.STATUS_LABELS,
         manageable={team.id for team in teams_service.teams_led_by(current_user)},
+        charges=team_payments.charges,
+        joining_period=team_payments.joining_period,
+        just_paid=request.args.get("paid"),
     )
 
 
@@ -308,10 +329,44 @@ def team_join(slug):
         slug, lambda team: teams_service.join_or_apply(current_user, team, request.form.get("application_text"))
     )
     if done:
-        if team.admission_mode == teams_service.ADMISSION_OPEN:
+        current = teams_service.ongoing_membership(current_user, team)
+        if current is not None and current.status == teams_service.APPROVED:
+            flash(_("One step left: pay the team fee."), "success")
+        elif team.admission_mode == teams_service.ADMISSION_OPEN:
             flash(_("Welcome to %(team)s.", team=team.name), "success")
         else:
             flash(_("Application sent. The leads will be in touch."), "success")
+    return redirect(url_for("teams.teams_home"))
+
+
+@teams_bp.route("/teams/<slug>/pay", methods=["POST"])
+@login_required
+def team_pay(slug):
+    """Off to Stripe Checkout, to pay the team fee."""
+    from ..services.team_payments import start_checkout
+
+    team = _team_or_404(slug)
+    try:
+        checkout_url = start_checkout(current_user, team)
+    except ServiceError as error:
+        db.session.rollback()
+        flash(error.message, "danger")
+        return redirect(url_for("teams.teams_home"))
+    except Exception:  # noqa: BLE001 -- Stripe unreachable or refusing; logged
+        db.session.rollback()
+        current_app.logger.exception("Could not open a team Checkout for %s.", slug)
+        flash(_("The payment page could not be opened. Please try again in a few minutes."), "danger")
+        return redirect(url_for("teams.teams_home"))
+    db.session.commit()
+    return redirect(checkout_url, code=303)
+
+
+@teams_bp.route("/teams/<slug>/stay", methods=["POST"])
+@login_required
+def team_stay(slug):
+    _team, done = _member_action(slug, lambda team: teams_service.stay(current_user, team))
+    if done:
+        flash(_("You stay. Nothing changes."), "success")
     return redirect(url_for("teams.teams_home"))
 
 
@@ -329,7 +384,14 @@ def team_withdraw(slug):
 def team_leave(slug):
     team, done = _member_action(slug, lambda team: teams_service.leave(current_user, team))
     if done:
-        flash(_("You have left %(team)s.", team=team.name), "success")
+        current = teams_service.ongoing_membership(current_user, team)
+        if current is not None and current.ends_on is not None:
+            from ..services.membership import format_membership_date_display
+
+            flash(_("You leave %(team)s on %(day)s. Until then nothing changes.",
+                    team=team.name, day=format_membership_date_display(current.ends_on)), "success")
+        else:
+            flash(_("You have left %(team)s.", team=team.name), "success")
     return redirect(url_for("teams.teams_home"))
 
 
@@ -381,6 +443,7 @@ def team_manage(slug):
         has_lead_in_force=teams_service.has_lead_in_force(team),
         access_list_recipients=teams_service.parse_recipients(team.access_list_recipients),
         next_access_list_date=teams_service.next_access_list_date(team),
+        charges=team_payments.charges(team),
     )
 
 

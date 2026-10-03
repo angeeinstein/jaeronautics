@@ -1634,6 +1634,13 @@ def create_app(config_overrides=None):
     app.register_blueprint(admin_bp)
     app.register_blueprint(teams_bp)
 
+    # What else the association sells comes through the same Stripe webhook;
+    # each purpose has its handler. See services/payments.py.
+    from .services.payments import PURPOSE_TEAM, register_purpose
+    from .services.team_payments import handle_event as handle_team_payment_event
+
+    register_purpose(PURPOSE_TEAM, handle_team_payment_event)
+
     @app.context_processor
     def inject_babel_globals():
         cleaned_args = {}
@@ -4445,6 +4452,16 @@ def create_app(config_overrides=None):
         flush_marked_notification_channels()
         if unpaid:
             click.echo(f"{unpaid} team approval(s) lapsed unpaid.")
+
+        # Teams paid by subscription: a leaving day passed, or long unpaid.
+        # Stripe reports both; this is for when its word never arrived.
+        from .services.team_payments import end_finished_team_memberships
+
+        finished = end_finished_team_memberships()
+        db.session.commit()
+        flush_marked_notification_channels()
+        if finished:
+            click.echo(f"Ended {finished} team membership(s) paid by subscription.")
 
         # Then the teams' access lists due today, now that they are current.
         from .services.teams import send_due_access_lists

@@ -75,6 +75,28 @@
                 <div class="col-12">
                     {{ access_list_fields(team, form) }}
                 </div>
+                <div class="col-12">
+                    <h5 class="mt-2">{{ _('Fee') }}</h5>
+                    {% if team and team.fee_display %}<p class="text-muted small mb-2">{{ _('Now: %(fee)s.', fee=team.fee_display) }}</p>{% endif %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="payment_mode">{{ _('Payment') }}</label>
+                    {% set current_payment = value('payment_mode', team.payment_mode if team else 'none') %}
+                    <select class="form-select" id="payment_mode" name="payment_mode">
+                        <option value="none" {% if current_payment == 'none' %}selected{% endif %}>{{ _('Free') }}</option>
+                        <option value="subscription" {% if current_payment == 'subscription' %}selected{% endif %}>{{ _('Subscription') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="stripe_price_id">{{ _('Stripe price ID') }}</label>
+                    <input class="form-control" id="stripe_price_id" name="stripe_price_id" maxlength="100" placeholder="price_…" value="{{ value('stripe_price_id', team.stripe_price_id or '' if team else '') }}">
+                    <div class="form-text">{{ _("A recurring price on a product of the team's own. A new price applies to people joining from now on.") }}</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="period_starts">{{ _('Periods start on') }}</label>
+                    <input class="form-control" id="period_starts" name="period_starts" maxlength="100" placeholder="01.10, 01.04" value="{{ value('period_starts', team.period_starts or '' if team else '') }}">
+                    <div class="form-text">{{ _('Day and month. Joining pays the period under way; Stripe charges at each start.') }}</div>
+                </div>
             </div>
         </div>
     </form>

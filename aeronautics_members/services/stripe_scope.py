@@ -35,7 +35,8 @@ nothing real and let a team fee through whenever Stripe was slow to answer.
 What the teams, or anything else sold later, must do to be recognised: set
 ``purpose`` in the metadata of their Checkout session, subscription and
 payment intent to something other than ``membership`` -- or at least use a
-product of their own, not the membership's.
+product of their own, not the membership's. The purpose is kept on the scope,
+and services/payments.py hands the event to whoever registered for it.
 """
 
 from dataclasses import dataclass
@@ -78,6 +79,13 @@ _product_of_price = {}
 class Scope:
     verdict: str
     reason: str
+    # What a foreign object said it is (``team``, ...), when it said so.
+    marked: str = None
+
+    @property
+    def purpose(self):
+        """``membership`` for ours, what it was marked as otherwise, or None."""
+        return MEMBERSHIP_PURPOSE if self.verdict == OURS else self.marked
 
     @property
     def is_ours(self):
@@ -130,7 +138,7 @@ def _from_metadata(metadata):
     purpose = str(_get(metadata, "purpose", "") or "").strip().lower()
     if purpose:
         return Scope(OURS, "marked as the membership") if purpose == MEMBERSHIP_PURPOSE \
-            else Scope(FOREIGN, f"marked as {purpose!r}")
+            else Scope(FOREIGN, f"marked as {purpose!r}", marked=purpose)
     if any(_get(metadata, key) for key in LEGACY_MEMBERSHIP_KEYS):
         return Scope(OURS, "carries the membership checkout's metadata")
     return None
@@ -209,6 +217,11 @@ def _invoice_prices(invoice):
 
 def _invoice_subscription_details(invoice):
     return _get(invoice, "subscription_details") or _get(_get(invoice, "parent", {}), "subscription_details") or {}
+
+
+def invoice_subscription_metadata(invoice):
+    """The metadata of the subscription an invoice bills, wherever this API version puts it."""
+    return _get(_invoice_subscription_details(invoice), "metadata") or {}
 
 
 def invoice_subscription_id(invoice):

@@ -52,7 +52,7 @@ ADMISSION_OPEN = "open"
 ADMISSION_APPROVAL = "approval"
 ADMISSION_MODES = (ADMISSION_APPROVAL, ADMISSION_OPEN)
 
-#: Until payment exists, every team is free.
+#: A free team. The others are in services/team_payments.py.
 PAYMENT_NONE = "none"
 
 # The states of one attempt at being in a team (a TeamMembership row).
@@ -555,10 +555,14 @@ END_REMOVED = "removed"
 END_MEMBERSHIP_ENDED = "membership_ended"
 END_ACCOUNT_ERASED = "account_erased"
 END_NOT_PAID = "not_paid_in_time"
+END_PAYMENT_FAILED = "payment_failed"
 
 #: How long an approval waits for its payment before it lapses and the person
 #: has to apply again.
 APPROVAL_PAYMENT_DAYS = 14
+
+#: Whoever's membership ended unpaid may rejoin by paying, for about one period.
+REJOIN_DAYS = 183
 
 #: What applicants and members see for each state.
 STATUS_LABELS = {
@@ -577,6 +581,7 @@ END_REASON_LABELS = {
     END_MEMBERSHIP_ENDED: "Association membership ended",
     END_ACCOUNT_ERASED: "Account erased",
     END_NOT_PAID: "Not paid in time",
+    END_PAYMENT_FAILED: "Payment failed",
 }
 
 
@@ -701,9 +706,10 @@ def join_or_apply(user, team, application_text=None):
 
     now = get_now_utc()
     membership = TeamMembership(team=team, user=user, applied_at=now)
-    if team.admission_mode == ADMISSION_OPEN:
+    if team.admission_mode == ADMISSION_OPEN or may_rejoin_by_paying(user, team):
         # Joining an open team is being approved at once; the payment step
-        # comes next, as after any approval.
+        # comes next, as after any approval. So is coming back soon after a
+        # payment did not go through: paying again is all it takes.
         membership.status = APPROVED
         membership.approved_at = now
     else:
@@ -749,6 +755,7 @@ def withdraw(user, team):
         raise ConflictError("There is no application to withdraw.", code="team_nothing_to_withdraw")
     membership = _locked_membership(current.id, team)
     _require_status(membership, {APPLIED, INVITED, APPROVED}, "There is no application to withdraw.")
+    _stop_charging(membership, "withdrawn")
     membership.status = WITHDRAWN
     membership.ended_at = get_now_utc()
     _audit("team_application_withdrawn", user, membership)
@@ -756,12 +763,31 @@ def withdraw(user, team):
 
 
 def leave(user, team):
-    """The member leaves the team."""
+    """The member leaves the team.
+
+    Paid by subscription, it runs to the end of what is paid and the
+    subscription stops then; there is no refund. Otherwise it ends now.
+    """
     current = ongoing_membership(user, team)
     if current is None or current.status != ACTIVE:
         raise ConflictError("You are not a member of this team.", code="team_not_a_member")
     membership = _locked_membership(current.id, team)
     _require_status(membership, {ACTIVE}, "You are not a member of this team.")
+    if membership.stripe_subscription_id:
+        from . import payments
+        from .membership import format_membership_date_display
+
+        if membership.ends_on is not None:
+            return membership
+        # Stripe stops at the end of what is paid; the membership runs to then.
+        payments.set_cancel_at_period_end(membership.stripe_subscription_id, True)
+        membership.ends_on = membership.paid_until or get_now_utc().date()
+        _audit("team_leaving", user, membership, ends_on=membership.ends_on.isoformat())
+        name = _member_name(user)
+        _tell_leads(team, "team_member_leaving",
+                    f"{name} is leaving {team.name} on {format_membership_date_display(membership.ends_on)}.",
+                    person_name=name)
+        return membership
     membership.status = ENDED
     membership.ended_at = get_now_utc()
     membership.end_reason = END_LEFT
@@ -770,6 +796,72 @@ def leave(user, team):
     name = _member_name(user)
     _tell_leads(team, "team_member_left", f"{name} left {team.name}.", person_name=name)
     return membership
+
+
+def stay(user, team):
+    """Take back leaving, before the day comes."""
+    current = ongoing_membership(user, team)
+    if current is None or current.status != ACTIVE or current.ends_on is None:
+        raise ConflictError("You are not leaving this team.", code="team_not_leaving")
+    membership = _locked_membership(current.id, team)
+    from . import payments
+
+    payments.set_cancel_at_period_end(membership.stripe_subscription_id, False)
+    membership.ends_on = None
+    _audit("team_leaving_cancelled", user, membership)
+    return membership
+
+
+def stop_charging(membership, why):
+    """Cancel the membership's subscription and close its Checkout, now, without refund.
+
+    Never fails the caller: what they decided stands. If Stripe cannot be
+    reached, the site admins are told to cancel it by hand.
+    """
+    from . import ExternalServiceError, payments
+
+    if membership.stripe_checkout_session_id:
+        payments.expire_checkout_session(membership.stripe_checkout_session_id)
+        membership.stripe_checkout_session_id = None
+    subscription_id = membership.stripe_subscription_id
+    if not subscription_id:
+        return
+    try:
+        payments.cancel_subscription(subscription_id, reason=f"team membership {membership.id}: {why}")
+    except ExternalServiceError as exc:
+        from ..notification_service import ADMIN_ERROR_CHANNEL
+        from .notifications import queue_curated_admin_notification
+
+        current_app.logger.error("Could not cancel team subscription %s: %s", subscription_id, exc)
+        queue_curated_admin_notification(
+            ADMIN_ERROR_CHANNEL, "team_subscription_not_cancelled",
+            "A team membership ended, but its subscription could not be cancelled. Cancel it in Stripe.",
+            payload={"team": membership.team.slug, "team_membership_id": membership.id,
+                     "subscription_id": subscription_id, "why": why},
+            severity="warning",
+        )
+        return
+    membership.stripe_subscription_id = None
+
+
+_stop_charging = stop_charging
+
+
+def may_rejoin_by_paying(user, team, today=None):
+    """Whether the person's last membership here ended unpaid recently enough
+    to come back by paying, without applying."""
+    from .clock import get_membership_today
+
+    if team.payment_mode == PAYMENT_NONE:
+        return False
+    today = today or get_membership_today()
+    last = db.session.execute(
+        db.select(TeamMembership).filter_by(team_id=team.id, user_id=user.id, status=ENDED)
+        .order_by(TeamMembership.id.desc())
+    ).scalars().first()
+    if last is None or last.end_reason != END_PAYMENT_FAILED or last.ended_at is None:
+        return False
+    return (today - last.ended_at.date()).days <= REJOIN_DAYS
 
 
 def invite(actor, team, membership_id, meeting_details):
@@ -797,8 +889,8 @@ def _payment_step(membership, now):
     A free team settles the step on the spot: the record says so, the person
     becomes a member, and nobody is sent anything about a payment that did not
     happen. Returns whether the person is now a member. A team that charges
-    stays *approved* here until its payment arrives -- which does not exist
-    yet: no team can be set to charge.
+    stays *approved* here until its first payment arrives; see
+    services/team_payments.py.
     """
     team = membership.team
     membership.payment_mode = team.payment_mode
@@ -827,12 +919,15 @@ def approve(actor, team, membership_id):
     if _payment_step(membership, now):
         # One email: welcome. The payment step of a free team is not worth one.
         _tell_person("team_approved", membership)
+    else:
+        _tell_person("team_payment_due", membership)
     return membership
 
 
 def reject(actor, team, membership_id):
     membership = _locked_membership(membership_id, team)
     _require_status(membership, {APPLIED, INVITED, APPROVED}, "This application has already been decided.")
+    _stop_charging(membership, "not accepted")
     membership.status = REJECTED
     membership.ended_at = get_now_utc()
     membership.decided_by_user_id = getattr(actor, "id", None)
@@ -852,8 +947,10 @@ def remove(actor, team, membership_id, reason):
         raise ValidationError("Give a reason; it stays in the record.", code="team_removal_reason_missing")
     membership = _locked_membership(membership_id, team)
     _require_status(membership, {ACTIVE}, "This person is no longer a member.")
+    _stop_charging(membership, "removed by a lead")
     membership.status = ENDED
     membership.ended_at = get_now_utc()
+    membership.ends_on = None
     membership.end_reason = END_REMOVED
     membership.end_note = reason[:2000]
     membership.decided_by_user_id = getattr(actor, "id", None)
@@ -1001,7 +1098,7 @@ def _surname_first(row):
     return (row["name"].lower(), "")
 
 
-EXPORT_COLUMNS = ("Name", "University email", "Private email", "Phone", "Cohort", "Member since")
+EXPORT_COLUMNS = ("Name", "University email", "Private email", "Phone", "Cohort", "Member since", "Paid until")
 
 
 def export_rows(team):
@@ -1009,9 +1106,11 @@ def export_rows(team):
 
     for row in roster(team):
         started = row["membership"].started_at
+        paid_until = row["membership"].paid_until
         yield (
             row["name"], row["university_email"] or "", row["private_email"] or "",
             row["phone"] or "", row["cohort"] or "", format_date_display(started) if started else "",
+            format_date_display(paid_until) if paid_until else "",
         )
 
 
@@ -1040,8 +1139,10 @@ def end_lapsed_team_memberships():
         if membership.status not in ONGOING:
             continue
         was_member = membership.status == ACTIVE
+        _stop_charging(membership, "association membership ended")
         membership.status = ENDED if was_member else WITHDRAWN
         membership.ended_at = now
+        membership.ends_on = None
         membership.end_reason = END_MEMBERSHIP_ENDED
         _audit("team_membership_lapsed", None, membership)
         if was_member:
@@ -1081,11 +1182,12 @@ def lapse_unpaid_approvals(now=None):
             from datetime import timezone
 
             approved_at = approved_at.replace(tzinfo=timezone.utc)
-        if approved_at > cutoff:
-            continue
+        if approved_at > cutoff or waiting.payment_state == "processing":
+            continue  # a SEPA debit on its way is paid, only not yet arrived
         membership = _locked_membership(waiting.id)
         if membership.status != APPROVED:
             continue
+        _stop_charging(membership, "approval lapsed unpaid")
         membership.status = WITHDRAWN
         membership.ended_at = now
         membership.end_reason = END_NOT_PAID
@@ -1109,6 +1211,7 @@ def forget_for_erasure(user):
         db.select(TeamMembership).filter_by(user_id=user.id)
     ).scalars():
         membership.application_text = None
+        _stop_charging(membership, "account erased")
         if membership.status in ONGOING:
             membership.status = ENDED if membership.status == ACTIVE else WITHDRAWN
             membership.ended_at = now

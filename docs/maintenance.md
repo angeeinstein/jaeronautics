@@ -632,9 +632,46 @@ since the last list sent and lists who has left since.
 team's settings; members are added and removed with each forum sync. Renaming
 it later leaves people in the old group -- delete that one in Discourse.
 
+**A fee** (site admins, in the team's form under *Fee*):
+
+1. In Stripe, create a product for the team (e.g. "Rocket Team fee") with a
+   **recurring** price: every 6 months for two periods a year, yearly for one.
+   Not the membership's product.
+2. In the team's form: *Payment* → Subscription, the price ID (`price_...`),
+   and the days the periods start (`01.10, 01.04`). Saving checks the price
+   with Stripe; the fee members see ("€10.00 every 6 months") is taken from it.
+3. Nothing to change in Stripe's webhook: the events it already sends cover
+   teams. They are marked `purpose: team` and never touch the membership.
+
+How it runs: approved (or joining an open team), a person sees *Pay and join*.
+They pay the period under way in full, then Stripe charges at each period
+start; joining in the last 3 days before a start pays for the coming period
+instead. The first payment makes them a member. *Leave* runs to the end of
+what is paid (no refund), *Stay after all* takes it back. Removal by a lead,
+the association membership ending and erasure cancel the subscription at once,
+without refund. A renewal Stripe finally gives up on ends the team membership;
+for six months afterwards the person may come back by paying, without
+applying. Receipts and renewal emails come from Stripe. Payments are listed
+in the `payments` table, one per paid invoice.
+
+A new price applies to people joining from then on; running subscriptions
+keep theirs (change them in Stripe if needed). A team cannot be switched back
+to free while subscriptions for it still run.
+
 **Every night** (with `reconcile-billing`): team memberships of people no
 longer in the association end, approvals for a team that charges lapse when
-unpaid after 14 days, and access lists due that day go out.
+unpaid after 14 days (not while a SEPA debit is on its way), memberships whose
+leaving day has passed, or that are unpaid for more than 35 days, end in case
+Stripe's word never arrived, and access lists due that day go out.
+
+**How payments are built.** `services/payments.py` is the one place that talks
+to Stripe for anything sold: the connection, the person's Stripe customer (one
+per person, shared by the membership and every team), opening a Checkout
+without opening two, cancelling, and handing each webhook event to the handler
+registered for its `purpose`. The membership keeps its own rules in
+`services/billing.py`; teams have theirs in `services/team_payments.py`.
+Something new -- a balance for the coffee machine -- gets a purpose and a
+handler of its own.
 
 ## Roles and Permissions
 

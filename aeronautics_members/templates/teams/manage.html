@@ -38,7 +38,8 @@
                         {% for membership in applications %}
                             <tr>
                                 <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=membership.user_id) }}">{{ person_details(membership.user).name }}</a></td>
-                                <td>{{ status_label(membership.status, status_labels) }}</td>
+                                <td>{{ status_label(membership.status, status_labels) }}{% if membership.status == 'approved' and membership.payment_state %}
+                                    <div class="small text-muted">{{ {'processing': _('Payment on its way'), 'failed': _('Payment failed'), 'paid': _('Paid')}.get(membership.payment_state, '') }}</div>{% endif %}</td>
                                 <td>{{ membership.applied_at|date_display }}</td>
                             </tr>
                         {% endfor %}
@@ -60,7 +61,7 @@
         {% if roster %}
             <div class="table-responsive">
                 <table class="table table-striped align-middle mb-0">
-                    <thead><tr><th></th><th>{{ _('Name') }}</th><th>{{ _('University email') }}</th><th>{{ _('Cohort') }}</th><th>{{ _('Since') }}</th></tr></thead>
+                    <thead><tr><th></th><th>{{ _('Name') }}</th><th>{{ _('University email') }}</th><th>{{ _('Cohort') }}</th><th>{{ _('Since') }}</th>{% if charges %}<th>{{ _('Paid until') }}</th>{% endif %}</tr></thead>
                     <tbody>
                         {% for row in roster %}
                             <tr>
@@ -69,6 +70,7 @@
                                 <td>{{ row.university_email or '-' }}</td>
                                 <td>{{ row.cohort or '-' }}</td>
                                 <td>{{ row.membership.started_at|date_display }}</td>
+                                {% if charges %}<td>{% if row.membership.paid_until %}{{ row.membership.paid_until|date_display }}{% else %}-{% endif %}{% if row.membership.ends_on %}<div class="small text-muted">{{ _('Leaves %(day)s', day=row.membership.ends_on|date_display) }}</div>{% endif %}{% if row.membership.payment_state == 'failed' %}<div class="small text-warning">{{ _('Payment failed') }}</div>{% endif %}</td>{% endif %}
                             </tr>
                         {% endfor %}
                     </tbody>

@@ -61,7 +61,7 @@ class TestTheAdminAccountPage:
 class TestAnUnpaidApprovalLapses:
     def _approved(self, days_ago):
         team, lead = _led()
-        team.payment_mode = "stripe"  # nothing can be set to charge yet
+        team.payment_mode = "subscription"
         anna = _person()
         membership = teams.join_or_apply(anna, team)
         teams.approve(lead, team, membership.id)

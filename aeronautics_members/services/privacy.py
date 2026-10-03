@@ -252,19 +252,21 @@ def export_account_data(user):
 
 
 def _team_data(user):
-    """Every team attempt and role of this person -- not the leads' notes.
+    """Every team attempt, role and payment of this person -- not the leads' notes.
 
     The notes are the leads' working notes about a person and may hold
-    anything; whether and how they belong in an export is still open
-    (docs/teams-plan.md), so they are left out rather than handed over
-    unread.
+    anything, so they are left out rather than handed over unread. Erasing
+    the account deletes them.
     """
-    from ..db_models import TeamMembership, TeamRole
+    from ..db_models import Payment, TeamMembership, TeamRole
 
     memberships = db.session.execute(
         db.select(TeamMembership).filter_by(user_id=user.id).order_by(TeamMembership.id)
     ).scalars().all()
     roles = db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars().all()
+    payments = db.session.execute(
+        db.select(Payment).filter_by(user_id=user.id, purpose="team").order_by(Payment.id)
+    ).scalars().all()
     return {
         "memberships": [
             {
@@ -280,12 +282,25 @@ def _team_data(user):
                 "started_at": membership.started_at,
                 "ended_at": membership.ended_at,
                 "end_reason": membership.end_reason,
+                "paid_until": membership.paid_until,
+                "ends_on": membership.ends_on,
             }
             for membership in memberships
         ],
         "roles": [
             {"team": team_role.team.name, "role": team_role.role, "granted_at": team_role.granted_at}
             for team_role in roles
+        ],
+        "payments": [
+            {
+                "team": payment.team.name if payment.team else None,
+                "amount_cents": payment.amount_cents,
+                "currency": payment.currency,
+                "covers_until": payment.covers_until,
+                "paid_at": payment.paid_at,
+                "status": payment.status,
+            }
+            for payment in payments
         ],
     }
 

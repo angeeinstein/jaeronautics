@@ -798,8 +798,16 @@ class Team(db.Model):
     # Optional. The file as stored, and the unguessable name it is served under.
     logo_path = db.Column(db.String(500), nullable=True)
     logo_token = db.Column(db.String(64), unique=True, nullable=True)
-    # "none" until payment is built.
+    # "none" (free) or "subscription": the fee for the current period at
+    # joining, then Stripe charges it at every period start.
     payment_mode = db.Column(db.String(20), nullable=False, default="none")
+    # The team's recurring price in Stripe, on a product of the team's own.
+    stripe_price_id = db.Column(db.String(100), nullable=True)
+    # When the team's periods start, as days of the year: "01.10, 01.04".
+    period_starts = db.Column(db.String(100), nullable=True)
+    # The fee as members read it ("€10.00 every 6 months"), taken from Stripe
+    # when the price is saved, so pages need not ask Stripe.
+    fee_display = db.Column(db.String(100), nullable=True)
     # The list of current members for access to the team's rooms: who gets it
     # (addresses, one per line or comma), on which days of the year ("15.10,
     # 15.03"), whether it goes out on those days by itself, and when it last
@@ -864,6 +872,14 @@ class TeamMembership(db.Model):
     # it was settled (the team's payment mode at the time) and when.
     payment_mode = db.Column(db.String(20), nullable=True)
     payment_settled_at = db.Column(db.DateTime, nullable=True)
+    # For a team that charges: the Stripe subscription and the Checkout that
+    # opens it, how far it is paid, how the latest payment went ("processing",
+    # "paid", "failed"), and -- after leaving -- the day it ends.
+    stripe_subscription_id = db.Column(db.String(100), nullable=True, index=True)
+    stripe_checkout_session_id = db.Column(db.String(255), nullable=True)
+    paid_until = db.Column(db.Date, nullable=True)
+    payment_state = db.Column(db.String(20), nullable=True)
+    ends_on = db.Column(db.Date, nullable=True)
     started_at = db.Column(db.DateTime, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
     # Who approved, rejected or removed -- the last person to decide.
@@ -876,6 +892,39 @@ class TeamMembership(db.Model):
     team = db.relationship("Team", back_populates="memberships")
     user = db.relationship("User", foreign_keys=[user_id])
     decided_by = db.relationship("User", foreign_keys=[decided_by_user_id])
+
+
+class Payment(db.Model):
+    """A payment Stripe confirmed, for anything but the membership.
+
+    The membership keeps its own record (MembershipPeriod). Everything else
+    the association sells lands here, told apart by ``purpose``: a team's
+    fee now, a top-up of a balance later. One row per paid invoice, so a
+    payment Stripe reports twice is recorded once. Kept when an account is
+    erased: it is the bookkeeping.
+    """
+
+    __tablename__ = "payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    purpose = db.Column(db.String(40), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
+    team_membership_id = db.Column(db.Integer, db.ForeignKey("team_memberships.id"), nullable=True, index=True)
+    stripe_invoice_id = db.Column(db.String(100), nullable=False, unique=True)
+    stripe_subscription_id = db.Column(db.String(100), nullable=True)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(3), nullable=False)
+    # The time it pays for, where it pays for time.
+    covers_until = db.Column(db.Date, nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    # "paid", or "disputed" once a chargeback took it back.
+    status = db.Column(db.String(20), nullable=False, default="paid")
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    user = db.relationship("User")
+    team = db.relationship("Team")
+    team_membership = db.relationship("TeamMembership")
 
 
 class TeamAccessListSend(db.Model):

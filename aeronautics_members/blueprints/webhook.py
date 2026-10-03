@@ -54,6 +54,7 @@ from ..services.membership import (
 from ..services.notifications import (
     queue_curated_admin_notification,
 )
+from ..services.payments import handler_for
 from ..services.settings import (
     get_stripe_settings_map,
 )
@@ -192,6 +193,11 @@ def process_stripe_event(event):
             event.get("id"), event_type, scope.reason,
         )
         return "Could not ask Stripe what this is; deliver it again later", 503
+    # Something else the association sells -- a team's fee -- goes to its own
+    # handler; see services/payments.py.
+    handler = handler_for(scope)
+    if handler is not None:
+        return handler(event)
     if scope.is_foreign and not (
         # A SEPA debit starting is reported before, or without, its invoice
         # being easy to find, and marking a member "processing" by mistake

@@ -111,6 +111,18 @@ access to the office.
   per year or once, is not known yet. The three payment options are meant to
   cover whatever it decides without new code.
 
+**Built (October 2026):** *recurring* and *none*. One-time per period is not
+built yet -- nobody needs it so far; `payment_mode` is text, so it can be added
+as a third mode. A team's fee is its own Stripe product and recurring price,
+with its period start days (`01.10, 01.04`), set by site admins. Joining in the
+last 3 days before a period start pays for the coming period (Stripe will not
+end a trial sooner than 48 hours away). Leaving runs to the end of what is
+paid; removal, the association membership ending and erasure cancel at once,
+all without refund. Rejoining after not paying is by paying, within six months.
+Stripe sends the receipts and renewal emails. Built on `services/payments.py`,
+which the membership, every team and anything sold later share; see the
+maintenance guide.
+
 ## When a team membership ends
 
 - **Not paid, recurring:** it ends when the payment finally fails.
@@ -225,7 +237,8 @@ could take more states later are text, not yes/no.
 the forum group), name, description, `status` (`active`, `archived`),
 `admission_mode` (`open`, `approval`), applications open, the application
 question, the standing invitation, an optional maximum size, an optional forum
-group, and `payment_mode` (`none` for now).
+group, and `payment_mode` (`none` or `subscription`) with the Stripe price and
+the period start days.
 
 **`team_roles`** — who holds which role in which team: team, person, `role` as
 text (`lead` now, others later), when and by whom it was given. Several roles
@@ -281,14 +294,13 @@ Then, also built:
   team, passes through it, even for a free team, so the flow is the same with
   or without payment and payment can be added without changing it. A free team
   settles it on the spot -- recorded, with no email of its own; a team that
-  charges would stay *approved* there until paid.
+  charges stays *approved* there until paid;
+- **payment** by subscription, through Stripe (see *Payment* above).
 
 **One identity.** The association account is the person: one login, and the
 name, picture and addresses from the association profile. A team membership is
 only added to that account and never asks for any of it again -- much like
 signing in everywhere with one account.
-
-Not yet: payment itself.
 
 **The flow** — open team: join → active. Team by approval: applied → invited →
 approved → active, with rejected or withdrawn possible on the way. Without
