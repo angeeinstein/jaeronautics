@@ -75,6 +75,11 @@ access to the office.
   *Invited*. The application meetings are personal chats with a lead, so this
   is not needed for now; it stays a possibility.
 - **No restrictions on applying again** after a rejection — *agreed so far.*
+- **Every member type may join** — *agreed so far:* students, alumni, staff,
+  company members and honorary members alike; a team does not mind who is in
+  it. Leads who want a say choose "by approval", and can remove anybody. Known
+  side effect: the access list's "University email" shows whatever work
+  address somebody gave, so a company address for a company member.
 - **Several teams at once** — *agreed so far.*
 - **Applicants see their status in the Teams area** (see *Where it lives*) —
   *agreed so far*, with the states above.
