@@ -257,7 +257,7 @@ class TestWhoSeesWhat:
         page = client.get("/teams/rocket/money").get_data(as_text=True)
         assert "Mark as transferred" in page and "<svg" in page
         assert client.get("/teams/rocket/manage").status_code == 403
-        assert client.get("/teams/rocket").status_code == 404
+        assert "Lena Lead" not in client.get("/teams/rocket").get_data(as_text=True)
         assert client.get("/admin/teams").status_code in (302, 403)
         assert client.get("/admin/accounts").status_code in (302, 403)
 

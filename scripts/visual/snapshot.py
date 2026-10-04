@@ -208,6 +208,22 @@ def seed(app, app_module, subscriptions):
     buffer = BytesIO()
     logo.save(buffer, format="PNG")
     teams.set_team_logo(None, rocket, buffer.getvalue())
+    # The team's page: a longer text, a picture and rules to accept.
+    photo = Image.new("RGB", (1600, 1000), (40, 60, 80))
+    ImageDraw.Draw(photo).polygon([(200, 900), (800, 100), (1400, 900)], fill=(0, 223, 255))
+    photo_buffer = BytesIO()
+    photo.save(photo_buffer, format="JPEG")
+    teams.set_team_picture(None, rocket, photo_buffer.getvalue())
+    teams.update_team_page(
+        None, rocket,
+        about="We design, build and fly sounding rockets, and take part in the European Rocketry Challenge.\n\n"
+              "We meet every Tuesday at 18:00 in the workshop. New members start in one of the sub-teams: "
+              "structures, propulsion, avionics or recovery.",
+        terms_text="1. Everyone attends the safety briefing before working in the workshop.\n"
+                   "2. Tools and materials go back where they came from.\n"
+                   "3. Launch days follow the range safety officer's instructions without exception.\n"
+                   "4. Photos and data from the team are shared only with the leads' agreement.",
+    )
     db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now,
                                   payment_mode="subscription", stripe_subscription_id="sub_example_1",
                                   paid_until=date(2027, 3, 31), payment_state="paid"))
@@ -300,6 +316,7 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--home", "user": "active@example.org", "path": "/teams"},
         {"name": "teams--home-applicant", "user": "returning@example.org", "path": "/teams"},
         {"name": "teams--team-page", "user": "active@example.org", "path": "/teams/rocket-team"},
+        {"name": "teams--team-page-applying", "user": "photo-needed@example.org", "path": "/teams/rocket-team"},
         {"name": "teams--leave", "user": "active@example.org", "path": "/teams/rocket-team/leave"},
         {"name": "teams--manage", "user": "active@example.org", "path": "/teams/rocket-team/manage"},
         {"name": "teams--person", "user": "active@example.org", "path": f"/teams/rocket-team/manage/people/{bernd.id}"},

@@ -807,6 +807,16 @@ class Team(db.Model):
     # Optional. The file as stored, and the unguessable name it is served under.
     logo_path = db.Column(db.String(500), nullable=True)
     logo_token = db.Column(db.String(64), unique=True, nullable=True)
+    # The team's own page: what it does, at length (``description`` is the
+    # line on the overview), and one optional picture, stored like the logo.
+    about = db.Column(db.Text, nullable=True)
+    picture_path = db.Column(db.String(500), nullable=True)
+    picture_token = db.Column(db.String(64), unique=True, nullable=True)
+    # The team's own rules, accepted with a tick when applying or joining.
+    # When they last changed is their version: what a membership accepted is
+    # recorded against it.
+    terms_text = db.Column(db.Text, nullable=True)
+    terms_updated_at = db.Column(db.DateTime, nullable=True)
     # "none" (free); "subscription": the fee for the current period at
     # joining, then Stripe charges it at every period start; or "one_time":
     # paid once per period, renewed by paying again.
@@ -878,6 +888,10 @@ class TeamMembership(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     status = db.Column(db.String(20), nullable=False, index=True)
     application_text = db.Column(db.Text, nullable=True)
+    # The team's rules, accepted when applying or joining: when, and which
+    # version (the team's ``terms_updated_at`` then). Empty if it had none.
+    terms_accepted_at = db.Column(db.DateTime, nullable=True)
+    terms_version = db.Column(db.DateTime, nullable=True)
     meeting_details = db.Column(db.Text, nullable=True)
     applied_at = db.Column(db.DateTime, nullable=True)
     invited_at = db.Column(db.DateTime, nullable=True)

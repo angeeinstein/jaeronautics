@@ -682,6 +682,17 @@ this is how to use them.
    holder is a member of the association *and* of the team, so the lead joins
    the team like anybody else and an admin approves them.
 
+**The team's page** (`/teams/<short name>`): every signed-in visitor sees the
+logo, name, an "About the team" text, one optional picture, the fee, the
+team's rules and the form to apply or join; its members also see who is in it.
+The overview shows each team's short description and leads there. The texts,
+picture and rules are edited by the team's leads (Manage → Settings) and by
+site admins (Admin → Teams). Rules are optional; a team with rules needs them
+ticked to apply or join, and each membership keeps when they were accepted and
+which version -- the day they last changed. Changing the rules makes a new
+version for whoever applies next (members already in are not asked again) and
+is logged with the old and new text.
+
 **Running a team** (its leads, Teams → Manage): applications (invite with the
 meeting details, approve, not accept), members, former members, notes about a
 person (not shown to them, but in their data export, without the author), removing somebody

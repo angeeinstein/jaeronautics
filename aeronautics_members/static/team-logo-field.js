@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (hasFile) {
                 chosen = document.createElement('img');
-                chosen.className = 'team-logo team-logo-large';
+                chosen.className = field.getAttribute('data-preview-class') || 'team-logo team-logo-large';
                 chosen.alt = '';
                 chosen.src = URL.createObjectURL(input.files[0]);
                 preview.appendChild(chosen);

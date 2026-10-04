@@ -72,6 +72,10 @@ urgent.
 **Teams**
 - Applications (with the text written), memberships, start/end and the reason
   it ended, roles (lead, treasurer), a leaving message to the leads.
+- A team's own rules, if it has any: accepted with a tick when applying or
+  joining; the membership keeps when, and which version (the day the rules
+  last changed). Each change to the rules is logged with the old and new text.
+  Members already in are not asked to accept a new version.
 - **Leads' notes about a person** — never shown to that person. See 10.
 - Team bank details (account holder, IBAN, BIC) — the team's account, which
   may be a private person's. Every change logged with old and new value.
@@ -244,6 +248,7 @@ Collected so nothing is forgotten; none of it is urgent.
 - [ ] Impressum: name the portal (section 11).
 
 **Decisions**
+- [ ] Whether members already in a team must accept changed team rules.
 - [ ] How long the audit log is kept.
 - [ ] Whether former members' accounts are erased after some time.
 

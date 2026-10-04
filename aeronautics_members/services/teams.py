@@ -398,6 +398,106 @@ def team_by_logo_token(token):
     return db.session.execute(db.select(Team).filter_by(logo_token=token)).scalar_one_or_none()
 
 
+# --- The team's page: a longer text, a picture, its rules ------------------------
+
+PICTURE_MAX_BYTES = 10 * 1024 * 1024
+PICTURE_MAX_SIDE = 1600
+ABOUT_MAX_LENGTH = 10000
+TERMS_MAX_LENGTH = 50000
+
+
+def picture_storage_dir():
+    configured = current_app.config.get("TEAM_PICTURE_DIR")
+    return Path(configured) if configured else Path(current_app.root_path).parent / "storage" / "team_pictures"
+
+
+def picture_file(team):
+    if team is None or not team.picture_path:
+        return None
+    path = Path(team.picture_path)
+    return path if path.is_file() else None
+
+
+def set_team_picture(actor, team, raw_bytes):
+    """The picture on the team's page. Re-encoded as a JPEG, like the logo is
+    as a PNG: what is served is a picture this code made, never the upload."""
+    from PIL import Image
+
+    from ..forum_service import ForumProviderError, _load_image_for_processing
+
+    if not raw_bytes:
+        raise ValidationError("Choose a picture.", code="team_picture_missing")
+    if len(raw_bytes) > PICTURE_MAX_BYTES:
+        raise ValidationError("The picture may be at most 10 MB.", code="team_picture_too_large")
+    try:
+        image = _load_image_for_processing(raw_bytes, formats=LOGO_FORMATS)
+    except ForumProviderError:
+        raise ValidationError("Please upload a PNG, JPG or WebP picture.", code="team_picture_invalid") from None
+
+    if image.mode in ("RGBA", "LA", "P"):
+        image = image.convert("RGBA")
+        flat = Image.new("RGB", image.size, (22, 23, 24))  # the page's dark background
+        flat.paste(image, mask=image.split()[-1])
+        image = flat
+    else:
+        image = image.convert("RGB")
+    image.thumbnail((PICTURE_MAX_SIDE, PICTURE_MAX_SIDE))
+    directory = picture_storage_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_hex(16)
+    path = directory / f"{team.slug}-{token}.jpg"
+    image.save(path, format="JPEG", quality=85, optimize=True)
+
+    previous = team.picture_path
+    team.picture_path, team.picture_token = str(path), token
+    _delete_logo_file(previous)
+    log_audit_event("teams", "team_picture_changed", actor_user=actor, metadata={"team": team.slug})
+    return team
+
+
+def remove_team_picture(actor, team):
+    if not team.picture_path and not team.picture_token:
+        return team
+    _delete_logo_file(team.picture_path)
+    team.picture_path, team.picture_token = None, None
+    log_audit_event("teams", "team_picture_removed", actor_user=actor, metadata={"team": team.slug})
+    return team
+
+
+def team_by_picture_token(token):
+    if not token:
+        return None
+    return db.session.execute(db.select(Team).filter_by(picture_token=token)).scalar_one_or_none()
+
+
+def _clean_long_text(text, limit, what):
+    text = (text or "").replace("\r\n", "\n").strip()
+    if len(text) > limit:
+        raise ValidationError(f"The {what} is too long (at most {limit} characters).", code="team_text_too_long")
+    return text or None
+
+
+def update_team_page(actor, team, *, about, terms_text):
+    """What the team's page says about it, and the rules applicants accept.
+
+    Changed rules get a new version -- the moment they changed -- so what
+    each member accepted can be told apart. Every change is logged with
+    the old and new text.
+    """
+    about = _clean_long_text(about, ABOUT_MAX_LENGTH, "text about the team")
+    terms_text = _clean_long_text(terms_text, TERMS_MAX_LENGTH, "team's rules")
+    if about != team.about:
+        log_audit_event("teams", "team_about_changed", actor_user=actor, metadata={"team": team.slug},
+                        before={"about": team.about}, after={"about": about})
+        team.about = about
+    if terms_text != team.terms_text:
+        log_audit_event("teams", "team_terms_changed", actor_user=actor, metadata={"team": team.slug},
+                        before={"terms_text": team.terms_text}, after={"terms_text": terms_text})
+        team.terms_text = terms_text
+        team.terms_updated_at = get_now_utc() if terms_text else None
+    return team
+
+
 # --- Who is in a team, and what they may do there --------------------------
 
 
@@ -753,15 +853,24 @@ def _audit(event_type, actor, membership, **metadata):
     )
 
 
-def join_or_apply(user, team, application_text=None):
-    """Join an open team, or apply to one that approves its members."""
+def join_or_apply(user, team, application_text=None, accepted_terms=False):
+    """Join an open team, or apply to one that approves its members.
+
+    A team with rules of its own needs them accepted; which version was
+    accepted, and when, stays with the membership.
+    """
     _lock_team(team)
     reason = why_not_joinable(user, team)
     if reason:
         raise ConflictError(reason, code="team_not_joinable")
+    if team.terms_text and not accepted_terms:
+        raise ValidationError(f"Please accept the rules of {team.name}.", code="team_terms_not_accepted")
 
     now = get_now_utc()
     membership = TeamMembership(team=team, user=user, applied_at=now)
+    if team.terms_text:
+        membership.terms_accepted_at = now
+        membership.terms_version = team.terms_updated_at
     if team.admission_mode == ADMISSION_OPEN or may_rejoin_by_paying(user, team):
         # Joining an open team is being approved at once; the payment step
         # comes next, as after any approval. So is coming back soon after a

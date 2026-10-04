@@ -20,32 +20,64 @@
 {%- endif -%}
 {%- endmacro %}
 
-{# Upload, replace or remove a logo. The form around it needs enctype="multipart/form-data". #}
-{# The logo: what is there now beside the file picker. Remove and a new file
-   only mark what will happen; nothing changes until the form is saved
-   (team-logo-field.js). #}
-{% macro logo_field(team) -%}
-{%- set has_logo = team and team.logo_token -%}
-<label class="form-label" for="logo">{{ _('Logo') }}</label>
-<div class="team-logo-field" data-team-logo-field>
+{# Upload, replace or remove a picture -- the logo or the page's picture. The
+   form around it needs enctype="multipart/form-data". What is there now sits
+   beside the file picker; Remove and a new file only mark what will happen,
+   and nothing changes until the form is saved (team-logo-field.js). #}
+{% macro image_field(name, label, current_html, empty_text, help, preview_class) -%}
+<label class="form-label" for="{{ name }}">{{ label }}</label>
+<div class="team-logo-field" data-team-logo-field data-preview-class="{{ preview_class }}">
     <div class="team-logo-preview" data-logo-preview>
-        {% if has_logo %}<span data-logo-current>{{ team_logo(team, 'large') }}</span>{% endif %}
-        <span class="text-muted small" data-logo-empty {% if has_logo %}hidden{% endif %}>{{ _('No logo') }}</span>
+        {% if current_html %}<span data-logo-current>{{ current_html }}</span>{% endif %}
+        <span class="text-muted small" data-logo-empty {% if current_html %}hidden{% endif %}>{{ empty_text }}</span>
     </div>
     <div class="team-logo-controls">
         <div class="d-flex flex-wrap align-items-center gap-2">
-            <input class="form-control team-logo-input" type="file" id="logo" name="logo" accept="image/png,image/jpeg,image/webp">
+            <input class="form-control team-logo-input" type="file" id="{{ name }}" name="{{ name }}" accept="image/png,image/jpeg,image/webp">
             <button type="button" class="btn btn-outline-danger" data-logo-remove
-                    data-label-remove="{{ _('Remove') }}" data-label-undo="{{ _('Undo') }}" {% if not has_logo %}hidden{% endif %}>{{ _('Remove') }}</button>
+                    data-label-remove="{{ _('Remove') }}" data-label-undo="{{ _('Undo') }}" {% if not current_html %}hidden{% endif %}>{{ _('Remove') }}</button>
         </div>
-        <input type="hidden" name="remove_logo" value="" data-logo-remove-flag>
+        <input type="hidden" name="remove_{{ name }}" value="" data-logo-remove-flag>
         <div class="form-text" data-logo-note hidden
              data-note-removed="{{ _('Removed when you save.') }}"
              data-note-new="{{ _('Uploaded when you save.') }}"></div>
-        <div class="form-text">{{ _('Optional. PNG, JPG or WebP. Shown on dark backgrounds, so a logo with its own background or in light colours works best.') }}</div>
+        <div class="form-text">{{ help }}</div>
     </div>
 </div>
 <script src="{{ url_for('static', filename='team-logo-field.js') }}"></script>
+{%- endmacro %}
+
+{% macro logo_field(team) -%}
+{{ image_field('logo', _('Logo'), team_logo(team, 'large') if team and team.logo_token else '', _('No logo'),
+               _('Optional. PNG, JPG or WebP. Shown on dark backgrounds, so a logo with its own background or in light colours works best.'),
+               'team-logo team-logo-large') }}
+{%- endmacro %}
+
+{% macro picture_field(team) -%}
+{%- set current -%}{% if team and team.picture_token %}<img class="team-picture-preview" src="{{ url_for('teams.team_picture', token=team.picture_token) }}" alt="">{% endif %}{%- endset -%}
+{{ image_field('picture', _('Picture'), current, _('No picture'),
+               _('Optional. One picture on the team\'s page, for example the team with its aircraft. PNG, JPG or WebP.'),
+               'team-picture-preview') }}
+{%- endmacro %}
+
+{# The team's page: its longer text and its rules. For the admin form and the
+   leads' settings alike. #}
+{% macro page_fields(team, form=None) -%}
+{%- set about = form.get('about') if form else (team.about if team else '') -%}
+{%- set terms = form.get('terms_text') if form else (team.terms_text if team else '') -%}
+<div>
+    <label class="form-label" for="about">{{ _('About the team') }}</label>
+    <textarea class="form-control" id="about" name="about" rows="6" maxlength="10000">{{ about or '' }}</textarea>
+    <div class="form-text">{{ _('Shown on the team\'s page: what the team does, what members do, when it meets. Plain text; blank lines start a new paragraph.') }}</div>
+</div>
+<div>
+    <label class="form-label" for="terms_text">{{ _('Rules to accept') }}</label>
+    <textarea class="form-control" id="terms_text" name="terms_text" rows="8" maxlength="50000">{{ terms or '' }}</textarea>
+    <div class="form-text">
+        {{ _('Optional. Whoever applies or joins has to tick that they accept them. Each change is a new version, dated; members keep the version they accepted, and the change is logged.') }}
+        {% if team and team.terms_updated_at %}{{ _('Current version: %(day)s.', day=team.terms_updated_at|date_display) }}{% endif %}
+    </div>
+</div>
 {%- endmacro %}
 
 {# Who receives the list of current members, on which days, and whether it

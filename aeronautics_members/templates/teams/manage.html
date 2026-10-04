@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "teams/_status.html" import status_label, person_picture, team_logo, logo_field, access_list_fields %}
+{% from "teams/_status.html" import status_label, person_picture, team_logo, logo_field, picture_field, page_fields, access_list_fields %}
 {% block title %}{{ team.name }}{% endblock %}
 {% block content %}
 <div class="card mb-4">
@@ -148,8 +148,15 @@
         </div>
         <div class="card-body">
             <div class="mb-3">
-                <label class="form-label" for="description">{{ _('Description') }}</label>
-                <textarea class="form-control" id="description" name="description" rows="3">{{ team.description or '' }}</textarea>
+                <label class="form-label" for="description">{{ _('Short description') }}</label>
+                <textarea class="form-control" id="description" name="description" rows="2">{{ team.description or '' }}</textarea>
+                <div class="form-text">{{ _('One or two sentences, on the overview of all teams.') }}</div>
+            </div>
+            <div class="mb-3 d-flex flex-column gap-3">
+                {{ page_fields(team) }}
+            </div>
+            <div class="mb-3">
+                {{ picture_field(team) }}
             </div>
             <div class="mb-3">
                 <label class="form-label" for="application_prompt">{{ _('Question for applicants') }}</label>

@@ -89,6 +89,27 @@ def _apply_logo(team, form, files):
         teams_service.remove_team_logo(current_user, team)
 
 
+def _apply_page(team, form, files):
+    """The team's page: its longer text, its rules and its picture."""
+    if "about" in form or "terms_text" in form:
+        teams_service.update_team_page(current_user, team, about=form.get("about"),
+                                       terms_text=form.get("terms_text"))
+    upload = files.get("picture")
+    if upload is not None and upload.filename:
+        teams_service.set_team_picture(current_user, team, upload.read())
+    elif form.get("remove_picture") == "on":
+        teams_service.remove_team_picture(current_user, team)
+
+
+@teams_bp.route("/teams/picture/<token>", methods=["GET"])
+def team_picture(token):
+    """The picture on a team's page; like the logo, not secret."""
+    path = teams_service.picture_file(teams_service.team_by_picture_token(token))
+    if path is None:
+        abort(404)
+    return send_file(path, mimetype="image/jpeg", conditional=True, max_age=86400)
+
+
 @teams_bp.route("/teams/logo/<token>", methods=["GET"])
 def team_logo(token):
     """A team's logo. Not secret, so not behind a login: the token only keeps
@@ -151,6 +172,7 @@ def admin_team_new():
             _apply_access_list(team, request.form)
             moving = _apply_payment(team, request.form)
             _apply_logo(team, request.form, request.files)
+            _apply_page(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
             flash(error.message, "danger")
@@ -188,6 +210,7 @@ def admin_team_detail(slug):
             _apply_access_list(team, request.form)
             moving = _apply_payment(team, request.form)
             _apply_logo(team, request.form, request.files)
+            _apply_page(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
             flash(error.message, "danger")
@@ -315,33 +338,27 @@ def _sees_team_page(team):
     )
 
 
-@teams_bp.route("/teams", methods=["GET"])
-@login_required
-def teams_home():
-    _teams_or_404()
+def _membership_context():
+    """What the status and buttons of a person's team membership need --
+    on the overview and on each team's page alike."""
     singular, plural = teams_service.team_labels()
     mine = {}
     for membership in teams_service.memberships_of(current_user):  # newest first
         # The latest attempt per team: somebody who left and applied again is
         # an applicant, not a former member.
         mine.setdefault(membership.team_id, membership)
-    ongoing = {
-        team_id: membership for team_id, membership in mine.items()
-        if membership.status in teams_service.ONGOING
-    }
-    teams = teams_service.all_teams(include_archived=False)
-    return render_template(
-        "teams/home.html",
+    led = teams_service.teams_led_by(current_user)
+    return dict(
         label_singular=singular,
         label_plural=plural,
-        teams=teams,
         latest=mine,
-        ongoing=ongoing,
+        ongoing={team_id: membership for team_id, membership in mine.items()
+                 if membership.status in teams_service.ONGOING},
         is_member=teams_service.is_active_association_member(current_user),
         why_not_joinable=lambda team: teams_service.why_not_joinable(current_user, team),
         status_labels=teams_service.STATUS_LABELS,
-        manageable={team.id for team in teams_service.teams_led_by(current_user) if _manages_people(team)},
-        money_of={team.id for team in teams_service.teams_led_by(current_user)
+        manageable={team.id for team in led if _manages_people(team)},
+        money_of={team.id for team in led
                   if teams_service.can_in_team(current_user, team, teams_service.TeamPermission.VIEW_MONEY)},
         charges=team_payments.charges,
         needs_to_pay=team_payments.needs_to_pay,
@@ -350,6 +367,17 @@ def teams_home():
         timedelta_one_day=timedelta(days=1),
         joining_period=team_payments.joining_period,
         just_paid=request.args.get("paid"),
+    )
+
+
+@teams_bp.route("/teams", methods=["GET"])
+@login_required
+def teams_home():
+    _teams_or_404()
+    return render_template(
+        "teams/home.html",
+        teams=teams_service.all_teams(include_archived=False),
+        **_membership_context(),
     )
 
 
@@ -373,17 +401,21 @@ def _member_action(slug, action):
 @login_required
 def team_join(slug):
     team, done = _member_action(
-        slug, lambda team: teams_service.join_or_apply(current_user, team, request.form.get("application_text"))
+        slug, lambda team: teams_service.join_or_apply(
+            current_user, team, request.form.get("application_text"),
+            accepted_terms=request.form.get("accept_terms") == "on",
+        )
     )
-    if done:
-        current = teams_service.ongoing_membership(current_user, team)
-        if current is not None and current.status == teams_service.APPROVED:
-            flash(_("One step left: pay the team fee."), "success")
-        elif team.admission_mode == teams_service.ADMISSION_OPEN:
-            flash(_("Welcome to %(team)s.", team=team.name), "success")
-        else:
-            flash(_("Application sent. The leads will be in touch."), "success")
-    return redirect(url_for("teams.teams_home"))
+    if not done:
+        return redirect(url_for("teams.team_page", slug=team.slug) + "#join")
+    current = teams_service.ongoing_membership(current_user, team)
+    if current is not None and current.status == teams_service.APPROVED:
+        flash(_("One step left: pay the team fee."), "success")
+    elif team.admission_mode == teams_service.ADMISSION_OPEN:
+        flash(_("Welcome to %(team)s.", team=team.name), "success")
+    else:
+        flash(_("Application sent. The leads will be in touch."), "success")
+    return redirect(url_for("teams.team_page", slug=team.slug))
 
 
 @teams_bp.route("/teams/<slug>/pay", methods=["POST"])
@@ -467,23 +499,22 @@ def team_leave(slug):
 @teams_bp.route("/teams/<slug>", methods=["GET"])
 @login_required
 def team_page(slug):
-    """The team's own page, for its members: who is in it.
+    """A team's own page: what it does, its rules, applying or joining -- and,
+    for its members, who is in it.
 
     Built as sections so that more can be added -- documents, dates, a drinks
     balance -- without reworking it.
     """
     team = _team_or_404(slug)
-    if not _sees_team_page(team):
-        abort(404)
+    sees_members = _sees_team_page(team)
     return render_template(
         "teams/team.html",
         team=team,
-        roster=teams_service.roster(team),
-        leads=[team_role.user for team_role in teams_service.role_holders(team, teams_service.ROLE_LEAD)
-               if teams_service.role_counts(team_role)],
+        sees_members=sees_members,
+        roster=teams_service.roster(team) if sees_members else [],
         my_membership=teams_service.active_team_membership(current_user, team),
         can_manage=_manages_people(team),
-        label_plural=teams_service.team_labels()[1],
+        **_membership_context(),
     )
 
 
@@ -630,6 +661,7 @@ def team_lead_settings(slug):
             ),
             _apply_access_list(team, request.form),
             _apply_logo(team, request.form, request.files),
+            _apply_page(team, request.form, request.files),
         ),
         _("Saved."),
         back=url_for("teams.team_manage", slug=slug),

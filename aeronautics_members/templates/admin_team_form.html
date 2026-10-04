@@ -1,5 +1,5 @@
 {% extends "admin_layout.html" %}
-{% from "teams/_status.html" import logo_field, access_list_fields %}
+{% from "teams/_status.html" import logo_field, picture_field, page_fields, access_list_fields %}
 {% macro value(field, fallback='') -%}{{ form.get(field) if form else fallback }}{%- endmacro %}
 {% block admin_page_actions %}
     <a href="{{ url_for('teams.admin_teams') }}" class="btn btn-secondary">{{ _('All %(label)s', label=label_plural) }}</a>
@@ -38,11 +38,18 @@
                     {% endif %}
                 </div>
                 <div class="col-12">
-                    <label class="form-label" for="description">{{ _('Description') }}</label>
-                    <textarea class="form-control" id="description" name="description" rows="3">{{ value('description', team.description or '' if team else '') }}</textarea>
+                    <label class="form-label" for="description">{{ _('Short description') }}</label>
+                    <textarea class="form-control" id="description" name="description" rows="2">{{ value('description', team.description or '' if team else '') }}</textarea>
+                    <div class="form-text">{{ _('One or two sentences, on the overview of all teams.') }}</div>
                 </div>
                 <div class="col-12">
                     {{ logo_field(team) }}
+                </div>
+                <div class="col-12 d-flex flex-column gap-3">
+                    {{ page_fields(team, form) }}
+                </div>
+                <div class="col-12">
+                    {{ picture_field(team) }}
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" for="admission_mode">{{ _('Joining') }}</label>

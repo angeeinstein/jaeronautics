@@ -276,6 +276,8 @@ def _team_data(user):
                 "team": membership.team.name,
                 "status": membership.status,
                 "application_text": membership.application_text,
+                "team_rules_accepted_at": membership.terms_accepted_at,
+                "team_rules_version": membership.terms_version,
                 "meeting_details": membership.meeting_details,
                 "applied_at": membership.applied_at,
                 "invited_at": membership.invited_at,
