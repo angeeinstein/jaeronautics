@@ -4472,7 +4472,13 @@ def create_app(config_overrides=None):
 
         # Teams paid by subscription: a leaving day passed, or long unpaid.
         # Stripe reports both; this is for when its word never arrived.
-        from .services.team_payments import end_finished_team_memberships
+        from .services.team_payments import end_finished_team_memberships, send_renewal_notices
+
+        reminded = send_renewal_notices()
+        db.session.commit()
+        flush_marked_notification_channels()
+        if reminded:
+            click.echo(f"Reminded {reminded} team member(s) to pay for the next period.")
 
         finished = end_finished_team_memberships()
         db.session.commit()

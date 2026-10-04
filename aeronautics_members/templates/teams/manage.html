@@ -70,7 +70,7 @@
                                 <td>{{ row.university_email or '-' }}</td>
                                 <td>{{ row.cohort or '-' }}</td>
                                 <td>{{ row.membership.started_at|date_display }}</td>
-                                {% if charges %}<td>{% if row.membership.paid_until %}{{ row.membership.paid_until|date_display }}{% else %}-{% endif %}{% if row.membership.payment_mode == 'subscription' and not row.membership.stripe_subscription_id %}<div class="small text-warning">{{ _('Free until then, not paid yet') }}</div>{% endif %}{% if row.membership.ends_on %}<div class="small text-muted">{{ _('Leaves %(day)s', day=row.membership.ends_on|date_display) }}</div>{% endif %}{% if row.membership.payment_state == 'failed' %}<div class="small text-warning">{{ _('Payment failed') }}</div>{% endif %}</td>{% endif %}
+                                {% if charges %}<td>{% if row.membership.paid_until %}{{ row.membership.paid_until|date_display }}{% else %}-{% endif %}{% if needs_to_pay(row.membership) %}<div class="small text-warning">{{ _('Free until then, not paid yet') }}</div>{% elif renewal_open(row.membership) %}<div class="small text-warning">{{ _('Next period not paid yet') }}</div>{% endif %}{% if row.membership.ends_on %}<div class="small text-muted">{{ _('Leaves %(day)s', day=row.membership.ends_on|date_display) }}</div>{% endif %}{% if row.membership.payment_state == 'failed' %}<div class="small text-warning">{{ _('Payment failed') }}</div>{% endif %}</td>{% endif %}
                             </tr>
                         {% endfor %}
                     </tbody>

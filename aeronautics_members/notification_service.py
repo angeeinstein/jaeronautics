@@ -691,6 +691,39 @@ class NotificationService:
                    "What you have paid for runs to its end.")],
                 teams_url, _("Open Teams"),
             ),
+            "team_renewal_due": (
+                _("%(team)s: pay for the next period", team=team),
+                _("Your membership runs until %(day)s.", day=payload.get("until")),
+                [_("Your membership in %(team)s runs until %(day)s. To stay without a gap, pay for the next "
+                   "period (%(fee)s, until %(next)s) on the Teams page before then.",
+                   team=team, day=payload.get("until"), fee=payload.get("fee"), next=payload.get("next_until")),
+                 _("If you do not, your team membership ends on %(day)s.", day=payload.get("until"))],
+                teams_url, _("Open Teams"),
+            ),
+            "team_not_renewed": (
+                _("Your membership in %(team)s has ended", team=team),
+                _("The new period was not paid for."),
+                [_("Your membership in %(team)s has ended, because the new period was not paid for. Within the "
+                   "next six months you can come back by simply paying on the Teams page.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_now_once_per_period": (
+                _("%(team)s is paid once per period from now on", team=team),
+                _("Nothing renews by itself any more."),
+                [_("%(team)s is now paid once per period (%(fee)s), and nothing renews by itself any more. "
+                   "What you have paid for runs until %(day)s; before then you are reminded to pay for the "
+                   "next period.", team=team, fee=payload.get("fee"), day=payload.get("until"))],
+                teams_url, _("Open Teams"),
+            ),
+            "team_now_subscription": (
+                _("%(team)s is paid by subscription from %(day)s", team=team, day=payload.get("from_date")),
+                _("Set up the subscription on the Teams page."),
+                [_("From %(day)s %(team)s is paid by subscription: %(fee)s. What you have paid for until then "
+                   "stays as it is.", day=payload.get("from_date"), team=team, fee=payload.get("fee")),
+                 _("To stay in the team, set up the subscription on the Teams page before then. Nothing is "
+                   "charged before %(day)s.", day=payload.get("from_date"))],
+                teams_url, _("Open Teams"),
+            ),
             "team_now_free": (
                 _("%(team)s is free from now on", team=team),
                 _("Nothing more is charged for %(team)s.", team=team),

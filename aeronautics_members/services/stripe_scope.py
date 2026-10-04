@@ -309,6 +309,22 @@ def scope_of_payment_intent(payment_intent):
     return scope_of_invoice(invoice)
 
 
+def scope_of_charge(charge):
+    found = _from_metadata(_get(charge, "metadata"))
+    if found:
+        return found
+    payment_intent = _get(charge, "payment_intent")
+    if not payment_intent:
+        return Scope(UNCLEAR, "a charge with no payment to trace")
+    if isinstance(payment_intent, str):
+        try:
+            payment_intent = stripe.PaymentIntent.retrieve(payment_intent)
+        except Exception as exc:  # noqa: BLE001
+            _asking_stripe_failed(exc, f"payment {payment_intent}")
+            return Scope(UNCLEAR, "a charge whose payment Stripe would not find")
+    return scope_of_payment_intent(payment_intent)
+
+
 def _unless_unreachable(sort):
     """Report a Stripe that could not be asked as such, whichever lookup it was."""
     def sorted_or_unreachable(obj):
@@ -325,6 +341,7 @@ scope_of_subscription = _unless_unreachable(scope_of_subscription)
 scope_of_invoice = _unless_unreachable(scope_of_invoice)
 scope_of_checkout_session = _unless_unreachable(scope_of_checkout_session)
 scope_of_payment_intent = _unless_unreachable(scope_of_payment_intent)
+scope_of_charge = _unless_unreachable(scope_of_charge)
 
 
 def scope_of_event(event):
@@ -332,7 +349,7 @@ def scope_of_event(event):
     payment -- none, today -- count as the membership's."""
     event_type = event["type"]
     obj = event["data"]["object"]
-    if event_type == "checkout.session.completed":
+    if event_type.startswith("checkout.session."):
         return scope_of_checkout_session(obj)
     if event_type.startswith("invoice."):
         return scope_of_invoice(obj)
@@ -347,4 +364,7 @@ def scope_of_event(event):
                 payment_intent if not isinstance(payment_intent, str) else {"id": payment_intent}
             )
         return Scope(UNCLEAR, "a dispute with no payment to trace")
+    if event_type.startswith("charge."):
+        # A refund, say: what it belongs to is what the payment it took back was for.
+        return scope_of_charge(obj)
     return Scope(OURS, "not a payment or subscription event")

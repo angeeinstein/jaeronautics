@@ -72,6 +72,9 @@ def _flash_moving(outcome):
     if outcome.get("stopping"):
         flash(_("%(count)s running subscription(s) stop at the end of what is paid; those members stay "
                 "in the team for free and are emailed.", count=outcome["stopping"]), "info")
+    if outcome.get("switched"):
+        flash(_("%(count)s member(s) keep what they paid for and pay the new way from then on; they are emailed.",
+                count=outcome["switched"]), "info")
     if outcome.get("asked_to_pay"):
         flash(_("%(count)s member(s) stay free until the next period starts and are emailed to pay by then "
                 "to stay.", count=outcome["asked_to_pay"]), "info")
@@ -335,6 +338,8 @@ def teams_home():
         manageable={team.id for team in teams_service.teams_led_by(current_user)},
         charges=team_payments.charges,
         needs_to_pay=team_payments.needs_to_pay,
+        renewal_open=team_payments.renewal_open,
+        next_period_until=team_payments.next_period_until,
         timedelta_one_day=timedelta(days=1),
         joining_period=team_payments.joining_period,
         just_paid=request.args.get("paid"),
@@ -432,7 +437,9 @@ def team_leave(slug):
             membership=current,
             is_lead=any(team_role.role == teams_service.ROLE_LEAD
                         for team_role in teams_service.roles_of(current_user) if team_role.team_id == team.id),
-            runs_to_end=bool(current.stripe_subscription_id and current.payment_mode != teams_service.PAYMENT_NONE),
+            runs_to_end=bool(current.stripe_subscription_id and current.payment_mode == "subscription"),
+            paid_once_until=(current.paid_until if current.payment_mode == "one_time" and current.paid_until
+                             and current.paid_until >= get_membership_today() else None),
             message=request.form.get("message", ""),
         )
     team, done = _member_action(
@@ -499,6 +506,8 @@ def team_manage(slug):
         access_list_recipients=teams_service.parse_recipients(team.access_list_recipients),
         next_access_list_date=teams_service.next_access_list_date(team),
         charges=team_payments.charges(team),
+        renewal_open=team_payments.renewal_open,
+        needs_to_pay=team_payments.needs_to_pay,
     )
 
 

@@ -50,6 +50,7 @@ from .teams import (
     APPROVED,
     END_LEFT,
     END_MEMBERSHIP_ENDED,
+    END_NOT_RENEWED,
     END_PAYMENT_FAILED,
     ENDED,
     PAYMENT_NONE,
@@ -66,8 +67,11 @@ from .teams import (
 )
 
 PAYMENT_SUBSCRIPTION = "subscription"
-PAYMENT_MODES = (PAYMENT_NONE, PAYMENT_SUBSCRIPTION)
-PAYMENT_MODE_LABELS = {PAYMENT_NONE: "Free", PAYMENT_SUBSCRIPTION: "Subscription"}
+PAYMENT_ONE_TIME = "one_time"
+PAYMENT_MODES = (PAYMENT_NONE, PAYMENT_SUBSCRIPTION, PAYMENT_ONE_TIME)
+CHARGING_MODES = (PAYMENT_SUBSCRIPTION, PAYMENT_ONE_TIME)
+PAYMENT_MODE_LABELS = {PAYMENT_NONE: "Free", PAYMENT_SUBSCRIPTION: "Subscription",
+                       PAYMENT_ONE_TIME: "Once per period"}
 
 # How the latest payment of a team membership went.
 PROCESSING = "processing"
@@ -76,6 +80,9 @@ FAILED = "failed"
 
 #: Joining this close to a period start pays for the coming period instead.
 NEXT_PERIOD_WITHIN_DAYS = 3
+#: Paid once per period: the reminder to pay for the next one goes out this
+#: many days before the paid period ends, and paying for it opens then.
+RENEWAL_NOTICE_DAYS = 14
 #: A membership paid only until longer ago than this has had every retry
 #: Stripe makes; it ends even if Stripe's last word never arrived.
 OVERDUE_DAYS = 35
@@ -84,7 +91,16 @@ _PRICE_ID = re.compile(r"^price_[A-Za-z0-9]+$")
 
 
 def charges(team):
+    """Whether the team has a fee at all, however it is paid."""
+    return team is not None and team.payment_mode in CHARGING_MODES
+
+
+def by_subscription(team):
     return team is not None and team.payment_mode == PAYMENT_SUBSCRIPTION
+
+
+def once_per_period(team):
+    return team is not None and team.payment_mode == PAYMENT_ONE_TIME
 
 
 # --- Settings ------------------------------------------------------------------
@@ -101,6 +117,17 @@ def _price_problem(price, starts):
     if months * len(starts) != 12:
         return (f"That price renews every {months} month(s), but {len(starts)} period start(s) "
                 f"a year means every {12 // len(starts) if 12 % len(starts) == 0 else '?'} month(s).")
+    if price.get("unit_amount") in (None, 0):
+        return "That price has no fixed amount."
+    return None
+
+
+def _one_time_price_problem(price):
+    """Why a Stripe price cannot be a team's fee paid once per period, or None."""
+    if not price.get("active", True):
+        return "That price is archived in Stripe."
+    if price.get("recurring"):
+        return "That is a recurring price. A team paid once per period needs a one-time price."
     if price.get("unit_amount") in (None, 0):
         return "That price has no fixed amount."
     return None
@@ -141,13 +168,15 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
     stripe_price_id = (stripe_price_id or "").strip() or None
     starts = parse_dates(period_starts)
 
-    if payment_mode == PAYMENT_SUBSCRIPTION:
+    if payment_mode in CHARGING_MODES:
         if not stripe_price_id or not _PRICE_ID.match(stripe_price_id):
             raise ValidationError("Enter the Stripe price ID (price_...).", code="team_price_missing")
         if not starts:
             raise ValidationError("Enter the days the periods start, like 01.10, 01.04.",
                                   code="team_period_starts_missing")
-        if not _evenly_spaced(starts):
+        if payment_mode == PAYMENT_SUBSCRIPTION and not _evenly_spaced(starts):
+            # Paid once per period, a winter and a summer semester of different
+            # lengths are fine; a subscription renews at one fixed interval.
             raise ValidationError("The periods must be of equal length, like 01.10, 01.04.",
                                   code="team_period_starts_uneven")
         from .stripe_scope import _membership_price_id
@@ -162,7 +191,8 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
                 "Stripe does not know that price, or could not be asked. Check the ID and the Stripe keys.",
                 code="team_price_unknown",
             ) from None
-        problem = _price_problem(price, starts)
+        problem = (_price_problem(price, starts) if payment_mode == PAYMENT_SUBSCRIPTION
+                   else _one_time_price_problem(price))
         if problem:
             raise ValidationError(problem, code="team_price_unsuitable")
         team.fee_display = fee_text(team, price)
@@ -172,6 +202,7 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
     running = [membership for membership in team.memberships
                if membership.stripe_subscription_id and membership.status in (APPROVED, ACTIVE)]
     was_charging = charges(team)
+    switching = was_charging and payment_mode in CHARGING_MODES and payment_mode != team.payment_mode
     if (was_charging and payment_mode == PAYMENT_SUBSCRIPTION and running
             and starts != parse_dates(team.period_starts)):
         raise ValidationError(
@@ -180,7 +211,7 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
             code="team_period_starts_locked",
         )
     moving = (
-        payment_mode == PAYMENT_SUBSCRIPTION and charges(team) and team.stripe_price_id
+        payment_mode == PAYMENT_SUBSCRIPTION and by_subscription(team) and team.stripe_price_id
         and stripe_price_id != team.stripe_price_id and running
     )
     if moving:
@@ -203,6 +234,16 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
             if membership.ends_on is None and membership.payment_mode == PAYMENT_SUBSCRIPTION:
                 payments.set_cancel_at_period_end(membership.stripe_subscription_id, True)
                 stopping.append(membership)
+        # Paid once per period: nothing to stop, and nothing more to pay.
+        stopping += [m for m in team.memberships if m.status == ACTIVE and m.ends_on is None
+                     and m.payment_mode == PAYMENT_ONE_TIME]
+    to_one_time = []
+    if switching and payment_mode == PAYMENT_ONE_TIME:
+        # Their subscriptions stop at the end of what is paid; then they pay once per period.
+        for membership in running:
+            if membership.ends_on is None and membership.payment_mode == PAYMENT_SUBSCRIPTION:
+                payments.set_cancel_at_period_end(membership.stripe_subscription_id, True)
+                to_one_time.append(membership)
 
     before = {"payment_mode": team.payment_mode, "stripe_price_id": team.stripe_price_id,
               "period_starts": team.period_starts}
@@ -214,7 +255,7 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
     if before != after:
         log_audit_event("teams", "team_payment_settings_changed", actor_user=actor,
                         before=before, after=after, metadata={"team": team.slug})
-    outcome = {"moving": 0, "stopping": len(stopping), "asked_to_pay": 0}
+    outcome = {"moving": 0, "stopping": len(stopping), "asked_to_pay": 0, "switched": 0}
     if moving:
         for membership in running:
             payments.schedule_price_move(
@@ -226,9 +267,41 @@ def update_payment_settings(actor, team, *, payment_mode, stripe_price_id, perio
         _now_free(team, stopping)
     if was_charging and payment_mode == PAYMENT_NONE:
         _settle_waiting_approvals(team)
-    if not was_charging and payment_mode == PAYMENT_SUBSCRIPTION:
+    if not was_charging and payment_mode in CHARGING_MODES:
         outcome["asked_to_pay"] = _now_charging(team)
+    if switching:
+        outcome["switched"] = _switch_way_of_paying(team, to_one_time)
     return outcome
+
+
+def _switch_way_of_paying(team, stopped_subscriptions):
+    """Members keep what they paid for, and pay the new way from then on."""
+    switched = 0
+    if team.payment_mode == PAYMENT_ONE_TIME:
+        waiting = [m for m in team.memberships if m.status == ACTIVE and m.ends_on is None
+                   and m.payment_mode == PAYMENT_SUBSCRIPTION and not m.stripe_subscription_id]
+        for membership in list(stopped_subscriptions) + waiting:
+            membership.payment_mode = PAYMENT_ONE_TIME
+            # Asked to pay already, they may pay the new way at once.
+            membership.renewal_notice_for = membership.paid_until if membership in waiting else None
+            _audit("team_now_once_per_period", None, membership)
+            _tell_person("team_now_once_per_period", membership, fee=team.fee_display,
+                         until=format_membership_date_display(membership.paid_until) if membership.paid_until else None)
+            switched += 1
+    else:
+        free_until = joining_period(team)["paid_until"]
+        for membership in list(team.memberships):
+            if membership.status != ACTIVE or membership.ends_on is not None or membership.payment_mode != PAYMENT_ONE_TIME:
+                continue
+            membership.payment_mode = PAYMENT_SUBSCRIPTION
+            membership.paid_until = membership.paid_until or free_until
+            membership.payment_state = None
+            membership.renewal_notice_for = None
+            _audit("team_now_subscription", None, membership)
+            _tell_person("team_now_subscription", membership, fee=team.fee_display,
+                         from_date=format_membership_date_display(membership.paid_until + timedelta(days=1)))
+            switched += 1
+    return switched
 
 
 def _now_free(team, memberships):
@@ -260,9 +333,11 @@ def _now_charging(team):
     for membership in list(team.memberships):
         if membership.status != ACTIVE or membership.stripe_subscription_id:
             continue
-        membership.payment_mode = PAYMENT_SUBSCRIPTION
+        membership.payment_mode = team.payment_mode
         membership.paid_until = free_until
         membership.payment_state = None
+        # Paid once per period, the email below is the renewal reminder too.
+        membership.renewal_notice_for = free_until if team.payment_mode == PAYMENT_ONE_TIME else None
         _audit("team_now_charging", None, membership, free_until=free_until.isoformat())
         _tell_person("team_now_charges", membership, fee=team.fee_display,
                      from_date=format_membership_date_display(free_until + timedelta(days=1)))
@@ -295,6 +370,34 @@ def joining_period(team, today=None):
     return {"paid_until": charged_from - timedelta(days=1), "charged_from": charged_from}
 
 
+def period_end_after(team, day):
+    """The last day of the period starting the day after ``day``."""
+    starts = [start for start in _period_start_dates(team, day) if start > day + timedelta(days=1)]
+    return starts[0] - timedelta(days=1)
+
+
+def renewal_open(membership, today=None):
+    """Paid once per period: whether paying for the next period is open now.
+
+    From RENEWAL_NOTICE_DAYS before the paid period ends -- or as soon as the
+    reminder went out -- until it ends; paying in advance keeps the membership
+    running without a gap.
+    """
+    if (membership is None or membership.status != ACTIVE or membership.payment_mode != PAYMENT_ONE_TIME
+            or membership.paid_until is None or membership.ends_on is not None):
+        return False
+    today = today or get_membership_today()
+    if membership.paid_until < today - timedelta(days=1):
+        return False
+    return ((membership.paid_until - today).days <= RENEWAL_NOTICE_DAYS
+            or membership.renewal_notice_for == membership.paid_until)
+
+
+def next_period_until(membership):
+    """Paying for the next period now covers until this day."""
+    return period_end_after(membership.team, membership.paid_until)
+
+
 def _last_day(unix_timestamp):
     """The last day a period ending at ``unix_timestamp`` covers, in Vienna."""
     moment = datetime.fromtimestamp(int(unix_timestamp), MEMBERSHIP_TIMEZONE)
@@ -302,8 +405,11 @@ def _last_day(unix_timestamp):
 
 
 def fee_text(team, price=None):
-    """"€10.00 every 6 months", for pages and Checkout."""
-    return payments.fee_text(price or payments.retrieve_price(team.stripe_price_id))
+    """"€10.00 every 6 months", or "€10.00 per period" paid once per period."""
+    price = price or payments.retrieve_price(team.stripe_price_id)
+    if not price.get("recurring"):
+        return f"{payments.format_amount(int(price['unit_amount']), price['currency'])} per period"
+    return payments.fee_text(price)
 
 
 # --- Paying ------------------------------------------------------------------------
@@ -316,6 +422,44 @@ def _metadata(membership):
         "team_membership_id": str(membership.id),
         "user_id": str(membership.user_id),
     }
+
+
+def _one_time_checkout(user, team, membership, member):
+    """Pay once for a period: the one under way to join, the next one to renew."""
+    price = payments.retrieve_price(team.stripe_price_id)
+    amount = int(price["unit_amount"])
+    if membership.status == APPROVED:
+        covers_until = joining_period(team)["paid_until"]
+    else:
+        covers_until = next_period_until(membership)
+    until = format_membership_date_display(covers_until)
+    metadata = {**_metadata(membership), "covers_until": covers_until.isoformat()}
+    description = f"{team.name}, until {until}"
+    customer = payments.customer_params(member)
+    if "customer_email" in customer:
+        customer["customer_creation"] = "always"
+    params = dict(
+        mode="payment",
+        metadata=metadata,
+        payment_method_types=list(payments.PAYMENT_METHOD_TYPES),
+        line_items=[{"price": team.stripe_price_id, "quantity": 1}],
+        payment_intent_data={"metadata": metadata, "description": description},
+        # A receipt the member can keep, from Stripe.
+        invoice_creation={"enabled": True, "invoice_data": {"metadata": metadata, "description": description}},
+        custom_text={"submit": {"message": (
+            f"You pay {payments.format_amount(amount, price['currency'])} for {team.name} until {until}. "
+            "Nothing renews by itself: before it ends, you are reminded to pay for the next period."
+        )}},
+        success_url=build_public_url("teams.teams_home", paid=team.slug),
+        cancel_url=build_public_url("teams.teams_home"),
+        **customer,
+    )
+    key = f"checkout:team:{membership.id}:{covers_until.isoformat()}:{payments.request_fingerprint(params)}"
+    session = payments.create_checkout_session(params, idempotency_key=key)
+    membership.stripe_checkout_session_id = session.get("id")
+    membership.payment_state = None
+    _audit("team_checkout_started", user, membership, covers_until=covers_until.isoformat())
+    return session["url"]
 
 
 def needs_to_pay(membership):
@@ -340,7 +484,7 @@ def start_checkout(user, team):
     """
     membership = ongoing_membership(user, team)
     if membership is None or not charges(team) or not (
-        membership.status == APPROVED or needs_to_pay(membership)
+        membership.status == APPROVED or needs_to_pay(membership) or renewal_open(membership)
     ):
         raise ConflictError("There is nothing to pay for this team.", code="team_nothing_to_pay")
     membership = _locked_membership(membership.id, team)
@@ -354,6 +498,9 @@ def start_checkout(user, team):
     existing = payments.open_checkout_session(membership.stripe_checkout_session_id, what="team Checkout")
     if existing is not None:
         return existing["url"]
+
+    if once_per_period(team):
+        return _one_time_checkout(user, team, membership, member)
 
     replaced = membership.stripe_subscription_id
     if replaced:
@@ -437,7 +584,7 @@ def _tell_admins(event_type, text, **payload):
     queue_curated_admin_notification(ADMIN_ERROR_CHANNEL, event_type, text, payload=payload, severity="warning")
 
 
-def _end(membership, reason, now):
+def _end(membership, reason, now, tell_leads=True):
     membership.status = ENDED
     membership.ended_at = now
     membership.end_reason = reason
@@ -446,7 +593,12 @@ def _end(membership, reason, now):
     _sync_forum([membership.user], membership.team, f"left team {membership.team.slug}")
     name = _member_name(membership.user)
     team = membership.team
-    if reason == END_PAYMENT_FAILED:
+    if reason == END_NOT_RENEWED:
+        _tell_person("team_not_renewed", membership)
+        if tell_leads:
+            _tell_leads(team, "team_member_left", f"{name} did not renew their membership in {team.name}.",
+                        person_name=name)
+    elif reason == END_PAYMENT_FAILED:
         _tell_person("team_payment_ended", membership)
         _tell_leads(team, "team_member_left", f"{name} is no longer in {team.name}: the payment did not go through.",
                     person_name=name)
@@ -473,6 +625,8 @@ def _activate(membership, now):
 
 
 def _checkout_completed(session):
+    if session.get("mode") == "payment":
+        return _one_time_completed(session)
     membership = _membership_for(session.get("metadata"))
     if membership is None:
         _tell_admins("team_payment_unmatched", "A completed team Checkout matches no team membership.",
@@ -497,6 +651,8 @@ def _checkout_completed(session):
 def _invoice_paid(invoice):
     amount = int(invoice.get("amount_paid") or 0)
     subscription_id = invoice_subscription_id(invoice)
+    if not subscription_id:
+        return  # the receipt of a payment once per period; its Checkout recorded it
     membership = _membership_for(invoice_subscription_metadata(invoice), subscription_id)
     if membership is None:
         _tell_admins("team_payment_unmatched", "A paid team invoice matches no team membership.",
@@ -550,8 +706,8 @@ def _subscription_updated(subscription):
         return
     if status == "past_due":
         membership.payment_state = FAILED
-    if membership.status != ACTIVE or membership.payment_mode == PAYMENT_NONE:
-        return  # free now: the subscription running out is not leaving
+    if membership.status != ACTIVE or membership.payment_mode != PAYMENT_SUBSCRIPTION:
+        return  # free now, or paying once per period: the subscription running out is not leaving
     if payments.subscription_has_scheduled_cancellation(subscription):
         _period_start, period_end = payments.subscription_period_bounds(subscription)
         ends_at = subscription.get("cancel_at") or period_end
@@ -575,8 +731,8 @@ def _subscription_deleted(subscription):
     if membership.stripe_subscription_id == subscription.get("id"):
         membership.stripe_subscription_id = None
     reason = (subscription.get("cancellation_details") or {}).get("reason")
-    if membership.status == ACTIVE and membership.payment_mode == PAYMENT_NONE:
-        return  # the team became free; they stay
+    if membership.status == ACTIVE and membership.payment_mode != PAYMENT_SUBSCRIPTION:
+        return  # the team became free, or is paid once per period now; they stay
     if membership.status == ACTIVE:
         failed = reason in ("payment_failed", "payment_disputed")
         _end(membership, END_PAYMENT_FAILED if failed else _leaving_reason(membership), get_now_utc())
@@ -591,11 +747,8 @@ def _dispute_closed(dispute):
 
     payments.apply_runtime_stripe_config()
     charge = stripe.Charge.retrieve(dispute.get("charge"))
-    invoice_id = invoice_id_of_charge(charge) or invoice_id_of_payment_intent(
-        dispute.get("payment_intent") or charge.get("payment_intent")
-    )
-    payment = db.session.execute(db.select(Payment).filter_by(stripe_invoice_id=invoice_id)).scalars().first() \
-        if invoice_id else None
+    payment = _payment_of_charge(charge, dispute.get("payment_intent"))
+    invoice_id = payment.stripe_invoice_id if payment is not None else None
     if payment is None:
         _tell_admins("team_dispute_unmatched", "A lost chargeback on a team fee matches no recorded payment.",
                      charge_id=dispute.get("charge"), invoice_id=invoice_id)
@@ -607,8 +760,103 @@ def _dispute_closed(dispute):
         _end(membership, END_PAYMENT_FAILED, get_now_utc())
 
 
+def _payment_of_charge(charge, payment_intent=None):
+    """The recorded payment a Stripe charge paid: by its payment, else by its invoice."""
+    payment_intent = payment_intent or charge.get("payment_intent")
+    payment_intent = payment_intent if isinstance(payment_intent, str) else (payment_intent or {}).get("id")
+    if payment_intent:
+        found = db.session.execute(
+            db.select(Payment).filter_by(stripe_payment_intent_id=payment_intent)
+        ).scalars().first()
+        if found is not None:
+            return found
+    invoice_id = invoice_id_of_charge(charge) or invoice_id_of_payment_intent(payment_intent)
+    if not invoice_id:
+        return None
+    return db.session.execute(db.select(Payment).filter_by(stripe_invoice_id=invoice_id)).scalars().first()
+
+
+def _charge_refunded(charge):
+    """Money given back in Stripe comes off what the team earned."""
+    payment = _payment_of_charge(charge)
+    if payment is None:
+        return
+    refunded = int(charge.get("amount_refunded") or 0)
+    if refunded != payment.refunded_cents:
+        payment.refunded_cents = min(refunded, payment.amount_cents)
+        log_audit_event("payments", "team_payment_refunded", metadata={
+            "payment_id": payment.id, "team_id": payment.team_id, "refunded_cents": payment.refunded_cents,
+        })
+
+
+# --- Paid once per period ----------------------------------------------------------
+
+
+def _one_time_completed(session):
+    membership = _membership_for(session.get("metadata"))
+    if membership is None:
+        _tell_admins("team_payment_unmatched", "A completed team Checkout matches no team membership.",
+                     session_id=session.get("id"))
+        return
+    payments.remember_customer(getattr(membership.user, "member", None), session.get("customer"))
+    membership.stripe_checkout_session_id = None
+    if session.get("payment_status") == "paid":
+        _one_time_paid(session, membership)
+    elif membership.status in (APPROVED, ACTIVE):
+        # A SEPA debit: confirmed days later, by the event below.
+        membership.payment_state = PROCESSING
+
+
+def _one_time_async_succeeded(session):
+    membership = _membership_for(session.get("metadata"))
+    if membership is not None:
+        _one_time_paid(session, membership)
+
+
+def _one_time_async_failed(session):
+    membership = _membership_for(session.get("metadata"))
+    if membership is not None and membership.status in (APPROVED, ACTIVE):
+        membership.payment_state = FAILED
+        _audit("team_payment_failed", None, membership, session_id=session.get("id"))
+
+
+def _one_time_paid(session, membership):
+    """The money is in: record it once, and the membership runs to the end of the period."""
+    from .clock import parse_iso_date
+
+    payment_intent = session.get("payment_intent")
+    payment_intent = payment_intent if isinstance(payment_intent, str) else (payment_intent or {}).get("id")
+    if payment_intent and db.session.execute(
+        db.select(Payment.id).filter_by(stripe_payment_intent_id=payment_intent)
+    ).first() is not None:
+        return  # reported twice
+    covers_until = parse_iso_date((session.get("metadata") or {}).get("covers_until"))
+    invoice = session.get("invoice")
+    db.session.add(Payment(
+        purpose=payments.PURPOSE_TEAM, user_id=membership.user_id, team_id=membership.team_id,
+        team_membership_id=membership.id, stripe_payment_intent_id=payment_intent,
+        stripe_invoice_id=invoice if isinstance(invoice, str) else (invoice or {}).get("id"),
+        amount_cents=int(session.get("amount_total") or 0),
+        currency=(session.get("currency") or "eur")[:3], covers_until=covers_until, paid_at=get_now_utc(),
+    ))
+    if covers_until and (membership.paid_until is None or covers_until > membership.paid_until):
+        membership.paid_until = covers_until
+    membership.payment_state = PAID
+    if membership.status == APPROVED:
+        _activate(membership, get_now_utc())
+    elif membership.status == ACTIVE:
+        _audit("team_payment_received", None, membership, covers_until=str(covers_until))
+    else:
+        _tell_admins("team_paid_after_ending",
+                     "A team fee was paid for a membership that had already ended. Refund it in Stripe.",
+                     team=membership.team.slug, team_membership_id=membership.id, payment_intent=payment_intent)
+
+
 _HANDLERS = {
     "checkout.session.completed": _checkout_completed,
+    "checkout.session.async_payment_succeeded": _one_time_async_succeeded,
+    "checkout.session.async_payment_failed": _one_time_async_failed,
+    "charge.refunded": _charge_refunded,
     "invoice.paid": _invoice_paid,
     "invoice.payment_succeeded": _invoice_paid,
     "invoice.payment_failed": _payment_failed,
@@ -641,33 +889,69 @@ def handle_event(event):
 
 
 def end_finished_team_memberships(today=None):
-    """End memberships whose leaving day has passed, or that are long unpaid.
+    """End memberships whose leaving day has passed, or that are not paid for.
 
-    Stripe reports both itself; this is for when its word never arrived.
+    Paid by subscription, Stripe reports both itself; this is for when its word
+    never arrived. Paid once per period, this is what ends a period nobody paid
+    the next one for -- and its leads hear of everybody at once.
     """
     today = today or get_membership_today()
     ended = 0
+    not_renewed = {}
     for found in db.session.execute(
-        db.select(TeamMembership).where(TeamMembership.status == ACTIVE, TeamMembership.payment_mode == PAYMENT_SUBSCRIPTION)
+        db.select(TeamMembership).where(TeamMembership.status == ACTIVE,
+                                        TeamMembership.payment_mode.in_(CHARGING_MODES))
     ).scalars().all():
         membership = _locked_membership(found.id)
         if membership.status != ACTIVE:
             continue
+        subscription = membership.payment_mode == PAYMENT_SUBSCRIPTION
         if membership.ends_on is not None and membership.ends_on < today:
             stop_charging(membership, "leaving day passed")
             _end(membership, _leaving_reason(membership), get_now_utc())
             ended += 1
-        elif (membership.stripe_subscription_id is None and membership.paid_until is not None
-              and membership.paid_until < today):
+        elif membership.paid_until is None or membership.paid_until >= today:
+            continue
+        elif not subscription:
+            _end(membership, END_NOT_RENEWED, get_now_utc(), tell_leads=False)
+            not_renewed.setdefault(membership.team, []).append(_member_name(membership.user))
+            ended += 1
+        elif membership.stripe_subscription_id is None:
             # The team started charging, and they did not pay by the period start.
             _end(membership, END_PAYMENT_FAILED, get_now_utc())
             ended += 1
-        elif membership.paid_until is not None and (today - membership.paid_until).days > OVERDUE_DAYS:
+        elif (today - membership.paid_until).days > OVERDUE_DAYS:
             stop_charging(membership, "long unpaid")
             _end(membership, END_PAYMENT_FAILED, get_now_utc())
             ended += 1
+    for team, names in not_renewed.items():
+        _tell_leads(
+            team, "team_members_lapsed",
+            f"{len(names)} member(s) of {team.name} did not pay for the new period: {', '.join(sorted(names))}.",
+            names=sorted(names),
+        )
     return ended
 
+
+def send_renewal_notices(today=None):
+    """Paid once per period: remind each member to pay for the next one, once."""
+    today = today or get_membership_today()
+    sent = 0
+    for membership in db.session.execute(
+        db.select(TeamMembership).where(TeamMembership.status == ACTIVE,
+                                        TeamMembership.payment_mode == PAYMENT_ONE_TIME)
+    ).scalars().all():
+        if (membership.paid_until is None or membership.ends_on is not None
+                or membership.renewal_notice_for == membership.paid_until
+                or (membership.paid_until - today).days > RENEWAL_NOTICE_DAYS
+                or membership.paid_until < today):
+            continue
+        membership.renewal_notice_for = membership.paid_until
+        _tell_person("team_renewal_due", membership, fee=membership.team.fee_display,
+                     until=format_membership_date_display(membership.paid_until),
+                     next_until=format_membership_date_display(next_period_until(membership)))
+        sent += 1
+    return sent
 
 # --- A new fee -----------------------------------------------------------------------
 
@@ -676,7 +960,7 @@ def _team_price_now(payload):
     from ..db_models import Team
 
     team = db.session.get(Team, payload.get("team_id"))
-    return team.stripe_price_id if team is not None and charges(team) else None
+    return team.stripe_price_id if team is not None and by_subscription(team) else None
 
 
 def _tell_about_new_fee(payload, notice):

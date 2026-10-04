@@ -85,12 +85,13 @@
                     <select class="form-select" id="payment_mode" name="payment_mode">
                         <option value="none" {% if current_payment == 'none' %}selected{% endif %}>{{ _('Free') }}</option>
                         <option value="subscription" {% if current_payment == 'subscription' %}selected{% endif %}>{{ _('Subscription') }}</option>
+                        <option value="one_time" {% if current_payment == 'one_time' %}selected{% endif %}>{{ _('Once per period') }}</option>
                     </select>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label" for="stripe_price_id">{{ _('Stripe price ID') }}</label>
                     <input class="form-control" id="stripe_price_id" name="stripe_price_id" maxlength="100" placeholder="price_…" value="{{ value('stripe_price_id', team.stripe_price_id or '' if team else '') }}">
-                    <div class="form-text">{{ _("A recurring price on a product of the team's own. A new price applies to people joining from now on.") }}</div>
+                    <div class="form-text">{{ _("On a product of the team's own: a recurring price for a subscription, a one-time price for once per period. Both can live on the same product.") }}</div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label" for="period_starts">{{ _('Periods start on') }}</label>

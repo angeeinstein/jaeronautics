@@ -804,8 +804,9 @@ class Team(db.Model):
     # Optional. The file as stored, and the unguessable name it is served under.
     logo_path = db.Column(db.String(500), nullable=True)
     logo_token = db.Column(db.String(64), unique=True, nullable=True)
-    # "none" (free) or "subscription": the fee for the current period at
-    # joining, then Stripe charges it at every period start.
+    # "none" (free); "subscription": the fee for the current period at
+    # joining, then Stripe charges it at every period start; or "one_time":
+    # paid once per period, renewed by paying again.
     payment_mode = db.Column(db.String(20), nullable=False, default="none")
     # The team's recurring price in Stripe, on a product of the team's own.
     stripe_price_id = db.Column(db.String(100), nullable=True)
@@ -814,6 +815,10 @@ class Team(db.Model):
     # The fee as members read it ("€10.00 every 6 months"), taken from Stripe
     # when the price is saved, so pages need not ask Stripe.
     fee_display = db.Column(db.String(100), nullable=True)
+    # Where the team's money goes: the account the association transfers it to.
+    bank_account_holder = db.Column(db.String(70), nullable=True)
+    bank_iban = db.Column(db.String(34), nullable=True)
+    bank_bic = db.Column(db.String(11), nullable=True)
     # The list of current members for access to the team's rooms: who gets it
     # (addresses, one per line or comma), on which days of the year ("15.10,
     # 15.03"), whether it goes out on those days by itself, and when it last
@@ -889,6 +894,9 @@ class TeamMembership(db.Model):
     # ``ends_on`` was set because the association membership is ending, not
     # by leaving: taking that cancellation back lifts it again.
     ends_with_association = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # Paid once per period: the end of the period the renewal email went out
+    # for, so it goes out once.
+    renewal_notice_for = db.Column(db.Date, nullable=True)
     started_at = db.Column(db.DateTime, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
     # Who approved, rejected or removed -- the last person to decide.
@@ -920,7 +928,9 @@ class Payment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
     team_membership_id = db.Column(db.Integer, db.ForeignKey("team_memberships.id"), nullable=True, index=True)
-    stripe_invoice_id = db.Column(db.String(100), nullable=False, unique=True)
+    # A subscription's payment by its invoice, a one-time one by its payment.
+    stripe_invoice_id = db.Column(db.String(100), nullable=True, unique=True)
+    stripe_payment_intent_id = db.Column(db.String(100), nullable=True, unique=True)
     stripe_subscription_id = db.Column(db.String(100), nullable=True)
     amount_cents = db.Column(db.Integer, nullable=False)
     currency = db.Column(db.String(3), nullable=False)
@@ -929,11 +939,39 @@ class Payment(db.Model):
     paid_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     # "paid", or "disputed" once a chargeback took it back.
     status = db.Column(db.String(20), nullable=False, default="paid")
+    # Given back in Stripe, in part or in full.
+    refunded_cents = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     user = db.relationship("User")
     team = db.relationship("Team")
     team_membership = db.relationship("TeamMembership")
+
+
+class TeamPayout(db.Model):
+    """Money the association transferred to a team, out of what it earned.
+
+    What a team is still owed is what its members paid, less refunds and lost
+    chargebacks, less these. Stripe's fees are the association's: a team gets
+    exactly what its members paid.
+    """
+
+    __tablename__ = "team_payouts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(3), nullable=False, default="eur")
+    paid_on = db.Column(db.Date, nullable=False)
+    reference = db.Column(db.String(140), nullable=True)
+    # The account it went to, as it was then.
+    account_holder = db.Column(db.String(70), nullable=True)
+    iban = db.Column(db.String(34), nullable=True)
+    recorded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    team = db.relationship("Team")
+    recorded_by = db.relationship("User")
 
 
 class TeamAccessListSend(db.Model):

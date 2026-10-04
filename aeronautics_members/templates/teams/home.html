@@ -39,7 +39,11 @@
                                 <div class="alert alert-warning mb-0">{{ _('The payment did not go through. Please try again.') }}</div>
                             {% endif %}
                             {% set period = joining_period(team) %}
-                            <p class="mb-0">{{ _('One step left. Paying now covers until %(day)s; after that the fee is charged at the start of each period until you leave.', day=period.paid_until|date_display) }}</p>
+                            {% if team.payment_mode == 'one_time' %}
+                                <p class="mb-0">{{ _('One step left. Paying now covers until %(day)s. Nothing renews by itself: before it ends, you are reminded to pay for the next period.', day=period.paid_until|date_display) }}</p>
+                            {% else %}
+                                <p class="mb-0">{{ _('One step left. Paying now covers until %(day)s; after that the fee is charged at the start of each period until you leave.', day=period.paid_until|date_display) }}</p>
+                            {% endif %}
                         {% endif %}
                     {% endif %}
 
@@ -47,6 +51,15 @@
                         <div class="alert alert-warning mb-0">{{ _('%(team)s charges a fee from %(day)s: %(fee)s. Pay before then to stay in the team; nothing is charged earlier.', team=team.name, day=(current.paid_until + timedelta_one_day)|date_display, fee=team.fee_display or '') }}</div>
                     {% elif current and current.status == 'active' and current.ends_with_association %}
                         <div class="small">{{ _('Ends with your association membership on %(day)s.', day=current.ends_on|date_display) }}</div>
+                    {% elif current and current.status == 'active' and current.payment_mode == 'one_time' and current.paid_until %}
+                        <div class="small">
+                            {% if current.ends_on %}{{ _('You leave on %(day)s.', day=current.ends_on|date_display) }}{% else %}{{ _('Paid until %(day)s.', day=current.paid_until|date_display) }}{% endif %}
+                        </div>
+                        {% if current.payment_state == 'processing' %}
+                            <div class="alert alert-info mb-0">{{ _('Payment received. It is confirmed in a moment; by SEPA debit it can take a few days.') }}</div>
+                        {% elif renewal_open(current) %}
+                            <div class="alert alert-warning mb-0">{{ _('Pay for the next period, until %(day)s, to stay without a gap.', day=next_period_until(current)|date_display) }}{% if current.payment_state == 'failed' %} {{ _('The last payment did not go through.') }}{% endif %}</div>
+                        {% endif %}
                     {% elif current and current.status == 'active' and current.stripe_subscription_id %}
                         <div class="small">
                             {% if current.ends_on %}
@@ -70,6 +83,12 @@
                     <div class="d-flex flex-wrap gap-2 mt-auto">
                         {% if current and current.status == 'active' %}
                             <a class="btn btn-primary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Open') }}</a>
+                            {% if renewal_open(current) and current.payment_state != 'processing' %}
+                                <form method="POST" action="{{ url_for('teams.team_pay', slug=team.slug) }}" class="mb-0" data-busy-text="{{ _('Opening…') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-primary">{{ _('Pay for next period') }}</button>
+                                </form>
+                            {% endif %}
                             {% if needs_to_pay(current) %}
                                 <form method="POST" action="{{ url_for('teams.team_pay', slug=team.slug) }}" class="mb-0" data-busy-text="{{ _('Opening…') }}">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

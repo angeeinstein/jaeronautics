@@ -272,9 +272,15 @@ def update_team(actor, team, **fields):
 
 
 def _paying(team):
-    """Memberships of this team with a subscription still charging."""
-    return [m for m in team.memberships
-            if m.stripe_subscription_id and m.payment_mode != PAYMENT_NONE and m.status in (APPROVED, ACTIVE)]
+    """Memberships of this team still paying: a subscription charging, or a
+    period paid once that has not run out."""
+    from .clock import get_membership_today
+
+    today = get_membership_today()
+    return [m for m in team.memberships if m.status in (APPROVED, ACTIVE) and (
+        (m.stripe_subscription_id and m.payment_mode == "subscription")
+        or (m.payment_mode == "one_time" and m.paid_until is not None and m.paid_until >= today)
+    )]
 
 
 def set_team_archived(actor, team, archived, *, confirmed_name=None):
@@ -585,6 +591,7 @@ END_MEMBERSHIP_ENDED = "membership_ended"
 END_ACCOUNT_ERASED = "account_erased"
 END_NOT_PAID = "not_paid_in_time"
 END_PAYMENT_FAILED = "payment_failed"
+END_NOT_RENEWED = "not_renewed"
 
 #: How long an approval waits for its payment before it lapses and the person
 #: has to apply again.
@@ -611,6 +618,7 @@ END_REASON_LABELS = {
     END_ACCOUNT_ERASED: "Account erased",
     END_NOT_PAID: "Not paid in time",
     END_PAYMENT_FAILED: "Payment failed",
+    END_NOT_RENEWED: "Not renewed",
 }
 
 
@@ -815,14 +823,19 @@ def leave(user, team, message=None):
         raise ConflictError("You are not a member of this team.", code="team_not_a_member")
     membership = _locked_membership(current.id, team)
     _require_status(membership, {ACTIVE}, "You are not a member of this team.")
-    if membership.stripe_subscription_id and membership.payment_mode != PAYMENT_NONE:
+    from .clock import get_membership_today
+
+    paid_once = (membership.payment_mode == "one_time" and membership.paid_until is not None
+                 and membership.paid_until >= get_membership_today())
+    if paid_once or (membership.stripe_subscription_id and membership.payment_mode == "subscription"):
         from . import payments
         from .membership import format_membership_date_display
 
         if membership.ends_on is not None:
             return membership
-        # Stripe stops at the end of what is paid; the membership runs to then.
-        payments.set_cancel_at_period_end(membership.stripe_subscription_id, True)
+        if not paid_once:
+            # Stripe stops at the end of what is paid; the membership runs to then.
+            payments.set_cancel_at_period_end(membership.stripe_subscription_id, True)
         membership.ends_on = membership.paid_until or get_now_utc().date()
         membership.end_note = message
         _audit("team_leaving", user, membership, ends_on=membership.ends_on.isoformat())
@@ -853,7 +866,8 @@ def stay(user, team):
     membership = _locked_membership(current.id, team)
     from . import payments
 
-    payments.set_cancel_at_period_end(membership.stripe_subscription_id, False)
+    if membership.stripe_subscription_id and membership.payment_mode == "subscription":
+        payments.set_cancel_at_period_end(membership.stripe_subscription_id, False)
     membership.ends_on = None
     _audit("team_leaving_cancelled", user, membership)
     return membership
@@ -906,7 +920,7 @@ def may_rejoin_by_paying(user, team, today=None):
         db.select(TeamMembership).filter_by(team_id=team.id, user_id=user.id, status=ENDED)
         .order_by(TeamMembership.id.desc())
     ).scalars().first()
-    if last is None or last.end_reason != END_PAYMENT_FAILED or last.ended_at is None:
+    if last is None or last.end_reason not in (END_PAYMENT_FAILED, END_NOT_RENEWED) or last.ended_at is None:
         return False
     return (today - last.ended_at.date()).days <= REJOIN_DAYS
 

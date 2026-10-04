@@ -18,6 +18,9 @@
             {% if runs_to_end %}
                 <li>{{ _('You stay in the team until %(day)s, the end of what you have paid for. Your subscription stops then and nothing more is charged. There is no refund.', day=membership.paid_until|date_display) }}</li>
                 <li>{{ _('Until then you can take it back on the Teams page.') }}</li>
+            {% elif paid_once_until %}
+                <li>{{ _('You stay in the team until %(day)s, the end of what you have paid for. There is no refund.', day=paid_once_until|date_display) }}</li>
+                <li>{{ _('Until then you can take it back on the Teams page.') }}</li>
             {% else %}
                 <li>{{ _('You leave at once.') }}</li>
             {% endif %}
