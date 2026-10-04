@@ -1,0 +1,7 @@
+{#- A legal text itself: shown on its page, and alone (?part=body) in the window
+    over the signup form. -#}
+<div class="legal-text" lang="de">
+    <h2 class="legal-title">{{ rendered.title }}</h2>
+    <p class="text-muted small">{{ _('Version of %(day)s', day=rendered.version|date_display) }}{% if rendered.version != in_force %} · <strong>{{ _('No longer in force; the current version is of %(day)s.', day=in_force|date_display) }}</strong>{% endif %}</p>
+    {{ rendered.html }}
+</div>

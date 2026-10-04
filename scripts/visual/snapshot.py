@@ -282,6 +282,8 @@ def seed(app, app_module, subscriptions):
         {"name": "public--forgot-password", "path": "/forgot-password"},
         {"name": "public--reset-password", "path": f"/reset-password/{reset_token}"},
         {"name": "public--legal", "path": "/legal"},
+        {"name": "public--legal-statutes", "path": "/legal/statutes"},
+        {"name": "public--signup-legal-dialog", "path": "/join", "click": "a[data-legal-dialog]"},
         {"name": "public--thank-you", "path": "/thank-you?method=checkout&phase=prorated"},
         {"name": "public--thank-you-free", "path": "/thank-you?method=checkout&phase=free_period"},
         {"name": "public--cancel", "path": "/cancel"},

@@ -269,9 +269,10 @@ class MembershipForm(FlaskForm):
         validators=[Optional()],
         default="checkout",
     )
+    # The label is rendered by templates/legal/_accept.html, with the texts linked.
     terms_accepted = BooleanField(
-        _("I consent to the processing of my data as described in the privacy policy."),
-        validators=[InputRequired(message=_l("You must accept the privacy policy to continue."))],
+        _l("I accept the legal texts."),
+        validators=[InputRequired(message=_l("Please accept the legal texts to continue."))],
     )
     submit = SubmitField(_("Proceed to Payment"))
 
@@ -305,9 +306,10 @@ class CreateMembershipProfileForm(FlaskForm):
         validators=[Optional()],
         default="checkout",
     )
+    # The label is rendered by templates/legal/_accept.html, with the texts linked.
     terms_accepted = BooleanField(
-        _("I consent to the processing of my data as described in the privacy policy."),
-        validators=[InputRequired(message=_l("You must accept the privacy policy to continue."))],
+        _l("I accept the legal texts."),
+        validators=[InputRequired(message=_l("Please accept the legal texts to continue."))],
     )
     submit = SubmitField(_("Create Membership and Proceed to Payment"))
 

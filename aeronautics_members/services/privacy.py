@@ -140,6 +140,8 @@ def export_account_data(user):
             "id": member.id,
             "created_at": member.created_at,
             "terms_accepted": member.terms_accepted,
+            "legal_texts_accepted": member.legal_versions_accepted,
+            "legal_texts_accepted_at": member.legal_accepted_at,
             "payment_status": member.payment_status,
             "is_active": member.is_active,
             "membership_starts_on": member.membership_starts_on,

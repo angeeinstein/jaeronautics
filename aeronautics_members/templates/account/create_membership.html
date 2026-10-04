@@ -53,12 +53,7 @@
                             </div>
                             {% endif %}
                             <div class="col-12">
-                                <div class="form-check">
-                                    {{ form.terms_accepted(class='form-check-input') }}
-                                    <label class="form-check-label" for="{{ form.terms_accepted.id }}">
-                                        {{ _('I accept the') }} <a href="{{ url_for('public.legal_texts') }}" target="_blank">{{ _('Terms and Conditions') }}</a>
-                                    </label>
-                                </div>
+                                {% with field=form.terms_accepted %}{% include "legal/_accept.html" %}{% endwith %}
                             </div>
                             <div class="col-12 d-flex gap-2">
                                 <a href="{{ url_for('account.account') }}" class="btn btn-secondary">{{ _('Back') }}</a>

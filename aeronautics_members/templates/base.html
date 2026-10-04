@@ -16,7 +16,7 @@
     <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 </head>
-<body class="app-shell" data-confirm-label="{{ _('Yes, confirm') }}">
+<body class="app-shell" data-confirm-label="{{ _('Yes, confirm') }}" data-legal-close-label="{{ _('Close') }}" data-legal-open-label="{{ _('Open in a new tab') }}">
     <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
         <div class="container-fluid">
             <a class="navbar-brand" href="{{ url_for('public.index') }}" aria-label="{{ _('Joanneum Aeronautics') }}">
@@ -106,7 +106,7 @@
                     {% if footer.statutes_url %}
                         <a href="{{ footer.statutes_url }}" target="_blank" rel="noopener">{{ _('Statutes') }}</a>
                     {% else %}
-                        <a href="{{ url_for('public.legal_texts') }}">{{ _('Statutes') }}</a>
+                        <a href="{{ url_for('public.legal_text', slug='statutes') }}">{{ _('Statutes') }}</a>
                     {% endif %}
                 </li>
                 <li><a href="mailto:{{ footer.contact_email }}">{{ _('Contact') }}</a></li>

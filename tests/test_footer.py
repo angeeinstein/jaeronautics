@@ -36,7 +36,7 @@ def test_until_configured_the_links_lead_to_the_website_and_the_legal_page(clien
     footer = body.split('<footer class="site-footer">')[1]
 
     assert footer.count('href="https://joanneum-aeronautics.at"') == 3  # Impressum, privacy, website
-    assert 'href="/legal"' in footer
+    assert 'href="/legal/statutes"' in footer
 
 
 def test_configured_addresses_are_used(client, monkeypatch):
@@ -49,4 +49,4 @@ def test_configured_addresses_are_used(client, monkeypatch):
     assert 'href="https://example.org/impressum"' in footer
     assert 'href="https://example.org/privacy"' in footer
     assert 'href="https://example.org/statutes"' in footer
-    assert 'href="/legal"' not in footer
+    assert 'href="/legal/statutes"' not in footer

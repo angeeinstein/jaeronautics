@@ -43,9 +43,12 @@ urgent.
   verified by a link and is how a student shows they are one.
 - Member category (student, alumni, staff or lecturer, company or partner,
   honorary) and year group (cohort); required for students.
-- That the terms were accepted: a yes/no, with the signup date. The texts have
-  no version numbers yet, so the signup date stands for the version accepted
-  (the texts in force that day). **To-do:** give the texts a version date.
+- That the legal texts were accepted: a yes/no, and since October 2026 which
+  version of each text (statutes, rules of procedure, membership terms,
+  privacy statement -- by the day each version took effect) and when. For
+  those who signed up before, the signup date stands for the version (the
+  texts in force that day). The texts and all their versions are in the
+  repository, `legal/`, and readable at `/legal`.
 
 **Membership and payment**
 - Membership start, end, renewal date, status, whether cancelled for the end
@@ -99,16 +102,26 @@ urgent.
 | **Team leads** (fellow members) | Applicants' and members' name, university and private email, phone, cohort, member since, paid until (page and CSV export); notes. | Running the team. |
 | **Team treasurer / association treasurer** | Who paid what for the team, the team's bank details. | Passing the money on to the team. |
 | **Admins** | Everything above. | Running the association. |
+| **Cloudflare** (Cloudflare, Inc., US; EU data processing addendum) | Every request to the portal passes through Cloudflare's network (Cloudflare Tunnel): visitor IP address, the pages and form contents in transit, which Cloudflare decrypts and re-encrypts. Possibly Web Analytics (see below). | Reaching the server without opening it to the internet; protection from attacks. **To-do:** name it in the privacy statement. |
 
-No analytics, no advertising, no tracking pixels. Pages load nothing from
-other servers (fonts, scripts and styles are served by the portal itself).
-Stripe's payment page is Stripe's own, under Stripe's privacy policy.
+No advertising, no tracking pixels, and the portal itself adds no
+analytics. Its pages load nothing from other servers (fonts, scripts and
+styles are served by the portal itself) -- except that the security policy
+allows Cloudflare's Web Analytics script (`static.cloudflareinsights.com`),
+which Cloudflare inserts into pages if Web Analytics is switched on for the
+site in the Cloudflare dashboard. It counts visits without cookies.
+**To-do:** check in the Cloudflare dashboard whether it is on; if so, name it
+in the privacy statement, or switch it off and remove it from the policy
+(`deploy/nginx/aeronautics.conf`). Stripe's payment page is Stripe's own,
+under Stripe's privacy policy.
 
 ## 4. Cookies
 
 - One session cookie, set by the portal: keeps a person signed in, holds the
   form protection token. Secure, HttpOnly, SameSite=Lax, valid 7 days.
 - No other cookies from the portal. Stripe's payment page sets its own.
+  Cloudflare may set its own security cookies (e.g. `__cf_bm`, for telling
+  bots from people), which are needed for the service too.
 - Needed for the service, so no consent banner is needed; the privacy
   statement should still describe the cookie.
 
@@ -196,8 +209,8 @@ Stripe's payment page is Stripe's own, under Stripe's privacy policy.
 
 ## 9. The statutes and rules of procedure vs. the portal
 
-The texts on the portal's `/legal` page are Statutes Rev 1 (17.03.2019) and
-Rules of Procedure Rev 3 (26.02.2020). Where they no longer match:
+The texts on the portal's `/legal` page (files in `legal/`) are Statutes
+Rev 1 (17.03.2019) and Rules of Procedure Rev 3 (26.02.2020). Where they no longer match:
 
 - **Admission** (Statutes § 5 (2)): "the board decides on admission". The
   portal admits on payment, without a board decision — more relaxed than the
@@ -227,19 +240,24 @@ Rules of Procedure Rev 3 (26.02.2020). Where they no longer match:
   decided by an admin.
 - **Invitations to the general meeting** (Statutes § 9 (3)): by email to the
   address given — the portal holds that address (private email).
-- The signup checkbox says "I accept the Terms and Conditions" and links to
-  the statutes page; there are no separate terms. **To-do:** write the terms
-  (§ 8), link them and the privacy statement at signup.
+- The signup checkbox names and links the statutes, rules of procedure,
+  membership terms and privacy statement. The terms and the privacy statement
+  are placeholders. **To-do:** write them (section 8 and the sections above).
 
 ## 10. To-do
 
 Collected so nothing is forgotten; none of it is urgent.
 
 **Legal texts**
-- [ ] Write the terms (section 8) and the portal's part of the privacy
-      statement; link both at signup and in the footer.
-- [ ] Give the legal texts a version date. Until then, the signup date stands
-      for the version a member accepted.
+- [ ] Write the membership terms (section 8) and the privacy statement,
+      replacing the placeholders in `legal/membership-terms/` and
+      `legal/privacy/` -- before the next update of the live portal. Then
+      point the footer's Privacy link at `/legal/privacy` (`PRIVACY_URL`)
+      if the portal's statement is the one meant.
+- [x] Give the legal texts a version date: done, versions are files by
+      date and the versions accepted are kept with the member.
+- [ ] Withdrawal notice (Rücktrittsbelehrung) and impressum: add them as
+      `legal/withdrawal/<day>.md` and `legal/legal-notice/<day>.md` once written.
 - [ ] Statutes: admission open, board may decide or make it stricter.
 - [ ] Statutes: leaving by online cancellation, at the end of the paid year.
 - [ ] Rules of procedure: the fee is €15 for everyone, collected through
@@ -256,6 +274,7 @@ Collected so nothing is forgotten; none of it is urgent.
 - [ ] Check Stripe's "upcoming renewal" and "failed payment" emails are on
       (live and test), and note the reminder's lead time for the terms.
 - [ ] Note where the forum is hosted.
+- [ ] Check whether Cloudflare Web Analytics is on (section 3).
 
 ## 11. For the impressum
 

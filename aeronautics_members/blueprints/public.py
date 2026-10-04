@@ -14,6 +14,7 @@ from ..config import (
     RATELIMIT_MEMBERSHIP_PER_IP,
     STRIPE_PUBLISHABLE_KEY,
 )
+from ..services import legal_texts as legal
 from ..services.audit import (
     log_audit_event,
     snapshot_member_for_audit,
@@ -43,10 +44,12 @@ from ..services.signup import (
 )
 from ._signup import start_membership
 from datetime import (
+    date,
     datetime,
     timezone,
 )
 from flask import (
+    abort,
     flash,
     jsonify,
     redirect,
@@ -242,9 +245,52 @@ def cancel():
     return render_template("cancel.html")
 
 
+@public_bp.app_context_processor
+def inject_legal_texts():
+    """The texts accepted at signup, for the one tick on the signup forms."""
+    def legal_texts_to_accept():
+        return [text for text, _version in legal.available() if text.accepted_at_signup]
+
+    return {"legal_texts_to_accept": legal_texts_to_accept}
+
+
 @public_bp.route("/legal")
 def legal_texts():
-    return render_template("legal_texts.html")
+    """Every legal text in force, with the day its version took effect."""
+    return render_template("legal/index.html", texts=legal.available())
+
+
+@public_bp.route("/legal/<slug>")
+@public_bp.route("/legal/<slug>/<version>")
+def legal_text(slug, version=None):
+    """One legal text: the version in force, or an earlier one by its day.
+
+    With ``?part=body`` only the text itself, for reading it in a window over a
+    form -- the signup -- without leaving it.
+    """
+    if slug not in legal.BY_SLUG:
+        abort(404)
+    in_force = legal.current_version(slug)
+    if version is None:
+        shown = in_force
+    else:
+        try:
+            shown = date.fromisoformat(version)
+        except ValueError:
+            abort(404)
+        if in_force is None or shown > in_force:
+            abort(404)  # not yet in force: not shown before its day
+    rendered = legal.render(slug, shown) if shown else None
+    if rendered is None:
+        abort(404)
+    template = "legal/_body.html" if request.args.get("part") == "body" else "legal/text.html"
+    return render_template(
+        template,
+        text=legal.BY_SLUG[slug],
+        rendered=rendered,
+        in_force=in_force,
+        earlier=[v for v in legal.versions(slug) if v != shown and v <= in_force],
+    )
 
 
 @public_bp.route("/__health", methods=["GET"])

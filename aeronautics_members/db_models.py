@@ -250,6 +250,10 @@ class Member(db.Model):
     # here, so the two say different things about a person.
     year_group = db.Column(db.String(50), nullable=True)
     terms_accepted = db.Column(db.Boolean, nullable=False, default=False)
+    # Which legal texts were accepted at signup, by version: {"privacy": "2026-10-04", ...}
+    # (see services/legal_texts.py), and when. Empty for those who signed up before.
+    legal_versions_accepted = db.Column(db.JSON, nullable=True)
+    legal_accepted_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     pending_checkout_started_at = db.Column(db.DateTime, nullable=True)
     # When a signup that was never paid was told it will be removed; see

@@ -186,9 +186,60 @@ Stripe itself never announces a price change. For SEPA debits it does email
 the amount before every collection (two days ahead, under the mandate members
 accept at checkout), which covers the banking rule; the portal's own email is
 the real notice. Change a fee at least two weeks before the next renewal, so
-the email still goes out on time -- and update the fee rules in
-`legal_texts.html` for the membership. A move that keeps failing shows under the health check's failed
+the email still goes out on time -- and update the fee rules in the legal
+texts (`legal/`, see "Legal Texts") for the membership. A move that keeps failing shows under the health check's failed
 external work. Archive the old price in Stripe once nobody is on it.
+
+## Legal Texts
+
+The statutes, rules of procedure, membership terms, privacy statement and the
+rest are Markdown files in the repository, one folder per text and one file
+per version, named after the day it takes effect:
+
+```
+legal/statutes/2019-03-17.md
+legal/privacy/2026-10-04.md
+```
+
+The portal shows `/legal` (the list), `/legal/<text>` (the version in force)
+and `/legal/<text>/<day>` (an older one, marked as no longer in force). The
+version in force is the newest file whose day has come; a file dated in the
+future stays hidden, also by its address, until that day and then switches
+over by itself.
+
+**Changing a text:** add a new file next to the old one -- never edit a
+version people have already accepted -- commit it, and update the server.
+Write it in German. The first line is the title (`# Statuten`); each `## `
+heading becomes an entry in the contents list, and `## §5. …` gets the
+address `#paragraph-5`. Raw HTML is shown as text, not run; lists, bold,
+links and tables work. The tests in `tests/test_legal_texts.py` check every
+file in `legal/` (folder known, name a real day, title present), so a
+mistake fails CI rather than the page.
+
+**Which texts there are** is the list `LEGAL_TEXTS` in
+`services/legal_texts.py`: folder, German title, English name for links,
+and whether it is accepted at signup. A registered text without a file is
+not shown. Adding a text is a line there and a folder here. Currently
+accepted at signup: statutes, rules of procedure, membership terms, privacy
+statement. The withdrawal notice and impressum are registered but have no
+file yet. Team rules are not here: each team keeps its own on its page.
+
+**At signup** the one checkbox names every text accepted then, each a link.
+A click opens the text in a window over the form (`static/legal-dialog.js`
+fetches `/legal/<text>?part=body`); without JavaScript it opens in a new tab.
+Either way nothing typed into the form is lost. The member keeps which
+version of each text was accepted, and when (`legal_versions_accepted`,
+`legal_accepted_at`; in the member's data export). Members who signed up
+before October 2026 have neither; for them the signup date stands for the
+version.
+
+**The membership terms and privacy statement are placeholders** -- obvious
+nonsense, marked as such -- until the real texts are written. Replace them
+before this reaches the live portal.
+
+**Footer:** Impressum, Privacy and Statutes link to the addresses set by
+`IMPRESSUM_URL`, `PRIVACY_URL` and `STATUTES_URL`. Impressum and Privacy
+default to the main website; Statutes, unset, links to `/legal/statutes`.
 
 ## Legal Notes
 

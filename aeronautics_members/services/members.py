@@ -11,7 +11,8 @@ immediately, which is why they are listed separately from the contact fields a
 member may edit freely.
 """
 
-from ..db_models import Member, db
+from ..db_models import Member, db, utcnow
+from . import legal_texts
 
 DIRECT_MEMBER_PROFILE_FIELDS = (
     "street",
@@ -57,6 +58,10 @@ def apply_member_profile(member, form_data, fields=MEMBER_PROFILE_FIELDS):
         setattr(member, field_name, value)
     if "terms_accepted" in form_data:
         member.terms_accepted = bool(form_data.get("terms_accepted"))
+        if member.terms_accepted:
+            # What was on the page when the box was ticked.
+            member.legal_versions_accepted = legal_texts.versions_to_accept()
+            member.legal_accepted_at = utcnow()
 
     # A confirmation belongs to the address that was confirmed, never to the
     # member. Carrying it across a change would be a way in: confirm an address
