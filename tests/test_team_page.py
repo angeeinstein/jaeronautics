@@ -1,6 +1,7 @@
-"""A team's own page: what it does, a picture, its rules, and applying there.
+"""A team's join page: what it does, a picture, its rules, and applying there.
 
-Every signed-in visitor sees the page; who is in the team only its members.
+Every signed-in visitor sees it, at /teams/<team>/about; the team's own page,
+with who is in it, is for its members, and sends anybody else here.
 A team with rules needs them ticked to apply or join, and the membership
 keeps when and which version (the day the rules last changed). Leads and site
 admins edit the page; every change to the rules is logged.
@@ -56,7 +57,7 @@ class TestThePage:
         db.session.commit()
         _login(client, _person().id)
 
-        body = client.get("/teams/rocket").get_data(as_text=True)
+        body = client.get("/teams/rocket/about").get_data(as_text=True)
 
         assert "We build rockets." in body and f"/teams/picture/{team.picture_token}" in body
         assert 'action="/teams/rocket/join"' in body and 'name="accept_terms"' not in body
@@ -69,16 +70,40 @@ class TestThePage:
 
         body = client.get("/teams").get_data(as_text=True)
 
-        assert 'href="/teams/rocket#join"' in body and 'action="/teams/rocket/join"' not in body
+        assert 'href="/teams/rocket/about"' in body and 'action="/teams/rocket/join"' not in body
 
     def test_shows_the_rules_with_a_box_to_tick(self, app, client):
         team, _lead = _led()
         _with_rules(team)
         _login(client, _person().id)
 
-        body = client.get("/teams/rocket").get_data(as_text=True)
+        body = client.get("/teams/rocket/about").get_data(as_text=True)
 
         assert "Safety briefing before every flight." in body and 'name="accept_terms"' in body
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestTheTeamsOwnPage:
+    def test_sends_anybody_not_in_the_team_to_the_join_page(self, app, client):
+        _led()
+        _login(client, _person().id)
+
+        assert client.get("/teams/rocket").headers["Location"].endswith("/teams/rocket/about")
+
+    def test_shows_members_their_team_without_the_join_page(self, app, client, picture_dir):
+        team, _lead = _led()
+        teams.update_team_page(None, team, about="We build rockets.", terms_text=RULES)
+        teams.set_team_picture(None, team, _png())
+        anna = _person()
+        _in_team(anna, team)
+        db.session.commit()
+        _login(client, anna.id)
+
+        body = client.get("/teams/rocket").get_data(as_text=True)
+
+        assert "Lena Lead" in body and "Anna Berger" in body
+        assert "We build rockets." not in body and team.picture_token not in body
+        assert 'action="/teams/rocket/join"' not in body and 'href="/teams/rocket/about"' in body
 
 
 class TestThePicture:
@@ -117,7 +142,7 @@ class TestTheRules:
         _login(client, anna.id)
 
         refused = client.post("/teams/rocket/join", data={})
-        assert refused.headers["Location"].endswith("/teams/rocket#join")
+        assert refused.headers["Location"].endswith("/teams/rocket/about#join")
         assert teams.ongoing_membership(anna, team) is None
 
         client.post("/teams/rocket/join", data={"accept_terms": "on"})

@@ -254,10 +254,12 @@ details, and anything about the association membership itself.
   among themselves on SharePoint and Microsoft Teams). Later perhaps a prepaid
   balance for the drinks terminal, documents, dates. It should be built so that
   sections can be added without reworking the page.
-- **The same page for everyone, to apply from** — *built (October 2026).*
-  Every signed-in visitor sees what the team does ("About the team"), one
-  picture, the fee and the team's rules, and applies or joins there; who is in
-  the team stays for its members. Leads and site admins edit the texts.
+- **An About page for everyone, to apply from** — *built (October 2026).*
+  `/teams/<name>/about`: every signed-in visitor sees what the team does, one
+  picture, the fee and the team's rules, and applies or joins there. The
+  members' page stays separate and lean -- their membership and who is in the
+  team -- and sends anybody else to the About page. Leads and site admins edit
+  the texts.
 - **Team rules to accept** — *built.* Teams may have rules of their own, like
   the association's terms at signup: applying or joining needs them ticked,
   and the membership keeps when and which version (the day the rules last

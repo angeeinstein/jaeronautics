@@ -682,10 +682,12 @@ this is how to use them.
    holder is a member of the association *and* of the team, so the lead joins
    the team like anybody else and an admin approves them.
 
-**The team's page** (`/teams/<short name>`): every signed-in visitor sees the
-logo, name, an "About the team" text, one optional picture, the fee, the
-team's rules and the form to apply or join; its members also see who is in it.
-The overview shows each team's short description and leads there. The texts,
+**A team's About page** (`/teams/<short name>/about`): every signed-in visitor
+sees the logo, name, an "About the team" text, one optional picture, the fee,
+the team's rules and the form to apply or join. The overview shows each team's
+short description and leads there. **The team's own page**
+(`/teams/<short name>`) is for its members: their membership and who is in the
+team, without the texts; anybody else is sent to the About page. The texts,
 picture and rules are edited by the team's leads (Manage → Settings) and by
 site admins (Admin → Teams). Rules are optional; a team with rules needs them
 ticked to apply or join, and each membership keeps when they were accepted and

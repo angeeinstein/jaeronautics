@@ -17,64 +17,18 @@
         </div>
         <div class="d-flex flex-wrap align-items-center gap-2">
             {% if current %}{{ status_label(current.status, status_labels) }}{% elif last %}{{ status_label(last.status, status_labels) }}{% endif %}
+            <a class="btn btn-secondary" href="{{ url_for('teams.team_about', slug=team.slug) }}">{{ _('About the team') }}</a>
             <a class="btn btn-secondary" href="{{ url_for('teams.teams_home') }}">{{ _('All %(label)s', label=label_plural) }}</a>
         </div>
     </div>
 </div>
 
-{% if team.about or team.picture_token %}
-<section class="card mb-4" aria-labelledby="team-about-heading">
-    <div class="card-header"><h4 class="mb-0" id="team-about-heading">{{ _('About the team') }}</h4></div>
-    <div class="card-body team-about">
-        {% if team.picture_token %}
-            <img class="team-picture" src="{{ url_for('teams.team_picture', token=team.picture_token) }}"
-                 alt="{{ _('Picture of %(team)s', team=team.name) }}" loading="lazy">
-        {% endif %}
-        {% if team.about %}<div class="team-text">{{ team.about }}</div>{% endif %}
-    </div>
-</section>
-{% endif %}
-
-<section class="card mb-4" aria-labelledby="team-membership-heading" id="join">
-    <div class="card-header"><h4 class="mb-0" id="team-membership-heading">{{ _('Membership') if current and current.status == 'active' else (_('Applying') if team.admission_mode == 'approval' else _('Joining')) }}</h4></div>
+<section class="card mb-4" aria-labelledby="team-membership-heading">
+    <div class="card-header"><h4 class="mb-0" id="team-membership-heading">{{ _('Your membership') }}</h4></div>
     <div class="card-body d-flex flex-column gap-3">
-        {% if not current and team.admission_mode == 'approval' %}
-            <p class="mb-0 text-muted small">{{ _('You apply here; the leads get in touch, may invite you to meet, and decide.') }}</p>
-        {% endif %}
         {% set on_team_page = true %}
         {% include "teams/_membership.html" %}
-
-        {% if not current %}
-            {% if not is_member %}
-                <p class="mb-0">{{ _('Teams are for members of the association.') }}</p>
-            {% elif why_not_joinable(team) %}
-                <p class="mb-0 text-muted">{{ _(why_not_joinable(team)) }}</p>
-            {% else %}
-                <form method="POST" action="{{ url_for('teams.team_join', slug=team.slug) }}" class="mb-0 d-flex flex-column gap-3" data-busy-text="{{ _('Sending…') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    {% if team.admission_mode == 'approval' and team.application_prompt %}
-                        <div>
-                            <label class="form-label" for="application-text">{{ team.application_prompt }}</label>
-                            <textarea class="form-control" id="application-text" name="application_text" rows="4" maxlength="5000"></textarea>
-                        </div>
-                    {% endif %}
-                    {% if team.terms_text %}
-                        <div>
-                            <div class="form-label">{{ _('Rules of %(team)s', team=team.name) }}</div>
-                            <div class="team-terms" tabindex="0" role="region" aria-label="{{ _('Rules of %(team)s', team=team.name) }}">{{ team.terms_text }}</div>
-                            <div class="form-text">{{ _('As of %(day)s.', day=team.terms_updated_at|date_display) }}</div>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="accept-terms" name="accept_terms" required>
-                            <label class="form-check-label" for="accept-terms">{{ _('I accept the rules of %(team)s.', team=team.name) }}</label>
-                        </div>
-                    {% endif %}
-                    <div>
-                        <button type="submit" class="btn btn-primary">{{ _('Apply') if team.admission_mode == 'approval' else _('Join') }}</button>
-                    </div>
-                </form>
-            {% endif %}
-        {% elif team.terms_text %}
+        {% if current and team.terms_text %}
             <details>
                 <summary class="small">{{ _('Rules of %(team)s', team=team.name) }}</summary>
                 <div class="team-terms mt-2">{{ team.terms_text }}</div>
@@ -85,7 +39,6 @@
     </div>
 </section>
 
-{% if sees_members %}
 <section class="card mb-4" aria-labelledby="team-members-heading">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="mb-0" id="team-members-heading">{{ _('Members') }}</h4>
@@ -109,5 +62,4 @@
         {% endif %}
     </div>
 </section>
-{% endif %}
 {% endblock %}

@@ -397,6 +397,20 @@ def _member_action(slug, action):
     return team, False
 
 
+@teams_bp.route("/teams/<slug>/about", methods=["GET"])
+@login_required
+def team_about(slug):
+    """What a team does, its rules, and applying or joining -- for everyone
+    signed in. Its members' own page is team_page."""
+    team = _team_or_404(slug)
+    return render_template(
+        "teams/about.html",
+        team=team,
+        sees_members=_sees_team_page(team),
+        **_membership_context(),
+    )
+
+
 @teams_bp.route("/teams/<slug>/join", methods=["POST"])
 @login_required
 def team_join(slug):
@@ -407,15 +421,16 @@ def team_join(slug):
         )
     )
     if not done:
-        return redirect(url_for("teams.team_page", slug=team.slug) + "#join")
+        return redirect(url_for("teams.team_about", slug=team.slug) + "#join")
     current = teams_service.ongoing_membership(current_user, team)
     if current is not None and current.status == teams_service.APPROVED:
         flash(_("One step left: pay the team fee."), "success")
     elif team.admission_mode == teams_service.ADMISSION_OPEN:
         flash(_("Welcome to %(team)s.", team=team.name), "success")
+        return redirect(url_for("teams.team_page", slug=team.slug))
     else:
         flash(_("Application sent. The leads will be in touch."), "success")
-    return redirect(url_for("teams.team_page", slug=team.slug))
+    return redirect(url_for("teams.team_about", slug=team.slug))
 
 
 @teams_bp.route("/teams/<slug>/pay", methods=["POST"])
@@ -499,19 +514,19 @@ def team_leave(slug):
 @teams_bp.route("/teams/<slug>", methods=["GET"])
 @login_required
 def team_page(slug):
-    """A team's own page: what it does, its rules, applying or joining -- and,
-    for its members, who is in it.
+    """The team's own page, for its members: their membership and who is in
+    the team. Anybody else is shown what the team does and how to join.
 
     Built as sections so that more can be added -- documents, dates, a drinks
     balance -- without reworking it.
     """
     team = _team_or_404(slug)
-    sees_members = _sees_team_page(team)
+    if not _sees_team_page(team):
+        return redirect(url_for("teams.team_about", slug=team.slug))
     return render_template(
         "teams/team.html",
         team=team,
-        sees_members=sees_members,
-        roster=teams_service.roster(team) if sees_members else [],
+        roster=teams_service.roster(team),
         my_membership=teams_service.active_team_membership(current_user, team),
         can_manage=_manages_people(team),
         **_membership_context(),

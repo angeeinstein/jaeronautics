@@ -102,7 +102,7 @@ class TestJoining:
         anna = _person()
         _login(client, anna.id)
 
-        assert "Why do you want to join?" in client.get("/teams/rocket").get_data(as_text=True)
+        assert "Why do you want to join?" in client.get("/teams/rocket/about").get_data(as_text=True)
         client.post("/teams/rocket/join", data={"application_text": "I like rockets."})
 
         membership = teams.ongoing_membership(anna, team)
@@ -230,12 +230,12 @@ class TestTheTeamPage:
         assert "Lena Lead" in body
         assert "anna@example.com" not in body, "the private address is for the leads only"
 
-    def test_others_see_the_team_but_not_who_is_in_it(self, app, client):
+    def test_others_are_shown_how_to_join_not_who_is_in_it(self, app, client):
         _led()
         _login(client, _person().id)
 
-        body = client.get("/teams/rocket").get_data(as_text=True)
-
+        assert client.get("/teams/rocket").headers["Location"].endswith("/teams/rocket/about")
+        body = client.get("/teams/rocket/about").get_data(as_text=True)
         assert "Rocket" in body and 'id="join"' in body
         assert "Lena Lead" not in body
 
