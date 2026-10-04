@@ -1,13 +1,21 @@
 # Frontend Structure
 
 How the portal is laid out and navigated: the blueprint for reworking the
-current pages and, later, for a new front end (React or similar). It describes
-**where things are and how one moves between them**, not pixel styling.
+current pages and, later, for a new front end (React or similar).
 
 Chosen in October 2026 from three clickable mockups: **version A, "Admin
 sidebar"**. The mockup is kept in [`docs/design/navigation-mockup.html`](design/navigation-mockup.html)
-(open it in a browser; switch to version A at the top). Where this document and
-the mockup disagree, this document wins; the mockup has example data and
+(open it in a browser; switch to version A at the top), with screenshots in
+[`docs/design/navigation-a/`](design/navigation-a/).
+
+**What is decided and what is a guide.** The *structure* is the decision:
+the areas, the sidebars and what is in them, breadcrumbs, where tabs are used,
+where each page lives, how phones behave (sections 2-6, 9-11). The *look* --
+colours, fonts, sizes, spacing, button styles (sections 7, 8 and 14) -- is
+what the mockup used and what felt right; it is a reference for the overall
+impression, a starting point, not values to reproduce exactly. Improve on it
+freely as long as the result stays calm, dark and clear. Where this document
+and the mockup disagree, this document wins; the mockup has example data and
 leaves things out.
 
 ---
@@ -96,7 +104,8 @@ Entered with **Admin** in the top bar; opens on the Dashboard.
 Group labels are small, upper-case and muted; the current item is highlighted
 with a soft accent background and accent text. Each item has a simple line
 icon. Which items appear follows the permissions: the association's
-Treasurer, for example, sees Dashboard and Money only.
+Treasurer, for example, sees only what touches the money they transfer
+(section 15).
 
 **Pages:**
 
@@ -167,7 +176,7 @@ is to be done.
   actions right-aligned on the same line, wrapping under the title on phones.
 - **Breadcrumb**: above the page head, small, links in the accent colour, the
   current page plain.
-- **Cards**: white (or dark) surface, thin border, 10 px radius, header row with
+- **Cards**: a surface slightly lighter than the ground, thin border, rounded corners, header row with
   a title and optional right-aligned note or pill; body with even spacing.
   Borders rather than shadows separate things; the shadow is kept for menus
   and the app frame.
@@ -184,18 +193,20 @@ is to be done.
   banner across the page; errors stay next to the field they concern.
 - **Empty states**: one muted sentence in the card ("Nobody yet.").
 
-## 8. Visual language (as in the mockup)
+## 8. Visual language (a guide)
 
-- **Colours**: a cool, slightly blue-grey ground; white (light) or deep
-  blue-grey (dark) cards; one accent -- the association's cyan, darker in
-  light mode for contrast; semantic green, amber, red for state only.
-- **Light and dark**: the mockup follows the device's setting. The current
-  portal is dark only; whether to offer both is a decision for the redesign
-  (recommended: both, following the device).
-- **Type**: Archivo for headings (a sturdy, slightly technical grotesque),
-  IBM Plex Sans for text, IBM Plex Mono for figures and dates in tables.
-- **Shape**: 6--12 px radii, 1 px borders, generous but even spacing (gaps of
-  8 / 12 / 16 / 24 px).
+- **Dark only** -- *decided.* The association's website, its emails and the
+  portal today are all dark; the portal stays dark rather than following the
+  device. (The mockup also has a light variant; ignore it.)
+- **Colours**: what worked in the mockup -- a deep blue-grey ground, slightly
+  lighter cards, one accent (the association's cyan) for links, the current
+  item and the main button, and green, amber and red only for state. Keep the
+  association's brand colours where they differ.
+- **Type**: the mockup used a sturdy, slightly technical face for headings
+  (Archivo), a plain readable one for text (IBM Plex Sans) and a monospaced one
+  for figures and dates in tables. Any pairing with that character works; a
+  monospaced or tabular face for figures is worth keeping.
+- **Shape**: modest rounding, thin borders rather than shadows, even spacing.
 
 ## 9. Phones and narrow windows (below about 760 px)
 
@@ -277,7 +288,11 @@ In [`docs/design/navigation-a/`](design/navigation-a/), taken from the mockup
 | `21-phone-admin-dashboard.png` | Phone: admin area with the ☰ button, sidebar hidden |
 | `22-phone-admin-menu-open.png` | Phone: the sidebar as a drawer over the dimmed page |
 
-## 14. Measurements and colours (from the mockup)
+## 14. Measurements and colours in the mockup (a guide)
+
+What the mockup used, for reference when rebuilding the overall impression.
+None of it is a requirement: adjust sizes, colours, fonts and button styles as
+the real pages, the brand or a component library suggest.
 
 **Frame**: top bar 54 px high, 1 px bottom border; sidebar 236 px wide (drawer
 260 px on phones), 1 px right border, items 7 px × 10 px padding, 6 px radius,
@@ -295,29 +310,32 @@ titles Archivo semi-bold; table headings 0.78 rem upper-case 0.06 em; hints
 padding; pills 4 px radius, 0.72 rem upper-case; the app frame and menus carry
 the only shadows (`0 1px 2px` + `0 8px 24px`, low opacity).
 
-**Colours** (light / dark):
+**Colours** (the mockup's dark palette; the portal is dark only):
 
-| Token | Light | Dark | Use |
-|---|---|---|---|
-| bg | `#eef3f6` | `#0d1316` | page ground |
-| surface | `#ffffff` | `#141c20` | cards, top bar, sidebar |
-| surface-2 | `#f4f8fa` | `#1a2429` | hover, inputs, team sidebar |
-| fg | `#13222c` | `#e4edf1` | text |
-| muted | `#5a6c78` | `#93a5b0` | descriptions, labels |
-| border | `#d4dfe6` | `#283740` | lines |
-| accent | `#0089a8` | `#2fd0ec` | links, current item, primary button |
-| accent-soft | `#dcf2f8` | `#10343d` | current item background, info pills |
-| ok / ok-soft | `#1d7a4a` / `#e1f3e8` | `#5fd193` / `#13301f` | Active, Paid |
-| warn / warn-soft | `#a5610a` / `#fbefdc` | `#f0b45c` / `#3a2a12` | Ending, Waiting |
-| danger | `#b3261e` | `#ff8a80` | destructive actions |
+| Role | In the mockup | Use |
+|---|---|---|
+| ground | `#0d1316` | page background |
+| surface | `#141c20` | cards, top bar, sidebar |
+| raised | `#1a2429` | hover, inputs, the team's sidebar |
+| text | `#e4edf1` | text |
+| muted | `#93a5b0` | descriptions, labels |
+| line | `#283740` | borders |
+| accent | `#2fd0ec` | links, current item, main button |
+| accent, soft | `#10343d` | current item background, info pills |
+| good | `#5fd193` on `#13301f` | Active, Paid |
+| warning | `#f0b45c` on `#3a2a12` | Ending, Waiting |
+| danger | `#ff8a80` | destructive actions |
 
-The exact CSS is at the top of `docs/design/navigation-mockup.html`.
+The mockup's CSS is at the top of `docs/design/navigation-mockup.html`.
 
-## 15. Open points
+## 15. Decisions and open points
 
-- Light and dark, or dark only (section 8).
-- Whether the association's Treasurer gets a trimmed admin area (Dashboard and
-  Money only) or a page of their own.
-- Whether Admin → Teams and the team's management should merge for site
-  admins (today: the admins' part and the leads' part are separate, linked by
-  *Team page and settings*).
+- **Dark only** -- *decided* (section 8).
+- **Admin → Teams and a team's management stay separate** -- *decided.* They do
+  different things: the admins' part (name, joining, fee, forum group, access
+  list switch, leads, archiving) and the leads' part (people, team page,
+  applying, access list, roles). They link to each other.
+- **What the association's Treasurer sees** -- *open, for later.* Direction:
+  everything that touches the money they transfer to the teams (Money, each
+  team's money and bank details, and whatever leads to those amounts), and
+  nothing else of the admin area.
