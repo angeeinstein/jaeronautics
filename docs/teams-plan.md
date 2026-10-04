@@ -192,10 +192,9 @@ guide.
   list shows each person once, with every period they were in the team and
   when they were last active, most recently active first; whoever is back in
   the team is not on it.
-- **The leads' notes in a data export** — *agreed so far:* left out for now.
-  How leads will use them is not known -- a to-do for the applicant, even a
-  password -- so they are not handed over automatically. Everything else about
-  a person's teams is in the export.
+- **The leads' notes in a data export** — *decided:* included, with the team
+  and the date but not which lead wrote them. They are data about the person
+  (Art. 15). The notes box tells leads so.
 - **The leads' notes when someone erases their account** — *agreed so far:*
   deleted with the account, the simplest rule. Notes the person wrote about
   others as a lead stay.

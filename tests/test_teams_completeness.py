@@ -1,8 +1,8 @@
 """Teams, filling the gaps before they go live.
 
 Somebody downloading their data gets their teams too -- memberships, roles,
-what they wrote when applying -- but not the leads' notes, whose use is not
-settled yet. A site admin sees a person's teams on their account page. And an
+what they wrote when applying, and the leads' notes about them (without
+who wrote them). A site admin sees a person's teams on their account page. And an
 approval for a team that charges lapses when it is not paid within 14 days.
 """
 from datetime import datetime, timedelta, timezone
@@ -19,7 +19,7 @@ from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
 
 @pytest.mark.usefixtures("switched_on")
 class TestTheDataExport:
-    def test_includes_the_teams_but_not_the_leads_notes(self, app):
+    def test_includes_the_teams_and_the_leads_notes(self, app):
         team, lead = _led(application_prompt="Why?")
         anna = _person()
         teams.join_or_apply(anna, team, "I like rockets.")
@@ -34,7 +34,9 @@ class TestTheDataExport:
             "Rocket", teams.APPLIED, "I like rockets.",
         )
         assert exported["teams"]["roles"][0]["role"] == "lead"
-        assert "soldering iron" not in str(exported)
+        [note] = exported["teams"]["notes_by_leads"]
+        assert (note["team"], note["text"]) == ("Rocket", "Owes us a soldering iron.")
+        assert lead.email not in str(exported["teams"])
 
 
 @pytest.mark.usefixtures("switched_on")

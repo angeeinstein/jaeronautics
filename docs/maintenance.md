@@ -684,7 +684,7 @@ this is how to use them.
 
 **Running a team** (its leads, Teams → Manage): applications (invite with the
 meeting details, approve, not accept), members, former members, notes about a
-person (never shown to them, not in their data export), removing somebody
+person (not shown to them, but in their data export, without the author), removing somebody
 (immediately, with a reason that stays in the record), an export of the
 current members, and the team's own settings.
 

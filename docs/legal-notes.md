@@ -7,7 +7,9 @@ those texts does not have to read the code.
 
 Keep it current: whenever a change collects new data, sends data somewhere
 new, keeps it longer or shorter, or changes how money is taken, update this
-file in the same commit. Points marked **Open** still need a decision or a fix.
+file in the same commit. **To-do** marks what is still to be decided or
+written; it is collected in section 10 so nothing is forgotten, without being
+urgent.
 
 *Last reviewed: October 2026.*
 
@@ -18,11 +20,11 @@ file in the same commit. Points marked **Open** still need a decision or a fix.
 - Operator: the association (Verein) Joanneum Aeronautics. The portal is its
   membership administration: signing up, paying the membership fee, the
   member's account, access to the members' forum, teams and their fees.
-- Hosted on a server of the association (Microsoft Azure). **Open:** which
-  Azure region, and whether a data processing agreement with Microsoft is in
-  place (it is part of Azure's standard terms).
+- Hosted on a server of the association in Microsoft Azure, region West
+  Europe (Netherlands). Microsoft's data processing terms are part of Azure's
+  standard terms.
 - The forum (Discourse) is a separate system, signed into through the portal.
-  **Open:** where it is hosted.
+  **To-do:** note where it is hosted.
 - Language of the portal: English only.
 
 ## 2. Personal data the portal holds
@@ -41,8 +43,9 @@ file in the same commit. Points marked **Open** still need a decision or a fix.
   verified by a link and is how a student shows they are one.
 - Member category (student, alumni, staff or lecturer, company or partner,
   honorary) and year group (cohort); required for students.
-- That the terms were accepted (a yes/no with the signup date, not the version
-  of the text accepted). **Open:** keep which version was accepted.
+- That the terms were accepted: a yes/no, with the signup date. The texts have
+  no version numbers yet, so the signup date stands for the version accepted
+  (the texts in force that day). **To-do:** give the texts a version date.
 
 **Membership and payment**
 - Membership start, end, renewal date, status, whether cancelled for the end
@@ -87,8 +90,8 @@ file in the same commit. Points marked **Open** still need a decision or a fix.
 |---|---|---|
 | **Stripe** (Stripe Payments Europe, Ireland; group in the US) | Email address; the member enters name, card or IBAN on Stripe's page. Internal IDs as metadata. | Taking the membership and team fees, receipts, renewal emails, SEPA mandates. Stripe keeps its records under its own retention duties. |
 | **Discourse forum** | Email, forum username, full name, profile picture, year group, groups (member, cohort, teams, staff), admin/moderator flag. | Single sign-on and access to the members' area. Name and picture are visible to other forum members. |
-| **Email provider** (SMTP, set in the admin settings; currently Brevo — **Open:** confirm, and note the data processing agreement) | Recipient address, name, content of the email. | Sending the portal's emails. |
-| **Room access recipients** (e.g. FH Joanneum facility staff), per team | Names and university emails of the team's current members, who joined and who left since the last list. | Access to the team's rooms. **Open:** members are told only on the Leave page; tell them when joining a team, and in the privacy statement. |
+| **Email providers** (SMTP, set per sender in the admin settings): IONOS (Germany) for some senders, Brevo (France) for others. Moving to Brevo entirely, perhaps to Microsoft later — update this row when it changes. | Recipient address, name, content of the email. | Sending the portal's emails. |
+| **Room access recipients** (e.g. FH Joanneum facility staff), per team | Names and university emails of the team's current members, who joined and who left since the last list. | Access to the team's rooms. Covered in the privacy statement; no separate notice when joining a team (decided). |
 | **Team leads** (fellow members) | Applicants' and members' name, university and private email, phone, cohort, member since, paid until (page and CSV export); notes. | Running the team. |
 | **Team treasurer / association treasurer** | Who paid what for the team, the team's bank details. | Passing the money on to the team. |
 | **Admins** | Everything above. | Running the association. |
@@ -102,30 +105,31 @@ Stripe's payment page is Stripe's own, under Stripe's privacy policy.
 - One session cookie, set by the portal: keeps a person signed in, holds the
   form protection token. Secure, HttpOnly, SameSite=Lax, valid 7 days.
 - No other cookies from the portal. Stripe's payment page sets its own.
-- Needed for the service, so no consent banner (**Open:** confirm with
-  whoever writes the privacy statement).
+- Needed for the service, so no consent banner is needed; the privacy
+  statement should still describe the cookie.
 
 ## 5. How long data is kept
 
 | What | How long |
 |---|---|
-| Account and profile | While the membership lasts, and after it ends until the person or an admin erases the account. **Open:** decide whether former members are erased after some time. |
+| Account and profile | While the membership lasts, and after it ends until the person or an admin erases the account. **To-do:** decide whether former members' accounts are erased after some time. |
 | Payment records (membership periods, team payments) | 7 years (§ 132 BAO). On erasure they are kept without the person's identity. |
 | Stripe's records | At Stripe, under its retention duties; not erased with the account. The deletion page says so. |
-| Signups never paid for | **Open:** a clean-up exists (14 days) but no timer runs it, so they are kept indefinitely. Schedule it. |
-| Audit log | Kept indefinitely (setting `AUDIT_LOG_RETENTION_DAYS`, default 0 = forever). On erasure, entries about the person lose their before/after values. **Open:** decide a period. |
+| Signups never paid for | Kept indefinitely for now: a clean-up command exists but nothing runs it, and as written it would fail on the live database. **To-do:** a nightly clean-up (proposed: erase after 30 days without payment). |
+| Audit log | Kept indefinitely (setting `AUDIT_LOG_RETENTION_DAYS`, default 0 = forever). On erasure, entries about the person lose their before/after values. **To-do:** decide a period. |
 | Email and notification records | 1 year (monthly clean-up). |
 | Leads' notes, team bank details history | Notes: deleted with the account. Bank-detail changes: in the audit log. |
 | Encrypted backups (Backup & Restore page) | The last 5, on the server; AES-256 encrypted with a passphrase that is not stored. |
-| Database copies made by each update | Unencrypted, in `/var/backups`, the newest few kept. **Open:** encrypt or delete them after a successful update. |
-| Web server log (nginx, IP addresses) | System default rotation. **Open:** confirm the period (typically 14 days). |
+| Database copies made by each update | In `/var/backups` on the same server, the newest few kept; protected like the database itself. |
+| Web server log (nginx, IP addresses) | System default rotation (typically 14 days). |
 | Login rate limits | Short-lived counters; the email address is hashed. |
 
 ## 6. People's rights, as built
 
 - **Access and portability:** "Download my data" on the account page — a JSON
   file with profile, membership periods, forum, profile change requests, teams,
-  roles and payments. **Open:** leads' notes are left out (see 10).
+  roles, payments, and the leads' notes about the person (with team and date,
+  not which lead wrote them).
 - **Rectification:** contact details directly on the account page; name,
   category and year group by request to the admins.
 - **Erasure:** the member requests it by an emailed link, or an admin does it.
@@ -192,17 +196,22 @@ The texts on the portal's `/legal` page are Statutes Rev 1 (17.03.2019) and
 Rules of Procedure Rev 3 (26.02.2020). Where they no longer match:
 
 - **Admission** (Statutes § 5 (2)): "the board decides on admission". The
-  portal admits on payment, without a board decision.
+  portal admits on payment, without a board decision — more relaxed than the
+  text, which is intended. **To-do:** reword so admission is open, with the
+  board reserving the right to decide on admission or make it stricter.
 - **Leaving** (Statutes § 6 (2)): written notice by 24 December, by post
-  ("postmark"). The portal: cancel online any time before 31 December.
+  ("postmark"). The portal: cancel online any time before 31 December —
+  easier than the text, which is intended. **To-do:** reword to match
+  (cancellation online, effective at the end of the paid year).
 - **Fees** (Rules § 2): per section — €15 study, €20 alumni/supporter, €50
   company, free for staff — collected once a year by the treasurer by direct
   debit. The portal: one fee for all, by card or SEPA through Stripe, pro rata
-  in the first year, free from October.
+  in the first year, free from October. **To-do:** change to the current
+  €15 for everyone, and how it is collected.
 - **Every member in a section or team** (Rules § 1 (2)). In the portal,
   teams are optional.
 - **Team membership needs proof of insurance** (Statutes § 5 (4), Rules § 2
-  (3)). The portal does not ask for it.
+  (3)). The portal does not ask for it. **To-do:** decide and reword.
 - **Team fees** decided by the extended board (Rules § 3 (1)). The portal
   takes them by Stripe, per team, and has a team treasurer role and payouts
   to teams that the rules do not mention.
@@ -215,28 +224,34 @@ Rules of Procedure Rev 3 (26.02.2020). Where they no longer match:
 - **Invitations to the general meeting** (Statutes § 9 (3)): by email to the
   address given — the portal holds that address (private email).
 - The signup checkbox says "I accept the Terms and Conditions" and links to
-  the statutes page; there are no separate terms. **Open:** write the terms
-  (§ 8), link them and the privacy statement at signup, and keep which
-  version was accepted.
+  the statutes page; there are no separate terms. **To-do:** write the terms
+  (§ 8), link them and the privacy statement at signup.
 
-## 10. Open points (summary)
+## 10. To-do
 
-- [ ] Schedule the clean-up of unpaid signups (`cleanup-pending-signups`).
-- [ ] Tell members when joining a team that their name and university email go
-      to the room access recipients.
-- [ ] Leads' notes: currently not in the person's data export, though they are
-      personal data about them (Art. 15). Decide: include them, or define
-      what notes may contain.
-- [ ] Decide retention for the audit log and for former members' accounts.
-- [ ] Encrypt or remove the unencrypted database copies made at each update.
-- [ ] Confirm nginx log retention.
-- [ ] Record which version of the terms a member accepted.
-- [ ] Footer links (Impressum, Privacy) point to the main website: add the
-      portal's part there, or link portal-specific texts.
-- [ ] Confirm hosting region, email provider and forum host, with the data
-      processing agreements.
+Collected so nothing is forgotten; none of it is urgent.
+
+**Legal texts**
+- [ ] Write the terms (section 8) and the portal's part of the privacy
+      statement; link both at signup and in the footer.
+- [ ] Give the legal texts a version date. Until then, the signup date stands
+      for the version a member accepted.
+- [ ] Statutes: admission open, board may decide or make it stricter.
+- [ ] Statutes: leaving by online cancellation, at the end of the paid year.
+- [ ] Rules of procedure: the fee is €15 for everyone, collected through
+      the portal.
+- [ ] Statutes / rules: team insurance — decide and reword.
+- [ ] Impressum: name the portal (section 11).
+
+**Decisions**
+- [ ] How long the audit log is kept.
+- [ ] Whether former members' accounts are erased after some time.
+
+**Portal**
+- [ ] Clean up signups never paid for (proposed: nightly, after 30 days).
 - [ ] Check Stripe's "upcoming renewal" and "failed payment" emails are on
       (live and test), and note the reminder's lead time for the terms.
+- [ ] Note where the forum is hosted.
 
 ## 11. For the impressum
 

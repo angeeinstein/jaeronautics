@@ -252,13 +252,13 @@ def export_account_data(user):
 
 
 def _team_data(user):
-    """Every team attempt, role and payment of this person -- not the leads' notes.
+    """Every team attempt, role, payment and lead's note about this person.
 
-    The notes are the leads' working notes about a person and may hold
-    anything, so they are left out rather than handed over unread. Erasing
-    the account deletes them.
+    The notes are about the person, so they are theirs to see (Art. 15) --
+    with the team and the date, not which lead wrote them, which is the
+    lead's own data. Erasing the account deletes them.
     """
-    from ..db_models import Payment, TeamMembership, TeamRole
+    from ..db_models import Payment, TeamMembership, TeamNote, TeamRole
 
     memberships = db.session.execute(
         db.select(TeamMembership).filter_by(user_id=user.id).order_by(TeamMembership.id)
@@ -266,6 +266,9 @@ def _team_data(user):
     roles = db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars().all()
     payments = db.session.execute(
         db.select(Payment).filter_by(user_id=user.id, purpose="team").order_by(Payment.id)
+    ).scalars().all()
+    notes = db.session.execute(
+        db.select(TeamNote).filter_by(user_id=user.id).order_by(TeamNote.id)
     ).scalars().all()
     return {
         "memberships": [
@@ -302,6 +305,10 @@ def _team_data(user):
                 "refunded_cents": payment.refunded_cents,
             }
             for payment in payments
+        ],
+        "notes_by_leads": [
+            {"team": note.team.name, "written_at": note.created_at, "text": note.body}
+            for note in notes
         ],
     }
 
