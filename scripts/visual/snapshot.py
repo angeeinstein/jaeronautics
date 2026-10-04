@@ -288,6 +288,7 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--home", "user": "active@example.org", "path": "/teams"},
         {"name": "teams--home-applicant", "user": "returning@example.org", "path": "/teams"},
         {"name": "teams--team-page", "user": "active@example.org", "path": "/teams/rocket-team"},
+        {"name": "teams--leave", "user": "active@example.org", "path": "/teams/rocket-team/leave"},
         {"name": "teams--manage", "user": "active@example.org", "path": "/teams/rocket-team/manage"},
         {"name": "teams--person", "user": "active@example.org", "path": f"/teams/rocket-team/manage/people/{bernd.id}"},
         {"name": "teams--access-list", "user": "active@example.org", "path": "/teams/rocket-team/manage/access-list"},

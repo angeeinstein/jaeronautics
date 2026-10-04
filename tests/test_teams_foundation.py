@@ -112,7 +112,7 @@ class TestCreatingTeams:
     def test_archiving_keeps_the_team(self, app):
         team = _team("Rocket")
 
-        teams.set_team_archived(None, team, True)
+        teams.set_team_archived(None, team, True, confirmed_name=team.name)
         db.session.commit()
 
         assert team.status == teams.STATUS_ARCHIVED and team.archived_at is not None
@@ -168,7 +168,7 @@ class TestWhatALeadMayDo:
         _in_team(lead, team)
         teams.grant_team_role(None, team, lead, teams.ROLE_LEAD)
         admin = _staff("admin@example.com", "admin")
-        teams.set_team_archived(None, team, True)
+        teams.set_team_archived(None, team, True, confirmed_name=team.name)
 
         assert teams.team_permissions(lead, team) == frozenset()
         assert teams.team_permissions(admin, team) == TeamPermission.ALL
@@ -295,7 +295,7 @@ class TestTheAdminPages:
         admin = _staff("admin@example.com", "admin")
         _login(client, admin.id)
         client.post("/admin/teams/new", data={"name": "Rocket", "admission_mode": "open"})
-        client.post("/admin/teams/rocket/archive", data={"archived": "1"})
+        client.post("/admin/teams/rocket/archive", data={"archived": "1", "confirm_name": "Rocket"})
 
         events = {entry.event_type for entry in db.session.query(AuditLog).filter_by(category="teams")}
         assert {"team_created", "team_archived"} <= events

@@ -334,7 +334,7 @@ class TestANewTeamFee:
     def test_the_running_subscriptions_move_and_their_holders_hear(self, app, stripe_fake):
         team, membership = self._team_with_subscription(stripe_fake)
 
-        assert self._save(team, "price_team12") == 1
+        assert self._save(team, "price_team12")["moving"] == 1
         db.session.commit()
         assert _run_worker() == (1, 0)
         _when_the_notice_is_due()

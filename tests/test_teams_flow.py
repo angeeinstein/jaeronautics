@@ -161,7 +161,7 @@ class TestJoining:
         _in_team(anna, team)
         _login(client, anna.id)
 
-        client.post("/teams/rocket/leave")
+        client.post("/teams/rocket/leave", data={"confirm": "on"})
 
         membership = db.session.query(TeamMembership).filter_by(user_id=anna.id).one()
         assert (membership.status, membership.end_reason) == (teams.ENDED, teams.END_LEFT)
@@ -180,7 +180,7 @@ class TestJoining:
         anna = _person()
         _in_team(anna, team)
         _login(client, anna.id)
-        client.post("/teams/rocket/leave")
+        client.post("/teams/rocket/leave", data={"confirm": "on"})
         client.post("/teams/rocket/join", data={"application_text": "Back again."})
 
         body = client.get("/teams").get_data(as_text=True)
@@ -192,17 +192,29 @@ class TestJoining:
         body = client.get("/teams").get_data(as_text=True)
         assert "Leave" in body and ">Ended<" not in body
 
-    def test_leaving_asks_first(self, app, client):
-        team, _lead = _led()
+    def test_leaving_is_a_page_of_its_own_and_a_deliberate_yes(self, app, client):
+        team, lead = _led()
         anna = _person()
         _in_team(anna, team)
         _login(client, anna.id)
 
-        body = client.get("/teams").get_data(as_text=True)
+        assert 'href="/teams/rocket/leave"' in client.get("/teams").get_data(as_text=True)
+        page = client.get("/teams/rocket/leave").get_data(as_text=True)
+        assert "Yes, I want to leave Rocket." in page and "apply again" in page
 
-        assert 'data-confirm="Leave Rocket?"' in body
-        assert body.count("confirm-submit.js") == 1
+        client.post("/teams/rocket/leave", data={"message": "Exams."})
+        assert teams.ongoing_membership(anna, team).status == teams.ACTIVE
 
+        client.post("/teams/rocket/leave", data={"confirm": "on", "message": "Exams."})
+        membership = db.session.query(TeamMembership).filter_by(user_id=anna.id).one()
+        assert (membership.status, membership.end_note) == (teams.ENDED, "Exams.")
+        [email] = _events("team_member_left", lead.email)
+        assert "Their message: Exams." in email.summary
+
+    def test_the_confirmation_script_is_loaded_once(self, app, client):
+        _login(client, _person().id)
+
+        assert client.get("/teams").get_data(as_text=True).count("confirm-submit.js") == 1
 
 @pytest.mark.usefixtures("switched_on")
 class TestTheTeamPage:

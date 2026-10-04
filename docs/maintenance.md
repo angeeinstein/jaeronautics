@@ -698,8 +698,27 @@ does the same for anything a webhook missed.
 
 A new price applies to people joining at once, and running subscriptions
 move to it from their next renewal, their holders emailed two weeks before;
-see *Changing a Fee*. A different interval is refused while subscriptions run. A team cannot
-be switched back to free while subscriptions for it still run.
+see *Changing a Fee*. A different interval is refused while subscriptions run.
+
+Changing how a team charges while it has members -- something set up once
+and seldom touched -- is handled rather than refused:
+
+- **Free from now on**: every running subscription stops at the end of what
+  is paid, and those members stay in the team, for free; they are emailed.
+  Approved people not yet paying are members at once.
+- **Charging from now on**: members already in stay free until the next period
+  starts, are emailed, and see *Pay to stay* (nothing is charged before the
+  period starts). Whoever has not paid by then leaves, and may come back by
+  paying within six months.
+- **The period dates** cannot change while subscriptions run on them: switch
+  to free, let them run out, then set the new dates.
+- **Archiving a team, or switching teams off**, is refused while anybody still
+  pays by subscription: switch the team to free first. Archiving also asks for
+  the team's name to be typed.
+
+**Leaving** is a page of its own: what it means (until when, no refund, the
+forum group and access list, applying again to come back), an optional message
+to the leads, and a box to tick.
 
 **Every night** (with `reconcile-billing`): team memberships of people no
 longer in the association end, approvals for a team that charges lapse when

@@ -161,15 +161,6 @@ class TestTheSettings:
 
         assert caught.value.code == "team_price_is_membership"
 
-    def test_not_free_while_subscriptions_run(self, app, fake_stripe):
-        team, lead = _led()
-        _charging(team)
-        _anna, membership = _approved(team, lead)
-        membership.stripe_subscription_id = "sub_1"
-
-        with pytest.raises(ConflictError):
-            self._save(team, payment_mode="none")
-
     def test_the_admin_form_saves_it(self, app, client, fake_stripe):
         team, _lead = _led()
         _login(client, _staff("admin@example.com", "admin").id)

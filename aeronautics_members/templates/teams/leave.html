@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "teams/_status.html" import team_logo %}
+{% block title %}{{ _('Leave %(team)s', team=team.name) }}{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body d-flex align-items-center gap-3">
+        {% if team.logo_token %}{{ team_logo(team, 'large') }}{% endif %}
+        <div>
+            <h2 class="mb-1">{{ _('Leave %(team)s', team=team.name) }}</h2>
+            <p class="text-muted mb-0">{{ _('Please read what leaving means before you decide.') }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <ul class="mb-4">
+            {% if runs_to_end %}
+                <li>{{ _('You stay in the team until %(day)s, the end of what you have paid for. Your subscription stops then and nothing more is charged. There is no refund.', day=membership.paid_until|date_display) }}</li>
+                <li>{{ _('Until then you can take it back on the Teams page.') }}</li>
+            {% else %}
+                <li>{{ _('You leave at once.') }}</li>
+            {% endif %}
+            <li>{{ _('You are taken off the team page, its forum group and the list for access to its rooms.') }}</li>
+            {% if is_lead %}
+                <li>{{ _('Your role as a lead ends with your membership.') }}</li>
+            {% endif %}
+            <li>{{ _('To come back later, you apply again and the leads decide.') }}</li>
+        </ul>
+
+        <form method="POST" action="{{ url_for('teams.team_leave', slug=team.slug) }}" data-busy-text="{{ _('Leaving…') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-3">
+                <label class="form-label" for="message">{{ _('A message to the leads (optional)') }}</label>
+                <textarea class="form-control" id="message" name="message" rows="3" maxlength="1000">{{ message }}</textarea>
+            </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="confirm" id="confirm" required>
+                <label class="form-check-label" for="confirm">{{ _('Yes, I want to leave %(team)s.', team=team.name) }}</label>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-outline-danger">{{ _('Leave the team') }}</button>
+                <a class="btn btn-secondary" href="{{ url_for('teams.teams_home') }}">{{ _('Cancel') }}</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -163,17 +163,35 @@
     </div>
 </div>
 
+{% if team.status == 'archived' %}
 <div class="card">
     <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <span class="text-muted small">
-            {% if team.status == 'archived' %}{{ _('Restoring makes it available again.') }}{% else %}{{ _('Archiving keeps everything; nobody can join any more.') }}{% endif %}
-        </span>
+        <span class="text-muted small">{{ _('Restoring makes it available again.') }}</span>
         <form method="POST" action="{{ url_for('teams.admin_team_archive', slug=team.slug) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="archived" value="{{ '0' if team.status == 'archived' else '1' }}">
-            <button type="submit" class="btn btn-outline-secondary">{{ _('Restore') if team.status == 'archived' else _('Archive') }}</button>
+            <input type="hidden" name="archived" value="0">
+            <button type="submit" class="btn btn-outline-secondary">{{ _('Restore') }}</button>
         </form>
     </div>
 </div>
+{% else %}
+<div class="card border-danger">
+    <div class="card-header"><h4 class="mb-0">{{ _('Archive this team') }}</h4></div>
+    <div class="card-body">
+        <p class="small mb-3">{{ _('Its members lose the team at once: its pages, its forum group and the access list. Nothing is deleted, and it can be restored. While anybody still pays for it by subscription, it cannot be archived; switch it to free first.') }}</p>
+        <form method="POST" action="{{ url_for('teams.admin_team_archive', slug=team.slug) }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="archived" value="1">
+            <div class="col-md-8">
+                <label class="form-label" for="confirm_name">{{ _('Type the team name, %(name)s, to confirm', name=team.name) }}</label>
+                <input class="form-control" id="confirm_name" name="confirm_name" autocomplete="off" required>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-outline-danger w-100">{{ _('Archive') }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 {% endif %}
 {% endblock %}

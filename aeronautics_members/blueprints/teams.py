@@ -8,6 +8,7 @@ docs/teams-plan.md.
 
 import csv
 import io
+from datetime import timedelta
 
 from flask import (
     Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file, url_for,
@@ -53,20 +54,27 @@ def _apply_payment(team, form):
     if "payment_mode" in form:
         from ..services.team_payments import update_payment_settings
 
-        moving = update_payment_settings(
+        return update_payment_settings(
             current_user, team,
             payment_mode=form.get("payment_mode"),
             stripe_price_id=form.get("stripe_price_id"),
             period_starts=form.get("period_starts"),
         )
-        return moving
-    return 0
+    return {}
 
 
-def _flash_moving(moving):
-    if moving:
+def _flash_moving(outcome):
+    """What a change to the fee did to the members already in, after it is saved."""
+    if outcome.get("moving"):
         flash(_("%(count)s running subscription(s) move to the new price from their next renewal, "
-                "in the background over the next minutes. Each member is emailed two weeks before their renewal.", count=moving), "info")
+                "in the background over the next minutes. Each member is emailed two weeks before their renewal.",
+                count=outcome["moving"]), "info")
+    if outcome.get("stopping"):
+        flash(_("%(count)s running subscription(s) stop at the end of what is paid; those members stay "
+                "in the team for free and are emailed.", count=outcome["stopping"]), "info")
+    if outcome.get("asked_to_pay"):
+        flash(_("%(count)s member(s) stay free until the next period starts and are emailed to pay by then "
+                "to stay.", count=outcome["asked_to_pay"]), "info")
 
 
 def _apply_logo(team, form, files):
@@ -109,12 +117,17 @@ def _render_admin_teams(**context):
 @requires(Permission.TEAMS_MANAGE)
 def admin_teams():
     if request.method == "POST":
-        changed = teams_service.save_team_settings(
-            current_user,
-            enabled=request.form.get("teams_enabled") == "on",
-            label_singular=request.form.get("label_singular"),
-            label_plural=request.form.get("label_plural"),
-        )
+        try:
+            changed = teams_service.save_team_settings(
+                current_user,
+                enabled=request.form.get("teams_enabled") == "on",
+                label_singular=request.form.get("label_singular"),
+                label_plural=request.form.get("label_plural"),
+            )
+        except ServiceError as error:
+            db.session.rollback()
+            flash(error.message, "danger")
+            return redirect(url_for("teams.admin_teams"))
         db.session.commit()
         flash(_("Saved.") if changed else _("Nothing changed."), "success" if changed else "info")
         return redirect(url_for("teams.admin_teams"))
@@ -207,7 +220,13 @@ def admin_team_archive(slug):
         flash(error.message, "warning")
         return redirect(url_for("teams.admin_teams"))
     archived = request.form.get("archived") == "1"
-    teams_service.set_team_archived(current_user, team, archived)
+    try:
+        teams_service.set_team_archived(current_user, team, archived,
+                                        confirmed_name=request.form.get("confirm_name"))
+    except ServiceError as error:
+        db.session.rollback()
+        flash(error.message, "danger")
+        return redirect(url_for("teams.admin_team_detail", slug=team.slug))
     db.session.commit()
     flash(_("Archived.") if archived else _("Restored."), "success")
     return redirect(url_for("teams.admin_team_detail", slug=team.slug))
@@ -315,6 +334,8 @@ def teams_home():
         status_labels=teams_service.STATUS_LABELS,
         manageable={team.id for team in teams_service.teams_led_by(current_user)},
         charges=team_payments.charges,
+        needs_to_pay=team_payments.needs_to_pay,
+        timedelta_one_day=timedelta(days=1),
         joining_period=team_payments.joining_period,
         just_paid=request.args.get("paid"),
     )
@@ -393,10 +414,30 @@ def team_withdraw(slug):
     return redirect(url_for("teams.teams_home"))
 
 
-@teams_bp.route("/teams/<slug>/leave", methods=["POST"])
+@teams_bp.route("/teams/<slug>/leave", methods=["GET", "POST"])
 @login_required
 def team_leave(slug):
-    team, done = _member_action(slug, lambda team: teams_service.leave(current_user, team))
+    """Leaving is a page of its own: what it means, then a deliberate yes."""
+    team = _team_or_404(slug)
+    current = teams_service.ongoing_membership(current_user, team)
+    if current is None or current.status != teams_service.ACTIVE:
+        flash(_("You are not a member of this team."), "info")
+        return redirect(url_for("teams.teams_home"))
+    if request.method == "GET" or request.form.get("confirm") != "on":
+        if request.method == "POST":
+            flash(_("Tick the box to confirm that you want to leave."), "warning")
+        return render_template(
+            "teams/leave.html",
+            team=team,
+            membership=current,
+            is_lead=any(team_role.role == teams_service.ROLE_LEAD
+                        for team_role in teams_service.roles_of(current_user) if team_role.team_id == team.id),
+            runs_to_end=bool(current.stripe_subscription_id and current.payment_mode != teams_service.PAYMENT_NONE),
+            message=request.form.get("message", ""),
+        )
+    team, done = _member_action(
+        slug, lambda team: teams_service.leave(current_user, team, request.form.get("message"))
+    )
     if done:
         current = teams_service.ongoing_membership(current_user, team)
         if current is not None and current.ends_on is not None:

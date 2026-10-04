@@ -43,7 +43,9 @@
                         {% endif %}
                     {% endif %}
 
-                    {% if current and current.status == 'active' and current.ends_with_association %}
+                    {% if current and needs_to_pay(current) %}
+                        <div class="alert alert-warning mb-0">{{ _('%(team)s charges a fee from %(day)s: %(fee)s. Pay before then to stay in the team; nothing is charged earlier.', team=team.name, day=(current.paid_until + timedelta_one_day)|date_display, fee=team.fee_display or '') }}</div>
+                    {% elif current and current.status == 'active' and current.ends_with_association %}
                         <div class="small">{{ _('Ends with your association membership on %(day)s.', day=current.ends_on|date_display) }}</div>
                     {% elif current and current.status == 'active' and current.stripe_subscription_id %}
                         <div class="small">
@@ -68,6 +70,12 @@
                     <div class="d-flex flex-wrap gap-2 mt-auto">
                         {% if current and current.status == 'active' %}
                             <a class="btn btn-primary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Open') }}</a>
+                            {% if needs_to_pay(current) %}
+                                <form method="POST" action="{{ url_for('teams.team_pay', slug=team.slug) }}" class="mb-0" data-busy-text="{{ _('Opening…') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-primary">{{ _('Pay to stay') }}</button>
+                                </form>
+                            {% endif %}
                             {% if current.ends_with_association %}
                             {% elif current.ends_on %}
                                 <form method="POST" action="{{ url_for('teams.team_stay', slug=team.slug) }}" class="mb-0">
@@ -75,11 +83,7 @@
                                     <button type="submit" class="btn btn-secondary">{{ _('Stay after all') }}</button>
                                 </form>
                             {% else %}
-                                <form method="POST" action="{{ url_for('teams.team_leave', slug=team.slug) }}" class="mb-0"
-                                      data-confirm="{{ _('Leave %(team)s? You stay until the paid period ends; there is no refund.', team=team.name) if current.stripe_subscription_id else _('Leave %(team)s?', team=team.name) }}">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-secondary">{{ _('Leave') }}</button>
-                                </form>
+                                <a class="btn btn-secondary" href="{{ url_for('teams.team_leave', slug=team.slug) }}">{{ _('Leave') }}</a>
                             {% endif %}
                         {% elif current %}
                             {% if current.status == 'approved' and charges(team) and current.payment_state != 'processing' and just_paid != team.slug %}

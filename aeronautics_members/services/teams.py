@@ -150,6 +150,14 @@ def save_team_settings(actor, *, enabled, label_singular, label_plural):
     }
     if before == after:
         return False
+    if before["enabled"] and not after["enabled"]:
+        paying = [m for team in all_teams(include_archived=False) for m in _paying(team)]
+        if paying:
+            raise ConflictError(
+                f"{len(paying)} team membership(s) are still paid by subscription; switched off, they would "
+                "go on charging for a team nobody can see. Switch those teams to free first.",
+                code="teams_off_subscriptions_running",
+            )
     _write_setting(SETTING_ENABLED, "True" if after["enabled"] else None)
     _write_setting(SETTING_LABEL_SINGULAR, after["label_singular"])
     _write_setting(SETTING_LABEL_PLURAL, after["label_plural"])
@@ -263,11 +271,32 @@ def update_team(actor, team, **fields):
     return team
 
 
-def set_team_archived(actor, team, archived):
-    """Archive a team, or bring it back. Nothing is deleted either way."""
+def _paying(team):
+    """Memberships of this team with a subscription still charging."""
+    return [m for m in team.memberships
+            if m.stripe_subscription_id and m.payment_mode != PAYMENT_NONE and m.status in (APPROVED, ACTIVE)]
+
+
+def set_team_archived(actor, team, archived, *, confirmed_name=None):
+    """Archive a team, or bring it back. Nothing is deleted either way.
+
+    Archiving takes the team away from its members at once -- its pages, its
+    forum group -- so it asks for the team's name to be typed, and is refused
+    while anybody is still paying for it: switch the team to free first.
+    """
     target = STATUS_ARCHIVED if archived else STATUS_ACTIVE
     if team.status == target:
         return team
+    if archived:
+        if (confirmed_name or "").strip().casefold() != team.name.strip().casefold():
+            raise ValidationError("Type the team's name to archive it.", code="team_archive_unconfirmed")
+        paying = _paying(team)
+        if paying:
+            raise ConflictError(
+                f"{len(paying)} member(s) still pay for this team by subscription. Switch the team to free "
+                "first; their subscriptions then stop at the end of what is paid.",
+                code="team_archive_subscriptions_running",
+            )
     before = _snapshot(team)
     team.status = target
     team.archived_at = get_now_utc() if archived else None
@@ -762,18 +791,21 @@ def withdraw(user, team):
     return membership
 
 
-def leave(user, team):
+def leave(user, team, message=None):
     """The member leaves the team.
 
     Paid by subscription, it runs to the end of what is paid and the
     subscription stops then; there is no refund. Otherwise it ends now.
+    ``message`` is passed on to the leads and kept with the membership.
     """
+    message = (message or "").strip()[:1000] or None
+    said = f" Their message: {message}" if message else ""
     current = ongoing_membership(user, team)
     if current is None or current.status != ACTIVE:
         raise ConflictError("You are not a member of this team.", code="team_not_a_member")
     membership = _locked_membership(current.id, team)
     _require_status(membership, {ACTIVE}, "You are not a member of this team.")
-    if membership.stripe_subscription_id:
+    if membership.stripe_subscription_id and membership.payment_mode != PAYMENT_NONE:
         from . import payments
         from .membership import format_membership_date_display
 
@@ -782,19 +814,21 @@ def leave(user, team):
         # Stripe stops at the end of what is paid; the membership runs to then.
         payments.set_cancel_at_period_end(membership.stripe_subscription_id, True)
         membership.ends_on = membership.paid_until or get_now_utc().date()
+        membership.end_note = message
         _audit("team_leaving", user, membership, ends_on=membership.ends_on.isoformat())
         name = _member_name(user)
         _tell_leads(team, "team_member_leaving",
-                    f"{name} is leaving {team.name} on {format_membership_date_display(membership.ends_on)}.",
+                    f"{name} is leaving {team.name} on {format_membership_date_display(membership.ends_on)}.{said}",
                     person_name=name)
         return membership
     membership.status = ENDED
     membership.ended_at = get_now_utc()
     membership.end_reason = END_LEFT
+    membership.end_note = message
     _audit("team_left", user, membership)
     _sync_forum([user], team, f"left team {team.slug}")
     name = _member_name(user)
-    _tell_leads(team, "team_member_left", f"{name} left {team.name}.", person_name=name)
+    _tell_leads(team, "team_member_left", f"{name} left {team.name}.{said}", person_name=name)
     return membership
 
 

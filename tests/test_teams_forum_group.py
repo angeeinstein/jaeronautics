@@ -57,7 +57,7 @@ class TestTheGroup:
         anna = _person()
         _in_team(anna, team)
 
-        teams.set_team_archived(None, team, True)
+        teams.set_team_archived(None, team, True, confirmed_name=team.name)
 
         assert "team-rocket" in _groups(anna)[1]
 

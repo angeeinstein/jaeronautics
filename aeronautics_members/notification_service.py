@@ -691,6 +691,25 @@ class NotificationService:
                    "What you have paid for runs to its end.")],
                 teams_url, _("Open Teams"),
             ),
+            "team_now_free": (
+                _("%(team)s is free from now on", team=team),
+                _("Nothing more is charged for %(team)s.", team=team),
+                [_("%(team)s no longer charges a fee. Your membership continues as before, and nothing is "
+                   "charged after %(day)s.", team=team, day=payload.get("until"))
+                 if payload.get("until") else
+                 _("%(team)s no longer charges a fee. Your membership continues as before, and nothing more "
+                   "is charged.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_now_charges": (
+                _("%(team)s charges a fee from %(day)s", team=team, day=payload.get("from_date")),
+                _("Pay on the Teams page to stay."),
+                [_("From %(day)s %(team)s charges a fee: %(fee)s. Until then your membership stays free.",
+                   day=payload.get("from_date"), team=team, fee=payload.get("fee")),
+                 _("To stay in the team, pay on the Teams page before then. Nothing is charged before %(day)s. "
+                   "If you do not, your team membership ends that day.", day=payload.get("from_date"))],
+                teams_url, _("Open Teams"),
+            ),
             "team_ends_with_association": (
                 _("Your membership in %(team)s ends with your association membership", team=team),
                 _("It ends on %(day)s.", day=payload.get("ends_on")),
