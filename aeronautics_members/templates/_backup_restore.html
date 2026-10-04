@@ -139,7 +139,7 @@
                                 <td class="text-end text-nowrap">
                                     <a class="btn btn-sm btn-primary" href="{{ url_for('admin.admin_download_backup', name=entry.name) }}">{{ _('Download') }}</a>
                                     <form method="POST" action="{{ url_for('admin.admin_delete_backup', name=entry.name) }}" class="d-inline"
-                                          data-confirm="{{ _('Delete %(name)s from the server?', name=entry.name) }}">
+                                          data-confirm-label="{{ _('Yes, delete') }}" data-confirm="{{ _('Delete %(name)s from the server?', name=entry.name) }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-sm btn-outline-danger">{{ _('Delete') }}</button>
                                     </form>

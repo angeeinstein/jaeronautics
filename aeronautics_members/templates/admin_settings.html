@@ -227,7 +227,9 @@
             </div>
             {% if current_user.can('settings.credentials') %}
             <div class="tab-pane fade" id="settings-billing" role="tabpanel" aria-labelledby="settings-billing-tab" tabindex="0">
-                <form method="POST" action="{{ url_for('admin.admin_settings') }}" class="d-flex flex-column gap-4">
+                <form method="POST" action="{{ url_for('admin.admin_settings') }}" class="d-flex flex-column gap-4"
+                      data-confirm-if-changed="stripe_price_id"
+                      data-confirm-label="{{ _('Yes, change the price') }}" data-confirm-changed="{{ _('Change the membership price? Every running membership moves to it from its next renewal, and every member is emailed two weeks before.') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="settings_section" value="billing">
 
@@ -656,7 +658,8 @@
                                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                         <button type="submit" class="btn btn-sm btn-outline-primary">{{ _('Retry') }}</button>
                                                     </form>
-                                                    <form method="POST" action="{{ url_for('admin.admin_resolve_undelivered_email', job_id=job.id, action='dismiss') }}" class="d-inline">
+                                                    <form method="POST" action="{{ url_for('admin.admin_resolve_undelivered_email', job_id=job.id, action='dismiss') }}" class="d-inline"
+                                                          data-confirm-label="{{ _('Yes, dismiss') }}" data-confirm="{{ _('Dismiss this email? It will not be sent.') }}">
                                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                         <button type="submit" class="btn btn-sm btn-outline-secondary">{{ _('Dismiss') }}</button>
                                                     </form>
@@ -752,7 +755,7 @@
                         {% endif %}
 
                         <form method="POST" action="{{ url_for('admin.admin_request_system_update') }}"
-                              data-confirm="{{ _('Install the update now? The site will restart and be briefly unavailable.') }}" data-busy-text="{{ _('Starting…') }}">
+                              data-confirm-label="{{ _('Yes, install') }}" data-confirm="{{ _('Install the update now? The site will restart and be briefly unavailable.') }}" data-busy-text="{{ _('Starting…') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-primary"
                                     {% if not update_state.runner_installed or update_state.in_progress %}disabled{% endif %}>
@@ -781,7 +784,7 @@
                             {% endif %}
                         </dl>
                         <form method="POST" action="{{ url_for('admin.admin_request_system_update') }}"
-                              data-confirm="{{ _('Go back to the previous version? The site will restart and be briefly unavailable.') }}" data-busy-text="{{ _('Starting…') }}">
+                              data-confirm-label="{{ _('Yes, go back') }}" data-confirm="{{ _('Go back to the previous version? The site will restart and be briefly unavailable.') }}" data-busy-text="{{ _('Starting…') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="action" value="rollback">
                             <button type="submit" class="btn btn-outline-secondary"

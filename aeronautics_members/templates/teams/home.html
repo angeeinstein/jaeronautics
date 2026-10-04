@@ -112,7 +112,7 @@
                                 </form>
                             {% endif %}
                             <form method="POST" action="{{ url_for('teams.team_withdraw', slug=team.slug) }}" class="mb-0"
-                                  data-confirm="{{ _('Withdraw your application?') }}">
+                                  data-confirm-label="{{ _('Yes, withdraw') }}" data-confirm="{{ _('Withdraw your application?') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-secondary">{{ _('Withdraw application') }}</button>
                             </form>

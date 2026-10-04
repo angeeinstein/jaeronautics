@@ -13,7 +13,9 @@
 {% endif %}
 
 <div class="card mb-4">
-    <form method="POST" action="{{ url_for('teams.admin_team_detail', slug=team.slug) if team else url_for('teams.admin_team_new') }}" enctype="multipart/form-data">
+    <form method="POST" action="{{ url_for('teams.admin_team_detail', slug=team.slug) if team else url_for('teams.admin_team_new') }}" enctype="multipart/form-data"
+          {% if team %}data-confirm-if-changed="payment_mode,stripe_price_id,period_starts"
+          data-confirm-label="{{ _('Yes, change the fee') }}" data-confirm-changed="{{ _('Change the fee? Members already in are moved to it or asked to pay, and emailed; this cannot be taken back once they are.') }}"{% endif %}>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h4 class="mb-0">{{ _('Details') }}</h4>
@@ -131,7 +133,7 @@
                                 <td class="text-end">
                                     {% set last_lead = holder.role == 'lead' and lead_count <= 1 %}
                                     <form method="POST" action="{{ url_for('teams.admin_team_revoke_role', slug=team.slug) }}"
-                                          {% if last_lead %}data-confirm="{{ _('This is the last lead. Remove anyway?') }}"{% endif %}>
+                                          {% if last_lead %}data-confirm-label="{{ _('Yes, remove') }}" data-confirm="{{ _('This is the last lead. Remove anyway?') }}"{% endif %}>
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="user_id" value="{{ holder.user_id }}">
                                         <input type="hidden" name="role" value="{{ holder.role }}">

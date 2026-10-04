@@ -311,3 +311,14 @@ def test_the_treasurer_role_carries_no_other_admin_rights(app):
     from aeronautics_members.permissions import ROLE_PERMISSIONS, Permission
 
     assert ROLE_PERMISSIONS["treasurer"] == {Permission.ADMIN_ACCESS, Permission.TEAMS_MONEY}
+
+
+@pytest.mark.usefixtures("switched_on")
+def test_recording_a_transfer_asks_first_naming_the_amount(app, client):
+    team, lead = _led()
+    _paid(team, lead)
+    _login(client, _treasurer().id)
+
+    page = client.get("/teams/rocket/money").get_data(as_text=True)
+
+    assert "Record a transfer of €{amount} to Rocket?" in page

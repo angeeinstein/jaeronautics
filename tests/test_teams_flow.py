@@ -532,3 +532,16 @@ class TestFormerMembers:
         _in_team(cara, team)
 
         assert [row["name"] for row in teams.former_members(team)] == ["Ben Berg", "Anna Berger"]
+
+
+@pytest.mark.usefixtures("switched_on")
+def test_approving_asks_first(app, client):
+    team, lead = _led()
+    anna = _person()
+    teams.join_or_apply(anna, team, "Hello")
+    db.session.commit()
+    _login(client, lead.id)
+
+    person = client.get(f"/teams/{team.slug}/manage/people/{anna.id}").get_data(as_text=True)
+
+    assert "Approve Anna Berger? They are emailed straight away." in person

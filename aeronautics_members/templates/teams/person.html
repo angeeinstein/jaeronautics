@@ -48,19 +48,20 @@
                         <button type="submit" class="btn btn-secondary">{{ _('Send invitation') if current.status == 'applied' else _('Send again') }}</button>
                     </form>
                     <div class="d-flex flex-wrap gap-2">
-                        <form method="POST" action="{{ url_for('teams.team_approve', slug=team.slug, membership_id=current.id) }}" class="mb-0">
+                        <form method="POST" action="{{ url_for('teams.team_approve', slug=team.slug, membership_id=current.id) }}" class="mb-0"
+                              data-confirm-label="{{ _('Yes, approve') }}" data-confirm="{{ _('Approve %(name)s? They are emailed straight away.', name=details.name) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-primary">{{ _('Approve') }}</button>
                         </form>
                         <form method="POST" action="{{ url_for('teams.team_reject', slug=team.slug, membership_id=current.id) }}" class="mb-0"
-                              data-confirm="{{ _('Not accept %(name)s?', name=details.name) }}">
+                              data-confirm-label="{{ _('Yes, not accept') }}" data-confirm="{{ _('Not accept %(name)s?', name=details.name) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-outline-danger">{{ _('Not accept') }}</button>
                         </form>
                     </div>
                 {% elif current.status == 'active' and TeamPermission.REMOVE_MEMBERS in permissions %}
                     <form method="POST" action="{{ url_for('teams.team_remove', slug=team.slug, membership_id=current.id) }}" class="mb-0"
-                          data-confirm="{{ _('Remove %(name)s from the team now?', name=details.name) }}">
+                          data-confirm-label="{{ _('Yes, remove') }}" data-confirm="{{ _('Remove %(name)s from the team now?', name=details.name) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <label class="form-label" for="reason">{{ _('Remove from the team') }}</label>
                         <input class="form-control mb-2" id="reason" name="reason" required maxlength="2000"

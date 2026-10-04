@@ -77,7 +77,7 @@
                         </dl>
                     {% endif %}
                     <form method="POST" action="{{ url_for('teams.team_money_payout', slug=team.slug) }}" class="mb-0"
-                          data-confirm="{{ _('Record this transfer? Only do so once the money has been sent.') }}">
+                          data-confirm-label="{{ _('Yes, record it') }}" data-confirm="{{ _('Record a transfer of €{amount} to %(team)s? Only once the money has really been sent: it is kept in the records and cannot be undone here.', team=team.name) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="row g-2">
                             <div class="col-sm-4">

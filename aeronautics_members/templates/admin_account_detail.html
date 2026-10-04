@@ -68,7 +68,7 @@
                             {{ _('The account gets the combined permissions of every role selected here.') }}
                         </p>
                         <form method="POST" action="{{ url_for('admin.update_account_roles', user_id=user_record.id) }}"
-                              data-confirm="{{ _('Change this account’s roles?') }}">
+                              data-confirm-label="{{ _('Yes, change roles') }}" data-confirm="{{ _('Change this account’s roles?') }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             {% for option in role_options %}
                                 <div class="form-check">
@@ -412,7 +412,7 @@
                                 <td>{{ profile.post_count if profile.post_count is not none else '-' }}</td>
                                 <td class="text-end">
                                     <form method="POST" action="{{ url_for('admin.admin_reconnect_old_forum_account', user_id=user_record.id) }}" class="mb-0"
-                                          data-confirm="{{ _('Reconnect %(username)s to this account? Its posts, username and picture become theirs.', username=profile.source_username) }}"
+                                          data-confirm-label="{{ _('Yes, reconnect') }}" data-confirm="{{ _('Reconnect %(username)s to this account? Its posts, username and picture become theirs.', username=profile.source_username) }}"
                                           data-busy-text="{{ _('Reconnecting…') }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <input type="hidden" name="profile_id" value="{{ profile.id }}">

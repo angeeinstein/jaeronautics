@@ -10,7 +10,8 @@
         <div class="d-flex flex-wrap gap-2">
             <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Back to the team') }}</a>
             <form method="POST" action="{{ url_for('teams.team_access_list_send', slug=team.slug) }}" class="mb-0"
-                  data-busy-text="{{ _('Sending…') }}">
+                  data-busy-text="{{ _('Sending…') }}"
+                  data-confirm-label="{{ _('Yes, send') }}" data-confirm="{{ _('Send the access list to %(recipients)s now?', recipients=recipients|join(', ')) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-primary">{{ _('Send now') }}</button>
             </form>

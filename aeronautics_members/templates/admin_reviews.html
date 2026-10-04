@@ -71,7 +71,8 @@
                             </div>
                             <div class="d-flex flex-wrap gap-2">
                                 <button type="submit" class="btn btn-primary">{{ _('Approve') }}</button>
-                                <button type="submit" class="btn btn-danger" formaction="{{ url_for('admin.reject_profile_change_request', request_id=record.id) }}">{{ _('Reject') }}</button>
+                                <button type="submit" class="btn btn-danger" formaction="{{ url_for('admin.reject_profile_change_request', request_id=record.id) }}"
+                                        data-confirm-label="{{ _('Yes, reject') }}" data-confirm="{{ _('Reject this change? The member is emailed, and the request is closed.') }}">{{ _('Reject') }}</button>
                             </div>
                         </form>
                     </div>
@@ -99,7 +100,8 @@
                             </div>
                             <div class="d-flex flex-wrap gap-2">
                                 <button type="submit" class="btn btn-primary">{{ _('Approve and send to forum') }}</button>
-                                <button type="submit" class="btn btn-danger" formaction="{{ url_for('admin.reject_forum_avatar_submission', submission_id=record.id) }}">{{ _('Reject') }}</button>
+                                <button type="submit" class="btn btn-danger" formaction="{{ url_for('admin.reject_forum_avatar_submission', submission_id=record.id) }}"
+                                        data-confirm-label="{{ _('Yes, reject') }}" data-confirm="{{ _('Reject this picture? The member is emailed and has to upload a new one.') }}">{{ _('Reject') }}</button>
                             </div>
                         </form>
                     </div>

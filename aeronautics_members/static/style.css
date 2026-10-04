@@ -1321,3 +1321,48 @@ textarea.form-control {
     background: #ffffff;
     border-radius: 4px;
 }
+
+/* The two-step confirm button (confirm-submit.js): it fills up before it can
+   be pressed, then waits highlighted for the second click. */
+.confirm-arming,
+.confirm-ready {
+    position: relative;
+    overflow: hidden;
+}
+.confirm-arming:disabled {
+    opacity: 1;
+}
+.confirm-arming::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 3px;
+    background: currentColor;
+    transform-origin: left center;
+    animation: confirm-arming 1s linear forwards;
+}
+@keyframes confirm-arming {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+.confirm-ready {
+    box-shadow: 0 0 0 0.2rem rgba(var(--bs-warning-rgb), 0.6);
+}
+.confirm-hint {
+    flex-basis: 100%;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--bs-warning);
+}
+td .confirm-hint {
+    white-space: normal;
+}
+@media (prefers-reduced-motion: reduce) {
+    .confirm-arming::after {
+        animation: none;
+        transform: scaleX(1);
+        opacity: 0.4;
+    }
+}

@@ -186,7 +186,7 @@ external work. Archive the old price in Stripe once nobody is on it.
 ## Stripe Webhook Events
 
 The endpoint (`https://<portal>/stripe-webhook`, in Stripe under Developers →
-Webhooks) needs exactly these 12 events, on the test and the live account:
+Webhooks) needs exactly these 13 events, on the test and the live account:
 
 | Event | What the portal does with it |
 |---|---|
@@ -196,6 +196,7 @@ Webhooks) needs exactly these 12 events, on the test and the live account:
 | `customer.subscription.updated` | Cancellation set or taken back, status changes |
 | `customer.subscription.deleted` | A subscription ended |
 | `invoice.paid` | A subscription payment, first or renewal |
+| `invoice.payment_succeeded` | The same, as Stripe also reports it; a payment is recorded once |
 | `invoice.payment_failed` | A renewal failed |
 | `payment_intent.processing` | A SEPA debit is on its way |
 | `payment_intent.succeeded` | A membership payment confirmed |
