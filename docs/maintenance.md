@@ -89,8 +89,15 @@ Stripe credentials required). Install the dev dependencies and run pytest:
 
 ```powershell
 pip install --require-hashes -r requirements-dev.lock
-python -m pytest
+python -m pytest -n auto
 ```
+
+`-n auto` runs the tests on every core (pytest-xdist): about 3 minutes instead
+of 11 on four cores. Every test builds its own app and database, so they do
+not get in each other's way. While working on something, run the test files
+that cover it (`python -m pytest tests/test_teams_flow.py`); before the last
+commit of a piece of work, the whole suite. CI runs the whole suite, in
+parallel, on every push.
 
 The tests of the old forum's one-off import (moving the board, the people,
 BBCode, the MyBB converter) are skipped by default; the import is done.

@@ -25,4 +25,5 @@ jobs:
         run: ruff check .
 
       - name: Run tests
-        run: python -m pytest -q
+        # On every core of the runner (pytest-xdist).
+        run: python -m pytest -q -n auto
