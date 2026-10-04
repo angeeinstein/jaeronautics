@@ -299,6 +299,7 @@ def _team_data(user):
                 "covers_until": payment.covers_until,
                 "paid_at": payment.paid_at,
                 "status": payment.status,
+                "refunded_cents": payment.refunded_cents,
             }
             for payment in payments
         ],

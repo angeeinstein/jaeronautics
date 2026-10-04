@@ -787,6 +787,16 @@ class NotificationService:
                 "team_members_lapsed": _("Members left %(team)s", team=team),
             }[event.event_type]
             preview, lines, url, label = event.summary, [event.summary], manage_url, _("Open Team Management")
+        elif event.event_type == "team_bank_details_changed":
+            subject = _("Bank details of %(team)s changed", team=team)
+            preview = event.summary
+            lines = [
+                _("The bank details of %(team)s were changed by %(who)s. Payouts now go to %(holder)s, %(iban)s.",
+                  team=team, who=payload.get("changed_by"), holder=payload.get("account_holder") or "–",
+                  iban=payload.get("iban") or "–"),
+                _("If that was not agreed with the team, check it before the next transfer."),
+            ]
+            url, label = build_public_url("teams.team_money", slug=slug), _("Open Money")
         else:
             return None
         return (

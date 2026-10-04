@@ -68,6 +68,7 @@ class Permission:
     # What a lead may do inside their own team is not a global permission: it
     # is in services/teams.py, because it holds for one team only.
     TEAMS_MANAGE = "teams.manage"
+    TEAMS_MONEY = "teams.money"
 
 
 # Roles, and what each one may do. This is the whole access model.
@@ -88,6 +89,7 @@ ROLE_PERMISSIONS = {
         Permission.NOTIFICATIONS_RECEIVE,
         Permission.SETTINGS_GENERAL,
         Permission.TEAMS_MANAGE,
+        Permission.TEAMS_MONEY,
         # Somebody trusted to administer the members here is trusted to keep
         # order on the forum -- decided 2026-09-26. Nobody is made an admin
         # here who would not be trusted with that.
@@ -109,6 +111,7 @@ ROLE_PERMISSIONS = {
         Permission.SYSTEM_BACKUP,
         Permission.ROLES_MANAGE,
         Permission.TEAMS_MANAGE,
+        Permission.TEAMS_MONEY,
         Permission.FORUM_MODERATOR,
         # Everything on the forum as well. A Discourse admin can change any
         # site setting and make API keys, which is the forum's equivalent of
@@ -120,6 +123,12 @@ ROLE_PERMISSIONS = {
     # keeping a lecture category tidy has no reason to see who has paid.
     "forum_moderator": frozenset({
         Permission.FORUM_MODERATOR,
+    }),
+    # The association's treasurer: every team's money and bank account, and
+    # recording what was transferred -- no members, settings or anything else.
+    "treasurer": frozenset({
+        Permission.ADMIN_ACCESS,
+        Permission.TEAMS_MONEY,
     }),
 }
 
@@ -133,6 +142,11 @@ ROLE_LABELS = {
         "Super Admin",
         "Can install updates, manage credentials and grant administrator access. "
         "Also an administrator on the forum itself.",
+    ),
+    "treasurer": (
+        "Treasurer",
+        "Sees what every team earned and was paid out, records transfers to the teams and keeps "
+        "their bank details. No other admin rights.",
     ),
     "forum_moderator": (
         "Forum moderator",
@@ -171,6 +185,7 @@ PERMISSION_LABELS = {
     Permission.SYSTEM_BACKUP: "Make and download encrypted backups, and resume background jobs after a restore",
     Permission.ROLES_MANAGE: "Grant and revoke access for other people",
     Permission.TEAMS_MANAGE: "Create teams, appoint their leads, and open every team's page",
+    Permission.TEAMS_MONEY: "See every team's money, record transfers to teams and change their bank details",
 }
 
 

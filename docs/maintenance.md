@@ -668,25 +668,37 @@ it later leaves people in the old group -- delete that one in Discourse.
 
 **A fee** (site admins, in the team's form under *Fee*):
 
-1. In Stripe, create a product for the team (e.g. "Rocket Team fee") with a
-   **recurring** price: every 6 months for two periods a year, yearly for one.
-   Not the membership's product.
-2. In the team's form: *Payment* → Subscription, the price ID (`price_...`),
-   and the days the periods start (`01.10, 01.04`). Saving checks the price
-   with Stripe; the fee members see ("€10.00 every 6 months") is taken from it.
-3. Nothing to change in Stripe's webhook: the events it already sends cover
-   teams. They are marked `purpose: team` and never touch the membership.
+1. In Stripe, create one product for the team (e.g. "Rocket Team fee"), not the
+   membership's. Give it the price(s) you may use: a **recurring** one (every 6
+   months for two periods a year, yearly for one) and/or a **one-time** one.
+2. In the team's form: *Payment* → Subscription or Once per period, the
+   matching price ID (`price_...`), and the days the periods start
+   (`01.10, 01.03`). Saving checks the price with Stripe; the fee members see
+   ("€10.00 every 6 months", "€25.00 per period") is taken from it. Switching
+   later is the other mode with the other price -- the product stays.
+3. In Stripe's webhook endpoint, besides the events the membership uses, select
+   `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed` (SEPA paid once) and
+   `charge.refunded` (refunds come off what the team is owed). Everything for
+   teams is marked `purpose: team` and never touches the membership.
 
 How it runs: approved (or joining an open team), a person sees *Pay and join*.
-They pay the period under way in full, then Stripe charges at each period
-start; joining in the last 3 days before a start pays for the coming period
-instead. The first payment makes them a member. *Leave* runs to the end of
-what is paid (no refund), *Stay after all* takes it back. Removal by a lead,
-the association membership ending and erasure cancel the subscription at once,
-without refund. A renewal Stripe finally gives up on ends the team membership;
-for six months afterwards the person may come back by paying, without
-applying. Receipts and renewal emails come from Stripe. Payments are listed
-in the `payments` table, one per paid invoice.
+They pay the period under way in full, whenever they join. The first payment
+makes them a member. *Leave* runs to the end of what is paid (no refund), *Stay
+after all* takes it back. Removal by a lead, the association membership ending
+and erasure cancel a subscription at once, without refund. For six months
+after a membership ended unpaid the person may come back by paying, without
+applying. Payments are listed in the `payments` table and on the team's Money
+page.
+
+- **Subscription**: Stripe charges at each period start; joining in the last 3
+  days before one pays for the coming period instead. Receipts and renewal
+  emails come from Stripe. A renewal Stripe finally gives up on ends the team
+  membership.
+- **Once per period**: nothing renews by itself. 14 days before the period ends
+  the member is emailed and sees *Pay for next period* on the Teams page;
+  paying then continues without a gap. Whoever has not paid leaves on the last
+  day, and the leads get one summary. Stripe sends a receipt.
 
 Somebody who cancels their association membership -- on Stripe's billing page,
 say -- stays a member to the end of what they paid for. As soon as the portal
@@ -731,6 +743,24 @@ unpaid after 14 days (not while a SEPA debit is on its way), memberships whose
 leaving day has passed, or that are unpaid for more than 35 days, end in case
 Stripe's word never arrived, and access lists due that day go out.
 
+**Money** (Teams → Money, or the button on the management page). What the
+team's members paid -- exactly that: Stripe's fees are the association's --
+less refunds and lost chargebacks, what was transferred to the team, and what
+is still open, also by the period it paid for, with a CSV export. Seen by the
+team's leads and its **treasurer** (a team role, given like the lead role, that
+sees the money but not the people), and by the association's **Treasurer**
+and site admins for every team (Admin → Money), also archived ones.
+
+- **Bank details**: the team's leads and treasurer, the association's
+  Treasurer and site admins can set them. The IBAN is checked by its check
+  digits. Every change is in the log with before and after, and the
+  association's Treasurer is emailed when somebody else made it.
+- **Transferring**: the association's Treasurer (or an admin) opens the team's
+  Money page, scans the GiroCode with the banking app -- it fills in account,
+  open amount and reference -- sends it, then *Mark as transferred*. A
+  transfer is recorded with the account it went to and cannot exceed what is
+  open.
+
 **How payments are built.** `services/payments.py` is the one place that talks
 to Stripe for anything sold: the connection, the person's Stripe customer (one
 per person, shared by the membership and every team), opening a Checkout
@@ -755,16 +785,17 @@ year.
 
 `ROLE_PERMISSIONS` is the whole access model:
 
-| Capability | Admin | Super Admin |
-|---|---|---|
-| `admin.access` — open the admin workspace | yes | yes |
-| `accounts.view`, `accounts.billing`, `accounts.privacy` | yes | yes |
-| `approvals.review`, `forum.moderate`, `logs.view` | yes | yes |
-| `notifications.manage` — test email, undelivered queue | yes | yes |
-| `settings.general` | yes | yes |
-| `settings.credentials` — Stripe/Discourse keys, mail accounts | no | yes |
-| `system.update` — install a version, roll one back | no | yes |
-| `roles.manage` — grant or revoke access | no | yes |
+| Capability | Treasurer | Admin | Super Admin |
+|---|---|---|---|
+| `admin.access` — open the admin workspace | yes | yes | yes |
+| `teams.money` — every team's money, transfers, bank details | yes | yes | yes |
+| `accounts.view`, `accounts.billing`, `accounts.privacy` | no | yes | yes |
+| `approvals.review`, `forum.moderate`, `logs.view` | no | yes | yes |
+| `notifications.manage` — test email, undelivered queue | no | yes | yes |
+| `settings.general`, `teams.manage` | no | yes | yes |
+| `settings.credentials` — Stripe/Discourse keys, mail accounts | no | no | yes |
+| `system.update` — install a version, roll one back | no | no | yes |
+| `roles.manage` — grant or revoke access | no | no | yes |
 
 There is **no role implication**: `superadmin` is not "admin plus extra" by
 inheritance, its bundle simply contains the admin bundle. One mechanism rather

@@ -134,6 +134,9 @@
                         {% if team.id in manageable %}
                             <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Manage') }}</a>
                         {% endif %}
+                        {% if team.id in money_of %}
+                            <a class="btn btn-secondary" href="{{ url_for('teams.team_money', slug=team.slug) }}">{{ _('Money') }}</a>
+                        {% endif %}
                     </div>
                 </div>
             </div>

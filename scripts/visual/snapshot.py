@@ -235,6 +235,18 @@ def seed(app, app_module, subscriptions):
          "email": "anna.maximilian-hofstetter-wallensteiner@edu.fh-joanneum.at"},
         {"user_id": 99999, "name": "Dieter Departed", "email": "dieter.departed@edu.fh-joanneum.at"},
     ]))
+    # Money: two payments, one partly refunded, one transfer, and where it goes.
+    from aeronautics_members.db_models import Payment, TeamPayout
+
+    rocket.bank_account_holder, rocket.bank_iban, rocket.bank_bic = (
+        "Joanneum Aeronautics Rocket Team", "AT611904300234573201", "BKAUATWW")
+    for index, (payer, refunded) in enumerate(((active.user, 0), (carla, 500))):
+        db.session.add(Payment(purpose="team", team_id=rocket.id, user_id=payer.id, amount_cents=1000,
+                               currency="eur", covers_until=date(2027, 3, 31), refunded_cents=refunded,
+                               stripe_invoice_id=f"in_example_{index}"))
+    db.session.add(TeamPayout(team_id=rocket.id, amount_cents=500, paid_on=date(2026, 10, 1),
+                              reference="Teambeiträge Rocket Team bis 01.10.2026",
+                              account_holder=rocket.bank_account_holder, iban=rocket.bank_iban))
     db.session.commit()
 
     reset_token = build_password_reset_token(new.user)
@@ -292,6 +304,9 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--manage", "user": "active@example.org", "path": "/teams/rocket-team/manage"},
         {"name": "teams--person", "user": "active@example.org", "path": f"/teams/rocket-team/manage/people/{bernd.id}"},
         {"name": "teams--access-list", "user": "active@example.org", "path": "/teams/rocket-team/manage/access-list"},
+        {"name": "teams--money", "user": "active@example.org", "path": "/teams/rocket-team/money"},
+        {"name": "teams--money-treasurer", "user": "admin@example.org", "path": "/teams/rocket-team/money"},
+        {"name": "admin--money", "user": "admin@example.org", "path": "/admin/money"},
     ]
 
 

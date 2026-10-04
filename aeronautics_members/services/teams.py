@@ -77,23 +77,31 @@ class TeamPermission:
     EXPORT = "team.export"
     EDIT_SETTINGS = "team.edit_settings"
     SEND_ACCESS_LIST = "team.send_access_list"
+    VIEW_MONEY = "team.view_money"
+    EDIT_BANK_DETAILS = "team.edit_bank_details"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
+        VIEW_MONEY, EDIT_BANK_DETAILS,
     })
+    #: The team's money, and the account it is paid to -- nothing about people.
+    MONEY = frozenset({VIEW_MONEY, EDIT_BANK_DETAILS})
 
 
 ROLE_LEAD = "lead"
+ROLE_TREASURER = "treasurer"
 
 #: Every team role, and what it may do. A new role -- a treasurer who may only
 #: export, say -- is a new entry here and needs no change to the database.
 TEAM_ROLE_PERMISSIONS = {
     ROLE_LEAD: TeamPermission.ALL,
+    ROLE_TREASURER: TeamPermission.MONEY,
 }
 
 TEAM_ROLE_LABELS = {
     ROLE_LEAD: "Lead",
+    ROLE_TREASURER: "Treasurer",
 }
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -427,13 +435,14 @@ def team_permissions(user, team):
         return frozenset()
     if user.can(Permission.TEAMS_MANAGE):
         return TeamPermission.ALL
+    # The association's treasurer: every team's money, nothing about its people.
+    granted = set(TeamPermission.MONEY) if user.can(Permission.TEAMS_MONEY) else set()
     if team.status != STATUS_ACTIVE:
-        return frozenset()
+        return frozenset(granted)
 
     held = [team_role for team_role in team.roles if team_role.user_id == user.id]
     if not held or not role_counts(held[0]):
-        return frozenset()
-    granted = set()
+        return frozenset(granted)
     for team_role in held:
         granted |= TEAM_ROLE_PERMISSIONS.get(team_role.role, frozenset())
     return frozenset(granted)

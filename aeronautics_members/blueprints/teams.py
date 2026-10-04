@@ -303,8 +303,13 @@ def _may(team, permission):
         abort(403)
 
 
+def _manages_people(team):
+    """Money alone -- a treasurer's -- is not a say over the team's people."""
+    return teams_service.can_in_team(current_user, team, teams_service.TeamPermission.VIEW_MEMBERS)
+
+
 def _sees_team_page(team):
-    return bool(teams_service.team_permissions(current_user, team)) or (
+    return _manages_people(team) or (
         teams_service.is_active_association_member(current_user)
         and teams_service.active_team_membership(current_user, team) is not None
     )
@@ -335,7 +340,9 @@ def teams_home():
         is_member=teams_service.is_active_association_member(current_user),
         why_not_joinable=lambda team: teams_service.why_not_joinable(current_user, team),
         status_labels=teams_service.STATUS_LABELS,
-        manageable={team.id for team in teams_service.teams_led_by(current_user)},
+        manageable={team.id for team in teams_service.teams_led_by(current_user) if _manages_people(team)},
+        money_of={team.id for team in teams_service.teams_led_by(current_user)
+                  if teams_service.can_in_team(current_user, team, teams_service.TeamPermission.VIEW_MONEY)},
         charges=team_payments.charges,
         needs_to_pay=team_payments.needs_to_pay,
         renewal_open=team_payments.renewal_open,
@@ -475,7 +482,7 @@ def team_page(slug):
         leads=[team_role.user for team_role in teams_service.role_holders(team, teams_service.ROLE_LEAD)
                if teams_service.role_counts(team_role)],
         my_membership=teams_service.active_team_membership(current_user, team),
-        can_manage=bool(teams_service.team_permissions(current_user, team)),
+        can_manage=_manages_people(team),
         label_plural=teams_service.team_labels()[1],
     )
 
@@ -675,4 +682,145 @@ def team_access_list_send(slug):
         lambda team: teams_service.send_access_list(current_user, team),
         _("Sent."),
         back=url_for("teams.team_manage", slug=slug),
+    )
+
+
+# --- Money ---------------------------------------------------------------------
+#
+# What a team's members paid and what the association passed on. Open to the
+# team's leads and treasurers, and to the association's treasurer and admins
+# for every team -- also for an archived one, and while teams are switched
+# off, since what is owed stays owed.
+
+
+def _money_team_or_404(slug):
+    if not current_user.can(Permission.TEAMS_MONEY):
+        team = _team_or_404(slug)
+    else:
+        try:
+            team = teams_service.get_team(slug)
+        except ServiceError:
+            abort(404)
+    _may(team, teams_service.TeamPermission.VIEW_MONEY)
+    return team
+
+
+@teams_bp.route("/teams/<slug>/money", methods=["GET"])
+@login_required
+def team_money(slug):
+    from ..services import team_money as money
+
+    team = _money_team_or_404(slug)
+    permissions = teams_service.team_permissions(current_user, team)
+    summary = money.summary(team)
+    pays_out = current_user.can(Permission.TEAMS_MONEY)
+    reference = money.default_reference(team)
+    return render_template(
+        "teams/money.html",
+        team=team,
+        summary=summary,
+        permissions=permissions,
+        TeamPermission=teams_service.TeamPermission,
+        manages_people=_manages_people(team),
+        pays_out=pays_out,
+        reference=reference,
+        qr_svg=money.payout_qr_svg(team, summary["open"], reference) if pays_out else None,
+        today=get_membership_today(),
+        euros=money.euros,
+        counts=money.counts,
+        payer_name=money.payer_name,
+        masked_iban=money.masked_iban,
+        grouped_iban=money.grouped_iban,
+    )
+
+
+@teams_bp.route("/teams/<slug>/money.csv", methods=["GET"])
+@login_required
+def team_money_export(slug):
+    from ..services import team_money as money
+
+    team = _money_team_or_404(slug)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(money.EXPORT_COLUMNS)
+    writer.writerows(money.export_rows(team))
+    log_audit_event("payments", "team_payments_exported", actor_user=current_user, metadata={"team": team.slug})
+    db.session.commit()
+    filename = f"{team.slug}-payments-{get_membership_today().isoformat()}.csv"
+    return Response(
+        "﻿" + buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _money_action(slug, permission, action, success_message):
+    team = _money_team_or_404(slug)
+    _may(team, permission)
+    try:
+        changed = action(team)
+    except ServiceError as error:
+        db.session.rollback()
+        flash(error.message, "danger")
+    else:
+        db.session.commit()
+        from ..services.notifications import flush_marked_notification_channels
+
+        flush_marked_notification_channels()
+        flash(success_message if changed is not False else _("Nothing changed."),
+              "success" if changed is not False else "info")
+    return redirect(url_for("teams.team_money", slug=team.slug))
+
+
+@teams_bp.route("/teams/<slug>/money/bank", methods=["POST"])
+@login_required
+def team_money_bank(slug):
+    from ..services.team_money import update_bank_details
+
+    return _money_action(
+        slug, teams_service.TeamPermission.EDIT_BANK_DETAILS,
+        lambda team: update_bank_details(
+            current_user, team,
+            account_holder=request.form.get("account_holder"),
+            iban=request.form.get("iban"),
+            bic=request.form.get("bic"),
+        ),
+        _("Bank details saved."),
+    )
+
+
+@teams_bp.route("/teams/<slug>/money/payouts", methods=["POST"])
+@login_required
+@requires(Permission.TEAMS_MONEY)
+def team_money_payout(slug):
+    from ..services.team_money import record_payout
+
+    return _money_action(
+        slug, teams_service.TeamPermission.VIEW_MONEY,
+        lambda team: record_payout(
+            current_user, team,
+            amount=request.form.get("amount"),
+            paid_on=request.form.get("paid_on"),
+            reference=request.form.get("reference"),
+        ),
+        _("Transfer recorded."),
+    )
+
+
+@teams_bp.route("/admin/money", methods=["GET"])
+@login_required
+@requires(Permission.TEAMS_MONEY)
+def admin_money():
+    from ..services import team_money as money
+
+    rows = money.all_teams_money()
+    return render_template(
+        "admin_money.html",
+        active_admin_section="money",
+        page_title=_("Money"),
+        page_description=_("What each team's members paid, and what was transferred to the team."),
+        rows=rows,
+        total_open=sum(row["open"] for row in rows),
+        euros=money.euros,
+        masked_iban=money.masked_iban,
     )

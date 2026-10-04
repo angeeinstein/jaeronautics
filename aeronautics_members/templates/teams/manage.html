@@ -13,6 +13,9 @@
         </div>
         <div class="d-flex flex-wrap gap-2">
             <a class="btn btn-secondary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Team page') }}</a>
+            {% if TeamPermission.VIEW_MONEY in permissions %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_money', slug=team.slug) }}">{{ _('Money') }}</a>
+            {% endif %}
             {% if TeamPermission.EXPORT in permissions %}
                 <a class="btn btn-secondary" href="{{ url_for('teams.team_export', slug=team.slug) }}">{{ _('Export members') }}</a>
             {% endif %}

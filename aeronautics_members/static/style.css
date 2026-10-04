@@ -1310,3 +1310,14 @@ textarea.form-control {
     max-width: 22rem;
     min-width: 0;
 }
+
+/* The GiroCode for a transfer to a team: black on white, whatever the theme,
+   so every banking app reads it. */
+.payout-qr svg {
+    display: block;
+    width: 100%;
+    max-width: 240px;
+    height: auto;
+    background: #ffffff;
+    border-radius: 4px;
+}

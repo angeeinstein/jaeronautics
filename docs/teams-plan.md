@@ -113,17 +113,42 @@ access to the office.
   per year or once, is not known yet. The three payment options are meant to
   cover whatever it decides without new code.
 
-**Built (October 2026):** *recurring* and *none*. One-time per period is not
-built yet -- nobody needs it so far; `payment_mode` is text, so it can be added
-as a third mode. A team's fee is its own Stripe product and recurring price,
-with its period start days (`01.10, 01.04`), set by site admins. Joining in the
-last 3 days before a period start pays for the coming period (Stripe will not
-end a trial sooner than 48 hours away). Leaving runs to the end of what is
-paid; removal, the association membership ending and erasure cancel at once,
-all without refund. Rejoining after not paying is by paying, within six months.
-Stripe sends the receipts and renewal emails. Built on `services/payments.py`,
-which the membership, every team and anything sold later share; see the
-maintenance guide.
+**Built (October 2026):** all three. A team's fee is its own Stripe product,
+which can hold a recurring and a one-time price side by side; the team's form
+says which is used, so switching means picking the other price and mode. Period
+start days (`01.10, 01.03`) are set by site admins.
+
+- *Recurring:* joining in the last 3 days before a period start pays for the
+  coming period (Stripe will not end a trial sooner than 48 hours away). Stripe
+  sends the receipts and renewal emails.
+- *Once per period:* a Checkout payment for the period under way, full fee
+  also for late joiners. Nothing renews by itself: 14 days before the period
+  ends the member is emailed, and may pay for the next period any time from
+  then, so there is no gap. Whoever has not paid leaves on the last day.
+
+Leaving runs to the end of what is paid; removal, the association membership
+ending and erasure cancel at once, all without refund. Rejoining after not
+paying is by paying, within six months. Built on `services/payments.py`, which
+the membership, every team and anything sold later share; see the maintenance
+guide.
+
+## Money
+
+- **Teams get exactly what their members paid** -- *agreed.* Stripe's fees are
+  the association's, a sponsorship on top. Refunds and lost chargebacks come
+  off.
+- **An open balance, no cut-off dates** -- *agreed.* What was paid less what was
+  transferred, shown by the period it paid for. The association transfers
+  whenever suits and records each transfer.
+- **Who sees it** -- *agreed.* The team's leads and a team **treasurer** (a team
+  role with money rights only) see the team's money and keep its bank details.
+  The association's **Treasurer** (a global role with no other admin rights)
+  sees every team's money, records transfers and may edit bank details; so do
+  site admins. Every bank-details change is logged, and the association's
+  treasurer is emailed about one made by somebody else.
+- **Paying out** -- *built.* The transfer box shows a GiroCode (EPC QR) with the
+  team's account, the open amount and a reference; scanning it in a banking
+  app fills in the transfer.
 
 ## When a team membership ends
 
@@ -133,14 +158,13 @@ maintenance guide.
   group, onto the former members list. The leads are told — *suggested:* one
   summary per team ("these 7 ended on 30 September"), not an email per person,
   since every period ends on the same day.
-- **An email to the member when it ends** — *agreed so far*, with the summary
-  to the leads. One short email with a renewal link, no reminder beforehand.
-  To build with payment. If the team pays by subscription rather than once per
-  period, Stripe's own renewal emails may make this one redundant -- decide
-  then.
+- **Emails to the member** — *built.* Paid once per period: a reminder 14 days
+  before the period ends (paying then continues without a gap), and a short
+  email when it has ended, with the one summary to the leads. Paid by
+  subscription, Stripe's own renewal emails do the reminding.
 - **Leaving on one's own** — *agreed so far:* no refund, and the membership
-  runs to the end of the paid period rather than ending at once. To build with
-  payment; until then teams are free and leaving ends it at once.
+  runs to the end of the paid period rather than ending at once. Built; in a
+  free team leaving ends it at once.
 - **The association membership ends** — follows from the requirement: the team
   membership ends with it and the leads are told. *Built:* once somebody
   cancels their association membership, their team memberships are set to end
@@ -190,9 +214,9 @@ maintenance guide.
   members who pay like everybody else and carry a role on top. A role only
   counts while its holder is an active team member. The first lead of a new
   team joins like anybody, and a site admin approves them.
-- **More roles later** — *agreed so far*, not built now: a treasurer, say, with
-  slightly different permissions. The database keeps roles as text and allows
-  several per person, so adding one changes no table.
+- **More roles** — *built:* a team **treasurer**, who sees the team's money and
+  keeps its bank details but not its people. The database keeps roles as text
+  and allows several per person, so adding one changes no table.
 - **The last lead** — *suggested.* Never removed automatically, only paused.
   Site admins can open every team page at any time, so a team without an active
   lead is never unmanageable. When a team has no active lead, the site admins
