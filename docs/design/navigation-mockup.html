@@ -1,0 +1,681 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal Navigation Mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a page header with the version switcher, then one framed "app window"
+   that renders the chosen navigation version, fully clickable. */
+:root {
+  --bg: #eef3f6;
+  --surface: #ffffff;
+  --surface-2: #f4f8fa;
+  --fg: #13222c;
+  --muted: #5a6c78;
+  --border: #d4dfe6;
+  --accent: #0089a8;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcf2f8;
+  --ok: #1d7a4a;
+  --ok-soft: #e1f3e8;
+  --warn: #a5610a;
+  --warn-soft: #fbefdc;
+  --danger: #b3261e;
+  --shadow: 0 1px 2px rgba(19, 34, 44, .06), 0 8px 24px rgba(19, 34, 44, .06);
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1316; --surface: #141c20; --surface-2: #1a2429; --fg: #e4edf1; --muted: #93a5b0;
+    --border: #283740; --accent: #2fd0ec; --accent-ink: #062128; --accent-soft: #10343d;
+    --ok: #5fd193; --ok-soft: #13301f; --warn: #f0b45c; --warn-soft: #3a2a12; --danger: #ff8a80;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1316; --surface: #141c20; --surface-2: #1a2429; --fg: #e4edf1; --muted: #93a5b0;
+  --border: #283740; --accent: #2fd0ec; --accent-ink: #062128; --accent-soft: #10343d;
+  --ok: #5fd193; --ok-soft: #13301f; --warn: #f0b45c; --warn-soft: #3a2a12; --danger: #ff8a80;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5; padding-inline: 16px; padding-block: 20px 40px; }
+button { font: inherit; color: inherit; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1200px; margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
+
+/* Page header and switchers */
+.intro h1 { font-family: var(--display); font-weight: 700; font-size: 1.6rem; margin: 0 0 4px; text-wrap: balance; }
+.intro p { margin: 0; color: var(--muted); max-width: 70ch; }
+.switch-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+.versions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: 1 1 640px; }
+.version { text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.version b { font-family: var(--display); font-weight: 600; }
+.version span { color: var(--muted); font-size: .85rem; }
+.version[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.role { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); align-self: center; }
+.role button { border: 0; background: transparent; padding: 8px 14px; cursor: pointer; }
+.role button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.note { font-size: .85rem; color: var(--muted); }
+
+/* The app window */
+.app { position: relative; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); box-shadow: var(--shadow); height: min(760px, 82vh); min-height: 560px; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { display: flex; align-items: center; gap: 4px; padding: 0 12px; height: 54px; background: var(--surface); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.logo { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-weight: 700; letter-spacing: .02em; margin-right: 12px; white-space: nowrap; }
+.logo svg { width: 26px; height: 26px; flex: 0 0 auto; }
+.logo small { font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.toplink { border: 0; background: transparent; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-weight: 500; white-space: nowrap; }
+.toplink:hover { background: var(--surface-2); }
+.toplink[aria-current="page"] { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+.spacer { flex: 1 1 auto; }
+.usermenu { position: relative; }
+.avatar-btn { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 3px 10px 3px 3px; cursor: pointer; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 600; font-size: .8rem; flex: 0 0 auto; }
+.dropdown { position: absolute; right: 0; top: calc(100% + 6px); min-width: 210px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); padding: 6px; z-index: 20; display: flex; flex-direction: column; }
+.dropdown.up { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; }
+.dropdown .who { padding: 6px 10px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; font-size: .85rem; color: var(--muted); }
+.dropdown .who b { display: block; color: var(--fg); }
+.menuitem { text-align: left; border: 0; background: transparent; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+.menuitem:hover { background: var(--surface-2); }
+.c-mobile { display: none !important; }
+.hamburger { display: none; border: 1px solid var(--border); background: var(--surface-2); border-radius: 6px; padding: 6px 10px; cursor: pointer; margin-right: 8px; }
+
+.body { display: flex; flex: 1 1 auto; min-height: 0; }
+.sidebar { flex: 0 0 236px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+.sidebar.dark-context { background: var(--surface-2); }
+.side-back { display: flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--muted); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: .9rem; text-align: left; }
+.side-back:hover { background: var(--surface-2); color: var(--fg); }
+.side-title { display: flex; align-items: center; gap: 8px; padding: 8px 10px 10px; font-family: var(--display); font-weight: 600; }
+.group-label { text-transform: uppercase; letter-spacing: .08em; font-size: .7rem; color: var(--muted); padding: 12px 10px 4px; font-weight: 600; }
+.side-item { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; padding: 7px 10px; border-radius: 6px; cursor: pointer; text-align: left; }
+.side-item:hover { background: var(--surface-2); }
+.side-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.side-item .chev { margin-left: auto; transition: transform .15s; color: var(--muted); }
+.side-item[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.side-sub { display: flex; flex-direction: column; gap: 2px; padding-left: 14px; margin-left: 12px; border-left: 1px solid var(--border); }
+.side-sub .side-item { padding: 5px 10px; font-size: .92rem; }
+.count { margin-left: auto; background: var(--accent); color: var(--accent-ink); border-radius: 999px; font-size: .72rem; padding: 0 7px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.side-item .ext { margin-left: auto; color: var(--muted); font-size: .8rem; }
+.side-foot { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); position: relative; }
+.ico { width: 16px; height: 16px; flex: 0 0 auto; opacity: .8; }
+
+.main { flex: 1 1 auto; min-width: 0; overflow-y: auto; padding: 20px 24px 32px; display: flex; flex-direction: column; gap: 16px; }
+.main.narrow > * { max-width: 860px; width: 100%; margin-inline: auto; }
+.crumbs { display: flex; flex-wrap: wrap; gap: 6px; font-size: .85rem; color: var(--muted); align-items: center; }
+.crumbs button { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0; }
+.page-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+.page-head h2 { font-family: var(--display); font-weight: 700; font-size: 1.4rem; margin: 0; text-wrap: balance; }
+.page-head p { margin: 2px 0 0; color: var(--muted); }
+.page-head .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.card-h { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); font-family: var(--display); font-weight: 600; }
+.card-h .right { margin-left: auto; font-family: var(--body); font-weight: 400; color: var(--muted); font-size: .85rem; }
+.card-b { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.btn { border: 1px solid var(--border); background: var(--surface); padding: 7px 14px; border-radius: 7px; cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn-row .push { margin-left: auto; }
+.pill { display: inline-block; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.info { background: var(--accent-soft); color: var(--accent); }
+.pill.neutral { background: var(--surface-2); color: var(--muted); }
+.kv { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 6px 12px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; }
+.stat { padding: 14px 16px; }
+.stat b { display: block; font-family: var(--display); font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: .85rem; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--surface-2); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.tab { border: 0; background: transparent; padding: 8px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: .85rem; font-weight: 500; }
+.field input, .field select, .field textarea { border: 1px solid var(--border); background: var(--surface-2); color: var(--fg); border-radius: 6px; padding: 7px 10px; font: inherit; }
+.hint { font-size: .8rem; color: var(--muted); }
+.setting-groups { display: flex; flex-direction: column; gap: 18px; }
+.setting-group h3 { font-family: var(--display); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; }
+.tile { text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 12px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.tile:hover { border-color: var(--accent); }
+.tile b { font-weight: 600; }
+.tile span { color: var(--muted); font-size: .85rem; }
+.team-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px 16px; }
+.team-mark { width: 40px; height: 40px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-family: var(--display); font-weight: 700; flex: 0 0 auto; }
+.person { display: flex; align-items: center; gap: 10px; }
+.empty { color: var(--muted); }
+.toast { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: .9rem; z-index: 40; box-shadow: var(--shadow); }
+.scrim { position: absolute; inset: 54px 0 0 0; background: rgba(0,0,0,.35); z-index: 25; }
+
+/* Phone and narrow windows: the sidebar becomes a drawer behind a Menu button. */
+@media (max-width: 760px) {
+  body { padding-block: 12px 24px; }
+  .versions { grid-template-columns: minmax(0, 1fr); }
+  .app { height: 720px; }
+  .hamburger { display: inline-flex; }
+  .c-mobile { display: flex !important; }
+  .topbar { overflow-x: auto; gap: 0; padding: 0 8px; }
+  .toplink { padding: 8px 7px; }
+  .logo { margin-right: 4px; }
+  .logo .word, .logo small { display: none; }
+  .avatar-btn span.name { display: none; }
+  .sidebar { position: absolute; top: 54px; bottom: 0; left: 0; width: 260px; z-index: 30; transform: translateX(-105%); transition: transform .2s; box-shadow: var(--shadow); }
+  .app.menu-open .sidebar { transform: none; }
+  .main { padding: 16px; }
+  .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); }
+  .kv { grid-template-columns: minmax(0, 1fr); }
+  .kv dt { margin-top: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>Portal navigation, three ways</h1>
+    <p>Quick, clickable mockups of how the portal could be structured. Pick a version, click through My Account, Teams and Admin, and try it on a narrow window. Example data only; nothing is saved.</p>
+  </header>
+
+  <div class="switch-row">
+    <div class="versions" role="group" aria-label="Version">
+      <button class="version" data-version="A" aria-pressed="true"><b>A · Admin sidebar</b><span>Top bar for the portal; the admin area gets its own sidebar. Settings folds open inside it.</span></button>
+      <button class="version" data-version="B" aria-pressed="false"><b>B · Settings overview</b><span>Like A, but Settings is one page of grouped tiles, each opening its own page (as in Stripe).</span></button>
+      <button class="version" data-version="C" aria-pressed="false"><b>C · One sidebar</b><span>No top menu. One sidebar for everything; a team or Settings swaps it for its own, with a back arrow.</span></button>
+    </div>
+    <div class="role" role="group" aria-label="View as">
+      <button data-role="member" aria-pressed="false">Member</button>
+      <button data-role="admin" aria-pressed="true">Admin</button>
+    </div>
+  </div>
+
+  <div class="app" id="app"></div>
+  <p class="note">Things to try: open a member in Admin → Accounts, open Settings, open Rocket Team → Manage, and the user menu at the top right (bottom left in C).</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Example data ----------
+  var MEMBERS = [
+    { id: "anna", name: "Anna Berger", email: "anna.berger@edu.fh-joanneum.at", kind: "Student", cohort: "LAV25", status: "Active", until: "31.12.2026", teams: ["Rocket Team"] },
+    { id: "bernd", name: "Bernd Back", email: "bernd.back@edu.fh-joanneum.at", kind: "Student", cohort: "LAV24", status: "Active", until: "31.12.2026", teams: [] },
+    { id: "carla", name: "Carla Cancel", email: "carla@example.org", kind: "Alumni", cohort: "LAV19", status: "Ending", until: "31.12.2026", teams: ["Rocket Team"] },
+    { id: "dora", name: "Dora Double", email: "dora@example.org", kind: "Student", cohort: "LAV26", status: "Payment on its way", until: "-", teams: [] },
+    { id: "elke", name: "Elke Ended", email: "elke@example.org", kind: "Staff", cohort: "-", status: "Ended", until: "31.12.2025", teams: [] }
+  ];
+  var TEAMS = [
+    { id: "rocket", name: "Rocket Team", mark: "R", fee: "€10.00 every 6 months", members: 14, lead: "Anna Berger", open: "€140.00" },
+    { id: "glider", name: "Glider Team", mark: "G", fee: "€25.00 per period", members: 9, lead: "Lena Lead", open: "€0.00" },
+    { id: "drone", name: "Team Drone Tech", mark: "D", fee: "Free", members: 6, lead: "Tom Tech", open: "€0.00" }
+  ];
+  var SETTINGS = [
+    { group: "Association", items: [
+      { id: "general", name: "General", text: "Name, contact address, footer links, label for teams." },
+      { id: "notifications", name: "Notifications", text: "Who gets the admin digest, how often." },
+      { id: "billing", name: "Membership fee", text: "Stripe keys, price, free period from October." }
+    ] },
+    { group: "Connections", items: [
+      { id: "forum", name: "Forum", text: "Discourse address, single sign-on, groups." },
+      { id: "mail", name: "Mail accounts", text: "Senders for emails (IONOS, Brevo)." }
+    ] },
+    { group: "System", items: [
+      { id: "tests", name: "Test tools", text: "Send a test email, test the forum connection." },
+      { id: "maintenance", name: "Maintenance", text: "Updates, backups, background jobs." }
+    ] }
+  ];
+  var TEAM_SECTIONS = [
+    { id: "applications", name: "Applications", count: 1 },
+    { id: "members", name: "Members" },
+    { id: "former", name: "Former members" },
+    { id: "page", name: "Team page" },
+    { id: "applying", name: "Applying" },
+    { id: "access", name: "Access list" },
+    { id: "roles", name: "Roles" }
+  ];
+  var MEMBER_TABS = ["Profile", "Membership", "Forum", "Teams", "Roles", "Danger zone"];
+
+  // ---------- State ----------
+  var state = { version: "A", role: "admin", route: "account", settingsOpen: true, userMenu: false, toast: "", sidebarStack: "main" };
+  var app = document.getElementById("app");
+  var toastTimer = null;
+
+  function go(route) {
+    state.route = route;
+    state.userMenu = false;
+    app.classList.remove("menu-open");
+    render();
+    var main = app.querySelector(".main");
+    if (main) main.scrollTop = 0;
+  }
+  function toast(text) {
+    state.toast = text;
+    render();
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { state.toast = ""; render(); }, 1800);
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function isAdminRoute(r) { return r.indexOf("admin") === 0; }
+  function isManageRoute(r) { return r.indexOf("manage:") === 0; }
+  function parts(r) { return r.split(":"); }
+
+  // ---------- Small icons ----------
+  var I = {
+    home: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 7.5 8 2.5l6 5V14H2z"/></svg>',
+    user: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="2.8"/><path d="M2.5 14c.8-3 3-4.3 5.5-4.3s4.7 1.3 5.5 4.3"/></svg>',
+    users: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="2.4"/><circle cx="11.3" cy="6.6" r="1.9"/><path d="M1.5 13.5c.6-2.3 2.4-3.3 4.5-3.3s3.9 1 4.5 3.3M10.5 10.3c1.9 0 3.3.9 3.9 2.8"/></svg>',
+    check: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="m5 8 2 2 4-4"/></svg>',
+    flag: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 14V2.5M3 3h8l-1.5 3L11 9H3"/></svg>',
+    euro: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3.6A5 5 0 1 0 12 12.4M2.5 6.8h7M2.5 9.2h7"/></svg>',
+    list: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 4h9M5 8h9M5 12h9M2 4h.5M2 8h.5M2 12h.5"/></svg>',
+    gear: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>',
+    chat: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3h11v8h-6l-3 2.5V11h-2z"/></svg>',
+    back: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg>'
+  };
+  var CHEV = '<span class="chev" aria-hidden="true">›</span>';
+  var LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 28 16 3l13 25h-6l-7-14-7 14z" fill="var(--accent)"/><path d="M14 19h12" stroke="var(--fg)" stroke-width="2.4"/></svg>';
+
+  // ---------- Pieces of the frame ----------
+  function topLink(label, route, current, wide) {
+    return '<button class="toplink' + (wide ? " wide" : "") + '" data-go="' + route + '"' + (current ? ' aria-current="page"' : "") + ">" + label + "</button>";
+  }
+  function userMenu(up) {
+    var btn = '<button class="avatar-btn" data-action="usermenu" aria-expanded="' + state.userMenu + '"><span class="avatar">AB</span><span class="name">Anna Berger</span></button>';
+    var dd = "";
+    if (state.userMenu) {
+      dd = '<div class="dropdown' + (up ? " up" : "") + '" role="menu"><div class="who"><b>Anna Berger</b>anna.berger@edu.fh-joanneum.at</div>' +
+        '<button class="menuitem" data-go="account">My account</button>' +
+        '<button class="menuitem" data-toast="Change password would open here">Change password</button>' +
+        '<button class="menuitem" data-toast="Download my data would start here">Download my data</button>' +
+        '<button class="menuitem" data-toast="Logged out (mockup)">Log out</button></div>';
+    }
+    return '<div class="usermenu">' + btn + dd + "</div>";
+  }
+  function sideItem(label, route, icon, extra) {
+    var current = state.route === route || (extra && extra.match && extra.match(state.route));
+    return '<button class="side-item" data-go="' + route + '"' + (current ? ' aria-current="page"' : "") + ">" + (icon || "") + "<span>" + label + "</span>" + (extra && extra.count ? '<span class="count">' + extra.count + "</span>" : "") + (extra && extra.ext ? '<span class="ext">↗</span>' : "") + "</button>";
+  }
+  function crumbs(list) {
+    return '<nav class="crumbs" aria-label="Breadcrumb">' + list.map(function (c, i) {
+      var last = i === list.length - 1;
+      return (last ? "<span>" + esc(c[0]) + "</span>" : '<button data-go="' + c[1] + '">' + esc(c[0]) + "</button><span aria-hidden=\"true\">›</span>");
+    }).join("") + "</nav>";
+  }
+  function head(title, sub, actions) {
+    return '<div class="page-head"><div><h2>' + title + "</h2>" + (sub ? "<p>" + sub + "</p>" : "") + "</div>" + (actions ? '<div class="actions">' + actions + "</div>" : "") + "</div>";
+  }
+
+  // ---------- Sidebars ----------
+  function adminSidebar() {
+    var v = state.version;
+    var html = '<button class="side-back" data-go="account">' + I.back + "Back to the portal</button>";
+    html += '<div class="group-label">Overview</div>' + sideItem("Dashboard", "admin", I.home);
+    html += '<div class="group-label">People</div>' +
+      sideItem("Accounts", "admin:accounts", I.users, { match: function (r) { return r.indexOf("admin:account:") === 0; } }) +
+      sideItem("Reviews", "admin:reviews", I.check, { count: 2 });
+    html += '<div class="group-label">Teams</div>' +
+      sideItem("Teams", "admin:teams", I.flag, { match: function (r) { return r.indexOf("admin:team:") === 0; } }) +
+      sideItem("Money", "admin:money", I.euro);
+    html += '<div class="group-label">System</div>' + sideItem("Logs", "admin:logs", I.list);
+    if (v === "A") {
+      html += '<button class="side-item" data-action="toggle-settings" aria-expanded="' + state.settingsOpen + '">' + I.gear + "<span>Settings</span>" + CHEV + "</button>";
+      if (state.settingsOpen) {
+        html += '<div class="side-sub">' + SETTINGS.map(function (g) {
+          return g.items.map(function (it) { return sideItem(it.name, "admin:settings:" + it.id); }).join("");
+        }).join("") + "</div>";
+      }
+    } else {
+      html += sideItem("Settings", "admin:settings", I.gear, { match: function (r) { return r.indexOf("admin:settings") === 0; } });
+    }
+    return '<aside class="sidebar" aria-label="Admin">' + html + "</aside>";
+  }
+  function teamSidebar(teamId) {
+    var team = TEAMS.filter(function (t) { return t.id === teamId; })[0];
+    var html = '<button class="side-back" data-go="teams">' + I.back + "All teams</button>";
+    html += '<div class="side-title"><span class="team-mark" style="width:28px;height:28px;font-size:.85rem">' + team.mark + "</span>" + team.name + "</div>";
+    html += '<div class="group-label">People</div>' + TEAM_SECTIONS.slice(0, 3).map(function (s) {
+      return sideItem(s.name, "manage:" + teamId + ":" + s.id, "", s.count ? { count: s.count } : null);
+    }).join("");
+    html += '<div class="group-label">Settings</div>' + TEAM_SECTIONS.slice(3).map(function (s) {
+      return sideItem(s.name, "manage:" + teamId + ":" + s.id);
+    }).join("");
+    html += '<div class="group-label">Elsewhere</div>' + sideItem("Team page", "team:" + teamId, I.flag) + sideItem("Money", "money:" + teamId, I.euro);
+    return '<aside class="sidebar dark-context" aria-label="' + team.name + '">' + html + "</aside>";
+  }
+  // Version C: one sidebar; a team or Settings swaps it for its own.
+  function oneSidebar() {
+    var r = state.route;
+    var html = '<div class="side-title" style="padding-top:2px">' + LOGO.replace("<svg", '<svg style="width:22px;height:22px"') + "Aeronautics</div>";
+    if (isManageRoute(r)) {
+      var teamId = parts(r)[1];
+      var team = TEAMS.filter(function (t) { return t.id === teamId; })[0];
+      html += '<button class="side-back" data-go="teams">' + I.back + "Back</button>";
+      html += '<div class="side-title"><span class="team-mark" style="width:28px;height:28px;font-size:.85rem">' + team.mark + "</span>" + team.name + "</div>";
+      html += TEAM_SECTIONS.map(function (s) { return sideItem(s.name, "manage:" + teamId + ":" + s.id, "", s.count ? { count: s.count } : null); }).join("");
+    } else if (r.indexOf("admin:settings") === 0) {
+      html += '<button class="side-back" data-go="admin">' + I.back + "Back</button>";
+      html += '<div class="side-title">' + I.gear + "Settings</div>";
+      html += SETTINGS.map(function (g) {
+        return '<div class="group-label">' + g.group + "</div>" + g.items.map(function (it) { return sideItem(it.name, "admin:settings:" + it.id); }).join("");
+      }).join("");
+    } else {
+      html += '<div class="group-label">Me</div>' +
+        sideItem("My membership", "account", I.user) +
+        sideItem("Teams", "teams", I.flag, { match: function (x) { return x === "teams" || x.indexOf("team:") === 0 || x.indexOf("about:") === 0; } }) +
+        '<div class="side-sub">' + sideItem("Rocket Team", "team:rocket") + "</div>" +
+        sideItem("Forum", "forum", I.chat, { ext: true });
+      if (state.role === "admin") {
+        html += '<div class="group-label">Association</div>' +
+          sideItem("Dashboard", "admin", I.home) +
+          sideItem("Accounts", "admin:accounts", I.users, { match: function (x) { return x.indexOf("admin:account:") === 0; } }) +
+          sideItem("Reviews", "admin:reviews", I.check, { count: 2 }) +
+          sideItem("All teams", "admin:teams", I.flag, { match: function (x) { return x.indexOf("admin:team:") === 0; } }) +
+          sideItem("Money", "admin:money", I.euro) +
+          sideItem("Logs", "admin:logs", I.list) +
+          sideItem("Settings", "admin:settings:general", I.gear);
+      }
+    }
+    html += '<div class="side-foot">' + userMenu(true) + "</div>";
+    return '<aside class="sidebar" aria-label="Navigation">' + html + "</aside>";
+  }
+
+  // ---------- Pages ----------
+  function pageAccount() {
+    return head("My account", "Your membership, profile and access to the forum.") +
+      '<div class="grid2">' +
+      '<section class="card"><div class="card-h">Membership <span class="right"><span class="pill ok">Active</span></span></div><div class="card-b">' +
+      '<dl class="kv"><dt>Paid until</dt><dd class="num">31.12.2026</dd><dt>Next renewal</dt><dd class="num">01.01.2027 · €15.00</dd><dt>Paid by</dt><dd>SEPA debit</dd></dl>' +
+      '<div class="btn-row"><button class="btn" data-toast="Stripe billing would open">Manage billing</button></div></div></section>' +
+      '<section class="card"><div class="card-h">Forum</div><div class="card-b"><div class="person"><span class="avatar">AB</span><div><b>anna.berger</b><div class="hint">Picture approved · full access</div></div></div>' +
+      '<div class="btn-row"><button class="btn primary" data-toast="Off to the forum">Open forum</button></div></div></section>' +
+      '<section class="card"><div class="card-h">Profile</div><div class="card-b"><dl class="kv"><dt>Name</dt><dd>Anna Berger</dd><dt>University email</dt><dd>anna.berger@edu.fh-joanneum.at</dd><dt>Cohort</dt><dd>LAV25</dd></dl>' +
+      '<div class="btn-row"><button class="btn" data-toast="Edit form would open">Edit</button></div></div></section>' +
+      '<section class="card"><div class="card-h">Teams</div><div class="card-b"><div class="person"><span class="team-mark">R</span><div><b>Rocket Team</b><div class="hint">Member · lead</div></div></div><div class="btn-row"><button class="btn" data-go="teams">All teams</button></div></div></section>' +
+      "</div>";
+  }
+  function pageTeams() {
+    var mine = '<section class="card"><div class="team-row"><span class="team-mark">R</span><div><b>Rocket Team</b> <span class="pill ok">Member</span><div class="hint">Paid until 31.03.2027</div></div>' +
+      '<div class="btn-row push" style="margin-left:auto"><button class="btn primary" data-go="team:rocket">Open</button><button class="btn" data-go="manage:rocket:applications">Manage</button><button class="btn ghost" data-toast="Leave page would open">Leave</button></div></div></section>';
+    var others = TEAMS.slice(1).map(function (t) {
+      return '<section class="card"><div class="card-b"><div class="person"><span class="team-mark">' + t.mark + "</span><b>" + t.name + "</b></div>" +
+        '<p class="hint" style="margin:0">' + (t.id === "glider" ? "We build and fly gliders for the Akaflieg competition." : "We design drones for search and rescue.") + "</p>" +
+        '<div class="hint">Fee: ' + t.fee + '</div><div class="btn-row"><button class="btn primary" data-go="about:' + t.id + '">About &amp; apply</button></div></div></section>';
+    }).join("");
+    return head("Teams", "Groups inside the association with their own members.") +
+      '<h3 class="group-label" style="padding:0">My teams</h3>' + mine +
+      '<h3 class="group-label" style="padding:0">Other teams</h3><div class="grid2">' + others + "</div>";
+  }
+  function pageTeam(id) {
+    var t = TEAMS.filter(function (x) { return x.id === id; })[0];
+    return crumbs([["Teams", "teams"], [t.name, ""]]) +
+      head(t.name, "We build and fly sounding rockets.", '<button class="btn" data-go="about:' + id + '">About the team</button><button class="btn primary" data-go="manage:' + id + ':applications">Manage</button>') +
+      '<section class="card"><div class="card-h">Your membership <span class="right"><span class="pill ok">Member</span></span></div><div class="card-b"><div>Paid until <span class="num">31.03.2027</span></div><div class="btn-row"><button class="btn ghost push" data-toast="Leave page would open">Leave</button></div></div></section>' +
+      '<section class="card"><div class="card-h">Members <span class="right">' + t.members + '</span></div><div class="card-b">' +
+      ["Anna Berger · Lead", "Carla Cancel", "Felix Flight", "Greta Gyro"].map(function (n) { return '<div class="person"><span class="avatar">' + n[0] + "</span>" + n + "</div>"; }).join("") + "</div></section>";
+  }
+  function pageAbout(id) {
+    var t = TEAMS.filter(function (x) { return x.id === id; })[0];
+    return crumbs([["Teams", "teams"], [t.name, ""]]) + head(t.name, "About the team") +
+      '<section class="card"><div class="card-b"><p style="margin:0;max-width:65ch">We design, build and fly. New members start in one of the sub-teams. We meet every Tuesday at 18:00 in the workshop.</p></div></section>' +
+      '<section class="card"><div class="card-h">Applying</div><div class="card-b"><div class="hint">Fee: ' + t.fee + '</div>' +
+      '<div class="field"><label for="why">Why do you want to join?</label><textarea id="why" rows="3"></textarea></div>' +
+      '<label><input type="checkbox" id="rules"> I accept the rules of ' + t.name + '.</label><div class="btn-row"><button class="btn primary" data-toast="Application sent (mockup)">Apply</button></div></div></section>';
+  }
+  function pageMoney(id) {
+    var t = TEAMS.filter(function (x) { return x.id === id; })[0];
+    return crumbs([["Teams", "teams"], [t.name, "team:" + id], ["Money", ""]]) + head("Money", t.name) +
+      '<div class="grid3"><div class="card stat"><b class="num">€240.00</b><span>Paid by members</span></div><div class="card stat"><b class="num">€100.00</b><span>Transferred</span></div><div class="card stat"><b class="num">€140.00</b><span>Open</span></div></div>';
+  }
+  function pageManage(teamId, section) {
+    var t = TEAMS.filter(function (x) { return x.id === teamId; })[0];
+    var s = TEAM_SECTIONS.filter(function (x) { return x.id === section; })[0] || TEAM_SECTIONS[0];
+    var body = "";
+    if (s.id === "applications") {
+      body = '<section class="card"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Applied</th></tr></thead><tbody>' +
+        '<tr class="click" data-toast="The person\'s page would open"><td>Bernd Back</td><td><span class="pill warn">Application received</span></td><td class="num">04.10.2026</td></tr></tbody></table></div></section>';
+    } else if (s.id === "members") {
+      body = '<section class="card"><div class="table-wrap"><table><thead><tr><th>Name</th><th>University email</th><th>Paid until</th></tr></thead><tbody>' +
+        [["Anna Berger", "anna.berger@edu.fh-joanneum.at", "31.03.2027"], ["Carla Cancel", "carla.cancel@edu.fh-joanneum.at", "31.03.2027"], ["Felix Flight", "felix.flight@edu.fh-joanneum.at", "31.03.2027"]]
+          .map(function (r) { return '<tr class="click" data-toast="The person\'s page would open"><td>' + r[0] + "</td><td>" + r[1] + '</td><td class="num">' + r[2] + "</td></tr>"; }).join("") +
+        "</tbody></table></div></section>";
+    } else if (s.id === "former") {
+      body = '<section class="card"><div class="card-b empty">Nobody yet.</div></section>';
+    } else if (s.id === "roles") {
+      body = '<section class="card"><div class="card-b"><b>Leads</b><div>Anna Berger</div><div class="hint">Appointed by the association\'s admins.</div><b>Treasurer</b><div class="btn-row"><select class="btn" id="treas" aria-label="Member"><option>Choose a member…</option><option>Carla Cancel</option></select><button class="btn" data-toast="Treasurer appointed (mockup)">Appoint</button></div></div></section>';
+    } else {
+      var fields = {
+        page: [["Short description", "We build and fly sounding rockets."], ["About the team", "We design, build and fly…"]],
+        applying: [["Question for applicants", "Why do you want to join?"], ["Rules to accept", "1. Safety briefing first…"]],
+        access: [["Send to", "facility@uni.example"], ["On these days", "15.03, 15.10"]]
+      }[s.id];
+      body = '<section class="card"><div class="card-b">' + fields.map(function (f, i) {
+        return '<div class="field"><label for="f' + i + '">' + f[0] + '</label><input id="f' + i + '" value="' + esc(f[1]) + '"></div>';
+      }).join("") + '<div class="btn-row"><button class="btn primary push" data-toast="Saved (mockup)">Save</button></div></div></section>';
+    }
+    var trail = [["Teams", "teams"], [t.name, "team:" + teamId], [s.name, ""]];
+    return crumbs(trail) + head(s.name, "Managing " + t.name) + body;
+  }
+  function pageAdminDashboard() {
+    return crumbs([["Admin", "admin"], ["Dashboard", ""]]) + head("Dashboard", "How the association stands today.") +
+      '<div class="grid3"><button class="card stat tile" data-go="admin:accounts"><b class="num">214</b><span>Active members</span></button>' +
+      '<button class="card stat tile" data-go="admin:reviews"><b class="num">2</b><span>Waiting for review</span></button>' +
+      '<button class="card stat tile" data-go="admin:money"><b class="num">€140.00</b><span>Open to transfer to teams</span></button></div>' +
+      '<section class="card"><div class="card-h">Recent activity</div><div class="card-b">' +
+      ["Bernd Back applied to Rocket Team", "Dora Double signed up (payment on its way)", "Carla Cancel cancelled for 31.12.2026"].map(function (t) { return "<div>" + t + "</div>"; }).join("") + "</div></section>";
+  }
+  function pageAccounts() {
+    return crumbs([["Admin", "admin"], ["Accounts", ""]]) +
+      head("Accounts", "Everybody with an account, members or not.", '<button class="btn" data-toast="CSV export (mockup)">Export</button>') +
+      '<div class="btn-row"><input class="btn" style="flex:1 1 240px;text-align:left" placeholder="Search name or email" aria-label="Search" id="search"><span class="pill info">All</span><span class="pill neutral">Active</span><span class="pill neutral">Ending</span><span class="pill neutral">Ended</span></div>' +
+      '<section class="card"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Kind</th><th>Status</th><th>Paid until</th></tr></thead><tbody>' +
+      MEMBERS.map(function (m) {
+        var tone = m.status === "Active" ? "ok" : (m.status === "Ended" ? "neutral" : "warn");
+        return '<tr class="click" data-go="admin:account:' + m.id + ':Profile"><td><div class="person"><span class="avatar">' + m.name[0] + "</span>" + m.name + "</div></td><td>" + m.kind + '</td><td><span class="pill ' + tone + '">' + m.status + '</span></td><td class="num">' + m.until + "</td></tr>";
+      }).join("") + "</tbody></table></div></section>";
+  }
+  function pageAccount_(id, tab) {
+    var m = MEMBERS.filter(function (x) { return x.id === id; })[0];
+    tab = tab || "Profile";
+    var tabs = '<div class="tabs" role="tablist">' + MEMBER_TABS.map(function (t) {
+      return '<button class="tab" role="tab" aria-selected="' + (t === tab) + '" data-go="admin:account:' + id + ":" + t + '">' + t + "</button>";
+    }).join("") + "</div>";
+    var body = {
+      Profile: '<dl class="kv"><dt>Name</dt><dd>' + m.name + "</dd><dt>Email</dt><dd>" + m.email + "</dd><dt>Kind</dt><dd>" + m.kind + "</dd><dt>Cohort</dt><dd>" + m.cohort + "</dd></dl>",
+      Membership: '<dl class="kv"><dt>Status</dt><dd>' + m.status + '</dd><dt>Paid until</dt><dd class="num">' + m.until + '</dd></dl><div class="btn-row"><button class="btn" data-toast="Billing sync (mockup)">Sync billing</button></div>',
+      Forum: '<dl class="kv"><dt>Forum name</dt><dd>' + m.id + '</dd><dt>Picture</dt><dd>Approved</dd></dl><div class="btn-row"><button class="btn" data-toast="Forum resync (mockup)">Resync forum</button></div>',
+      Teams: m.teams.length ? m.teams.map(function (t) { return "<div>" + t + "</div>"; }).join("") : '<div class="empty">In no team.</div>',
+      Roles: '<label><input type="checkbox" id="r1"> Admin</label><label><input type="checkbox" id="r2"> Treasurer</label><div class="btn-row"><button class="btn" data-toast="Roles saved (mockup)">Save roles</button></div>',
+      "Danger zone": '<p style="margin:0">Deactivate the account, or erase the person\'s data.</p><div class="btn-row"><button class="btn">Deactivate</button><button class="btn danger" data-toast="Would ask to type the email first">Erase personal data</button></div>'
+    }[tab];
+    return crumbs([["Admin", "admin"], ["Accounts", "admin:accounts"], [m.name, ""]]) +
+      head(m.name + ' <span class="pill ' + (m.status === "Active" ? "ok" : "warn") + '" style="vertical-align:middle">' + m.status + "</span>", m.email) +
+      tabs + '<section class="card"><div class="card-b">' + body + "</div></section>";
+  }
+  function pageReviews() {
+    return crumbs([["Admin", "admin"], ["Reviews", ""]]) + head("Reviews", "Pictures and profile changes waiting for a decision.") +
+      [["Dora Double", "Profile picture"], ["Bernd Back", "Name change: Bernd → Bernhard"]].map(function (r) {
+        return '<section class="card"><div class="card-b"><div class="person"><span class="avatar">' + r[0][0] + "</span><b>" + r[0] + '</b><span class="pill info">' + r[1] + '</span></div><div class="btn-row"><button class="btn primary" data-toast="Approved (mockup)">Approve</button><button class="btn danger" data-toast="Would ask for the second click">Reject</button></div></div></section>';
+      }).join("");
+  }
+  function pageAdminTeams() {
+    return crumbs([["Admin", "admin"], ["Teams", ""]]) + head("Teams", "Create teams, appoint leads, set fees.", '<button class="btn primary" data-toast="New team form (mockup)">New team</button>') +
+      '<section class="card"><div class="table-wrap"><table><thead><tr><th>Team</th><th>Members</th><th>Fee</th><th>Lead</th></tr></thead><tbody>' +
+      TEAMS.map(function (t) { return '<tr class="click" data-go="admin:team:' + t.id + '"><td><div class="person"><span class="team-mark" style="width:28px;height:28px">' + t.mark + "</span>" + t.name + '</div></td><td class="num">' + t.members + "</td><td>" + t.fee + "</td><td>" + t.lead + "</td></tr>"; }).join("") +
+      "</tbody></table></div></section>";
+  }
+  function pageAdminTeam(id) {
+    var t = TEAMS.filter(function (x) { return x.id === id; })[0];
+    return crumbs([["Admin", "admin"], ["Teams", "admin:teams"], [t.name, ""]]) +
+      head(t.name, "The association's part of the team.", '<button class="btn" data-go="manage:' + id + ':applications">Team page and settings</button>') +
+      '<section class="card"><div class="card-h">Details</div><div class="card-b"><div class="grid2"><div class="field"><label for="tn">Name</label><input id="tn" value="' + t.name + '"></div><div class="field"><label for="tj">Joining</label><select id="tj"><option>By approval of the leads</option><option>Open</option></select></div></div>' +
+      '<label><input type="checkbox" id="acl" checked> Has rooms that need an access list</label></div></section>' +
+      '<section class="card"><div class="card-h">Fee</div><div class="card-b"><dl class="kv"><dt>Now</dt><dd>' + t.fee + "</dd></dl></div></section>" +
+      '<section class="card"><div class="card-h">Roles</div><div class="card-b"><div>' + t.lead + ' · Lead</div></div></section>' +
+      '<div class="btn-row"><button class="btn primary push" data-toast="Saved (mockup)">Save</button></div>';
+  }
+  function pageAdminMoney() {
+    return crumbs([["Admin", "admin"], ["Money", ""]]) + head("Money", "What each team's members paid, and what was transferred.") +
+      '<section class="card"><div class="table-wrap"><table><thead><tr><th>Team</th><th>Paid</th><th>Transferred</th><th>Open</th></tr></thead><tbody>' +
+      TEAMS.map(function (t) { return '<tr class="click" data-go="money:' + t.id + '"><td>' + t.name + '</td><td class="num">€240.00</td><td class="num">€100.00</td><td class="num"><b>' + t.open + "</b></td></tr>"; }).join("") +
+      "</tbody></table></div></section>";
+  }
+  function pageLogs() {
+    return crumbs([["Admin", "admin"], ["Logs", ""]]) + head("Logs", "Who did what, when.") +
+      '<section class="card"><div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>' +
+      [["04.10.2026 16:02", "Anna Berger", "Changed the rules of Rocket Team"], ["04.10.2026 15:40", "System", "Sent the access list of Rocket Team"], ["04.10.2026 09:12", "Lena Lead", "Approved Greta Gyro"]]
+        .map(function (r) { return '<tr><td class="num">' + r[0] + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td></tr>"; }).join("") + "</tbody></table></div></section>";
+  }
+  function settingName(id) {
+    var found = null;
+    SETTINGS.forEach(function (g) { g.items.forEach(function (it) { if (it.id === id) found = it; }); });
+    return found;
+  }
+  function pageSettingsIndex() {
+    return crumbs([["Admin", "admin"], ["Settings", ""]]) + head("Settings", "Everything the portal is set up with.") +
+      '<div class="setting-groups">' + SETTINGS.map(function (g) {
+        return '<div class="setting-group"><h3>' + g.group + '</h3><div class="grid3">' + g.items.map(function (it) {
+          return '<button class="tile" data-go="admin:settings:' + it.id + '"><b>' + it.name + "</b><span>" + it.text + "</span></button>";
+        }).join("") + "</div></div>";
+      }).join("") + "</div>";
+  }
+  function pageSetting(id) {
+    var it = settingName(id) || SETTINGS[0].items[0];
+    var trail = state.version === "B"
+      ? [["Admin", "admin"], ["Settings", "admin:settings"], [it.name, ""]]
+      : [["Admin", "admin"], ["Settings", state.version === "A" ? "admin:settings:general" : "admin:settings:general"], [it.name, ""]];
+    var fields = {
+      general: [["Association name", "Joanneum Aeronautics"], ["Contact address", "office@joanneum-aeronautics.at"], ["Teams are called", "Teams"]],
+      notifications: [["Admin digest goes to", "office@joanneum-aeronautics.at"], ["How often", "Once a day"]],
+      billing: [["Stripe price", "price_1Q…"], ["Free from", "01.10"]],
+      forum: [["Forum address", "https://forum.joanneum-aeronautics.at"], ["Members' group", "members"]],
+      mail: [["Default sender", "noreply (Brevo)"], ["Office sender", "office (IONOS)"]],
+      tests: [["Send a test email to", "anna.berger@edu.fh-joanneum.at"]],
+      maintenance: [["Installed version", "6f24d3f"], ["Last backup", "04.10.2026 03:00"]]
+    }[it.id];
+    return crumbs(trail) + head(it.name, it.text) +
+      '<section class="card"><div class="card-b">' + fields.map(function (f, i) {
+        return '<div class="field"><label for="s' + i + '">' + f[0] + '</label><input id="s' + i + '" value="' + esc(f[1]) + '"></div>';
+      }).join("") + '<div class="btn-row">' + (state.version === "B" ? '<button class="btn ghost" data-go="admin:settings">‹ All settings</button>' : "") +
+      '<button class="btn primary push" data-toast="Saved (mockup)">Save</button></div></div></section>';
+  }
+  function pageForum() {
+    return head("Forum", "In the real portal this opens the forum in a new tab.") + '<section class="card"><div class="card-b">The forum lives at its own address; the portal only signs you in.</div></section>';
+  }
+
+  function pageFor(route) {
+    var p = parts(route);
+    if (route === "account") return { html: pageAccount(), narrow: true };
+    if (route === "teams") return { html: pageTeams(), narrow: true };
+    if (route === "forum") return { html: pageForum(), narrow: true };
+    if (p[0] === "team") return { html: pageTeam(p[1]), narrow: true };
+    if (p[0] === "about") return { html: pageAbout(p[1]), narrow: true };
+    if (p[0] === "money") return { html: pageMoney(p[1]), narrow: true };
+    if (p[0] === "manage") return { html: pageManage(p[1], p[2]) };
+    if (route === "admin") return { html: pageAdminDashboard() };
+    if (route === "admin:accounts") return { html: pageAccounts() };
+    if (p[0] === "admin" && p[1] === "account") return { html: pageAccount_(p[2], p[3]) };
+    if (route === "admin:reviews") return { html: pageReviews() };
+    if (route === "admin:teams") return { html: pageAdminTeams() };
+    if (p[0] === "admin" && p[1] === "team") return { html: pageAdminTeam(p[2]) };
+    if (route === "admin:money") return { html: pageAdminMoney() };
+    if (route === "admin:logs") return { html: pageLogs() };
+    if (route === "admin:settings") return { html: state.version === "B" ? pageSettingsIndex() : pageSetting("general") };
+    if (p[0] === "admin" && p[1] === "settings") return { html: pageSetting(p[2]) };
+    return { html: pageAccount(), narrow: true };
+  }
+
+  // ---------- The frame for each version ----------
+  function render() {
+    var r = state.route;
+    if (state.role === "member" && isAdminRoute(r)) r = state.route = "account";
+    var page = pageFor(r);
+    var html = "";
+    var hasSidebar = false;
+
+    if (state.version === "C") {
+      hasSidebar = true;
+      html += '<div class="topbar c-mobile"><button class="hamburger" data-action="menu" aria-label="Menu">☰ Menu</button><div class="logo">' + LOGO + "Aeronautics</div></div>";
+      html += '<div class="body">' + oneSidebar();
+    } else {
+      var area = isAdminRoute(r) ? "admin" : (r === "teams" || r.indexOf("team") === 0 || isManageRoute(r) || r.indexOf("about:") === 0 || r.indexOf("money:") === 0 ? "teams" : "account");
+      hasSidebar = isAdminRoute(r) || isManageRoute(r);
+      html += '<div class="topbar">' + (hasSidebar ? '<button class="hamburger" data-action="menu" aria-label="Menu">☰</button>' : "") +
+        '<div class="logo">' + LOGO + "<span class=\"word\">Aeronautics</span> <small>Members</small></div>" +
+        topLink("My Account", "account", area === "account", true) +
+        topLink("Teams", "teams", area === "teams", true) +
+        (state.role === "admin" ? topLink("Admin", "admin", area === "admin", true) : "") +
+        '<span class="spacer"></span>' + userMenu(false) + "</div>";
+      html += '<div class="body">';
+      if (isAdminRoute(r)) html += adminSidebar();
+      else if (isManageRoute(r)) html += teamSidebar(parts(r)[1]);
+    }
+    html += '<main class="main' + (page.narrow ? " narrow" : "") + '">' + page.html + "</main></div>";
+    if (hasSidebar && app.classList.contains("menu-open")) html += '<div class="scrim" data-action="menu"></div>';
+    if (state.toast) html += '<div class="toast" role="status">' + esc(state.toast) + "</div>";
+    app.innerHTML = html;
+
+    document.querySelectorAll(".version").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.version === state.version)); });
+    document.querySelectorAll(".role button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.role === state.role)); });
+  }
+
+  // ---------- Events ----------
+  app.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-go],[data-action],[data-toast]");
+    if (!t || !app.contains(t)) {
+      if (state.userMenu) { state.userMenu = false; render(); }
+      return;
+    }
+    if (t.dataset.go !== undefined) {
+      if (t.dataset.go === "") return;
+      if (t.dataset.go === "forum" && state.version !== "C") { toast("The forum would open in a new tab"); return; }
+      go(t.dataset.go);
+    } else if (t.dataset.action === "usermenu") {
+      state.userMenu = !state.userMenu; render();
+    } else if (t.dataset.action === "toggle-settings") {
+      state.settingsOpen = !state.settingsOpen;
+      if (state.settingsOpen && state.route.indexOf("admin:settings") !== 0) state.route = "admin:settings:general";
+      render();
+    } else if (t.dataset.action === "menu") {
+      app.classList.toggle("menu-open"); render();
+    } else if (t.dataset.toast) {
+      toast(t.dataset.toast);
+    }
+  });
+  document.querySelectorAll(".version").forEach(function (b) {
+    b.addEventListener("click", function () {
+      state.version = b.dataset.version; state.userMenu = false; app.classList.remove("menu-open");
+      if (state.version !== "B" && state.route === "admin:settings") state.route = "admin:settings:general";
+      render();
+    });
+  });
+  document.querySelectorAll(".role button").forEach(function (b) {
+    b.addEventListener("click", function () { state.role = b.dataset.role; state.userMenu = false; render(); });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && (state.userMenu || app.classList.contains("menu-open"))) {
+      state.userMenu = false; app.classList.remove("menu-open"); render();
+    }
+  });
+
+  // Open where the problem is: an admin in the admin area.
+  state.route = "admin:accounts";
+  render();
+})();
+</script>
