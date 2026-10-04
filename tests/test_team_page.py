@@ -224,9 +224,110 @@ class TestEditingThePage:
         team, _lead = _led()
         _login(client, _admin().id)
 
-        client.post("/admin/teams/rocket", data={
-            "name": "Rocket", "admission_mode": "approval", "about": "From the admins.", "terms_text": RULES,
-        })
+        # On the team's management page, like the leads; the admin form is for the rest.
+        client.post("/teams/rocket/manage/settings", data={"section": "page", "about": "From the admins."})
+        client.post("/teams/rocket/manage/settings", data={"section": "applying", "terms_text": RULES})
 
         assert (team.about, team.terms_text) == ("From the admins.", RULES)
-        assert "Rules to accept" in client.get("/admin/teams/rocket").get_data(as_text=True)
+        admin_form = client.get("/admin/teams/rocket").get_data(as_text=True)
+        assert 'href="/teams/rocket/manage"' in admin_form and "Rules to accept" not in admin_form
+
+    def test_the_admin_form_leaves_the_leads_part_be(self, app, client):
+        team, _lead = _led(application_prompt="Why?")
+        teams.update_team_by_lead(None, team, description="Rockets.", applications_open=False)
+        _with_rules(team)
+        _login(client, _admin().id)
+
+        client.post("/admin/teams/rocket", data={
+            "name": "Rocket Team", "admission_mode": "approval", "access_list_enabled": "on",
+        })
+
+        assert (team.name, team.description, team.application_prompt, team.applications_open, team.terms_text) == (
+            "Rocket Team", "Rockets.", "Why?", False, RULES)
+        assert team.access_list_enabled is True
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestTheManagementPage:
+    def test_one_section_saved_leaves_the_others_be(self, app, client):
+        team, lead = _led(application_prompt="Why?")
+        _with_rules(team)
+        teams.update_team_page(None, team, about="We build rockets.", keep_terms=True)
+        db.session.commit()
+        _login(client, lead.id)
+
+        client.post("/teams/rocket/manage/settings", data={"section": "page", "description": "Rockets.", "about": "New."})
+
+        assert (team.description, team.about, team.terms_text, team.application_prompt) == (
+            "Rockets.", "New.", RULES, "Why?")
+        assert team.applications_open is True
+
+    def test_back_to_the_section_saved(self, app, client):
+        _team, lead = _led()
+        _login(client, lead.id)
+
+        response = client.post("/teams/rocket/manage/settings", data={"section": "applying", "applications_open": "on"})
+
+        assert response.headers["Location"].endswith("/teams/rocket/manage#manage-applying")
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestTheTreasurer:
+    def test_a_lead_appoints_a_member_and_takes_it_back(self, app, client):
+        team, lead = _led()
+        anna = _person()
+        _in_team(anna, team)
+        _login(client, lead.id)
+
+        client.post("/teams/rocket/manage/treasurer", data={"user_id": anna.id})
+        assert teams.can_in_team(anna, team, teams.TeamPermission.VIEW_MONEY)
+        assert db.session.query(AuditLog).filter_by(event_type="team_role_granted", target_user_id=anna.id).count() == 1
+
+        client.post("/teams/rocket/manage/treasurer/remove", data={"user_id": anna.id})
+        assert not teams.can_in_team(anna, team, teams.TeamPermission.VIEW_MONEY)
+
+    def test_only_one_of_the_teams_members(self, app, client):
+        team, lead = _led()
+        outsider = _person("out@example.com", "Otto", "Outside")
+        _login(client, lead.id)
+
+        client.post("/teams/rocket/manage/treasurer", data={"user_id": outsider.id})
+
+        assert not teams.role_holders(team, teams.ROLE_TREASURER)
+
+    def test_not_by_the_treasurer_or_an_ordinary_member(self, app, client):
+        team, _lead = _led()
+        anna = _person()
+        _in_team(anna, team)
+        tim = _person("tim@example.com", "Tim", "Treasurer")
+        _in_team(tim, team)
+        teams.grant_team_role(None, team, tim, teams.ROLE_TREASURER)
+        db.session.commit()
+
+        for who in (anna, tim):
+            _login(client, who.id)
+            assert client.post("/teams/rocket/manage/treasurer", data={"user_id": anna.id}).status_code == 403
+
+
+@pytest.mark.usefixtures("switched_on")
+class TestTheOverview:
+    def test_my_teams_first_the_others_to_read_about(self, app, client):
+        rocket, _lead = _led()
+        _led("Glider")
+        anna = _person()
+        _in_team(anna, rocket)
+        _login(client, anna.id)
+
+        body = client.get("/teams").get_data(as_text=True)
+
+        mine, others = body.split('id="other-teams-heading"')
+        assert "My teams" in mine and "Rocket" in mine and 'href="/teams/rocket"' in mine
+        assert "Glider" in others and 'href="/teams/glider/about"' in others and "About & apply" in others
+
+    def test_nothing_of_mine_just_the_teams(self, app, client):
+        _led()
+        _login(client, _person().id)
+
+        body = client.get("/teams").get_data(as_text=True)
+
+        assert "My teams" not in body and 'href="/teams/rocket/about"' in body

@@ -28,7 +28,7 @@ from pathlib import Path
 
 from flask import current_app
 
-from ..db_models import Setting, Team, TeamMembership, TeamRole, db
+from ..db_models import Setting, Team, TeamMembership, TeamRole, User, db
 from ..permissions import Permission
 from . import ConflictError, NotFoundError, ValidationError
 from .audit import log_audit_event
@@ -79,11 +79,13 @@ class TeamPermission:
     SEND_ACCESS_LIST = "team.send_access_list"
     VIEW_MONEY = "team.view_money"
     EDIT_BANK_DETAILS = "team.edit_bank_details"
+    #: Give and take the treasurer role, among the team's own members.
+    APPOINT_TREASURER = "team.appoint_treasurer"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
-        VIEW_MONEY, EDIT_BANK_DETAILS,
+        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER,
     })
     #: The team's money, and the account it is paid to -- nothing about people.
     MONEY = frozenset({VIEW_MONEY, EDIT_BANK_DETAILS})
@@ -103,6 +105,10 @@ TEAM_ROLE_LABELS = {
     ROLE_LEAD: "Lead",
     ROLE_TREASURER: "Treasurer",
 }
+
+#: Leave a field as it is: settings are saved part by part -- the leads'
+#: sections, the admins' form -- and a part does not touch what it lacks.
+KEEP = object()
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SLUG_MAX_LENGTH = 60
@@ -196,8 +202,8 @@ def get_team(slug):
     return team
 
 
-def _clean_team_fields(*, name, description, admission_mode, applications_open,
-                       application_prompt, max_members, forum_group):
+def _clean_team_fields(*, name, admission_mode, max_members, forum_group,
+                       description=KEEP, applications_open=KEEP, application_prompt=KEEP):
     name = (name or "").strip()
     if not name:
         raise ValidationError("A team needs a name.", code="team_name_missing")
@@ -216,15 +222,20 @@ def _clean_team_fields(*, name, description, admission_mode, applications_open,
         if max_members <= 0:
             raise ValidationError("The maximum size must be above zero.", code="team_max_members_invalid")
 
-    return {
+    cleaned = {
         "name": name,
-        "description": (description or "").strip() or None,
         "admission_mode": admission_mode,
-        "applications_open": bool(applications_open),
-        "application_prompt": (application_prompt or "").strip()[:255] or None,
         "max_members": max_members,
         "forum_group": (forum_group or "").strip()[:100] or None,
     }
+    # The leads' part, only when given: the admins' form leaves it to them.
+    if description is not KEEP:
+        cleaned["description"] = (description or "").strip() or None
+    if applications_open is not KEEP:
+        cleaned["applications_open"] = bool(applications_open)
+    if application_prompt is not KEEP:
+        cleaned["application_prompt"] = (application_prompt or "").strip()[:255] or None
+    return cleaned
 
 
 def _snapshot(team):
@@ -477,15 +488,15 @@ def _clean_long_text(text, limit, what):
     return text or None
 
 
-def update_team_page(actor, team, *, about, terms_text):
+def update_team_page(actor, team, *, about=None, terms_text=None, keep_about=False, keep_terms=False):
     """What the team's page says about it, and the rules applicants accept.
 
     Changed rules get a new version -- the moment they changed -- so what
     each member accepted can be told apart. Every change is logged with
-    the old and new text.
+    the old and new text. ``keep_*`` leaves that text as it is.
     """
-    about = _clean_long_text(about, ABOUT_MAX_LENGTH, "text about the team")
-    terms_text = _clean_long_text(terms_text, TERMS_MAX_LENGTH, "team's rules")
+    about = team.about if keep_about else _clean_long_text(about, ABOUT_MAX_LENGTH, "text about the team")
+    terms_text = team.terms_text if keep_terms else _clean_long_text(terms_text, TERMS_MAX_LENGTH, "team's rules")
     if about != team.about:
         log_audit_event("teams", "team_about_changed", actor_user=actor, metadata={"team": team.slug},
                         before={"about": team.about}, after={"about": about})
@@ -642,6 +653,22 @@ def revoke_team_role(actor, team, user, role, *, confirmed=False):
         metadata={"team": team.slug, "role": role},
     )
     return True
+
+
+def appoint_treasurer(actor, team, user_id):
+    """A lead makes one of the team's own members its treasurer. Leads are
+    appointed by site admins; the treasurer by the team itself."""
+    user = db.session.get(User, user_id) if user_id else None
+    if user is None or active_team_membership(user, team) is None:
+        raise ValidationError("Choose one of the team's members.", code="team_treasurer_not_member")
+    return grant_team_role(actor, team, user, ROLE_TREASURER)
+
+
+def dismiss_treasurer(actor, team, user_id):
+    user = db.session.get(User, user_id) if user_id else None
+    if user is None:
+        raise NotFoundError("That person does not exist.")
+    return revoke_team_role(actor, team, user, ROLE_TREASURER)
 
 
 def find_account(address):
@@ -1217,12 +1244,16 @@ def add_note(actor, team, user, body):
     return note
 
 
-def update_team_by_lead(actor, team, *, description, application_prompt, applications_open):
-    """The part of a team's settings that belongs to its leads."""
+def update_team_by_lead(actor, team, *, description=KEEP, application_prompt=KEEP, applications_open=KEEP):
+    """The part of a team's settings that belongs to its leads; what is not
+    given stays as it is."""
     before = _snapshot(team)
-    team.description = (description or "").strip() or None
-    team.application_prompt = (application_prompt or "").strip()[:255] or None
-    team.applications_open = bool(applications_open)
+    if description is not KEEP:
+        team.description = (description or "").strip() or None
+    if application_prompt is not KEEP:
+        team.application_prompt = (application_prompt or "").strip()[:255] or None
+    if applications_open is not KEEP:
+        team.applications_open = bool(applications_open)
     after = _snapshot(team)
     if before != after:
         log_audit_event("teams", "team_updated", actor_user=actor, before=before, after=after)
@@ -1448,6 +1479,18 @@ def format_dates(dates):
     return ", ".join(f"{day:02d}.{month:02d}" for day, month in dates)
 
 
+def set_access_list_enabled(actor, team, enabled):
+    """Whether the team has an access list at all -- for site admins. Off,
+    nothing is sent; what was set up is kept for when it is switched on."""
+    enabled = bool(enabled)
+    if team.access_list_enabled == enabled:
+        return team
+    team.access_list_enabled = enabled
+    log_audit_event("teams", "team_access_list_switched", actor_user=actor,
+                    metadata={"team": team.slug, "enabled": enabled})
+    return team
+
+
 def update_access_list(actor, team, *, recipients, dates, auto_send):
     recipients = parse_recipients(recipients)
     dates = parse_dates(dates)
@@ -1579,6 +1622,8 @@ def send_access_list(actor, team, *, today=None, automatic=False):
     from .notifications import get_notification_service
 
     today = today or get_membership_today()
+    if not team.access_list_enabled:
+        raise ConflictError("This team has no access list.", code="team_access_list_off")
     recipients = parse_recipients(team.access_list_recipients)
     if not recipients:
         raise ValidationError("Add who receives the list first.", code="team_access_list_no_recipients")
@@ -1645,7 +1690,8 @@ def send_due_access_lists(today=None):
     today = today or get_membership_today()
     sent = 0
     for team in all_teams(include_archived=False):
-        if not team.access_list_auto_send or team.access_list_last_sent_on == today:
+        if (not team.access_list_enabled or not team.access_list_auto_send
+                or team.access_list_last_sent_on == today):
             continue
         try:
             due = (today.day, today.month) in parse_dates(team.access_list_dates)

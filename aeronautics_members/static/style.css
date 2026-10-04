@@ -1420,3 +1420,11 @@ td .confirm-hint {
     height: auto;
     border-radius: 4px;
 }
+
+/* The overview's own teams: name and state on the left, what to do next beside. */
+@media (min-width: 768px) {
+    .team-row .team-row-name {
+        flex: 0 0 15rem;
+        align-items: flex-start !important;
+    }
+}

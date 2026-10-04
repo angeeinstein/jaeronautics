@@ -1,7 +1,7 @@
 {% extends "admin_layout.html" %}
-{% from "teams/_status.html" import logo_field, picture_field, page_fields, access_list_fields %}
 {% macro value(field, fallback='') -%}{{ form.get(field) if form else fallback }}{%- endmacro %}
 {% block admin_page_actions %}
+    {% if team %}<a href="{{ url_for('teams.team_manage', slug=team.slug) }}" class="btn btn-secondary">{{ _('Team page and settings') }}</a>{% endif %}
     <a href="{{ url_for('teams.admin_teams') }}" class="btn btn-secondary">{{ _('All %(label)s', label=label_plural) }}</a>
 {% endblock %}
 {% block admin_content %}
@@ -13,7 +13,7 @@
 {% endif %}
 
 <div class="card mb-4">
-    <form method="POST" action="{{ url_for('teams.admin_team_detail', slug=team.slug) if team else url_for('teams.admin_team_new') }}" enctype="multipart/form-data"
+    <form method="POST" action="{{ url_for('teams.admin_team_detail', slug=team.slug) if team else url_for('teams.admin_team_new') }}"
           {% if team %}data-confirm-if-changed="payment_mode,stripe_price_id,period_starts"
           data-confirm-label="{{ _('Yes, change the fee') }}" data-confirm-changed="{{ _('Change the fee? Members already in are moved to it or asked to pay, and emailed; this cannot be taken back once they are.') }}"{% endif %}>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -38,18 +38,7 @@
                     {% endif %}
                 </div>
                 <div class="col-12">
-                    <label class="form-label" for="description">{{ _('Short description') }}</label>
-                    <textarea class="form-control" id="description" name="description" rows="2">{{ value('description', team.description or '' if team else '') }}</textarea>
-                    <div class="form-text">{{ _('One or two sentences, on the overview of all teams.') }}</div>
-                </div>
-                <div class="col-12">
-                    {{ logo_field(team) }}
-                </div>
-                <div class="col-12 d-flex flex-column gap-3">
-                    {{ page_fields(team, form) }}
-                </div>
-                <div class="col-12">
-                    {{ picture_field(team) }}
+                    <p class="small text-muted mb-0">{{ _('What the team says about itself -- its descriptions, picture, logo, the question for applicants and its rules -- its leads keep on the team\'s management page, which admins can open too.') }}</p>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label" for="admission_mode">{{ _('Joining') }}</label>
@@ -64,25 +53,20 @@
                     <input class="form-control" id="max_members" name="max_members" type="number" min="1" value="{{ value('max_members', team.max_members or '' if team else '') }}">
                     <div class="form-text">{{ _('Empty for no limit.') }}</div>
                 </div>
-                <div class="col-12">
-                    <label class="form-label" for="application_prompt">{{ _('Question for applicants') }}</label>
-                    <input class="form-control" id="application_prompt" name="application_prompt" maxlength="255" value="{{ value('application_prompt', team.application_prompt or '' if team else '') }}">
-                    <div class="form-text">{{ _('Optional. Without one, applicants are not asked to write anything.') }}</div>
-                </div>
                 <div class="col-md-6">
                     <label class="form-label" for="forum_group">{{ _('Forum group') }}</label>
                     <input class="form-control" id="forum_group" name="forum_group" maxlength="100" value="{{ value('forum_group', team.forum_group or '' if team else '') }}">
                     <div class="form-text">{{ _('Optional. Its active members are put in this forum group, which has to exist on the forum. Renamed later, people stay in the old one.') }}</div>
                 </div>
                 <div class="col-md-6 d-flex align-items-center">
-                    {% set is_open = (form.get('applications_open') == 'on') if form else (team.applications_open if team else true) %}
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="applications_open" id="applications_open" {% if is_open %}checked{% endif %}>
-                        <label class="form-check-label" for="applications_open">{{ _('Accepting new members') }}</label>
+                    {% set has_access_list = (form.get('access_list_enabled') == 'on') if form else (team.access_list_enabled if team else false) %}
+                    <div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="access_list_enabled" id="access_list_enabled" {% if has_access_list %}checked{% endif %}>
+                            <label class="form-check-label" for="access_list_enabled">{{ _('Has rooms that need an access list') }}</label>
+                        </div>
+                        <div class="form-text">{{ _('The list of current members for whoever gives access to the team\'s rooms. Off, the leads do not see it and nothing is sent.') }}</div>
                     </div>
-                </div>
-                <div class="col-12">
-                    {{ access_list_fields(team, form) }}
                 </div>
                 <div class="col-12">
                     <h5 class="mt-2">{{ _('Fee') }}</h5>

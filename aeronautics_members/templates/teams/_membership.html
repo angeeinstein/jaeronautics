@@ -55,9 +55,11 @@
         </div>
     {% endif %}
 
+    {#- One main button: paying, when it is due; otherwise opening the team. Leave stands apart. -#}
     <div class="d-flex flex-wrap gap-2 mt-auto">
         {% if current and current.status == 'active' %}
-            {% if not on_team_page %}<a class="btn btn-primary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Open') }}</a>{% endif %}
+            {% set pay_due = (renewal_open(current) and current.payment_state != 'processing') or needs_to_pay(current) %}
+            {% if not on_team_page %}<a class="btn {{ 'btn-secondary' if pay_due else 'btn-primary' }}" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Open') }}</a>{% endif %}
             {% if renewal_open(current) and current.payment_state != 'processing' %}
                 <form method="POST" action="{{ url_for('teams.team_pay', slug=team.slug) }}" class="mb-0" data-busy-text="{{ _('Opening…') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -70,6 +72,12 @@
                     <button type="submit" class="btn btn-primary">{{ _('Pay to stay') }}</button>
                 </form>
             {% endif %}
+            {% if team.id in manageable %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Manage') }}</a>
+            {% endif %}
+            {% if team.id in money_of %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_money', slug=team.slug) }}">{{ _('Money') }}</a>
+            {% endif %}
             {% if current.ends_with_association %}
             {% elif current.ends_on %}
                 <form method="POST" action="{{ url_for('teams.team_stay', slug=team.slug) }}" class="mb-0">
@@ -77,7 +85,7 @@
                     <button type="submit" class="btn btn-secondary">{{ _('Stay after all') }}</button>
                 </form>
             {% else %}
-                <a class="btn btn-secondary" href="{{ url_for('teams.team_leave', slug=team.slug) }}">{{ _('Leave') }}</a>
+                <a class="btn btn-outline-secondary ms-auto" href="{{ url_for('teams.team_leave', slug=team.slug) }}">{{ _('Leave') }}</a>
             {% endif %}
         {% elif current %}
             {% if current.status == 'approved' and charges(team) and current.payment_state != 'processing' and just_paid != team.slug %}
@@ -99,10 +107,12 @@
                 <a class="btn btn-primary" href="{{ url_for('teams.team_about', slug=team.slug) }}">{{ _('Apply') if team.admission_mode == 'approval' else _('Join') }}</a>
             {% endif %}
         {% endif %}
-        {% if team.id in manageable %}
-            <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Manage') }}</a>
-        {% endif %}
-        {% if team.id in money_of %}
-            <a class="btn btn-secondary" href="{{ url_for('teams.team_money', slug=team.slug) }}">{{ _('Money') }}</a>
+        {% if not (current and current.status == 'active') %}
+            {% if team.id in manageable %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Manage') }}</a>
+            {% endif %}
+            {% if team.id in money_of %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_money', slug=team.slug) }}">{{ _('Money') }}</a>
+            {% endif %}
         {% endif %}
     </div>

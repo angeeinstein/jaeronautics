@@ -241,6 +241,7 @@ def seed(app, app_module, subscriptions):
     db.session.add(application)
     db.session.flush()
     teams.add_note(active.user, rocket, bernd, "Met him at the open day. Knows CATIA.")
+    teams.set_access_list_enabled(None, rocket, True)
     teams.update_access_list(None, rocket, recipients="facility@uni.example\nporter@uni.example",
                              dates="15.10, 15.03", auto_send=True)
     # As if a list went out in March: Carla has joined since, Dieter has left.
@@ -319,6 +320,10 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--about", "user": "photo-needed@example.org", "path": "/teams/rocket-team/about"},
         {"name": "teams--leave", "user": "active@example.org", "path": "/teams/rocket-team/leave"},
         {"name": "teams--manage", "user": "active@example.org", "path": "/teams/rocket-team/manage"},
+        {"name": "teams--manage-page", "user": "active@example.org", "path": "/teams/rocket-team/manage#manage-page"},
+        {"name": "teams--manage-applying", "user": "active@example.org", "path": "/teams/rocket-team/manage#manage-applying"},
+        {"name": "teams--manage-access-list", "user": "active@example.org", "path": "/teams/rocket-team/manage#manage-access-list"},
+        {"name": "teams--manage-roles", "user": "active@example.org", "path": "/teams/rocket-team/manage#manage-roles"},
         {"name": "teams--person", "user": "active@example.org", "path": f"/teams/rocket-team/manage/people/{bernd.id}"},
         {"name": "teams--access-list", "user": "active@example.org", "path": "/teams/rocket-team/manage/access-list"},
         {"name": "teams--money", "user": "active@example.org", "path": "/teams/rocket-team/money"},

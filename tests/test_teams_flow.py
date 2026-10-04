@@ -66,12 +66,19 @@ def _events(event_type, recipient=None):
 
 
 class TestSwitchedOff:
-    @pytest.mark.parametrize("path", ["/teams", "/teams/rocket", "/teams/rocket/manage"])
-    def test_nothing_is_there(self, app, client, path):
+    @pytest.mark.parametrize("path", ["/teams", "/teams/rocket", "/teams/rocket/about", "/teams/rocket/manage"])
+    def test_nothing_is_there_for_members(self, app, client, path):
+        _team("Rocket")
+        _login(client, _person().id)
+
+        assert client.get(path).status_code == 404
+
+    def test_admins_set_a_team_up_before_switching_on(self, app, client):
         _team("Rocket")
         _login(client, _staff("admin@example.com", "admin").id)
 
-        assert client.get(path).status_code == 404
+        assert client.get("/teams").status_code == 404
+        assert client.get("/teams/rocket/manage").status_code == 200
 
     def test_and_there_is_no_link(self, app, client):
         _login(client, _person().id)

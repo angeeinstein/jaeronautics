@@ -60,26 +60,6 @@
                'team-picture-preview') }}
 {%- endmacro %}
 
-{# The team's page: its longer text and its rules. For the admin form and the
-   leads' settings alike. #}
-{% macro page_fields(team, form=None) -%}
-{%- set about = form.get('about') if form else (team.about if team else '') -%}
-{%- set terms = form.get('terms_text') if form else (team.terms_text if team else '') -%}
-<div>
-    <label class="form-label" for="about">{{ _('About the team') }}</label>
-    <textarea class="form-control" id="about" name="about" rows="6" maxlength="10000">{{ about or '' }}</textarea>
-    <div class="form-text">{{ _('Shown on the team\'s page: what the team does, what members do, when it meets. Plain text; blank lines start a new paragraph.') }}</div>
-</div>
-<div>
-    <label class="form-label" for="terms_text">{{ _('Rules to accept') }}</label>
-    <textarea class="form-control" id="terms_text" name="terms_text" rows="8" maxlength="50000">{{ terms or '' }}</textarea>
-    <div class="form-text">
-        {{ _('Optional. Whoever applies or joins has to tick that they accept them. Each change is a new version, dated; members keep the version they accepted, and the change is logged.') }}
-        {% if team and team.terms_updated_at %}{{ _('Current version: %(day)s.', day=team.terms_updated_at|date_display) }}{% endif %}
-    </div>
-</div>
-{%- endmacro %}
-
 {# Who receives the list of current members, on which days, and whether it
    goes out by itself. For the admin form and the leads' settings alike. #}
 {% macro access_list_fields(team, form=None) -%}

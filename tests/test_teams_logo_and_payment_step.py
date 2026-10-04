@@ -134,14 +134,16 @@ class TestTheLogo:
     def test_an_admin_uploads_and_removes_it(self, app, client):
         team, _lead = _led()
         _login(client, _staff("admin@example.com", "admin").id)
-        fields = {"name": team.name, "admission_mode": team.admission_mode}
+        # On the team's management page -- open to admins while teams are still off.
+        fields = {"section": "page", "description": ""}
 
-        client.post("/admin/teams/rocket", data={**fields, "logo": (BytesIO(_png()), "logo.png")},
+        client.post("/teams/rocket/manage/settings", data={**fields, "logo": (BytesIO(_png()), "logo.png")},
                     content_type="multipart/form-data")
         db.session.refresh(team)
         assert team.logo_token is not None
 
-        client.post("/admin/teams/rocket", data={**fields, "remove_logo": "on"}, content_type="multipart/form-data")
+        client.post("/teams/rocket/manage/settings", data={**fields, "remove_logo": "on"},
+                    content_type="multipart/form-data")
         db.session.refresh(team)
         assert team.logo_token is None
 

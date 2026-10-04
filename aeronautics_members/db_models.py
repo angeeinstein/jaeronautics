@@ -836,6 +836,9 @@ class Team(db.Model):
     # (addresses, one per line or comma), on which days of the year ("15.10,
     # 15.03"), whether it goes out on those days by itself, and when it last
     # went out.
+    # Switched on by site admins for teams that have rooms of their own; off,
+    # the access list is nowhere to be seen and never sent.
+    access_list_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     access_list_recipients = db.Column(db.Text, nullable=True)
     access_list_dates = db.Column(db.String(255), nullable=True)
     access_list_auto_send = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())

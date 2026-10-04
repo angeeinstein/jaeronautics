@@ -29,12 +29,12 @@ teams_bp = Blueprint("teams", __name__)
 
 
 def _team_form_fields(form):
+    """The admins' part of a team. The rest -- its texts, pictures, rules, the
+    question for applicants -- the leads keep on the team's management page,
+    which site admins can open too."""
     return {
         "name": form.get("name"),
-        "description": form.get("description"),
         "admission_mode": form.get("admission_mode"),
-        "applications_open": form.get("applications_open") == "on",
-        "application_prompt": form.get("application_prompt"),
         "max_members": form.get("max_members"),
         "forum_group": form.get("forum_group"),
     }
@@ -90,10 +90,13 @@ def _apply_logo(team, form, files):
 
 
 def _apply_page(team, form, files):
-    """The team's page: its longer text, its rules and its picture."""
+    """The team's page: its longer text, its rules and its picture -- each
+    only if the form has it, so a form for one leaves the others be."""
     if "about" in form or "terms_text" in form:
-        teams_service.update_team_page(current_user, team, about=form.get("about"),
-                                       terms_text=form.get("terms_text"))
+        teams_service.update_team_page(
+            current_user, team, about=form.get("about"), terms_text=form.get("terms_text"),
+            keep_about="about" not in form, keep_terms="terms_text" not in form,
+        )
     upload = files.get("picture")
     if upload is not None and upload.filename:
         teams_service.set_team_picture(current_user, team, upload.read())
@@ -169,10 +172,8 @@ def admin_team_new():
             team = teams_service.create_team(
                 current_user, slug=request.form.get("slug"), **_team_form_fields(request.form)
             )
-            _apply_access_list(team, request.form)
+            teams_service.set_access_list_enabled(current_user, team, request.form.get("access_list_enabled") == "on")
             moving = _apply_payment(team, request.form)
-            _apply_logo(team, request.form, request.files)
-            _apply_page(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
             flash(error.message, "danger")
@@ -207,10 +208,8 @@ def admin_team_detail(slug):
     if request.method == "POST":
         try:
             teams_service.update_team(current_user, team, **_team_form_fields(request.form))
-            _apply_access_list(team, request.form)
+            teams_service.set_access_list_enabled(current_user, team, request.form.get("access_list_enabled") == "on")
             moving = _apply_payment(team, request.form)
-            _apply_logo(team, request.form, request.files)
-            _apply_page(team, request.form, request.files)
         except ServiceError as error:
             db.session.rollback()
             flash(error.message, "danger")
@@ -311,7 +310,10 @@ def _teams_or_404():
 
 
 def _team_or_404(slug):
-    _teams_or_404()
+    # Site admins set a team up -- its page, its settings -- before teams are
+    # switched on for everybody, so its pages are open to them already.
+    if not current_user.can(Permission.TEAMS_MANAGE):
+        _teams_or_404()
     try:
         team = teams_service.get_team(slug)
     except ServiceError:
@@ -561,6 +563,9 @@ def team_manage(slug):
         charges=team_payments.charges(team),
         renewal_open=team_payments.renewal_open,
         needs_to_pay=team_payments.needs_to_pay,
+        leads=teams_service.role_holders(team, teams_service.ROLE_LEAD),
+        treasurers=teams_service.role_holders(team, teams_service.ROLE_TREASURER),
+        role_counts=teams_service.role_counts,
     )
 
 
@@ -662,24 +667,60 @@ def team_add_note(slug, user_id):
     )
 
 
+#: The parts of the leads' settings, each saved by a form of its own.
+SETTINGS_SECTIONS = ("page", "applying", "access_list")
+
+
 @teams_bp.route("/teams/<slug>/manage/settings", methods=["POST"])
 @login_required
 def team_lead_settings(slug):
-    return _lead_action(
-        slug, teams_service.TeamPermission.EDIT_SETTINGS,
-        lambda team: (
+    """Save one section of the leads' settings -- or, without a section, all."""
+    form = request.form
+    section = form.get("section")
+    sections = {section} if section in SETTINGS_SECTIONS else set(SETTINGS_SECTIONS)
+
+    def save(team):
+        keep = teams_service.KEEP
+        if "page" in sections:
+            teams_service.update_team_by_lead(current_user, team, description=form.get("description"))
+            _apply_logo(team, form, request.files)
+        if "applying" in sections:
             teams_service.update_team_by_lead(
                 current_user, team,
-                description=request.form.get("description"),
-                application_prompt=request.form.get("application_prompt"),
-                applications_open=request.form.get("applications_open") == "on",
-            ),
-            _apply_access_list(team, request.form),
-            _apply_logo(team, request.form, request.files),
-            _apply_page(team, request.form, request.files),
-        ),
-        _("Saved."),
-        back=url_for("teams.team_manage", slug=slug),
+                application_prompt=form.get("application_prompt") if section or "application_prompt" in form else keep,
+                applications_open=form.get("applications_open") == "on",
+            )
+        # The texts and the picture: whichever of them the form carries.
+        _apply_page(team, form, request.files)
+        if "access_list" in sections and team.access_list_enabled:
+            _apply_access_list(team, form)
+
+    anchor = {"page": "#manage-page", "applying": "#manage-applying", "access_list": "#manage-access-list"}
+    return _lead_action(
+        slug, teams_service.TeamPermission.EDIT_SETTINGS, save, _("Saved."),
+        back=url_for("teams.team_manage", slug=slug) + anchor.get(section, ""),
+    )
+
+
+@teams_bp.route("/teams/<slug>/manage/treasurer", methods=["POST"])
+@login_required
+def team_appoint_treasurer(slug):
+    return _lead_action(
+        slug, teams_service.TeamPermission.APPOINT_TREASURER,
+        lambda team: teams_service.appoint_treasurer(current_user, team, request.form.get("user_id", type=int)),
+        _("Treasurer appointed."),
+        back=url_for("teams.team_manage", slug=slug) + "#manage-roles",
+    )
+
+
+@teams_bp.route("/teams/<slug>/manage/treasurer/remove", methods=["POST"])
+@login_required
+def team_dismiss_treasurer(slug):
+    return _lead_action(
+        slug, teams_service.TeamPermission.APPOINT_TREASURER,
+        lambda team: teams_service.dismiss_treasurer(current_user, team, request.form.get("user_id", type=int)),
+        _("No longer treasurer."),
+        back=url_for("teams.team_manage", slug=slug) + "#manage-roles",
     )
 
 
@@ -709,6 +750,8 @@ def team_access_list(slug):
     """The email exactly as it would go out, with a button to send it now."""
     team = _team_or_404(slug)
     _may(team, teams_service.TeamPermission.SEND_ACCESS_LIST)
+    if not team.access_list_enabled:
+        abort(404)
     subject, message = teams_service.access_list_message(team)
     return render_template(
         "teams/access_list.html",

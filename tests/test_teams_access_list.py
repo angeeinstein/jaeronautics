@@ -18,6 +18,7 @@ from test_teams_foundation import _in_team
 
 
 def _configured(team, recipients="office@uni.example", dates="15.10, 15.03", auto_send=True):
+    teams.set_access_list_enabled(None, team, True)
     teams.update_access_list(None, team, recipients=recipients, dates=dates, auto_send=auto_send)
     db.session.commit()
     return team
@@ -104,9 +105,24 @@ class TestSending:
 
     def test_nobody_to_send_to(self, app):
         team, lead = _led()
+        teams.set_access_list_enabled(None, team, True)
 
         with pytest.raises(ValidationError):
             teams.send_access_list(lead, team)
+
+    def test_never_while_switched_off(self, app, client):
+        from aeronautics_members.services import ConflictError
+
+        team, lead = _led()
+        _configured(team)
+        teams.set_access_list_enabled(None, team, False)
+        db.session.commit()
+
+        assert teams.send_due_access_lists(date(2026, 10, 15)) == 0
+        with pytest.raises(ConflictError):
+            teams.send_access_list(lead, team)
+        _login(client, lead.id)
+        assert client.get("/teams/rocket/manage/access-list").status_code == 404
 
     def test_by_itself_on_its_day_and_only_once(self, app):
         team, _lead = _led()
@@ -173,6 +189,8 @@ class TestThePages:
 
     def test_the_lead_sets_it_up(self, app, client):
         team, lead = _led()
+        teams.set_access_list_enabled(None, team, True)
+        db.session.commit()
         _login(client, lead.id)
 
         client.post("/teams/rocket/manage/settings", data={
@@ -188,6 +206,8 @@ class TestThePages:
 
     def test_a_mistake_is_said_and_nothing_is_saved(self, app, client):
         team, lead = _led()
+        teams.set_access_list_enabled(None, team, True)
+        db.session.commit()
         _login(client, lead.id)
 
         response = client.post("/teams/rocket/manage/settings", data={
@@ -264,3 +284,18 @@ class TestComparedWithTheLastList:
 
         assert "New: not on our list of 15.10.2026." in body
         assert body.count('status-label status-info">New<') == 1
+
+
+@pytest.mark.usefixtures("switched_on")
+def test_switched_off_the_leads_see_none_of_it(app, client):
+    team, lead = _led()
+    _login(client, lead.id)
+
+    body = client.get("/teams/rocket/manage").get_data(as_text=True)
+    assert "manage-access-list" not in body and 'name="access_list_recipients"' not in body
+    client.post("/teams/rocket/manage/settings", data={"section": "access_list", "access_list_recipients": "x@uni.example"})
+    assert team.access_list_recipients is None
+
+    teams.set_access_list_enabled(None, team, True)
+    db.session.commit()
+    assert 'name="access_list_recipients"' in client.get("/teams/rocket/manage").get_data(as_text=True)

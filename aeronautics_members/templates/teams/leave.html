@@ -24,7 +24,7 @@
             {% else %}
                 <li>{{ _('You leave at once.') }}</li>
             {% endif %}
-            <li>{{ _('You are taken off the team page, its forum group and the list for access to its rooms.') }}</li>
+            <li>{% if team.access_list_enabled %}{{ _('You are taken off the team page, its forum group and the list for access to its rooms.') }}{% else %}{{ _('You are taken off the team page and its forum group.') }}{% endif %}</li>
             {% if is_lead %}
                 <li>{{ _('Your role as a lead ends with your membership.') }}</li>
             {% endif %}

@@ -214,7 +214,8 @@ guide.
   counts while its holder is an active team member. The first lead of a new
   team joins like anybody, and a site admin approves them.
 - **More roles** — *built:* a team **treasurer**, who sees the team's money and
-  keeps its bank details but not its people. The database keeps roles as text
+  keeps its bank details but not its people. The leads appoint the treasurer
+  from the team's members themselves; leads stay appointed by site admins. The database keeps roles as text
   and allows several per person, so adding one changes no table.
 - **The last lead** — *suggested.* Never removed automatically, only paused.
   Site admins can open every team page at any time, so a team without an active

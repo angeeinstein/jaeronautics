@@ -681,10 +681,14 @@ this is how to use them.
 
 **Setting up** (site admins, Admin → Teams):
 
-1. Switch teams on. While off, members see nothing of them.
+1. Switch teams on. While off, members see nothing of them; site admins can
+   already open each team's pages to set them up.
 2. **New Team**: a name, how people join (by approval of the leads, or open to
-   every member), optionally a logo, a question for applicants, a maximum size
-   and a forum group.
+   every member), optionally a maximum size and a forum group, whether it
+   **has rooms that need an access list**, and its fee. Everything the team
+   says about itself -- descriptions, picture, logo, question for applicants,
+   rules -- is on its management page (*Team page and settings*), kept by its
+   leads; admins can open it too.
 3. **Give the lead role** by email address. A role counts only while its
    holder is a member of the association *and* of the team, so the lead joins
    the team like anybody else and an admin approves them.
@@ -702,13 +706,20 @@ which version -- the day they last changed. Changing the rules makes a new
 version for whoever applies next (members already in are not asked again) and
 is logged with the old and new text.
 
-**Running a team** (its leads, Teams → Manage): applications (invite with the
-meeting details, approve, not accept), members, former members, notes about a
-person (not shown to them, but in their data export, without the author), removing somebody
-(immediately, with a reason that stays in the record), an export of the
-current members, and the team's own settings.
+**Running a team** (its leads, Teams → Manage), in sections down the side:
+*Applications* (invite with the meeting details, approve, not accept),
+*Members*, *Former members*, *Team page* (descriptions, picture, logo),
+*Applying* (open or closed, the question, the rules), *Access list* (only for
+teams that have one) and *Roles*. Each settings section is saved on its own.
+Also: notes about a person (not shown to them, but in their data export,
+without the author), removing somebody (immediately, with a reason that stays
+in the record), and an export of the current members. Under *Roles* the leads
+appoint the team's **treasurer** from its members, and take the role back;
+leads themselves are appointed by site admins.
 
-**Access list.** In the team's settings: who receives it, on which days of the
+**Access list.** Only for teams with rooms: site admins switch it on in the
+team's admin form; off, the leads do not see it and nothing is sent. In the
+leads' *Access list* section: who receives it, on which days of the
 year (`15.10, 15.03`), and whether it goes out by itself on those days. The
 leads' page has *Preview and send* for sending it by hand. It marks who is new
 since the last list sent and lists who has left since.
