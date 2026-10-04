@@ -183,6 +183,29 @@ the email still goes out on time -- and update the fee rules in
 `legal_texts.html` for the membership. A move that keeps failing shows under the health check's failed
 external work. Archive the old price in Stripe once nobody is on it.
 
+## Stripe Webhook Events
+
+The endpoint (`https://<portal>/stripe-webhook`, in Stripe under Developers →
+Webhooks) needs exactly these 12 events, on the test and the live account:
+
+| Event | What the portal does with it |
+|---|---|
+| `checkout.session.completed` | A Checkout finished: membership, team subscription or team payment |
+| `checkout.session.async_payment_succeeded` | A SEPA debit for a one-time payment cleared |
+| `checkout.session.async_payment_failed` | A SEPA debit for a one-time payment failed |
+| `customer.subscription.updated` | Cancellation set or taken back, status changes |
+| `customer.subscription.deleted` | A subscription ended |
+| `invoice.paid` | A subscription payment, first or renewal |
+| `invoice.payment_failed` | A renewal failed |
+| `payment_intent.processing` | A SEPA debit is on its way |
+| `payment_intent.succeeded` | A membership payment confirmed |
+| `payment_intent.payment_failed` | A membership payment failed |
+| `charge.refunded` | A refund, taken off what a team is owed |
+| `charge.dispute.closed` | A chargeback decided |
+
+Any other event is accepted and ignored; leaving them out only spares the log
+and Stripe's retries.
+
 ## Billing Shows Up in Stripe as a Trial
 
 The association bills one shared calendar year, which is implemented by giving
@@ -676,11 +699,9 @@ it later leaves people in the old group -- delete that one in Discourse.
    (`01.10, 01.03`). Saving checks the price with Stripe; the fee members see
    ("€10.00 every 6 months", "€25.00 per period") is taken from it. Switching
    later is the other mode with the other price -- the product stays.
-3. In Stripe's webhook endpoint, besides the events the membership uses, select
-   `checkout.session.async_payment_succeeded`,
-   `checkout.session.async_payment_failed` (SEPA paid once) and
-   `charge.refunded` (refunds come off what the team is owed). Everything for
-   teams is marked `purpose: team` and never touches the membership.
+3. Stripe's webhook endpoint needs the events listed under *Stripe Webhook
+   Events*. Everything for teams is marked `purpose: team` and never touches
+   the membership.
 
 How it runs: approved (or joining an open team), a person sees *Pay and join*.
 They pay the period under way in full, whenever they join. The first payment
