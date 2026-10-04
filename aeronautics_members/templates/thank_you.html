@@ -29,6 +29,12 @@
                     <div class="mt-5">
                         <a href="{{ url_for('account.account') }}" class="btn btn-primary btn-lg">{{ _('Go to My Account') }}</a>
                     </div>
+                    {% if teams_switched_on() %}
+                        {% set teams_label = team_labels()[1] %}
+                        <hr class="my-4">
+                        <p class="mb-3">{{ _('Interested in one of our %(label)s? Once your membership is active, you can see them and join or apply. Paying by SEPA, that is once the debit has cleared.', label=teams_label|lower) }}</p>
+                        <a href="{{ url_for('teams.teams_home') }}" class="btn btn-secondary">{{ _('See the %(label)s', label=teams_label) }}</a>
+                    {% endif %}
                 </div>
             </div>
         </div>

@@ -83,12 +83,14 @@ access to the office.
 - **Several teams at once** — *agreed so far.*
 - **Applicants see their status in the Teams area** (see *Where it lives*) —
   *agreed so far*, with the states above.
-- **A checkbox at association signup** — *agreed so far* in principle. For a team by
-  approval it creates the application; for an open team, the team payment
-  follows straight after the membership payment, on the thank-you page. It is a
-  second Checkout, because the two fees are billed on different dates and so
-  must be two subscriptions — which is also what lets someone leave a team and
-  stay in the association.
+- **Pointing to the teams instead of a checkbox at signup** — *agreed so far*,
+  *built*. A team can only be joined once the association membership is active
+  (at once by card or in October, after the debit by SEPA), so nothing is asked
+  during signup. The welcome email, the page after paying and the account page
+  (for members in no team yet) point to the Teams page, while teams are on.
+  Joining a team is a second Checkout anyway, because the two fees are billed
+  on different dates and so must be two subscriptions — which is also what
+  lets someone leave a team and stay in the association.
 - **No manual adding by leads** — *agreed so far.* The point of the portal is that
   teams no longer handle cash. Consequence: someone with neither a card nor a
   SEPA account cannot join a team through the portal.

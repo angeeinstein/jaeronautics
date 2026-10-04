@@ -229,6 +229,17 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if teams_invite %}
+            {% set teams_label = team_labels()[1] %}
+            <div class="card mt-4">
+                <div class="card-header"><h4 class="mb-0">{{ teams_label }}</h4></div>
+                <div class="card-body">
+                    <p class="mb-3">{{ _('Groups inside the association with their own members. See which there are, and join or apply.') }}</p>
+                    <a href="{{ url_for('teams.teams_home') }}" class="btn btn-primary">{{ _('See the %(label)s', label=teams_label) }}</a>
+                </div>
+            </div>
+        {% endif %}
     </div>
     <div class="col-xl-8">
         <div class="card mb-4">

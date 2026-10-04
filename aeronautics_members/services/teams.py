@@ -626,6 +626,16 @@ def ongoing_membership(user, team):
     ).scalars().first()
 
 
+def invite_to_teams(user):
+    """Whether to point this person to the Teams page: teams are on, there is
+    one to join, they may join, and they are not in or applying to any yet."""
+    if user is None or not teams_enabled() or not is_active_association_member(user):
+        return False
+    if not all_teams(include_archived=False):
+        return False
+    return not any(membership.status in ONGOING for membership in memberships_of(user))
+
+
 def memberships_of(user, include_archived=False):
     """Every attempt of this person, newest first; by default in teams still running."""
     query = db.select(TeamMembership).join(Team).where(TeamMembership.user_id == user.id)

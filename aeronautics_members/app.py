@@ -1133,7 +1133,14 @@ def render_account_dashboard(profile_form=None, identity_form=None):
         payment_needs_attention=payment_needs_attention,
         invoice_payments_enabled=invoice_payments_allowed(),
         forum_context=forum_context,
+        teams_invite=_invite_to_teams(member),
     )
+
+
+def _invite_to_teams(member):
+    from .services.teams import invite_to_teams
+
+    return invite_to_teams(member.user) if member is not None else False
 
 
 def get_admin_dashboard_metrics():

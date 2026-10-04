@@ -716,6 +716,11 @@ and seldom touched -- is handled rather than refused:
   pays by subscription: switch the team to free first. Archiving also asks for
   the team's name to be typed.
 
+**New members** are pointed to the Teams page, not asked at signup: a team can
+only be joined once the association membership is active. The welcome email,
+the page after paying and the account page (for members in no team yet) carry
+the link while teams are switched on.
+
 **Leaving** is a page of its own: what it means (until when, no refund, the
 forum group and access list, applying again to come back), an optional message
 to the leads, and a box to tick.

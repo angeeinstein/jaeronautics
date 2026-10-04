@@ -59,6 +59,15 @@ def _display_date(value):
     return format_membership_date_display(value) if value is not None else None
 
 
+def _teams_for_welcome():
+    """The Teams page, for the welcome email -- only while teams are switched on."""
+    from .teams import all_teams, team_labels, teams_enabled
+
+    if not teams_enabled() or not all_teams(include_archived=False):
+        return {"teams_url": None, "teams_label": None}
+    return {"teams_url": build_public_url("teams.teams_home"), "teams_label": team_labels()[1]}
+
+
 def send_member_welcome_email(app, member, force_send=False, notify_on_failure=True, queue_retry_on_failure=None, return_error=False):
     settings = get_settings_map()
     if queue_retry_on_failure is None:
@@ -119,6 +128,7 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
         account_url=build_public_url("account.account"),
         forum_integration_enabled=forum_service.is_enabled(),
         forum_entry_url=forum_entry_url,
+        **_teams_for_welcome(),
         now=get_now_utc(),
         return_error=True,
     )
