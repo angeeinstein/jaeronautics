@@ -183,6 +183,13 @@ the email still goes out on time -- and update the fee rules in
 `legal_texts.html` for the membership. A move that keeps failing shows under the health check's failed
 external work. Archive the old price in Stripe once nobody is on it.
 
+## Legal Notes
+
+`docs/legal-notes.md` lists what the portal does with personal data and money,
+for the privacy statement, terms and statutes. Update it in the same commit as
+any change that collects, sends or keeps data differently, or changes how fees
+are taken.
+
 ## Stripe Webhook Events
 
 The endpoint (`https://<portal>/stripe-webhook`, in Stripe under Developers →
