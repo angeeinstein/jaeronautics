@@ -12,9 +12,12 @@ abandoned signups must not pile up as nameless leftovers.
   removed. Removal waits until the notice has been out that long, so a night
   the job did not run never removes anybody unwarned. Trying to pay again
   starts the count afresh.
-* Only a bare signup. Anything more -- a role, a team, a forum account, a
-  picture, a change request, a membership period, a payment, a Stripe
-  subscription -- and it is left alone for an admin to look at.
+* Only a bare signup: no Stripe subscription, and no row anywhere in the
+  database pointing at it except its own log, email and background-task
+  rows. A role, a team, a forum account, a picture, a change request, a
+  membership period, a payment -- anything more, and it is left alone for an
+  admin. Checked against the schema, not a list, so it stays true as tables
+  are added, and the delete can never fail on a foreign key.
 
 Removed with the account: its profile and the log, email and background-task
 rows about it. One log entry, without the person, records how many went.
@@ -22,23 +25,7 @@ rows about it. One log entry, without the person, records how many went.
 
 from datetime import timedelta, timezone
 
-from ..db_models import (
-    AuditLog,
-    EmailDeliveryJob,
-    ExternalWorkItem,
-    ForumAccount,
-    ForumAvatarSubmission,
-    ImportedForumProfile,
-    Member,
-    MemberProfileChangeRequest,
-    MembershipPeriod,
-    NotificationEvent,
-    Payment,
-    TeamMembership,
-    TeamNote,
-    TeamRole,
-    db,
-)
+from ..db_models import Member, db
 from .audit import log_audit_event
 from .clock import get_now_utc
 from .membership import format_date_display
@@ -62,26 +49,41 @@ def removal_day(member):
     return _last_activity(member) + timedelta(days=KEEP_DAYS)
 
 
-def _exists(model, *conditions):
-    return db.session.execute(db.select(model.id).where(*conditions).limit(1)).first() is not None
+# The signup's own traces: deleted with it. Anything else pointing at the
+# account means it is more than a signup.
+_OWN_TRACES = ("audit_logs", "notification_events", "email_delivery_jobs", "external_work_items")
+
+
+def _referenced_elsewhere(user, member):
+    """Whether any row, in any table, points at this account beyond its own traces.
+
+    Read from the schema rather than listed by hand, so a table added later
+    makes a signup it points at stay, instead of making the delete fail.
+    """
+    ids = {"users": user.id, "member": member.id}
+    for table in db.metadata.sorted_tables:
+        if table.name in _OWN_TRACES:
+            continue
+        for foreign_key in table.foreign_keys:
+            target = foreign_key.column.table.name
+            if target not in ids:
+                continue
+            if table.name == "member" and foreign_key.parent.name == "user_id":
+                continue  # the signup itself
+            found = db.session.execute(
+                db.select(foreign_key.parent).where(foreign_key.parent == ids[target]).limit(1)
+            ).first()
+            if found is not None:
+                return True
+    return False
 
 
 def _bare(member):
     """Only a signup: nothing anybody would miss, nothing the books need."""
     user = member.user
-    if user is None or user.deleted_at is not None or user.roles:
+    if user is None or user.deleted_at is not None:
         return False
-    return not any((
-        _exists(MembershipPeriod, MembershipPeriod.member_id == member.id),
-        _exists(Payment, Payment.user_id == user.id),
-        _exists(ForumAccount, db.or_(ForumAccount.user_id == user.id, ForumAccount.member_id == member.id)),
-        _exists(ImportedForumProfile, ImportedForumProfile.user_id == user.id),
-        _exists(ForumAvatarSubmission, ForumAvatarSubmission.member_id == member.id),
-        _exists(MemberProfileChangeRequest, MemberProfileChangeRequest.member_id == member.id),
-        _exists(TeamMembership, TeamMembership.user_id == user.id),
-        _exists(TeamRole, TeamRole.user_id == user.id),
-        _exists(TeamNote, TeamNote.user_id == user.id),
-    ))
+    return not _referenced_elsewhere(user, member)
 
 
 def unfinished_signups(now=None):
@@ -124,15 +126,16 @@ def _send_notice(member, removal, now):
 
 
 def _delete(member):
+    """The signup, and every one of its own traces, by whatever column points at it."""
     user = member.user
-    for model in (NotificationEvent, EmailDeliveryJob):
-        db.session.execute(db.delete(model).where(
-            db.or_(model.target_user_id == user.id, model.target_member_id == member.id)))
-    db.session.execute(db.delete(ExternalWorkItem).where(
-        db.or_(ExternalWorkItem.user_id == user.id, ExternalWorkItem.member_id == member.id)))
-    db.session.execute(db.delete(AuditLog).where(db.or_(
-        AuditLog.target_user_id == user.id, AuditLog.target_member_id == member.id,
-        AuditLog.actor_user_id == user.id)))
+    ids = {"users": user.id, "member": member.id}
+    for table in db.metadata.sorted_tables:
+        if table.name not in _OWN_TRACES:
+            continue
+        pointing = [foreign_key.parent == ids[foreign_key.column.table.name]
+                    for foreign_key in table.foreign_keys if foreign_key.column.table.name in ids]
+        if pointing:
+            db.session.execute(table.delete().where(db.or_(*pointing)))
     db.session.delete(member)
     db.session.flush()
     db.session.delete(user)

@@ -7,6 +7,7 @@ more is left for an admin.
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import event
 
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import AuditLog, Member, MembershipPeriod, NotificationEvent, User
@@ -108,3 +109,79 @@ def test_the_email(app):
 
     assert subject == "Your signup at Joanneum Aeronautics is not complete"
     assert any("10.04.2026" in (line or "") for line in template_vars["body_lines"])
+
+
+def _rows_pointing_at(user_id, member_id):
+    ids = {"users": user_id, "member": member_id}
+    found = []
+    for table in db.metadata.sorted_tables:
+        for foreign_key in table.foreign_keys:
+            target = foreign_key.column.table.name
+            if target in ids and db.session.execute(
+                db.select(foreign_key.parent).where(foreign_key.parent == ids[target]).limit(1)
+            ).first():
+                found.append(f"{table.name}.{foreign_key.parent.name}")
+    return found
+
+
+def test_a_real_signup_goes_without_a_trace_with_foreign_keys_enforced(app, client, monkeypatch):
+    """As on the live database: a delete that leaves a row pointing at the
+    account is refused there, though SQLite lets it pass unless asked."""
+    from test_member_journey import TestTheSignupSentTwice
+
+    from aeronautics_members.blueprints import _signup, public
+    from aeronautics_members.services.clock import get_now_utc
+
+    def open_checkout(member):
+        import types
+        return types.SimpleNamespace(url=f"https://checkout.stripe.test/{member.id}"), {}
+
+    monkeypatch.setattr(_signup, "create_checkout_session_for_member", open_checkout)
+    monkeypatch.setattr(public, "create_checkout_session_for_member", open_checkout)
+    monkeypatch.setattr(_signup, "send_email_verification_email", lambda *a, **k: True)
+    monkeypatch.setattr(_signup, "send_work_email_verification_email", lambda *a, **k: True)
+    client.post("/process-membership", data=TestTheSignupSentTwice.FORM)
+    client.post("/logout")
+    member = db.session.execute(db.select(Member).filter_by(email_private="dora@example.com")).scalar_one()
+    user_id, member_id = member.user_id, member.id
+    db.session.commit()
+    own_logs = [log.id for log in db.session.query(AuditLog).filter(db.or_(
+        AuditLog.target_user_id == user_id, AuditLog.actor_user_id == user_id,
+        AuditLog.target_member_id == member_id))]
+    assert own_logs  # the signup's own log entries, at least
+
+    def enforce_foreign_keys(connection, _record):
+        connection.execute("PRAGMA foreign_keys=ON")
+
+    engine = db.engine
+    event.listen(engine, "connect", enforce_foreign_keys)
+    db.session.remove()
+    engine.dispose()
+    try:
+        assert db.session.connection().exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+        unfinished_signups.clean_up(get_now_utc() + timedelta(days=83))
+        db.session.commit()
+        assert unfinished_signups.clean_up(get_now_utc() + timedelta(days=91))["removed"] == 1
+        db.session.commit()
+
+        assert db.session.get(User, user_id) is None
+        assert _rows_pointing_at(user_id, member_id) == []
+        # Gone, not just unlinked: the database layer blanks a link rather than refusing.
+        assert not db.session.query(AuditLog).filter(
+            AuditLog.id.in_(own_logs), AuditLog.event_type != "unfinished_signups_removed").count()
+    finally:
+        db.session.remove()
+        event.remove(engine, "connect", enforce_foreign_keys)
+        engine.dispose()
+
+
+def test_a_signup_something_else_points_at_is_left_alone(app):
+    from aeronautics_members.db_models import TeamNote
+    from test_teams_flow import _led
+
+    member = _signup()
+    team, lead = _led()
+    db.session.add(TeamNote(team=team, user=member.user, author_user_id=lead.id, body="Met at the open day."))
+    db.session.commit()
+
+    assert unfinished_signups.clean_up(_day(400)) == {"noticed": 0, "removed": 0}

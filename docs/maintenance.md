@@ -776,9 +776,12 @@ Stripe's word never arrived, and access lists due that day go out.
 90 days after the signup or the last attempt to pay, completely -- account,
 profile and its log and email records -- since nothing has to be kept for it.
 The person is emailed 7 days before, and removal waits until that email has
-been out 7 days. Only bare signups: one with a role, team, forum account,
-picture, change request, membership period, payment or Stripe subscription is
-left alone. One log entry records how many went. Run by hand with
+been out 7 days. Only bare signups: if any row in any table points at the
+account other than its own log, email and background-task rows -- a role, a
+team, a forum account, a picture, a change request, a membership period, a
+payment -- or it has a Stripe subscription, it is left alone. That is read
+from the schema, so a table added later keeps such signups rather than
+breaking the delete. One log entry records how many went. Run by hand with
 `flask cleanup-pending-signups`.
 
 **Money** (Teams → Money, or the button on the management page). What the
