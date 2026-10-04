@@ -115,7 +115,7 @@ Stripe's payment page is Stripe's own, under Stripe's privacy policy.
 | Account and profile | While the membership lasts, and after it ends until the person or an admin erases the account. **To-do:** decide whether former members' accounts are erased after some time. |
 | Payment records (membership periods, team payments) | 7 years (§ 132 BAO). On erasure they are kept without the person's identity. |
 | Stripe's records | At Stripe, under its retention duties; not erased with the account. The deletion page says so. |
-| Signups never paid for | Kept indefinitely for now: a clean-up command exists but nothing runs it, and as written it would fail on the live database. **To-do:** a nightly clean-up (proposed: erase after 30 days without payment). |
+| Signups never paid for | 90 days after the signup or the last attempt to pay. The person is emailed 7 days before; removal waits until that email has been out 7 days. Removed completely (account, profile, its log and email records), not anonymised: there is nothing the books need. Only bare signups — anything with a role, team, forum account, picture, change request, period, payment or Stripe subscription is left for an admin. |
 | Audit log | Kept indefinitely (setting `AUDIT_LOG_RETENTION_DAYS`, default 0 = forever). On erasure, entries about the person lose their before/after values. **To-do:** decide a period. |
 | Email and notification records | 1 year (monthly clean-up). |
 | Leads' notes, team bank details history | Notes: deleted with the account. Bank-detail changes: in the audit log. |
@@ -142,7 +142,7 @@ Stripe's payment page is Stripe's own, under Stripe's privacy policy.
 ## 7. Emails the portal sends
 
 - Account: email verification, password reset, account deletion link,
-  university email verification.
+  university email verification, notice that an unpaid signup is removed.
 - Membership: welcome email, profile change and picture approved/rejected,
   fee change (14 days before the renewal at the new price). Nothing about
   failed payments or the membership ending — that is left to Stripe.
@@ -248,7 +248,6 @@ Collected so nothing is forgotten; none of it is urgent.
 - [ ] Whether former members' accounts are erased after some time.
 
 **Portal**
-- [ ] Clean up signups never paid for (proposed: nightly, after 30 days).
 - [ ] Check Stripe's "upcoming renewal" and "failed payment" emails are on
       (live and test), and note the reminder's lead time for the terms.
 - [ ] Note where the forum is hosted.

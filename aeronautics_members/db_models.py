@@ -252,6 +252,9 @@ class Member(db.Model):
     terms_accepted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     pending_checkout_started_at = db.Column(db.DateTime, nullable=True)
+    # When a signup that was never paid was told it will be removed; see
+    # services/unfinished_signups.py.
+    unfinished_signup_notice_at = db.Column(db.DateTime, nullable=True)
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
     # The last Checkout session started for this member. Kept so resuming an

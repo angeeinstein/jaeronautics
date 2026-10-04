@@ -772,6 +772,15 @@ unpaid after 14 days (not while a SEPA debit is on its way), memberships whose
 leaving day has passed, or that are unpaid for more than 35 days, end in case
 Stripe's word never arrived, and access lists due that day go out.
 
+**Unfinished signups** (also every night): a signup never paid for is removed
+90 days after the signup or the last attempt to pay, completely -- account,
+profile and its log and email records -- since nothing has to be kept for it.
+The person is emailed 7 days before, and removal waits until that email has
+been out 7 days. Only bare signups: one with a role, team, forum account,
+picture, change request, membership period, payment or Stripe subscription is
+left alone. One log entry records how many went. Run by hand with
+`flask cleanup-pending-signups`.
+
 **Money** (Teams → Money, or the button on the management page). What the
 team's members paid -- exactly that: Stripe's fees are the association's --
 less refunds and lost chargebacks, what was transferred to the team, and what
@@ -1178,9 +1187,10 @@ permission table.
 - **The account directory.** 50 per page becomes 13 pages, and "Member Only"
   fills with people who are not members. Needs its own filter value and probably
   a default that hides them.
-- **`cleanup-pending-signups`** deletes stale `pending_checkout` members after
-  14 days. An import that sets that status by accident would quietly delete the
-  archive a fortnight later. Give archival rows a status of their own.
+- **The nightly clean-up of unfinished signups** removes bare `pending_checkout`
+  members after 90 days (with a notice 7 days before). An import that sets that
+  status by accident would have its rows emailed and removed. Give archival
+  rows a status of their own.
 
 ### Identity: what actually names a person
 

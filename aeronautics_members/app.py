@@ -525,7 +525,6 @@ def requires(*permissions):
 
 
 
-PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
 # Log retention. 0 means keep forever. Audit logs default to keep-forever because
 # they are the account/security trail; higher-churn notification delivery records
 # default to a generous one-year window.
@@ -4495,6 +4494,21 @@ def create_app(config_overrides=None):
         if access_lists:
             click.echo(f"Sent {access_lists} team access list(s).")
 
+        # Signups never paid for: a notice, then removal (90 days; see
+        # services/unfinished_signups.py). Never allowed to stop the rest.
+        from .services.unfinished_signups import clean_up as clean_up_unfinished_signups
+
+        try:
+            unfinished = clean_up_unfinished_signups()
+            db.session.commit()
+            flush_marked_notification_channels()
+        except Exception:  # noqa: BLE001 -- logged; tried again tomorrow
+            db.session.rollback()
+            current_app.logger.exception("Cleaning up unfinished signups failed.")
+        else:
+            if unfinished["noticed"] or unfinished["removed"]:
+                click.echo(f"Unfinished signups: {unfinished['noticed']} told, {unfinished['removed']} removed.")
+
         summary_color = "green" if error_count == 0 else "yellow"
         click.echo(click.style(
             f"Processed {len(member_ids)} Stripe-linked membership(s). Changed: {changed_count}. Unchanged: {unchanged_count}. Errors: {error_count}. Forum warnings: {forum_warning_count}.",
@@ -4727,32 +4741,16 @@ def create_app(config_overrides=None):
             sys.exit(1)
 
     @app.cli.command("cleanup-pending-signups")
-    @click.option("--days", default=PENDING_SIGNUP_RETENTION_DAYS, show_default=True, type=int)
     @with_appcontext
-    def cleanup_pending_signups(days):
-        """Deletes stale pending signups that never completed Checkout."""
-        cutoff = get_now_utc() - timedelta(days=days)
-        stale_members = db.session.execute(
-            db.select(Member)
-            .filter(Member.payment_status == "pending_checkout")
-            .filter(Member.is_active.is_(False))
-            .filter(Member.pending_checkout_started_at.is_not(None))
-            .filter(Member.pending_checkout_started_at < cutoff)
-            .filter(Member.stripe_customer_id.is_(None))
-            .filter(Member.stripe_subscription_id.is_(None))
-        ).scalars().all()
+    def cleanup_pending_signups():
+        """Tells, then removes, signups never paid for (also run nightly by reconcile-billing)."""
+        from .services.unfinished_signups import clean_up as clean_up_unfinished_signups
 
-        deleted_count = 0
-        for member in stale_members:
-            user = member.user
-            db.session.delete(member)
-            if user is not None and not user.roles:
-                db.session.delete(user)
-            deleted_count += 1
-
-        if deleted_count:
-            db.session.commit()
-        click.echo(click.style(f"Deleted {deleted_count} stale pending signup(s).", fg="green"))
+        result = clean_up_unfinished_signups()
+        db.session.commit()
+        flush_marked_notification_channels()
+        click.echo(click.style(
+            f"Unfinished signups: {result['noticed']} told, {result['removed']} removed.", fg="green"))
 
     @app.cli.command("system-check")
     @with_appcontext

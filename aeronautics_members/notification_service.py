@@ -550,6 +550,26 @@ class NotificationService:
                     ],
                 },
             )
+        if event.event_type == "unfinished_signup_removal":
+            day = payload.get("removal_day")
+            return (
+                _("Your signup at Joanneum Aeronautics is not complete"),
+                {
+                    "preview_text": _("Pay by %(day)s, or your signup is removed.", day=day),
+                    "action_url": account_url,
+                    "action_label": _("Complete my membership"),
+                    "heading": _("Your signup is not complete"),
+                    "body_lines": [
+                        greeting,
+                        _("You signed up for a membership at Joanneum Aeronautics, but the membership fee "
+                          "was never paid, so the membership has not started."),
+                        _("To become a member, sign in and complete the payment by %(day)s. Otherwise your "
+                          "signup and the details you entered are removed on that day.", day=day),
+                        _("If you no longer want to join, there is nothing to do. You are welcome to sign "
+                          "up again at any time."),
+                    ],
+                },
+            )
         if event.event_type == "forum_avatar_approved":
             return (
                 _("Your forum access is complete"),
