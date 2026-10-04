@@ -192,50 +192,87 @@ external work. Archive the old price in Stripe once nobody is on it.
 
 ## Legal Texts
 
-The statutes, rules of procedure, membership terms, privacy statement and the
-rest are Markdown files in the repository, one folder per text and one file
-per version, named after the day it takes effect:
+The statutes, rules of procedure, membership terms, privacy policy and the
+rest are Markdown files in the repository: one folder per text, one per
+language, one file per version, named after the version's day.
 
 ```
-legal/statutes/2019-03-17.md
-legal/privacy/2026-10-04.md
+legal/
+├── privacy-policy/
+│   ├── de/2026-10-04.md
+│   └── en/2026-10-04.md
+├── membership-terms/{de,en}/2026-10-04.md
+├── statutes/de/2019-03-17.md
+└── rules-of-procedure/de/2020-02-26.md
 ```
 
-The portal shows `/legal` (the list), `/legal/<text>` (the version in force)
-and `/legal/<text>/<day>` (an older one, marked as no longer in force). The
-version in force is the newest file whose day has come; a file dated in the
-future stays hidden, also by its address, until that day and then switches
-over by itself.
+Every file starts with YAML front matter. It is metadata and never shown:
+
+```
+---
+title: "Membership Terms and Conditions"
+document: "membership-terms"    # must match the folder
+language: "en"                  # must match the language folder
+version: "2026-10-04"           # must match the file name
+effective_from: "2026-10-04"    # the day it applies from
+status: "published"             # or "draft"
+---
+```
+
+**Which version is shown:** for the text and language, files with `status:
+"published"` whose `effective_from` has come; of those, the latest
+`effective_from`. So a version can be committed early and switch over by
+itself on its day, or wait as `draft` until it is approved. Drafts and
+future versions are not shown, not even by their address. Older versions
+stay readable at `/legal/<text>/<language>/<version>`, marked "No longer in
+force".
+
+**German applies; English is a translation.** A text is in force when its
+German version is. `/legal/<text>` shows the English translation of the
+version in force if there is one -- with a notice that it is a translation,
+may contain mistakes, and that the German version applies where they differ
+-- and the German text otherwise ("In German only", or "No English
+translation of this version yet" when the English file is of an older
+version: an outdated translation is never shown as the current text).
+`/legal/<text>/de` and `/legal/<text>/en` pick the language. An English file
+is the translation of the German file with the same `version`.
 
 **Changing a text:** add a new file next to the old one -- never edit a
-version people have already accepted -- commit it, and update the server.
-Write it in German. The first line is the title (`# Statuten`); each `## `
-heading becomes an entry in the contents list, and `## §5. …` gets the
-address `#paragraph-5`. Raw HTML is shown as text, not run; lists, bold,
-links and tables work. The tests in `tests/test_legal_texts.py` check every
-file in `legal/` (folder known, name a real day, title present), so a
-mistake fails CI rather than the page.
+version people have already accepted -- in German, and in English if there
+is a translation, with the same `version`; commit it, and update the server.
+In the body, each `## ` heading becomes an entry in the contents list, and
+`## §5. …` gets the address `#paragraph-5`. Raw HTML is shown as text, not
+run; lists, bold, links and tables work.
+
+**Checked by the tests:** `legal_texts.problems()` lists everything wrong
+with the files -- a file in the wrong place, front matter missing or not
+matching the folder and file name, an unknown status, two published
+versions from the same day, a translation without its German file -- and
+`tests/test_legal_texts.py` fails on any of it, so a mistake fails CI, not
+the page. A broken file is also simply not shown.
 
 **Which texts there are** is the list `LEGAL_TEXTS` in
-`services/legal_texts.py`: folder, German title, English name for links,
-and whether it is accepted at signup. A registered text without a file is
-not shown. Adding a text is a line there and a folder here. Currently
-accepted at signup: statutes, rules of procedure, membership terms, privacy
-statement. The withdrawal notice and impressum are registered but have no
-file yet. Team rules are not here: each team keeps its own on its page.
+`services/legal_texts.py`: folder, German and English name, and whether it
+is accepted at signup. A registered text without a German file is not
+shown. Adding a text is a line there and a folder here. Accepted at signup:
+statutes, rules of procedure, membership terms, privacy policy. Also
+registered: webshop and event terms, team rules (a general text; each team's
+own rules stay on its page), legal notice.
 
 **At signup** the one checkbox names every text accepted then, each a link.
 A click opens the text in a window over the form (`static/legal-dialog.js`
-fetches `/legal/<text>?part=body`); without JavaScript it opens in a new tab.
-Either way nothing typed into the form is lost. The member keeps which
-version of each text was accepted, and when (`legal_versions_accepted`,
-`legal_accepted_at`; in the member's data export). Members who signed up
-before October 2026 have neither; for them the signup date stands for the
-version.
+fetches `/legal/<text>?part=body`); links inside it (to the German version,
+to another text) load in the same window, anything else in a new tab.
+Without JavaScript the link opens in a new tab. Either way nothing typed
+into the form is lost. The member keeps which version of each text was
+accepted -- the version day, the same in both languages -- and when
+(`legal_versions_accepted`, `legal_accepted_at`; in the member's data
+export). Members who signed up before October 2026 have neither; for them
+the signup date stands for the version.
 
-**The membership terms and privacy statement are placeholders** -- obvious
-nonsense, marked as such -- until the real texts are written. Replace them
-before this reaches the live portal.
+**The membership terms and privacy policy in the repository are
+placeholders** -- obvious nonsense, marked as such -- until the real texts are
+committed. Replace them before this reaches the live portal.
 
 **Footer:** Impressum, Privacy and Statutes link to the addresses set by
 `IMPRESSUM_URL`, `PRIVACY_URL` and `STATUTES_URL`. Impressum and Privacy

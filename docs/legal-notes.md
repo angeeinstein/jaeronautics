@@ -45,7 +45,7 @@ urgent.
   honorary) and year group (cohort); required for students.
 - That the legal texts were accepted: a yes/no, and since October 2026 which
   version of each text (statutes, rules of procedure, membership terms,
-  privacy statement -- by the day each version took effect) and when. For
+  privacy policy -- by version day) and when. For
   those who signed up before, the signup date stands for the version (the
   texts in force that day). The texts and all their versions are in the
   repository, `legal/`, and readable at `/legal`.
@@ -251,13 +251,15 @@ Collected so nothing is forgotten; none of it is urgent.
 **Legal texts**
 - [ ] Write the membership terms (section 8) and the privacy statement,
       replacing the placeholders in `legal/membership-terms/` and
-      `legal/privacy/` -- before the next update of the live portal. Then
-      point the footer's Privacy link at `/legal/privacy` (`PRIVACY_URL`)
-      if the portal's statement is the one meant.
+      `legal/privacy-policy/` (German and English) -- before the next update
+      of the live portal. Then point the footer's Privacy link at
+      `/legal/privacy-policy` (`PRIVACY_URL`) if the portal's statement is
+      the one meant.
 - [x] Give the legal texts a version date: done, versions are files by
       date and the versions accepted are kept with the member.
-- [ ] Withdrawal notice (Rücktrittsbelehrung) and impressum: add them as
-      `legal/withdrawal/<day>.md` and `legal/legal-notice/<day>.md` once written.
+- [ ] Webshop and event terms (with the withdrawal notice) and the
+      impressum: add them as `legal/webshop-event-terms/de/<day>.md` and
+      `legal/legal-notice/de/<day>.md` once written.
 - [ ] Statutes: admission open, board may decide or make it stricter.
 - [ ] Statutes: leaving by online cancellation, at the end of the paid year.
 - [ ] Rules of procedure: the fee is €15 for everyone, collected through

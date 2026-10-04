@@ -261,35 +261,62 @@ def legal_texts():
 
 
 @public_bp.route("/legal/<slug>")
-@public_bp.route("/legal/<slug>/<version>")
-def legal_text(slug, version=None):
+@public_bp.route("/legal/<slug>/<language>")
+@public_bp.route("/legal/<slug>/<language>/<version>")
+def legal_text(slug, language=None, version=None):
     """One legal text: the version in force, or an earlier one by its day.
 
-    With ``?part=body`` only the text itself, for reading it in a window over a
-    form -- the signup -- without leaving it.
+    Without a language, the English translation where there is one of the
+    version shown, else the German text. A translation always says the German
+    text is the one that applies. With ``?part=body`` only the text itself, for
+    reading it in a window over a form -- the signup -- without leaving it.
     """
-    if slug not in legal.BY_SLUG:
+    if slug not in legal.BY_SLUG or (language is not None and language not in legal.LANGUAGES):
         abort(404)
     in_force = legal.current_version(slug)
+    if in_force is None:
+        abort(404)
     if version is None:
-        shown = in_force
+        german = in_force
     else:
         try:
-            shown = date.fromisoformat(version)
+            day = date.fromisoformat(version)
         except ValueError:
             abort(404)
-        if in_force is None or shown > in_force:
-            abort(404)  # not yet in force: not shown before its day
-    rendered = legal.render(slug, shown) if shown else None
-    if rendered is None:
-        abort(404)
+        # Only published versions whose day has come; a later one is not shown before it.
+        german = legal.find(slug, legal.AUTHORITATIVE, day)
+        if german is None:
+            abort(404)
+    english = legal.translation(german)
+    if language == legal.AUTHORITATIVE:
+        shown = german
+    elif language is not None:
+        if english is None:
+            if version is None:
+                return redirect(url_for("public.legal_text", slug=slug, language=legal.AUTHORITATIVE))
+            abort(404)
+        shown = english
+    else:
+        shown = english or german
+
+    def address(of):
+        if of is None:
+            return None
+        current = of.version == in_force.version
+        return url_for("public.legal_text", slug=slug, language=of.language,
+                       version=None if current else of.version.isoformat())
+
     template = "legal/_body.html" if request.args.get("part") == "body" else "legal/text.html"
     return render_template(
         template,
         text=legal.BY_SLUG[slug],
-        rendered=rendered,
+        shown=shown,
+        rendered=legal.render(shown),
         in_force=in_force,
-        earlier=[v for v in legal.versions(slug) if v != shown and v <= in_force],
+        german_url=address(german),
+        english_url=address(english),
+        english_elsewhere=english is None and legal.has_language(slug, "en"),
+        others=[(v, address(v)) for v in legal.versions(slug, shown.language) if v.version != shown.version],
     )
 
 

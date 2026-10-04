@@ -31,14 +31,8 @@
         return dialog;
     }
 
-    document.addEventListener('click', function (event) {
-        var link = event.target.closest('a[data-legal-dialog]');
-        if (!link || typeof HTMLDialogElement === 'undefined' || !window.fetch) {
-            return;
-        }
-        event.preventDefault();
-        var url = link.getAttribute('href');
-        fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'part=body', { credentials: 'same-origin' })
+    function show(url) {
+        return fetch(url + (url.indexOf('?') === -1 ? '?' : '&') + 'part=body', { credentials: 'same-origin' })
             .then(function (response) {
                 if (!response.ok) {
                     throw new Error('HTTP ' + response.status);
@@ -47,14 +41,45 @@
             })
             .then(function (html) {
                 var box = ensureDialog();
-                box.querySelector('.legal-dialog-body').innerHTML = html;
+                var body = box.querySelector('.legal-dialog-body');
+                body.innerHTML = html;
                 box.querySelector('[data-legal-open]').setAttribute('href', url);
-                box.showModal();
-                box.querySelector('.legal-dialog-body').scrollTop = 0;
-                box.querySelector('.legal-dialog-body').focus();
+                if (!box.open) {
+                    box.showModal();
+                }
+                body.scrollTop = 0;
+                body.focus();
             })
             .catch(function () {
                 window.open(url, '_blank', 'noopener');
             });
+    }
+
+    document.addEventListener('click', function (event) {
+        if (typeof HTMLDialogElement === 'undefined' || !window.fetch) {
+            return;
+        }
+        var link = event.target.closest('a[data-legal-dialog]');
+        if (link) {
+            event.preventDefault();
+            show(link.getAttribute('href'));
+            return;
+        }
+        // A link inside the text (the German version, another text) must not
+        // take the page away from the form either: another legal text loads in
+        // the window, anything else opens in a new tab.
+        var inner = event.target.closest('.legal-dialog-body a[href]');
+        if (inner) {
+            var href = inner.getAttribute('href');
+            if (href.charAt(0) === '#') {
+                return;
+            }
+            event.preventDefault();
+            if (href.indexOf('/legal/') === 0) {
+                show(href);
+            } else {
+                window.open(inner.href, '_blank', 'noopener');
+            }
+        }
     });
 }());

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ rendered.title }}{% endblock %}
+{% block title %}{{ shown.title }}{% endblock %}
 {% block content %}
 <div class="legal-page">
     <nav class="small mb-3" aria-label="{{ _('Breadcrumb') }}">
@@ -22,12 +22,11 @@
                     </div>
                 </div>
             {% endif %}
-            {% if earlier %}
+            {% if others %}
                 <div class="card">
                     <div class="card-header"><h3 class="h6 mb-0">{{ _('Other versions') }}</h3></div>
                     <div class="card-body small d-flex flex-column gap-1">
-                        {% if rendered.version != in_force %}<a href="{{ url_for('public.legal_text', slug=text.slug) }}">{{ _('In force: %(day)s', day=in_force|date_display) }}</a>{% endif %}
-                        {% for version in earlier %}{% if version != in_force %}<a href="{{ url_for('public.legal_text', slug=text.slug, version=version.isoformat()) }}">{{ version|date_display }}</a>{% endif %}{% endfor %}
+                        {% for version, url in others %}<a href="{{ url }}">{{ version.version|date_display }}{% if version.version == in_force.version %} ({{ _('in force') }}){% endif %}</a>{% endfor %}
                     </div>
                 </div>
             {% endif %}
