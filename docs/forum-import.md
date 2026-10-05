@@ -443,6 +443,16 @@ recognises the person. `flask forum-likely-old-accounts` lists them for
 everybody at once (it changes nothing), for those who signed up before this
 existed.
 
+**After a reconnect** the forum account made at signup is left over, holding
+the person's address, and Discourse refuses to give that address to the old
+account until the leftover is gone ("Primary email has already been taken").
+So the leftover goes first, then the kept account is synced: right away when
+an admin presses *Reconnect* or *Resync Forum*, and in the background every
+sync of that person does the cleanup first and waits while it fails. The
+account page says when a cleanup is still waiting, or gave up and why -- then
+delete the leftover in Discourse by hand (plain *Delete*, not *Delete and
+block*) and press *Resync Forum*.
+
 ### Ordering
 
 Because the claim is automatic, the import can run **before** the intake —

@@ -348,6 +348,15 @@ def _handle_forum_sync_work(item):
         # Erased between queueing and running. Syncing now would push the
         # placeholder profile to Discourse and undo the anonymisation.
         return
+    # After a reconnect, the account left behind holds the address this sync
+    # gives the kept one, and Discourse refuses it ("Primary email has already
+    # been taken") until the leftover is dealt with. The queue runs the oldest
+    # item first -- often this sync -- so the cleanup is done here, first.
+    if not finish_forum_cleanup_for(member.user):
+        raise ExternalServiceError(
+            f"Forum sync for member_id={member.id} waits for the forum account a reconnection "
+            "left behind to be removed."
+        )
     result, _service = sync_member_forum_state(member)
     db.session.commit()
     if result is not None and result.error:
@@ -512,6 +521,34 @@ def _handle_forum_discard_replaced_work(item):
         kept = item.user
         if kept is not None and kept.member is not None:
             enqueue_forum_sync(kept.member, reason="forum_replaced_account_removed")
+
+
+def forum_cleanup_waiting(user):
+    """The removal of the forum account a reconnect left behind, while it has
+    not happened: the work item (waiting, or given up), or None."""
+    if user is None:
+        return None
+    return db.session.execute(
+        db.select(ExternalWorkItem)
+        .where(
+            ExternalWorkItem.user_id == user.id,
+            ExternalWorkItem.kind == ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED,
+            ExternalWorkItem.status.in_([
+                ExternalWorkItem.STATUS_PENDING, ExternalWorkItem.STATUS_PROCESSING, ExternalWorkItem.STATUS_FAILED,
+            ]),
+        )
+        .order_by(ExternalWorkItem.id.desc())
+    ).scalars().first()
+
+
+def cleanup_then_sync(user):
+    """For an administrator: deal with what a reconnect left on the forum, then
+    sync -- in that order, now. ``(result, waiting)``: the sync's result, or
+    None with the cleanup that could not be finished."""
+    if not finish_forum_cleanup_for(user):
+        return None, forum_cleanup_waiting(user)
+    result, _service = sync_member_forum_state(user.member)
+    return result, None
 
 
 def finish_forum_cleanup_for(user):

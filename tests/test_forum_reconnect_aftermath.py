@@ -600,3 +600,105 @@ def test_the_placeholder_address_is_unique_per_person(app):
 
     assert first != second
     assert first.endswith(f"@{IMPORTED_EMAIL_DOMAIN}")
+
+
+class TestTheSyncWaitsForTheCleanup:
+    """Found twice on the live portal: right after a reconnect, the sync of the
+    kept account ran before the leftover was removed -- the queue runs the
+    oldest item first -- and Discourse answered "Primary email has already
+    been taken". So whatever syncs does the cleanup first."""
+
+    def _queued(self, member):
+        from aeronautics_members.services.outbox import enqueue_forum_sync
+
+        discard = ExternalWorkItem(
+            kind=ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED, user=member.user,
+            payload={"remote_user_id": 44, "external_id": "1"}, status=ExternalWorkItem.STATUS_PENDING,
+        )
+        enqueue_forum_sync(member, reason="test")  # older than the discard, as after a reconnect
+        db.session.add(discard)
+        db.session.commit()
+        return discard
+
+    def _fakes(self, monkeypatch, order, fail=False):
+        from aeronautics_members.services import outbox, workflows
+
+        def discard(item):
+            if fail:
+                raise RuntimeError("forum unreachable")
+            order.append("cleanup")
+
+        def sync(member):
+            order.append("sync")
+            return type("Result", (), {"error": None, "desired_state": "active"})(), None
+
+        monkeypatch.setitem(outbox._HANDLERS, ExternalWorkItem.KIND_FORUM_DISCARD_REPLACED, discard)
+        monkeypatch.setattr(workflows, "sync_member_forum_state", sync)
+
+    def test_in_the_background_the_cleanup_runs_first(self, app, monkeypatch):
+        from aeronautics_members.services.outbox import process_pending
+
+        order = []
+        self._fakes(monkeypatch, order)
+        self._queued(make_member(email="back@example.com"))
+
+        process_pending()
+
+        assert order == ["cleanup", "sync"]
+
+    def test_while_the_cleanup_fails_the_sync_waits_and_says_why(self, app, monkeypatch):
+        from aeronautics_members.services.outbox import process_pending
+
+        order = []
+        self._fakes(monkeypatch, order, fail=True)
+        member = make_member(email="back@example.com")
+        self._queued(member)
+
+        process_pending()
+
+        sync = db.session.execute(db.select(ExternalWorkItem).filter_by(
+            kind=ExternalWorkItem.KIND_FORUM_SYNC, member_id=member.id)).scalar_one()
+        assert "sync" not in order and "left behind" in sync.last_error
+
+    def test_resync_forum_removes_the_leftover_first(self, app, client, monkeypatch):
+        from test_admin_reviews import _login, _staff
+
+        order = []
+        self._fakes(monkeypatch, order)
+        member = make_member(email="back@example.com")
+        self._queued(member)
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        client.post(f"/admin/accounts/{member.user_id}/forum-resync")
+
+        assert order == ["cleanup", "sync"]
+
+    def test_resync_forum_says_why_when_it_cannot(self, app, client, monkeypatch):
+        from test_admin_reviews import _login, _staff
+
+        order = []
+        self._fakes(monkeypatch, order, fail=True)
+        member = make_member(email="back@example.com")
+        self._queued(member)
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        response = client.post(f"/admin/accounts/{member.user_id}/forum-resync", follow_redirects=True)
+
+        assert "sync" not in order
+        assert "could not be removed yet" in response.get_data(as_text=True)
+
+    def test_the_account_page_says_a_cleanup_is_waiting_or_gave_up(self, app, client):
+        from test_admin_reviews import _login, _staff
+
+        member = make_member(email="back@example.com")
+        discard = self._queued(member)
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        assert "is being removed in the background" in client.get(
+            f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+
+        discard.status, discard.last_error = ExternalWorkItem.STATUS_FAILED, "Discourse said no."
+        db.session.commit()
+        body = client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+
+        assert "could not be removed" in body and "Discourse said no." in body

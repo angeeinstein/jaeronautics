@@ -299,6 +299,11 @@
                     <dt class="col-sm-5">{{ _('Last Synced') }}</dt>
                     <dd class="col-sm-7">{{ forum_account.last_synced_at|datetime_display if forum_account and forum_account.last_synced_at else '-' }}</dd>
                 </dl>
+                {% if forum_cleanup and forum_cleanup.status == 'failed' %}
+                    <div class="alert alert-warning mt-4 mb-3">{{ _('The forum account this person left behind when reconnecting could not be removed, and holds their address: %(error)s Delete it in Discourse by hand (plain Delete, not "Delete and block"), then Resync Forum.', error=forum_cleanup.last_error or '') }}</div>
+                {% elif forum_cleanup %}
+                    <div class="alert alert-info mt-4 mb-3">{{ _('The forum account this person left behind when reconnecting is being removed in the background; until it is, the forum refuses their address here. Resync Forum removes it now.') }}{% if forum_cleanup.last_error %} {{ _('Last attempt: %(error)s', error=forum_cleanup.last_error) }}{% endif %}</div>
+                {% endif %}
                 {% if forum_context.forum_error %}
                     <div class="alert alert-warning mt-4 mb-3">{{ forum_context.forum_error }}</div>
                 {% endif %}

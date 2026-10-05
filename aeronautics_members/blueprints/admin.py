@@ -343,6 +343,7 @@ def admin_account_detail(user_id):
         member=user.member,
         forum_account=user.forum_account,
         forum_context=build_forum_context(user.member),
+        forum_cleanup=_forum_cleanup_waiting(user),
         latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
         recent_logs=recent_logs,
         **_reconnect_context(user),
@@ -513,6 +514,12 @@ def admin_reviews():
     )
 
 
+def _forum_cleanup_waiting(user):
+    from ..services.workflows import forum_cleanup_waiting
+
+    return forum_cleanup_waiting(user)
+
+
 @admin_bp.route("/admin/accounts/<int:user_id>/forum-resync", methods=["POST"])
 @login_required
 @requires(Permission.FORUM_MODERATE)
@@ -530,8 +537,16 @@ def admin_resync_forum_account(user_id):
         flash(_("This account does not have a linked membership profile yet."), "warning")
         return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
 
+    from ..services.workflows import cleanup_then_sync
+
     before_state = snapshot_forum_account_for_audit(user.forum_account)
-    result, _service = sync_member_forum_state(user.member)
+    # A reconnect's leftover account first, or this sync is refused for its address.
+    result, waiting = cleanup_then_sync(user)
+    if result is None:
+        flash(_("The forum account left behind by the reconnection could not be removed yet, so the forum "
+                "still refuses this address: %(error)s", error=(waiting.last_error if waiting else None) or "-"),
+              "warning")
+        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
     log_audit_event(
         category="forum",
         event_type="manual_forum_resync",
@@ -736,6 +751,21 @@ def admin_reconnect_old_forum_account(user_id):
     )
     db.session.commit()
     flash(_("Reconnected to %(username)s.", username=old_username), "success")
+    # The account they leave behind holds their address; it goes first, then
+    # the forum is told -- now, so this page shows how it went.
+    from ..services.workflows import cleanup_then_sync
+
+    try:
+        result, _waiting = cleanup_then_sync(archived)
+        db.session.commit()
+    except Exception:  # noqa: BLE001 -- both stay queued and run in the background
+        db.session.rollback()
+        current_app.logger.exception("Forum cleanup and sync after reconnecting user %s", archived.id)
+        result = None
+    if result is None:
+        flash(_("The forum is updated in the background over the next minutes."), "info")
+    elif result.error:
+        flash(_("Forum sync completed with an issue: %(message)s", message=result.error), "warning")
     # The account now lives on the old forum's row; the one it came from is gone.
     return redirect(url_for("admin.admin_account_detail", user_id=archived.id))
 
