@@ -23,7 +23,11 @@
                 </div>
             </div>
             <div class="form-text">{{ _('Named after the version, like 2026-10-05.md, at most %(kb)s KB each. A team\'s rules carry its short name in the front matter (team: "rocket-team") and get that team\'s logo.', kb=max_kb) }}</div>
-            <div><button type="submit" class="btn btn-primary">{{ _('Make the PDF') }}</button></div>
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <button type="submit" class="btn btn-primary">{{ _('Make the PDF') }}</button>
+                <a href="{{ url_for('admin.admin_legal_template') }}">{{ _('Download a template') }}</a>
+                <span class="text-muted small">{{ _('The structure a text needs and everything it can do, dated today: preview it as it is to see each in the PDF.') }}</span>
+            </div>
         </form>
     </div>
 </div>

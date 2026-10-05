@@ -288,6 +288,11 @@ The files are checked as CI checks them, so a file that previews is one that
 can be committed; whatever is wrong is listed instead. Nothing is kept: the
 files go to a temporary folder for the checks and the layout and are deleted
 with it. A team's rules (`team:` in the front matter) get that team's logo.
+*Download a template* there gives a Markdown file with every front matter
+field explained and an example of everything a text can contain -- headings
+and paragraph anchors, emphasis, links, lists, lettered points, tables,
+quotes, parts -- dated today as a draft, so it previews as it is
+(`templates/legal/template.md`).
 
 **Which texts there are** is the list `LEGAL_TEXTS` in
 `services/legal_texts.py`: folder, German and English name, and whether it

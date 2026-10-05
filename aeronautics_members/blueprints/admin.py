@@ -1355,6 +1355,22 @@ def admin_legal():
     )
 
 
+@admin_bp.route("/admin/legal/template", methods=["GET"])
+@login_required
+@requires(Permission.SETTINGS_GENERAL)
+def admin_legal_template():
+    """A Markdown file showing what a legal text needs and everything it can do,
+    dated today and a draft -- so it previews as it is."""
+    from ..services.clock import get_membership_today
+
+    day = get_membership_today().isoformat()
+    response = current_app.response_class(
+        render_template("legal/template.md", day=day), mimetype="text/markdown",
+    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{day}.md"'
+    return response
+
+
 @admin_bp.route("/admin/logs", methods=["GET"])
 @login_required
 @requires(Permission.LOGS_VIEW)

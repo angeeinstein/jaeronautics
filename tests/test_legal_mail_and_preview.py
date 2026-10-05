@@ -251,6 +251,29 @@ class TestThePreview:
         assert response.mimetype == "application/pdf" and seen["team"] == team
 
 
+class TestTheTemplate:
+    def test_dated_today_and_previewed_as_it_is(self, app, client):
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        response = client.get("/admin/legal/template")
+        name = f"{TODAY.isoformat()}.md"
+
+        assert response.mimetype == "text/markdown" and f'filename="{name}"' in response.headers["Content-Disposition"]
+        text = response.get_data(as_text=True)
+        assert text.startswith("---\n") and f'version: "{TODAY.isoformat()}"' in text and "{{" not in text
+        preview = client.post("/admin/legal", data={"german": (io.BytesIO(response.data), name)},
+                              content_type="multipart/form-data")
+        assert preview.mimetype == "application/pdf"
+
+    def test_shows_every_kind_of_markup(self, app, client):
+        _login(client, _staff("boss@example.org", "admin").id)
+        text = client.get("/admin/legal/template").get_data(as_text=True)
+
+        for shown in ("## § 1", "### ", "**bold**", "](https://", "1. ", "- ", "  \n   a. ", "|---|", "> ", "\n---\n",
+                      "\n# Teil B", "source_revision", "team:"):
+            assert shown in text, shown
+
+
 class TestThePage:
     def test_lists_what_is_in_force_and_what_is_wrong(self, app, client, texts, legal_dir, rules_file):  # noqa: F811
         texts("statutes", "2019-03-17", title="Statuten")
