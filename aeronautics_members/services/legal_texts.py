@@ -13,6 +13,7 @@ Every file starts with YAML front matter, which is metadata and never shown:
     version: "2026-10-04"           # the file's name
     effective_from: "2026-10-04"    # the day it applies from
     status: "published"             # or "draft"
+    source_revision: "Rev 4"        # optional: the text's own revision, shown with the date
     ---
 
 The version in force is the newest ``published`` one whose ``effective_from``
@@ -92,6 +93,7 @@ class Version:
     status: str
     title: str
     path: Path
+    revision: str = None
 
     @property
     def is_translation(self):
@@ -158,6 +160,7 @@ def _check(path, slug, language):
         slug=slug, language=language, version=from_name,
         effective_from=_as_date(meta["effective_from"]), status=meta["status"],
         title=str(meta["title"]).strip(), path=path,
+        revision=str(meta["source_revision"]).strip() if meta.get("source_revision") else None,
     ), []
 
 
@@ -291,7 +294,9 @@ def render(version):
 
     The front matter is metadata and not shown; the title comes from it, so a
     top-level heading opening the body would say it twice and is left out.
-    The second-level headings get anchors and make the contents list.
+    Top-level headings further down divide the text into parts ("Teil A");
+    they and the second-level headings get anchors and make the contents
+    list, as ``(anchor, label, level)``.
     """
     key = (str(version.path), version.path.stat().st_mtime_ns)
     if key in _rendered:
@@ -309,11 +314,13 @@ def render(version):
         if token.type == "heading_open" and token.tag == "h1" and not kept:
             skip_until = index + 2
             continue
-        if token.type == "heading_open" and token.tag == "h2":
+        if token.type == "heading_open" and token.tag in ("h1", "h2"):
             label = tokens[index + 1].content.strip()
             anchor = _anchor(label, taken)
             token.attrSet("id", anchor)
-            contents.append((anchor, label))
+            if token.tag == "h1":
+                token.attrSet("class", "legal-part")
+            contents.append((anchor, label, int(token.tag[1])))
         kept.append(token)
 
     rendered = {

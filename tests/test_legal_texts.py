@@ -158,7 +158,26 @@ class TestRendering:
         assert version.title == "Statuten"
         assert "<h1" not in rendered["html"] and "effective_from" not in rendered["html"]
         assert '<h2 id="paragraph-1">' in rendered["html"]
-        assert rendered["contents"] == [("paragraph-1", "§1. Name"), ("schluss", "Schluss")]
+        assert rendered["contents"] == [("paragraph-1", "§1. Name", 2), ("schluss", "Schluss", 2)]
+
+    def test_parts_further_down_are_headings_of_their_own_and_in_the_contents(self, texts):
+        texts("privacy-policy", "2026-10-04", "Einleitung.\n\n## 1. Allgemein\n\n---\n\n# Teil B – Portal\n\n## 2. Konto\n")
+
+        rendered = legal.render(legal.current_version("privacy-policy", today=date(2026, 10, 4)))
+
+        assert '<h1 id="teil-b-portal" class="legal-part">' in rendered["html"]
+        assert [level for _anchor, _label, level in rendered["contents"]] == [2, 1, 2]
+
+    def test_the_texts_own_revision_is_shown_with_the_date(self, client, texts, legal_dir):
+        (legal_dir / "statutes" / "de").mkdir(parents=True)
+        (legal_dir / "statutes" / "de" / "2019-03-17.md").write_text(
+            '---\ntitle: "Statuten"\ndocument: "statutes"\nlanguage: "de"\nversion: "2019-03-17"\n'
+            'effective_from: "2019-03-17"\nstatus: "published"\nsource_revision: "Rev 1"\n---\n\nText.\n',
+            encoding="utf-8")
+
+        body = client.get("/legal/statutes").get_data(as_text=True)
+
+        assert "Version of 17.03.2019 (Rev 1)" in body
 
     def test_html_in_a_text_is_shown_as_text_never_run(self, texts):
         texts("privacy-policy", "2026-10-04", "<script>alert(1)</script>\n\n[x](javascript:alert(1))")
@@ -319,3 +338,18 @@ class TestTheTextsInTheRepository:
         for text in legal.LEGAL_TEXTS:
             if text.accepted_at_signup:
                 assert legal.versions(text.slug, today=date(9999, 12, 31)), f"legal/{text.slug}/de/ has nothing published"
+
+
+def test_lettered_points_start_on_a_line_of_their_own():
+    """ "a. ..." under a numbered point is not a Markdown list: without a line
+    break (two spaces) at the end of the line before, the first one is glued to it."""
+    import re
+
+    glued = []
+    for path in sorted(REPO_TEXTS.rglob("*.md")):
+        lines = path.read_text(encoding="utf-8").split("\n")
+        for number, (before, line) in enumerate(zip(lines, lines[1:]), start=2):
+            if (re.match(r"^\s+[a-z]\. ", line) and before.strip() and not before.endswith("  ")
+                    and not re.match(r"^\s+[a-z]\. ", before)):
+                glued.append(f"{path.relative_to(REPO_TEXTS)}:{number}")
+    assert glued == []

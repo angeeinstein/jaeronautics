@@ -1444,6 +1444,21 @@ td .confirm-hint {
     margin-top: 1.75rem;
     scroll-margin-top: 5rem;
 }
+/* A part of a long text ("Teil B – Mitgliederportal"): above its sections, not above the title. */
+.legal-text h1.legal-part {
+    font-size: 1.3rem;
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--ja-border);
+    scroll-margin-top: 5rem;
+}
+.legal-text hr:has(+ h1.legal-part) {
+    display: none;  /* the part heading draws its own line */
+}
+.legal-contents-part {
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
 .legal-text h3 {
     font-size: 1rem;
     margin-top: 1.25rem;

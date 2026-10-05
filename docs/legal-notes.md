@@ -241,25 +241,28 @@ Rev 1 (17.03.2019) and Rules of Procedure Rev 3 (26.02.2020). Where they no long
 - **Invitations to the general meeting** (Statutes § 9 (3)): by email to the
   address given — the portal holds that address (private email).
 - The signup checkbox names and links the statutes, rules of procedure,
-  membership terms and privacy statement. The terms and the privacy statement
-  are placeholders. **To-do:** write them (section 8 and the sections above).
+  membership terms and privacy policy, which are accepted together. Since
+  October 2026 all four are real texts (`legal/`).
+- **The fee, twice (open):** the rules of procedure Rev 4 (02.03.2026) § 2
+  still give per-section fees (EUR 10 study, EUR 20 alumni/supporter, EUR 50
+  company), collected yearly by the treasurer by direct debit; the membership
+  terms § 7 and § 9 say EUR 15 a calendar year, through Stripe. Both are
+  accepted at signup. **To-do:** align them (a new rules version, or the
+  terms).
 
 ## 10. To-do
 
 Collected so nothing is forgotten; none of it is urgent.
 
 **Legal texts**
-- [ ] Write the membership terms (section 8) and the privacy statement,
-      replacing the placeholders in `legal/membership-terms/` and
-      `legal/privacy-policy/` (German and English) -- before the next update
-      of the live portal. Then point the footer's Privacy link at
-      `/legal/privacy-policy` (`PRIVACY_URL`) if the portal's statement is
-      the one meant.
+- [x] Membership terms and privacy policy written (04.10.2026, German).
+- [ ] Decide whether the footer's Impressum and Privacy links point to the
+      portal's own texts (`/legal/legal-notice`, `/legal/privacy-policy`, via
+      `IMPRESSUM_URL`, `PRIVACY_URL`) or stay on the website.
+- [ ] English translations, if wanted: `legal/<text>/en/<same day>.md`.
 - [x] Give the legal texts a version date: done, versions are files by
       date and the versions accepted are kept with the member.
-- [ ] Webshop and event terms (with the withdrawal notice) and the
-      impressum: add them as `legal/webshop-event-terms/de/<day>.md` and
-      `legal/legal-notice/de/<day>.md` once written.
+- [x] Webshop and event terms and the impressum (04.10.2026).
 - [ ] Statutes: admission open, board may decide or make it stricter.
 - [ ] Statutes: leaving by online cancellation, at the end of the paid year.
 - [ ] Rules of procedure: the fee is €15 for everyone, collected through

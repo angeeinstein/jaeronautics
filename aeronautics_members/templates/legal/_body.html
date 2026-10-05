@@ -9,7 +9,7 @@
     {% endif %}
     <h2 class="legal-title">{{ shown.title }}</h2>
     <p class="text-muted small" lang="en">
-        {{ _('Version of %(day)s', day=shown.version|date_display) }}
+        {{ _('Version of %(day)s', day=shown.version|date_display) }}{% if shown.revision %} ({{ shown.revision }}){% endif %}
         {%- if shown.effective_from != shown.version %}, {{ _('in force from %(day)s', day=shown.effective_from|date_display) }}{% endif %}
         {%- if shown.version != in_force.version %} · <strong>{{ _('No longer in force; the current version is of %(day)s.', day=in_force.version|date_display) }}</strong>{% endif %}
         {%- if not shown.is_translation %} ·

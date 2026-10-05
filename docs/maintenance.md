@@ -270,9 +270,13 @@ accepted -- the version day, the same in both languages -- and when
 export). Members who signed up before October 2026 have neither; for them
 the signup date stands for the version.
 
-**The membership terms and privacy policy in the repository are
-placeholders** -- obvious nonsense, marked as such -- until the real texts are
-committed. Replace them before this reaches the live portal.
+**What is in `legal/`** (October 2026): statutes (Rev 1, 2019), rules of
+procedure (Rev 3, 2020, and Rev 4, 2026), membership terms, privacy policy
+(website and portal together), webshop and event terms, impressum -- German
+only so far. `source_revision` in the front matter ("Rev 4") is shown next to
+the date. A `# ` heading further down a text ("Teil B – Mitgliederportal") is a
+part of it, listed in the contents. Points lettered "a." under a numbered one
+need a line break (two spaces) at the end of the line before; the tests check.
 
 **Footer:** Impressum, Privacy and Statutes link to the addresses set by
 `IMPRESSUM_URL`, `PRIVACY_URL` and `STATUTES_URL`. Impressum and Privacy
