@@ -39,7 +39,10 @@
 <section class="card mb-4" aria-labelledby="team-membership-heading" id="join">
     <div class="card-header"><h4 class="mb-0" id="team-membership-heading">{{ _('Membership') if current and current.status == 'active' else (_('Applying') if team.admission_mode == 'approval' else _('Joining')) }}</h4></div>
     <div class="card-body d-flex flex-column gap-3">
-        {% if not current and team.admission_mode == 'approval' %}
+        {% set back_until = rejoin_until(team) if not current else none %}
+        {% if back_until %}
+            <p class="mb-0">{{ _('Your membership ended because it was not paid. Until %(day)s you can come back by paying again — no new application needed.', day=back_until|date_display) }}</p>
+        {% elif not current and team.admission_mode == 'approval' %}
             <p class="mb-0 text-muted small">{{ _('You apply here; the leads get in touch, may invite you to meet, and decide.') }}</p>
         {% endif %}
         {% set on_team_page = true %}
@@ -53,7 +56,7 @@
             {% else %}
                 <form method="POST" action="{{ url_for('teams.team_join', slug=team.slug) }}" class="mb-0 d-flex flex-column gap-3" data-busy-text="{{ _('Sending…') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    {% if team.admission_mode == 'approval' and team.application_prompt %}
+                    {% if team.admission_mode == 'approval' and team.application_prompt and not back_until %}
                         <div>
                             <label class="form-label" for="application-text">{{ team.application_prompt }}</label>
                             <textarea class="form-control" id="application-text" name="application_text" rows="4" maxlength="5000"></textarea>
@@ -71,7 +74,7 @@
                         </div>
                     {% endif %}
                     <div>
-                        <button type="submit" class="btn btn-primary">{{ _('Apply') if team.admission_mode == 'approval' else _('Join') }}</button>
+                        <button type="submit" class="btn btn-primary">{{ _('Rejoin and pay') if back_until else (_('Apply') if team.admission_mode == 'approval' else _('Join')) }}</button>
                     </div>
                 </form>
             {% endif %}

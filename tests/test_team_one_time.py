@@ -198,6 +198,23 @@ class TestRenewing:
         assert len(_emails("team_members_lapsed")) == 1  # one summary; the lead is gone too, so the admins get it
         assert teams.join_or_apply(anna, team).status == teams.APPROVED  # back by paying
 
+    def test_the_pages_say_paying_again_is_enough(self, app, client, monkeypatch, stripe_fake):
+        team, lead, anna, membership = _member_paid_once(client, monkeypatch, stripe_fake)
+        team.admission_mode, team.application_prompt = teams.ADMISSION_APPROVAL, "Why do you want to join?"
+        lead_membership = teams.ongoing_membership(lead, team)
+        lead_membership.payment_mode, lead_membership.paid_until = "one_time", date(2099, 12, 31)
+        db.session.commit()
+        team_payments.end_finished_team_memberships(membership.paid_until + timedelta(days=1))
+        _login(client, anna.id)
+
+        about = client.get(f"/teams/{team.slug}/about").get_data(as_text=True)
+        overview = client.get("/teams").get_data(as_text=True)
+
+        until = (membership.ended_at.date() + timedelta(days=teams.REJOIN_DAYS)).strftime("%d.%m.%Y")
+        assert f"Until {until} you can come back by paying again" in about
+        assert "Rejoin and pay" in about and "Why do you want to join?" not in about
+        assert "About &amp; rejoin" in overview or "About & rejoin" in overview
+
     def test_leaving_runs_to_the_end_of_what_is_paid(self, app, client, monkeypatch, stripe_fake):
         team, _lead, anna, membership = _member_paid_once(client, monkeypatch, stripe_fake)
 

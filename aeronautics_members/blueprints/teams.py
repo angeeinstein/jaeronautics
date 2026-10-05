@@ -358,6 +358,8 @@ def _membership_context():
                  if membership.status in teams_service.ONGOING},
         is_member=teams_service.is_active_association_member(current_user),
         why_not_joinable=lambda team: teams_service.why_not_joinable(current_user, team),
+        # Ended unpaid not long ago: back by paying, no application.
+        rejoin_until=lambda team: teams_service.rejoin_by_paying_until(current_user, team),
         status_labels=teams_service.STATUS_LABELS,
         manageable={team.id for team in led if _manages_people(team)},
         money_of={team.id for team in led

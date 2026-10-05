@@ -1133,21 +1133,30 @@ def stop_charging(membership, why):
 _stop_charging = stop_charging
 
 
-def may_rejoin_by_paying(user, team, today=None):
-    """Whether the person's last membership here ended unpaid recently enough
-    to come back by paying, without applying."""
+def rejoin_by_paying_until(user, team, today=None):
+    """The last day the person may come back by paying, without applying --
+    their last membership here ended unpaid not long ago -- or None."""
+    from datetime import timedelta
+
     from .clock import get_membership_today
 
-    if team.payment_mode == PAYMENT_NONE:
-        return False
+    if user is None or team.payment_mode == PAYMENT_NONE:
+        return None
     today = today or get_membership_today()
     last = db.session.execute(
         db.select(TeamMembership).filter_by(team_id=team.id, user_id=user.id, status=ENDED)
         .order_by(TeamMembership.id.desc())
     ).scalars().first()
     if last is None or last.end_reason not in (END_PAYMENT_FAILED, END_NOT_RENEWED) or last.ended_at is None:
-        return False
-    return (today - last.ended_at.date()).days <= REJOIN_DAYS
+        return None
+    until = last.ended_at.date() + timedelta(days=REJOIN_DAYS)
+    return until if today <= until else None
+
+
+def may_rejoin_by_paying(user, team, today=None):
+    """Whether the person's last membership here ended unpaid recently enough
+    to come back by paying, without applying."""
+    return rejoin_by_paying_until(user, team, today) is not None
 
 
 def invite(actor, team, membership_id, meeting_details):

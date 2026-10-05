@@ -106,7 +106,7 @@
             {% if reason %}
                 <span class="text-muted small">{{ _(reason) }}</span>
             {% else %}
-                <a class="btn btn-primary" href="{{ url_for('teams.team_about', slug=team.slug) }}">{{ _('Apply') if team.admission_mode == 'approval' else _('Join') }}</a>
+                <a class="btn btn-primary" href="{{ url_for('teams.team_about', slug=team.slug) }}#join">{{ _('Rejoin') if rejoin_until(team) else (_('Apply') if team.admission_mode == 'approval' else _('Join')) }}</a>
             {% endif %}
         {% endif %}
         {% if not (current and current.status == 'active') %}
