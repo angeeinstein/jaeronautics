@@ -14,9 +14,10 @@ abandoned signups must not pile up as nameless leftovers.
   starts the count afresh.
 * Only a bare signup: no Stripe subscription, and no row anywhere in the
   database pointing at it except its own log, email and background-task
-  rows. A role, a team, a forum account, a picture, a change request, a
-  membership period, a payment -- anything more, and it is left alone for an
-  admin. Checked against the schema, not a list, so it stays true as tables
+  rows. Never an account of the old forum (imported, or reconnected by a
+  returning student who has not paid yet). A role, a team, a forum account,
+  a picture, a change request, a membership period, a payment -- anything
+  more, and it is left alone for an admin. Checked against the schema, not a list, so it stays true as tables
   are added, and the delete can never fail on a foreign key.
 
 Removed with the account: its profile and the log, email and background-task
@@ -83,6 +84,8 @@ def _bare(member):
     user = member.user
     if user is None or user.deleted_at is not None:
         return False
+    if user.imported_forum_profile is not None:
+        return False  # the old forum's: its posts hang off this account, whatever the membership
     return not _referenced_elsewhere(user, member)
 
 

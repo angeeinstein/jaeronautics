@@ -185,3 +185,38 @@ def test_a_signup_something_else_points_at_is_left_alone(app):
     db.session.commit()
 
     assert unfinished_signups.clean_up(_day(400)) == {"noticed": 0, "removed": 0}
+
+
+class TestTheOldForumsAccounts:
+    """The archive of the old forum: never told, never removed, however old."""
+
+    def test_an_imported_account_is_never_a_signup(self, app):
+        from aeronautics_members.db_models import ImportedForumProfile
+        from test_forum_account_claim import _archived
+
+        profile = _archived()
+        user_id = profile.user_id
+
+        for days in (0, 400, 4000):
+            assert unfinished_signups.clean_up(_day(days)) == {"noticed": 0, "removed": 0}
+        assert db.session.get(User, user_id) is not None
+        assert db.session.get(ImportedForumProfile, profile.id) is not None
+        assert not _notices()
+
+    def test_nor_one_reconnected_whose_membership_was_never_paid(self, app):
+        from datetime import datetime as _datetime
+
+        from aeronautics_members.services.forum_import import claim_archived_account
+        from test_forum_account_claim import OLD_EMAIL, _archived
+
+        _archived()
+        member = _signup(email=OLD_EMAIL)
+        member.user.email_verified_at = _datetime.utcnow()
+        db.session.commit()
+        claimed = claim_archived_account(member.user)
+        db.session.commit()
+        assert claimed is not None and claimed.user.member is not None  # the unpaid membership moved onto it
+
+        for days in (100, 400):
+            assert unfinished_signups.clean_up(_day(days)) == {"noticed": 0, "removed": 0}
+        assert db.session.get(User, claimed.user_id).member is not None
