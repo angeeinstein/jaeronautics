@@ -274,6 +274,55 @@ class TestTheTemplate:
             assert shown in text, shown
 
 
+class TestNotInForceYet:
+    def test_drafts_and_versions_waiting_for_their_day_are_listed(self, app, client, texts, rules_file):  # noqa: F811
+        texts("statutes", "2019-03-17", title="Statuten")
+        texts("statutes", "2026-01-01", title="Statuten", status="draft")
+        texts("privacy-policy", "2099-01-01", title="Datenschutzerklärung")
+        texts("privacy-policy", "2099-01-01", title="Privacy Policy", language="en")
+        _led()
+        rules_file(team="rocket", status="draft")
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        body = client.get("/admin/legal").get_data(as_text=True)
+        waiting = body.split('id="legal-waiting"')[1].split('class="card"')[0]
+
+        assert "Statuten" in waiting and "Draft" in waiting
+        assert "Datenschutzerklärung" in waiting and "From 01.01.2099" in waiting and "with English" in waiting
+        assert "Teamordnung" in waiting and "Rocket" in waiting
+        assert "2019-03-17" not in waiting  # in force, so above
+        assert "document=statutes&amp;version=2026-01-01" in waiting
+        assert "document=team-rules&amp;version=" in waiting and "team=rocket" in waiting
+
+    def test_their_pdf_marked_and_with_the_english(self, app, client, texts, monkeypatch):  # noqa: F811
+        texts("privacy-policy", "2099-01-01", title="Datenschutzerklärung", status="draft")
+        texts("privacy-policy", "2099-01-01", title="Privacy Policy", language="en", status="draft")
+        seen = {}
+        monkeypatch.setattr(legal_pdf, "build", lambda german, team=None, versions=None, watermark=None:
+                            seen.update(watermark=watermark, languages=[v.language for v in versions])
+                            or b"%PDF-1.7 x")
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        response = client.get("/admin/legal/waiting.pdf?document=privacy-policy&version=2099-01-01")
+
+        assert response.mimetype == "application/pdf" and "ENTWURF_" in response.headers["Content-Disposition"]
+        assert seen == {"watermark": "ENTWURF", "languages": ["de", "en"]}
+
+    @pytest.mark.parametrize("query", ["document=unknown&version=2099-01-01", "document=statutes&version=x",
+                                       "document=statutes&version=2001-01-01", "document=statutes&version=2099-01-01&team=rocket"])
+    def test_what_is_not_there(self, app, client, texts, query):  # noqa: F811
+        texts("statutes", "2099-01-01", title="Statuten", status="draft")
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        assert client.get(f"/admin/legal/waiting.pdf?{query}").status_code == 404
+
+    def test_nothing_waiting(self, app, client, texts):  # noqa: F811
+        texts("statutes", "2019-03-17", title="Statuten")
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        assert "No drafts, and no versions waiting" in client.get("/admin/legal").get_data(as_text=True)
+
+
 class TestThePage:
     def test_lists_what_is_in_force_and_what_is_wrong(self, app, client, texts, legal_dir, rules_file):  # noqa: F811
         texts("statutes", "2019-03-17", title="Statuten")

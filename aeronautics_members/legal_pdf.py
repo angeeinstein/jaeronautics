@@ -358,3 +358,13 @@ def preview(german_upload, english_upload=None):
         finally:
             legal.forget(paths)
         return data, [], filename(german, team)
+
+
+def waiting_pdf(german, team=None):
+    """A version not shown yet -- a draft, or one whose day has not come -- with
+    its English file of the same version, if any, marked across every page.
+    Made when asked for and not kept: drafts change until they are approved."""
+    english = legal.find_any(german.slug, "en", german.version, german.team)
+    versions = [german] + ([english] if english is not None else [])
+    watermark = "ENTWURF" if german.status == "draft" else "VORSCHAU"
+    return build(german, team, versions=versions, watermark=watermark), f"{watermark}_{filename(german, team)}"
