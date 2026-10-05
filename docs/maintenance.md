@@ -278,9 +278,10 @@ the date. A `# ` heading further down a text ("Teil B – Mitgliederportal") is 
 part of it, listed in the contents. Points lettered "a." under a numbered one
 need a line break (two spaces) at the end of the line before; the tests check.
 
-**Footer:** Impressum, Privacy and Statutes link to the addresses set by
-`IMPRESSUM_URL`, `PRIVACY_URL` and `STATUTES_URL`. Impressum and Privacy
-default to the main website; Statutes, unset, links to `/legal/statutes`.
+**Footer:** Impressum, Privacy and Statutes lead to the portal's own texts
+(`/legal/legal-notice`, `/legal/privacy-policy`, `/legal/statutes`), and *Legal
+texts* to the list of all. `IMPRESSUM_URL`, `PRIVACY_URL` and `STATUTES_URL`
+in `.env` send one somewhere else instead, the website say.
 
 ## Legal Notes
 

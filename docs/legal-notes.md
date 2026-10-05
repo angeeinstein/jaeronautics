@@ -256,9 +256,8 @@ Collected so nothing is forgotten; none of it is urgent.
 
 **Legal texts**
 - [x] Membership terms and privacy policy written (04.10.2026, German).
-- [ ] Decide whether the footer's Impressum and Privacy links point to the
-      portal's own texts (`/legal/legal-notice`, `/legal/privacy-policy`, via
-      `IMPRESSUM_URL`, `PRIVACY_URL`) or stay on the website.
+- [x] The footer's Impressum, Privacy and Statutes lead to the portal's own
+      texts (October 2026).
 - [ ] English translations, if wanted: `legal/<text>/en/<same day>.md`.
 - [x] Give the legal texts a version date: done, versions are files by
       date and the versions accepted are kept with the member.

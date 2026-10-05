@@ -100,15 +100,19 @@
     <footer class="site-footer">
         <div class="container">
             <ul class="site-footer-links">
-                <li><a href="{{ footer.impressum_url }}" target="_blank" rel="noopener">{{ _('Impressum') }}</a></li>
-                <li><a href="{{ footer.privacy_url }}" target="_blank" rel="noopener">{{ _('Privacy') }}</a></li>
-                <li>
-                    {% if footer.statutes_url %}
-                        <a href="{{ footer.statutes_url }}" target="_blank" rel="noopener">{{ _('Statutes') }}</a>
-                    {% else %}
-                        <a href="{{ url_for('public.legal_text', slug='statutes') }}">{{ _('Statutes') }}</a>
-                    {% endif %}
-                </li>
+                {#- The portal's own legal texts, unless an address elsewhere is configured. -#}
+                {% for label, url, slug in [(_('Impressum'), footer.impressum_url, 'legal-notice'),
+                                            (_('Privacy'), footer.privacy_url, 'privacy-policy'),
+                                            (_('Statutes'), footer.statutes_url, 'statutes')] %}
+                    <li>
+                        {% if url %}
+                            <a href="{{ url }}" target="_blank" rel="noopener">{{ label }}</a>
+                        {% else %}
+                            <a href="{{ url_for('public.legal_text', slug=slug) }}">{{ label }}</a>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+                <li><a href="{{ url_for('public.legal_texts') }}">{{ _('Legal texts') }}</a></li>
                 <li><a href="mailto:{{ footer.contact_email }}">{{ _('Contact') }}</a></li>
                 <li><a href="{{ footer.website_url }}" target="_blank" rel="noopener">{{ _('Website') }} <span aria-hidden="true">&#8599;</span></a></li>
             </ul>

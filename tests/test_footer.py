@@ -31,12 +31,16 @@ def test_signed_in_pages_have_it_too(client, app):
     assert '<footer class="site-footer">' in body
 
 
-def test_until_configured_the_links_lead_to_the_website_and_the_legal_page(client):
+def test_until_configured_the_links_lead_to_the_portals_own_legal_texts(client):
     body = client.get("/login").get_data(as_text=True)
     footer = body.split('<footer class="site-footer">')[1]
 
-    assert footer.count('href="https://joanneum-aeronautics.at"') == 3  # Impressum, privacy, website
-    assert 'href="/legal/statutes"' in footer
+    for path in ("/legal/legal-notice", "/legal/privacy-policy", "/legal/statutes", "/legal"):
+        assert f'href="{path}"' in footer
+    assert footer.count('href="https://joanneum-aeronautics.at"') == 1  # the website
+
+    for path in ("/legal/legal-notice", "/legal/privacy-policy", "/legal/statutes"):
+        assert client.get(path).status_code == 200, path
 
 
 def test_configured_addresses_are_used(client, monkeypatch):
@@ -49,4 +53,4 @@ def test_configured_addresses_are_used(client, monkeypatch):
     assert 'href="https://example.org/impressum"' in footer
     assert 'href="https://example.org/privacy"' in footer
     assert 'href="https://example.org/statutes"' in footer
-    assert 'href="/legal/statutes"' not in footer
+    assert 'href="/legal/statutes"' not in footer and 'href="/legal/legal-notice"' not in footer
