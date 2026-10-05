@@ -131,3 +131,86 @@ def test_the_timers_are_restarted_not_only_enabled(installer):
     for timer in ("billing-reconcile", "notifications", "cleanup-logs",
                   "forum-drift", "external-work", "update-runner"):
         assert timer in body
+
+
+# --- An update while people use the portal -------------------------------------
+
+JOB_TIMERS = ("billing-reconcile", "notifications", "cleanup-logs", "forum-drift", "external-work")
+
+
+def _function(installer, name):
+    """A shell function's text: up to the next function, since a heredoc inside may hold a "}" line."""
+    start = installer.index(f"\n{name}() {{") + 1
+    following = re.search(r"\n[a-z_]+\(\) \{", installer[start + 1:])
+    return installer[start: start + 1 + following.start()] if following else installer[start:]
+
+
+def test_an_update_pauses_the_jobs_before_the_new_code_arrives(installer):
+    """A job started between the code arriving and the restart would run it
+    against packages and a database not updated yet."""
+    body = _function(installer, "install_or_update")
+    calls = [line.strip() for line in body.splitlines()]
+    assert calls.index("record_rollback_point") < calls.index("pause_background_jobs") < calls.index("ensure_repo_present")
+    jobs = re.search(r"BACKGROUND_JOBS=\(([^)]*)\)", installer).group(1).split()
+    assert tuple(jobs) == JOB_TIMERS
+    # and every one of them is started again at the end
+    assert all(timer in _function(installer, "reload_services") for timer in JOB_TIMERS)
+
+
+def test_a_failed_update_starts_them_again(installer):
+    assert "resume_background_jobs_after_failure" in _function(installer, "on_error")
+
+
+def test_pausing_waits_for_a_running_job_and_a_failure_resumes(tmp_path):
+    """The functions themselves, with a systemctl that reports one job still running."""
+    import subprocess
+
+    log = tmp_path / "systemctl.log"
+    fake = tmp_path / "bin" / "systemctl"
+    fake.parent.mkdir()
+    fake.write_text(
+        "#!/bin/bash\n"
+        f'echo "$*" >> "{log}"\n'
+        'if [[ "$1" == show ]]; then\n'
+        f'  n=$(grep -c "show.*external-work.service" "{log}")\n'
+        '  [[ "${@: -1}" == *external-work.service && $n -lt 3 ]] && echo activating || echo inactive\n'
+        "fi\n"
+    )
+    fake.chmod(0o755)
+    text = INSTALLER.read_text(encoding="utf-8")
+    functions = text[text.index("# The jobs the timers run"):text.index("usage() {")]
+    script = (
+        "set -Eeuo pipefail\nstep(){ :; }; info(){ :; }; warn(){ :; }\nSERVICE_NAME=portal\n"
+        + functions
+        + "\npause_background_jobs\necho paused=$BACKGROUND_JOBS_PAUSED\n"
+        + "resume_background_jobs_after_failure\necho paused=$BACKGROUND_JOBS_PAUSED\n"
+    )
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60,
+                            env={"PATH": f"{fake.parent}:/usr/bin:/bin"})
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["paused=1", "paused=0"]
+    calls = log.read_text().splitlines()
+    assert [c for c in calls if c.startswith("stop")] == [f"stop portal-{t}.timer" for t in JOB_TIMERS]
+    assert len([c for c in calls if "external-work.service" in c]) >= 3  # it waited
+    assert [c for c in calls if c.startswith("start")] == [f"start portal-{t}.timer" for t in JOB_TIMERS]
+
+
+STATIC = Path(__file__).resolve().parent.parent / "aeronautics_members" / "static"
+
+
+def test_nginx_shows_a_page_of_its_own_while_the_portal_does_not_answer(installer):
+    """As 503, so Stripe sends its webhook again and browsers come back."""
+    body = _function(installer, "render_nginx_config")
+    assert body.count("error_page 502 503 504 =503 /maintenance.html;") == 2  # with and without TLS
+    assert body.count("location = /maintenance.html {") == 2 and body.count("internal;") == 2
+    deployed = (INSTALLER.parent / "deploy" / "nginx" / "aeronautics.conf").read_text(encoding="utf-8")
+    assert "error_page 502 503 504 =503 /maintenance.html;" in deployed
+
+
+def test_the_page_needs_nothing_from_the_portal():
+    page = (STATIC / "maintenance.html").read_text(encoding="utf-8")
+    assert '<meta http-equiv="refresh"' in page
+    assert "<script" not in page and "style=" not in page and "<style" not in page  # the CSP forbids both
+    for asset in re.findall(r'(?:href|src)="(/static/[^"]+)"', page):
+        assert (STATIC / asset[len("/static/"):]).is_file(), asset

@@ -227,6 +227,9 @@ on_error() {
     local line="$1"
     local command="$2"
     error "Installer failed at line ${line}: ${command}"
+    # Never leave billing, notifications and forum syncs switched off because
+    # an update stopped halfway.
+    resume_background_jobs_after_failure || true
     warn "Collecting diagnostics for the failure above."
     collect_diagnostics
     error "Installer failed. The diagnostics above show the state at the time of failure."
@@ -240,6 +243,58 @@ trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
 # The database credential files live only as long as the run that needs them,
 # however that run ends.
 trap 'cleanup_migration_temp_files' EXIT
+
+# The jobs the timers run, each a oneshot service of its own.
+BACKGROUND_JOBS=(billing-reconcile notifications cleanup-logs forum-drift external-work)
+BACKGROUND_JOBS_PAUSED=0
+# How long an update waits for a job that is already running to finish.
+BACKGROUND_JOB_WAIT_SECONDS=180
+
+background_job_running() {
+    # A oneshot service is "activating" while it runs.
+    local state
+    state="$(systemctl show -p ActiveState --value "$1" 2>/dev/null || true)"
+    [[ "${state}" == "activating" || "${state}" == "active" || "${state}" == "deactivating" ]]
+}
+
+pause_background_jobs() {
+    # Between the new code arriving on disk and the restart, a job started by
+    # its timer would run that code against packages and a database not yet
+    # updated -- and these jobs talk to Discourse, send emails and change
+    # memberships. So the timers stop for the update, a job already running is
+    # let finish, and reload_services starts them all again at the end.
+    step "Pausing background jobs for the update"
+    local job unit waited
+    for job in "${BACKGROUND_JOBS[@]}"; do
+        systemctl stop "${SERVICE_NAME}-${job}.timer" 2>/dev/null || true
+    done
+    BACKGROUND_JOBS_PAUSED=1
+    for job in "${BACKGROUND_JOBS[@]}"; do
+        unit="${SERVICE_NAME}-${job}.service"
+        waited=0
+        while background_job_running "${unit}"; do
+            if (( waited >= BACKGROUND_JOB_WAIT_SECONDS )); then
+                warn "${unit} is still running after ${BACKGROUND_JOB_WAIT_SECONDS}s; updating anyway."
+                break
+            fi
+            if (( waited == 0 )); then
+                info "Waiting for ${unit} to finish"
+            fi
+            sleep 2
+            waited=$(( waited + 2 ))
+        done
+    done
+}
+
+resume_background_jobs_after_failure() {
+    [[ "${BACKGROUND_JOBS_PAUSED:-0}" == "1" ]] || return 0
+    warn "Starting the background jobs again after the failed update."
+    local job
+    for job in "${BACKGROUND_JOBS[@]}"; do
+        systemctl start "${SERVICE_NAME}-${job}.timer" 2>/dev/null || true
+    done
+    BACKGROUND_JOBS_PAUSED=0
+}
 
 usage() {
     cat <<'EOF'
@@ -2503,6 +2558,16 @@ server {
     set_real_ip_from ::1;
     client_max_body_size 20m;
 
+    # While the portal itself does not answer -- restarting during an update,
+    # or down -- nginx shows a page of its own instead of "Bad gateway". As
+    # 503, so browsers and Stripe know to come back; a request to the portal
+    # that it answers itself, even with an error, is passed on untouched.
+    error_page 502 503 504 =503 /maintenance.html;
+    location = /maintenance.html {
+        root ${static_dir};
+        internal;
+    }
+
     location /static/ {
         alias ${static_dir}/;
         expires 30d;
@@ -2545,6 +2610,16 @@ server {
     set_real_ip_from 127.0.0.1;
     set_real_ip_from ::1;
     client_max_body_size 20m;
+
+    # While the portal itself does not answer -- restarting during an update,
+    # or down -- nginx shows a page of its own instead of "Bad gateway". As
+    # 503, so browsers and Stripe know to come back; a request to the portal
+    # that it answers itself, even with an error, is passed on untouched.
+    error_page 502 503 504 =503 /maintenance.html;
+    location = /maintenance.html {
+        root ${static_dir};
+        internal;
+    }
 
     location /static/ {
         alias ${static_dir}/;
@@ -2814,6 +2889,7 @@ reload_services() {
         systemctl enable "${SERVICE_NAME}-${timer}.timer"
         systemctl restart "${SERVICE_NAME}-${timer}.timer"
     done
+    BACKGROUND_JOBS_PAUSED=0
     systemctl enable --now "${SERVICE_NAME}-update-runner.path"
     nginx -t
     systemctl reload nginx
@@ -2966,6 +3042,8 @@ install_or_update() {
         # Must run before ensure_repo_present moves the checkout, or it would
         # record the revision being installed rather than the one being replaced.
         record_rollback_point
+        # Before the new code arrives; reload_services starts them again.
+        pause_background_jobs
     fi
 
     detect_redis_service_name
