@@ -275,8 +275,24 @@ viewer from showing them.
 is accepted at signup. A registered text without a German file is not
 shown. Adding a text is a line there and a folder here. Accepted at signup:
 statutes, rules of procedure, membership terms, privacy policy. Also
-registered: webshop and event terms, team rules (a general text; each team's
-own rules stay on its page), legal notice.
+registered: webshop and event terms, team rules (a general text, not shown
+until it has a file), legal notice.
+
+**A team's own rules** are kept here too, approved by the association like
+its own texts: `legal/teams/<team's short name>/team-rules/<de|en>/<day>.md`,
+with `team: "<short name>"` in the front matter as well; everything else --
+versions, drafts, `effective_from`, English as a translation of the same
+version, the checks in CI -- works as above. Shown at `/teams/<team>/rules`
+(signed-in only), as a PDF at `/teams/<team>/rules/pdf` with the team's logo
+on a dark badge and its name, and ticked when applying or joining, read in a
+window over the form. The membership keeps the version's day. Leads can no
+longer change their rules in the portal; they send the new text to the
+association. A folder whose short name matches no team is reported by `flask
+build-legal-pdfs`. Before this, leads typed rules into the portal: those still
+apply to a team until it has a file, and `flask export-team-rules --out
+<folder>` writes them as files -- dated the day they last changed, the
+version its members accepted -- to check, copy into `legal/teams/`, commit
+and deploy.
 
 **At signup** the one checkbox names every text accepted then, each a link.
 A click opens the text in a window over the form (`static/legal-dialog.js`
@@ -810,21 +826,21 @@ this is how to use them.
 
 **A team's About page** (`/teams/<short name>/about`): every signed-in visitor
 sees the logo, name, an "About the team" text, one optional picture, the fee,
-the team's rules and the form to apply or join. The overview shows each team's
+the team's rules (see "Legal Texts") and the form to apply or join. The overview shows each team's
 short description and leads there. **The team's own page**
 (`/teams/<short name>`) is for its members: their membership and who is in the
-team, without the texts; anybody else is sent to the About page. The texts,
-picture and rules are edited by the team's leads (Manage → Settings) and by
-site admins (Admin → Teams). Rules are optional; a team with rules needs them
-ticked to apply or join, and each membership keeps when they were accepted and
-which version -- the day they last changed. Changing the rules makes a new
-version for whoever applies next (members already in are not asked again) and
-is logged with the old and new text.
+team, without the texts; anybody else is sent to the About page. The texts
+and picture are edited by the team's leads (Manage → Settings) and by site
+admins. Rules are optional and kept by the association as files (see "Legal
+Texts"); a team with rules needs them ticked to apply or join, and each
+membership keeps when they were accepted and which version. A new version
+applies to whoever applies next; members already in are not asked again, and
+their team page says the rules have changed.
 
 **Running a team** (its leads, Teams → Manage), in sections down the side:
 *Applications* (invite with the meeting details, approve, not accept),
 *Members*, *Former members*, *Team page* (descriptions, picture, logo),
-*Applying* (open or closed, the question, the rules), *Access list* (only for
+*Applying* (open or closed, the question; the rules in force, read-only), *Access list* (only for
 teams that have one) and *Roles*. Each settings section is saved on its own.
 Also: notes about a person (not shown to them, but in their data export,
 without the author), removing somebody (immediately, with a reason that stays

@@ -5,6 +5,7 @@
 {# What a team does and applying to it -- for everyone signed in. The team's
    own page, for its members, is teams/team.html. #}
 {% set current = ongoing.get(team.id) %}
+{% set rules = team_rules(team) %}
 {% set last = latest.get(team.id) %}
 <div class="card mb-4">
     <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
@@ -62,11 +63,21 @@
                             <textarea class="form-control" id="application-text" name="application_text" rows="4" maxlength="5000"></textarea>
                         </div>
                     {% endif %}
-                    {% if team.terms_text %}
+                    {% if rules and rules.from_file %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="accept-terms" name="accept_terms" required>
+                            <label class="form-check-label" for="accept-terms">
+                                {{ _('I accept the') }}
+                                <a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-dialog class="text-decoration-underline">{{ _('rules of %(team)s', team=team.name) }}</a>
+                                ({{ _('version of %(day)s', day=rules.day|date_display) }}).<span class="text-danger">*</span>
+                            </label>
+                            <div class="form-text"><a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener">{{ _('Rules as PDF') }}</a></div>
+                        </div>
+                    {% elif rules %}
                         <div>
                             <div class="form-label">{{ _('Rules of %(team)s', team=team.name) }}</div>
-                            <div class="team-terms" tabindex="0" role="region" aria-label="{{ _('Rules of %(team)s', team=team.name) }}">{{ team.terms_text }}</div>
-                            <div class="form-text">{{ _('As of %(day)s.', day=team.terms_updated_at|date_display) }}</div>
+                            <div class="team-terms" tabindex="0" role="region" aria-label="{{ _('Rules of %(team)s', team=team.name) }}">{{ rules.text }}</div>
+                            <div class="form-text">{{ _('As of %(day)s.', day=rules.day|date_display) }}</div>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="accept-terms" name="accept_terms" required>
@@ -78,14 +89,10 @@
                     </div>
                 </form>
             {% endif %}
-        {% elif team.terms_text %}
-            <details>
-                <summary class="small">{{ _('Rules of %(team)s', team=team.name) }}</summary>
-                <div class="team-terms mt-2">{{ team.terms_text }}</div>
-                <div class="form-text">{{ _('As of %(day)s.', day=team.terms_updated_at|date_display) }}
-                    {% if current.terms_accepted_at %}{{ _('You accepted the version of %(day)s.', day=current.terms_version|date_display) }}{% endif %}</div>
-            </details>
+        {% elif rules %}
+            {% include "teams/_rules.html" %}
         {% endif %}
     </div>
 </section>
+{% if rules and rules.from_file %}<script src="{{ url_for('static', filename='legal-dialog.js') }}"></script>{% endif %}
 {% endblock %}

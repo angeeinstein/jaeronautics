@@ -34,6 +34,14 @@ shape itself (headings, lists, bold, links, tables) but never put anything
 else on the page. Which texts there are is the registry below; a text without
 a file is simply not shown. Those accepted at signup are recorded with the
 member, by version, see ``versions_to_accept``.
+
+A team's own rules are kept the same way, under the team's slug, and are
+approved by the association like its own texts:
+
+    legal/teams/rocket/team-rules/de/2026-10-05.md
+
+with ``team: "rocket"`` in the front matter as well. Every function here takes
+``team=`` for them; without it, it is about the association's texts.
 """
 
 import re
@@ -69,6 +77,13 @@ LEGAL_TEXTS = (
 )
 BY_SLUG = {text.slug: text for text in LEGAL_TEXTS}
 
+#: What a team can have in legal/teams/<team>/: its rules, accepted when joining.
+TEAM_RULES = "team-rules"
+TEAM_TEXTS = (LegalText(TEAM_RULES, "Teamordnung", "Team Rules", False),)
+TEAM_BY_SLUG = {text.slug: text for text in TEAM_TEXTS}
+TEAMS_FOLDER = "teams"
+TEAM_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
 AUTHORITATIVE = "de"
 LANGUAGES = ("de", "en")
 STATUSES = ("draft", "published")
@@ -94,6 +109,7 @@ class Version:
     title: str
     path: Path
     revision: str = None
+    team: str = None  # the team's slug, for a team's own text
 
     @property
     def is_translation(self):
@@ -132,10 +148,12 @@ def _read(path):
     return _parsed[key]
 
 
-def _check(path, slug, language):
+def _check(path, slug, language, team=None):
     """The Version a file describes, and what is wrong with it."""
     meta, _body, problems = _read(path)
     problems = list(problems)
+    if team is not None and meta and str(meta.get("team") or "") != team:
+        problems.append(f'team is "{meta.get("team") or ""}", but the file is in {TEAMS_FOLDER}/{team}/')
     name = VERSION_FILE.match(path.name)
     from_name = _as_date(name.group(1)) if name else None
     if from_name is None:
@@ -161,48 +179,61 @@ def _check(path, slug, language):
         effective_from=_as_date(meta["effective_from"]), status=meta["status"],
         title=str(meta["title"]).strip(), path=path,
         revision=str(meta["source_revision"]).strip() if meta.get("source_revision") else None,
+        team=team,
     ), []
 
 
-def _files(slug, language):
-    folder = texts_dir() / slug / language
-    if slug not in BY_SLUG or language not in LANGUAGES or not folder.is_dir():
+def _files(slug, language, team=None):
+    if team is None:
+        known, folder = slug in BY_SLUG, texts_dir() / slug / language
+    else:
+        known = slug in TEAM_BY_SLUG and bool(TEAM_SLUG.match(team))
+        folder = texts_dir() / TEAMS_FOLDER / team / slug / language
+    if not known or language not in LANGUAGES or not folder.is_dir():
         return []
     return sorted(path for path in folder.iterdir() if path.is_file())
 
 
-def versions(slug, language=AUTHORITATIVE, today=None):
+def versions(slug, language=AUTHORITATIVE, today=None, team=None):
     """The versions that may be shown -- published, their day come -- newest first.
 
     A file with something wrong with it is left out (``problems()`` names it).
     """
     today = today or get_membership_today()
     found = []
-    for path in _files(slug, language):
-        version, problems = _check(path, slug, language)
+    for path in _files(slug, language, team):
+        version, problems = _check(path, slug, language, team)
         if version and version.status == "published" and version.effective_from <= today:
             found.append(version)
     return sorted(found, key=lambda v: (v.effective_from, v.version), reverse=True)
 
 
-def current_version(slug, today=None):
+def current_version(slug, today=None, team=None):
     """The version in force: the newest German one that may be shown, or None."""
-    shown = versions(slug, AUTHORITATIVE, today)
+    shown = versions(slug, AUTHORITATIVE, today, team)
     return shown[0] if shown else None
 
 
-def find(slug, language, version_day, today=None):
+def find(slug, language, version_day, today=None, team=None):
     """A version that may be shown, by language and version day, or None."""
-    return next((v for v in versions(slug, language, today) if v.version == version_day), None)
+    return next((v for v in versions(slug, language, today, team) if v.version == version_day), None)
 
 
 def translation(version, language="en", today=None):
     """The translation of a German version into ``language``, if there is one."""
-    return find(version.slug, language, version.version, today)
+    return find(version.slug, language, version.version, today, version.team)
 
 
-def has_language(slug, language, today=None):
-    return bool(versions(slug, language, today))
+def has_language(slug, language, today=None, team=None):
+    return bool(versions(slug, language, today, team))
+
+
+def teams_with_texts():
+    """The team slugs that have a folder in legal/teams/."""
+    folder = texts_dir() / TEAMS_FOLDER
+    if not folder.is_dir():
+        return []
+    return sorted(path.name for path in folder.iterdir() if path.is_dir() and TEAM_SLUG.match(path.name))
 
 
 def available(today=None):
@@ -235,38 +266,50 @@ def problems():
             continue
         relative = path.relative_to(root)
         parts = relative.parts
-        if len(parts) != 3 or parts[0] not in BY_SLUG or parts[1] not in LANGUAGES:
+        if parts[0] == TEAMS_FOLDER:
+            if (len(parts) != 5 or not TEAM_SLUG.match(parts[1]) or parts[2] not in TEAM_BY_SLUG
+                    or parts[3] not in LANGUAGES):
+                found.append(f"{relative}: not where a version goes, legal/{TEAMS_FOLDER}/<team>/<text>/"
+                             f"<language>/<YYYY-MM-DD>.md (texts: {', '.join(TEAM_BY_SLUG)}; "
+                             f"languages: {', '.join(LANGUAGES)})")
+                continue
+            _version, file_problems = _check(path, parts[2], parts[3], parts[1])
+        elif len(parts) != 3 or parts[0] not in BY_SLUG or parts[1] not in LANGUAGES:
             found.append(f"{relative}: not where a version goes, legal/<text>/<language>/<YYYY-MM-DD>.md "
                          f"(texts: {', '.join(BY_SLUG)}; languages: {', '.join(LANGUAGES)})")
             continue
-        _version, file_problems = _check(path, parts[0], parts[1])
+        else:
+            _version, file_problems = _check(path, parts[0], parts[1])
         found.extend(f"{relative}: {problem}" for problem in file_problems)
-    for text in LEGAL_TEXTS:
+    places = [(text.slug, None) for text in LEGAL_TEXTS]
+    places += [(text.slug, team) for team in teams_with_texts() for text in TEAM_TEXTS]
+    for slug, team in places:
+        where = slug if team is None else f"{TEAMS_FOLDER}/{team}/{slug}"
         for language in LANGUAGES:
             published = {}
-            for path in _files(text.slug, language):
-                version, _ = _check(path, text.slug, language)
+            for path in _files(slug, language, team):
+                version, _ = _check(path, slug, language, team)
                 if version and version.status == "published":
                     published.setdefault(version.effective_from, []).append(path.name)
             for day, names in published.items():
                 if len(names) > 1:
-                    found.append(f"{text.slug}/{language}: {', '.join(names)} are all published "
+                    found.append(f"{where}/{language}: {', '.join(names)} are all published "
                                  f"from {day}; only one can be in force")
             if language != AUTHORITATIVE:
-                german = {v.version for v in _published(text.slug, AUTHORITATIVE)}
+                german = {v.version for v in _published(slug, AUTHORITATIVE, team)}
                 found.extend(
-                    f"{text.slug}/{language}/{v.path.name}: a translation of a version that has no "
-                    f"published German file, {text.slug}/{AUTHORITATIVE}/{v.path.name}"
-                    for v in _published(text.slug, language) if v.version not in german
+                    f"{where}/{language}/{v.path.name}: a translation of a version that has no "
+                    f"published German file, {where}/{AUTHORITATIVE}/{v.path.name}"
+                    for v in _published(slug, language, team) if v.version not in german
                 )
     return found
 
 
-def _published(slug, language):
+def _published(slug, language, team=None):
     """Every published version, whatever its day."""
     found = []
-    for path in _files(slug, language):
-        version, _ = _check(path, slug, language)
+    for path in _files(slug, language, team):
+        version, _ = _check(path, slug, language, team)
         if version and version.status == "published":
             found.append(version)
     return found

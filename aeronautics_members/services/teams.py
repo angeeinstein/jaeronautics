@@ -24,6 +24,8 @@ every team, which is what keeps a team with no active lead manageable.
 
 import re
 import secrets
+from dataclasses import dataclass
+from datetime import datetime, time
 from pathlib import Path
 
 from flask import current_app
@@ -474,12 +476,84 @@ def team_by_logo_token(token):
     return db.session.execute(db.select(Team).filter_by(logo_token=token)).scalar_one_or_none()
 
 
-# --- The team's page: a longer text, a picture, its rules ------------------------
+# --- The team's rules ----------------------------------------------------------
+#
+# Kept with the association's legal texts, which approves them like its own:
+# legal/teams/<slug>/team-rules/<language>/<day>.md (services/legal_texts.py),
+# German, optionally with an English translation, each version dated, a PDF
+# of each. Before that, leads typed them into the portal (Team.terms_text);
+# that text still applies to a team until it has a file -- ``flask
+# export-team-rules`` writes one from it -- and can no longer be changed here.
+
+
+@dataclass(frozen=True)
+class TeamRules:
+    """The rules somebody joining a team accepts."""
+
+    version: object = None  # a legal_texts.Version: the team's file in force
+    text: str = None  # or, until there is one, the text kept in the portal
+    stamp: datetime = None  # kept with a membership as the version accepted
+
+    @property
+    def day(self):
+        return self.stamp.date()
+
+    @property
+    def from_file(self):
+        return self.version is not None
+
+
+def team_rules(team, today=None):
+    """The rules in force for ``team``, or None when it has none."""
+    from . import legal_texts as legal
+
+    version = legal.current_version(legal.TEAM_RULES, today, team=team.slug)
+    if version is not None:
+        return TeamRules(version=version, stamp=datetime.combine(version.version, time()))
+    if team.terms_text:
+        return TeamRules(text=team.terms_text, stamp=team.terms_updated_at or team.created_at)
+    return None
+
+
+def portal_rules_as_file(team):
+    """The rules a lead typed into the portal, as a file for legal/:
+    ``(relative path, content)``, or None when there are none.
+
+    Dated the day they were last changed -- the day kept with every member who
+    accepted them -- so those acceptances name this file's version. Line
+    breaks are kept as they were typed.
+    """
+    if not team.terms_text:
+        return None
+    from . import legal_texts as legal
+
+    day = (team.terms_updated_at or team.created_at).date().isoformat()
+    lines = team.terms_text.replace("\r\n", "\n").strip().split("\n")
+    body = "\n".join(
+        line.rstrip() + ("  " if line.strip() and index + 1 < len(lines) and lines[index + 1].strip() else "")
+        for index, line in enumerate(lines)
+    )
+    title = f"Teamordnung {team.name}".replace('"', "'")
+    content = (
+        f'---\ntitle: "{title}"\ndocument: "{legal.TEAM_RULES}"\nlanguage: "{legal.AUTHORITATIVE}"\n'
+        f'team: "{team.slug}"\nversion: "{day}"\neffective_from: "{day}"\nstatus: "published"\n---\n\n{body}\n'
+    )
+    path = f"{legal.TEAMS_FOLDER}/{team.slug}/{legal.TEAM_RULES}/{legal.AUTHORITATIVE}/{day}.md"
+    return path, content
+
+
+def accepted_rules_in_force(membership, rules):
+    """Whether the member accepted the rules now in force (by their day), not an earlier version."""
+    if rules is None or membership is None or membership.terms_version is None:
+        return rules is None
+    return membership.terms_version.date() == rules.day
+
+
+# --- The team's page: a longer text, a picture ------------------------------------
 
 PICTURE_MAX_BYTES = 10 * 1024 * 1024
 PICTURE_MAX_SIDE = 1600
 ABOUT_MAX_LENGTH = 10000
-TERMS_MAX_LENGTH = 50000
 
 
 def picture_storage_dir():
@@ -553,24 +627,14 @@ def _clean_long_text(text, limit, what):
     return text or None
 
 
-def update_team_page(actor, team, *, about=None, terms_text=None, keep_about=False, keep_terms=False):
-    """What the team's page says about it, and the rules applicants accept.
-
-    Changed rules get a new version -- the moment they changed -- so what
-    each member accepted can be told apart. Every change is logged with
-    the old and new text. ``keep_*`` leaves that text as it is.
-    """
-    about = team.about if keep_about else _clean_long_text(about, ABOUT_MAX_LENGTH, "text about the team")
-    terms_text = team.terms_text if keep_terms else _clean_long_text(terms_text, TERMS_MAX_LENGTH, "team's rules")
+def update_team_page(actor, team, *, about=None):
+    """What the team's page says about it. Every change is logged with the old
+    and new text. (Its rules are not changed here: see team_rules.)"""
+    about = _clean_long_text(about, ABOUT_MAX_LENGTH, "text about the team")
     if about != team.about:
         log_audit_event("teams", "team_about_changed", actor_user=actor, metadata={"team": team.slug},
                         before={"about": team.about}, after={"about": about})
         team.about = about
-    if terms_text != team.terms_text:
-        log_audit_event("teams", "team_terms_changed", actor_user=actor, metadata={"team": team.slug},
-                        before={"terms_text": team.terms_text}, after={"terms_text": terms_text})
-        team.terms_text = terms_text
-        team.terms_updated_at = get_now_utc() if terms_text else None
     return team
 
 
@@ -961,20 +1025,21 @@ def join_or_apply(user, team, application_text=None, accepted_terms=False):
     """Join an open team, or apply to one that approves its members.
 
     A team with rules of its own needs them accepted; which version was
-    accepted, and when, stays with the membership.
+    accepted -- its day -- and when, stays with the membership.
     """
     _lock_team(team)
     reason = why_not_joinable(user, team)
     if reason:
         raise ConflictError(reason, code="team_not_joinable")
-    if team.terms_text and not accepted_terms:
+    rules = team_rules(team)
+    if rules is not None and not accepted_terms:
         raise ValidationError(f"Please accept the rules of {team.name}.", code="team_terms_not_accepted")
 
     now = get_now_utc()
     membership = TeamMembership(team=team, user=user, applied_at=now)
-    if team.terms_text:
+    if rules is not None:
         membership.terms_accepted_at = now
-        membership.terms_version = team.terms_updated_at
+        membership.terms_version = rules.stamp
     if team.admission_mode == ADMISSION_OPEN or may_rejoin_by_paying(user, team):
         # Joining an open team is being approved at once; the payment step
         # comes next, as after any approval. So is coming back soon after a

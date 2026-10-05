@@ -64,7 +64,7 @@ class TestWhatIsInIt:
 class TestKept:
     def test_made_once_until_the_text_changes(self, app, with_translation, legal_dir, monkeypatch):  # noqa: F811
         made = []
-        monkeypatch.setattr(legal_pdf, "build", lambda version: made.append(version) or b"%PDF-1.7 fake")
+        monkeypatch.setattr(legal_pdf, "build", lambda version, team=None: made.append(version) or b"%PDF-1.7 fake")
 
         legal_pdf.pdf_for(with_translation)
         legal_pdf.pdf_for(with_translation)
@@ -101,8 +101,8 @@ class TestOnlyTheStaticFolderIsRead:
         asked = []
         original = legal_pdf._static_only_fetcher
 
-        def spying():
-            fetcher = original()
+        def spying(also=None):
+            fetcher = original(also)
             fetch = fetcher.fetch
             fetcher.fetch = lambda url, headers=None: asked.append(url) or fetch(url, headers)
             return fetcher
@@ -127,7 +127,7 @@ class TestThePages:
         assert client.get(path).status_code == 404
 
     def test_when_it_cannot_be_made_the_text_is_shown(self, client, with_translation, monkeypatch):
-        monkeypatch.setattr(legal_pdf, "pdf_for", lambda version: 1 / 0)
+        monkeypatch.setattr(legal_pdf, "pdf_for", lambda version, team=None: 1 / 0)
 
         response = client.get("/legal/membership-terms/pdf")
 

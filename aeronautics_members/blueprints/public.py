@@ -5,8 +5,6 @@ Route handlers moved verbatim out of app.py (dedented; @app.route ->
 from the app module, which is fully initialized before this is imported.
 """
 
-import io
-
 import stripe
 from flask import Blueprint, current_app
 from sqlalchemy import text
@@ -17,6 +15,7 @@ from ..config import (
     STRIPE_PUBLISHABLE_KEY,
 )
 from ..services import legal_texts as legal
+from . import _legal_pages as legal_pages
 from ..services.audit import (
     log_audit_event,
     snapshot_member_for_audit,
@@ -46,7 +45,6 @@ from ..services.signup import (
 )
 from ._signup import start_membership
 from datetime import (
-    date,
     datetime,
     timezone,
 )
@@ -57,7 +55,6 @@ from flask import (
     redirect,
     render_template,
     request,
-    send_file,
     url_for,
 )
 from flask_babel import (
@@ -267,63 +264,15 @@ def legal_texts():
 @public_bp.route("/legal/<slug>/<language>")
 @public_bp.route("/legal/<slug>/<language>/<version>")
 def legal_text(slug, language=None, version=None):
-    """One legal text: the version in force, or an earlier one by its day.
-
-    Without a language, the English translation where there is one of the
-    version shown, else the German text. A translation always says the German
-    text is the one that applies. With ``?part=body`` only the text itself, for
-    reading it in a window over a form -- the signup -- without leaving it.
-    """
-    if slug not in legal.BY_SLUG or (language is not None and language not in legal.LANGUAGES):
+    """One legal text: the version in force, or an earlier one by its day."""
+    if slug not in legal.BY_SLUG:
         abort(404)
-    in_force = legal.current_version(slug)
-    if in_force is None:
-        abort(404)
-    if version is None:
-        german = in_force
-    else:
-        try:
-            day = date.fromisoformat(version)
-        except ValueError:
-            abort(404)
-        # Only published versions whose day has come; a later one is not shown before it.
-        german = legal.find(slug, legal.AUTHORITATIVE, day)
-        if german is None:
-            abort(404)
-    english = legal.translation(german)
-    if language == legal.AUTHORITATIVE:
-        shown = german
-    elif language is not None:
-        if english is None:
-            if version is None:
-                return redirect(url_for("public.legal_text", slug=slug, language=legal.AUTHORITATIVE))
-            abort(404)
-        shown = english
-    else:
-        shown = english or german
-
-    def address(of):
-        if of is None:
-            return None
-        current = of.version == in_force.version
-        return url_for("public.legal_text", slug=slug, language=of.language,
-                       version=None if current else of.version.isoformat())
-
-    current_german = german.version == in_force.version
-    template = "legal/_body.html" if request.args.get("part") == "body" else "legal/text.html"
-    return render_template(
-        template,
-        text=legal.BY_SLUG[slug],
-        shown=shown,
-        rendered=legal.render(shown),
-        in_force=in_force,
-        german_url=address(german),
-        english_url=address(english),
-        english_elsewhere=english is None and legal.has_language(slug, "en"),
-        pdf_url=url_for("public.legal_text_pdf", slug=slug,
-                        version=None if current_german else german.version.isoformat()),
-        pdf_has_english=english is not None,
-        others=[(v, address(v)) for v in legal.versions(slug, shown.language) if v.version != shown.version],
+    return legal_pages.text_page(
+        slug, language, version,
+        url=lambda language, version: url_for("public.legal_text", slug=slug, language=language, version=version),
+        pdf_url=lambda version: url_for("public.legal_text_pdf", slug=slug, version=version),
+        crumbs=[(_("Legal texts"), url_for("public.legal_texts"))],
+        label=legal.BY_SLUG[slug].english,
     )
 
 
@@ -331,27 +280,12 @@ def legal_text(slug, language=None, version=None):
 @public_bp.route("/legal/<slug>/pdf/<version>")
 def legal_text_pdf(slug, version=None):
     """A legal text as a PDF: the German version, then its English translation."""
-    from .. import legal_pdf
-
     if slug not in legal.BY_SLUG:
         abort(404)
-    if version is None:
-        german = legal.current_version(slug)
-    else:
-        try:
-            german = legal.find(slug, legal.AUTHORITATIVE, date.fromisoformat(version))
-        except ValueError:
-            abort(404)
-    if german is None:
-        abort(404)
-    try:
-        data = legal_pdf.pdf_for(german)
-    except Exception:  # noqa: BLE001 -- the text itself is still there to read
-        current_app.logger.exception("Could not make the PDF of %s %s", slug, german.version)
-        flash(_("The PDF could not be made just now. The text is below."), "warning")
-        return redirect(url_for("public.legal_text", slug=slug, language=legal.AUTHORITATIVE,
-                                version=version))
-    return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=legal_pdf.filename(german))
+    return legal_pages.pdf(
+        slug, version,
+        back=url_for("public.legal_text", slug=slug, language=legal.AUTHORITATIVE, version=version),
+    )
 
 
 @public_bp.route("/__health", methods=["GET"])

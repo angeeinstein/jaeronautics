@@ -3,8 +3,9 @@
 Every signed-in visitor sees it, at /teams/<team>/about; the team's own page,
 with who is in it, is for its members, and sends anybody else here.
 A team with rules needs them ticked to apply or join, and the membership
-keeps when and which version (the day the rules last changed). Leads and site
-admins edit the page; every change to the rules is logged.
+keeps when and which version. Leads and site admins edit the page, but no
+longer the rules: those are the association's files now (test_team_rules.py).
+Rules typed into the portal before still apply, as here, until there is one.
 """
 from io import BytesIO
 
@@ -12,6 +13,7 @@ import pytest
 
 from conftest import app_module, db
 from aeronautics_members.db_models import AuditLog, User
+from aeronautics_members.services.clock import get_now_utc
 from aeronautics_members.services import ValidationError, privacy, teams
 from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
 from test_teams_foundation import _in_team
@@ -34,7 +36,8 @@ def picture_dir(app, tmp_path):
 
 
 def _with_rules(team, text=RULES):
-    teams.update_team_page(None, team, about=team.about, terms_text=text)
+    """Rules as a lead typed them into the portal, before they became files."""
+    team.terms_text, team.terms_updated_at = text, get_now_utc()
     db.session.commit()
     return team
 
@@ -52,7 +55,7 @@ def _admin():
 class TestThePage:
     def test_shows_what_the_team_does_and_how_to_apply(self, app, client, picture_dir):
         team, _lead = _led()
-        teams.update_team_page(None, team, about="We build rockets.\n\nEvery Tuesday.", terms_text=None)
+        teams.update_team_page(None, team, about="We build rockets.\n\nEvery Tuesday.")
         teams.set_team_picture(None, team, _png())
         db.session.commit()
         _login(client, _person().id)
@@ -92,7 +95,8 @@ class TestTheTeamsOwnPage:
 
     def test_shows_members_their_team_without_the_join_page(self, app, client, picture_dir):
         team, _lead = _led()
-        teams.update_team_page(None, team, about="We build rockets.", terms_text=RULES)
+        teams.update_team_page(None, team, about="We build rockets.")
+        _with_rules(team)
         teams.set_team_picture(None, team, _png())
         anna = _person()
         _in_team(anna, team)
@@ -157,27 +161,17 @@ class TestTheRules:
         with pytest.raises(ValidationError, match="accept the rules"):
             teams.join_or_apply(_person(), team)
 
-    def test_a_change_is_a_new_version_and_logged(self, app):
+    def test_no_longer_changed_in_the_portal(self, app, client):
         team, lead = _led()
         _with_rules(team)
-        first = team.terms_updated_at
-
-        teams.update_team_page(lead, team, about=None, terms_text=RULES + "\n3. Have fun.")
-        db.session.commit()
-
-        assert team.terms_updated_at > first
-        logs = db.session.query(AuditLog).filter_by(event_type="team_terms_changed").order_by(AuditLog.id).all()
-        assert logs[-1].before_state == {"terms_text": RULES} and logs[-1].actor_user_id == lead.id
-
-    def test_unchanged_is_no_new_version(self, app):
-        team, _lead = _led()
-        _with_rules(team)
         version = team.terms_updated_at
+        _login(client, lead.id)
 
-        teams.update_team_page(None, team, about=None, terms_text=RULES)
+        client.post("/teams/rocket/manage/settings", data={"section": "applying", "terms_text": "Anything goes."})
+        body = client.get("/teams/rocket/manage").get_data(as_text=True)
 
-        assert team.terms_updated_at == version
-        assert db.session.query(AuditLog).filter_by(event_type="team_terms_changed").count() == 1
+        assert (team.terms_text, team.terms_updated_at) == (RULES, version)
+        assert 'name="terms_text"' not in body and "send the new text to the association" in body
 
     def test_without_rules_nothing_is_ticked_or_kept(self, app):
         team, _lead = _led()
@@ -204,11 +198,10 @@ class TestEditingThePage:
         team, lead = _led()
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/settings", data={
-            "description": "Rockets.", "about": "We build rockets.", "terms_text": RULES,
-        })
+        client.post("/teams/rocket/manage/settings", data={"description": "Rockets.", "about": "We build rockets."})
 
-        assert (team.about, team.terms_text) == ("We build rockets.", RULES)
+        assert team.about == "We build rockets."
+        assert db.session.query(AuditLog).filter_by(event_type="team_about_changed", actor_user_id=lead.id).count() == 1
 
     def test_not_by_an_ordinary_member(self, app, client):
         team, _lead = _led()
@@ -226,9 +219,8 @@ class TestEditingThePage:
 
         # On the team's management page, like the leads; the admin form is for the rest.
         client.post("/teams/rocket/manage/settings", data={"section": "page", "about": "From the admins."})
-        client.post("/teams/rocket/manage/settings", data={"section": "applying", "terms_text": RULES})
 
-        assert (team.about, team.terms_text) == ("From the admins.", RULES)
+        assert team.about == "From the admins."
         admin_form = client.get("/admin/teams/rocket").get_data(as_text=True)
         assert 'href="/teams/rocket/manage"' in admin_form and "Rules to accept" not in admin_form
 
@@ -252,7 +244,7 @@ class TestTheManagementPage:
     def test_one_section_saved_leaves_the_others_be(self, app, client):
         team, lead = _led(application_prompt="Why?")
         _with_rules(team)
-        teams.update_team_page(None, team, about="We build rockets.", keep_terms=True)
+        teams.update_team_page(None, team, about="We build rockets.")
         db.session.commit()
         _login(client, lead.id)
 

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="legal-page">
     <nav class="small mb-3" aria-label="{{ _('Breadcrumb') }}">
-        <a href="{{ url_for('public.legal_texts') }}">{{ _('Legal texts') }}</a> › {{ text.english }}
+        {% for crumb_label, crumb_url in crumbs %}<a href="{{ crumb_url }}">{{ crumb_label }}</a> › {% endfor %}{{ _(label) }}
     </nav>
     <div class="row g-4">
         <div class="col-lg-8 order-2 order-lg-1">

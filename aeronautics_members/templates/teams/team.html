@@ -28,13 +28,9 @@
     <div class="card-body d-flex flex-column gap-3">
         {% set on_team_page = true %}
         {% include "teams/_membership.html" %}
-        {% if current and team.terms_text %}
-            <details>
-                <summary class="small">{{ _('Rules of %(team)s', team=team.name) }}</summary>
-                <div class="team-terms mt-2">{{ team.terms_text }}</div>
-                <div class="form-text">{{ _('As of %(day)s.', day=team.terms_updated_at|date_display) }}
-                    {% if current.terms_accepted_at %}{{ _('You accepted the version of %(day)s.', day=current.terms_version|date_display) }}{% endif %}</div>
-            </details>
+        {% set rules = team_rules(team) %}
+        {% if current and rules %}
+            {% include "teams/_rules.html" %}
         {% endif %}
     </div>
 </section>

@@ -1,6 +1,8 @@
 {#- A legal text as a PDF (legal_pdf.py): the German version, then its
     English translation on pages of its own. Laid out by WeasyPrint for A4;
-    only files in the static folder (the fonts, the logo) are read. The words
+    only files in the static folder (the fonts, the logo) are read, and for a
+    team's rules its logo, shown on a dark badge since team logos are made for
+    the portal's dark pages. The words
     around the text are fixed per language, not translated with the site. -#}
 <!doctype html>
 <html lang="de">
@@ -40,6 +42,11 @@ body { margin: 0; }
     margin-bottom: 8mm; padding-bottom: 5mm; border-bottom: 1.2pt solid var(--brand);
 }
 .cover .logo { width: 62mm; display: block; margin-bottom: 10mm; }
+.brand { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10mm; }
+.brand .logo { width: 50mm; margin: 0; }
+.team-mark { width: 24mm; height: 24mm; background: #10191b; border-radius: 3mm; padding: 2.5mm; box-sizing: border-box; }
+.team-mark img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.kicker { font-family: "Archivo", sans-serif; font-size: 9pt; font-weight: 650; color: var(--brand); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 1.5mm; }
 .doc-title { font-family: "Archivo", sans-serif; font-size: 22pt; font-weight: 700; line-height: 1.15; color: var(--brand-dark); margin: 0 0 2.5mm; }
 .meta { color: var(--muted); font-size: 9pt; margin: 0; }
 .pageref { color: var(--muted); text-decoration: none; }
@@ -78,12 +85,24 @@ body { margin: 0; }
 </style>
 </head>
 <body>
+{% macro brand() -%}
+    {% if team %}
+        <div class="brand">
+            <img class="logo" src="logo_joanneum_aeronautics_positiv.svg" alt="{{ association }}">
+            {% if team_logo %}<div class="team-mark"><img src="{{ team_logo }}" alt="{{ team.name }}"></div>{% endif %}
+        </div>
+        <p class="kicker">{{ team.name }}</p>
+    {% else %}
+        <img class="logo" src="logo_joanneum_aeronautics_positiv.svg" alt="{{ association }}">
+    {% endif %}
+{%- endmacro %}
+{% set owner = association ~ (' · ' ~ team.name if team else '') %}
 {% for section in sections %}
 {% set v = section.version %}
 {% if v.is_translation %}
 <section class="part" id="{{ section.id }}" lang="en">
-    <header class="cover" data-footer="{{ association }} · {{ v.title }} (English translation) · Version of {{ v.version|date_display }}" data-page="Page" data-of="of">
-        <img class="logo" src="logo_joanneum_aeronautics_positiv.svg" alt="{{ association }}">
+    <header class="cover" data-footer="{{ owner }} · {{ v.title }} (English translation) · Version of {{ v.version|date_display }}" data-page="Page" data-of="of">
+        {{ brand() }}
         <p class="notice">This is an English translation for convenience. It may contain mistakes. Where it differs from the German version before it, the German version applies.</p>
         <h1 class="doc-title">{{ v.title }}</h1>
         <p class="meta">Version of {{ v.version|date_display }}{% if v.revision %} ({{ v.revision }}){% endif %}{% if v.effective_from != v.version %} · in force from {{ v.effective_from|date_display }}{% endif %}</p>
@@ -93,8 +112,8 @@ body { margin: 0; }
     {% endif %}
 {% else %}
 <section class="part" id="{{ section.id }}" lang="de">
-    <header class="cover" data-footer="{{ association }} · {{ v.title }} · Fassung vom {{ v.version|date_display }}" data-page="Seite" data-of="von">
-        <img class="logo" src="logo_joanneum_aeronautics_positiv.svg" alt="{{ association }}">
+    <header class="cover" data-footer="{{ owner }} · {{ v.title }} · Fassung vom {{ v.version|date_display }}" data-page="Seite" data-of="von">
+        {{ brand() }}
         <h1 class="doc-title">{{ v.title }}</h1>
         <p class="meta">Fassung vom {{ v.version|date_display }}{% if v.revision %} ({{ v.revision }}){% endif %}{% if v.effective_from != v.version %} · gültig ab {{ v.effective_from|date_display }}{% endif %}</p>
         {% if sections|length > 1 %}<p class="meta">Englische Übersetzung (English translation): Seite <a class="pageref" href="#part-en"></a></p>{% endif %}
