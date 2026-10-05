@@ -78,6 +78,8 @@ body { margin: 0; }
 .legal-text hr { border: 0; border-top: 0.5pt solid var(--line); margin: 5mm 0; }
 .legal-text code { font-family: "IBM Plex Mono", monospace; font-size: 8.5pt; }
 
+.watermark { position: fixed; top: 105mm; left: 0; width: 170mm; text-align: center; transform: rotate(-35deg);
+    font-family: "Archivo", sans-serif; font-size: 60pt; font-weight: 700; letter-spacing: 0.06em; color: rgba(15, 178, 201, 0.16); }
 .legal-text table { width: 100%; border-collapse: collapse; margin: 1mm 0 4mm; font-size: 8.5pt; line-height: 1.35; }
 .legal-text th, .legal-text td { border: 0.5pt solid var(--line); padding: 1.6mm 2.2mm; text-align: left; vertical-align: top; }
 .legal-text th { background: var(--tint); font-weight: 650; color: var(--brand-dark); }
@@ -85,6 +87,7 @@ body { margin: 0; }
 </style>
 </head>
 <body>
+{% if watermark %}<div class="watermark">{{ watermark }}</div>{% endif %}
 {% macro brand() -%}
     {% if team %}
         <div class="brand">

@@ -52,6 +52,9 @@
             <p>{{ _('You can see and manage your membership at any time in your account:') }}<br>
                <a href="{{ account_url }}" style="color:#00dfff;">{{ account_url }}</a></p>
         {% endif %}
+        {% if legal_texts_attached %}
+            <p>{{ _('Attached for your records, as PDFs: the texts you accepted when you joined (%(texts)s).', texts=legal_texts_attached|join(', ')) }}</p>
+        {% endif %}
         <p>{{ _('If you have any questions, feel free to contact us.') }}</p>
         <p style="margin:0;">{{ _('Best regards,') }}<br>{{ _('The Joanneum Aeronautics Team') }}</p>
     </div>

@@ -147,6 +147,14 @@ def _read(path):
     return _parsed[key]
 
 
+def forget(paths):
+    """Drop what was read from ``paths`` -- files that are gone again, such as a preview's."""
+    names = {str(path) for path in paths}
+    for cache in (_parsed, _rendered):
+        for key in [key for key in cache if key[0] in names]:
+            del cache[key]
+
+
 def _check(path, slug, language, team=None):
     """The Version a file describes, and what is wrong with it."""
     meta, _body, problems = _read(path)

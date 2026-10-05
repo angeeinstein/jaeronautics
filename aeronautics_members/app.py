@@ -1352,6 +1352,7 @@ def build_settings_page_context(edit_mail_account_id=None):
     general_settings = get_settings_map([
         "invoice_payments_enabled",
         "automatic_emails_enabled",
+        "legal_pdfs_in_welcome_emails",
         "welcome_email_sender",
         "automatic_email_template",
         INSTITUTIONAL_EMAIL_SETTING_KEY,

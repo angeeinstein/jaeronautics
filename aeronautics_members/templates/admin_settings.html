@@ -49,9 +49,14 @@
                                 <input class="form-check-input" type="checkbox" name="invoice_payments_enabled" id="invoice_payments_enabled" {% if general_settings.get('invoice_payments_enabled') == 'True' %}checked{% endif %}>
                                 <label class="form-check-label" for="invoice_payments_enabled">{{ _('Enable Invoice Payments') }}</label>
                             </div>
-                            <div class="form-check mb-4">
+                            <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" name="automatic_emails_enabled" id="automatic_emails_enabled" {% if general_settings.get('automatic_emails_enabled') == 'True' %}checked{% endif %}>
                                 <label class="form-check-label" for="automatic_emails_enabled">{{ _('Enable Automatic Emails') }}</label>
+                            </div>
+                            <div class="form-check mb-4">
+                                <input class="form-check-input" type="checkbox" name="legal_pdfs_in_welcome_emails" id="legal_pdfs_in_welcome_emails" {% if general_settings.get('legal_pdfs_in_welcome_emails') == 'True' %}checked{% endif %}>
+                                <label class="form-check-label" for="legal_pdfs_in_welcome_emails">{{ _('Attach the legal texts as PDFs to welcome emails') }}</label>
+                                <div class="form-text">{{ _('The association\'s welcome email gets the texts the member accepted at signup, in the version they accepted; a team\'s welcome email gets that team\'s rules.') }}</div>
                             </div>
                             <div class="row g-3">
                                 <div class="col-12">

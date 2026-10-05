@@ -103,9 +103,9 @@ def _with_prefix(html, prefix):
     return Markup(re.sub(r'(<a href="#)', rf"\g<1>{prefix}-", html))
 
 
-def _sections(german):
+def _sections(german, versions=None):
     sections = []
-    for version in parts(german):
+    for version in versions or parts(german):
         rendered = legal.render(version)
         prefix = version.language
         sections.append({
@@ -132,14 +132,18 @@ def _source_hash(german, team=None):
     return digest.hexdigest()[:20]
 
 
-def build(german, team=None):
-    """The PDF of a German version, made now. Bytes. ``team``: the team a team's text belongs to."""
+def build(german, team=None, versions=None, watermark=None):
+    """The PDF of a German version, made now. Bytes. ``team``: the team a team's text belongs to.
+
+    ``versions`` and ``watermark`` are for a preview: the files to lay out, and
+    the word across every page.
+    """
     from weasyprint import HTML
 
     logo = _team_logo(team)
     html = render_template(
-        TEMPLATE, sections=_sections(german), german=german, association=ASSOCIATION,
-        team=team, team_logo=logo.as_uri() if logo is not None else None,
+        TEMPLATE, sections=_sections(german, versions), german=german, association=ASSOCIATION,
+        team=team, team_logo=logo.as_uri() if logo is not None else None, watermark=watermark,
     )
     # The PDF's title, author and language come from the HTML's <title>, <meta name=author> and lang.
     document = HTML(string=html, base_url=_static_dir().as_uri() + "/", url_fetcher=_static_only_fetcher(logo))
@@ -199,3 +203,158 @@ def build_all():
         except Exception as exc:  # noqa: BLE001 -- report every text, not just the first that fails
             made.append((version, exc))
     return made
+
+
+# --- Attached to the welcome emails ---------------------------------------------
+#
+# Behind a switch in Admin -> Settings -> General. The exact versions a person
+# accepted, not whatever is in force when the mail goes out: the PDF is their
+# copy of what they agreed to. A PDF that cannot be made is left out and
+# logged; the welcome email goes all the same.
+
+SETTING_KEY = "legal_pdfs_in_welcome_emails"
+
+
+def attach_to_welcome_emails():
+    from .services.settings import get_settings_map
+
+    return get_settings_map([SETTING_KEY]).get(SETTING_KEY) == "True"
+
+
+def _as_file(german, team=None):
+    try:
+        return {"filename": filename(german, team), "data": pdf_for(german, team), "mimetype": "application/pdf",
+                "title": german.title}
+    except Exception:  # noqa: BLE001 -- one PDF missing must not stop a welcome email
+        current_app.logger.exception("Could not make the PDF of %s %s to attach", german.slug, german.version)
+        return None
+
+
+def files_for_member(member):
+    """The texts a member accepted at signup, as attachments.
+
+    By the version kept with them; for somebody who signed up before versions
+    were kept, the version in force on their signup day; failing both, the
+    one in force now.
+    """
+    from datetime import date
+
+    accepted = getattr(member, "legal_versions_accepted", None) or {}
+    signed_up = getattr(member, "created_at", None)
+    files = []
+    for text in legal.LEGAL_TEXTS:
+        if not text.accepted_at_signup:
+            continue
+        german = None
+        try:
+            if accepted.get(text.slug):
+                german = legal.find(text.slug, legal.AUTHORITATIVE, date.fromisoformat(accepted[text.slug]))
+            elif signed_up is not None:
+                german = legal.current_version(text.slug, today=signed_up.date())
+        except ValueError:
+            german = None
+        german = german or legal.current_version(text.slug)
+        document = _as_file(german) if german is not None else None
+        if document is not None:
+            files.append(document)
+    return files
+
+
+def files_for_team_membership(membership):
+    """The team's rules the member accepted, as an attachment -- when they are a file."""
+    if membership is None or membership.terms_version is None or membership.team is None:
+        return []
+    german = legal.find(legal.TEAM_RULES, legal.AUTHORITATIVE, membership.terms_version.date(),
+                        team=membership.team.slug)
+    document = _as_file(german, membership.team) if german is not None else None
+    return [document] if document is not None else []
+
+
+# --- A preview of a text not in legal/ yet ---------------------------------------
+#
+# For an administrator checking a new text, or a team's, before it is
+# committed: the German file and, if there is one, its English translation are
+# checked as CI checks them and laid out as the PDF would be -- with "ENTWURF"
+# or "VORSCHAU" across every page, so the preview is never mistaken for the
+# text in force. Nothing is kept: the files are written to a temporary folder
+# for the checks and the layout, and deleted with it.
+
+PREVIEW_MAX_BYTES = 1024 * 1024
+
+
+def _uploaded(folder, data, name, role):
+    """Write one uploaded file where it would go in legal/; ``(path, slug, language, team, problems)``."""
+    import yaml
+
+    if len(data) > PREVIEW_MAX_BYTES:
+        return None, None, None, None, [f"The {role} file is larger than 1 MB."]
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None, None, None, None, [f"The {role} file is not UTF-8 text."]
+    match = legal.FRONT_MATTER.match(text)
+    try:
+        meta = yaml.safe_load(match.group(1)) if match else None
+    except yaml.YAMLError as error:
+        return None, None, None, None, [f"{role}: the front matter is not valid YAML: {error}"]
+    if not isinstance(meta, dict):
+        return None, None, None, None, [f"{role}: no front matter (--- ... ---) at the top."]
+    slug, language = str(meta.get("document") or ""), str(meta.get("language") or "")
+    team = str(meta.get("team") or "") or None
+    known = legal.TEAM_BY_SLUG if team else legal.BY_SLUG
+    if slug not in known:
+        return None, None, None, None, [
+            f'{role}: document "{slug}" is not a text there is ({", ".join(known)}).']
+    if team is not None and not legal.TEAM_SLUG.match(team):
+        return None, None, None, None, [f'{role}: team "{team}" is not a short name (a-z, 0-9, -).']
+    where = Path(folder) / (f"{legal.TEAMS_FOLDER}/{team}/" if team else "") / slug / language
+    where.mkdir(parents=True, exist_ok=True)
+    path = where / (Path(name or "").name or "upload.md")
+    path.write_text(text, encoding="utf-8")
+    return path, slug, language, team, []
+
+
+def preview(german_upload, english_upload=None):
+    """``(pdf bytes or None, problems, title)`` for uploaded files, each ``(data, filename)``."""
+    from .services import NotFoundError
+    from .services.teams import get_team
+
+    with tempfile.TemporaryDirectory() as folder:
+        uploads = [("German", german_upload, legal.AUTHORITATIVE)]
+        if english_upload is not None:
+            uploads.append(("English", english_upload, "en"))
+        versions, problems, paths = [], [], []
+        for role, (data, name), language in uploads:
+            path, slug, found_language, team, found = _uploaded(folder, data, name, role)
+            problems += found
+            if path is None:
+                continue
+            paths.append(path)
+            if found_language != language:
+                problems.append(f'{role}: language is "{found_language}"; this file must be "{language}".')
+                continue
+            version, found = legal._check(path, slug, language, team)
+            problems += [f"{role} ({path.name}): {problem}" for problem in found]
+            if version is not None:
+                versions.append(version)
+        if len(versions) == 2:
+            german, english = versions
+            if (english.slug, english.team, english.version) != (german.slug, german.team, german.version):
+                problems.append("The English file must be the translation of the German one: the same "
+                                f"document, team and version ({german.version}).")
+        if problems or not versions:
+            legal.forget(paths)
+            return None, problems, None
+        german = versions[0]
+        team = None
+        if german.team:
+            try:
+                team = get_team(german.team)
+            except NotFoundError:
+                team = None  # laid out without a team's name and logo
+        try:
+            data = build(german, team, versions=versions,
+                         watermark="ENTWURF" if german.status == "draft" else "VORSCHAU")
+        finally:
+            legal.forget(paths)
+        return data, [], filename(german, team)

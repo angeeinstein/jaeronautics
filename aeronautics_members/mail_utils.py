@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
+from email.mime.application import MIMEApplication
 from html.parser import HTMLParser
 
 from flask import current_app, has_app_context, render_template
@@ -192,9 +193,13 @@ def html_to_text(html):
     return parser.text()
 
 
-def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, **template_vars):
+def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, files=None, **template_vars):
     """
     Sends an email using pre-configured SMTP accounts.
+
+    ``attachments`` are images shown in the body (``{"path", "cid"}``);
+    ``files`` are documents attached to it (``{"filename", "data", "mimetype"}``),
+    such as the legal texts' PDFs.
 
     When ``return_error`` is True, the function returns ``(success, error_message)``.
     Otherwise it preserves the legacy ``True``/``False`` return value.
@@ -231,7 +236,10 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
         # such as Brevo signs in with an id of its own and sends from a
         # verified address, which the account then names.
         sender = (config.get("from") or config["user"]).strip()
-        message = MIMEMultipart("related")
+        # The body and the pictures in it belong together ("related"); files
+        # attached to the mail sit beside that, in a "mixed" message around it.
+        body_part = MIMEMultipart("related")
+        message = MIMEMultipart("mixed") if files else body_part
         message["Subject"] = subject
         message["From"] = formataddr((config["from_name"], sender)) if config.get("from_name") else sender
         message["To"] = primary_recipient
@@ -259,7 +267,7 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
         alternative = MIMEMultipart("alternative")
         alternative.attach(MIMEText(html_to_text(html_body), "plain", "utf-8"))
         alternative.attach(MIMEText(html_body, "html", "utf-8"))
-        message.attach(alternative)
+        body_part.attach(alternative)
 
         if attachments:
             for attachment in attachments:
@@ -267,12 +275,21 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
                     with open(attachment["path"], "rb") as handle:
                         img = MIMEImage(handle.read())
                         img.add_header("Content-ID", f"<{attachment['cid']}>")
-                        message.attach(img)
+                        body_part.attach(img)
                 except Exception as exc:
                     if has_app_context():
                         current_app.logger.warning("Error attaching image %s: %s", attachment.get("path"), exc)
                     else:
                         print(f"Error attaching image {attachment.get('path')}: {exc}")
+
+        if files:
+            message.attach(body_part)
+            for document in files:
+                maintype, _slash, subtype = (document.get("mimetype") or "application/octet-stream").partition("/")
+                part = MIMEApplication(document["data"], _subtype=subtype or "octet-stream") \
+                    if maintype == "application" else MIMEApplication(document["data"])
+                part.add_header("Content-Disposition", "attachment", filename=document["filename"])
+                message.attach(part)
 
         context = ssl.create_default_context()
         if config.get("starttls", False):
