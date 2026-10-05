@@ -1,6 +1,77 @@
 {% extends "admin_layout.html" %}
 {% from "teams/_status.html" import team_logo %}
 {% block admin_content %}
+<div class="card mb-4" id="money-overview">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h4 class="mb-0">{{ _('Overview') }}</h4>
+        <form method="GET" action="{{ url_for('teams.admin_money') }}" class="d-flex gap-2 align-items-center mb-0" data-busy-text="{{ _('Asking Stripe…') }}">
+            <input type="hidden" name="check" value="1">
+            <label class="visually-hidden" for="money-year">{{ _('Year') }}</label>
+            <select class="form-select form-select-sm" id="money-year" name="year">
+                {% for option in years %}<option value="{{ option }}" {% if option == year %}selected{% endif %}>{{ option }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm text-nowrap">{{ _('Check against Stripe') }}</button>
+        </form>
+    </div>
+    <div class="card-body">
+        {% if not overview %}
+            <p class="text-muted mb-0">{{ _('The totals come from Stripe, where all the association\'s payments land: the membership, the teams, and the webshop and events too. They are fetched when you ask, together with a check of every payment against the portal\'s records.') }}</p>
+        {% else %}
+            {% set books = overview.books %}
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <h5 class="h6">{{ _('%(year)s on Stripe', year=overview.year) }}</h5>
+                    <table class="table table-sm mb-0 money-overview">
+                        <tbody>
+                            <tr><td>{{ _('Membership fees') }}</td><td class="text-end">{{ euros(overview.split.membership) }}</td></tr>
+                            <tr><td>{{ _('Team fees') }}</td><td class="text-end">{{ euros(overview.split.teams) }}</td></tr>
+                            <tr><td>{{ _('Other (webshop, events, payment links)') }}</td><td class="text-end">{{ euros(overview.split.other) }}</td></tr>
+                            <tr class="fw-semibold"><td>{{ _('Received') }}</td><td class="text-end">{{ euros(books.received - books.returned) }}</td></tr>
+                            <tr><td>{{ _('Refunded') }}</td><td class="text-end">{{ euros(-books.refunded) }}</td></tr>
+                            <tr><td>{{ _('Taken back (chargebacks)') }}</td><td class="text-end">{{ euros(-books.taken_back) }}</td></tr>
+                            <tr><td>{{ _('Stripe\'s fees') }}</td><td class="text-end">{{ euros(-books.fees) }}</td></tr>
+                            {% if books.other %}<tr><td>{{ _('Other bookings') }}</td><td class="text-end">{{ euros(books.other) }}</td></tr>{% endif %}
+                            <tr class="fw-semibold"><td>{{ _('Net') }}</td><td class="text-end">{{ euros(books.net) }}</td></tr>
+                            <tr><td class="ps-4">{{ _('of which the teams\' (what their members paid)') }}</td><td class="text-end">{{ euros(overview.teams_share) }}</td></tr>
+                            <tr class="fw-semibold"><td class="ps-4">{{ _('of which the association\'s own') }}</td><td class="text-end">{{ euros(overview.association_own) }}</td></tr>
+                        </tbody>
+                    </table>
+                    {% if books.returned %}<p class="small text-muted mt-2 mb-0">{{ _('Received is less %(amount)s of SEPA debits that bounced.', amount=euros(books.returned)) }}</p>{% endif %}
+                </div>
+                <div class="col-lg-6">
+                    <h5 class="h6">{{ _('Where it is') }}</h5>
+                    <table class="table table-sm mb-3 money-overview">
+                        <tbody>
+                            <tr><td>{{ _('In Stripe now, available') }}</td><td class="text-end">{{ euros(overview.in_stripe_now.available) }}</td></tr>
+                            <tr><td>{{ _('In Stripe now, on its way') }}</td><td class="text-end">{{ euros(overview.in_stripe_now.pending) }}</td></tr>
+                            <tr><td>{{ _('Paid out to the bank account in %(year)s', year=overview.year) }}</td><td class="text-end">{{ euros(books.paid_out) }}</td></tr>
+                            <tr class="fw-semibold"><td>{{ _('Still owed to the teams (all years)') }}</td><td class="text-end">{{ euros(total_open) }}</td></tr>
+                        </tbody>
+                    </table>
+                    <h5 class="h6">{{ _('Check against the portal') }}</h5>
+                    {% set problems = overview.checks.teams + overview.checks.membership %}
+                    {% if not problems %}
+                        <p class="text-success mb-0">{{ _('Every paid membership and team invoice of %(year)s matches the portal\'s records.', year=overview.year) }}</p>
+                    {% else %}
+                        <p class="text-warning mb-2">{{ _('%(count)s payment(s) do not match:', count=problems|length) }}</p>
+                        {% macro problem_line(problem) %}<li>{{ _(problem.what) }}: <code>{{ problem.invoice }}</code>{% if problem.amount is not none %}, {{ euros(problem.amount) }}{% endif %}{% if problem.stripe_amount is defined %} / {{ euros(problem.stripe_amount) }}{% endif %}{% if problem.who %}, {{ problem.who }}{% endif %}</li>{% endmacro %}
+                        <ul class="small mb-0">
+                            {% for problem in problems[:10] %}{{ problem_line(problem) }}{% endfor %}
+                        </ul>
+                        {% if problems|length > 10 %}
+                            <details class="small mt-1">
+                                <summary>{{ _('%(count)s more', count=problems|length - 10) }}</summary>
+                                <ul class="mb-0">{% for problem in problems[10:] %}{{ problem_line(problem) }}{% endfor %}</ul>
+                            </details>
+                        {% endif %}
+                    {% endif %}
+                    <p class="small text-muted mt-2 mb-0">{{ _('Checked %(when)s.', when=overview.checked_at|datetime_display) }}</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="mb-0">{{ _('Teams') }}</h4>

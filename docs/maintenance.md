@@ -965,6 +965,25 @@ can show:
    meet: the team subscription is set to stop on the association's last day;
    check what Stripe bills at the renewal in between.
 
+**The association's money** (Admin → Money → *Check against Stripe*, for a
+year; site admins and the Treasurer). Fetched from Stripe on request, since all
+payments land there -- membership, teams, and the webshop and events, which the
+portal knows nothing of:
+
+- Received, split by what it was for (paid invoices sorted as the webhook
+  sorts them: membership, team; the rest is the webshop and events), less
+  refunds, bounced SEPA debits, chargebacks and Stripe's fees: the net.
+- Of the net, the teams' share (what their members paid, from the portal's
+  records) and the association's own (the rest; Stripe's fees are all the
+  association's).
+- What is in Stripe now, what went to the bank account in the year, and what
+  the teams are still owed.
+- The check: every paid team invoice of the year is a team payment in the
+  portal with the same amount and the other way round; every paid membership
+  invoice has a membership period, and every period counted as paid has an
+  invoice Stripe shows as paid. Whatever does not match is listed with its
+  invoice id, to look up in Stripe. Read-only: it changes nothing.
+
 **How payments are built.** `services/payments.py` is the one place that talks
 to Stripe for anything sold: the connection, the person's Stripe customer (one
 per person, shared by the membership and every team), opening a Checkout

@@ -906,13 +906,32 @@ def admin_money():
     from ..services import team_money as money
 
     rows = money.all_teams_money()
+    this_year = get_membership_today().year
+    year = request.args.get("year", type=int) or this_year
+    if not 2000 <= year <= this_year:
+        year = this_year
+    overview = None
+    if request.args.get("check") == "1":
+        # On request only: it pages through Stripe and takes a few seconds.
+        import stripe
+
+        from ..services.money_overview import overview as money_overview
+
+        try:
+            overview = money_overview(year)
+        except stripe.StripeError as exc:
+            current_app.logger.warning("Money overview: Stripe could not be asked: %s", exc)
+            flash(_("Stripe could not be asked. Please try again in a few minutes."), "danger")
     return render_template(
         "admin_money.html",
         active_admin_section="money",
         page_title=_("Money"),
-        page_description=_("What each team's members paid, and what was transferred to the team."),
+        page_description=_("The association's money on Stripe, and what each team's members paid."),
         rows=rows,
         total_open=sum(row["open"] for row in rows),
         euros=money.euros,
         masked_iban=money.masked_iban,
+        year=year,
+        years=list(range(this_year, max(this_year - 5, 2000) - 1, -1)),
+        overview=overview,
     )
