@@ -86,9 +86,11 @@ def forgot_password():
 
     form = EmailRequestForm()
     if form.validate_on_submit():
-        # A university address finds the account too, but the link always
-        # goes to the private address: that is the mailbox the account
-        # belongs to. The message below says the same either way.
+        # A university address finds the account too, but the link goes to
+        # the private address -- the mailbox the account belongs to -- unless
+        # that one was never confirmed and could be mistyped; then to the
+        # confirmed university address asked with (password_reset_address).
+        # The message below says the same either way.
         user = user_for_login_address(form.email.data)
         # Asked again within the minute: nothing is sent. Every request makes a
         # new link and kills the last one, so a double click left the email
@@ -99,7 +101,7 @@ def forgot_password():
             try:
                 rotate_password_reset_nonce(user)
                 db.session.commit()
-                send_password_reset_email(current_app._get_current_object(), user)
+                send_password_reset_email(current_app._get_current_object(), user, requested_with=form.email.data)
                 remember_sent("password-reset", email_address)
             except Exception as exc:
                 db.session.rollback()

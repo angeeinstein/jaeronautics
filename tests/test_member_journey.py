@@ -443,7 +443,7 @@ class TestAnEmailPerClickNoMore:
 
         sent = []
         monkeypatch.setattr(auth_module, "send_password_reset_email",
-                            lambda app, user: sent.append(user.password_reset_nonce) or True)
+                            lambda app, user, requested_with=None: sent.append(user.password_reset_nonce) or True)
         make_member(email="forgot@example.com")
 
         client.post("/forgot-password", data={"email": "forgot@example.com"})

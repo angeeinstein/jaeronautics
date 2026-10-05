@@ -1312,6 +1312,23 @@ confirmation across a change would let somebody confirm an address they can
 read, edit the field to another student's, and claim that student's archived
 forum account and posts.
 
+### Locked out by a wrong private address
+
+The private address is the login and where password resets go. Mistyped at
+signup, or changed to a wrong one, with the password forgotten too, nothing
+reaches the person. Two ways back:
+
+- **Forgot password with the confirmed university address:** if the private
+  address was never confirmed, the link goes to the university address
+  instead (`password_reset_address`). Once in, they correct the private one
+  in their profile.
+- **An admin corrects it** (account page, *Correct the Private Email
+  Address*; `approvals.review`, and for an account with a role
+  `roles.manage`). Whoever reads the new address can sign in, so only once you
+  know who is asking. The new address has to be confirmed like any other, the
+  old one is emailed if it was ever confirmed, Stripe's customer and the forum
+  get the new address, and the change is in the audit log with both.
+
 ## Planned: Archival Forum Accounts (not built)
 
 Roughly 500–600 people have used the forum over the last decade. The intention

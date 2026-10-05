@@ -370,6 +370,31 @@
 </div>
 {% endif %}
 
+{% if can_correct_email %}
+{#
+  For somebody locked out by a wrong private address -- mistyped at signup or
+  changed to a wrong one -- who has forgotten the password too.
+#}
+<div class="card mt-4" id="correct-email">
+    <div class="card-header"><h4 class="mb-0">{{ _('Correct the Private Email Address') }}</h4></div>
+    <div class="card-body">
+        <p class="text-muted small">{{ _('For a member who cannot get in because the address is wrong and the password forgotten. Whoever reads the new address can take over the account, so change it only once you know who is asking (in person, say, or from an address of theirs you know). A confirmation link goes to the new address, and the old one is told if it was ever confirmed.') }}</p>
+        <p class="small mb-3">{{ _('Now: %(email)s', email=user_record.email) }}{% if not user_record.email_verified_at %} <span class="text-warning">({{ _('never confirmed') }})</span>{% endif %}</p>
+        <form method="POST" action="{{ url_for('admin.admin_correct_private_email', user_id=user_record.id) }}" class="row g-2"
+              data-confirm-label="{{ _('Yes, change it') }}" data-confirm="{{ _('Change the address of this account to {new_email}? Whoever reads it can sign in.') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-sm-8">
+                <label class="visually-hidden" for="new-email">{{ _('New private email address') }}</label>
+                <input type="email" id="new-email" name="new_email" class="form-control" required placeholder="{{ _('New private email address') }}">
+            </div>
+            <div class="col-sm-4 d-grid">
+                <button type="submit" class="btn btn-secondary">{{ _('Change address') }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 {% if can_reconnect %}
 {#
   Reconnecting by hand, for a returning student whose university address no

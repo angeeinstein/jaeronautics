@@ -346,6 +346,11 @@ def admin_account_detail(user_id):
         latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
         recent_logs=recent_logs,
         **_reconnect_context(user),
+        can_correct_email=(
+            user.member is not None and user.deleted_at is None and user.id != current_user.id
+            and current_user.can(Permission.APPROVALS_REVIEW)
+            and (not user.roles or current_user.can(Permission.ROLES_MANAGE))
+        ),
         **_teams_context(user),
         # The role editor. Every assignable role, whether this account holds it,
         # and what refusing would say -- worked out server-side so the form and
@@ -592,6 +597,94 @@ def _reconnect_context(user):
         likely = {profile.id: reason for profile, reason in found}
     return {"can_reconnect": can_reconnect, "reconnect_query": query, "reconnect_results": results,
             "reconnect_likely": likely}
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/email", methods=["POST"])
+@login_required
+@requires(Permission.APPROVALS_REVIEW)
+def admin_correct_private_email(user_id):
+    """Correct a member's private address, for somebody locked out by a wrong one.
+
+    The private address is the login and where password resets go: mistyped
+    at signup or changed to a wrong one, and the password forgotten too, the
+    person cannot get back in. Changing it hands the account to whoever reads
+    the new address, so it is for an admin who knows who is asking. The new
+    address must then be confirmed like any other, the address replaced is
+    told when it was ever confirmed, and the change is logged with both.
+    """
+    import re
+
+    from ..config import CONTACT_EMAIL
+    from ..services.identity import send_email_verification_email
+    from ..services.notifications import flush_marked_notification_channels
+    from ..services.workflows import sync_member_primary_email
+
+    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
+    if user is None or user.deleted_at is not None or user.member is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+    back = url_for("admin.admin_account_detail", user_id=user_id)
+    member = user.member
+    new_email = (request.form.get("new_email") or "").strip().lower()
+    if user.id == current_user.id:
+        flash(_("Change your own address in your profile."), "warning")
+        return redirect(back)
+    if user.roles and not current_user.can(Permission.ROLES_MANAGE):
+        # Their address is a way into somebody else's admin rights.
+        flash(_("Only somebody who manages access can change the address of an account with a role."), "danger")
+        return redirect(back)
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", new_email):
+        flash(_("Enter a valid email address."), "danger")
+        return redirect(back)
+    old_email = user.email
+    if new_email == (old_email or "").strip().lower():
+        flash(_("That is the address the account has already."), "info")
+        return redirect(back)
+
+    has_forum_account = user.forum_account is not None or member_has_active_access(member)
+    if has_forum_account and get_forum_service().address_taken_by_another_forum_account(user, new_email):
+        flash(_("That address belongs to another account on the forum."), "danger")
+        return redirect(back)
+    old_was_confirmed = user.email_verified_at is not None
+    before = snapshot_user_for_audit(user)
+    try:
+        sync_member_primary_email(member, new_email)
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(back)
+    log_audit_event(
+        category="profile",
+        event_type="private_email_corrected_by_admin",
+        actor_user=current_user,
+        target_user=user,
+        target_member=member,
+        before=before,
+        after=snapshot_user_for_audit(user),
+    )
+    if old_was_confirmed and old_email:
+        new_local, _at, new_domain = new_email.partition("@")
+        queue_user_status_notification(
+            "account_email_changed_by_admin",
+            f"The email address of account {user.id} was changed by an admin.",
+            old_email,
+            payload={"first_name": member.first_name,
+                     "new_email_masked": f"{new_local[:2]}…@{new_domain}",
+                     "contact_email": CONTACT_EMAIL},
+            target_user=user, target_member=member,
+        )
+    if has_forum_account:
+        sync_member_forum_state(member)
+    db.session.commit()
+    flush_marked_notification_channels()
+    try:
+        send_email_verification_email(current_app._get_current_object(), user)
+    except Exception as exc:  # noqa: BLE001 -- the change stands; they can ask for the link again
+        current_app.logger.warning("Could not send the verification email to the corrected address of user %s: %s",
+                                   user.id, exc)
+    flash(_("The address is now %(email)s. A confirmation link went there; with it, or with Forgot password, "
+            "they can get back in.", email=new_email), "success")
+    return redirect(back)
 
 
 @admin_bp.route("/admin/accounts/<int:user_id>/reconnect", methods=["POST"])

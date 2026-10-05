@@ -570,6 +570,26 @@ class NotificationService:
                     ],
                 },
             )
+        if event.event_type == "account_email_changed_by_admin":
+            # To the address that was replaced: whoever reads it learns of the
+            # change, in case it was not at their request.
+            return (
+                _("The email address of your Joanneum Aeronautics account was changed"),
+                {
+                    "preview_text": _("An administrator changed the address your account uses."),
+                    "action_url": None,
+                    "action_label": None,
+                    "heading": _("Your account's email address was changed"),
+                    "body_lines": [
+                        greeting,
+                        _("An administrator of Joanneum Aeronautics changed the email address of your account "
+                          "to %(new)s, at the request of somebody who said the account was theirs.",
+                          new=payload.get("new_email_masked")),
+                        _("If that was you, there is nothing to do. If it was not, please write to %(contact)s "
+                          "at once.", contact=payload.get("contact_email")),
+                    ],
+                },
+            )
         if event.event_type == "forum_avatar_approved":
             return (
                 _("Your forum access is complete"),
