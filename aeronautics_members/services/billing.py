@@ -338,6 +338,7 @@ def get_open_checkout_session(member):
         return None
     return open_checkout_session(
         member.stripe_checkout_session_id, what=f"stored Checkout session of member_id={member.id}",
+        email=member.email_private,
     )
 
 

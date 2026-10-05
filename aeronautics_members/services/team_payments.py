@@ -570,7 +570,8 @@ def start_checkout(user, team):
 
     if membership.status == APPROVED:
         membership.payment_mode = team.payment_mode  # the way the team charges now
-    existing = payments.open_checkout_session(membership.stripe_checkout_session_id, what="team Checkout")
+    existing = payments.open_checkout_session(membership.stripe_checkout_session_id, what="team Checkout",
+                                              email=member.email_private)
     if existing is not None:
         return existing["url"]
 

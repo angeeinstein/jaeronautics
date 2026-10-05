@@ -204,11 +204,17 @@ def request_fingerprint(params):
     return hashlib.sha256(json.dumps(params, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
 
 
-def open_checkout_session(session_id, *, what="Checkout session"):
+def open_checkout_session(session_id, *, what="Checkout session", email=None):
     """The Checkout session if it can still be paid, else None.
 
     None too when Stripe cannot be asked: the caller then starts a new one,
     so a failed lookup must not be an error.
+
+    With ``email``, a session opened for another address -- the person
+    corrected a mistyped one since -- is closed and None returned, so the new
+    one is made with the right address: before somebody's first payment
+    Stripe knows them only by the address on that session, and its receipts
+    and reminders would go there.
     """
     if not session_id:
         return None
@@ -218,9 +224,14 @@ def open_checkout_session(session_id, *, what="Checkout session"):
     except stripe.StripeError as exc:
         current_app.logger.warning("Could not load %s %s: %s", what, session_id, exc)
         return None
-    if session.get("status") == "open" and session.get("url"):
-        return session
-    return None
+    if session.get("status") != "open" or not session.get("url"):
+        return None
+    opened_for = (session.get("customer_email") or "").strip().lower()
+    if email and opened_for and opened_for != email.strip().lower():
+        current_app.logger.info("Closing %s %s: opened for an address since changed.", what, session_id)
+        expire_checkout_session(session_id)
+        return None
+    return session
 
 
 def expire_checkout_session(session_id):
