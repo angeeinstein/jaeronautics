@@ -813,8 +813,13 @@ leads' page has *Preview and send* for sending it by hand. It marks who is new
 since the last list sent and lists who has left since.
 
 **Forum group.** Create the group in Discourse first, then name it in the
-team's settings; members are added and removed with each forum sync. Renaming
-it later leaves people in the old group -- delete that one in Discourse.
+team's settings; members are added and removed with each forum sync. It must be
+a group of the team's own: everybody not in the team is taken out of it. So
+Discourse's own groups (admins, moderators, staff, trust levels) and those the
+portal fills otherwise (members, onboarding, lapsed, staff, member kinds) are
+refused, and leaving a team never takes somebody out of a group they are in for
+another reason. Renaming it later leaves people in the old group -- delete that
+one in Discourse.
 
 **A fee** (site admins, in the team's form under *Fee*):
 
@@ -869,12 +874,23 @@ and seldom touched -- is handled rather than refused:
 - **Charging from now on**: members already in stay free until the next period
   starts, are emailed, and see *Pay to stay* (nothing is charged before the
   period starts). Whoever has not paid by then leaves, and may come back by
-  paying within six months.
+  paying within six months. Members whose subscription from an earlier paying
+  time is still running out simply carry on with it (moved to the new price
+  from their next renewal) and are emailed that.
+- **Any change of fee or way of paying** closes payment pages still open at
+  the old one; the next *Pay* opens one at the new. The members are locked
+  while Stripe is told, so the webhooks that causes find the new way of paying
+  rather than taking it for somebody leaving; if Stripe fails half-way, what
+  was changed there is changed back and nothing is saved.
 - **The period dates** cannot change while subscriptions run on them: switch
   to free, let them run out, then set the new dates.
 - **Archiving a team, or switching teams off**, is refused while anybody still
-  pays by subscription: switch the team to free first. Archiving also asks for
-  the team's name to be typed.
+  pays -- a subscription, a period paid once not yet over, a payment on its
+  way: switch the team to free first. Archiving also asks for the team's name
+  to be typed, and ends the applications under way (open payment pages are
+  closed, the applicants emailed). Switching teams off is also refused while
+  approved applicants could still pay: reject them, or wait until their
+  approval lapses.
 
 **New members** are pointed to the Teams page, not asked at signup: a team can
 only be joined once the association membership is active. The welcome email,
@@ -885,11 +901,15 @@ the link while teams are switched on.
 forum group and access list, applying again to come back), an optional message
 to the leads, and a box to tick.
 
-**Every night** (with `reconcile-billing`): team memberships of people no
-longer in the association end, approvals for a team that charges lapse when
-unpaid after 14 days (not while a SEPA debit is on its way), memberships whose
-leaving day has passed, or that are unpaid for more than 35 days, end in case
-Stripe's word never arrived, and access lists due that day go out.
+**Every night** (with `reconcile-billing`), each step on its own so one that
+fails does not stop the others: team memberships follow a cancelled
+association membership, those of people no longer in the association end,
+approvals for a team that charges lapse when unpaid after 14 days (not while a
+SEPA debit is on its way, unless that has gone on for 45 days), renewal
+reminders go out, memberships whose leaving day has passed, or that are unpaid
+for more than 35 days, end in case Stripe's word never arrived (paid once per
+period by SEPA debit at the last moment: up to 14 days while the money is on
+its way), and access lists due that day go out.
 
 **Unfinished signups** (also every night): a signup never paid for is removed
 90 days after the signup or the last attempt to pay, completely -- account,
@@ -920,6 +940,22 @@ and site admins for every team (Admin → Money), also archived ones.
   open amount and reference -- sends it, then *Mark as transferred*. A
   transfer is recorded with the account it went to and cannot exceed what is
   open.
+
+**Before teams charge on the live portal** -- things only Stripe's dashboard
+can show:
+
+1. *Settings → Billing → Customer portal*: members reach it from their
+   account, and it shows their team subscriptions too. Leave *Customers can
+   switch plans* **off** (or list only the membership's product there):
+   otherwise somebody could move their membership to a team's price or back.
+   Cancelling there is fine; the portal treats it as leaving.
+2. The webhook endpoint has the events under *Stripe Webhook Events* (13).
+3. In **test mode, with a test clock**, run one team through a whole year
+   before charging real money: join, a renewal, a failed SEPA debit, leaving,
+   and cancelling the association membership in a month before the team's
+   next renewal. That last one is where the team period and the calendar year
+   meet: the team subscription is set to stop on the association's last day;
+   check what Stripe bills at the renewal in between.
 
 **How payments are built.** `services/payments.py` is the one place that talks
 to Stripe for anything sold: the connection, the person's Stripe customer (one

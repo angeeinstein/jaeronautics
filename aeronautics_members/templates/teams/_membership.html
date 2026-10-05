@@ -94,11 +94,13 @@
                     <button type="submit" class="btn btn-primary">{{ _('Pay and join') }}</button>
                 </form>
             {% endif %}
+            {% if current.payment_state != 'processing' %}
             <form method="POST" action="{{ url_for('teams.team_withdraw', slug=team.slug) }}" class="mb-0"
                   data-confirm-label="{{ _('Yes, withdraw') }}" data-confirm="{{ _('Withdraw your application?') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-secondary">{{ _('Withdraw application') }}</button>
             </form>
+            {% endif %}
         {% elif is_member and not on_team_page %}
             {% set reason = why_not_joinable(team) %}
             {% if reason %}

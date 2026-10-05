@@ -777,6 +777,7 @@ class DiscourseConnectProvider(ForumProvider):
         team_add, team_remove = forum_groups_for(user)
         add_groups.extend(team_add)
         remove_groups.extend(team_remove)
+        team_remove = set(team_remove)
         if desired_state == FORUM_STATE_ACTIVE:
             if member_group:
                 add_groups.append(member_group)
@@ -798,6 +799,10 @@ class DiscourseConnectProvider(ForumProvider):
                 remove_groups.append(member_group)
             if onboarding_group:
                 remove_groups.append(onboarding_group)
+
+        # Leaving a team never takes somebody out of a group they are in for
+        # another reason -- a team named after a group used elsewhere, say.
+        remove_groups = [group for group in remove_groups if not (group in team_remove and group in add_groups)]
 
         payload = {}
         if add_groups:

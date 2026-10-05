@@ -727,6 +727,22 @@ class NotificationService:
                    "next six months you can come back by simply paying on the Teams page.", team=team)],
                 teams_url, _("Open Teams"),
             ),
+            "team_charging_again": (
+                _("%(team)s charges its fee again", team=team),
+                _("Your subscription carries on."),
+                [_("%(team)s charges a fee again: %(fee)s. Your subscription, which was to stop, carries on as "
+                   "before; you need to do nothing.", team=team, fee=payload.get("fee")),
+                 _("If you do not want to continue, you can leave on the Teams page. What you have paid for "
+                   "runs to its end.")],
+                teams_url, _("Open Teams"),
+            ),
+            "team_closed": (
+                _("%(team)s is no longer taking members", team=team),
+                _("Your application has ended."),
+                [_("%(team)s has been closed, so your application has ended. Nothing has been charged.",
+                   team=team)],
+                teams_url, _("Open Teams"),
+            ),
             "team_now_once_per_period": (
                 _("%(team)s is paid once per period from now on", team=team),
                 _("Nothing renews by itself any more."),

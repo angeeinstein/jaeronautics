@@ -4440,59 +4440,42 @@ def create_app(config_overrides=None):
                 error_count += 1
                 click.echo(click.style(f"Billing reconciliation failed for {member.email_private}: {exc}", fg="red"), err=True)
 
-        # Whoever has cancelled their association membership has their teams
-        # set to end on the same day, in case the webhook that says so was missed.
-        from .services.team_payments import follow_association_ends
+        # The teams' nightly steps, in this order. Each on its own: one that
+        # fails is logged and counted, and the others still run.
+        from .services.team_payments import (
+            end_finished_team_memberships, follow_association_ends, send_renewal_notices,
+        )
+        from .services.teams import end_lapsed_team_memberships, lapse_unpaid_approvals, send_due_access_lists
 
-        following = follow_association_ends()
-        db.session.commit()
-        flush_marked_notification_channels()
-        if following:
-            click.echo(f"Brought {following} team membership(s) in line with a cancelled or resumed association membership.")
-
-        # Teams follow the association: whoever is no longer a member leaves
-        # their teams too. Here because this is the nightly membership job.
-        from .services.teams import end_lapsed_team_memberships
-
-        lapsed = end_lapsed_team_memberships()
-        db.session.commit()
-        flush_marked_notification_channels()
-        if lapsed:
-            click.echo(f"Ended {lapsed} team membership(s) of people no longer in the association.")
-
-        # Approvals for teams that charge, not paid for in time, lapse.
-        from .services.teams import lapse_unpaid_approvals
-
-        unpaid = lapse_unpaid_approvals()
-        db.session.commit()
-        flush_marked_notification_channels()
-        if unpaid:
-            click.echo(f"{unpaid} team approval(s) lapsed unpaid.")
-
-        # Teams paid by subscription: a leaving day passed, or long unpaid.
-        # Stripe reports both; this is for when its word never arrived.
-        from .services.team_payments import end_finished_team_memberships, send_renewal_notices
-
-        reminded = send_renewal_notices()
-        db.session.commit()
-        flush_marked_notification_channels()
-        if reminded:
-            click.echo(f"Reminded {reminded} team member(s) to pay for the next period.")
-
-        finished = end_finished_team_memberships()
-        db.session.commit()
-        flush_marked_notification_channels()
-        if finished:
-            click.echo(f"Ended {finished} team membership(s) paid by subscription.")
-
-        # Then the teams' access lists due today, now that they are current.
-        from .services.teams import send_due_access_lists
-
-        access_lists = send_due_access_lists()
-        db.session.commit()
-        flush_marked_notification_channels()
-        if access_lists:
-            click.echo(f"Sent {access_lists} team access list(s).")
+        team_steps = (
+            # Whoever has cancelled their association membership has their teams set
+            # to end on the same day, in case the webhook that says so was missed.
+            (follow_association_ends,
+             "Brought {} team membership(s) in line with a cancelled or resumed association membership."),
+            # Whoever is no longer in the association leaves their teams too.
+            (end_lapsed_team_memberships, "Ended {} team membership(s) of people no longer in the association."),
+            # Approvals for teams that charge, not paid for in time, lapse.
+            (lapse_unpaid_approvals, "{} team approval(s) lapsed unpaid."),
+            # Paid once per period: the reminder to pay for the next one.
+            (send_renewal_notices, "Reminded {} team member(s) to pay for the next period."),
+            # A leaving day passed, a period not paid for, or long unpaid.
+            (end_finished_team_memberships, "Ended {} team membership(s) that ran out or were not paid."),
+            # Then the access lists due today, now that the teams are current.
+            (send_due_access_lists, "Sent {} team access list(s)."),
+        )
+        for step, done_text in team_steps:
+            try:
+                count = step()
+                db.session.commit()
+                flush_marked_notification_channels()
+            except Exception as exc:  # noqa: BLE001 -- logged; tried again tomorrow
+                db.session.rollback()
+                current_app.logger.exception("Nightly team step %s failed.", step.__name__)
+                error_count += 1
+                click.echo(click.style(f"Team step {step.__name__} failed: {exc}", fg="red"), err=True)
+                continue
+            if count:
+                click.echo(done_text.format(count))
 
         # Signups never paid for: a notice, then removal (90 days; see
         # services/unfinished_signups.py). Never allowed to stop the rest.

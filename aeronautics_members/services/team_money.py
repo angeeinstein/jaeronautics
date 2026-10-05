@@ -82,10 +82,12 @@ EXPORT_COLUMNS = ("Paid on", "Name", "Paid until", "Amount", "Refunded", "Counts
 
 
 def export_rows(team):
+    from .teams import csv_cell
+
     for payment in team_payments(team):
         yield (
             format_date_display(payment.paid_at) if payment.paid_at else "",
-            payer_name(payment),
+            csv_cell(payer_name(payment)),
             format_membership_date_display(payment.covers_until) if payment.covers_until else "",
             f"{payment.amount_cents / 100:.2f}",
             f"{(payment.refunded_cents or 0) / 100:.2f}",

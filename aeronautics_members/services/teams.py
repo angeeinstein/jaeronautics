@@ -168,9 +168,16 @@ def save_team_settings(actor, *, enabled, label_singular, label_plural):
         paying = [m for team in all_teams(include_archived=False) for m in _paying(team)]
         if paying:
             raise ConflictError(
-                f"{len(paying)} team membership(s) are still paid by subscription; switched off, they would "
-                "go on charging for a team nobody can see. Switch those teams to free first.",
+                f"{len(paying)} team membership(s) are still paid for; switched off, they would go on "
+                "charging for a team nobody can see. Switch those teams to free first.",
                 code="teams_off_subscriptions_running",
+            )
+        waiting = [m for team in all_teams(include_archived=False) for m in _waiting_to_pay(team)]
+        if waiting:
+            raise ConflictError(
+                f"{len(waiting)} approved applicant(s) can still pay for a team; switched off, they could pay "
+                "for a team nobody can see. Reject them on the team's page, or wait until their approval lapses.",
+                code="teams_off_approvals_waiting",
             )
     _write_setting(SETTING_ENABLED, "True" if after["enabled"] else None)
     _write_setting(SETTING_LABEL_SINGULAR, after["label_singular"])
@@ -222,11 +229,18 @@ def _clean_team_fields(*, name, admission_mode, max_members, forum_group,
         if max_members <= 0:
             raise ValidationError("The maximum size must be above zero.", code="team_max_members_invalid")
 
+    forum_group = (forum_group or "").strip()[:100] or None
+    if forum_group and forum_group.lower() in reserved_forum_groups():
+        raise ValidationError(
+            f"The forum group {forum_group} is already used for something else. A team needs a forum group of "
+            "its own: everybody not in the team is taken out of it.",
+            code="team_forum_group_reserved",
+        )
     cleaned = {
         "name": name,
         "admission_mode": admission_mode,
         "max_members": max_members,
-        "forum_group": (forum_group or "").strip()[:100] or None,
+        "forum_group": forum_group,
     }
     # The leads' part, only when given: the admins' form leaves it to them.
     if description is not KEEP:
@@ -236,6 +250,28 @@ def _clean_team_fields(*, name, admission_mode, max_members, forum_group,
     if application_prompt is not KEEP:
         cleaned["application_prompt"] = (application_prompt or "").strip()[:255] or None
     return cleaned
+
+
+#: Discourse's own groups, which it fills by itself.
+DISCOURSE_AUTOMATIC_GROUPS = frozenset({
+    "everyone", "admins", "moderators", "staff",
+    "trust_level_0", "trust_level_1", "trust_level_2", "trust_level_3", "trust_level_4",
+})
+
+
+def reserved_forum_groups():
+    """Forum groups a team cannot have, lower-case: Discourse's own, and those
+    the portal fills for other reasons (members, staff, member kinds)."""
+    from ..forum_service import member_category_groups, normalize_forum_settings
+    from .forum import get_forum_settings_map
+
+    settings = normalize_forum_settings(get_forum_settings_map())
+    reserved = set(DISCOURSE_AUTOMATIC_GROUPS)
+    for key in ("forum_onboarding_group", "forum_member_group", "forum_inactive_group", "forum_staff_group"):
+        if settings.get(key):
+            reserved.add(str(settings[key]).strip().lower())
+    reserved.update(str(group).strip().lower() for group in member_category_groups(settings).values())
+    return reserved
 
 
 def _snapshot(team):
@@ -291,15 +327,24 @@ def update_team(actor, team, **fields):
 
 
 def _paying(team):
-    """Memberships of this team still paying: a subscription charging, or a
-    period paid once that has not run out."""
+    """Memberships of this team still paying: a subscription charging, a
+    period paid once that has not run out, or a payment on its way."""
     from .clock import get_membership_today
 
     today = get_membership_today()
     return [m for m in team.memberships if m.status in (APPROVED, ACTIVE) and (
         (m.stripe_subscription_id and m.payment_mode == "subscription")
         or (m.payment_mode == "one_time" and m.paid_until is not None and m.paid_until >= today)
+        or m.payment_state == "processing"
     )]
+
+
+def _waiting_to_pay(team):
+    """Approvals of a team that charges, their payment not made yet."""
+    if team.payment_mode == PAYMENT_NONE:
+        return []
+    paying = _paying(team)
+    return [m for m in team.memberships if m.status == APPROVED and m not in paying]
 
 
 def set_team_archived(actor, team, archived, *, confirmed_name=None):
@@ -323,6 +368,8 @@ def set_team_archived(actor, team, archived, *, confirmed_name=None):
                 code="team_archive_subscriptions_running",
             )
     before = _snapshot(team)
+    if archived:
+        _close_applications(team)
     team.status = target
     team.archived_at = get_now_utc() if archived else None
     _sync_forum([m.user for m in team.memberships if m.status == ACTIVE], team,
@@ -332,6 +379,24 @@ def set_team_archived(actor, team, archived, *, confirmed_name=None):
         actor_user=actor, before=before, after=_snapshot(team),
     )
     return team
+
+
+def _close_applications(team):
+    """An archived team takes nobody: applications under way end, and any
+    payment page still open is closed, so nobody pays for a team that is gone."""
+    now = get_now_utc()
+    for found in list(team.memberships):
+        if found.status not in (APPLIED, INVITED, APPROVED):
+            continue
+        membership = _locked_membership(found.id, team)
+        if membership.status not in (APPLIED, INVITED, APPROVED):
+            continue
+        _stop_charging(membership, "team archived")
+        membership.status = WITHDRAWN
+        membership.ended_at = now
+        membership.end_reason = END_TEAM_CLOSED
+        _audit("team_application_closed", None, membership)
+        _tell_person("team_closed", membership)
 
 
 # --- The logo ----------------------------------------------------------------
@@ -728,10 +793,14 @@ END_ACCOUNT_ERASED = "account_erased"
 END_NOT_PAID = "not_paid_in_time"
 END_PAYMENT_FAILED = "payment_failed"
 END_NOT_RENEWED = "not_renewed"
+END_TEAM_CLOSED = "team_closed"
 
 #: How long an approval waits for its payment before it lapses and the person
 #: has to apply again.
 APPROVAL_PAYMENT_DAYS = 14
+#: A SEPA debit takes days, never weeks: one "on its way" for longer than this
+#: lost its answer from Stripe, and the approval lapses too.
+APPROVAL_PROCESSING_DAYS = 45
 
 #: Whoever's membership ended unpaid may rejoin by paying, for about one period.
 REJOIN_DAYS = 183
@@ -755,6 +824,7 @@ END_REASON_LABELS = {
     END_NOT_PAID: "Not paid in time",
     END_PAYMENT_FAILED: "Payment failed",
     END_NOT_RENEWED: "Not renewed",
+    END_TEAM_CLOSED: "Team closed",
 }
 
 
@@ -802,7 +872,14 @@ def active_member_count(team):
 
 
 def is_full(team):
-    return team.max_members is not None and active_member_count(team) >= team.max_members
+    """No place left: the members, and those approved who are paying to join, fill it."""
+    if team.max_members is None:
+        return False
+    taken = db.session.scalar(
+        db.select(db.func.count()).select_from(TeamMembership)
+        .where(TeamMembership.team_id == team.id, TeamMembership.status.in_((ACTIVE, APPROVED)))
+    ) or 0
+    return taken >= team.max_members
 
 
 def why_not_joinable(user, team):
@@ -947,6 +1024,9 @@ def withdraw(user, team):
         raise ConflictError("There is no application to withdraw.", code="team_nothing_to_withdraw")
     membership = _locked_membership(current.id, team)
     _require_status(membership, {APPLIED, INVITED, APPROVED}, "There is no application to withdraw.")
+    if membership.payment_state == "processing":
+        raise ConflictError("Your payment is on its way, so the application can no longer be withdrawn. "
+                            "Once you are in, you can leave.", code="team_payment_processing")
     _stop_charging(membership, "withdrawn")
     membership.status = WITHDRAWN
     membership.ended_at = get_now_utc()
@@ -1311,17 +1391,32 @@ def _surname_first(row):
 EXPORT_COLUMNS = ("Name", "University email", "Private email", "Phone", "Cohort", "Member since", "Paid until")
 
 
+def csv_cell(value):
+    """A value for a CSV cell that a spreadsheet will show, never run.
+
+    Names are typed by members themselves, and a spreadsheet takes a cell
+    starting with =, +, - or @ for a formula. A phone number (+43 ...) stays
+    as it is.
+    """
+    text = "" if value is None else str(value)
+    if text[:1] in ("=", "@", "\t", "\r") or (
+        text[:1] in ("+", "-") and not re.fullmatch(r"[+-][\d ()/.-]*", text)
+    ):
+        return "'" + text
+    return text
+
+
 def export_rows(team):
     from .membership import format_date_display
 
     for row in roster(team):
         started = row["membership"].started_at
         paid_until = row["membership"].paid_until
-        yield (
+        yield tuple(csv_cell(value) for value in (
             row["name"], row["university_email"] or "", row["private_email"] or "",
             row["phone"] or "", row["cohort"] or "", format_date_display(started) if started else "",
             format_date_display(paid_until) if paid_until else "",
-        )
+        ))
 
 
 # --- Keeping teams in step with the association ----------------------------
@@ -1392,7 +1487,9 @@ def lapse_unpaid_approvals(now=None):
             from datetime import timezone
 
             approved_at = approved_at.replace(tzinfo=timezone.utc)
-        if approved_at > cutoff or waiting.payment_state == "processing":
+        if approved_at > cutoff:
+            continue
+        if waiting.payment_state == "processing" and approved_at > now - timedelta(days=APPROVAL_PROCESSING_DAYS):
             continue  # a SEPA debit on its way is paid, only not yet arrived
         membership = _locked_membership(waiting.id)
         if membership.status != APPROVED:
