@@ -19,3 +19,6 @@ segno==1.6.6
 markdown-it-py==4.2.0
 # ... each starting with YAML front matter (title, version, effective_from, status).
 PyYAML==6.0.3
+# ... and laid out as PDFs (aeronautics_members/legal_pdf.py). Needs Pango from the system
+# (libpango-1.0-0, libpangoft2-1.0-0 -- install.sh installs them).
+weasyprint==70.0

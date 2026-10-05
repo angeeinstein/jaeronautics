@@ -16,7 +16,8 @@
             {% if english_url %}<a href="{{ english_url }}">{{ _('English translation') }}</a>
             {% elif english_elsewhere %}{{ _('No English translation of this version yet.') }}
             {% else %}{{ _('In German only.') }}{% endif %}
-        {%- endif %}
+        {%- endif %} ·
+        <a href="{{ pdf_url }}" target="_blank" rel="noopener" data-legal-file>{{ _('PDF, German and English') if pdf_has_english else _('PDF') }}</a>
     </p>
     {{ rendered.html }}
 </div>

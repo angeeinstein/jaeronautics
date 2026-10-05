@@ -22,6 +22,11 @@ INLINE_STYLE = re.compile(r"<[^>]+\sstyle\s*=\s*[\"']", re.I)
 INLINE_HANDLER = re.compile(r"(?<![\w-])on[a-z]+\s*=\s*[\"']", re.I)
 
 
+def _csp():
+    """The pages' policy: nginx maps it per content type (PDFs go without), so read it from the map."""
+    return re.search(r'"(default-src [^"]+)"', NGINX_CONF.read_text()).group(1)
+
+
 def test_no_inline_scripts_in_templates():
     offenders = []
     for path in TEMPLATES.rglob("*.html"):
@@ -55,10 +60,7 @@ def test_no_inline_event_handlers_in_templates():
 def test_csp_does_not_permit_inline_scripts():
     # If this ever gains 'unsafe-inline', the guard above stops being meaningful,
     # so the two must be changed together deliberately.
-    csp = next(
-        line for line in NGINX_CONF.read_text().splitlines()
-        if "Content-Security-Policy" in line
-    )
+    csp = _csp()
     assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
 
 
@@ -86,10 +88,7 @@ def test_no_inline_style_attributes_in_templates():
 
 
 def test_csp_does_not_permit_inline_styles():
-    csp = next(
-        line for line in NGINX_CONF.read_text().splitlines()
-        if "Content-Security-Policy" in line
-    )
+    csp = _csp()
     assert "'unsafe-inline'" not in csp.split("style-src")[1].split(";")[0]
 
 
@@ -164,10 +163,7 @@ DELIBERATE_EXTERNAL_ORIGINS = {
 
 
 def test_csp_allows_no_unrecorded_external_origin():
-    csp = next(
-        line for line in NGINX_CONF.read_text().splitlines()
-        if "Content-Security-Policy" in line
-    )
+    csp = _csp()
     unexpected = []
     for directive in ("script-src", "style-src", "connect-src"):
         if directive not in csp:
@@ -186,10 +182,7 @@ def test_csp_allows_no_unrecorded_external_origin():
 
 def test_stylesheets_stay_same_origin():
     # Nothing needs a third-party stylesheet now that Bootstrap is vendored.
-    csp = next(
-        line for line in NGINX_CONF.read_text().splitlines()
-        if "Content-Security-Policy" in line
-    )
+    csp = _csp()
     assert "http" not in csp.split("style-src")[1].split(";")[0]
     # Defences that cost nothing once everything is same-origin.
     for directive in ("object-src 'none'", "base-uri 'self'", "frame-ancestors 'self'"):

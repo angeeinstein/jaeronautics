@@ -27,7 +27,8 @@ CONFIG_FILES = ("deploy/nginx/aeronautics.conf", "install.sh")
 
 
 def _policies(text):
-    return re.findall(r'Content-Security-Policy\s+"([^"]+)"', text)
+    # Written once per file, as the value nginx maps every response but a PDF to.
+    return re.findall(r'"(default-src [^"]+)"', text)
 
 
 def _directive(policy, name):
@@ -65,6 +66,18 @@ def test_the_policy_is_still_restrictive(filename):
         assert "default-src 'self'" in policy
         assert "object-src 'none'" in policy
         assert "frame-ancestors 'self'" in policy
+
+
+@pytest.mark.parametrize("filename", CONFIG_FILES)
+def test_every_response_but_a_pdf_gets_the_policy(filename):
+    """Chrome's PDF viewer is a plugin object-src 'none' forbids, so the legal
+    texts' PDFs go without; nothing else may."""
+    text = (REPO_ROOT / filename).read_text(encoding="utf-8")
+    assert len(_policies(text)) == 1
+    headers = re.findall(r"add_header Content-Security-Policy (\S+) always;", text)
+    assert headers and all("csp" in header for header in headers)  # the mapped variable
+    exempt = re.findall(r'^\s*(~\S+) \\?"\\?";', text, re.M)
+    assert exempt == ["~^application/pdf"]
 
 
 def test_the_installer_and_the_deploy_file_agree():

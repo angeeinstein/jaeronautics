@@ -1,0 +1,110 @@
+{#- A legal text as a PDF (legal_pdf.py): the German version, then its
+    English translation on pages of its own. Laid out by WeasyPrint for A4;
+    only files in the static folder (the fonts, the logo) are read. The words
+    around the text are fixed per language, not translated with the site. -#}
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>{{ german.title }}</title>
+<meta name="author" content="{{ association }}">
+<meta name="generator" content="{{ association }} member portal">
+<style>
+@font-face { font-family: "Inter"; font-weight: 100 900; src: url("fonts/inter-latin-wght-normal.woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter"; font-weight: 100 900; src: url("fonts/inter-latin-ext-wght-normal.woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url("fonts/ibm-plex-mono-latin-400-normal.woff2"); }
+@font-face { font-family: "Archivo"; font-weight: 100 900; src: url("fonts/archivo-latin-wght-normal.woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-weight: 100 900; src: url("fonts/archivo-latin-ext-wght-normal.woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+:root { --ink: #1a1a1a; --muted: #5f6b70; --brand: #0fb2c9; --brand-dark: #08515a; --line: #c9d3d6; --tint: #eaf7f9; }
+
+@page {
+    size: A4;
+    margin: 20mm 20mm 22mm 20mm;
+    @bottom-left {
+        content: string(footer-left);
+        font: 7.5pt "Inter", sans-serif; color: var(--muted); vertical-align: top; padding-top: 4mm;
+    }
+    @bottom-right {
+        content: string(page-word) " " counter(page) " " string(of-word) " " counter(pages);
+        font: 7.5pt "Inter", sans-serif; color: var(--muted); vertical-align: top; padding-top: 4mm;
+    }
+}
+
+html { font-family: "Inter", sans-serif; font-size: 9.5pt; line-height: 1.5; color: var(--ink); }
+body { margin: 0; }
+.part + .part { break-before: page; }
+
+.cover {
+    string-set: footer-left attr(data-footer), page-word attr(data-page), of-word attr(data-of);
+    margin-bottom: 8mm; padding-bottom: 5mm; border-bottom: 1.2pt solid var(--brand);
+}
+.cover .logo { width: 62mm; display: block; margin-bottom: 10mm; }
+.doc-title { font-family: "Archivo", sans-serif; font-size: 22pt; font-weight: 700; line-height: 1.15; color: var(--brand-dark); margin: 0 0 2.5mm; }
+.meta { color: var(--muted); font-size: 9pt; margin: 0; }
+.pageref { color: var(--muted); text-decoration: none; }
+.pageref::after { content: target-counter(attr(href), page); }
+.notice { background: var(--tint); border-left: 2.5pt solid var(--brand); padding: 3mm 4mm; margin: 0 0 7mm; font-size: 9pt; }
+
+.toc { margin: 0 0 8mm; }
+.toc h2 { font-family: "Archivo", sans-serif; font-size: 10pt; font-weight: 650; color: var(--brand-dark); margin: 0 0 2mm; text-transform: uppercase; letter-spacing: 0.06em; }
+.toc ol { list-style: none; margin: 0; padding: 0; }
+.toc ol { font-size: 9pt; }
+.toc li { margin: 0 0 0.5mm; }
+.toc li.level-1 { font-weight: 600; margin-top: 2mm; }
+.toc li.level-2 { padding-left: 4mm; }
+.toc a { color: var(--ink); text-decoration: none; }
+.toc a::after { content: leader(dotted) target-counter(attr(href), page); color: var(--muted); }
+
+.legal-text h1, .legal-text h2, .legal-text h3, .legal-text h4 { font-family: "Archivo", sans-serif; color: var(--brand-dark); break-after: avoid; line-height: 1.25; }
+.legal-text h1 { font-size: 13pt; font-weight: 700; margin: 9mm 0 3mm; padding-top: 3mm; border-top: 0.5pt solid var(--line); }
+.legal-text hr + h1 { border-top: 0; padding-top: 0; margin-top: 6mm; }
+.legal-text h2 { font-size: 11pt; font-weight: 650; margin: 6mm 0 2mm; }
+.legal-text h3 { font-size: 10pt; font-weight: 650; margin: 4mm 0 1.5mm; }
+.legal-text h4 { font-size: 9.5pt; font-weight: 650; margin: 3mm 0 1mm; }
+.legal-text p { margin: 0 0 2.2mm; orphans: 3; widows: 3; }
+.legal-text ul, .legal-text ol { margin: 0 0 2.5mm; padding-left: 6mm; }
+.legal-text li { margin: 0 0 1mm; }
+.legal-text a { color: var(--brand-dark); text-decoration: none; }
+.legal-text strong { font-weight: 650; }
+.legal-text blockquote { margin: 0 0 3mm; padding: 1mm 0 1mm 4mm; border-left: 2pt solid var(--line); color: var(--muted); }
+.legal-text hr { border: 0; border-top: 0.5pt solid var(--line); margin: 5mm 0; }
+.legal-text code { font-family: "IBM Plex Mono", monospace; font-size: 8.5pt; }
+
+.legal-text table { width: 100%; border-collapse: collapse; margin: 1mm 0 4mm; font-size: 8.5pt; line-height: 1.35; }
+.legal-text th, .legal-text td { border: 0.5pt solid var(--line); padding: 1.6mm 2.2mm; text-align: left; vertical-align: top; }
+.legal-text th { background: var(--tint); font-weight: 650; color: var(--brand-dark); }
+.legal-text tr { break-inside: avoid; }
+</style>
+</head>
+<body>
+{% for section in sections %}
+{% set v = section.version %}
+{% if v.is_translation %}
+<section class="part" id="{{ section.id }}" lang="en">
+    <header class="cover" data-footer="{{ association }} · {{ v.title }} (English translation) · Version of {{ v.version|date_display }}" data-page="Page" data-of="of">
+        <img class="logo" src="logo_joanneum_aeronautics_positiv.svg" alt="{{ association }}">
+        <p class="notice">This is an English translation for convenience. It may contain mistakes. Where it differs from the German version before it, the German version applies.</p>
+        <h1 class="doc-title">{{ v.title }}</h1>
+        <p class="meta">Version of {{ v.version|date_display }}{% if v.revision %} ({{ v.revision }}){% endif %}{% if v.effective_from != v.version %} · in force from {{ v.effective_from|date_display }}{% endif %}</p>
+    </header>
+    {% if section.contents|length >= 3 %}
+    <nav class="toc"><h2>Contents</h2><ol>{% for anchor, label, level in section.contents %}<li class="level-{{ level }}"><a href="#{{ anchor }}">{{ label }}</a></li>{% endfor %}</ol></nav>
+    {% endif %}
+{% else %}
+<section class="part" id="{{ section.id }}" lang="de">
+    <header class="cover" data-footer="{{ association }} · {{ v.title }} · Fassung vom {{ v.version|date_display }}" data-page="Seite" data-of="von">
+        <img class="logo" src="logo_joanneum_aeronautics_positiv.svg" alt="{{ association }}">
+        <h1 class="doc-title">{{ v.title }}</h1>
+        <p class="meta">Fassung vom {{ v.version|date_display }}{% if v.revision %} ({{ v.revision }}){% endif %}{% if v.effective_from != v.version %} · gültig ab {{ v.effective_from|date_display }}{% endif %}</p>
+        {% if sections|length > 1 %}<p class="meta">Englische Übersetzung (English translation): Seite <a class="pageref" href="#part-en"></a></p>{% endif %}
+    </header>
+    {% if section.contents|length >= 3 %}
+    <nav class="toc"><h2>Inhalt</h2><ol>{% for anchor, label, level in section.contents %}<li class="level-{{ level }}"><a href="#{{ anchor }}">{{ label }}</a></li>{% endfor %}</ol></nav>
+    {% endif %}
+{% endif %}
+    <div class="legal-text">{{ section.html }}</div>
+</section>
+{% endfor %}
+</body>
+</html>

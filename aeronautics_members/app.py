@@ -4795,6 +4795,27 @@ def create_app(config_overrides=None):
         else:
             sys.exit(1)
 
+    @app.cli.command("build-legal-pdfs")
+    @with_appcontext
+    def build_legal_pdfs_command():
+        """Make the PDF of every legal text version shown (into storage/legal_pdf).
+
+        The pages make each one when it is first asked for; this makes them all
+        ahead, and says which text cannot be laid out.
+        """
+        from . import legal_pdf
+
+        failed = 0
+        for version, result in legal_pdf.build_all():
+            name = f"{version.slug}/{version.version.isoformat()}"
+            if isinstance(result, Exception):
+                failed += 1
+                click.echo(click.style(f"  {name}: {result}", fg="red"))
+            else:
+                click.echo(f"  {name}: {result // 1024} KB")
+        if failed:
+            raise click.ClickException(f"{failed} PDF(s) could not be made.")
+
     @app.cli.command("process-external-work")
     @click.option("--limit", default=50, show_default=True, type=int,
                   help="Maximum number of work items to process in this run.")

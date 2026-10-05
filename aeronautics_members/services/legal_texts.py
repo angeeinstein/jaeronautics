@@ -305,14 +305,15 @@ def render(version):
     _meta, body, _problems = _read(version.path)
     tokens = _markdown.parse(body)
     contents, taken, kept = [], set(), []
-    skip_until = None
+    skip_until, title_dropped = None, False
     for index, token in enumerate(tokens):
         if skip_until is not None:
             if index <= skip_until:
                 continue
             skip_until = None
-        if token.type == "heading_open" and token.tag == "h1" and not kept:
-            skip_until = index + 2
+        if token.type == "heading_open" and token.tag == "h1" and not kept and not title_dropped:
+            # Only the one title: a part heading right after it ("Teil A") stays.
+            skip_until, title_dropped = index + 2, True
             continue
         if token.type == "heading_open" and token.tag in ("h1", "h2"):
             label = tokens[index + 1].content.strip()

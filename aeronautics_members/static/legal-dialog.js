@@ -67,7 +67,7 @@
         }
         // A link inside the text (the German version, another text) must not
         // take the page away from the form either: another legal text loads in
-        // the window, anything else opens in a new tab.
+        // the window, anything else -- the PDF among them -- opens in a new tab.
         var inner = event.target.closest('.legal-dialog-body a[href]');
         if (inner) {
             var href = inner.getAttribute('href');
@@ -75,7 +75,7 @@
                 return;
             }
             event.preventDefault();
-            if (href.indexOf('/legal/') === 0) {
+            if (href.indexOf('/legal/') === 0 && !inner.hasAttribute('data-legal-file')) {
                 show(href);
             } else {
                 window.open(inner.href, '_blank', 'noopener');

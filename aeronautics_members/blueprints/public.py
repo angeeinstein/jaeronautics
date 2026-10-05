@@ -5,6 +5,8 @@ Route handlers moved verbatim out of app.py (dedented; @app.route ->
 from the app module, which is fully initialized before this is imported.
 """
 
+import io
+
 import stripe
 from flask import Blueprint, current_app
 from sqlalchemy import text
@@ -55,6 +57,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from flask_babel import (
@@ -306,6 +309,7 @@ def legal_text(slug, language=None, version=None):
         return url_for("public.legal_text", slug=slug, language=of.language,
                        version=None if current else of.version.isoformat())
 
+    current_german = german.version == in_force.version
     template = "legal/_body.html" if request.args.get("part") == "body" else "legal/text.html"
     return render_template(
         template,
@@ -316,8 +320,38 @@ def legal_text(slug, language=None, version=None):
         german_url=address(german),
         english_url=address(english),
         english_elsewhere=english is None and legal.has_language(slug, "en"),
+        pdf_url=url_for("public.legal_text_pdf", slug=slug,
+                        version=None if current_german else german.version.isoformat()),
+        pdf_has_english=english is not None,
         others=[(v, address(v)) for v in legal.versions(slug, shown.language) if v.version != shown.version],
     )
+
+
+@public_bp.route("/legal/<slug>/pdf")
+@public_bp.route("/legal/<slug>/pdf/<version>")
+def legal_text_pdf(slug, version=None):
+    """A legal text as a PDF: the German version, then its English translation."""
+    from .. import legal_pdf
+
+    if slug not in legal.BY_SLUG:
+        abort(404)
+    if version is None:
+        german = legal.current_version(slug)
+    else:
+        try:
+            german = legal.find(slug, legal.AUTHORITATIVE, date.fromisoformat(version))
+        except ValueError:
+            abort(404)
+    if german is None:
+        abort(404)
+    try:
+        data = legal_pdf.pdf_for(german)
+    except Exception:  # noqa: BLE001 -- the text itself is still there to read
+        current_app.logger.exception("Could not make the PDF of %s %s", slug, german.version)
+        flash(_("The PDF could not be made just now. The text is below."), "warning")
+        return redirect(url_for("public.legal_text", slug=slug, language=legal.AUTHORITATIVE,
+                                version=version))
+    return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=legal_pdf.filename(german))
 
 
 @public_bp.route("/__health", methods=["GET"])

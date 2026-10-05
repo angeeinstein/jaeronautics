@@ -251,6 +251,25 @@ versions from the same day, a translation without its German file -- and
 `tests/test_legal_texts.py` fails on any of it, so a mistake fails CI, not
 the page. A broken file is also simply not shown.
 
+**As PDFs:** every version is also a PDF (`/legal/<text>/pdf`, an earlier
+one `/legal/<text>/pdf/<version>`), linked from its page and from `/legal`.
+A4, with the association's logo, the title and version on the first page,
+a contents list for longer texts, and the text, version and page number in
+the footer. The German version comes first; where there is an English
+translation of the same version, it follows on pages of its own, with the
+notice that German applies. Made by WeasyPrint
+(`legal_pdf.py`, layout in `templates/legal/pdf.html`) from the
+same Markdown -- tables included -- when first asked for, then kept in
+`storage/legal_pdf/` (not in backups) until the text, its translation or
+the layout changes. `flask build-legal-pdfs` makes them all ahead and names
+any text that cannot be laid out; the tests make every one, so that fails
+CI first. WeasyPrint needs Pango from the system (`libpango-1.0-0`,
+`libpangoft2-1.0-0`), which `install.sh` installs, also on an update. Only
+the fonts and the logo in `static/` are read while laying out; an image a
+text points at elsewhere is left out. nginx sends PDFs without the pages'
+Content-Security-Policy, whose `object-src 'none'` would stop Chrome's PDF
+viewer from showing them.
+
 **Which texts there are** is the list `LEGAL_TEXTS` in
 `services/legal_texts.py`: folder, German and English name, and whether it
 is accepted at signup. A registered text without a German file is not
