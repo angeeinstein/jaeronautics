@@ -49,7 +49,7 @@
 
 {% macro logo_field(team) -%}
 {{ image_field('logo', _('Logo'), team_logo(team, 'large') if team and team.logo_token else '', _('No logo'),
-               _('Optional. PNG, JPG or WebP. Shown on dark backgrounds, so a logo with its own background or in light colours works best.'),
+               _('Optional. PNG, JPG or WebP. Shown on the portal\'s dark pages and on the white pages of the team\'s rules as a PDF, so choose one that can be seen on both: with a background of its own, or in colours that stand out on dark and on white.'),
                'team-logo team-logo-large') }}
 {%- endmacro %}
 

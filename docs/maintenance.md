@@ -333,7 +333,7 @@ with `team: "<short name>"` in the front matter as well; everything else --
 versions, drafts, `effective_from`, English as a translation of the same
 version, the checks in CI -- works as above. Shown at `/teams/<team>/rules`
 (signed-in only), as a PDF at `/teams/<team>/rules/pdf` with the team's logo
-on a dark badge and its name, and ticked when applying or joining, read in a
+beside the association's and its name (on white: the logo field asks teams for one visible on dark and on white), and ticked when applying or joining, read in a
 window over the form. The membership keeps the version's day. Leads can no
 longer change their rules in the portal; they send the new text to the
 association. A folder whose short name matches no team is reported by `flask
