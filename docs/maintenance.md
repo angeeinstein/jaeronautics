@@ -275,8 +275,8 @@ viewer from showing them.
 is accepted at signup. A registered text without a German file is not
 shown. Adding a text is a line there and a folder here. Accepted at signup:
 statutes, rules of procedure, membership terms, privacy policy. Also
-registered: webshop and event terms, team rules (a general text, not shown
-until it has a file), legal notice.
+registered: webshop and event terms, legal notice. There is no general
+"Teamordnung": each team has its own, below.
 
 **A team's own rules** are kept here too, approved by the association like
 its own texts: `legal/teams/<team's short name>/team-rules/<de|en>/<day>.md`,

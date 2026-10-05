@@ -72,7 +72,6 @@ LEGAL_TEXTS = (
     LegalText("membership-terms", "Mitgliedschaftsbedingungen", "Membership Terms and Conditions", True),
     LegalText("privacy-policy", "Datenschutzerklärung", "Privacy Policy", True),
     LegalText("webshop-event-terms", "AGB für Webshop und Events", "Terms and Conditions for Webshop and Events", False),
-    LegalText("team-rules", "Teamordnung", "Team Rules", False),
     LegalText("legal-notice", "Impressum", "Legal Notice", False),
 )
 BY_SLUG = {text.slug: text for text in LEGAL_TEXTS}
