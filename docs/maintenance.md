@@ -272,8 +272,11 @@ the signup date stands for the version.
 
 **What is in `legal/`** (October 2026): statutes (Rev 1, 2019), rules of
 procedure (Rev 3, 2020, and Rev 4, 2026), membership terms, privacy policy
-(website and portal together), webshop and event terms, impressum -- German
-only so far. `source_revision` in the front matter ("Rev 4") is shown next to
+(website and portal together), webshop and event terms, impressum -- all in
+German; the membership terms and privacy policy also in English (a
+translation of the same version, 04.10.2026). A new German version of those
+two needs its English file too, or the portal shows German there until it
+has one. `source_revision` in the front matter ("Rev 4") is shown next to
 the date. A `# ` heading further down a text ("Teil B – Mitgliederportal") is a
 part of it, listed in the contents. Points lettered "a." under a numbered one
 need a line break (two spaces) at the end of the line before; the tests check.

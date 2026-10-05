@@ -258,7 +258,8 @@ Collected so nothing is forgotten; none of it is urgent.
 - [x] Membership terms and privacy policy written (04.10.2026, German).
 - [x] The footer's Impressum, Privacy and Statutes lead to the portal's own
       texts (October 2026).
-- [ ] English translations, if wanted: `legal/<text>/en/<same day>.md`.
+- [x] English translations of the membership terms and privacy policy
+      (04.10.2026). Others, if wanted: `legal/<text>/en/<same day>.md`.
 - [x] Give the legal texts a version date: done, versions are files by
       date and the versions accepted are kept with the member.
 - [x] Webshop and event terms and the impressum (04.10.2026).
