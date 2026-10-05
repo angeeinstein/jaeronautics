@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Legal texts') }}{% endblock %}
+{% block content %}
+<div class="legal-page">
+    <h2 class="mb-1">{{ _('Legal texts') }}</h2>
+    <p class="text-muted">{{ _('The texts that apply to membership and this portal, each in the version in force. The German texts apply; English translations are for convenience.') }}</p>
+    <div class="card">
+        <ul class="list-group list-group-flush">
+            {% for text, version in texts %}
+                <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <a href="{{ url_for('public.legal_text', slug=text.slug) }}">{{ text.title }}</a>
+                    <span class="text-muted small">{{ text.english }} · {{ _('in force since %(day)s', day=version.effective_from|date_display) }}</span>
+                </li>
+            {% else %}
+                <li class="list-group-item text-muted">{{ _('None yet.') }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

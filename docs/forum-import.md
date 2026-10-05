@@ -428,6 +428,21 @@ rights.
 a private address gets a working new account and no claim, which then needs
 linking by hand.
 
+**Mistyped addresses in the old forum.** It never confirmed addresses, so some
+it holds were mistyped -- `annaberger@edu...` for `anna.berger@edu...`. Such an
+address does not exist (mail to it comes back), so nobody can confirm it and
+the claim never fires. It is not matched automatically: that would be
+guessing whose posts to hand over. Instead, when a member confirms an address
+and nothing matched exactly, the portal looks for unclaimed old accounts
+whose address differs only in dots, hyphens, underscores, case or umlaut
+spelling (`ue` for `ü`), with `edu.fh-joanneum.at` and `fh-joanneum.at` taken
+as one, or that carry the same first and last name. If there are any, the
+admins are told once, and the member's account page shows them under
+*Reconnect to the Old Forum* with a *Reconnect* button -- for an admin who
+recognises the person. `flask forum-likely-old-accounts` lists them for
+everybody at once (it changes nothing), for those who signed up before this
+existed.
+
 ### Ordering
 
 Because the claim is automatic, the import can run **before** the intake —

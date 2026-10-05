@@ -525,7 +525,6 @@ def requires(*permissions):
 
 
 
-PENDING_SIGNUP_RETENTION_DAYS = int(os.getenv("PENDING_SIGNUP_RETENTION_DAYS", "14"))
 # Log retention. 0 means keep forever. Audit logs default to keep-forever because
 # they are the account/security trail; higher-churn notification delivery records
 # default to a generous one-year window.
@@ -1133,7 +1132,14 @@ def render_account_dashboard(profile_form=None, identity_form=None):
         payment_needs_attention=payment_needs_attention,
         invoice_payments_enabled=invoice_payments_allowed(),
         forum_context=forum_context,
+        teams_invite=_invite_to_teams(member),
     )
+
+
+def _invite_to_teams(member):
+    from .services.teams import invite_to_teams
+
+    return invite_to_teams(member.user) if member is not None else False
 
 
 def get_admin_dashboard_metrics():
@@ -1370,6 +1376,8 @@ def build_settings_page_context(edit_mail_account_id=None):
             mail_account_form.port.data = editing_mail_account.port
             mail_account_form.username.data = editing_mail_account.username
             mail_account_form.starttls.data = editing_mail_account.starttls
+            mail_account_form.from_email.data = editing_mail_account.from_email
+            mail_account_form.from_name.data = editing_mail_account.from_name
 
     test_email_form.sender.choices = sender_choices
     test_email_form.template.choices = template_choices
@@ -1620,6 +1628,7 @@ def create_app(config_overrides=None):
     from .blueprints.auth import auth_bp
     from .blueprints.forum import forum_bp
     from .blueprints.public import public_bp
+    from .blueprints.teams import teams_bp
     from .blueprints.webhook import webhook_bp
 
     csrf.exempt(webhook_bp)
@@ -1629,6 +1638,14 @@ def create_app(config_overrides=None):
     app.register_blueprint(account_bp)
     app.register_blueprint(forum_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(teams_bp)
+
+    # What else the association sells comes through the same Stripe webhook;
+    # each purpose has its handler. See services/payments.py.
+    from .services.payments import PURPOSE_TEAM, register_purpose
+    from .services.team_payments import handle_event as handle_team_payment_event
+
+    register_purpose(PURPOSE_TEAM, handle_team_payment_event)
 
     @app.context_processor
     def inject_babel_globals():
@@ -1695,6 +1712,20 @@ def create_app(config_overrides=None):
         from .services.reviews import waiting_for_review_count
 
         return waiting_for_review_count(current_user)
+
+    # What teams are called here, as (singular, plural) -- "Teams" unless an
+    # admin chose another word.
+    @app.template_global("teams_switched_on")
+    def teams_switched_on_global():
+        from .services.teams import teams_enabled
+
+        return teams_enabled()
+
+    @app.template_global("team_labels")
+    def team_labels_global():
+        from .services.teams import team_labels
+
+        return team_labels()
 
     # Dates and times on every page and email in one format and in Vienna
     # time: 31.12.2026, 31.12.2026 14:05.
@@ -4409,6 +4440,58 @@ def create_app(config_overrides=None):
                 error_count += 1
                 click.echo(click.style(f"Billing reconciliation failed for {member.email_private}: {exc}", fg="red"), err=True)
 
+        # The teams' nightly steps, in this order. Each on its own: one that
+        # fails is logged and counted, and the others still run.
+        from .services.team_payments import (
+            end_finished_team_memberships, follow_association_ends, send_renewal_notices,
+        )
+        from .services.teams import end_lapsed_team_memberships, lapse_unpaid_approvals, send_due_access_lists
+
+        team_steps = (
+            # Whoever has cancelled their association membership has their teams set
+            # to end on the same day, in case the webhook that says so was missed.
+            (follow_association_ends,
+             "Brought {} team membership(s) in line with a cancelled or resumed association membership."),
+            # Whoever is no longer in the association leaves their teams too.
+            (end_lapsed_team_memberships, "Ended {} team membership(s) of people no longer in the association."),
+            # Approvals for teams that charge, not paid for in time, lapse.
+            (lapse_unpaid_approvals, "{} team approval(s) lapsed unpaid."),
+            # Paid once per period: the reminder to pay for the next one.
+            (send_renewal_notices, "Reminded {} team member(s) to pay for the next period."),
+            # A leaving day passed, a period not paid for, or long unpaid.
+            (end_finished_team_memberships, "Ended {} team membership(s) that ran out or were not paid."),
+            # Then the access lists due today, now that the teams are current.
+            (send_due_access_lists, "Sent {} team access list(s)."),
+        )
+        for step, done_text in team_steps:
+            try:
+                count = step()
+                db.session.commit()
+                flush_marked_notification_channels()
+            except Exception as exc:  # noqa: BLE001 -- logged; tried again tomorrow
+                db.session.rollback()
+                current_app.logger.exception("Nightly team step %s failed.", step.__name__)
+                error_count += 1
+                click.echo(click.style(f"Team step {step.__name__} failed: {exc}", fg="red"), err=True)
+                continue
+            if count:
+                click.echo(done_text.format(count))
+
+        # Signups never paid for: a notice, then removal (90 days; see
+        # services/unfinished_signups.py). Never allowed to stop the rest.
+        from .services.unfinished_signups import clean_up as clean_up_unfinished_signups
+
+        try:
+            unfinished = clean_up_unfinished_signups()
+            db.session.commit()
+            flush_marked_notification_channels()
+        except Exception:  # noqa: BLE001 -- logged; tried again tomorrow
+            db.session.rollback()
+            current_app.logger.exception("Cleaning up unfinished signups failed.")
+        else:
+            if unfinished["noticed"] or unfinished["removed"]:
+                click.echo(f"Unfinished signups: {unfinished['noticed']} told, {unfinished['removed']} removed.")
+
         summary_color = "green" if error_count == 0 else "yellow"
         click.echo(click.style(
             f"Processed {len(member_ids)} Stripe-linked membership(s). Changed: {changed_count}. Unchanged: {unchanged_count}. Errors: {error_count}. Forum warnings: {forum_warning_count}.",
@@ -4484,6 +4567,32 @@ def create_app(config_overrides=None):
             + (f", {failed} could not be" if failed else ""),
             fg="green" if not failed else "yellow",
         ))
+
+    @app.cli.command("forum-likely-old-accounts")
+    @with_appcontext
+    def forum_likely_old_accounts_command():
+        """Members whose old forum account probably did not reconnect by itself.
+
+        The old forum never checked addresses, so a mistyped one there never
+        matches. Lists, for every member without an old account, the unclaimed
+        ones that differ only in dots or spelling from an address they
+        confirmed, or carry the same name -- to reconnect by hand on the
+        account page if they are theirs. Changes nothing.
+        """
+        from .services.forum_import import LIKELY_BY_ADDRESS, likely_old_accounts, unclaimed_profiles
+
+        profiles = unclaimed_profiles()
+        users = db.session.execute(
+            db.select(User).join(Member, Member.user_id == User.id).where(User.deleted_at.is_(None))
+        ).scalars().all()
+        found = 0
+        for user in users:
+            for profile, reason in likely_old_accounts(user, profiles):
+                why = "address differs only in dots or spelling" if reason == LIKELY_BY_ADDRESS else "same name"
+                click.echo(f"{user.member.first_name} {user.member.last_name} <{user.email}> (account {user.id})"
+                           f" -> {profile.source_username} <{profile.source_email or '-'}>: {why}")
+                found += 1
+        click.echo(f"{found} likely old account(s).")
 
     @app.cli.command("forum-explain")
     @click.argument("who")
@@ -4641,32 +4750,16 @@ def create_app(config_overrides=None):
             sys.exit(1)
 
     @app.cli.command("cleanup-pending-signups")
-    @click.option("--days", default=PENDING_SIGNUP_RETENTION_DAYS, show_default=True, type=int)
     @with_appcontext
-    def cleanup_pending_signups(days):
-        """Deletes stale pending signups that never completed Checkout."""
-        cutoff = get_now_utc() - timedelta(days=days)
-        stale_members = db.session.execute(
-            db.select(Member)
-            .filter(Member.payment_status == "pending_checkout")
-            .filter(Member.is_active.is_(False))
-            .filter(Member.pending_checkout_started_at.is_not(None))
-            .filter(Member.pending_checkout_started_at < cutoff)
-            .filter(Member.stripe_customer_id.is_(None))
-            .filter(Member.stripe_subscription_id.is_(None))
-        ).scalars().all()
+    def cleanup_pending_signups():
+        """Tells, then removes, signups never paid for (also run nightly by reconcile-billing)."""
+        from .services.unfinished_signups import clean_up as clean_up_unfinished_signups
 
-        deleted_count = 0
-        for member in stale_members:
-            user = member.user
-            db.session.delete(member)
-            if user is not None and not user.roles:
-                db.session.delete(user)
-            deleted_count += 1
-
-        if deleted_count:
-            db.session.commit()
-        click.echo(click.style(f"Deleted {deleted_count} stale pending signup(s).", fg="green"))
+        result = clean_up_unfinished_signups()
+        db.session.commit()
+        flush_marked_notification_channels()
+        click.echo(click.style(
+            f"Unfinished signups: {result['noticed']} told, {result['removed']} removed.", fg="green"))
 
     @app.cli.command("system-check")
     @with_appcontext

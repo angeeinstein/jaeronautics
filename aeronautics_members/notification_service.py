@@ -531,6 +531,65 @@ class NotificationService:
         note = (payload.get("review_note") or payload.get("admin_note") or "").strip()
         account_url = build_public_url("account.account")
 
+        if event.event_type == "membership_fee_changed":
+            new_fee, old_fee, from_date = payload.get("new_fee"), payload.get("old_fee"), payload.get("from_date")
+            return (
+                _("The membership fee changes"),
+                {
+                    "preview_text": _("From %(day)s the membership fee is %(fee)s.", day=from_date, fee=new_fee),
+                    "action_url": account_url,
+                    "action_label": _("Open My Account"),
+                    "heading": _("The membership fee changes"),
+                    "body_lines": [
+                        greeting,
+                        _("From %(day)s the membership fee is %(new)s (until now %(old)s). It is charged "
+                          "automatically, as before; nothing else changes.",
+                          day=from_date, new=new_fee, old=old_fee),
+                        _("If you do not want to continue, you can cancel before then on your account page, "
+                          "under Manage billing."),
+                    ],
+                },
+            )
+        if event.event_type == "unfinished_signup_removal":
+            day = payload.get("removal_day")
+            return (
+                _("Your signup at Joanneum Aeronautics is not complete"),
+                {
+                    "preview_text": _("Pay by %(day)s, or your signup is removed.", day=day),
+                    "action_url": account_url,
+                    "action_label": _("Complete my membership"),
+                    "heading": _("Your signup is not complete"),
+                    "body_lines": [
+                        greeting,
+                        _("You signed up for a membership at Joanneum Aeronautics, but the membership fee "
+                          "was never paid, so the membership has not started."),
+                        _("To become a member, sign in and complete the payment by %(day)s. Otherwise your "
+                          "signup and the details you entered are removed on that day.", day=day),
+                        _("If you no longer want to join, there is nothing to do. You are welcome to sign "
+                          "up again at any time."),
+                    ],
+                },
+            )
+        if event.event_type == "account_email_changed_by_admin":
+            # To the address that was replaced: whoever reads it learns of the
+            # change, in case it was not at their request.
+            return (
+                _("The email address of your Joanneum Aeronautics account was changed"),
+                {
+                    "preview_text": _("An administrator changed the address your account uses."),
+                    "action_url": None,
+                    "action_label": None,
+                    "heading": _("Your account's email address was changed"),
+                    "body_lines": [
+                        greeting,
+                        _("An administrator of Joanneum Aeronautics changed the email address of your account "
+                          "to %(new)s, at the request of somebody who said the account was theirs.",
+                          new=payload.get("new_email_masked")),
+                        _("If that was you, there is nothing to do. If it was not, please write to %(contact)s "
+                          "at once.", contact=payload.get("contact_email")),
+                    ],
+                },
+            )
         if event.event_type == "forum_avatar_approved":
             return (
                 _("Your forum access is complete"),
@@ -610,6 +669,9 @@ class NotificationService:
                     ],
                 },
             )
+        team_message = self._build_team_message(event, payload, greeting)
+        if team_message is not None:
+            return team_message
         return (
             _("An update on your Joanneum Aeronautics account"),
             {
@@ -618,6 +680,193 @@ class NotificationService:
                 "action_label": _("Open My Account"),
                 "heading": _("An update on your account"),
                 "body_lines": [greeting, event.summary],
+            },
+        )
+
+    def _build_team_message(self, event, payload, greeting):
+        """Emails about teams: to the person, or to the team's leads."""
+        team = payload.get("team_name") or _("your team")
+        slug = payload.get("team_slug")
+        if not event.event_type.startswith("team_") or not slug:
+            return None
+        teams_url = build_public_url("teams.teams_home")
+        manage_url = build_public_url("teams.team_manage", slug=slug)
+
+        to_person = {
+            "team_invited": (
+                _("Invitation from %(team)s", team=team),
+                _("The leads of %(team)s would like to meet you.", team=team),
+                [_("Thanks for applying to %(team)s. The leads would like to meet you:", team=team),
+                 payload.get("meeting_details")],
+                teams_url, _("Open Teams"),
+            ),
+            "team_approved": (
+                _("Welcome to %(team)s", team=team),
+                _("You are now a member of %(team)s.", team=team),
+                [_("You are now a member of %(team)s.", team=team)],
+                build_public_url("teams.team_page", slug=slug), _("Open Team Page"),
+            ),
+            "team_payment_due": (
+                _("%(team)s: one step left", team=team),
+                _("Pay the team fee to become a member."),
+                [_("The leads of %(team)s have accepted you. To become a member, pay the team fee "
+                   "on the Teams page within two weeks.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_payment_ended": (
+                _("Your membership in %(team)s has ended", team=team),
+                _("The payment for it did not go through."),
+                [_("Your membership in %(team)s has ended because the payment for it did not go through. "
+                   "Within the next six months you can come back by simply paying again on the Teams page.",
+                   team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_fee_changed": (
+                _("The fee for %(team)s changes", team=team),
+                _("From %(day)s the fee is %(fee)s.", day=payload.get("from_date"), fee=payload.get("new_fee")),
+                [_("From %(day)s the fee for %(team)s is %(new)s (until now %(old)s). It is charged "
+                   "automatically, as before; nothing else changes.",
+                   day=payload.get("from_date"), team=team, new=payload.get("new_fee"), old=payload.get("old_fee")),
+                 _("If you do not want to continue, you can leave on the Teams page before then. "
+                   "What you have paid for runs to its end.")],
+                teams_url, _("Open Teams"),
+            ),
+            "team_renewal_due": (
+                _("%(team)s: pay for the next period", team=team),
+                _("Your membership runs until %(day)s.", day=payload.get("until")),
+                [_("Your membership in %(team)s runs until %(day)s. To stay without a gap, pay for the next "
+                   "period (%(fee)s, until %(next)s) on the Teams page before then.",
+                   team=team, day=payload.get("until"), fee=payload.get("fee"), next=payload.get("next_until")),
+                 _("If you do not, your team membership ends on %(day)s.", day=payload.get("until"))],
+                teams_url, _("Open Teams"),
+            ),
+            "team_not_renewed": (
+                _("Your membership in %(team)s has ended", team=team),
+                _("The new period was not paid for."),
+                [_("Your membership in %(team)s has ended, because the new period was not paid for. Within the "
+                   "next six months you can come back by simply paying on the Teams page.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_charging_again": (
+                _("%(team)s charges its fee again", team=team),
+                _("Your subscription carries on."),
+                [_("%(team)s charges a fee again: %(fee)s. Your subscription, which was to stop, carries on as "
+                   "before; you need to do nothing.", team=team, fee=payload.get("fee")),
+                 _("If you do not want to continue, you can leave on the Teams page. What you have paid for "
+                   "runs to its end.")],
+                teams_url, _("Open Teams"),
+            ),
+            "team_closed": (
+                _("%(team)s is no longer taking members", team=team),
+                _("Your application has ended."),
+                [_("%(team)s has been closed, so your application has ended. Nothing has been charged.",
+                   team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_now_once_per_period": (
+                _("%(team)s is paid once per period from now on", team=team),
+                _("Nothing renews by itself any more."),
+                [_("%(team)s is now paid once per period (%(fee)s), and nothing renews by itself any more. "
+                   "What you have paid for runs until %(day)s; before then you are reminded to pay for the "
+                   "next period.", team=team, fee=payload.get("fee"), day=payload.get("until"))],
+                teams_url, _("Open Teams"),
+            ),
+            "team_now_subscription": (
+                _("%(team)s is paid by subscription from %(day)s", team=team, day=payload.get("from_date")),
+                _("Set up the subscription on the Teams page."),
+                [_("From %(day)s %(team)s is paid by subscription: %(fee)s. What you have paid for until then "
+                   "stays as it is.", day=payload.get("from_date"), team=team, fee=payload.get("fee")),
+                 _("To stay in the team, set up the subscription on the Teams page before then. Nothing is "
+                   "charged before %(day)s.", day=payload.get("from_date"))],
+                teams_url, _("Open Teams"),
+            ),
+            "team_now_free": (
+                _("%(team)s is free from now on", team=team),
+                _("Nothing more is charged for %(team)s.", team=team),
+                [_("%(team)s no longer charges a fee. Your membership continues as before, and nothing is "
+                   "charged after %(day)s.", team=team, day=payload.get("until"))
+                 if payload.get("until") else
+                 _("%(team)s no longer charges a fee. Your membership continues as before, and nothing more "
+                   "is charged.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_now_charges": (
+                _("%(team)s charges a fee from %(day)s", team=team, day=payload.get("from_date")),
+                _("Pay on the Teams page to stay."),
+                [_("From %(day)s %(team)s charges a fee: %(fee)s. Until then your membership stays free.",
+                   day=payload.get("from_date"), team=team, fee=payload.get("fee")),
+                 _("To stay in the team, pay on the Teams page before then. Nothing is charged before %(day)s. "
+                   "If you do not, your team membership ends that day.", day=payload.get("from_date"))],
+                teams_url, _("Open Teams"),
+            ),
+            "team_ends_with_association": (
+                _("Your membership in %(team)s ends with your association membership", team=team),
+                _("It ends on %(day)s.", day=payload.get("ends_on")),
+                [_("You have cancelled your association membership, which ends on %(day)s. Teams are for "
+                   "members of the association, so your membership in %(team)s ends on the same day, and "
+                   "its fee is not charged again.", day=payload.get("ends_on"), team=team),
+                 _("If you keep your association membership after all, your team membership continues "
+                   "as before.")],
+                teams_url, _("Open Teams"),
+            ),
+            "team_rejected": (
+                _("Your application to %(team)s", team=team),
+                _("Your application was not accepted."),
+                [_("Your application to %(team)s was not accepted this time.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_approval_lapsed": (
+                _("Your approval for %(team)s has lapsed", team=team),
+                _("It was not paid for in time."),
+                [_("Your approval for %(team)s was not paid for within two weeks, so it has lapsed. "
+                   "You are welcome to apply again.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+            "team_removed": (
+                _("Your membership in %(team)s has ended", team=team),
+                _("Your membership in %(team)s has ended.", team=team),
+                [_("Your membership in %(team)s has ended. If you think this is a mistake, "
+                   "please contact the team's leads.", team=team)],
+                teams_url, _("Open Teams"),
+            ),
+        }
+        if event.event_type in to_person:
+            subject, preview, lines, url, label = to_person[event.event_type]
+        elif event.event_type in {"team_application_received", "team_member_joined", "team_member_leaving",
+                                  "team_member_staying", "team_member_left", "team_members_lapsed"}:
+            subject = {
+                "team_application_received": _("New application for %(team)s", team=team),
+                "team_member_joined": _("New member in %(team)s", team=team),
+                "team_member_leaving": _("A member is leaving %(team)s", team=team),
+                "team_member_staying": _("A member stays in %(team)s", team=team),
+                "team_member_left": _("A member left %(team)s", team=team),
+                "team_members_lapsed": _("Members left %(team)s", team=team),
+            }[event.event_type]
+            preview, lines, url, label = event.summary, [event.summary], manage_url, _("Open Team Management")
+        elif event.event_type == "team_bank_details_changed":
+            subject = _("Bank details of %(team)s changed", team=team)
+            preview = event.summary
+            lines = [
+                _("The bank details of %(team)s were changed by %(who)s. Payouts now go to %(holder)s, %(iban)s.",
+                  team=team, who=payload.get("changed_by"), holder=payload.get("account_holder") or "–",
+                  iban=payload.get("iban") or "–"),
+                _("If that was not agreed with the team, check it before the next transfer."),
+            ]
+            url, label = build_public_url("teams.team_money", slug=slug), _("Open Money")
+        else:
+            return None
+        return (
+            subject,
+            {
+                "preview_text": preview,
+                "action_url": url,
+                "action_label": label,
+                "heading": subject,
+                "body_lines": [greeting, *lines],
+                # Under the association's header, so it is clear the email comes
+                # from the association, about this team.
+                "team_badge_name": payload.get("team_name"),
+                "team_logo_token": payload.get("team_logo_token"),
             },
         )
 
@@ -649,12 +898,24 @@ class NotificationService:
         if not sender_account:
             return False, "No notification sender account is configured."
 
+        template_vars = dict(template_vars)
+        attachments = None
+        logo_token = template_vars.pop("team_logo_token", None)
+        if logo_token:
+            from .services.teams import logo_file, team_by_logo_token
+
+            logo = logo_file(team_by_logo_token(logo_token))
+            if logo is not None:
+                attachments = [{"path": str(logo), "cid": "teamlogo"}]
+                template_vars["team_logo_cid"] = "teamlogo"
+
         return send_mail(
             from_account=sender_account,
             to_email=event.recipient_email,
             subject=subject,
             template_name="member_account_action.html",
             return_error=True,
+            attachments=attachments,
             **template_vars,
         )
 

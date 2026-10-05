@@ -8,6 +8,12 @@ with their name, their year group and the face they had.
 What matters here is mostly what must NOT happen: these are not accounts, they
 must not be named after a placeholder address, and they must not cause 740
 activation emails to a domain that cannot resolve.
+
+Parts of this file are the old forum's one-off import (publishing the old
+forum's people) and are marked ``forum_import``: skipped by default, run with
+``pytest -m forum_import``. The rest -- cohort group names, making groups and
+the year-group field, rate limits, the connection test -- is the live forum
+client and always runs.
 """
 import json
 
@@ -64,6 +70,7 @@ class FakeProvider:
         return {"ok": True}
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestWhatTheForumIsTold:
     def test_they_are_named_by_their_display_name(self, app):
         """Not by their email, which is a placeholder that cannot resolve.
@@ -131,6 +138,7 @@ class TestGroupNames:
         assert group_name_for_year_group(year_group) == expected
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestPublishing:
     def test_everyone_is_published_not_only_the_posters(self, app):
         """498 of the 740 never wrote a word and still belong in the register."""
@@ -278,6 +286,7 @@ class TestPublishing:
         assert profile.forum_synced_at is None, "or the retry would skip it"
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheForumHavingRoomForTheirNames:
     """A rebuilt forum comes back with Discourse's defaults, every time.
 
@@ -344,6 +353,7 @@ class TestTheForumHavingRoomForTheirNames:
         assert make_room_for_usernames(self.SettingsClient(title="LAVBoard"), 30) is None
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheGroupsThemselves:
     """The register is only useful if the groups actually hold people.
 
@@ -496,6 +506,7 @@ class TestTheGroupsThemselves:
         assert len(report["problems"]) == 2
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheSettingThatDecidesWhetherAvatarsAreUsed:
     """676 avatars were sent, fetched, and thrown away.
 
@@ -553,6 +564,7 @@ class TestTheSettingThatDecidesWhetherAvatarsAreUsed:
         assert client.written == []
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestAddingPeopleToAGroupTwice:
     """Running it again is the ordinary case, and Discourse treats it as a fault.
 
@@ -738,6 +750,7 @@ class TestTheConnectionTestMentionsIt:
         assert "avatar" not in message.lower()
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheAvatarTheForumFetches:
     def test_the_url_is_public_and_token_guarded(self, app, tmp_path):
         """Discourse fetches it itself, unauthenticated, from its own server.
@@ -933,6 +946,7 @@ class TestFindingTheUserFieldEndpoint:
         assert "discourse_api_username" in str(raised.value)
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheTokenItself:
     def test_it_survives_being_pasted_into_a_shell(self, app, tmp_path):
         """token_urlsafe can begin with "-", which curl then reads as a flag.
@@ -953,6 +967,7 @@ class TestTheTokenItself:
         assert token.isalnum(), "no characters that a shell or a URL parser argues about"
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheAvatarNeedsASecondCall:
     """Discourse ignores avatar_url on the call that creates the account.
 

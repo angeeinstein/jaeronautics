@@ -1,0 +1,120 @@
+{#- A person's membership of one team: its state, what to do next, the buttons.
+    On the overview's cards and on the team's own page alike; expects ``team``,
+    ``current`` (ongoing membership or none), ``on_team_page`` and the context
+    of _membership_context(). -#}
+    {% if charges(team) and team.fee_display and not (current and current.status == 'active') %}
+        <p class="text-muted small mb-0">{{ _('Fee: %(fee)s.', fee=team.fee_display) }}</p>
+    {% endif %}
+
+    {% if current and current.status == 'approved' and charges(team) %}
+        {% if current.payment_state == 'processing' or just_paid == team.slug %}
+            <div class="alert alert-info mb-0">{{ _('Payment received. It is confirmed in a moment; by SEPA debit it can take a few days.') }}</div>
+        {% else %}
+            {% if current.payment_state == 'failed' %}
+                <div class="alert alert-warning mb-0">{{ _('The payment did not go through. Please try again.') }}</div>
+            {% endif %}
+            {% set period = joining_period(team) %}
+            {% if team.payment_mode == 'one_time' %}
+                <p class="mb-0">{{ _('One step left. Paying now covers until %(day)s. Nothing renews by itself: before it ends, you are reminded to pay for the next period.', day=period.paid_until|date_display) }}</p>
+            {% else %}
+                <p class="mb-0">{{ _('One step left. Paying now covers until %(day)s; after that the fee is charged at the start of each period until you leave.', day=period.paid_until|date_display) }}</p>
+            {% endif %}
+        {% endif %}
+    {% endif %}
+
+    {% if current and needs_to_pay(current) %}
+        <div class="alert alert-warning mb-0">{{ _('%(team)s charges a fee from %(day)s: %(fee)s. Pay before then to stay in the team; nothing is charged earlier.', team=team.name, day=(current.paid_until + timedelta_one_day)|date_display, fee=team.fee_display or '') }}</div>
+    {% elif current and current.status == 'active' and current.ends_with_association %}
+        <div class="small">{{ _('Ends with your association membership on %(day)s.', day=current.ends_on|date_display) }}</div>
+    {% elif current and current.status == 'active' and current.payment_mode == 'one_time' and current.paid_until %}
+        <div class="small">
+            {% if current.ends_on %}{{ _('You leave on %(day)s.', day=current.ends_on|date_display) }}{% else %}{{ _('Paid until %(day)s.', day=current.paid_until|date_display) }}{% endif %}
+        </div>
+        {% if current.payment_state == 'processing' %}
+            <div class="alert alert-info mb-0">{{ _('Payment received. It is confirmed in a moment; by SEPA debit it can take a few days.') }}</div>
+        {% elif renewal_open(current) %}
+            <div class="alert alert-warning mb-0">{{ _('Pay for the next period, until %(day)s, to stay without a gap.', day=next_period_until(current)|date_display) }}{% if current.payment_state == 'failed' %} {{ _('The last payment did not go through.') }}{% endif %}</div>
+        {% endif %}
+    {% elif current and current.status == 'active' and current.stripe_subscription_id %}
+        <div class="small">
+            {% if current.ends_on %}
+                {{ _('You leave on %(day)s.', day=current.ends_on|date_display) }}
+            {% elif current.paid_until %}
+                {{ _('Paid until %(day)s.', day=current.paid_until|date_display) }}
+            {% endif %}
+            {% if current.payment_state == 'failed' %}
+                <div class="text-warning">{{ _('The last payment did not go through. Update your payment method under Account, Manage billing.') }}</div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {% if current and current.status == 'invited' and current.meeting_details %}
+        <div>
+            <div class="text-muted small">{{ _('The leads would like to meet you:') }}</div>
+            <div class="team-meeting">{{ current.meeting_details }}</div>
+        </div>
+    {% endif %}
+
+    {#- One main button: paying, when it is due; otherwise opening the team. Leave stands apart. -#}
+    <div class="d-flex flex-wrap gap-2 mt-auto">
+        {% if current and current.status == 'active' %}
+            {% set pay_due = (renewal_open(current) and current.payment_state != 'processing') or needs_to_pay(current) %}
+            {% if not on_team_page %}<a class="btn {{ 'btn-secondary' if pay_due else 'btn-primary' }}" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Open') }}</a>{% endif %}
+            {% if renewal_open(current) and current.payment_state != 'processing' %}
+                <form method="POST" action="{{ url_for('teams.team_pay', slug=team.slug) }}" class="mb-0" data-busy-text="{{ _('Opening…') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-primary">{{ _('Pay for next period') }}</button>
+                </form>
+            {% endif %}
+            {% if needs_to_pay(current) %}
+                <form method="POST" action="{{ url_for('teams.team_pay', slug=team.slug) }}" class="mb-0" data-busy-text="{{ _('Opening…') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-primary">{{ _('Pay to stay') }}</button>
+                </form>
+            {% endif %}
+            {% if team.id in manageable %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Manage') }}</a>
+            {% endif %}
+            {% if team.id in money_of %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_money', slug=team.slug) }}">{{ _('Money') }}</a>
+            {% endif %}
+            {% if current.ends_with_association %}
+            {% elif current.ends_on %}
+                <form method="POST" action="{{ url_for('teams.team_stay', slug=team.slug) }}" class="mb-0">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-secondary">{{ _('Stay after all') }}</button>
+                </form>
+            {% else %}
+                <a class="btn btn-outline-secondary ms-auto" href="{{ url_for('teams.team_leave', slug=team.slug) }}">{{ _('Leave') }}</a>
+            {% endif %}
+        {% elif current %}
+            {% if current.status == 'approved' and charges(team) and current.payment_state != 'processing' and just_paid != team.slug %}
+                <form method="POST" action="{{ url_for('teams.team_pay', slug=team.slug) }}" class="mb-0" data-busy-text="{{ _('Opening…') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-primary">{{ _('Pay and join') }}</button>
+                </form>
+            {% endif %}
+            {% if current.payment_state != 'processing' %}
+            <form method="POST" action="{{ url_for('teams.team_withdraw', slug=team.slug) }}" class="mb-0"
+                  data-confirm-label="{{ _('Yes, withdraw') }}" data-confirm="{{ _('Withdraw your application?') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-secondary">{{ _('Withdraw application') }}</button>
+            </form>
+            {% endif %}
+        {% elif is_member and not on_team_page %}
+            {% set reason = why_not_joinable(team) %}
+            {% if reason %}
+                <span class="text-muted small">{{ _(reason) }}</span>
+            {% else %}
+                <a class="btn btn-primary" href="{{ url_for('teams.team_about', slug=team.slug) }}#join">{{ _('Rejoin') if rejoin_until(team) else (_('Apply') if team.admission_mode == 'approval' else _('Join')) }}</a>
+            {% endif %}
+        {% endif %}
+        {% if not (current and current.status == 'active') %}
+            {% if team.id in manageable %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Manage') }}</a>
+            {% endif %}
+            {% if team.id in money_of %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_money', slug=team.slug) }}">{{ _('Money') }}</a>
+            {% endif %}
+        {% endif %}
+    </div>

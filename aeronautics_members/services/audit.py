@@ -124,6 +124,8 @@ def snapshot_mail_account_for_audit(mail_account):
             "port": mail_account.port,
             "username": mail_account.username,
             "starttls": mail_account.starttls,
+            "from_email": mail_account.from_email,
+            "from_name": mail_account.from_name,
         }
     )
 

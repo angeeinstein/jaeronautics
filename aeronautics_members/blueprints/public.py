@@ -14,6 +14,7 @@ from ..config import (
     RATELIMIT_MEMBERSHIP_PER_IP,
     STRIPE_PUBLISHABLE_KEY,
 )
+from ..services import legal_texts as legal
 from ..services.audit import (
     log_audit_event,
     snapshot_member_for_audit,
@@ -43,10 +44,12 @@ from ..services.signup import (
 )
 from ._signup import start_membership
 from datetime import (
+    date,
     datetime,
     timezone,
 )
 from flask import (
+    abort,
     flash,
     jsonify,
     redirect,
@@ -242,9 +245,79 @@ def cancel():
     return render_template("cancel.html")
 
 
+@public_bp.app_context_processor
+def inject_legal_texts():
+    """The texts accepted at signup, for the one tick on the signup forms."""
+    def legal_texts_to_accept():
+        return [text for text, _version in legal.available() if text.accepted_at_signup]
+
+    return {"legal_texts_to_accept": legal_texts_to_accept}
+
+
 @public_bp.route("/legal")
 def legal_texts():
-    return render_template("legal_texts.html")
+    """Every legal text in force, with the day its version took effect."""
+    return render_template("legal/index.html", texts=legal.available())
+
+
+@public_bp.route("/legal/<slug>")
+@public_bp.route("/legal/<slug>/<language>")
+@public_bp.route("/legal/<slug>/<language>/<version>")
+def legal_text(slug, language=None, version=None):
+    """One legal text: the version in force, or an earlier one by its day.
+
+    Without a language, the English translation where there is one of the
+    version shown, else the German text. A translation always says the German
+    text is the one that applies. With ``?part=body`` only the text itself, for
+    reading it in a window over a form -- the signup -- without leaving it.
+    """
+    if slug not in legal.BY_SLUG or (language is not None and language not in legal.LANGUAGES):
+        abort(404)
+    in_force = legal.current_version(slug)
+    if in_force is None:
+        abort(404)
+    if version is None:
+        german = in_force
+    else:
+        try:
+            day = date.fromisoformat(version)
+        except ValueError:
+            abort(404)
+        # Only published versions whose day has come; a later one is not shown before it.
+        german = legal.find(slug, legal.AUTHORITATIVE, day)
+        if german is None:
+            abort(404)
+    english = legal.translation(german)
+    if language == legal.AUTHORITATIVE:
+        shown = german
+    elif language is not None:
+        if english is None:
+            if version is None:
+                return redirect(url_for("public.legal_text", slug=slug, language=legal.AUTHORITATIVE))
+            abort(404)
+        shown = english
+    else:
+        shown = english or german
+
+    def address(of):
+        if of is None:
+            return None
+        current = of.version == in_force.version
+        return url_for("public.legal_text", slug=slug, language=of.language,
+                       version=None if current else of.version.isoformat())
+
+    template = "legal/_body.html" if request.args.get("part") == "body" else "legal/text.html"
+    return render_template(
+        template,
+        text=legal.BY_SLUG[slug],
+        shown=shown,
+        rendered=legal.render(shown),
+        in_force=in_force,
+        german_url=address(german),
+        english_url=address(english),
+        english_elsewhere=english is None and legal.has_language(slug, "en"),
+        others=[(v, address(v)) for v in legal.versions(slug, shown.language) if v.version != shown.version],
+    )
 
 
 @public_bp.route("/__health", methods=["GET"])

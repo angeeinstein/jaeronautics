@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% from "teams/_status.html" import status_label %}
+{% block title %}{{ details.name }}{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+        <div>
+            <h2 class="mb-1">{{ details.name }}</h2>
+            <p class="text-muted mb-0">{{ team.name }}</p>
+        </div>
+        <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Back to the team') }}</a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <section class="card mb-4" aria-labelledby="details-heading">
+            <div class="card-header"><h4 class="mb-0" id="details-heading">{{ _('Details') }}</h4></div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">{{ _('University email') }}</dt><dd class="col-sm-7">{{ details.university_email or '-' }}</dd>
+                    <dt class="col-sm-5">{{ _('Private email') }}</dt><dd class="col-sm-7">{{ details.private_email or '-' }}</dd>
+                    <dt class="col-sm-5">{{ _('Phone') }}</dt><dd class="col-sm-7">{{ details.phone or '-' }}</dd>
+                    <dt class="col-sm-5">{{ _('Cohort') }}</dt><dd class="col-sm-7">{{ details.cohort or '-' }}</dd>
+                </dl>
+            </div>
+        </section>
+
+        {% if current %}
+        <section class="card mb-4" aria-labelledby="decide-heading">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0" id="decide-heading">{{ _('Now') }}</h4>
+                {{ status_label(current.status, status_labels) }}
+            </div>
+            <div class="card-body d-flex flex-column gap-3">
+                {% if current.application_text %}
+                    <div>
+                        <div class="text-muted small">{{ team.application_prompt or _('Application') }}</div>
+                        <div class="team-meeting">{{ current.application_text }}</div>
+                    </div>
+                {% endif %}
+                {% if current.status in ('applied', 'invited') and TeamPermission.REVIEW_APPLICATIONS in permissions %}
+                    <form method="POST" action="{{ url_for('teams.team_invite', slug=team.slug, membership_id=current.id) }}" class="mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label class="form-label" for="meeting_details">{{ _('Invite to a meeting') }}</label>
+                        <textarea class="form-control mb-2" id="meeting_details" name="meeting_details" rows="3" required
+                                  placeholder="{{ _('When and where, or a link') }}">{{ current.meeting_details or '' }}</textarea>
+                        <button type="submit" class="btn btn-secondary">{{ _('Send invitation') if current.status == 'applied' else _('Send again') }}</button>
+                    </form>
+                    <div class="d-flex flex-wrap gap-2">
+                        <form method="POST" action="{{ url_for('teams.team_approve', slug=team.slug, membership_id=current.id) }}" class="mb-0"
+                              data-confirm-label="{{ _('Yes, approve') }}" data-confirm="{{ _('Approve %(name)s? They are emailed straight away.', name=details.name) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-primary">{{ _('Approve') }}</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('teams.team_reject', slug=team.slug, membership_id=current.id) }}" class="mb-0"
+                              data-confirm-label="{{ _('Yes, not accept') }}" data-confirm="{{ _('Not accept %(name)s?', name=details.name) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-danger">{{ _('Not accept') }}</button>
+                        </form>
+                    </div>
+                {% elif current.status == 'active' and TeamPermission.REMOVE_MEMBERS in permissions %}
+                    <form method="POST" action="{{ url_for('teams.team_remove', slug=team.slug, membership_id=current.id) }}" class="mb-0"
+                          data-confirm-label="{{ _('Yes, remove') }}" data-confirm="{{ _('Remove %(name)s from the team now?', name=details.name) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label class="form-label" for="reason">{{ _('Remove from the team') }}</label>
+                        <input class="form-control mb-2" id="reason" name="reason" required maxlength="2000"
+                               placeholder="{{ _('Reason, for the record') }}">
+                        <div class="form-text mb-2">{{ _('Ends the membership now. They are only told that it ended.') }}</div>
+                        <button type="submit" class="btn btn-outline-danger">{{ _('Remove') }}</button>
+                    </form>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+
+        <section class="card mb-4" aria-labelledby="history-heading">
+            <div class="card-header"><h4 class="mb-0" id="history-heading">{{ _('History') }}</h4></div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0 d-flex flex-column gap-2">
+                    {% for membership in history %}
+                        <li class="d-flex flex-wrap gap-2 align-items-center">
+                            {{ status_label(membership.status, status_labels) }}
+                            <span class="small text-muted">
+                                {{ membership.applied_at|date_display }}{% if membership.ended_at %} – {{ membership.ended_at|date_display }}{% endif %}
+                                {% if membership.end_reason %}· {{ _(end_reasons.get(membership.end_reason, membership.end_reason)) }}{% endif %}
+                            </span>
+                            {% if membership.end_note %}<span class="small">{{ membership.end_note }}</span>{% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-lg-6">
+        <section class="card" aria-labelledby="notes-heading">
+            <div class="card-header"><h4 class="mb-0" id="notes-heading">{{ _('Notes') }}</h4></div>
+            <div class="card-body d-flex flex-column gap-3">
+                <p class="small text-muted mb-0">{{ _('Seen by the leads and the admins. Not shown to the person, but part of their data if they ask for it (without who wrote it).') }}</p>
+                {% if TeamPermission.WRITE_NOTES in permissions %}
+                    <form method="POST" action="{{ url_for('teams.team_add_note', slug=team.slug, user_id=person.id) }}" class="mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label class="visually-hidden" for="note-body">{{ _('New note') }}</label>
+                        <textarea class="form-control mb-2" id="note-body" name="body" rows="3" required maxlength="5000"></textarea>
+                        <button type="submit" class="btn btn-secondary">{{ _('Add note') }}</button>
+                    </form>
+                {% endif %}
+                {% for note in notes %}
+                    <div class="team-note">
+                        <div class="small text-muted">{{ note.created_at|datetime_display }} · {{ note.author.email if note.author else '-' }}</div>
+                        <div class="team-meeting">{{ note.body }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

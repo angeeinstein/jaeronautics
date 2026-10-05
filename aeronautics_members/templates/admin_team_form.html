@@ -1,0 +1,191 @@
+{% extends "admin_layout.html" %}
+{% macro value(field, fallback='') -%}{{ form.get(field) if form else fallback }}{%- endmacro %}
+{% block admin_page_actions %}
+    {% if team %}<a href="{{ url_for('teams.team_manage', slug=team.slug) }}" class="btn btn-secondary">{{ _('Team page and settings') }}</a>{% endif %}
+    <a href="{{ url_for('teams.admin_teams') }}" class="btn btn-secondary">{{ _('All %(label)s', label=label_plural) }}</a>
+{% endblock %}
+{% block admin_content %}
+{% if team and team.status == 'archived' %}
+    <div class="alert alert-secondary">{{ _('Archived. Nobody can join, and leads cannot open it.') }}</div>
+{% endif %}
+{% if team and team.status != 'archived' and not has_lead_in_force %}
+    <div class="alert alert-warning">{{ _('No active lead. Until there is one, only admins can run it.') }}</div>
+{% endif %}
+
+<div class="card mb-4">
+    <form method="POST" action="{{ url_for('teams.admin_team_detail', slug=team.slug) if team else url_for('teams.admin_team_new') }}"
+          {% if team %}data-confirm-if-changed="payment_mode,stripe_price_id,period_starts"
+          data-confirm-label="{{ _('Yes, change the fee') }}" data-confirm-changed="{{ _('Change the fee? Members already in are moved to it or asked to pay, and emailed; this cannot be taken back once they are.') }}"{% endif %}>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">{{ _('Details') }}</h4>
+            <button type="submit" class="btn btn-primary">{{ _('Save') if team else _('Create') }}</button>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="name">{{ _('Name') }}</label>
+                    <input class="form-control" id="name" name="name" maxlength="120" required value="{{ value('name', team.name if team else '') }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="slug">{{ _('Short name') }}</label>
+                    {% if team %}
+                        <input class="form-control" id="slug" value="{{ team.slug }}" disabled>
+                        <div class="form-text">{{ _('Used in links. Cannot be changed.') }}</div>
+                    {% else %}
+                        <input class="form-control" id="slug" name="slug" maxlength="60" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="{{ value('slug') }}">
+                        <div class="form-text">{{ _('Lowercase letters, digits and hyphens. Made from the name if left empty. Cannot be changed later.') }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-12">
+                    <p class="small text-muted mb-0">{{ _('What the team says about itself -- its descriptions, picture, logo, the question for applicants and its rules -- its leads keep on the team\'s management page, which admins can open too.') }}</p>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="admission_mode">{{ _('Joining') }}</label>
+                    {% set current_mode = value('admission_mode', team.admission_mode if team else 'approval') %}
+                    <select class="form-select" id="admission_mode" name="admission_mode">
+                        <option value="approval" {% if current_mode == 'approval' %}selected{% endif %}>{{ _('By approval of the leads') }}</option>
+                        <option value="open" {% if current_mode == 'open' %}selected{% endif %}>{{ _('Open to every member') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="max_members">{{ _('Maximum size') }}</label>
+                    <input class="form-control" id="max_members" name="max_members" type="number" min="1" value="{{ value('max_members', team.max_members or '' if team else '') }}">
+                    <div class="form-text">{{ _('Empty for no limit.') }}</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="forum_group">{{ _('Forum group') }}</label>
+                    <input class="form-control" id="forum_group" name="forum_group" maxlength="100" value="{{ value('forum_group', team.forum_group or '' if team else '') }}">
+                    <div class="form-text">{{ _('Optional. Its active members are put in this forum group, which has to exist on the forum. Renamed later, people stay in the old one.') }}</div>
+                </div>
+                <div class="col-md-6 d-flex align-items-center">
+                    {% set has_access_list = (form.get('access_list_enabled') == 'on') if form else (team.access_list_enabled if team else false) %}
+                    <div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="access_list_enabled" id="access_list_enabled" {% if has_access_list %}checked{% endif %}>
+                            <label class="form-check-label" for="access_list_enabled">{{ _('Has rooms that need an access list') }}</label>
+                        </div>
+                        <div class="form-text">{{ _('The list of current members for whoever gives access to the team\'s rooms. Off, the leads do not see it and nothing is sent.') }}</div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <h5 class="mt-2">{{ _('Fee') }}</h5>
+                    {% if team and team.fee_display %}<p class="text-muted small mb-2">{{ _('Now: %(fee)s.', fee=team.fee_display) }}</p>{% endif %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="payment_mode">{{ _('Payment') }}</label>
+                    {% set current_payment = value('payment_mode', team.payment_mode if team else 'none') %}
+                    <select class="form-select" id="payment_mode" name="payment_mode">
+                        <option value="none" {% if current_payment == 'none' %}selected{% endif %}>{{ _('Free') }}</option>
+                        <option value="subscription" {% if current_payment == 'subscription' %}selected{% endif %}>{{ _('Subscription') }}</option>
+                        <option value="one_time" {% if current_payment == 'one_time' %}selected{% endif %}>{{ _('Once per period') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="stripe_price_id">{{ _('Stripe price ID') }}</label>
+                    <input class="form-control" id="stripe_price_id" name="stripe_price_id" maxlength="100" placeholder="price_…" value="{{ value('stripe_price_id', team.stripe_price_id or '' if team else '') }}">
+                    <div class="form-text">{{ _("On a product of the team's own: a recurring price for a subscription, a one-time price for once per period. Both can live on the same product.") }}</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="period_starts">{{ _('Periods start on') }}</label>
+                    <input class="form-control" id="period_starts" name="period_starts" maxlength="100" placeholder="01.10, 01.04" value="{{ value('period_starts', team.period_starts or '' if team else '') }}">
+                    <div class="form-text">{{ _('Day and month. Joining pays the period under way; Stripe charges at each start.') }}</div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+{% if team %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h4 class="mb-0">{{ _('Roles') }}</h4>
+    </div>
+    <div class="card-body">
+        <p class="small text-muted">{{ _('A role counts only while its holder is a member of the association and of this team.') }}</p>
+        {% set lead_count = role_holders|selectattr('role', 'equalto', 'lead')|list|length %}
+        {% if role_holders %}
+            <div class="table-responsive mb-3">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Person') }}</th>
+                            <th>{{ _('Role') }}</th>
+                            <th>{{ _('In force') }}</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for holder in role_holders %}
+                            <tr>
+                                <td>{{ holder.user.email }}</td>
+                                <td>{{ team_roles.get(holder.role, holder.role) }}</td>
+                                <td>{% if role_counts(holder) %}{{ _('Yes') }}{% else %}<span class="text-warning">{{ _('Not yet a team member, or membership lapsed') }}</span>{% endif %}</td>
+                                <td class="text-end">
+                                    {% set last_lead = holder.role == 'lead' and lead_count <= 1 %}
+                                    <form method="POST" action="{{ url_for('teams.admin_team_revoke_role', slug=team.slug) }}"
+                                          {% if last_lead %}data-confirm-label="{{ _('Yes, remove') }}" data-confirm="{{ _('This is the last lead. Remove anyway?') }}"{% endif %}>
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="user_id" value="{{ holder.user_id }}">
+                                        <input type="hidden" name="role" value="{{ holder.role }}">
+                                        {% if last_lead %}<input type="hidden" name="confirmed" value="1">{% endif %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">{{ _('Remove') }}</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('teams.admin_team_grant_role', slug=team.slug) }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="col-md-6">
+                <label class="form-label" for="role_email">{{ _('Email address') }}</label>
+                <input class="form-control" id="role_email" name="email" type="email" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="role">{{ _('Role') }}</label>
+                <select class="form-select" id="role" name="role">
+                    {% for slug, label in team_roles.items() %}<option value="{{ slug }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">{{ _('Give role') }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if team.status == 'archived' %}
+<div class="card">
+    <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <span class="text-muted small">{{ _('Restoring makes it available again.') }}</span>
+        <form method="POST" action="{{ url_for('teams.admin_team_archive', slug=team.slug) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="archived" value="0">
+            <button type="submit" class="btn btn-outline-secondary">{{ _('Restore') }}</button>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="card border-danger">
+    <div class="card-header"><h4 class="mb-0">{{ _('Archive this team') }}</h4></div>
+    <div class="card-body">
+        <p class="small mb-3">{{ _('Its members lose the team at once: its pages, its forum group and the access list. Nothing is deleted, and it can be restored. While anybody still pays for it by subscription, it cannot be archived; switch it to free first.') }}</p>
+        <form method="POST" action="{{ url_for('teams.admin_team_archive', slug=team.slug) }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="archived" value="1">
+            <div class="col-md-8">
+                <label class="form-label" for="confirm_name">{{ _('Type the team name, %(name)s, to confirm', name=team.name) }}</label>
+                <input class="form-control" id="confirm_name" name="confirm_name" autocomplete="off" required>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-outline-danger w-100">{{ _('Archive') }}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

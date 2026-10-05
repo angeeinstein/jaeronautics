@@ -89,8 +89,19 @@ Stripe credentials required). Install the dev dependencies and run pytest:
 
 ```powershell
 pip install --require-hashes -r requirements-dev.lock
-python -m pytest
+python -m pytest -n auto
 ```
+
+`-n auto` runs the tests on every core (pytest-xdist): about 3 minutes instead
+of 11 on four cores. Every test builds its own app and database, so they do
+not get in each other's way. While working on something, run the test files
+that cover it (`python -m pytest tests/test_teams_flow.py`); before the last
+commit of a piece of work, the whole suite. CI runs the whole suite, in
+parallel, on every push.
+
+The tests of the old forum's one-off import (moving the board, the people,
+BBCode, the MyBB converter) are skipped by default; the import is done.
+`python -m pytest -m forum_import` runs them if it is ever needed again.
 
 - `tests/test_membership_cycle.py` covers the proration / calendar-year billing
   math and date helpers with no database.
@@ -148,6 +159,163 @@ by SEPA stops being a member meanwhile, access continues for up to
 
 It never follows a revoked year, so a lost chargeback still ends access. The
 welcome email is only sent for somebody's first year, not when a renewal clears.
+
+## Changing a Fee
+
+The same for the membership (Settings -> Billing) and for a team (its form,
+*Fee*):
+
+1. In Stripe, create a new recurring price **on the same product** as the old
+   one, with the **same interval** (yearly for the membership). Leave "Trial
+   period days" on the price empty.
+2. Enter the new price ID and save. The portal checks it with Stripe and
+   refuses one that does not fit.
+3. New members pay the new fee at once. Every running subscription is moved
+   to the new price in the background -- through the external-work worker,
+   one item per subscription, within minutes -- with no proration: nothing is
+   charged or refunded now, the next charge is the new amount. Subscriptions
+   that are ending are left alone.
+4. Each person moved is emailed the new fee, the old one, from when, and how
+   to cancel or leave before then -- **14 days before their renewal**
+   (`FEE_NOTICE_DAYS` in `services/payments.py`), or at once when the renewal
+   is closer than that. The email waits in the same queue; whoever has
+   cancelled or left by then is not sent it, and a fee changed again before
+   it went out replaces it, so nobody is told twice.
+
+Stripe itself never announces a price change. For SEPA debits it does email
+the amount before every collection (two days ahead, under the mandate members
+accept at checkout), which covers the banking rule; the portal's own email is
+the real notice. Change a fee at least two weeks before the next renewal, so
+the email still goes out on time -- and update the fee rules in the legal
+texts (`legal/`, see "Legal Texts") for the membership. A move that keeps failing shows under the health check's failed
+external work. Archive the old price in Stripe once nobody is on it.
+
+## Legal Texts
+
+The statutes, rules of procedure, membership terms, privacy policy and the
+rest are Markdown files in the repository: one folder per text, one per
+language, one file per version, named after the version's day.
+
+```
+legal/
+├── privacy-policy/
+│   ├── de/2026-10-04.md
+│   └── en/2026-10-04.md
+├── membership-terms/{de,en}/2026-10-04.md
+├── statutes/de/2019-03-17.md
+└── rules-of-procedure/de/2020-02-26.md
+```
+
+Every file starts with YAML front matter. It is metadata and never shown:
+
+```
+---
+title: "Membership Terms and Conditions"
+document: "membership-terms"    # must match the folder
+language: "en"                  # must match the language folder
+version: "2026-10-04"           # must match the file name
+effective_from: "2026-10-04"    # the day it applies from
+status: "published"             # or "draft"
+---
+```
+
+**Which version is shown:** for the text and language, files with `status:
+"published"` whose `effective_from` has come; of those, the latest
+`effective_from`. So a version can be committed early and switch over by
+itself on its day, or wait as `draft` until it is approved. Drafts and
+future versions are not shown, not even by their address. Older versions
+stay readable at `/legal/<text>/<language>/<version>`, marked "No longer in
+force".
+
+**German applies; English is a translation.** A text is in force when its
+German version is. `/legal/<text>` shows the English translation of the
+version in force if there is one -- with a notice that it is a translation,
+may contain mistakes, and that the German version applies where they differ
+-- and the German text otherwise ("In German only", or "No English
+translation of this version yet" when the English file is of an older
+version: an outdated translation is never shown as the current text).
+`/legal/<text>/de` and `/legal/<text>/en` pick the language. An English file
+is the translation of the German file with the same `version`.
+
+**Changing a text:** add a new file next to the old one -- never edit a
+version people have already accepted -- in German, and in English if there
+is a translation, with the same `version`; commit it, and update the server.
+In the body, each `## ` heading becomes an entry in the contents list, and
+`## §5. …` gets the address `#paragraph-5`. Raw HTML is shown as text, not
+run; lists, bold, links and tables work.
+
+**Checked by the tests:** `legal_texts.problems()` lists everything wrong
+with the files -- a file in the wrong place, front matter missing or not
+matching the folder and file name, an unknown status, two published
+versions from the same day, a translation without its German file -- and
+`tests/test_legal_texts.py` fails on any of it, so a mistake fails CI, not
+the page. A broken file is also simply not shown.
+
+**Which texts there are** is the list `LEGAL_TEXTS` in
+`services/legal_texts.py`: folder, German and English name, and whether it
+is accepted at signup. A registered text without a German file is not
+shown. Adding a text is a line there and a folder here. Accepted at signup:
+statutes, rules of procedure, membership terms, privacy policy. Also
+registered: webshop and event terms, team rules (a general text; each team's
+own rules stay on its page), legal notice.
+
+**At signup** the one checkbox names every text accepted then, each a link.
+A click opens the text in a window over the form (`static/legal-dialog.js`
+fetches `/legal/<text>?part=body`); links inside it (to the German version,
+to another text) load in the same window, anything else in a new tab.
+Without JavaScript the link opens in a new tab. Either way nothing typed
+into the form is lost. The member keeps which version of each text was
+accepted -- the version day, the same in both languages -- and when
+(`legal_versions_accepted`, `legal_accepted_at`; in the member's data
+export). Members who signed up before October 2026 have neither; for them
+the signup date stands for the version.
+
+**What is in `legal/`** (October 2026): statutes (Rev 1, 2019), rules of
+procedure (Rev 3, 2020, and Rev 4, 2026), membership terms, privacy policy
+(website and portal together), webshop and event terms, impressum -- all in
+German; the membership terms and privacy policy also in English (a
+translation of the same version, 04.10.2026). A new German version of those
+two needs its English file too, or the portal shows German there until it
+has one. `source_revision` in the front matter ("Rev 4") is shown next to
+the date. A `# ` heading further down a text ("Teil B – Mitgliederportal") is a
+part of it, listed in the contents. Points lettered "a." under a numbered one
+need a line break (two spaces) at the end of the line before; the tests check.
+
+**Footer:** Impressum, Privacy and Statutes lead to the portal's own texts
+(`/legal/legal-notice`, `/legal/privacy-policy`, `/legal/statutes`), and *Legal
+texts* to the list of all. `IMPRESSUM_URL`, `PRIVACY_URL` and `STATUTES_URL`
+in `.env` send one somewhere else instead, the website say.
+
+## Legal Notes
+
+`docs/legal-notes.md` lists what the portal does with personal data and money,
+for the privacy statement, terms and statutes. Update it in the same commit as
+any change that collects, sends or keeps data differently, or changes how fees
+are taken.
+
+## Stripe Webhook Events
+
+The endpoint (`https://<portal>/stripe-webhook`, in Stripe under Developers →
+Webhooks) needs exactly these 13 events, on the test and the live account:
+
+| Event | What the portal does with it |
+|---|---|
+| `checkout.session.completed` | A Checkout finished: membership, team subscription or team payment |
+| `checkout.session.async_payment_succeeded` | A SEPA debit for a one-time payment cleared |
+| `checkout.session.async_payment_failed` | A SEPA debit for a one-time payment failed |
+| `customer.subscription.updated` | Cancellation set or taken back, status changes |
+| `customer.subscription.deleted` | A subscription ended |
+| `invoice.paid` | A subscription payment, first or renewal |
+| `invoice.payment_succeeded` | The same, as Stripe also reports it; a payment is recorded once |
+| `invoice.payment_failed` | A renewal failed |
+| `payment_intent.processing` | A SEPA debit is on its way |
+| `payment_intent.succeeded` | A membership payment confirmed |
+| `payment_intent.payment_failed` | A membership payment failed |
+| `charge.refunded` | A refund, taken off what a team is owed |
+| `charge.dispute.closed` | A chargeback decided |
+
+Any other event is accepted and ignored; leaving them out only spares the log
+and Stripe's retries.
 
 ## Billing Shows Up in Stripe as a Trial
 
@@ -601,6 +769,211 @@ people hold administrator accounts. At that point the answer changes to keeping
 the secrets in deployment configuration (`.env`, systemd credentials) rather
 than in rows that every backup copies.
 
+## Teams
+
+Groups inside the association with their own members and leads -- off until
+switched on. What was decided and why is in [teams-plan.md](teams-plan.md);
+this is how to use them.
+
+**Setting up** (site admins, Admin → Teams):
+
+1. Switch teams on. While off, members see nothing of them; site admins can
+   already open each team's pages to set them up.
+2. **New Team**: a name, how people join (by approval of the leads, or open to
+   every member), optionally a maximum size and a forum group, whether it
+   **has rooms that need an access list**, and its fee. Everything the team
+   says about itself -- descriptions, picture, logo, question for applicants,
+   rules -- is on its management page (*Team page and settings*), kept by its
+   leads; admins can open it too.
+3. **Give the lead role** by email address. A role counts only while its
+   holder is a member of the association *and* of the team, so the lead joins
+   the team like anybody else and an admin approves them.
+
+**A team's About page** (`/teams/<short name>/about`): every signed-in visitor
+sees the logo, name, an "About the team" text, one optional picture, the fee,
+the team's rules and the form to apply or join. The overview shows each team's
+short description and leads there. **The team's own page**
+(`/teams/<short name>`) is for its members: their membership and who is in the
+team, without the texts; anybody else is sent to the About page. The texts,
+picture and rules are edited by the team's leads (Manage → Settings) and by
+site admins (Admin → Teams). Rules are optional; a team with rules needs them
+ticked to apply or join, and each membership keeps when they were accepted and
+which version -- the day they last changed. Changing the rules makes a new
+version for whoever applies next (members already in are not asked again) and
+is logged with the old and new text.
+
+**Running a team** (its leads, Teams → Manage), in sections down the side:
+*Applications* (invite with the meeting details, approve, not accept),
+*Members*, *Former members*, *Team page* (descriptions, picture, logo),
+*Applying* (open or closed, the question, the rules), *Access list* (only for
+teams that have one) and *Roles*. Each settings section is saved on its own.
+Also: notes about a person (not shown to them, but in their data export,
+without the author), removing somebody (immediately, with a reason that stays
+in the record), and an export of the current members. Under *Roles* the leads
+appoint the team's **treasurer** from its members, and take the role back;
+leads themselves are appointed by site admins.
+
+**Access list.** Only for teams with rooms: site admins switch it on in the
+team's admin form; off, the leads do not see it and nothing is sent. In the
+leads' *Access list* section: who receives it, on which days of the
+year (`15.10, 15.03`), and whether it goes out by itself on those days. The
+leads' page has *Preview and send* for sending it by hand. It marks who is new
+since the last list sent and lists who has left since.
+
+**Forum group.** Create the group in Discourse first, then name it in the
+team's settings; members are added and removed with each forum sync. It must be
+a group of the team's own: everybody not in the team is taken out of it. So
+Discourse's own groups (admins, moderators, staff, trust levels) and those the
+portal fills otherwise (members, onboarding, lapsed, staff, member kinds) are
+refused, and leaving a team never takes somebody out of a group they are in for
+another reason. Renaming it later leaves people in the old group -- delete that
+one in Discourse.
+
+**A fee** (site admins, in the team's form under *Fee*):
+
+1. In Stripe, create one product for the team (e.g. "Rocket Team fee"), not the
+   membership's. Give it the price(s) you may use: a **recurring** one (every 6
+   months for two periods a year, yearly for one) and/or a **one-time** one.
+2. In the team's form: *Payment* → Subscription or Once per period, the
+   matching price ID (`price_...`), and the days the periods start
+   (`01.10, 01.03`). Saving checks the price with Stripe; the fee members see
+   ("€10.00 every 6 months", "€25.00 per period") is taken from it. Switching
+   later is the other mode with the other price -- the product stays.
+3. Stripe's webhook endpoint needs the events listed under *Stripe Webhook
+   Events*. Everything for teams is marked `purpose: team` and never touches
+   the membership.
+
+How it runs: approved (or joining an open team), a person sees *Pay and join*.
+They pay the period under way in full, whenever they join. The first payment
+makes them a member. *Leave* runs to the end of what is paid (no refund), *Stay
+after all* takes it back. Removal by a lead, the association membership ending
+and erasure cancel a subscription at once, without refund. For six months
+after a membership ended unpaid the person may come back by paying, without
+applying. Payments are listed in the `payments` table and on the team's Money
+page.
+
+- **Subscription**: Stripe charges at each period start; joining in the last 3
+  days before one pays for the coming period instead. Receipts and renewal
+  emails come from Stripe. A renewal Stripe finally gives up on ends the team
+  membership.
+- **Once per period**: nothing renews by itself. 14 days before the period ends
+  the member is emailed and sees *Pay for next period* on the Teams page;
+  paying then continues without a gap. Whoever has not paid leaves on the last
+  day, and the leads get one summary. Stripe sends a receipt.
+
+Somebody who cancels their association membership -- on Stripe's billing page,
+say -- stays a member to the end of what they paid for. As soon as the portal
+hears of it, each of their team memberships is set to end on the same day:
+the team subscription stops then without renewing (no refund for time paid
+beyond it), and they and the leads are emailed. Taking the cancellation back
+lifts it again. Leaving a team on one's own is not touched. The nightly job
+does the same for anything a webhook missed.
+
+A new price applies to people joining at once, and running subscriptions
+move to it from their next renewal, their holders emailed two weeks before;
+see *Changing a Fee*. A different interval is refused while subscriptions run.
+
+Changing how a team charges while it has members -- something set up once
+and seldom touched -- is handled rather than refused:
+
+- **Free from now on**: every running subscription stops at the end of what
+  is paid, and those members stay in the team, for free; they are emailed.
+  Approved people not yet paying are members at once.
+- **Charging from now on**: members already in stay free until the next period
+  starts, are emailed, and see *Pay to stay* (nothing is charged before the
+  period starts). Whoever has not paid by then leaves, and may come back by
+  paying within six months. Members whose subscription from an earlier paying
+  time is still running out simply carry on with it (moved to the new price
+  from their next renewal) and are emailed that.
+- **Any change of fee or way of paying** closes payment pages still open at
+  the old one; the next *Pay* opens one at the new. The members are locked
+  while Stripe is told, so the webhooks that causes find the new way of paying
+  rather than taking it for somebody leaving; if Stripe fails half-way, what
+  was changed there is changed back and nothing is saved.
+- **The period dates** cannot change while subscriptions run on them: switch
+  to free, let them run out, then set the new dates.
+- **Archiving a team, or switching teams off**, is refused while anybody still
+  pays -- a subscription, a period paid once not yet over, a payment on its
+  way: switch the team to free first. Archiving also asks for the team's name
+  to be typed, and ends the applications under way (open payment pages are
+  closed, the applicants emailed). Switching teams off is also refused while
+  approved applicants could still pay: reject them, or wait until their
+  approval lapses.
+
+**New members** are pointed to the Teams page, not asked at signup: a team can
+only be joined once the association membership is active. The welcome email,
+the page after paying and the account page (for members in no team yet) carry
+the link while teams are switched on.
+
+**Leaving** is a page of its own: what it means (until when, no refund, the
+forum group and access list, applying again to come back), an optional message
+to the leads, and a box to tick.
+
+**Every night** (with `reconcile-billing`), each step on its own so one that
+fails does not stop the others: team memberships follow a cancelled
+association membership, those of people no longer in the association end,
+approvals for a team that charges lapse when unpaid after 14 days (not while a
+SEPA debit is on its way, unless that has gone on for 45 days), renewal
+reminders go out, memberships whose leaving day has passed, or that are unpaid
+for more than 35 days, end in case Stripe's word never arrived (paid once per
+period by SEPA debit at the last moment: up to 14 days while the money is on
+its way), and access lists due that day go out.
+
+**Unfinished signups** (also every night): a signup never paid for is removed
+90 days after the signup or the last attempt to pay, completely -- account,
+profile and its log and email records -- since nothing has to be kept for it.
+The person is emailed 7 days before, and removal waits until that email has
+been out 7 days. Only bare signups: if any row in any table points at the
+account other than its own log, email and background-task rows -- a role, a
+team, a forum account, a picture, a change request, a membership period, a
+payment -- or it has a Stripe subscription, it is left alone. That is read
+from the schema, so a table added later keeps such signups rather than
+breaking the delete. One log entry records how many went. Run by hand with
+`flask cleanup-pending-signups`.
+
+**Money** (Teams → Money, or the button on the management page). What the
+team's members paid -- exactly that: Stripe's fees are the association's --
+less refunds and lost chargebacks, what was transferred to the team, and what
+is still open, also by the period it paid for, with a CSV export. Seen by the
+team's leads and its **treasurer** (a team role, given like the lead role, that
+sees the money but not the people), and by the association's **Treasurer**
+and site admins for every team (Admin → Money), also archived ones.
+
+- **Bank details**: the team's leads and treasurer, the association's
+  Treasurer and site admins can set them. The IBAN is checked by its check
+  digits. Every change is in the log with before and after, and the
+  association's Treasurer is emailed when somebody else made it.
+- **Transferring**: the association's Treasurer (or an admin) opens the team's
+  Money page, scans the GiroCode with the banking app -- it fills in account,
+  open amount and reference -- sends it, then *Mark as transferred*. A
+  transfer is recorded with the account it went to and cannot exceed what is
+  open.
+
+**Before teams charge on the live portal** -- things only Stripe's dashboard
+can show:
+
+1. *Settings → Billing → Customer portal*: members reach it from their
+   account, and it shows their team subscriptions too. Leave *Customers can
+   switch plans* **off** (or list only the membership's product there):
+   otherwise somebody could move their membership to a team's price or back.
+   Cancelling there is fine; the portal treats it as leaving.
+2. The webhook endpoint has the events under *Stripe Webhook Events* (13).
+3. In **test mode, with a test clock**, run one team through a whole year
+   before charging real money: join, a renewal, a failed SEPA debit, leaving,
+   and cancelling the association membership in a month before the team's
+   next renewal. That last one is where the team period and the calendar year
+   meet: the team subscription is set to stop on the association's last day;
+   check what Stripe bills at the renewal in between.
+
+**How payments are built.** `services/payments.py` is the one place that talks
+to Stripe for anything sold: the connection, the person's Stripe customer (one
+per person, shared by the membership and every team), opening a Checkout
+without opening two, cancelling, and handing each webhook event to the handler
+registered for its `purpose`. The membership keeps its own rules in
+`services/billing.py`; teams have theirs in `services/team_payments.py`.
+Something new -- a balance for the coffee machine -- gets a purpose and a
+handler of its own.
+
 ## Roles and Permissions
 
 **Access is decided by capability, never by role name.** A route says what it
@@ -616,16 +989,17 @@ year.
 
 `ROLE_PERMISSIONS` is the whole access model:
 
-| Capability | Admin | Super Admin |
-|---|---|---|
-| `admin.access` — open the admin workspace | yes | yes |
-| `accounts.view`, `accounts.billing`, `accounts.privacy` | yes | yes |
-| `approvals.review`, `forum.moderate`, `logs.view` | yes | yes |
-| `notifications.manage` — test email, undelivered queue | yes | yes |
-| `settings.general` | yes | yes |
-| `settings.credentials` — Stripe/Discourse keys, mail accounts | no | yes |
-| `system.update` — install a version, roll one back | no | yes |
-| `roles.manage` — grant or revoke access | no | yes |
+| Capability | Treasurer | Admin | Super Admin |
+|---|---|---|---|
+| `admin.access` — open the admin workspace | yes | yes | yes |
+| `teams.money` — every team's money, transfers, bank details | yes | yes | yes |
+| `accounts.view`, `accounts.billing`, `accounts.privacy` | no | yes | yes |
+| `approvals.review`, `forum.moderate`, `logs.view` | no | yes | yes |
+| `notifications.manage` — test email, undelivered queue | no | yes | yes |
+| `settings.general`, `teams.manage` | no | yes | yes |
+| `settings.credentials` — Stripe/Discourse keys, mail accounts | no | no | yes |
+| `system.update` — install a version, roll one back | no | no | yes |
+| `roles.manage` — grant or revoke access | no | no | yes |
 
 There is **no role implication**: `superadmin` is not "admin plus extra" by
 inheritance, its bundle simply contains the admin bundle. One mechanism rather
@@ -938,6 +1312,23 @@ confirmation across a change would let somebody confirm an address they can
 read, edit the field to another student's, and claim that student's archived
 forum account and posts.
 
+### Locked out by a wrong private address
+
+The private address is the login and where password resets go. Mistyped at
+signup, or changed to a wrong one, with the password forgotten too, nothing
+reaches the person. Two ways back:
+
+- **Forgot password with the confirmed university address:** if the private
+  address was never confirmed, the link goes to the university address
+  instead (`password_reset_address`). Once in, they correct the private one
+  in their profile.
+- **An admin corrects it** (account page, *Correct the Private Email
+  Address*; `approvals.review`, and for an account with a role
+  `roles.manage`). Whoever reads the new address can sign in, so only once you
+  know who is asking. The new address has to be confirmed like any other, the
+  old one is emailed if it was ever confirmed, Stripe's customer and the forum
+  get the new address, and the change is in the audit log with both.
+
 ## Planned: Archival Forum Accounts (not built)
 
 Roughly 500–600 people have used the forum over the last decade. The intention
@@ -979,9 +1370,10 @@ permission table.
 - **The account directory.** 50 per page becomes 13 pages, and "Member Only"
   fills with people who are not members. Needs its own filter value and probably
   a default that hides them.
-- **`cleanup-pending-signups`** deletes stale `pending_checkout` members after
-  14 days. An import that sets that status by accident would quietly delete the
-  archive a fortnight later. Give archival rows a status of their own.
+- **The nightly clean-up of unfinished signups** removes bare `pending_checkout`
+  members after 90 days (with a notice 7 days before). An import that sets that
+  status by accident would have its rows emailed and removed. Give archival
+  rows a status of their own.
 
 ### Identity: what actually names a person
 

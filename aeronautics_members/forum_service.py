@@ -769,6 +769,15 @@ class DiscourseConnectProvider(ForumProvider):
             # rather than when somebody remembers.
             runs_the_place = bool(user is not None and user.can(Permission.FORUM_MODERATE))
             (add_groups if runs_the_place else remove_groups).append(staff_group)
+
+        # The groups of the teams somebody is in, and out of the rest. Nothing
+        # at all while teams are switched off.
+        from .services.teams import forum_groups_for
+
+        team_add, team_remove = forum_groups_for(user)
+        add_groups.extend(team_add)
+        remove_groups.extend(team_remove)
+        team_remove = set(team_remove)
         if desired_state == FORUM_STATE_ACTIVE:
             if member_group:
                 add_groups.append(member_group)
@@ -790,6 +799,10 @@ class DiscourseConnectProvider(ForumProvider):
                 remove_groups.append(member_group)
             if onboarding_group:
                 remove_groups.append(onboarding_group)
+
+        # Leaving a team never takes somebody out of a group they are in for
+        # another reason -- a team named after a group used elsewhere, say.
+        remove_groups = [group for group in remove_groups if not (group in team_remove and group in add_groups)]
 
         payload = {}
         if add_groups:

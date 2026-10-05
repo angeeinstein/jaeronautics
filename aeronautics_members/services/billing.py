@@ -14,20 +14,14 @@ merely outstanding -- so for those, payment must come from an actual paid
 invoice, never from the status.
 """
 
-import hashlib
-import json
-from datetime import datetime, timezone
-from decimal import Decimal
 
 import stripe
-from babel.numbers import format_currency
 from flask import current_app
-from flask_babel import _, get_locale
+from flask_babel import _
 
-from ..config import STRIPE_PRICE_ID, STRIPE_SECRET_KEY
+from ..config import STRIPE_PRICE_ID
 from ..db_models import MembershipPeriod
 from ..security_utils import build_public_url
-from . import ExternalServiceError
 from .clock import (
     first_day_of_year,
     get_membership_today,
@@ -53,52 +47,18 @@ from .membership import (
 from .periods import active_periods, coverage_end, grant_calendar_year, grant_period
 from .settings import get_stripe_settings_map
 from .stripe_scope import scope_of_subscription
+from .payments import (  # noqa: F401 -- shared with the teams; imported from here too
+    apply_runtime_stripe_config,
+    cancel_subscription,
+    format_amount as format_checkout_amount,
+    open_checkout_session,
+    request_fingerprint,
+    reusable_stripe_customer_id,
+    subscription_has_scheduled_cancellation,
+    subscription_period_bounds,
+)
 
 
-
-
-def apply_runtime_stripe_config():
-    stripe_settings = get_stripe_settings_map()
-    stripe.api_key = stripe_settings.get("stripe_secret_key") or STRIPE_SECRET_KEY
-    return stripe_settings
-
-
-def subscription_has_scheduled_cancellation(subscription):
-    if not subscription:
-        return False
-
-    if bool(subscription.get("cancel_at_period_end")):
-        return True
-
-    cancel_at = subscription.get("cancel_at")
-    if cancel_at is None:
-        return False
-
-    try:
-        return int(cancel_at) > int(datetime.now(timezone.utc).timestamp())
-    except (TypeError, ValueError):
-        return False
-
-
-def subscription_period_bounds(subscription):
-    """Return the (start, end) unix timestamps of a subscription's current period.
-
-    Stripe's Basil API version (2025-03-31) removed the top-level
-    ``current_period_start`` / ``current_period_end`` fields and moved them onto
-    each subscription item. Read the item-level values first and fall back to the
-    legacy top-level fields, so this keeps working whichever API version the
-    installed library and the account negotiate.
-    """
-    if not subscription:
-        return None, None
-
-    items = ((subscription.get("items") or {}).get("data")) or []
-    starts = [item.get("current_period_start") for item in items if item.get("current_period_start")]
-    ends = [item.get("current_period_end") for item in items if item.get("current_period_end")]
-
-    period_start = min(starts) if starts else subscription.get("current_period_start")
-    period_end = max(ends) if ends else subscription.get("current_period_end")
-    return period_start, period_end
 
 
 def subscription_collects_payment_automatically(subscription):
@@ -143,15 +103,6 @@ def get_stripe_membership_price():
         "interval": interval,
         "interval_count": int(interval_count),
     }
-
-
-def format_checkout_amount(amount_cents, currency):
-    locale = str(get_locale()) if get_locale() else None
-    amount = Decimal(amount_cents) / Decimal("100")
-    try:
-        return format_currency(amount, currency.upper(), locale=locale)
-    except Exception:
-        return f"{amount:.2f} {currency.upper()}"
 
 
 def build_checkout_submit_message(cycle, price_details):
@@ -376,35 +327,6 @@ def find_live_stripe_subscription(member):
     return None
 
 
-def reusable_stripe_customer_id(member):
-    """The member's existing Stripe customer, brought up to date, or None.
-
-    Somebody coming back stays the same customer in Stripe, with their old
-    invoices next to the new ones, rather than becoming a second customer that
-    has to be matched to the first by hand. Their address and name are sent
-    again first: receipts go to the address Stripe holds, and the member may
-    have changed theirs since.
-    """
-    if member is None or not member.stripe_customer_id:
-        return None
-    try:
-        stripe.Customer.modify(
-            member.stripe_customer_id,
-            email=member.email_private,
-            name=f"{member.first_name} {member.last_name}",
-        )
-    except stripe.StripeError as exc:
-        if getattr(exc, "code", None) != "resource_missing":
-            raise
-        current_app.logger.warning(
-            "Stripe customer %s for member_id=%s no longer exists; a new one will be made.",
-            member.stripe_customer_id, member.id,
-        )
-        member.stripe_customer_id = None
-        return None
-    return member.stripe_customer_id
-
-
 def get_open_checkout_session(member):
     """The member's previous Checkout session, if it is still usable.
 
@@ -414,18 +336,10 @@ def get_open_checkout_session(member):
     """
     if member is None or not member.stripe_checkout_session_id:
         return None
-    apply_runtime_stripe_config()
-    try:
-        session = stripe.checkout.Session.retrieve(member.stripe_checkout_session_id)
-    except stripe.StripeError as exc:
-        current_app.logger.warning(
-            "Could not load stored Checkout session %s for member_id=%s: %s",
-            member.stripe_checkout_session_id, member.id, exc,
-        )
-        return None
-    if session.get("status") == "open" and session.get("url"):
-        return session
-    return None
+    return open_checkout_session(
+        member.stripe_checkout_session_id, what=f"stored Checkout session of member_id={member.id}",
+        email=member.email_private,
+    )
 
 
 def checkout_completed_but_not_yet_confirmed(member):
@@ -473,10 +387,7 @@ def checkout_idempotency_key(member, cycle, checkout_params):
     they may have joined earlier the same year with an identical request, and
     that key would hand back the first, completed session.
     """
-    fingerprint = hashlib.sha256(
-        json.dumps(checkout_params, sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()[:16]
-    key = f"checkout:member:{member.id}:{cycle['current_year']}:{fingerprint}"
+    key = f"checkout:member:{member.id}:{cycle['current_year']}:{request_fingerprint(checkout_params)}"
     if member.stripe_subscription_id:
         key += f":after:{member.stripe_subscription_id}"
     return key
@@ -880,39 +791,10 @@ def cancel_member_subscription(member, *, reason=None):
     if member is None or not member.stripe_subscription_id:
         return False
 
-    apply_runtime_stripe_config()
-    subscription_id = member.stripe_subscription_id
-    try:
-        stripe.Subscription.cancel(
-            subscription_id,
-            # Stripe would otherwise create a final prorated invoice for the
-            # unused time, which is the opposite of what cancelling for erasure
-            # should do.
-            prorate=False,
-        )
-    except stripe.StripeError as exc:
-        if getattr(exc, "code", None) != "resource_missing":
-            raise ExternalServiceError(
-                "Stripe could not cancel the subscription.",
-                code="subscription_cancel_failed",
-                details={"stripe_code": getattr(exc, "code", None)},
-            ) from exc
-        # Already gone in Stripe; the local reference is what is stale.
-        current_app.logger.warning(
-            "Stripe subscription %s for member_id=%s was already gone when cancelling (%s).",
-            subscription_id,
-            member.id,
-            reason or "no reason given",
-        )
+    cancel_subscription(member.stripe_subscription_id, reason=f"member_id={member.id}: {reason or 'no reason given'}")
 
     member.stripe_subscription_id = None
     member.cancel_at_period_end = False
-    current_app.logger.info(
-        "Cancelled Stripe subscription %s for member_id=%s (%s).",
-        subscription_id,
-        member.id,
-        reason or "no reason given",
-    )
     return True
 
 
@@ -925,3 +807,103 @@ def sync_member_subscription_state_from_stripe(member):
         return False
 
     return sync_member_subscription_state_from_subscription(member, subscription)
+
+
+# --- A new membership fee -----------------------------------------------------------
+#
+# Entered as a new price ID under Settings -> Billing. New members pay it at
+# once; every running membership subscription moves to it from its next
+# renewal, in the background (services/payments.py), and its member is told
+# two weeks before that renewal.
+
+
+def _membership_price_id_now(payload=None):
+    return get_stripe_settings_map().get("stripe_price_id") or STRIPE_PRICE_ID or None
+
+
+def check_membership_price(new_price_id, old_price_id=None):
+    """The new price, if it can be the membership's; ValidationError otherwise."""
+    from . import ValidationError
+    from .payments import interval_months, retrieve_price
+
+    try:
+        price = retrieve_price(new_price_id)
+    except Exception as exc:  # noqa: BLE001 -- shown to the admin, nothing saved
+        current_app.logger.warning("Could not check Stripe price %s: %s", new_price_id, exc)
+        raise ValidationError(
+            _("Stripe does not know that price, or could not be asked. Check the ID and the Stripe keys."),
+            code="membership_price_unknown",
+        ) from None
+    if not price.get("active", True):
+        raise ValidationError(_("That price is archived in Stripe."), code="membership_price_unsuitable")
+    if interval_months(price) != 12 or price.get("unit_amount") in (None, 0):
+        raise ValidationError(_("The membership needs a yearly recurring price with a fixed amount."),
+                              code="membership_price_unsuitable")
+    if old_price_id:
+        try:
+            old_product = (retrieve_price(old_price_id) or {}).get("product")
+        except Exception:  # noqa: BLE001 -- the old one gone is no reason to refuse the new
+            old_product = None
+        new_product = price.get("product")
+        new_product = new_product if isinstance(new_product, str) else (new_product or {}).get("id")
+        old_product = old_product if isinstance(old_product, str) else (old_product or {}).get("id")
+        if old_product and new_product != old_product:
+            raise ValidationError(
+                _("Create the new price on the same product as the old one, so Stripe and the portal "
+                  "keep recognising it as the membership."),
+                code="membership_price_other_product",
+            )
+    return price
+
+
+def change_membership_price(actor, new_price_id):
+    """Check a new membership price and move every running subscription to it.
+
+    Returns how many subscriptions will move. Call before the setting is
+    saved, in the same transaction.
+    """
+    from ..db_models import Member, db
+    from .audit import log_audit_event
+    from .payments import PURPOSE_MEMBERSHIP, schedule_price_move
+
+    old_price_id = _membership_price_id_now()
+    if not new_price_id or new_price_id == old_price_id:
+        return 0
+    check_membership_price(new_price_id, old_price_id)
+    members = db.session.execute(
+        db.select(Member).where(Member.stripe_subscription_id.isnot(None), Member.deleted_at.is_(None))
+    ).scalars().all()
+    for member in members:
+        schedule_price_move(PURPOSE_MEMBERSHIP, member.stripe_subscription_id, new_price_id,
+                            member=member, member_id=member.id)
+    log_audit_event("billing", "membership_price_changed", actor_user=actor,
+                    before={"stripe_price_id": old_price_id}, after={"stripe_price_id": new_price_id},
+                    metadata={"subscriptions_to_move": len(members)})
+    return len(members)
+
+
+def _tell_member_about_new_fee(payload, notice):
+    """The email, when it is due -- unless the member has left since."""
+    from ..db_models import Member, db
+    from .notifications import queue_user_status_notification
+
+    member = db.session.get(Member, payload.get("member_id"))
+    if member is None or member.deleted_at is not None or member.user is None:
+        return
+    if member.stripe_subscription_id != payload.get("subscription_id") or member.cancel_at_period_end:
+        return  # cancelled, or on another subscription: the new fee never reaches them
+    queue_user_status_notification(
+        "membership_fee_changed", "The membership fee changes", member.user.email,
+        payload={"first_name": member.first_name, **notice},
+        target_user=member.user, target_member=member,
+    )
+
+
+def _register_membership_price_moves():
+    from .payments import PURPOSE_MEMBERSHIP, register_price_moves
+
+    register_price_moves(PURPOSE_MEMBERSHIP, current_price=_membership_price_id_now,
+                         tell=_tell_member_about_new_fee)
+
+
+_register_membership_price_moves()

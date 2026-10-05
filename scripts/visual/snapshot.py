@@ -58,6 +58,8 @@ def build_app(db_path):
         "RATELIMIT_ENABLED": False,
         "SESSION_COOKIE_SECURE": False,
         "PUBLIC_BASE_URL": BASE,
+        # Beside the throwaway database, never the repository's storage.
+        "TEAM_LOGO_DIR": str(Path(db_path).parent / "team_logos"),
     })
     return app, app_module
 
@@ -180,6 +182,90 @@ def seed(app, app_module, subscriptions):
     ))
     db.session.commit()
 
+    # A team with a lead who is in it, and one whose lead has not joined yet.
+    from aeronautics_members.db_models import TeamMembership
+    from aeronautics_members.services import teams
+
+    team_fields = dict(description="We build and fly sounding rockets.", admission_mode="approval",
+                       applications_open=True, application_prompt="Why do you want to join?",
+                       max_members=None, forum_group=None)
+    rocket = teams.create_team(None, slug=None, name="Rocket Team", **team_fields)
+    glider = teams.create_team(None, slug=None, name="Glider Team", **team_fields)
+    # Both charge: set directly, as checking the price would ask Stripe.
+    for charging in (rocket, glider):
+        charging.payment_mode, charging.stripe_price_id = "subscription", "price_example"
+        charging.period_starts, charging.fee_display = "01.04, 01.10", "€10.00 every 6 months"
+    teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
+    # A made-up logo for one team; the other has none, as many will not.
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw
+
+    logo = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(logo)
+    draw.polygon([(20, 180), (100, 20), (180, 180)], fill=(0, 223, 255, 255))
+    draw.rectangle([(220, 70), (580, 130)], fill=(255, 255, 255, 255))
+    buffer = BytesIO()
+    logo.save(buffer, format="PNG")
+    teams.set_team_logo(None, rocket, buffer.getvalue())
+    # The team's page: a longer text, a picture and rules to accept.
+    photo = Image.new("RGB", (1600, 1000), (40, 60, 80))
+    ImageDraw.Draw(photo).polygon([(200, 900), (800, 100), (1400, 900)], fill=(0, 223, 255))
+    photo_buffer = BytesIO()
+    photo.save(photo_buffer, format="JPEG")
+    teams.set_team_picture(None, rocket, photo_buffer.getvalue())
+    teams.update_team_page(
+        None, rocket,
+        about="We design, build and fly sounding rockets, and take part in the European Rocketry Challenge.\n\n"
+              "We meet every Tuesday at 18:00 in the workshop. New members start in one of the sub-teams: "
+              "structures, propulsion, avionics or recovery.",
+        terms_text="1. Everyone attends the safety briefing before working in the workshop.\n"
+                   "2. Tools and materials go back where they came from.\n"
+                   "3. Launch days follow the range safety officer's instructions without exception.\n"
+                   "4. Photos and data from the team are shared only with the leads' agreement.",
+    )
+    db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now,
+                                  payment_mode="subscription", stripe_subscription_id="sub_example_1",
+                                  paid_until=date(2027, 3, 31), payment_state="paid"))
+    teams.grant_team_role(None, rocket, active.user, teams.ROLE_LEAD)
+    carla = Member.query.filter_by(email_private="cancelling@example.org").one().user
+    db.session.add(TeamMembership(team=rocket, user=carla, status=teams.ACTIVE, started_at=now,
+                                  payment_mode="subscription", stripe_subscription_id="sub_example_2",
+                                  paid_until=date(2027, 3, 31), payment_state="paid", ends_on=date(2027, 3, 31)))
+    bernd = Member.query.filter_by(email_private="returning@example.org").one().user
+    # Approved by the glider team, the fee not paid yet.
+    db.session.add(TeamMembership(team=glider, user=bernd, status=teams.APPROVED, applied_at=now,
+                                  approved_at=now, payment_mode="subscription"))
+    application = TeamMembership(team=rocket, user=bernd, status=teams.APPLIED, applied_at=now,
+                                 application_text="I built model rockets at school\nand would love to help.")
+    db.session.add(application)
+    db.session.flush()
+    teams.add_note(active.user, rocket, bernd, "Met him at the open day. Knows CATIA.")
+    teams.set_access_list_enabled(None, rocket, True)
+    teams.update_access_list(None, rocket, recipients="facility@uni.example\nporter@uni.example",
+                             dates="15.10, 15.03", auto_send=True)
+    # As if a list went out in March: Carla has joined since, Dieter has left.
+    from aeronautics_members.db_models import TeamAccessListSend
+
+    db.session.add(TeamAccessListSend(team=rocket, sent_on=date(2026, 3, 15), automatic=True, entries=[
+        {"user_id": active.user.id, "name": "Anna Maximilian-Hofstetter-Wallensteiner",
+         "email": "anna.maximilian-hofstetter-wallensteiner@edu.fh-joanneum.at"},
+        {"user_id": 99999, "name": "Dieter Departed", "email": "dieter.departed@edu.fh-joanneum.at"},
+    ]))
+    # Money: two payments, one partly refunded, one transfer, and where it goes.
+    from aeronautics_members.db_models import Payment, TeamPayout
+
+    rocket.bank_account_holder, rocket.bank_iban, rocket.bank_bic = (
+        "Joanneum Aeronautics Rocket Team", "AT611904300234573201", "BKAUATWW")
+    for index, (payer, refunded) in enumerate(((active.user, 0), (carla, 500))):
+        db.session.add(Payment(purpose="team", team_id=rocket.id, user_id=payer.id, amount_cents=1000,
+                               currency="eur", covers_until=date(2027, 3, 31), refunded_cents=refunded,
+                               stripe_invoice_id=f"in_example_{index}"))
+    db.session.add(TeamPayout(team_id=rocket.id, amount_cents=500, paid_on=date(2026, 10, 1),
+                              reference="Teambeiträge Rocket Team bis 01.10.2026",
+                              account_holder=rocket.bank_account_holder, iban=rocket.bank_iban))
+    db.session.commit()
+
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
     db.session.commit()
@@ -196,6 +282,8 @@ def seed(app, app_module, subscriptions):
         {"name": "public--forgot-password", "path": "/forgot-password"},
         {"name": "public--reset-password", "path": f"/reset-password/{reset_token}"},
         {"name": "public--legal", "path": "/legal"},
+        {"name": "public--legal-statutes", "path": "/legal/statutes"},
+        {"name": "public--signup-legal-dialog", "path": "/join", "click": "a[data-legal-dialog]"},
         {"name": "public--thank-you", "path": "/thank-you?method=checkout&phase=prorated"},
         {"name": "public--thank-you-free", "path": "/thank-you?method=checkout&phase=free_period"},
         {"name": "public--cancel", "path": "/cancel"},
@@ -225,6 +313,24 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--reviews", "user": "admin@example.org", "path": "/admin/reviews"},
         {"name": "admin--logs", "user": "admin@example.org", "path": "/admin/logs"},
         {"name": "admin--settings", "user": "admin@example.org", "path": "/admin/settings"},
+        {"name": "admin--teams", "user": "admin@example.org", "path": "/admin/teams"},
+        {"name": "admin--team-detail", "user": "admin@example.org", "path": "/admin/teams/rocket-team"},
+        {"name": "admin--team-new", "user": "admin@example.org", "path": "/admin/teams/new"},
+        {"name": "teams--home", "user": "active@example.org", "path": "/teams"},
+        {"name": "teams--home-applicant", "user": "returning@example.org", "path": "/teams"},
+        {"name": "teams--team-page", "user": "active@example.org", "path": "/teams/rocket-team"},
+        {"name": "teams--about", "user": "photo-needed@example.org", "path": "/teams/rocket-team/about"},
+        {"name": "teams--leave", "user": "active@example.org", "path": "/teams/rocket-team/leave"},
+        {"name": "teams--manage", "user": "active@example.org", "path": "/teams/rocket-team/manage"},
+        {"name": "teams--manage-page", "user": "active@example.org", "path": "/teams/rocket-team/manage#manage-page"},
+        {"name": "teams--manage-applying", "user": "active@example.org", "path": "/teams/rocket-team/manage#manage-applying"},
+        {"name": "teams--manage-access-list", "user": "active@example.org", "path": "/teams/rocket-team/manage#manage-access-list"},
+        {"name": "teams--manage-roles", "user": "active@example.org", "path": "/teams/rocket-team/manage#manage-roles"},
+        {"name": "teams--person", "user": "active@example.org", "path": f"/teams/rocket-team/manage/people/{bernd.id}"},
+        {"name": "teams--access-list", "user": "active@example.org", "path": "/teams/rocket-team/manage/access-list"},
+        {"name": "teams--money", "user": "active@example.org", "path": "/teams/rocket-team/money"},
+        {"name": "teams--money-treasurer", "user": "admin@example.org", "path": "/teams/rocket-team/money"},
+        {"name": "admin--money", "user": "admin@example.org", "path": "/admin/money"},
     ]
 
 

@@ -1,0 +1,48 @@
+{% extends "emails/_layout.html" %}
+{#- A team's current members, for whoever gives access to its rooms. -#}
+{% block content %}
+    {% if team_badge_name %}
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">
+            <tr>
+                {% if team_logo_cid %}
+                    <td style="padding-right:12px; vertical-align:middle;">
+                        <img src="cid:{{ team_logo_cid }}" alt="" height="48" style="display:block; height:48px; width:auto; max-width:160px; border:0;">
+                    </td>
+                {% endif %}
+                <td style="vertical-align:middle; color:#aab4bb; font-size:14px; font-weight:600;">{{ team_badge_name }}</td>
+            </tr>
+        </table>
+    {% endif %}
+    <h2>{{ heading }}</h2>
+    <p>{{ intro }}</p>
+    {% if rows %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; margin:8px 0 12px;">
+            <tr>
+                <th align="left" width="40%" style="padding:8px 10px 8px 0; border-bottom:1px solid #34383b; color:#aab4bb; font-size:13px;">{{ _('Name') }}</th>
+                <th align="left" style="padding:8px 0; border-bottom:1px solid #34383b; color:#aab4bb; font-size:13px;">{{ _('University email') }}</th>
+            </tr>
+            {% for row in rows %}
+                <tr>
+                    <td style="padding:8px 10px 8px 0; border-bottom:1px solid #34383b;">
+                        {{ row.name }}{% if row.new %} <span style="display:inline-block; margin-left:6px; padding:1px 6px; background-color:#0b3a42; color:#00dfff; font-size:11px; font-weight:700; letter-spacing:0.04em;">{{ _('NEW') }}</span>{% endif %}
+                    </td>
+                    <td style="padding:8px 0; border-bottom:1px solid #34383b; word-break:break-all;">{{ row.email or '-' }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+        <p class="muted" style="color:#aab4bb; margin-top:0;">{{ _('%(count)s member(s).', count=rows|length) }}{% if compared_note %} {{ compared_note }}{% endif %}</p>
+    {% else %}
+        <p class="muted" style="color:#aab4bb;">{{ _('The team has no members at the moment.') }}</p>
+    {% endif %}
+    {% if gone %}
+        <p style="margin:24px 0 4px; color:#aab4bb; font-size:14px; font-weight:600;">{{ _('No longer in the team') }}</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse; margin:0 0 12px;">
+            {% for entry in gone %}
+                <tr>
+                    <td width="40%" style="padding:4px 10px 4px 0; color:#aab4bb; font-size:14px;">{{ entry.name }}</td>
+                    <td style="padding:4px 0; color:#aab4bb; font-size:14px; word-break:break-all;">{{ entry.email or '-' }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+{% endblock %}

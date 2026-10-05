@@ -6,6 +6,7 @@ import smtplib
 import ssl
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
+from email.utils import formataddr
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 from html.parser import HTMLParser
@@ -191,7 +192,7 @@ def html_to_text(html):
     return parser.text()
 
 
-def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, **template_vars):
+def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, **template_vars):
     """
     Sends an email using pre-configured SMTP accounts.
 
@@ -215,15 +216,27 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
             for email in (bcc_emails or [])
             if str(email).strip()
         ]
+        # Copies everybody can see, unlike the blind ones.
+        cc_list = [
+            str(email).strip()
+            for email in (cc_emails or [])
+            if str(email).strip() and str(email).strip() != primary_recipient
+        ]
         recipients = []
-        for email in [primary_recipient, *bcc_list]:
+        for email in [primary_recipient, *cc_list, *bcc_list]:
             if email not in recipients:
                 recipients.append(email)
 
+        # The login and the sender are the same for most providers; a relay
+        # such as Brevo signs in with an id of its own and sends from a
+        # verified address, which the account then names.
+        sender = (config.get("from") or config["user"]).strip()
         message = MIMEMultipart("related")
         message["Subject"] = subject
-        message["From"] = config["user"]
+        message["From"] = formataddr((config["from_name"], sender)) if config.get("from_name") else sender
         message["To"] = primary_recipient
+        if cc_list:
+            message["Cc"] = ", ".join(dict.fromkeys(cc_list))
 
         if template_name:
             # Every template's footer carries the year. Supplied here rather
@@ -266,16 +279,16 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
             with smtplib.SMTP(config["host"], config["port"], timeout=SMTP_SEND_TIMEOUT_SECONDS) as server:
                 server.starttls(context=context)
                 server.login(config["user"], config["pass"])
-                server.sendmail(config["user"], recipients, message.as_string())
+                server.sendmail(sender, recipients, message.as_string())
         else:
             with smtplib.SMTP_SSL(
                 config["host"], config["port"], context=context, timeout=SMTP_SEND_TIMEOUT_SECONDS,
             ) as server:
                 server.login(config["user"], config["pass"])
-                server.sendmail(config["user"], recipients, message.as_string())
+                server.sendmail(sender, recipients, message.as_string())
 
         if has_app_context():
-            current_app.logger.info("Email sent successfully to %s from %s", ", ".join(recipients), config["user"])
+            current_app.logger.info("Email sent successfully to %s from %s", ", ".join(recipients), sender)
         else:
             print(f"Email sent successfully to {', '.join(recipients)} from {config['user']}")
         return (True, None) if return_error else True

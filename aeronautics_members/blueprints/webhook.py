@@ -54,6 +54,7 @@ from ..services.membership import (
 from ..services.notifications import (
     queue_curated_admin_notification,
 )
+from ..services.payments import handler_for
 from ..services.settings import (
     get_stripe_settings_map,
 )
@@ -173,6 +174,22 @@ def _stop_charging_after_lost_dispute(member, charge_id):
         )
 
 
+def _teams_follow(member):
+    """A cancelled association membership ends its teams on the same day.
+
+    After the membership's own change is committed, and never failing the
+    event: the nightly job brings anything missed here in line too.
+    """
+    from ..services.team_payments import follow_association_end
+
+    try:
+        if follow_association_end(member):
+            db.session.commit()
+    except Exception as exc:  # noqa: BLE001 -- the nightly job tries again
+        db.session.rollback()
+        current_app.logger.warning("Teams not brought in line for member_id=%s: %s", member.id, exc)
+
+
 def process_stripe_event(event):
     """Apply a verified Stripe event and return (body, status).
 
@@ -192,6 +209,11 @@ def process_stripe_event(event):
             event.get("id"), event_type, scope.reason,
         )
         return "Could not ask Stripe what this is; deliver it again later", 503
+    # Something else the association sells -- a team's fee -- goes to its own
+    # handler; see services/payments.py.
+    handler = handler_for(scope)
+    if handler is not None:
+        return handler(event)
     if scope.is_foreign and not (
         # A SEPA debit starting is reported before, or without, its invoice
         # being easy to find, and marking a member "processing" by mistake
@@ -490,6 +512,7 @@ def process_stripe_event(event):
             sync_member_subscription_state_from_subscription(member, subscription)
             enqueue_forum_sync(member, reason="Subscription updated.")
             db.session.commit()
+            _teams_follow(member)
             current_app.logger.info(
                 "Subscription updated for member_id=%s customer=%s subscription=%s status=%s cancel_at_period_end=%s cancel_at=%s",
                 member.id,
@@ -577,6 +600,7 @@ def process_stripe_event(event):
             sync_member_active_state(member, event_date)
             enqueue_forum_sync(member, reason="Subscription canceled.")
             db.session.commit()
+            _teams_follow(member)
         else:
             current_app.logger.warning(
                 "Webhook for subscription cancellation received, but no member found for Stripe reference customer=%s subscription=%s",

@@ -1,0 +1,73 @@
+{% extends "admin_layout.html" %}
+{% from "teams/_status.html" import team_logo %}
+{% block admin_page_actions %}
+    <a href="{{ url_for('teams.admin_team_new') }}" class="btn btn-primary">{{ _('New %(label)s', label=label_singular) }}</a>
+{% endblock %}
+{% block admin_content %}
+<div class="card mb-4">
+    <form method="POST" action="{{ url_for('teams.admin_teams') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">{{ _('Settings') }}</h4>
+            <button type="submit" class="btn btn-primary">{{ _('Save') }}</button>
+        </div>
+        <div class="card-body">
+            <div class="form-check mb-1">
+                <input class="form-check-input" type="checkbox" name="teams_enabled" id="teams_enabled" {% if teams_enabled %}checked{% endif %}>
+                <label class="form-check-label" for="teams_enabled">{{ _('Switched on') }}</label>
+            </div>
+            <p class="small text-muted mb-3">{{ _('While off, members see nothing of teams. You can still set them up here.') }}</p>
+            <div class="row g-3">
+                <div class="col-sm-6 col-lg-4">
+                    <label class="form-label" for="label_singular">{{ _('Called (one)') }}</label>
+                    <input class="form-control" id="label_singular" name="label_singular" maxlength="50" value="{{ label_singular }}">
+                </div>
+                <div class="col-sm-6 col-lg-4">
+                    <label class="form-label" for="label_plural">{{ _('Called (several)') }}</label>
+                    <input class="form-control" id="label_plural" name="label_plural" maxlength="50" value="{{ label_plural }}">
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h4 class="mb-0">{{ label_plural }}</h4>
+    </div>
+    <div class="card-body">
+        {% if teams %}
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>{{ _('Name') }}</th>
+                            <th>{{ _('Joining') }}</th>
+                            <th>{{ _('Accepting') }}</th>
+                            <th>{{ _('Lead') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for team in teams %}
+                            <tr>
+                                <td>
+                                    {{ team_logo(team, 'small') }}
+                                    <a href="{{ url_for('teams.admin_team_detail', slug=team.slug) }}">{{ team.name }}</a>
+                                    {% if team.status == 'archived' %}<span class="status-label status-neutral ms-1">{{ _("Archived") }}</span>{% endif %}
+                                </td>
+                                <td>{{ _('By approval') if team.admission_mode == 'approval' else _('Open') }}</td>
+                                <td>{{ _('Yes') if team.applications_open else _('No') }}</td>
+                                <td>
+                                    {% if has_lead_in_force(team) %}{{ _('Yes') }}{% else %}<span class="text-warning">{{ _('None active') }}</span>{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">{{ _('None yet.') }}</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

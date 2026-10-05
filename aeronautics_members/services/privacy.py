@@ -131,6 +131,7 @@ def export_account_data(user):
         "forum_avatar_submissions": [],
         "emails_sent_to_you": [],
         "account_history": [],
+        "teams": [],
     }
 
     if member is not None:
@@ -139,6 +140,8 @@ def export_account_data(user):
             "id": member.id,
             "created_at": member.created_at,
             "terms_accepted": member.terms_accepted,
+            "legal_texts_accepted": member.legal_versions_accepted,
+            "legal_texts_accepted_at": member.legal_accepted_at,
             "payment_status": member.payment_status,
             "is_active": member.is_active,
             "membership_starts_on": member.membership_starts_on,
@@ -246,7 +249,72 @@ def export_account_data(user):
         ).scalars()
     ]
 
+    payload["teams"] = _team_data(user)
     return serialize_audit_value(payload)
+
+
+def _team_data(user):
+    """Every team attempt, role, payment and lead's note about this person.
+
+    The notes are about the person, so they are theirs to see (Art. 15) --
+    with the team and the date, not which lead wrote them, which is the
+    lead's own data. Erasing the account deletes them.
+    """
+    from ..db_models import Payment, TeamMembership, TeamNote, TeamRole
+
+    memberships = db.session.execute(
+        db.select(TeamMembership).filter_by(user_id=user.id).order_by(TeamMembership.id)
+    ).scalars().all()
+    roles = db.session.execute(db.select(TeamRole).filter_by(user_id=user.id)).scalars().all()
+    payments = db.session.execute(
+        db.select(Payment).filter_by(user_id=user.id, purpose="team").order_by(Payment.id)
+    ).scalars().all()
+    notes = db.session.execute(
+        db.select(TeamNote).filter_by(user_id=user.id).order_by(TeamNote.id)
+    ).scalars().all()
+    return {
+        "memberships": [
+            {
+                "team": membership.team.name,
+                "status": membership.status,
+                "application_text": membership.application_text,
+                "team_rules_accepted_at": membership.terms_accepted_at,
+                "team_rules_version": membership.terms_version,
+                "meeting_details": membership.meeting_details,
+                "applied_at": membership.applied_at,
+                "invited_at": membership.invited_at,
+                "approved_at": membership.approved_at,
+                "payment_mode": membership.payment_mode,
+                "payment_settled_at": membership.payment_settled_at,
+                "started_at": membership.started_at,
+                "ended_at": membership.ended_at,
+                "end_reason": membership.end_reason,
+                "paid_until": membership.paid_until,
+                "ends_on": membership.ends_on,
+            }
+            for membership in memberships
+        ],
+        "roles": [
+            {"team": team_role.team.name, "role": team_role.role, "granted_at": team_role.granted_at}
+            for team_role in roles
+        ],
+        "payments": [
+            {
+                "team": payment.team.name if payment.team else None,
+                "amount_cents": payment.amount_cents,
+                "currency": payment.currency,
+                "covers_until": payment.covers_until,
+                "paid_at": payment.paid_at,
+                "status": payment.status,
+                "refunded_cents": payment.refunded_cents,
+            }
+            for payment in payments
+        ],
+        "notes_by_leads": [
+            {"team": note.team.name, "written_at": note.created_at, "text": note.body}
+            for note in notes
+        ],
+    }
 
 
 def export_filename_for(user):
@@ -434,6 +502,11 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
         summary["periods_retained"] = len(member.membership_periods)
         summary["avatar_files_deleted"] = _erase_member_rows(member)
         _erase_member_profile(member, now)
+
+    # Teams: memberships end, roles go, application texts are blanked.
+    from .teams import forget_for_erasure
+
+    forget_for_erasure(user)
 
     # Somebody from the old forum -- still archived, or a returning student
     # who reclaimed the account -- also has what that board knew about them.

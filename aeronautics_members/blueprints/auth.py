@@ -86,9 +86,11 @@ def forgot_password():
 
     form = EmailRequestForm()
     if form.validate_on_submit():
-        # A university address finds the account too, but the link always
-        # goes to the private address: that is the mailbox the account
-        # belongs to. The message below says the same either way.
+        # A university address finds the account too, but the link goes to
+        # the private address -- the mailbox the account belongs to -- unless
+        # that one was never confirmed and could be mistyped; then to the
+        # confirmed university address asked with (password_reset_address).
+        # The message below says the same either way.
         user = user_for_login_address(form.email.data)
         # Asked again within the minute: nothing is sent. Every request makes a
         # new link and kills the last one, so a double click left the email
@@ -99,7 +101,7 @@ def forgot_password():
             try:
                 rotate_password_reset_nonce(user)
                 db.session.commit()
-                send_password_reset_email(current_app._get_current_object(), user)
+                send_password_reset_email(current_app._get_current_object(), user, requested_with=form.email.data)
                 remember_sent("password-reset", email_address)
             except Exception as exc:
                 db.session.rollback()
@@ -188,6 +190,7 @@ def verify_email(token):
         _stay_signed_in(claimed, signed_in_here)
         if claimed is None:
             _tell_the_forum_the_address_is_confirmed(user)
+            _point_out_a_likely_old_account(user)
 
     flash(_("Your email address has been verified."), "success")
     if claimed is not None:
@@ -200,6 +203,18 @@ def verify_email(token):
     if signed_in_here:
         return redirect(url_for(get_member_portal_target(current_user)))
     return redirect(url_for("auth.login"))
+
+
+def _point_out_a_likely_old_account(user):
+    """No old forum account matched the confirmed address exactly; if one
+    nearly does -- the old forum never checked what was typed -- the admins
+    are told, to reconnect it by hand. Never fails the confirmation."""
+    from ..services.forum_import import report_likely_old_accounts
+    from ..services.notifications import flush_marked_notification_channels
+
+    if report_likely_old_accounts(user):
+        db.session.commit()
+        flush_marked_notification_channels()
 
 
 @auth_bp.route("/verify-work-email/<token>")
@@ -241,6 +256,8 @@ def verify_work_email(token):
             )
         db.session.commit()
         _stay_signed_in(claimed, signed_in_here)
+        if claimed is None:
+            _point_out_a_likely_old_account(member.user)
 
     flash(_("Your university or company email address has been confirmed."), "success")
     if claimed is not None:

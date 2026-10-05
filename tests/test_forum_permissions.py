@@ -5,6 +5,11 @@ failure. A Discourse category with no group permission on it is public, so a
 run that reports "1,529 posts" and nothing else has put thirteen years of exams
 and transcripts, with students' names in them, where anybody can read them and
 a crawler will. Everything here is about that one silence.
+
+Parts of this file are the old forum's one-off import (category permissions
+for the archive) and are marked ``forum_import``: skipped by default, run with
+``pytest -m forum_import``. The rest -- which groups the portal puts people in
+and the settings page for them -- is the live forum sync and always runs.
 """
 import pytest
 
@@ -105,6 +110,7 @@ def plan(forum):
     return made
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestWhichCategoriesAreOurs:
     def test_the_roots_come_from_the_worksheet_not_the_forum(self):
         """The forum cannot tell what we made from what Discourse shipped."""
@@ -137,6 +143,7 @@ class TestWhichCategoriesAreOurs:
         assert set(live_tree(looping)) == {1, 2}
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestWhatEachGroupMay:
     def test_a_live_lecture_lets_students_start_topics(self, plan):
         """Students keep adding exams; a read-only lecture is a museum."""
@@ -195,6 +202,7 @@ class TestWhatEachGroupMay:
             assert "members" not in grants
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheGroupsThatHaveToExistFirst:
     """add_groups silently drops names Discourse does not already have."""
 
@@ -223,6 +231,7 @@ class TestTheGroupsThatHaveToExistFirst:
         assert wanted.count("members") == 1
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestReadingWhatTheForumHasNow:
     def test_the_shape_discourse_sends(self):
         assert current_permissions({"group_permissions": [
@@ -241,6 +250,7 @@ class TestReadingWhatTheForumHasNow:
         ]}) == {"members": 3}
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestApplyingThem:
     def test_every_category_in_the_plan_is_written(self, forum, plan):
         report = apply_permissions(forum, plan)
@@ -467,6 +477,7 @@ class TestSortingPeopleByWhatKindOfMemberTheyAre:
             assert not {"lecturers", "companies"} & set(grants)
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestNotUndoingWhatSomebodyDecidedOnTheForum:
     """The standing job is narrow: nothing is ever left open.
 
@@ -513,6 +524,7 @@ class TestNotUndoingWhatSomebodyDecidedOnTheForum:
         assert dict(forum.written)[11] == {"students": CREATE, STAFF_GROUP: CREATE}
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestReadingTheAccessSettings:
     def test_commas_and_newlines_are_both_how_people_type_a_list(self):
         assert access_groups(
@@ -571,6 +583,7 @@ class TestAGroupMeansHasPaidAndIsThatKindOfPerson:
         assert "students" in self._groups(payload, "remove_groups")
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestSayingWhatHasNotBeenDecidedYet:
     """Each of these settings is empty by default, and empty is a silence.
 
@@ -617,6 +630,7 @@ class TestSayingWhatHasNotBeenDecidedYet:
             assert len(why) > 40
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestALineThatNamesNothing:
     """The left-hand side is fixed and a typo in it is silent.
 
@@ -734,6 +748,7 @@ class TestTheBoxesOnTheSettingsPage:
             assert f'name="forum_group_{kind}"' in page
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheOrderDiscourseInsistsOn:
     """Discourse refuses to restrict a parent while a child still admits more.
 
@@ -803,6 +818,7 @@ class TestTheOrderDiscourseInsistsOn:
         assert "Angewandte Thermodynamik" in report["problems"][0]
 
 
+@pytest.mark.forum_import  # the one-off import
 class TestTheAuthorsMayPostWhileTheImportRuns:
     """Found for real: with the categories restricted first, every post refused.
 

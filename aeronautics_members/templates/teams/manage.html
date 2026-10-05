@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% from "teams/_status.html" import status_label, person_picture, team_logo, logo_field, picture_field, access_list_fields %}
+{% block title %}{{ team.name }}{% endblock %}
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+        <div class="d-flex align-items-center gap-3">
+            {{ team_logo(team, 'large') }}
+            <div>
+                <h2 class="mb-1">{{ team.name }}</h2>
+                <p class="text-muted mb-0">{{ _('Team management') }}</p>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-secondary" href="{{ url_for('teams.team_page', slug=team.slug) }}">{{ _('Team page') }}</a>
+            {% if TeamPermission.VIEW_MONEY in permissions %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_money', slug=team.slug) }}">{{ _('Money') }}</a>
+            {% endif %}
+            {% if TeamPermission.EXPORT in permissions %}
+                <a class="btn btn-secondary" href="{{ url_for('teams.team_export', slug=team.slug) }}">{{ _('Export members') }}</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if not has_lead_in_force %}
+    <div class="alert alert-warning">{{ _('This team has no active lead.') }}</div>
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-xl-3">
+        <div class="card settings-sidebar-card">
+            <div class="card-body p-0">
+                <div class="nav settings-nav flex-column nav-pills" id="manage-tab" data-remember-tab role="tablist" aria-orientation="vertical">
+                    <button class="nav-link active" id="manage-applications-tab" data-bs-toggle="pill" data-bs-target="#manage-applications" type="button" role="tab" aria-controls="manage-applications" aria-selected="true">{{ _('Applications') }}{% if applications|length %}<span class="nav-count">{{ applications|length }}</span>{% endif %}</button>
+                    <button class="nav-link" id="manage-members-tab" data-bs-toggle="pill" data-bs-target="#manage-members" type="button" role="tab" aria-controls="manage-members" aria-selected="false">{{ _('Members') }}</button>
+                    <button class="nav-link" id="manage-former-tab" data-bs-toggle="pill" data-bs-target="#manage-former" type="button" role="tab" aria-controls="manage-former" aria-selected="false">{{ _('Former members') }}</button>
+                    {% if TeamPermission.EDIT_SETTINGS in permissions %}
+                    <button class="nav-link" id="manage-page-tab" data-bs-toggle="pill" data-bs-target="#manage-page" type="button" role="tab" aria-controls="manage-page" aria-selected="false">{{ _('Team page') }}</button>
+                    <button class="nav-link" id="manage-applying-tab" data-bs-toggle="pill" data-bs-target="#manage-applying" type="button" role="tab" aria-controls="manage-applying" aria-selected="false">{{ _('Applying') }}</button>
+                    {% endif %}
+                    {% if team.access_list_enabled and TeamPermission.SEND_ACCESS_LIST in permissions %}
+                    <button class="nav-link" id="manage-access-list-tab" data-bs-toggle="pill" data-bs-target="#manage-access-list" type="button" role="tab" aria-controls="manage-access-list" aria-selected="false">{{ _('Access list') }}</button>
+                    {% endif %}
+                    <button class="nav-link" id="manage-roles-tab" data-bs-toggle="pill" data-bs-target="#manage-roles" type="button" role="tab" aria-controls="manage-roles" aria-selected="false">{{ _('Roles') }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-9">
+        <div class="tab-content settings-tab-content">
+        <div class="tab-pane fade show active" id="manage-applications" role="tabpanel" aria-labelledby="manage-applications-tab" tabindex="0">
+            <section class="card" aria-labelledby="applications-heading">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0" id="applications-heading">{{ _('Applications') }}</h4>
+                    <span class="text-muted small">{{ applications|length }}</span>
+                </div>
+                <div class="card-body">
+                    {% if applications %}
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead><tr><th>{{ _('Name') }}</th><th>{{ _('Status') }}</th><th>{{ _('Applied') }}</th></tr></thead>
+                                <tbody>
+                                    {% for membership in applications %}
+                                        <tr>
+                                            <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=membership.user_id) }}">{{ person_details(membership.user).name }}</a></td>
+                                            <td>{{ status_label(membership.status, status_labels) }}{% if membership.status == 'approved' and membership.payment_state %}
+                                                <div class="small text-muted">{{ {'processing': _('Payment on its way'), 'failed': _('Payment failed'), 'paid': _('Paid')}.get(membership.payment_state, '') }}</div>{% endif %}</td>
+                                            <td>{{ membership.applied_at|date_display }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">{{ _('None waiting.') }}</p>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+        <div class="tab-pane fade" id="manage-members" role="tabpanel" aria-labelledby="manage-members-tab" tabindex="0">
+            <section class="card" aria-labelledby="members-heading">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0" id="members-heading">{{ _('Members') }}</h4>
+                    <span class="text-muted small">{{ roster|length }}{% if team.max_members %} / {{ team.max_members }}{% endif %}</span>
+                </div>
+                <div class="card-body">
+                    {% if roster %}
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead><tr><th></th><th>{{ _('Name') }}</th><th>{{ _('University email') }}</th><th>{{ _('Cohort') }}</th><th>{{ _('Since') }}</th>{% if charges %}<th>{{ _('Paid until') }}</th>{% endif %}</tr></thead>
+                                <tbody>
+                                    {% for row in roster %}
+                                        <tr>
+                                            <td>{{ person_picture(row.avatar_token, row.name) }}</td>
+                                            <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=row.user.id) }}">{{ row.name }}</a>{% if row.is_lead %} <span class="status-label status-info">{{ _('Lead') }}</span>{% endif %}</td>
+                                            <td>{{ row.university_email or '-' }}</td>
+                                            <td>{{ row.cohort or '-' }}</td>
+                                            <td>{{ row.membership.started_at|date_display }}</td>
+                                            {% if charges %}<td>{% if row.membership.paid_until %}{{ row.membership.paid_until|date_display }}{% else %}-{% endif %}{% if needs_to_pay(row.membership) %}<div class="small text-warning">{{ _('Free until then, not paid yet') }}</div>{% elif renewal_open(row.membership) %}<div class="small text-warning">{{ _('Next period not paid yet') }}</div>{% endif %}{% if row.membership.ends_on %}<div class="small text-muted">{{ _('Leaves %(day)s', day=row.membership.ends_on|date_display) }}</div>{% endif %}{% if row.membership.payment_state == 'failed' %}<div class="small text-warning">{{ _('Payment failed') }}</div>{% endif %}</td>{% endif %}
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">{{ _('Nobody yet.') }}</p>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+        <div class="tab-pane fade" id="manage-former" role="tabpanel" aria-labelledby="manage-former-tab" tabindex="0">
+            <section class="card" aria-labelledby="former-heading">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0" id="former-heading">{{ _('Former members') }}</h4>
+                    <span class="text-muted small">{{ former|length }}</span>
+                </div>
+                <div class="card-body">
+                    {% if former %}
+                        <div class="table-responsive">
+                            <table class="table table-striped align-middle mb-0">
+                                <thead><tr><th>{{ _('Name') }}</th><th>{{ _('In the team') }}</th><th>{{ _('Last active') }}</th><th>{{ _('Why it ended') }}</th></tr></thead>
+                                <tbody>
+                                    {% for row in former %}
+                                        <tr>
+                                            <td><a href="{{ url_for('teams.team_person', slug=team.slug, user_id=row.user_id) }}">{{ row.name }}</a></td>
+                                            <td>{{ row.periods }}</td>
+                                            <td>{{ row.last_active_shown or '-' }}</td>
+                                            <td>{{ _(end_reasons.get(row.end_reason, '-')) }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">{{ _('None.') }}</p>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+            {% if TeamPermission.EDIT_SETTINGS in permissions %}
+        <div class="tab-pane fade" id="manage-page" role="tabpanel" aria-labelledby="manage-page-tab" tabindex="0">
+            <form method="POST" action="{{ url_for('teams.team_lead_settings', slug=team.slug) }}" enctype="multipart/form-data" class="card mb-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="section" value="page">
+                <div class="card-header"><h4 class="mb-0">{{ _('Team page') }}</h4></div>
+                <div class="card-body d-flex flex-column gap-3">
+                    <p class="small text-muted mb-0">{{ _('What everybody sees about the team, on the overview and on its About page.') }}</p>
+                    <div>
+                        <label class="form-label" for="description">{{ _('Short description') }}</label>
+                        <textarea class="form-control" id="description" name="description" rows="2">{{ team.description or '' }}</textarea>
+                        <div class="form-text">{{ _('One or two sentences, on the overview of all teams.') }}</div>
+                    </div>
+                    <div>
+                        <label class="form-label" for="about">{{ _('About the team') }}</label>
+                        <textarea class="form-control" id="about" name="about" rows="6" maxlength="10000">{{ team.about or '' }}</textarea>
+                        <div class="form-text">{{ _('What the team does, what members do, when it meets. Plain text; blank lines start a new paragraph.') }}</div>
+                    </div>
+                    <div>{{ picture_field(team) }}</div>
+                    <div>{{ logo_field(team) }}</div>
+                </div>
+                <div class="card-footer d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary">{{ _('Save') }}</button>
+                </div>
+            </form>
+        </div>
+        <div class="tab-pane fade" id="manage-applying" role="tabpanel" aria-labelledby="manage-applying-tab" tabindex="0">
+            <form method="POST" action="{{ url_for('teams.team_lead_settings', slug=team.slug) }}" enctype="multipart/form-data" class="card mb-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="section" value="applying">
+                <div class="card-header"><h4 class="mb-0">{{ _('Applying') }}</h4></div>
+                <div class="card-body d-flex flex-column gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="applications_open" id="applications_open" {% if team.applications_open %}checked{% endif %}>
+                        <label class="form-check-label" for="applications_open">{{ _('Accepting new members') }}</label>
+                    </div>
+                    <div>
+                        <label class="form-label" for="application_prompt">{{ _('Question for applicants') }}</label>
+                        <input class="form-control" id="application_prompt" name="application_prompt" maxlength="255" value="{{ team.application_prompt or '' }}">
+                        <div class="form-text">{{ _('Optional. Without one, applicants are not asked to write anything.') }}</div>
+                    </div>
+                    <div>
+                        <label class="form-label" for="terms_text">{{ _('Rules to accept') }}</label>
+                        <textarea class="form-control" id="terms_text" name="terms_text" rows="8" maxlength="50000">{{ team.terms_text or '' }}</textarea>
+                        <div class="form-text">
+                            {{ _('Optional. Whoever applies or joins has to tick that they accept them. Each change is a new version, dated; members keep the version they accepted, and the change is logged.') }}
+                            {% if team.terms_updated_at %}{{ _('Current version: %(day)s.', day=team.terms_updated_at|date_display) }}{% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary">{{ _('Save') }}</button>
+                </div>
+            </form>
+        </div>
+            {% endif %}
+            {% if team.access_list_enabled and TeamPermission.SEND_ACCESS_LIST in permissions %}
+        <div class="tab-pane fade" id="manage-access-list" role="tabpanel" aria-labelledby="manage-access-list-tab" tabindex="0">
+            <section class="card mb-4" aria-labelledby="access-list-heading">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0" id="access-list-heading">{{ _('Access list') }}</h4>
+                    {% if access_list_recipients %}
+                        <a class="btn btn-primary" href="{{ url_for('teams.team_access_list', slug=team.slug) }}">{{ _('Preview and send') }}</a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if access_list_recipients %}
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4">{{ _('Send to') }}</dt><dd class="col-sm-8">{{ access_list_recipients|join(', ') }}</dd>
+                            <dt class="col-sm-4">{{ _('By itself') }}</dt>
+                            <dd class="col-sm-8">
+                                {% if team.access_list_auto_send %}{{ _('On %(dates)s; next on %(next)s', dates=team.access_list_dates, next=next_access_list_date|date_display) }}{% else %}{{ _('Off') }}{% endif %}
+                            </dd>
+                            <dt class="col-sm-4">{{ _('Last sent') }}</dt><dd class="col-sm-8">{{ team.access_list_last_sent_on|date_display or _('Never') }}</dd>
+                        </dl>
+                    {% else %}
+                        <p class="text-muted mb-0">{{ _('Add who receives it below.') }}</p>
+                    {% endif %}
+                </div>
+            </section>
+            {% if TeamPermission.EDIT_SETTINGS in permissions %}
+            <form method="POST" action="{{ url_for('teams.team_lead_settings', slug=team.slug) }}" enctype="multipart/form-data" class="card mb-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="section" value="access_list">
+                <div class="card-header"><h4 class="mb-0">{{ _('Who receives it, and when') }}</h4></div>
+                <div class="card-body d-flex flex-column gap-3">
+                    {{ access_list_fields(team) }}
+                </div>
+                <div class="card-footer d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary">{{ _('Save') }}</button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+            {% endif %}
+        <div class="tab-pane fade" id="manage-roles" role="tabpanel" aria-labelledby="manage-roles-tab" tabindex="0">
+            <section class="card mb-4" aria-labelledby="roles-heading">
+                <div class="card-header"><h4 class="mb-0" id="roles-heading">{{ _('Roles') }}</h4></div>
+                <div class="card-body d-flex flex-column gap-3">
+                    <div>
+                        <h5>{{ _('Leads') }}</h5>
+                        <ul class="mb-1">
+                            {% for team_role in leads %}<li>{{ person_details(team_role.user).name }}{% if not role_counts(team_role) %} <span class="text-muted small">({{ _('not in force') }})</span>{% endif %}</li>{% else %}<li class="text-muted">{{ _('None') }}</li>{% endfor %}
+                        </ul>
+                        <div class="form-text">{{ _('Leads are appointed by the association\'s admins.') }}</div>
+                    </div>
+                    <div>
+                        <h5>{{ _('Treasurer') }}</h5>
+                        <p class="small text-muted">{{ _('Sees what the team\'s members paid and what was transferred to the team, and keeps its bank details. Nothing about the people.') }}</p>
+                        {% if treasurers %}
+                            <ul class="list-unstyled d-flex flex-column gap-2 mb-3">
+                                {% for team_role in treasurers %}
+                                    <li class="d-flex flex-wrap align-items-center gap-2">
+                                        <span>{{ person_details(team_role.user).name }}{% if not role_counts(team_role) %} <span class="text-muted small">({{ _('not in force') }})</span>{% endif %}</span>
+                                        {% if TeamPermission.APPOINT_TREASURER in permissions %}
+                                            <form method="POST" action="{{ url_for('teams.team_dismiss_treasurer', slug=team.slug) }}" class="mb-0"
+                                                  data-confirm-label="{{ _('Yes, remove') }}" data-confirm="{{ _('No longer treasurer: %(name)s?', name=person_details(team_role.user).name) }}">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="user_id" value="{{ team_role.user_id }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">{{ _('Remove') }}</button>
+                                            </form>
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="text-muted">{{ _('None.') }}</p>
+                        {% endif %}
+                        {% set treasurer_ids = treasurers|map(attribute='user_id')|list %}
+                        {% set candidates = roster|rejectattr('user.id', 'in', treasurer_ids)|list %}
+                        {% if TeamPermission.APPOINT_TREASURER in permissions and candidates %}
+                            <form method="POST" action="{{ url_for('teams.team_appoint_treasurer', slug=team.slug) }}" class="row g-2 align-items-end mb-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="col-sm-8">
+                                    <label class="form-label" for="treasurer-user">{{ _('Appoint a member') }}</label>
+                                    <select class="form-select" id="treasurer-user" name="user_id" required>
+                                        <option value="">{{ _('Choose…') }}</option>
+                                        {% for row in candidates %}<option value="{{ row.user.id }}">{{ row.name }}</option>{% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-sm-4"><button type="submit" class="btn btn-secondary w-100">{{ _('Appoint') }}</button></div>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+        </div>
+        </div>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='admin-settings-tabs.js') }}"></script>
+{% endblock %}

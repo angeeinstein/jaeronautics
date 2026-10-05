@@ -1,5 +1,6 @@
-/* Keeps the settings page's active tab in sync with the URL fragment, so a
- * reload or a shared link reopens the same tab.
+/* Keeps a side list's active tab -- the admin settings, a team's management
+ * page -- in sync with the URL fragment, so a reload, a shared link or the
+ * page after saving reopens the same tab.
  *
  * Kept in a static file rather than an inline <script> because the deployed
  * Content-Security-Policy allows script-src 'self' only: an inline block is
@@ -7,16 +8,20 @@
  * template-render tests.
  */
 document.addEventListener('DOMContentLoaded', function () {
-    var tabTriggerList = [].slice.call(
-        document.querySelectorAll('#settings-tab button[data-bs-toggle="pill"]')
-    );
+    // The admin settings (#settings-tab) and any other side list that asks
+    // for it (data-remember-tab), such as a team's management page.
+    var nav = document.querySelector('#settings-tab, [data-remember-tab]');
+    if (!nav) {
+        return;
+    }
+    var tabTriggerList = [].slice.call(nav.querySelectorAll('button[data-bs-toggle="pill"]'));
     if (!tabTriggerList.length) {
         return;
     }
 
     var currentHash = window.location.hash;
     var matchedTab = currentHash
-        ? document.querySelector('#settings-tab button[data-bs-target="' + currentHash + '"]')
+        ? nav.querySelector('button[data-bs-target="' + currentHash + '"]')
         : null;
     // A link to something inside a tab (#backup-restore) opens the tab it
     // sits in and scrolls to it, rather than leaving it hidden behind General.
@@ -29,7 +34,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         var pane = inner ? inner.closest('.tab-pane') : null;
         matchedTab = pane
-            ? document.querySelector('#settings-tab button[data-bs-target="#' + pane.id + '"]')
+            ? nav.querySelector('button[data-bs-target="#' + pane.id + '"]')
             : null;
     }
     if (matchedTab && window.bootstrap && window.bootstrap.Tab) {

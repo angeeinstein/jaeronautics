@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "teams/_status.html" import person_picture, status_label, team_logo %}
+{% block title %}{{ team.name }}{% endblock %}
+{% block content %}
+{# Sections, so more can be added -- documents, dates, a drinks balance --
+   without reworking the page. #}
+{% set current = ongoing.get(team.id) %}
+{% set last = latest.get(team.id) %}
+<div class="card mb-4">
+    <div class="card-body d-flex flex-column flex-lg-row justify-content-between align-items-lg-start gap-3">
+        <div class="d-flex align-items-center gap-3">
+            {{ team_logo(team, 'large') }}
+            <div>
+                <h2 class="mb-1">{{ team.name }}</h2>
+                {% if team.description %}<p class="text-muted mb-0">{{ team.description }}</p>{% endif %}
+            </div>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            {% if current %}{{ status_label(current.status, status_labels) }}{% elif last %}{{ status_label(last.status, status_labels) }}{% endif %}
+            <a class="btn btn-secondary" href="{{ url_for('teams.team_about', slug=team.slug) }}">{{ _('About the team') }}</a>
+            <a class="btn btn-secondary" href="{{ url_for('teams.teams_home') }}">{{ _('All %(label)s', label=label_plural) }}</a>
+        </div>
+    </div>
+</div>
+
+<section class="card mb-4" aria-labelledby="team-membership-heading">
+    <div class="card-header"><h4 class="mb-0" id="team-membership-heading">{{ _('Your membership') }}</h4></div>
+    <div class="card-body d-flex flex-column gap-3">
+        {% set on_team_page = true %}
+        {% include "teams/_membership.html" %}
+        {% if current and team.terms_text %}
+            <details>
+                <summary class="small">{{ _('Rules of %(team)s', team=team.name) }}</summary>
+                <div class="team-terms mt-2">{{ team.terms_text }}</div>
+                <div class="form-text">{{ _('As of %(day)s.', day=team.terms_updated_at|date_display) }}
+                    {% if current.terms_accepted_at %}{{ _('You accepted the version of %(day)s.', day=current.terms_version|date_display) }}{% endif %}</div>
+            </details>
+        {% endif %}
+    </div>
+</section>
+
+<section class="card mb-4" aria-labelledby="team-members-heading">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h4 class="mb-0" id="team-members-heading">{{ _('Members') }}</h4>
+        <span class="text-muted small">{{ roster|length }}</span>
+    </div>
+    <div class="card-body">
+        {% if roster %}
+            <ul class="team-roster list-unstyled mb-0">
+                {% for row in roster %}
+                    <li class="team-roster-person">
+                        {{ person_picture(row.avatar_token, row.name) }}
+                        <div class="team-roster-text">
+                            <div>{{ row.name }}{% if row.is_lead %} <span class="status-label status-info">{{ _('Lead') }}</span>{% endif %}</div>
+                            {% if row.university_email %}<a class="small" href="mailto:{{ row.university_email }}">{{ row.university_email }}</a>{% endif %}
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-muted mb-0">{{ _('Nobody yet.') }}</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

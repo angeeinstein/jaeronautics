@@ -62,7 +62,7 @@
                         </a>
                         {% if not impact.is_last_admin %}
                             <form method="POST" class="mb-0"
-                                  data-confirm="{{ _('Delete your account and erase your personal data? This cannot be undone.') }}" data-busy-text="{{ _('Deleting…') }}">
+                                  data-confirm-label="{{ _('Yes, delete my account') }}" data-confirm="{{ _('Delete your account and erase your personal data? This cannot be undone.') }}" data-busy-text="{{ _('Deleting…') }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-danger">
                                     {{ _('Delete my account permanently') }}
@@ -78,5 +78,4 @@
 {% endblock %}
 
 {% block extra_scripts %}
-    <script src="{{ url_for('static', filename='confirm-submit.js') }}"></script>
 {% endblock %}

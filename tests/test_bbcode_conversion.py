@@ -216,3 +216,8 @@ class TestItRefusesToPostEverythingAsOnePerson:
 
         assert report["problems"] == []
         assert [p["author"] for p in report["posts"]] == ["SpaniolA_L18", "KappelL_L18"]
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

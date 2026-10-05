@@ -250,8 +250,15 @@ class Member(db.Model):
     # here, so the two say different things about a person.
     year_group = db.Column(db.String(50), nullable=True)
     terms_accepted = db.Column(db.Boolean, nullable=False, default=False)
+    # Which legal texts were accepted at signup, by version: {"privacy": "2026-10-04", ...}
+    # (see services/legal_texts.py), and when. Empty for those who signed up before.
+    legal_versions_accepted = db.Column(db.JSON, nullable=True)
+    legal_accepted_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     pending_checkout_started_at = db.Column(db.DateTime, nullable=True)
+    # When a signup that was never paid was told it will be removed; see
+    # services/unfinished_signups.py.
+    unfinished_signup_notice_at = db.Column(db.DateTime, nullable=True)
     stripe_customer_id = db.Column(db.String(255), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(255), unique=True, nullable=True)
     # The last Checkout session started for this member. Kept so resuming an
@@ -706,6 +713,12 @@ class ExternalWorkItem(db.Model):
     # other change leaves the username alone, on purpose, so that returning
     # students keep the one their old posts are under.
     KIND_FORUM_RENAME = "forum_rename"
+    # Queued when a fee changes: one running subscription moved to the new
+    # price, from its next renewal (services/payments.py).
+    KIND_STRIPE_PRICE_MOVE = "stripe_price_move"
+    # The email about that new fee, due some days before the renewal it takes
+    # effect at: ``not_before`` holds it until then.
+    KIND_FEE_CHANGE_NOTICE = "fee_change_notice"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"
@@ -773,6 +786,261 @@ class Setting(db.Model):
     value = db.Column(db.String(255), nullable=False)
 
 
+# Teams: groups inside the association with their own members and leads. A
+# feature that can be switched off (services/teams.py), so nothing outside these
+# tables depends on them. Values that another association might need more of --
+# statuses, modes, roles -- are text rather than yes/no; what each one means is
+# in services/teams.py.
+
+
+class Team(db.Model):
+    __tablename__ = "teams"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # In URLs, and later in the Stripe marker and the forum group's default name.
+    slug = db.Column(db.String(60), unique=True, nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="active")
+    admission_mode = db.Column(db.String(20), nullable=False, default="approval")
+    applications_open = db.Column(db.Boolean, nullable=False, default=True)
+    # The question applicants are asked. Without one, no text is asked for.
+    application_prompt = db.Column(db.String(255), nullable=True)
+    max_members = db.Column(db.Integer, nullable=True)
+    forum_group = db.Column(db.String(100), nullable=True)
+    # Optional. The file as stored, and the unguessable name it is served under.
+    logo_path = db.Column(db.String(500), nullable=True)
+    logo_token = db.Column(db.String(64), unique=True, nullable=True)
+    # The team's own page: what it does, at length (``description`` is the
+    # line on the overview), and one optional picture, stored like the logo.
+    about = db.Column(db.Text, nullable=True)
+    picture_path = db.Column(db.String(500), nullable=True)
+    picture_token = db.Column(db.String(64), unique=True, nullable=True)
+    # The team's own rules, accepted with a tick when applying or joining.
+    # When they last changed is their version: what a membership accepted is
+    # recorded against it.
+    terms_text = db.Column(db.Text, nullable=True)
+    terms_updated_at = db.Column(db.DateTime, nullable=True)
+    # "none" (free); "subscription": the fee for the current period at
+    # joining, then Stripe charges it at every period start; or "one_time":
+    # paid once per period, renewed by paying again.
+    payment_mode = db.Column(db.String(20), nullable=False, default="none")
+    # The team's recurring price in Stripe, on a product of the team's own.
+    stripe_price_id = db.Column(db.String(100), nullable=True)
+    # When the team's periods start, as days of the year: "01.10, 01.04".
+    period_starts = db.Column(db.String(100), nullable=True)
+    # The fee as members read it ("€10.00 every 6 months"), taken from Stripe
+    # when the price is saved, so pages need not ask Stripe.
+    fee_display = db.Column(db.String(100), nullable=True)
+    # Where the team's money goes: the account the association transfers it to.
+    bank_account_holder = db.Column(db.String(70), nullable=True)
+    bank_iban = db.Column(db.String(34), nullable=True)
+    bank_bic = db.Column(db.String(11), nullable=True)
+    # The list of current members for access to the team's rooms: who gets it
+    # (addresses, one per line or comma), on which days of the year ("15.10,
+    # 15.03"), whether it goes out on those days by itself, and when it last
+    # went out.
+    # Switched on by site admins for teams that have rooms of their own; off,
+    # the access list is nowhere to be seen and never sent.
+    access_list_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    access_list_recipients = db.Column(db.Text, nullable=True)
+    access_list_dates = db.Column(db.String(255), nullable=True)
+    access_list_auto_send = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    access_list_last_sent_on = db.Column(db.Date, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    archived_at = db.Column(db.DateTime, nullable=True)
+
+    roles = db.relationship("TeamRole", back_populates="team", cascade="all, delete-orphan")
+    memberships = db.relationship("TeamMembership", back_populates="team", cascade="all, delete-orphan")
+    notes = db.relationship("TeamNote", back_populates="team", cascade="all, delete-orphan")
+
+
+class TeamRole(db.Model):
+    """A role somebody holds in one team: ``lead`` now, others later.
+
+    Several per person are allowed. A role only counts while its holder is an
+    active member of the team and of the association; services/teams.py checks
+    that, so the row itself survives a lapse and needs nobody to restore it.
+    """
+
+    __tablename__ = "team_roles"
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", "role", name="uq_team_roles_team_user_role"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    role = db.Column(db.String(40), nullable=False)
+    granted_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    granted_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    team = db.relationship("Team", back_populates="roles")
+    user = db.relationship("User", foreign_keys=[user_id])
+    granted_by = db.relationship("User", foreign_keys=[granted_by_user_id])
+
+
+class TeamMembership(db.Model):
+    """One attempt at being in a team, from applying to having left.
+
+    Whoever applies again gets a new row, so the history stays and former
+    members are simply the ended rows.
+    """
+
+    __tablename__ = "team_memberships"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, index=True)
+    application_text = db.Column(db.Text, nullable=True)
+    # The team's rules, accepted when applying or joining: when, and which
+    # version (the team's ``terms_updated_at`` then). Empty if it had none.
+    terms_accepted_at = db.Column(db.DateTime, nullable=True)
+    terms_version = db.Column(db.DateTime, nullable=True)
+    meeting_details = db.Column(db.Text, nullable=True)
+    applied_at = db.Column(db.DateTime, nullable=True)
+    invited_at = db.Column(db.DateTime, nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    # The payment step every approval goes through, even for a free team: how
+    # it was settled (the team's payment mode at the time) and when.
+    payment_mode = db.Column(db.String(20), nullable=True)
+    payment_settled_at = db.Column(db.DateTime, nullable=True)
+    # For a team that charges: the Stripe subscription and the Checkout that
+    # opens it, how far it is paid, how the latest payment went ("processing",
+    # "paid", "failed"), and -- after leaving -- the day it ends.
+    stripe_subscription_id = db.Column(db.String(100), nullable=True, index=True)
+    stripe_checkout_session_id = db.Column(db.String(255), nullable=True)
+    paid_until = db.Column(db.Date, nullable=True)
+    payment_state = db.Column(db.String(20), nullable=True)
+    ends_on = db.Column(db.Date, nullable=True)
+    # ``ends_on`` was set because the association membership is ending, not
+    # by leaving: taking that cancellation back lifts it again.
+    ends_with_association = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # Paid once per period: the end of the period the renewal email went out
+    # for, so it goes out once.
+    renewal_notice_for = db.Column(db.Date, nullable=True)
+    started_at = db.Column(db.DateTime, nullable=True)
+    ended_at = db.Column(db.DateTime, nullable=True)
+    # Who approved, rejected or removed -- the last person to decide.
+    decided_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    end_reason = db.Column(db.String(40), nullable=True)
+    end_note = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    team = db.relationship("Team", back_populates="memberships")
+    user = db.relationship("User", foreign_keys=[user_id])
+    decided_by = db.relationship("User", foreign_keys=[decided_by_user_id])
+
+
+class Payment(db.Model):
+    """A payment Stripe confirmed, for anything but the membership.
+
+    The membership keeps its own record (MembershipPeriod). Everything else
+    the association sells lands here, told apart by ``purpose``: a team's
+    fee now, a top-up of a balance later. One row per paid invoice, so a
+    payment Stripe reports twice is recorded once. Kept when an account is
+    erased: it is the bookkeeping.
+    """
+
+    __tablename__ = "payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    purpose = db.Column(db.String(40), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
+    team_membership_id = db.Column(db.Integer, db.ForeignKey("team_memberships.id"), nullable=True, index=True)
+    # A subscription's payment by its invoice, a one-time one by its payment.
+    stripe_invoice_id = db.Column(db.String(100), nullable=True, unique=True)
+    stripe_payment_intent_id = db.Column(db.String(100), nullable=True, unique=True)
+    stripe_subscription_id = db.Column(db.String(100), nullable=True)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(3), nullable=False)
+    # The time it pays for, where it pays for time.
+    covers_until = db.Column(db.Date, nullable=True)
+    paid_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    # "paid", or "disputed" once a chargeback took it back.
+    status = db.Column(db.String(20), nullable=False, default="paid")
+    # Given back in Stripe, in part or in full.
+    refunded_cents = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    user = db.relationship("User")
+    team = db.relationship("Team")
+    team_membership = db.relationship("TeamMembership")
+
+
+class TeamPayout(db.Model):
+    """Money the association transferred to a team, out of what it earned.
+
+    What a team is still owed is what its members paid, less refunds and lost
+    chargebacks, less these. Stripe's fees are the association's: a team gets
+    exactly what its members paid.
+    """
+
+    __tablename__ = "team_payouts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(3), nullable=False, default="eur")
+    paid_on = db.Column(db.Date, nullable=False)
+    reference = db.Column(db.String(140), nullable=True)
+    # The account it went to, as it was then.
+    account_holder = db.Column(db.String(70), nullable=True)
+    iban = db.Column(db.String(34), nullable=True)
+    recorded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    team = db.relationship("Team")
+    recorded_by = db.relationship("User")
+
+
+class TeamAccessListSend(db.Model):
+    """The access list a team last sent, to mark who is new on the next one.
+
+    Only the latest is kept. It holds what was sent -- account, name and
+    university email -- so somebody who has left since, even by erasing their
+    account, shows up once as no longer in the team, and is gone after that.
+    """
+
+    __tablename__ = "team_access_list_sends"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    sent_on = db.Column(db.Date, nullable=False)
+    sent_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    automatic = db.Column(db.Boolean, nullable=False, default=False)
+    # [{"user_id": 7, "name": "Anna Berger", "email": "anna@edu..."}, ...]
+    entries = db.Column(db.JSON, nullable=False)
+
+    team = db.relationship("Team")
+
+
+class TeamNote(db.Model):
+    """What the leads write down about a person, across all their attempts.
+
+    About the person in the team rather than one attempt, so notes from an
+    earlier application are still there when somebody applies again. Seen by
+    the team's leads and site admins, never by the person.
+    """
+
+    __tablename__ = "team_notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    author_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    team = db.relationship("Team", back_populates="notes")
+    user = db.relationship("User", foreign_keys=[user_id])
+    author = db.relationship("User", foreign_keys=[author_user_id])
+
+
 class MailAccount(db.Model):
     __tablename__ = "mail_accounts"
 
@@ -783,6 +1051,12 @@ class MailAccount(db.Model):
     username = db.Column(db.String(255), nullable=False)
     password = db.Column(db.String(255), nullable=False)
     starttls = db.Column(db.Boolean, nullable=False, default=False)
+    # Who the email is from, when that is not the login. Most providers sign in
+    # with the address they send from; Brevo and similar relays sign in with an
+    # account id of their own and send from a verified address. Empty: the
+    # login is the sender, as before.
+    from_email = db.Column(db.String(255), nullable=True)
+    from_name = db.Column(db.String(120), nullable=True)
 
     def to_config(self):
         config = {
@@ -793,5 +1067,9 @@ class MailAccount(db.Model):
         }
         if self.starttls:
             config["starttls"] = True
+        if self.from_email:
+            config["from"] = self.from_email
+        if self.from_name:
+            config["from_name"] = self.from_name
         return config
 

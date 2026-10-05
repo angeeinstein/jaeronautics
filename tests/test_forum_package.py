@@ -304,3 +304,8 @@ class TestChecking:
         said = capsys.readouterr().out
         assert "import without a picture" in said
         assert "Whole, and complete" in said
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

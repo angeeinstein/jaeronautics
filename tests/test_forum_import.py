@@ -19,7 +19,6 @@ from aeronautics_members.services.forum_import import (
     IMPORTED_EMAIL_DOMAIN,
     derive_year_group,
     import_forum_people,
-    imported_email_for,
     load_people,
 )
 
@@ -429,14 +428,6 @@ class TestTheCommand:
         assert "Everyone has a year group." in result.output
 
 
-def test_the_placeholder_address_is_unique_per_person(app):
-    first = imported_email_for("mybb", "1")
-    second = imported_email_for("mybb", "2")
-
-    assert first != second
-    assert first.endswith(f"@{IMPORTED_EMAIL_DOMAIN}")
-
-
 class TestADryRunWritesNothingAtAll:
     """Not even the avatars.
 
@@ -701,3 +692,8 @@ class TestWhoCanGetTheirAccountBack:
 
         assert [row["can_reclaim"] for row in rehearsal["people"]] \
             == [row["can_reclaim"] for row in real["people"]]
+
+
+# The old forum's import was a one-off and is done: skipped by default,
+# run with `pytest -m forum_import` if it is ever needed again.
+pytestmark = pytest.mark.forum_import

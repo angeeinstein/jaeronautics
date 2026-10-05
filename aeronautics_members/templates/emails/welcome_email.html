@@ -39,6 +39,14 @@
         </div>
     {% endif %}
 
+    {% if teams_url %}
+        <div class="section" style="border-top:1px solid #34383b; margin-top:28px; padding-top:24px;">
+            <h3>{{ teams_label }}</h3>
+            <p>{{ _('Interested in one of our %(label)s? See which there are, and join or apply:', label=teams_label|lower) }}<br>
+               <a href="{{ teams_url }}" style="color:#00dfff;">{{ teams_url }}</a></p>
+        </div>
+    {% endif %}
+
     <div class="section" style="border-top:1px solid #34383b; margin-top:28px; padding-top:24px;">
         {% if account_url %}
             <p>{{ _('You can see and manage your membership at any time in your account:') }}<br>

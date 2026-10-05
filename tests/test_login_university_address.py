@@ -95,12 +95,15 @@ def test_an_address_confirmed_on_two_accounts_signs_in_nowhere(app, client):
 def reset_mails(monkeypatch):
     sent = []
     monkeypatch.setattr(auth_module, "send_password_reset_email",
-                        lambda app, user: sent.append(user.email))
+                        lambda app, user, requested_with=None:
+                        sent.append(identity.password_reset_address(user, requested_with)))
     return sent
 
 
 def test_a_reset_asked_with_the_university_address_goes_to_the_private_one(app, client, reset_mails):
-    _member()
+    member = _member()
+    member.user.email_verified_at = datetime(2026, 9, 1)  # the mailbox the account belongs to
+    db.session.commit()
 
     client.post("/forgot-password", data={"email": UNI})
 

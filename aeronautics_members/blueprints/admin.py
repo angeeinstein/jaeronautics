@@ -192,6 +192,22 @@ def _role_removal_warning(user):
     return blockers[0][1] if blockers else None
 
 
+def _teams_context(user):
+    """Which teams this person is in or has been in, and their roles there."""
+    from ..services import teams as teams_service
+
+    if not current_user.can(Permission.TEAMS_MANAGE):
+        return {"team_memberships": [], "team_roles": []}
+    return {
+        "team_memberships": teams_service.memberships_of(user, include_archived=True),
+        "team_roles": teams_service.roles_of(user),
+        "team_status_labels": teams_service.STATUS_LABELS,
+        "team_end_reasons": teams_service.END_REASON_LABELS,
+        "team_role_labels": teams_service.TEAM_ROLE_LABELS,
+        "teams_are_on": teams_service.teams_enabled(),
+    }
+
+
 @admin_bp.route("/admin", methods=["GET"])
 @login_required
 @requires(Permission.ADMIN_ACCESS)
@@ -330,6 +346,12 @@ def admin_account_detail(user_id):
         latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
         recent_logs=recent_logs,
         **_reconnect_context(user),
+        can_correct_email=(
+            user.member is not None and user.deleted_at is None and user.id != current_user.id
+            and current_user.can(Permission.APPROVALS_REVIEW)
+            and (not user.roles or current_user.can(Permission.ROLES_MANAGE))
+        ),
+        **_teams_context(user),
         # The role editor. Every assignable role, whether this account holds it,
         # and what refusing would say -- worked out server-side so the form and
         # the guard cannot disagree about what is possible.
@@ -565,7 +587,104 @@ def _reconnect_context(user):
             .order_by(ImportedForumProfile.source_username)
             .limit(RECONNECT_RESULT_LIMIT)
         ).scalars().all()
-    return {"can_reconnect": can_reconnect, "reconnect_query": query, "reconnect_results": results}
+    likely = {}
+    if can_reconnect and not query:
+        # Not searching: what is probably theirs, if anything.
+        from ..services.forum_import import likely_old_accounts
+
+        found = likely_old_accounts(user)
+        results = [profile for profile, _reason in found]
+        likely = {profile.id: reason for profile, reason in found}
+    return {"can_reconnect": can_reconnect, "reconnect_query": query, "reconnect_results": results,
+            "reconnect_likely": likely}
+
+
+@admin_bp.route("/admin/accounts/<int:user_id>/email", methods=["POST"])
+@login_required
+@requires(Permission.APPROVALS_REVIEW)
+def admin_correct_private_email(user_id):
+    """Correct a member's private address, for somebody locked out by a wrong one.
+
+    The private address is the login and where password resets go: mistyped
+    at signup or changed to a wrong one, and the password forgotten too, the
+    person cannot get back in. Changing it hands the account to whoever reads
+    the new address, so it is for an admin who knows who is asking. The new
+    address must then be confirmed like any other, the address replaced is
+    told when it was ever confirmed, and the change is logged with both.
+    """
+    import re
+
+    from ..config import CONTACT_EMAIL
+    from ..services.identity import send_email_verification_email
+    from ..services.notifications import flush_marked_notification_channels
+    from ..services.workflows import sync_member_primary_email
+
+    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
+    if user is None or user.deleted_at is not None or user.member is None:
+        flash(_("The selected account could not be found."), "warning")
+        return redirect(url_for("admin.admin_accounts"))
+    back = url_for("admin.admin_account_detail", user_id=user_id)
+    member = user.member
+    new_email = (request.form.get("new_email") or "").strip().lower()
+    if user.id == current_user.id:
+        flash(_("Change your own address in your profile."), "warning")
+        return redirect(back)
+    if user.roles and not current_user.can(Permission.ROLES_MANAGE):
+        # Their address is a way into somebody else's admin rights.
+        flash(_("Only somebody who manages access can change the address of an account with a role."), "danger")
+        return redirect(back)
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", new_email):
+        flash(_("Enter a valid email address."), "danger")
+        return redirect(back)
+    old_email = user.email
+    if new_email == (old_email or "").strip().lower():
+        flash(_("That is the address the account has already."), "info")
+        return redirect(back)
+
+    has_forum_account = user.forum_account is not None or member_has_active_access(member)
+    if has_forum_account and get_forum_service().address_taken_by_another_forum_account(user, new_email):
+        flash(_("That address belongs to another account on the forum."), "danger")
+        return redirect(back)
+    old_was_confirmed = user.email_verified_at is not None
+    before = snapshot_user_for_audit(user)
+    try:
+        sync_member_primary_email(member, new_email)
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(back)
+    log_audit_event(
+        category="profile",
+        event_type="private_email_corrected_by_admin",
+        actor_user=current_user,
+        target_user=user,
+        target_member=member,
+        before=before,
+        after=snapshot_user_for_audit(user),
+    )
+    if old_was_confirmed and old_email:
+        new_local, _at, new_domain = new_email.partition("@")
+        queue_user_status_notification(
+            "account_email_changed_by_admin",
+            f"The email address of account {user.id} was changed by an admin.",
+            old_email,
+            payload={"first_name": member.first_name,
+                     "new_email_masked": f"{new_local[:2]}…@{new_domain}",
+                     "contact_email": CONTACT_EMAIL},
+            target_user=user, target_member=member,
+        )
+    if has_forum_account:
+        sync_member_forum_state(member)
+    db.session.commit()
+    flush_marked_notification_channels()
+    try:
+        send_email_verification_email(current_app._get_current_object(), user)
+    except Exception as exc:  # noqa: BLE001 -- the change stands; they can ask for the link again
+        current_app.logger.warning("Could not send the verification email to the corrected address of user %s: %s",
+                                   user.id, exc)
+    flash(_("The address is now %(email)s. A confirmation link went there; with it, or with Forgot password, "
+            "they can get back in.", email=new_email), "success")
+    return redirect(back)
 
 
 @admin_bp.route("/admin/accounts/<int:user_id>/reconnect", methods=["POST"])
@@ -1091,6 +1210,18 @@ def admin_settings():
         set_setting_value("notification_admin_error_enabled", str(notification_admin_error_enabled))
         set_setting_value("notification_user_status_enabled", str(notification_user_status_enabled))
         set_setting_value("notification_sender", (notification_sender if settings_section == "notifications" else before_settings.get("notification_sender")) or None)
+        moving_to_new_fee = 0
+        if settings_section == "billing" and stripe_price_id:
+            # A new fee: checked with Stripe, and every running subscription
+            # moves to it from its next renewal (services/billing.py).
+            from ..services.billing import change_membership_price
+
+            try:
+                moving_to_new_fee = change_membership_price(current_user, stripe_price_id)
+            except ServiceError as exc:
+                db.session.rollback()
+                flash(exc.message, "danger")
+                return redirect(settings_redirect)
         set_setting_value("stripe_publishable_key", stripe_publishable_key or None)
         set_setting_value("stripe_price_id", stripe_price_id or None)
         set_setting_value("forum_integration_enabled", str(forum_enabled))
@@ -1159,6 +1290,10 @@ def admin_settings():
         )
         db.session.commit()
         flash(_("Settings updated successfully!"), "success")
+        if moving_to_new_fee:
+            flash(_("%(count)s running subscription(s) move to the new price from their next renewal, "
+                    "in the background over the next minutes. Each member is emailed two weeks before their renewal.",
+                    count=moving_to_new_fee), "info")
         return redirect(settings_redirect)
 
     return render_template(
@@ -1411,6 +1546,8 @@ def save_mail_account():
     if form.password.data:
         mail_account.password = form.password.data
     mail_account.starttls = bool(form.starttls.data)
+    mail_account.from_email = (form.from_email.data or "").strip().lower() or None
+    mail_account.from_name = (form.from_name.data or "").strip() or None
 
     try:
         db.session.flush()
@@ -1516,6 +1653,8 @@ def import_mail_accounts():
             mail_account.username = imported_account["username"]
             mail_account.password = imported_account["password"]
             mail_account.starttls = imported_account["starttls"]
+            mail_account.from_email = imported_account["from_email"]
+            mail_account.from_name = imported_account["from_name"]
             db.session.flush()
 
             log_audit_event(
@@ -1735,7 +1874,7 @@ def admin_resolve_undelivered_email(job_id, action):
 @login_required
 @requires(Permission.SYSTEM_UPDATE)
 def admin_retry_failed_forum_tasks():
-    """Put forum tasks that gave up retrying back in the queue.
+    """Put background tasks that gave up retrying back in the queue.
 
     They give up after about seven hours of failing -- in practice a forum that
     was down that long. Once it is back, this sends them again rather than
@@ -1751,9 +1890,9 @@ def admin_retry_failed_forum_tasks():
         )
     db.session.commit()
     flash(
-        ngettext("%(num)s forum task will be tried again within a few minutes.",
-                 "%(num)s forum tasks will be tried again within a few minutes.", count)
-        if count else _("No forum tasks are waiting to be retried."),
+        ngettext("%(num)s background task will be tried again within a few minutes.",
+                 "%(num)s background tasks will be tried again within a few minutes.", count)
+        if count else _("No background tasks are waiting to be retried."),
         "success" if count else "info",
     )
     return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")

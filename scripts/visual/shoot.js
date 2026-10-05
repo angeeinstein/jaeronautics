@@ -128,6 +128,12 @@ function inspect() {
           }, entry.submit),
         ]);
       }
+      if (entry.click) {
+        // Something that opens over the page (a dialog): shown open.
+        await page.click(entry.click);
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(200);
+      }
       // Times of day ("Uploaded 2026-09-27 08:30", "Last synced ...") differ
       // from one run to the next; zeroed, they don't show up as a change.
       await page.evaluate(() => {

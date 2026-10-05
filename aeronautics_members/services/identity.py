@@ -291,12 +291,32 @@ def send_work_email_verification_email(app, member):
     )
 
 
-def send_password_reset_email(app, user):
+def password_reset_address(user, requested_with=None):
+    """Where a password reset for ``user`` goes: the private address -- the
+    one the account belongs to -- unless it was never confirmed (mistyped at
+    signup, or changed to a wrong one since) and the request came with the
+    member's confirmed university address. Reading that inbox is proof
+    enough: the address signs in already."""
+    member = getattr(user, "member", None)
+    asked = (requested_with or "").strip().lower()
+    if (
+        user.email_verified_at is None
+        and member is not None
+        and member.email_work_verified_at is not None
+        and asked
+        and asked == (member.email_work or "").strip().lower()
+        and asked != (user.email or "").strip().lower()
+    ):
+        return member.email_work
+    return user.email
+
+
+def send_password_reset_email(app, user, requested_with=None):
     token = build_password_reset_token(user)
     reset_url = build_public_url("auth.reset_password", token=token)
     return send_account_action_email(
         app,
-        to_email=user.email,
+        to_email=password_reset_address(user, requested_with),
         subject=_("Reset your Joanneum Aeronautics password"),
         preview_text=_("Use this link to choose a new password for your account."),
         action_url=reset_url,

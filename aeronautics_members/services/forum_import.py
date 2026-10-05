@@ -23,6 +23,7 @@ Three rules the rest of this module exists to keep:
 """
 
 import json
+import re
 import secrets
 from datetime import date, datetime
 from pathlib import Path
@@ -232,6 +233,113 @@ def find_claimable_profile_for_user(user):
         if profile is not None:
             return profile
     return None
+
+
+# --- Old accounts that are probably somebody's, for an admin to confirm ---------
+#
+# The old forum never confirmed addresses, so some it holds were mistyped:
+# "annaberger@edu..." for "anna.berger@edu...". That address does not exist --
+# mail to it comes back -- so nobody can ever confirm it, and the claim above
+# never fires. Matching it automatically would be guessing whose posts to hand
+# over; so a near match is only pointed out, and an admin who recognises the
+# person reconnects them on the account page.
+
+_SPELLED_OUT = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
+
+
+def _address_key(address):
+    """An address as it may have been typed: case, dots, hyphens, underscores
+    and umlaut spellings in the name part ignored; the university's domains as one."""
+    from .institutional_email import get_institutional_domains
+
+    local, _at, domain = (address or "").strip().lower().rpartition("@")
+    if not local or not domain:
+        return None
+    local = re.sub(r"[._\-]", "", local.translate(_SPELLED_OUT))
+    if domain in get_institutional_domains():
+        domain = "institutional"
+    return local, domain
+
+
+def _name_key(name):
+    """A name as a set of words: order, case and umlaut spellings ignored. None for one word."""
+    words = re.findall(r"[a-z]+", (name or "").lower().translate(_SPELLED_OUT))
+    return tuple(sorted(words)) if len(words) >= 2 else None
+
+
+def unclaimed_profiles():
+    return db.session.execute(
+        db.select(ImportedForumProfile)
+        .join(User, User.id == ImportedForumProfile.user_id)
+        .where(ImportedForumProfile.claimed_at.is_(None), User.deleted_at.is_(None))
+    ).scalars().all()
+
+
+#: Why an old account is shown as probably somebody's.
+LIKELY_BY_ADDRESS = "address"
+LIKELY_BY_NAME = "name"
+
+
+def likely_old_accounts(user, profiles=None):
+    """Unclaimed old forum accounts that are probably this person's: ``[(profile, reason)]``.
+
+    ``address``: a confirmed address of theirs, and the old one differs only in
+    dots, hyphens, case or umlaut spelling. ``name``: the same first and last
+    name. Never the exact match, which reconnects by itself.
+    """
+    if user is None or user.deleted_at is not None or user.imported_forum_profile is not None:
+        return []
+    member = user.member
+    confirmed = verified_addresses_for(user)
+    exact = {address.strip().lower() for address in confirmed}
+    address_keys = {key for key in map(_address_key, confirmed) if key}
+    name = _name_key(f"{member.first_name} {member.last_name}") if member is not None else None
+    found = []
+    for profile in unclaimed_profiles() if profiles is None else profiles:
+        source = (profile.source_email or "").strip().lower()
+        if source and source in exact:
+            continue
+        if source and address_keys and _address_key(source) in address_keys:
+            found.append((profile, LIKELY_BY_ADDRESS))
+        elif name and _name_key(profile.display_name) == name:
+            found.append((profile, LIKELY_BY_NAME))
+    return found
+
+
+def report_likely_old_accounts(user):
+    """Tell the admins once when a confirmed member probably has an old account
+    that did not reconnect by itself. Never fails the caller."""
+    from ..db_models import NotificationEvent
+    from ..notification_service import ADMIN_GENERAL_CHANNEL
+    from ..security_utils import build_public_url
+    from .notifications import queue_curated_admin_notification
+
+    event_type = "forum_old_account_likely"
+    try:
+        likely = likely_old_accounts(user)
+        if not likely:
+            return False
+        if db.session.execute(
+            db.select(NotificationEvent.id).filter_by(event_type=event_type, target_user_id=user.id)
+        ).first() is not None:
+            return False  # told already
+        member = user.member
+        who = f"{member.first_name} {member.last_name}".strip() if member is not None else user.email
+        names = ", ".join(
+            f"{profile.source_username} ({'address differs only in dots or spelling' if reason == LIKELY_BY_ADDRESS else 'same name'})"
+            for profile, reason in likely
+        )
+        queue_curated_admin_notification(
+            ADMIN_GENERAL_CHANNEL, event_type,
+            f"{who} may have an old forum account that did not reconnect by itself: {names}.",
+            payload={"what_to_do": "If it is theirs, reconnect it on their account page: "
+                                   + build_public_url("admin.admin_account_detail", user_id=user.id)},
+            target_user=user, object_type="user", object_id=user.id, severity="info",
+        )
+        return True
+    except Exception:  # noqa: BLE001 -- a hint, never a reason for a confirmation to fail
+        current_app.logger.exception("Could not look for a likely old forum account of user %s", user.id)
+        return False
 
 
 def _blocking_relationships(user):

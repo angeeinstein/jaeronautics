@@ -13,3 +13,9 @@ Flask-Limiter==3.8.0
 redis==5.2.1
 Pillow==12.3.0
 cryptography==50.0.1
+# EPC ("GiroCode") QR codes for paying a team out from a banking app.
+segno==1.6.6
+# The legal texts are Markdown files (legal/), rendered without raw HTML.
+markdown-it-py==4.2.0
+# ... each starting with YAML front matter (title, version, effective_from, status).
+PyYAML==6.0.3

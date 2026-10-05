@@ -169,6 +169,39 @@ class TestOneAttemptAtATime:
         assert session["id"] == "cs_created_1"
         assert len(stripe_calls["create"]) == 1, "a second Checkout session was created"
 
+    def test_a_session_for_a_mistyped_address_since_corrected_is_replaced(self, app, stripe_calls, monkeypatch):
+        """Before the first payment Stripe knows the person only by the address
+        on the open session: reused, receipts and reminders went to the typo."""
+        expired = []
+        monkeypatch.setattr(billing.stripe.checkout.Session, "expire",
+                            staticmethod(lambda session_id, **kwargs: expired.append(session_id)))
+        member = make_member(email="anna.right@example.com")
+        member.stripe_checkout_session_id = "cs_created_1"
+        db.session.commit()
+        stripe_calls["stored"] = {
+            "id": "cs_created_1", "status": "open", "customer_email": "anna.wrnog@example.com",
+            "url": "https://checkout.stripe.test/cs_created_1",
+        }
+
+        billing.create_checkout_session_for_member(member)
+
+        assert expired == ["cs_created_1"]
+        assert len(stripe_calls["create"]) == 1
+        assert stripe_calls["create"][0]["customer_email"] == "anna.right@example.com"
+
+    def test_a_session_for_the_same_address_is_kept_whatever_its_case(self, app, stripe_calls):
+        member = make_member(email="anna@example.com")
+        member.stripe_checkout_session_id = "cs_created_1"
+        db.session.commit()
+        stripe_calls["stored"] = {
+            "id": "cs_created_1", "status": "open", "customer_email": "Anna@Example.com",
+            "url": "https://checkout.stripe.test/cs_created_1",
+        }
+
+        session, _cycle = billing.create_checkout_session_for_member(member)
+
+        assert session["id"] == "cs_created_1" and not stripe_calls["create"]
+
     def test_an_expired_session_starts_a_fresh_one(self, app, stripe_calls):
         member = make_member(email="expired@example.com")
         billing.create_checkout_session_for_member(member)
@@ -280,3 +313,20 @@ def test_an_unmatched_checkout_is_reported_not_invented(client, monkeypatch):
 
     assert response.status_code == 400
     assert db.session.execute(db.select(Member)).scalars().all() == []
+
+
+def test_a_corrected_address_reaches_stripes_customer_after_the_first_payment(app, monkeypatch):
+    """Once somebody has paid, Stripe knows them as a customer, and that record
+    is what its receipts and renewal reminders go to."""
+    from aeronautics_members.services import workflows
+
+    modified = []
+    monkeypatch.setattr(workflows.stripe.Customer, "modify",
+                        staticmethod(lambda customer_id, **kwargs: modified.append((customer_id, kwargs))))
+    member = make_member(email="anna.wrnog@example.com")
+    member.stripe_customer_id = "cus_anna"
+    db.session.commit()
+
+    workflows.sync_member_primary_email(member, "anna.right@example.com")
+
+    assert modified == [("cus_anna", {"email": "anna.right@example.com"})]

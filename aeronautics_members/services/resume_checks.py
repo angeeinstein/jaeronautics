@@ -161,7 +161,7 @@ def checklist(run_next=True):
     queues = get_queue_summary()
     pending, failed = queues["external_work_pending"], queues["external_work_failed"]
     if pending:
-        queue_state, queue_detail = "waiting", f"{pending} task(s) still waiting to be sent to the forum."
+        queue_state, queue_detail = "waiting", f"{pending} background task(s) still waiting."
     elif failed:
         queue_state, queue_detail = "failed", f"{failed} task(s) failed. See Background work above."
     else:
