@@ -966,19 +966,25 @@ can show:
    check what Stripe bills at the renewal in between.
 
 **The association's money** (Admin → Money → *Check against Stripe*, for a
-year; site admins and the Treasurer). Fetched from Stripe on request, since all
+period, or with *From* left empty everything from the start up to a day;
+site admins and the Treasurer). Fetched from Stripe on request, since all
 payments land there -- membership, teams, and the webshop and events, which the
-portal knows nothing of:
+portal knows nothing of. Money that never went through Stripe (cash, bank
+transfers) is not in it.
 
-- Received, split by what it was for (paid invoices sorted as the webhook
-  sorts them: membership, team; the rest is the webshop and events), less
-  refunds, bounced SEPA debits, chargebacks and Stripe's fees: the net.
-- Of the net, the teams' share (what their members paid, from the portal's
-  records) and the association's own (the rest; Stripe's fees are all the
-  association's).
-- What is in Stripe now, what went to the bank account in the year, and what
-  the teams are still owed.
-- The check: every paid team invoice of the year is a team payment in the
+- Every booking in Stripe's books (balance transactions) sorted by product:
+  membership and team by the invoice the payment paid (sorted as the webhook
+  sorts it), a team's one-time payment also by the payment the portal recorded;
+  a refund, bounced SEPA debit or chargeback goes with the payment it takes
+  back. Everything else is *Other* (webshop, events, payment links).
+- For each: received, bounced, refunded, taken back, Stripe's fees, net. Of
+  the net, the teams' share (what their members paid) and the association's
+  own (the rest; Stripe's fees are all the association's).
+- On the last day: what was in Stripe (the sum of every booking up to it --
+  up to today it must equal what Stripe holds now, and the page says whether
+  it does), what went to the bank account in the period, and what the teams
+  were still owed.
+- The check: every paid team invoice of the period is a team payment in the
   portal with the same amount and the other way round; every paid membership
   invoice has a membership period, and every period counted as paid has an
   invoice Stripe shows as paid. Whatever does not match is listed with its

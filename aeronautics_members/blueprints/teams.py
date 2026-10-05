@@ -8,7 +8,7 @@ docs/teams-plan.md.
 
 import csv
 import io
-from datetime import timedelta
+from datetime import date, timedelta
 
 from flask import (
     Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file, url_for,
@@ -899,6 +899,21 @@ def team_money_payout(slug):
     )
 
 
+def _money_period(since, until, today):
+    """The period asked for: from ``since`` (blank: the start) to ``until`` (blank: today)."""
+    def day(text):
+        try:
+            return date.fromisoformat((text or "").strip())
+        except ValueError:
+            return None
+
+    until = min(day(until) or today, today)
+    since = day(since)
+    if since is not None and (since > until or since.year < 2000):
+        since = None
+    return since, until
+
+
 @teams_bp.route("/admin/money", methods=["GET"])
 @login_required
 @requires(Permission.TEAMS_MONEY)
@@ -906,10 +921,8 @@ def admin_money():
     from ..services import team_money as money
 
     rows = money.all_teams_money()
-    this_year = get_membership_today().year
-    year = request.args.get("year", type=int) or this_year
-    if not 2000 <= year <= this_year:
-        year = this_year
+    today = get_membership_today()
+    since, until = _money_period(request.args.get("since"), request.args.get("until"), today)
     overview = None
     if request.args.get("check") == "1":
         # On request only: it pages through Stripe and takes a few seconds.
@@ -918,7 +931,7 @@ def admin_money():
         from ..services.money_overview import overview as money_overview
 
         try:
-            overview = money_overview(year)
+            overview = money_overview(since, until)
         except stripe.StripeError as exc:
             current_app.logger.warning("Money overview: Stripe could not be asked: %s", exc)
             flash(_("Stripe could not be asked. Please try again in a few minutes."), "danger")
@@ -931,7 +944,13 @@ def admin_money():
         total_open=sum(row["open"] for row in rows),
         euros=money.euros,
         masked_iban=money.masked_iban,
-        year=year,
-        years=list(range(this_year, max(this_year - 5, 2000) - 1, -1)),
+        since=since,
+        until=until,
+        today=today,
+        shortcuts=[
+            (_("Since the start"), None, today),
+            (str(today.year), date(today.year, 1, 1), today),
+            (str(today.year - 1), date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)),
+        ],
         overview=overview,
     )
