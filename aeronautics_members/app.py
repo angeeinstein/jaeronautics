@@ -4568,6 +4568,32 @@ def create_app(config_overrides=None):
             fg="green" if not failed else "yellow",
         ))
 
+    @app.cli.command("forum-likely-old-accounts")
+    @with_appcontext
+    def forum_likely_old_accounts_command():
+        """Members whose old forum account probably did not reconnect by itself.
+
+        The old forum never checked addresses, so a mistyped one there never
+        matches. Lists, for every member without an old account, the unclaimed
+        ones that differ only in dots or spelling from an address they
+        confirmed, or carry the same name -- to reconnect by hand on the
+        account page if they are theirs. Changes nothing.
+        """
+        from .services.forum_import import LIKELY_BY_ADDRESS, likely_old_accounts, unclaimed_profiles
+
+        profiles = unclaimed_profiles()
+        users = db.session.execute(
+            db.select(User).join(Member, Member.user_id == User.id).where(User.deleted_at.is_(None))
+        ).scalars().all()
+        found = 0
+        for user in users:
+            for profile, reason in likely_old_accounts(user, profiles):
+                why = "address differs only in dots or spelling" if reason == LIKELY_BY_ADDRESS else "same name"
+                click.echo(f"{user.member.first_name} {user.member.last_name} <{user.email}> (account {user.id})"
+                           f" -> {profile.source_username} <{profile.source_email or '-'}>: {why}")
+                found += 1
+        click.echo(f"{found} likely old account(s).")
+
     @app.cli.command("forum-explain")
     @click.argument("who")
     @with_appcontext

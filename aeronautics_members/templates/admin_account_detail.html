@@ -390,6 +390,9 @@
         {% if reconnect_query and not reconnect_results %}
             <p class="text-muted mb-0">{{ _('No unclaimed old forum account found.') }}</p>
         {% elif reconnect_results %}
+            {% if reconnect_likely %}
+                <p class="mb-2">{{ _('Probably theirs. The old forum never checked addresses, so it may hold a mistyped one. Reconnect only if you recognise them:') }}</p>
+            {% endif %}
             <div class="table-responsive">
                 <table class="table align-middle mb-0">
                     <thead>
@@ -408,7 +411,11 @@
                                 <td>{{ profile.source_username }}</td>
                                 <td>{{ profile.display_name }}</td>
                                 <td>{{ profile.year_group or '-' }}</td>
-                                <td>{{ profile.source_email or '-' }}</td>
+                                <td>
+                                    {{ profile.source_email or '-' }}
+                                    {% if reconnect_likely.get(profile.id) == 'address' %}<div class="small text-warning">{{ _('Differs only in dots or spelling') }}</div>
+                                    {% elif reconnect_likely.get(profile.id) == 'name' %}<div class="small text-warning">{{ _('Same name') }}</div>{% endif %}
+                                </td>
                                 <td>{{ profile.post_count if profile.post_count is not none else '-' }}</td>
                                 <td class="text-end">
                                     <form method="POST" action="{{ url_for('admin.admin_reconnect_old_forum_account', user_id=user_record.id) }}" class="mb-0"

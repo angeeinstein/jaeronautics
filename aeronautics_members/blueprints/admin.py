@@ -582,7 +582,16 @@ def _reconnect_context(user):
             .order_by(ImportedForumProfile.source_username)
             .limit(RECONNECT_RESULT_LIMIT)
         ).scalars().all()
-    return {"can_reconnect": can_reconnect, "reconnect_query": query, "reconnect_results": results}
+    likely = {}
+    if can_reconnect and not query:
+        # Not searching: what is probably theirs, if anything.
+        from ..services.forum_import import likely_old_accounts
+
+        found = likely_old_accounts(user)
+        results = [profile for profile, _reason in found]
+        likely = {profile.id: reason for profile, reason in found}
+    return {"can_reconnect": can_reconnect, "reconnect_query": query, "reconnect_results": results,
+            "reconnect_likely": likely}
 
 
 @admin_bp.route("/admin/accounts/<int:user_id>/reconnect", methods=["POST"])

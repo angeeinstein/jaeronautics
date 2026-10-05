@@ -188,6 +188,7 @@ def verify_email(token):
         _stay_signed_in(claimed, signed_in_here)
         if claimed is None:
             _tell_the_forum_the_address_is_confirmed(user)
+            _point_out_a_likely_old_account(user)
 
     flash(_("Your email address has been verified."), "success")
     if claimed is not None:
@@ -200,6 +201,18 @@ def verify_email(token):
     if signed_in_here:
         return redirect(url_for(get_member_portal_target(current_user)))
     return redirect(url_for("auth.login"))
+
+
+def _point_out_a_likely_old_account(user):
+    """No old forum account matched the confirmed address exactly; if one
+    nearly does -- the old forum never checked what was typed -- the admins
+    are told, to reconnect it by hand. Never fails the confirmation."""
+    from ..services.forum_import import report_likely_old_accounts
+    from ..services.notifications import flush_marked_notification_channels
+
+    if report_likely_old_accounts(user):
+        db.session.commit()
+        flush_marked_notification_channels()
 
 
 @auth_bp.route("/verify-work-email/<token>")
@@ -241,6 +254,8 @@ def verify_work_email(token):
             )
         db.session.commit()
         _stay_signed_in(claimed, signed_in_here)
+        if claimed is None:
+            _point_out_a_likely_old_account(member.user)
 
     flash(_("Your university or company email address has been confirmed."), "success")
     if claimed is not None:
