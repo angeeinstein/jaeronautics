@@ -1123,6 +1123,7 @@ def admin_settings():
         tracked_setting_keys = [
             "invoice_payments_enabled",
             "automatic_emails_enabled",
+            "legal_pdfs_in_welcome_emails",
             "welcome_email_sender",
             "automatic_email_template",
             INSTITUTIONAL_EMAIL_SETTING_KEY,
@@ -1197,6 +1198,11 @@ def admin_settings():
 
         set_setting_value("invoice_payments_enabled", str(invoice_enabled))
         set_setting_value("automatic_emails_enabled", str(emails_enabled))
+        set_setting_value(
+            "legal_pdfs_in_welcome_emails",
+            str(request.form.get("legal_pdfs_in_welcome_emails") == "on") if settings_section == "general"
+            else before_settings.get("legal_pdfs_in_welcome_emails"),
+        )
         set_setting_value("welcome_email_sender", welcome_sender if settings_section == "general" else before_settings.get("welcome_email_sender"))
         set_setting_value("automatic_email_template", auto_email_template if settings_section == "general" else before_settings.get("automatic_email_template"))
         set_setting_value(
@@ -1301,6 +1307,68 @@ def admin_settings():
         active_admin_section="settings",
         **context,
     )
+
+
+@admin_bp.route("/admin/legal", methods=["GET", "POST"])
+@login_required
+@requires(Permission.SETTINGS_GENERAL)
+def admin_legal():
+    """The legal texts in force, the teams' rules, what is wrong with the files
+    on this server -- and a preview of a new text as its PDF, from uploaded
+    files that are checked as CI checks them and not kept."""
+    import io
+
+    from .. import legal_pdf
+    from ..services import legal_texts as legal
+    from ..services import teams as teams_service
+
+    preview_problems = None
+    if request.method == "POST":
+        german = request.files.get("german")
+        english = request.files.get("english")
+        if german is None or not german.filename:
+            flash(_("Choose the German file."), "warning")
+            return redirect(url_for("admin.admin_legal"))
+        uploads = [(german.read(legal_pdf.PREVIEW_MAX_BYTES + 1), german.filename)]
+        if english is not None and english.filename:
+            uploads.append((english.read(legal_pdf.PREVIEW_MAX_BYTES + 1), english.filename))
+        try:
+            data, preview_problems, name = legal_pdf.preview(*uploads)
+        except Exception:  # noqa: BLE001 -- a text WeasyPrint cannot lay out, say
+            current_app.logger.exception("Could not make a preview PDF")
+            data, preview_problems = None, [_("The PDF could not be made. See the log for why.")]
+        if data is not None:
+            return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=f"VORSCHAU_{name}")
+
+    team_slugs = {team.slug for team in teams_service.all_teams(include_archived=True)}
+    return render_template(
+        "admin_legal.html",
+        active_admin_section="legal",
+        page_title=_("Legal Texts"),
+        page_description=_("The texts in force, each team's rules, and a preview of a new text as a PDF."),
+        texts=legal.available(),
+        team_rules=[(team, teams_service.team_rules(team)) for team in teams_service.all_teams(include_archived=False)],
+        repo_problems=legal.problems(),
+        orphan_folders=[slug for slug in legal.teams_with_texts() if slug not in team_slugs],
+        preview_problems=preview_problems,
+        max_kb=legal_pdf.PREVIEW_MAX_BYTES // 1024,
+    )
+
+
+@admin_bp.route("/admin/legal/template", methods=["GET"])
+@login_required
+@requires(Permission.SETTINGS_GENERAL)
+def admin_legal_template():
+    """A Markdown file showing what a legal text needs and everything it can do,
+    dated today and a draft -- so it previews as it is."""
+    from ..services.clock import get_membership_today
+
+    day = get_membership_today().isoformat()
+    response = current_app.response_class(
+        render_template("legal/template.md", day=day), mimetype="text/markdown",
+    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{day}.md"'
+    return response
 
 
 @admin_bp.route("/admin/logs", methods=["GET"])

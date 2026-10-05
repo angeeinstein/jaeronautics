@@ -8,7 +8,7 @@ docs/teams-plan.md.
 
 import csv
 import io
-from datetime import timedelta
+from datetime import date, timedelta
 
 from flask import (
     Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file, url_for,
@@ -20,10 +20,12 @@ from ..app import requires
 from ..db_models import User, db
 from ..permissions import Permission
 from ..services import ServiceError
+from ..services import legal_texts as legal
 from ..services import team_payments
 from ..services import teams as teams_service
 from ..services.audit import log_audit_event
 from ..services.clock import get_membership_today
+from . import _legal_pages as legal_pages
 
 teams_bp = Blueprint("teams", __name__)
 
@@ -90,13 +92,11 @@ def _apply_logo(team, form, files):
 
 
 def _apply_page(team, form, files):
-    """The team's page: its longer text, its rules and its picture -- each
-    only if the form has it, so a form for one leaves the others be."""
-    if "about" in form or "terms_text" in form:
-        teams_service.update_team_page(
-            current_user, team, about=form.get("about"), terms_text=form.get("terms_text"),
-            keep_about="about" not in form, keep_terms="terms_text" not in form,
-        )
+    """The team's page: its longer text and its picture -- each only if the
+    form has it, so a form for one leaves the other be. (Its rules are files
+    the association keeps: teams_service.team_rules.)"""
+    if "about" in form:
+        teams_service.update_team_page(current_user, team, about=form.get("about"))
     upload = files.get("picture")
     if upload is not None and upload.filename:
         teams_service.set_team_picture(current_user, team, upload.read())
@@ -366,6 +366,8 @@ def _membership_context():
                   if teams_service.can_in_team(current_user, team, teams_service.TeamPermission.VIEW_MONEY)},
         charges=team_payments.charges,
         needs_to_pay=team_payments.needs_to_pay,
+        team_rules=teams_service.team_rules,
+        accepted_rules_in_force=teams_service.accepted_rules_in_force,
         renewal_open=team_payments.renewal_open,
         next_period_until=team_payments.next_period_until,
         timedelta_one_day=timedelta(days=1),
@@ -412,6 +414,38 @@ def team_about(slug):
         team=team,
         sees_members=_sees_team_page(team),
         **_membership_context(),
+    )
+
+
+@teams_bp.route("/teams/<slug>/rules", methods=["GET"])
+@teams_bp.route("/teams/<slug>/rules/<language>", methods=["GET"])
+@teams_bp.route("/teams/<slug>/rules/<language>/<version>", methods=["GET"])
+@login_required
+def team_rules_text(slug, language=None, version=None):
+    """A team's rules, as the association's texts are shown: the version in
+    force or an earlier one, German or the English translation. ``?part=body``
+    for the window over the join form."""
+    team = _team_or_404(slug)
+    return legal_pages.text_page(
+        legal.TEAM_RULES, language, version, team=team.slug,
+        url=lambda language, version: url_for("teams.team_rules_text", slug=team.slug,
+                                              language=language, version=version),
+        pdf_url=lambda version: url_for("teams.team_rules_pdf", slug=team.slug, version=version),
+        crumbs=[(teams_service.team_labels()[1], url_for("teams.teams_home")),
+                (team.name, url_for("teams.team_about", slug=team.slug))],
+        label="Rules",
+    )
+
+
+@teams_bp.route("/teams/<slug>/rules/pdf", methods=["GET"])
+@teams_bp.route("/teams/<slug>/rules/pdf/<version>", methods=["GET"])
+@login_required
+def team_rules_pdf(slug, version=None):
+    """A team's rules as a PDF, with its logo: German, then the English translation."""
+    team = _team_or_404(slug)
+    return legal_pages.pdf(
+        legal.TEAM_RULES, version, team=team.slug, owner=team,
+        back=url_for("teams.team_rules_text", slug=team.slug, language=legal.AUTHORITATIVE, version=version),
     )
 
 
@@ -568,6 +602,7 @@ def team_manage(slug):
         leads=teams_service.role_holders(team, teams_service.ROLE_LEAD),
         treasurers=teams_service.role_holders(team, teams_service.ROLE_TREASURER),
         role_counts=teams_service.role_counts,
+        team_rules=teams_service.team_rules,
     )
 
 
@@ -899,6 +934,21 @@ def team_money_payout(slug):
     )
 
 
+def _money_period(since, until, today):
+    """The period asked for: from ``since`` (blank: the start) to ``until`` (blank: today)."""
+    def day(text):
+        try:
+            return date.fromisoformat((text or "").strip())
+        except ValueError:
+            return None
+
+    until = min(day(until) or today, today)
+    since = day(since)
+    if since is not None and (since > until or since.year < 2000):
+        since = None
+    return since, until
+
+
 @teams_bp.route("/admin/money", methods=["GET"])
 @login_required
 @requires(Permission.TEAMS_MONEY)
@@ -906,13 +956,36 @@ def admin_money():
     from ..services import team_money as money
 
     rows = money.all_teams_money()
+    today = get_membership_today()
+    since, until = _money_period(request.args.get("since"), request.args.get("until"), today)
+    overview = None
+    if request.args.get("check") == "1":
+        # On request only: it pages through Stripe and takes a few seconds.
+        import stripe
+
+        from ..services.money_overview import overview as money_overview
+
+        try:
+            overview = money_overview(since, until)
+        except stripe.StripeError as exc:
+            current_app.logger.warning("Money overview: Stripe could not be asked: %s", exc)
+            flash(_("Stripe could not be asked. Please try again in a few minutes."), "danger")
     return render_template(
         "admin_money.html",
         active_admin_section="money",
         page_title=_("Money"),
-        page_description=_("What each team's members paid, and what was transferred to the team."),
+        page_description=_("The association's money on Stripe, and what each team's members paid."),
         rows=rows,
         total_open=sum(row["open"] for row in rows),
         euros=money.euros,
         masked_iban=money.masked_iban,
+        since=since,
+        until=until,
+        today=today,
+        shortcuts=[
+            (_("Since the start"), None, today),
+            (str(today.year), date(today.year, 1, 1), today),
+            (str(today.year - 1), date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)),
+        ],
+        overview=overview,
     )

@@ -251,13 +251,72 @@ versions from the same day, a translation without its German file -- and
 `tests/test_legal_texts.py` fails on any of it, so a mistake fails CI, not
 the page. A broken file is also simply not shown.
 
+**As PDFs:** every version is also a PDF (`/legal/<text>/pdf`, an earlier
+one `/legal/<text>/pdf/<version>`), linked from its page and from `/legal`.
+A4, with the association's logo, the title and version on the first page,
+a contents list for longer texts, and the text, version and page number in
+the footer. The German version comes first; where there is an English
+translation of the same version, it follows on pages of its own, with the
+notice that German applies. Made by WeasyPrint
+(`legal_pdf.py`, layout in `templates/legal/pdf.html`) from the
+same Markdown -- tables included -- when first asked for, then kept in
+`storage/legal_pdf/` (not in backups) until the text, its translation or
+the layout changes. `flask build-legal-pdfs` makes them all ahead and names
+any text that cannot be laid out; the tests make every one, so that fails
+CI first. WeasyPrint needs Pango from the system (`libpango-1.0-0`,
+`libpangoft2-1.0-0`), which `install.sh` installs, also on an update. Only
+the fonts and the logo in `static/` are read while laying out; an image a
+text points at elsewhere is left out. nginx sends PDFs without the pages'
+Content-Security-Policy, whose `object-src 'none'` would stop Chrome's PDF
+viewer from showing them.
+
+**In the welcome emails** (Settings → General, *Attach the legal texts as
+PDFs to welcome emails*, off until switched on): the association's welcome
+email carries the PDFs of the texts the member accepted at signup, in the
+version they accepted (for somebody who signed up before versions were kept,
+the version in force on their signup day), with a line saying so; "Welcome to
+<team>" carries the PDF of the team's rules they accepted, when the rules are
+a file. A PDF that cannot be made is left out and logged; the email goes all
+the same.
+
+**Admin → Legal Texts** lists every text and team's rules in force with their
+PDFs, and whatever is wrong with the files in `legal/` on this server (also a
+folder for a team that does not exist). **Preview:** upload the Markdown file
+of a new version -- and its English translation, if any -- and it comes back
+as its PDF, with ENTWURF (`status: "draft"`) or VORSCHAU across every page.
+The files are checked as CI checks them, so a file that previews is one that
+can be committed; whatever is wrong is listed instead. Nothing is kept: the
+files go to a temporary folder for the checks and the layout and are deleted
+with it. A team's rules (`team:` in the front matter) get that team's logo.
+*Download a template* there gives a Markdown file with every front matter
+field explained and an example of everything a text can contain -- headings
+and paragraph anchors, emphasis, links, lists, lettered points, tables,
+quotes, parts -- dated today as a draft, so it previews as it is
+(`templates/legal/template.md`).
+
 **Which texts there are** is the list `LEGAL_TEXTS` in
 `services/legal_texts.py`: folder, German and English name, and whether it
 is accepted at signup. A registered text without a German file is not
 shown. Adding a text is a line there and a folder here. Accepted at signup:
 statutes, rules of procedure, membership terms, privacy policy. Also
-registered: webshop and event terms, team rules (a general text; each team's
-own rules stay on its page), legal notice.
+registered: webshop and event terms, legal notice. There is no general
+"Teamordnung": each team has its own, below.
+
+**A team's own rules** are kept here too, approved by the association like
+its own texts: `legal/teams/<team's short name>/team-rules/<de|en>/<day>.md`,
+with `team: "<short name>"` in the front matter as well; everything else --
+versions, drafts, `effective_from`, English as a translation of the same
+version, the checks in CI -- works as above. Shown at `/teams/<team>/rules`
+(signed-in only), as a PDF at `/teams/<team>/rules/pdf` with the team's logo
+on a dark badge and its name, and ticked when applying or joining, read in a
+window over the form. The membership keeps the version's day. Leads can no
+longer change their rules in the portal; they send the new text to the
+association. A folder whose short name matches no team is reported by `flask
+build-legal-pdfs`. Before this, leads typed rules into the portal: those still
+apply to a team until it has a file, and `flask export-team-rules --out
+<folder>` writes them as files -- dated the day they last changed, the
+version its members accepted -- to check, copy into `legal/teams/`, commit
+and deploy.
 
 **At signup** the one checkbox names every text accepted then, each a link.
 A click opens the text in a window over the form (`static/legal-dialog.js`
@@ -791,21 +850,21 @@ this is how to use them.
 
 **A team's About page** (`/teams/<short name>/about`): every signed-in visitor
 sees the logo, name, an "About the team" text, one optional picture, the fee,
-the team's rules and the form to apply or join. The overview shows each team's
+the team's rules (see "Legal Texts") and the form to apply or join. The overview shows each team's
 short description and leads there. **The team's own page**
 (`/teams/<short name>`) is for its members: their membership and who is in the
-team, without the texts; anybody else is sent to the About page. The texts,
-picture and rules are edited by the team's leads (Manage → Settings) and by
-site admins (Admin → Teams). Rules are optional; a team with rules needs them
-ticked to apply or join, and each membership keeps when they were accepted and
-which version -- the day they last changed. Changing the rules makes a new
-version for whoever applies next (members already in are not asked again) and
-is logged with the old and new text.
+team, without the texts; anybody else is sent to the About page. The texts
+and picture are edited by the team's leads (Manage → Settings) and by site
+admins. Rules are optional and kept by the association as files (see "Legal
+Texts"); a team with rules needs them ticked to apply or join, and each
+membership keeps when they were accepted and which version. A new version
+applies to whoever applies next; members already in are not asked again, and
+their team page says the rules have changed.
 
 **Running a team** (its leads, Teams → Manage), in sections down the side:
 *Applications* (invite with the meeting details, approve, not accept),
 *Members*, *Former members*, *Team page* (descriptions, picture, logo),
-*Applying* (open or closed, the question, the rules), *Access list* (only for
+*Applying* (open or closed, the question; the rules in force, read-only), *Access list* (only for
 teams that have one) and *Roles*. Each settings section is saved on its own.
 Also: notes about a person (not shown to them, but in their data export,
 without the author), removing somebody (immediately, with a reason that stays
@@ -964,6 +1023,31 @@ can show:
    next renewal. That last one is where the team period and the calendar year
    meet: the team subscription is set to stop on the association's last day;
    check what Stripe bills at the renewal in between.
+
+**The association's money** (Admin → Money → *Check against Stripe*, for a
+period, or with *From* left empty everything from the start up to a day;
+site admins and the Treasurer). Fetched from Stripe on request, since all
+payments land there -- membership, teams, and the webshop and events, which the
+portal knows nothing of. Money that never went through Stripe (cash, bank
+transfers) is not in it.
+
+- Every booking in Stripe's books (balance transactions) sorted by product:
+  membership and team by the invoice the payment paid (sorted as the webhook
+  sorts it), a team's one-time payment also by the payment the portal recorded;
+  a refund, bounced SEPA debit or chargeback goes with the payment it takes
+  back. Everything else is *Other* (webshop, events, payment links).
+- For each: received, bounced, refunded, taken back, Stripe's fees, net. Of
+  the net, the teams' share (what their members paid) and the association's
+  own (the rest; Stripe's fees are all the association's).
+- On the last day: what was in Stripe (the sum of every booking up to it --
+  up to today it must equal what Stripe holds now, and the page says whether
+  it does), what went to the bank account in the period, and what the teams
+  were still owed.
+- The check: every paid team invoice of the period is a team payment in the
+  portal with the same amount and the other way round; every paid membership
+  invoice has a membership period, and every period counted as paid has an
+  invoice Stripe shows as paid. Whatever does not match is listed with its
+  invoice id, to look up in Stripe. Read-only: it changes nothing.
 
 **How payments are built.** `services/payments.py` is the one place that talks
 to Stripe for anything sold: the connection, the person's Stripe customer (one

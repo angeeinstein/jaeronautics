@@ -1,0 +1,19 @@
+{#- A member's view of the team's rules: which version is in force, which one
+    they accepted, and where to read it. Expects ``team``, ``rules`` and
+    ``current``, their membership. -#}
+{% if rules.from_file %}
+    <p class="mb-0 small">
+        <a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}">{{ _('Rules of %(team)s', team=team.name) }}</a>
+        ({{ _('version of %(day)s', day=rules.day|date_display) }}) ·
+        <a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener">{{ _('PDF') }}</a>
+        {% if current.terms_version %}· {{ _('You accepted the version of %(day)s.', day=current.terms_version|date_display) }}{% endif %}
+        {% if not accepted_rules_in_force(current, rules) %}<br><span class="text-warning">{{ _('The rules have changed since; the version above applies now.') }}</span>{% endif %}
+    </p>
+{% else %}
+    <details>
+        <summary class="small">{{ _('Rules of %(team)s', team=team.name) }}</summary>
+        <div class="team-terms mt-2">{{ rules.text }}</div>
+        <div class="form-text">{{ _('As of %(day)s.', day=rules.day|date_display) }}
+            {% if current.terms_version %}{{ _('You accepted the version of %(day)s.', day=current.terms_version|date_display) }}{% endif %}</div>
+    </details>
+{% endif %}

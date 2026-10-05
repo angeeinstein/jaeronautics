@@ -355,10 +355,14 @@ def _storage_files():
     root = storage_dir()
     if not root.is_dir():
         return []
-    excluded = backup_dir().resolve()
+    from ..legal_pdf import cache_dir as legal_pdf_dir
+
+    # Not the backups themselves, nor the legal texts' PDFs: made again from
+    # the texts in the repository whenever they are missing.
+    excluded = {backup_dir().resolve(), legal_pdf_dir().resolve()}
     files = []
     for path in sorted(root.rglob("*")):
-        if path.is_file() and excluded not in path.resolve().parents:
+        if path.is_file() and not excluded.intersection(path.resolve().parents):
             files.append(path)
     return files
 

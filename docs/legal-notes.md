@@ -75,10 +75,13 @@ urgent.
 **Teams**
 - Applications (with the text written), memberships, start/end and the reason
   it ended, roles (lead, treasurer), a leaving message to the leads.
-- A team's own rules, if it has any: accepted with a tick when applying or
-  joining; the membership keeps when, and which version (the day the rules
-  last changed). Each change to the rules is logged with the old and new text.
-  Members already in are not asked to accept a new version.
+- A team's own rules, if it has any: files the association approves and
+  keeps with its own legal texts (`legal/teams/<team>/team-rules/`), each
+  version dated, with its history in the repository. Accepted with a tick
+  when applying or joining; the membership keeps when, and which version (its
+  day). Members already in are not asked to accept a new version; their team
+  page says the rules have changed. Rules typed into the portal before apply
+  until the team has a file.
 - **Leads' notes about a person** — never shown to that person. See 10.
 - Team bank details (account holder, IBAN, BIC) — the team's account, which
   may be a private person's. Every change logged with old and new value.

@@ -38,6 +38,7 @@ FORMAT = 1
 GENERAL_SETTING_KEYS = (
     "invoice_payments_enabled",
     "automatic_emails_enabled",
+    "legal_pdfs_in_welcome_emails",
     "welcome_email_sender",
     "automatic_email_template",
     INSTITUTIONAL_EMAIL_SETTING_KEY,

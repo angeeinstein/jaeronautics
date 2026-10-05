@@ -909,6 +909,13 @@ class NotificationService:
                 attachments = [{"path": str(logo), "cid": "teamlogo"}]
                 template_vars["team_logo_cid"] = "teamlogo"
 
+        files = self._team_rules_files(event)
+        if files:
+            template_vars["body_lines"] = [
+                *template_vars.get("body_lines", []),
+                _("Attached for your records, as a PDF: the rules of the team you accepted."),
+            ]
+
         return send_mail(
             from_account=sender_account,
             to_email=event.recipient_email,
@@ -916,8 +923,22 @@ class NotificationService:
             template_name="member_account_action.html",
             return_error=True,
             attachments=attachments,
+            files=files or None,
             **template_vars,
         )
+
+    @staticmethod
+    def _team_rules_files(event):
+        """The team's rules as a PDF, with "Welcome to <team>" -- when the switch
+        for the legal texts in welcome emails is on and the rules are a file."""
+        if event.event_type != "team_approved" or event.object_type != "team_membership" or not event.object_id:
+            return []
+        from . import legal_pdf
+        from .db_models import TeamMembership
+
+        if not legal_pdf.attach_to_welcome_emails():
+            return []
+        return legal_pdf.files_for_team_membership(db.session.get(TeamMembership, event.object_id))
 
     def _get_pending_events(self, channel):
         return db.session.execute(

@@ -181,12 +181,21 @@
                         <div class="form-text">{{ _('Optional. Without one, applicants are not asked to write anything.') }}</div>
                     </div>
                     <div>
-                        <label class="form-label" for="terms_text">{{ _('Rules to accept') }}</label>
-                        <textarea class="form-control" id="terms_text" name="terms_text" rows="8" maxlength="50000">{{ team.terms_text or '' }}</textarea>
-                        <div class="form-text">
-                            {{ _('Optional. Whoever applies or joins has to tick that they accept them. Each change is a new version, dated; members keep the version they accepted, and the change is logged.') }}
-                            {% if team.terms_updated_at %}{{ _('Current version: %(day)s.', day=team.terms_updated_at|date_display) }}{% endif %}
-                        </div>
+                        <div class="form-label">{{ _('Rules to accept') }}</div>
+                        {% set rules = team_rules(team) %}
+                        {% if rules and rules.from_file %}
+                            <p class="mb-1">
+                                <a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}">{{ _('Rules of %(team)s', team=team.name) }}</a>
+                                ({{ _('version of %(day)s', day=rules.day|date_display) }}) ·
+                                <a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener">{{ _('PDF') }}</a>
+                            </p>
+                        {% elif rules %}
+                            <div class="team-terms" tabindex="0" role="region" aria-label="{{ _('Rules of %(team)s', team=team.name) }}">{{ rules.text }}</div>
+                            <p class="small text-muted mb-1 mt-1">{{ _('As of %(day)s, entered here before the rules moved to the association.', day=rules.day|date_display) }}</p>
+                        {% else %}
+                            <p class="mb-1 text-muted">{{ _('None. Whoever joins accepts the association\'s rules only.') }}</p>
+                        {% endif %}
+                        <div class="form-text">{{ _('The association approves and keeps every team\'s rules with its own legal texts, versioned, each as a PDF. Whoever applies or joins has to accept the version in force, and keeps the version they accepted. To change them, send the new text to the association.') }}</div>
                     </div>
                 </div>
                 <div class="card-footer d-flex justify-content-end">

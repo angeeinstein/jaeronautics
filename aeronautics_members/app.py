@@ -1352,6 +1352,7 @@ def build_settings_page_context(edit_mail_account_id=None):
     general_settings = get_settings_map([
         "invoice_payments_enabled",
         "automatic_emails_enabled",
+        "legal_pdfs_in_welcome_emails",
         "welcome_email_sender",
         "automatic_email_template",
         INSTITUTIONAL_EMAIL_SETTING_KEY,
@@ -4794,6 +4795,61 @@ def create_app(config_overrides=None):
             click.echo("Everything looks healthy.")
         else:
             sys.exit(1)
+
+    @app.cli.command("build-legal-pdfs")
+    @with_appcontext
+    def build_legal_pdfs_command():
+        """Make the PDF of every legal text version shown (into storage/legal_pdf).
+
+        The pages make each one when it is first asked for; this makes them all
+        ahead, and says which text cannot be laid out.
+        """
+        from . import legal_pdf
+
+        failed = 0
+        for version, result in legal_pdf.build_all():
+            name = f"{'teams/' + version.team + '/' if version.team else ''}{version.slug}/{version.version.isoformat()}"
+            if isinstance(result, Exception):
+                failed += 1
+                click.echo(click.style(f"  {name}: {result}", fg="red"))
+            else:
+                click.echo(f"  {name}: {result // 1024} KB")
+        if failed:
+            raise click.ClickException(f"{failed} PDF(s) could not be made.")
+
+    @app.cli.command("export-team-rules")
+    @click.option("--out", default="legal-export", show_default=True,
+                  help="Folder to write into; its teams/ goes into the repository's legal/.")
+    @with_appcontext
+    def export_team_rules_command(out):
+        """Write the rules leads typed into the portal as files for legal/teams/.
+
+        A team's rules now live with the association's legal texts. Until a
+        team has a file, the text from the portal still applies; this writes
+        that text as the file -- dated the day it last changed, which is the
+        version its members accepted -- to review, commit and deploy.
+        """
+        from pathlib import Path
+
+        from .services import legal_texts
+        from .services import teams as teams_service
+
+        written = 0
+        for team in teams_service.all_teams(include_archived=True):
+            if legal_texts.current_version(legal_texts.TEAM_RULES, team=team.slug) is not None:
+                click.echo(f"  {team.slug}: has a file in legal/ already")
+                continue
+            exported = teams_service.portal_rules_as_file(team)
+            if exported is None:
+                continue
+            relative, content = exported
+            target = Path(out) / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            written += 1
+            click.echo(f"  {team.slug}: {target}")
+        click.echo(f"{written} file(s) written. Copy {Path(out) / 'teams'} into the repository's legal/, "
+                   "check them, commit and update.")
 
     @app.cli.command("process-external-work")
     @click.option("--limit", default=50, show_default=True, type=int,

@@ -262,9 +262,11 @@ details, and anything about the association membership itself.
   team -- and sends anybody else to the About page. Leads and site admins edit
   the texts.
 - **Team rules to accept** — *built.* Teams may have rules of their own, like
-  the association's terms at signup: applying or joining needs them ticked,
-  and the membership keeps when and which version (the day the rules last
-  changed). Members already in are not asked again when the rules change --
+  the association's terms at signup: applying or joining needs them ticked
+  (read in a window over the form), and the membership keeps when and which
+  version. Since October 2026 they are files the association approves,
+  `legal/teams/<team>/team-rules/`, versioned, with a PDF carrying the team's
+  logo (maintenance.md, "Legal Texts"). Members already in are not asked again when the rules change --
   *open:* whether they should be.
 
 ## The foundation: data model

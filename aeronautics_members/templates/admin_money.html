@@ -1,6 +1,103 @@
 {% extends "admin_layout.html" %}
 {% from "teams/_status.html" import team_logo %}
 {% block admin_content %}
+<div class="card mb-4" id="money-overview">
+    <div class="card-header"><h4 class="mb-0">{{ _('Overview') }}</h4></div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('teams.admin_money') }}" class="d-flex flex-wrap gap-2 align-items-end mb-2" data-busy-text="{{ _('Asking Stripe…') }}">
+            <input type="hidden" name="check" value="1">
+            <div>
+                <label class="form-label small mb-1" for="money-since">{{ _('From') }}</label>
+                <input type="date" class="form-control form-control-sm" id="money-since" name="since" value="{{ since.isoformat() if since else '' }}" max="{{ today.isoformat() }}">
+            </div>
+            <div>
+                <label class="form-label small mb-1" for="money-until">{{ _('Until') }}</label>
+                <input type="date" class="form-control form-control-sm" id="money-until" name="until" value="{{ until.isoformat() }}" max="{{ today.isoformat() }}">
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm text-nowrap">{{ _('Check against Stripe') }}</button>
+        </form>
+        <p class="small mb-3">
+            {% for label, from_day, to_day in shortcuts %}<a href="{{ url_for('teams.admin_money', check=1, since=from_day.isoformat() if from_day else '', until=to_day.isoformat()) }}" class="me-3">{{ label }}</a>{% endfor %}
+            <span class="text-muted">{{ _('Leave “From” empty for everything from the start.') }}</span>
+        </p>
+        {% if not overview %}
+            <p class="text-muted mb-0">{{ _('The totals come from Stripe, where all the association\'s payments land: the membership, the teams, and the webshop and events too. They are fetched when you ask, together with a check of every payment against the portal\'s records.') }}</p>
+        {% else %}
+            {% set books = overview.books %}
+            {% set p = books.by_product %}
+            {% set t = books.total %}
+            <h5 class="h6">{% if overview.since %}{{ _('%(since)s to %(until)s on Stripe', since=overview.since|date_display, until=overview.until|date_display) }}{% else %}{{ _('From the start to %(until)s on Stripe', until=overview.until|date_display) }}{% endif %}</h5>
+            <div class="table-responsive">
+                <table class="table table-sm money-overview">
+                    <thead>
+                        <tr><th></th><th class="text-end">{{ _('Membership') }}</th><th class="text-end">{{ _('Teams') }}</th><th class="text-end">{{ _('Other') }}</th><th class="text-end">{{ _('Total') }}</th></tr>
+                    </thead>
+                    <tbody>
+                        {% macro money_row(label, key, sign=1, strong=false) %}
+                            <tr{% if strong %} class="fw-semibold"{% endif %}><td>{{ label }}</td>
+                                {% for product in ('membership', 'team', 'other') %}<td class="text-end text-nowrap">{{ euros(sign * p[product][key]) }}</td>{% endfor %}
+                                <td class="text-end text-nowrap">{{ euros(sign * t[key]) }}</td></tr>
+                        {% endmacro %}
+                        {{ money_row(_('Received'), 'received') }}
+                        {% if t.returned %}{{ money_row(_('SEPA debits that bounced'), 'returned', -1) }}{% endif %}
+                        {{ money_row(_('Refunded'), 'refunded', -1) }}
+                        {{ money_row(_('Taken back (chargebacks)'), 'taken_back', -1) }}
+                        {{ money_row(_('Stripe\'s fees'), 'fees', -1) }}
+                        {% if books.account.other %}<tr><td colspan="4">{{ _('Other bookings') }}</td><td class="text-end">{{ euros(books.account.other) }}</td></tr>{% endif %}
+                        {{ money_row(_('Net'), 'net', 1, true) }}
+                        <tr><td class="ps-4" colspan="4">{{ _('of which the teams\' (what their members paid)') }}</td><td class="text-end">{{ euros(overview.teams_share) }}</td></tr>
+                        <tr class="fw-semibold"><td class="ps-4" colspan="4">{{ _('of which the association\'s own') }}</td><td class="text-end">{{ euros(overview.association_own) }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted">{{ _('Other is everything paid without a membership or team invoice: the webshop, events, payment links.') }}{% if books.account.stripe_fees %} {{ _('Stripe\'s fees include %(amount)s Stripe billed on its own.', amount=euros(books.account.stripe_fees)) }}{% endif %}</p>
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <h5 class="h6">{{ _('On %(day)s', day=overview.until|date_display) }}</h5>
+                    <table class="table table-sm mb-0 money-overview">
+                        <tbody>
+                            <tr class="fw-semibold"><td>{{ _('In Stripe') }}</td><td class="text-end">{{ euros(books.balance_at_end) }}</td></tr>
+                            {% if overview.in_stripe_now %}
+                                {% set now_total = overview.in_stripe_now.available + overview.in_stripe_now.pending %}
+                                <tr><td class="ps-4">{{ _('available now / on its way') }}</td><td class="text-end">{{ euros(overview.in_stripe_now.available) }} / {{ euros(overview.in_stripe_now.pending) }}</td></tr>
+                            {% endif %}
+                            <tr><td>{{ _('Paid out to the bank account in the period') }}</td><td class="text-end">{{ euros(books.paid_out) }}</td></tr>
+                            <tr><td>{{ _('Still owed to the teams') }}</td><td class="text-end">{{ euros(overview.owed_to_teams) }}</td></tr>
+                        </tbody>
+                    </table>
+                    {% if overview.in_stripe_now %}
+                        {% if now_total == books.balance_at_end %}
+                            <p class="small text-success mt-2 mb-0">{{ _('Stripe\'s bookings add up to the balance Stripe holds now.') }}</p>
+                        {% else %}
+                            <p class="small text-warning mt-2 mb-0">{{ _('Stripe\'s bookings add up to %(books)s, but Stripe holds %(now)s now. A booking in another currency, or one made this very moment, can explain it.', books=euros(books.balance_at_end), now=euros(now_total)) }}</p>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <div class="col-lg-6">
+                    <h5 class="h6">{{ _('Check against the portal') }}</h5>
+                    {% set problems = overview.checks.teams + overview.checks.membership %}
+                    {% if not problems %}
+                        <p class="text-success mb-0">{{ _('Every paid membership and team invoice of the period matches the portal\'s records.') }}</p>
+                    {% else %}
+                        <p class="text-warning mb-2">{{ _('%(count)s payment(s) do not match:', count=problems|length) }}</p>
+                        {% macro problem_line(problem) %}<li>{{ _(problem.what) }}: <code>{{ problem.invoice }}</code>{% if problem.amount is not none %}, {{ euros(problem.amount) }}{% endif %}{% if problem.stripe_amount is defined %} / {{ euros(problem.stripe_amount) }}{% endif %}{% if problem.who %}, {{ problem.who }}{% endif %}</li>{% endmacro %}
+                        <ul class="small mb-0">
+                            {% for problem in problems[:10] %}{{ problem_line(problem) }}{% endfor %}
+                        </ul>
+                        {% if problems|length > 10 %}
+                            <details class="small mt-1">
+                                <summary>{{ _('%(count)s more', count=problems|length - 10) }}</summary>
+                                <ul class="mb-0">{% for problem in problems[10:] %}{{ problem_line(problem) }}{% endfor %}</ul>
+                            </details>
+                        {% endif %}
+                    {% endif %}
+                    <p class="small text-muted mt-2 mb-0">{{ _('Checked %(when)s.', when=overview.checked_at|datetime_display) }}</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="mb-0">{{ _('Teams') }}</h4>

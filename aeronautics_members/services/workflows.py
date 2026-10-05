@@ -115,10 +115,18 @@ def send_member_welcome_email(app, member, force_send=False, notify_on_failure=T
     if forum_service.is_enabled() and member.user is not None:
         forum_entry_url = build_forum_entry_url(member.user, include_token=True)
 
+    files = []
+    from .. import legal_pdf
+
+    if legal_pdf.attach_to_welcome_emails():
+        files = legal_pdf.files_for_member(member)
+
     success, error_message = send_mail(
         from_account=sender_account,
         to_email=member.email_private,
         subject=_("Welcome to Joanneum Aeronautics!"),
+        files=files or None,
+        legal_texts_attached=[document["title"] for document in files],
         template_name=template_name,
         first_name=member.first_name,
         suggested_username=suggested_username,

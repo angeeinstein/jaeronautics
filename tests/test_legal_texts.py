@@ -168,6 +168,13 @@ class TestRendering:
         assert '<h1 id="teil-b-portal" class="legal-part">' in rendered["html"]
         assert [level for _anchor, _label, level in rendered["contents"]] == [2, 1, 2]
 
+    def test_a_part_right_after_the_title_stays(self, texts):
+        texts("rules-of-procedure", "2026-03-02", "# Geschäftsordnung\n\n# Teil A – Allgemeines\n\n## § 1 Geltung\n")
+
+        rendered = legal.render(legal.current_version("rules-of-procedure", today=date(2026, 3, 2)))
+
+        assert "Geschäftsordnung" not in rendered["html"] and "Teil A – Allgemeines" in rendered["html"]
+
     def test_the_texts_own_revision_is_shown_with_the_date(self, client, texts, legal_dir):
         (legal_dir / "statutes" / "de").mkdir(parents=True)
         (legal_dir / "statutes" / "de" / "2019-03-17.md").write_text(

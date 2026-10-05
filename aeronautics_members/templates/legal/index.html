@@ -9,7 +9,8 @@
             {% for text, version in texts %}
                 <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <a href="{{ url_for('public.legal_text', slug=text.slug) }}">{{ text.title }}</a>
-                    <span class="text-muted small">{{ text.english }} · {{ _('in force since %(day)s', day=version.effective_from|date_display) }}</span>
+                    <span class="text-muted small">{{ text.english }} · {{ _('in force since %(day)s', day=version.effective_from|date_display) }} ·
+                        <a href="{{ url_for('public.legal_text_pdf', slug=text.slug) }}" target="_blank" rel="noopener">{{ _('PDF') }}</a></span>
                 </li>
             {% else %}
                 <li class="list-group-item text-muted">{{ _('None yet.') }}</li>

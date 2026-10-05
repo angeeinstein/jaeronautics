@@ -621,10 +621,12 @@ base_packages() {
             # mariadb-client always: the data has to be readable whether the
             # database is on this box or elsewhere. mariadb-server only once
             # the local/external answer is known, from install_or_update.
-            printf '%s\n' ca-certificates curl git nginx mariadb-client openssl python3 python3-pip python3-venv redis-server
+            # Pango (libpango, libpangoft2): WeasyPrint lays out the legal texts' PDFs with it.
+            printf '%s\n' ca-certificates curl git nginx mariadb-client openssl python3 python3-pip python3-venv redis-server \
+                libpango-1.0-0 libpangoft2-1.0-0
             ;;
         dnf|yum)
-            printf '%s\n' ca-certificates curl git nginx mariadb openssl python3 python3-pip redis
+            printf '%s\n' ca-certificates curl git nginx mariadb openssl python3 python3-pip redis pango
             ;;
     esac
 }
@@ -2452,6 +2454,17 @@ render_nginx_config() {
     keepalive 32;
     keepalive_timeout 60s;
 }"
+    # The pages' Content-Security-Policy, left off PDFs (the legal texts): Chrome
+    # shows a PDF through its viewer plugin, which object-src 'none' forbids, and
+    # would refuse to show the file. An empty value makes nginx send no header.
+    local csp_variable="${upstream_name}_csp"
+    local csp="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; frame-ancestors 'self'; frame-src 'none';"
+    upstream_block="${upstream_block}
+
+map \$sent_http_content_type \$${csp_variable} {
+    ~^application/pdf \"\";
+    default \"${csp}\";
+}"
     mkdir -p "$(dirname "${NGINX_CONF_PATH}")"
 
     if [[ "${ENABLE_SSL}" == "1" ]] && cert_paths_exist; then
@@ -2482,7 +2495,7 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; frame-ancestors 'self'; frame-src 'none';" always;
+    add_header Content-Security-Policy \$${csp_variable} always;
 
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
@@ -2525,7 +2538,7 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; frame-ancestors 'self'; frame-src 'none';" always;
+    add_header Content-Security-Policy \$${csp_variable} always;
 
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
