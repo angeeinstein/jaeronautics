@@ -280,8 +280,12 @@ a file. A PDF that cannot be made is left out and logged; the email goes all
 the same.
 
 **Admin → Legal Texts** lists every text and team's rules in force with their
-PDFs, and whatever is wrong with the files in `legal/` on this server (also a
-folder for a team that does not exist). **Preview:** upload the Markdown file
+PDFs; under *Not in force yet*, every draft and every published version whose
+`effective_from` has not come, the association's and the teams', each with a
+*Preview PDF* (with its English file of the same version, marked ENTWURF or
+VORSCHAU, made when asked for and not kept); and whatever is wrong with the
+files in `legal/` on this server (also a folder for a team that does not
+exist). **Preview:** upload the Markdown file
 of a new version -- and its English translation, if any -- and it comes back
 as its PDF, with ENTWURF (`status: "draft"`) or VORSCHAU across every page.
 The files are checked as CI checks them, so a file that previews is one that

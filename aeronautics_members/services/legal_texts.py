@@ -235,6 +235,31 @@ def has_language(slug, language, today=None, team=None):
     return bool(versions(slug, language, today, team))
 
 
+def _all_versions(slug, language, team=None):
+    """Every version with nothing wrong with it, whatever its status and day."""
+    found = []
+    for path in _files(slug, language, team):
+        version, _problems = _check(path, slug, language, team)
+        if version is not None:
+            found.append(version)
+    return found
+
+
+def waiting(slug, team=None, today=None):
+    """German versions not shown yet: drafts, and published ones whose day has
+    not come. Newest first. For the administrators, who approve them."""
+    today = today or get_membership_today()
+    return sorted(
+        (v for v in _all_versions(slug, AUTHORITATIVE, team) if v.status == "draft" or v.effective_from > today),
+        key=lambda v: (v.effective_from, v.version), reverse=True,
+    )
+
+
+def find_any(slug, language, version_day, team=None):
+    """A version by language and day, shown or not (a draft, one not in force yet), or None."""
+    return next((v for v in _all_versions(slug, language, team) if v.version == version_day), None)
+
+
 def teams_with_texts():
     """The team slugs that have a folder in legal/teams/."""
     folder = texts_dir() / TEAMS_FOLDER

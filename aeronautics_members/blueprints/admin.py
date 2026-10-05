@@ -1340,7 +1340,20 @@ def admin_legal():
         if data is not None:
             return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=f"VORSCHAU_{name}")
 
-    team_slugs = {team.slug for team in teams_service.all_teams(include_archived=True)}
+    all_teams = {team.slug: team for team in teams_service.all_teams(include_archived=True)}
+    team_slugs = set(all_teams)
+    waiting = []
+    for slug, team in [(text.slug, None) for text in legal.LEGAL_TEXTS] + [
+        (text.slug, team_slug) for team_slug in legal.teams_with_texts() for text in legal.TEAM_TEXTS
+    ]:
+        for version in legal.waiting(slug, team=team):
+            waiting.append({
+                "version": version,
+                "team_name": all_teams[team].name if team in all_teams else team,
+                "has_english": legal.find_any(slug, "en", version.version, team) is not None,
+                "url": url_for("admin.admin_legal_waiting_pdf", document=slug, version=version.version.isoformat(),
+                               team=team),
+            })
     return render_template(
         "admin_legal.html",
         active_admin_section="legal",
@@ -1350,9 +1363,50 @@ def admin_legal():
         team_rules=[(team, teams_service.team_rules(team)) for team in teams_service.all_teams(include_archived=False)],
         repo_problems=legal.problems(),
         orphan_folders=[slug for slug in legal.teams_with_texts() if slug not in team_slugs],
+        waiting=waiting,
         preview_problems=preview_problems,
         max_kb=legal_pdf.PREVIEW_MAX_BYTES // 1024,
     )
+
+
+@admin_bp.route("/admin/legal/waiting.pdf", methods=["GET"])
+@login_required
+@requires(Permission.SETTINGS_GENERAL)
+def admin_legal_waiting_pdf():
+    """A version in legal/ not shown yet -- a draft, or one whose day has not
+    come -- as its PDF, marked ENTWURF or VORSCHAU on every page."""
+    import io
+    from datetime import date
+
+    from .. import legal_pdf
+    from ..services import NotFoundError
+    from ..services import legal_texts as legal
+    from ..services import teams as teams_service
+
+    document = request.args.get("document", "")
+    team_slug = request.args.get("team") or None
+    if document not in (legal.TEAM_BY_SLUG if team_slug else legal.BY_SLUG):
+        abort(404)
+    try:
+        german = legal.find_any(document, legal.AUTHORITATIVE, date.fromisoformat(request.args.get("version", "")),
+                                team=team_slug)
+    except ValueError:
+        abort(404)
+    if german is None:
+        abort(404)
+    team = None
+    if team_slug:
+        try:
+            team = teams_service.get_team(team_slug)
+        except NotFoundError:
+            team = None
+    try:
+        data, name = legal_pdf.waiting_pdf(german, team)
+    except Exception:  # noqa: BLE001
+        current_app.logger.exception("Could not make the PDF of the waiting version %s", german.path)
+        flash(_("The PDF could not be made. See the log for why."), "danger")
+        return redirect(url_for("admin.admin_legal"))
+    return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=name)
 
 
 @admin_bp.route("/admin/legal/template", methods=["GET"])
