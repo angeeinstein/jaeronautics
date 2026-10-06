@@ -44,3 +44,6 @@ Object.defineProperty(document, 'fonts', {
     ready: Promise.resolve(),
   },
 });
+
+// Nor scrollIntoView, which a Select's dropdown calls to show the chosen option.
+Element.prototype.scrollIntoView = () => undefined;
