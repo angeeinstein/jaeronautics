@@ -83,13 +83,17 @@ Status: `[ ]` to do, `[x]` done.
 - `GET /admin/legal/template`, `/admin/legal/waiting.pdf` (download) -- stay
 
 ### 4.8 Settings
-- [ ] `GET|POST /admin/settings` (page + action: every section's save)
+- [ ] `GET|POST /admin/settings` (page + action: every section's save) -- the save is gone: each section has a page of its own, `/admin/settings/<section>`; the page keeps Mail accounts, Test tools and Maintenance until they move
+  - [x] General → `GET|PUT /api/v1/admin/settings/general`
+  - [x] Notifications → `GET|PUT /api/v1/admin/settings/notifications`
+  - [x] Membership fee → `GET|PUT /api/v1/admin/settings/billing`
+  - [x] Forum → `GET|PUT /api/v1/admin/settings/forum`
 - [ ] `POST /admin/settings/mail-accounts` (action: add or change)
 - [ ] `POST /admin/settings/mail-accounts/<id>/delete` (action)
 - [ ] `POST /admin/settings/mail-accounts/<id>/test-connection` (action)
 - [ ] `POST /admin/settings/mail-accounts/import` (action, upload)
 - [ ] `POST /admin/settings/send-test-email` (action)
-- [ ] `POST /admin/settings/test-forum-connection` (action)
+- [x] `POST /admin/settings/test-forum-connection` (action) → `POST /api/v1/admin/settings/forum/test`
 - [ ] `POST /admin/system-update`, `GET /admin/system-update/status` (action, already JSON) → API
 - [ ] `POST /admin/backup`, `GET /admin/backup/status` (action, already JSON) → API
 - [ ] `POST /admin/backup/files/<name>/delete` (action)

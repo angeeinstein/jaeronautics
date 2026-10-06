@@ -9,22 +9,15 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify
 
-from ..member_categories import CATEGORY_ORDER
 from ..permissions import (
     Permission,
 )
 from ..config import (
     RATELIMIT_ADMIN_EMAIL,
-    STRIPE_SETTING_KEYS,
 )
 from ..services.audit import (
     log_audit_event,
-    redact_settings_states_for_audit,
     snapshot_mail_account_for_audit,
-)
-from ..services.institutional_email import SETTING_KEY as INSTITUTIONAL_EMAIL_SETTING_KEY
-from ..services.forum import (
-    get_forum_service,
 )
 from ..services.privacy import (
     export_account_data,
@@ -90,23 +83,15 @@ from ..forms import (
     MailAccountForm,
     TestEmailForm,
 )
-from ..forum_service import (
-    FORUM_SETTING_KEYS,
-    ForumProviderError,
-)
 from ..mail_utils import (
     load_mail_accounts_config,
     probe_mail_account_connection,
     send_mail,
 )
-from ..notification_service import (
-    NOTIFICATION_SETTING_KEYS,
-)
 from ..app import (
     build_settings_page_context,
     limiter,
     requires,
-    set_setting_value,
 )
 
 admin_bp = Blueprint("admin", __name__)
@@ -176,234 +161,28 @@ def admin_reviews():
     return app_shell()
 
 
-@admin_bp.route("/admin/settings/test-forum-connection", methods=["POST"])
-@login_required
-@requires(Permission.SETTINGS_CREDENTIALS)
-def test_forum_connection():
-    service = get_forum_service()
-    try:
-        success, message = service.test_connection()
-    except ForumProviderError as exc:
-        success = False
-        message = str(exc)
-
-    log_audit_event(
-        category="forum",
-        event_type="forum_connection_tested",
-        actor_user=current_user,
-        target_user=current_user,
-        before=None,
-        after={"ready": service.is_ready(), "enabled": service.is_enabled()},
-        metadata={"success": success, "message": message},
-    )
-    db.session.commit()
-    flash(message, "success" if success else "danger")
-    return redirect(f"{url_for('admin.admin_settings')}#settings-forum")
-
-
-@admin_bp.route("/admin/settings", methods=["GET", "POST"])
+@admin_bp.route("/admin/settings", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
 def admin_settings():
+    """The settings not moved to the new front end yet: mail accounts, the test
+    email and maintenance (docs/frontend-routes.md, 4.8)."""
     edit_mail_account_id = request.args.get("edit_mail_account", type=int)
     context = build_settings_page_context(edit_mail_account_id=edit_mail_account_id)
-
     if edit_mail_account_id and context["editing_mail_account"] is None:
         flash(_("The selected mail account could not be found."), "warning")
         return redirect(url_for("admin.admin_settings"))
+    return render_template("admin_settings.html", active_admin_section="settings", **context)
 
-    if request.method == "POST" and "save_settings" in request.form:
-        valid_senders = {choice for choice, _label in context["sender_choices"]}
-        valid_templates = {choice for choice, _label in context["template_choices"]}
-        valid_forum_providers = {choice for choice, _label in context["forum_provider_choices"]}
-        valid_forum_auth_strategies = {choice for choice, _label in context["forum_auth_strategy_choices"]}
-        tracked_setting_keys = [
-            "invoice_payments_enabled",
-            "automatic_emails_enabled",
-            "legal_pdfs_in_welcome_emails",
-            "welcome_email_sender",
-            "automatic_email_template",
-            INSTITUTIONAL_EMAIL_SETTING_KEY,
-            *STRIPE_SETTING_KEYS,
-            *FORUM_SETTING_KEYS,
-            *NOTIFICATION_SETTING_KEYS,
-        ]
-        before_settings = {
-            key: db.session.get(Setting, key).value if db.session.get(Setting, key) is not None else None
-            for key in tracked_setting_keys
-        }
-        settings_section = (request.form.get("settings_section") or "general").strip().lower()
-        if settings_section not in {"general", "notifications", "billing", "forum", "mail", "test"}:
-            settings_section = "general"
 
-        # Billing and Forum hold third-party credentials -- the Stripe secret and
-        # webhook secret, the Discourse API key and connect secret. Those tabs are
-        # not rendered for an ordinary administrator, but the form they would have
-        # posted is trivial to reconstruct, so the decision is made here as well.
-        # Every other section only touches the settings a plain admin may change,
-        # because the unselected ones are written back from before_settings.
-        if settings_section in CREDENTIAL_SETTINGS_SECTIONS and not current_user.can(Permission.SETTINGS_CREDENTIALS):
-            flash(_("You do not have permission to change those settings."), "danger")
-            return redirect(url_for("admin.admin_settings"))
-
-        settings_redirect = f"{url_for('admin.admin_settings')}#settings-{settings_section}"
-        welcome_sender = request.form.get("welcome_email_sender")
-        auto_email_template = request.form.get("automatic_email_template")
-        institutional_domains = request.form.get(INSTITUTIONAL_EMAIL_SETTING_KEY)
-        notification_sender = request.form.get("notification_sender")
-        stripe_publishable_key = ((request.form.get("stripe_publishable_key") if settings_section == "billing" else before_settings.get("stripe_publishable_key")) or "").strip()
-        stripe_price_id = ((request.form.get("stripe_price_id") if settings_section == "billing" else before_settings.get("stripe_price_id")) or "").strip()
-        forum_provider = (request.form.get("forum_provider") or before_settings.get("forum_provider") or "discourse").strip() or "discourse"
-        forum_auth_strategy = (request.form.get("forum_auth_strategy") or before_settings.get("forum_auth_strategy") or "discourse_connect").strip() or "discourse_connect"
-        forum_avatar_max_bytes = (request.form.get("forum_avatar_max_bytes") or before_settings.get("forum_avatar_max_bytes") or "").strip()
-        forum_avatar_allowed_types = (request.form.get("forum_avatar_allowed_types") or before_settings.get("forum_avatar_allowed_types") or "").strip()
-
-        if welcome_sender and welcome_sender not in valid_senders:
-            flash(_("Invalid sender account selected."), "danger")
-            return redirect(settings_redirect)
-
-        if auto_email_template and auto_email_template not in valid_templates:
-            flash(_("Invalid email template selected."), "danger")
-            return redirect(settings_redirect)
-
-        if notification_sender and notification_sender not in valid_senders:
-            flash(_("Invalid sender account selected."), "danger")
-            return redirect(settings_redirect)
-
-        if forum_provider not in valid_forum_providers:
-            flash(_("Invalid forum provider selected."), "danger")
-            return redirect(settings_redirect)
-
-        if forum_auth_strategy not in valid_forum_auth_strategies:
-            flash(_("Invalid forum authentication strategy selected."), "danger")
-            return redirect(settings_redirect)
-
-        if forum_avatar_max_bytes:
-            try:
-                if int(forum_avatar_max_bytes) <= 0:
-                    raise ValueError
-            except ValueError:
-                flash(_("The forum avatar size limit must be a positive number of bytes."), "danger")
-                return redirect(settings_redirect)
-
-        invoice_enabled = (request.form.get("invoice_payments_enabled") == "on") if settings_section == "general" else str(before_settings.get("invoice_payments_enabled") or "False") == "True"
-        emails_enabled = (request.form.get("automatic_emails_enabled") == "on") if settings_section == "general" else str(before_settings.get("automatic_emails_enabled") or "False") == "True"
-        forum_enabled = (request.form.get("forum_integration_enabled") == "on") if settings_section == "forum" else str(before_settings.get("forum_integration_enabled") or "False") == "True"
-        notification_admin_general_enabled = (request.form.get("notification_admin_general_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_admin_general_enabled") or "True") == "True"
-        notification_admin_error_enabled = (request.form.get("notification_admin_error_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_admin_error_enabled") or "True") == "True"
-        notification_user_status_enabled = (request.form.get("notification_user_status_enabled") == "on") if settings_section == "notifications" else str(before_settings.get("notification_user_status_enabled") or "True") == "True"
-
-        set_setting_value("invoice_payments_enabled", str(invoice_enabled))
-        set_setting_value("automatic_emails_enabled", str(emails_enabled))
-        set_setting_value(
-            "legal_pdfs_in_welcome_emails",
-            str(request.form.get("legal_pdfs_in_welcome_emails") == "on") if settings_section == "general"
-            else before_settings.get("legal_pdfs_in_welcome_emails"),
-        )
-        set_setting_value("welcome_email_sender", welcome_sender if settings_section == "general" else before_settings.get("welcome_email_sender"))
-        set_setting_value("automatic_email_template", auto_email_template if settings_section == "general" else before_settings.get("automatic_email_template"))
-        set_setting_value(
-            INSTITUTIONAL_EMAIL_SETTING_KEY,
-            # Stored as the admin typed it; institutional_email.py is what
-            # makes sense of commas, newlines and stray @ signs.
-            institutional_domains if settings_section == "general"
-            else before_settings.get(INSTITUTIONAL_EMAIL_SETTING_KEY),
-        )
-        set_setting_value("notification_admin_general_enabled", str(notification_admin_general_enabled))
-        set_setting_value("notification_admin_error_enabled", str(notification_admin_error_enabled))
-        set_setting_value("notification_user_status_enabled", str(notification_user_status_enabled))
-        set_setting_value("notification_sender", (notification_sender if settings_section == "notifications" else before_settings.get("notification_sender")) or None)
-        moving_to_new_fee = 0
-        if settings_section == "billing" and stripe_price_id:
-            # A new fee: checked with Stripe, and every running subscription
-            # moves to it from its next renewal (services/billing.py).
-            from ..services.billing import change_membership_price
-
-            try:
-                moving_to_new_fee = change_membership_price(current_user, stripe_price_id)
-            except ServiceError as exc:
-                db.session.rollback()
-                flash(exc.message, "danger")
-                return redirect(settings_redirect)
-        set_setting_value("stripe_publishable_key", stripe_publishable_key or None)
-        set_setting_value("stripe_price_id", stripe_price_id or None)
-        set_setting_value("forum_integration_enabled", str(forum_enabled))
-        set_setting_value("forum_provider", forum_provider)
-        set_setting_value("forum_auth_strategy", forum_auth_strategy)
-        set_setting_value("forum_base_url", ((request.form.get("forum_base_url") if settings_section == "forum" else before_settings.get("forum_base_url")) or "").strip() or None)
-        set_setting_value("discourse_api_username", ((request.form.get("discourse_api_username") if settings_section == "forum" else before_settings.get("discourse_api_username")) or "").strip() or None)
-        set_setting_value("forum_onboarding_group", ((request.form.get("forum_onboarding_group") if settings_section == "forum" else before_settings.get("forum_onboarding_group")) or "").strip() or None)
-        set_setting_value("forum_member_group", ((request.form.get("forum_member_group") if settings_section == "forum" else before_settings.get("forum_member_group")) or "").strip() or None)
-        set_setting_value("forum_inactive_group", ((request.form.get("forum_inactive_group") if settings_section == "forum" else before_settings.get("forum_inactive_group")) or "").strip() or None)
-        set_setting_value("forum_staff_group", ((request.form.get("forum_staff_group") if settings_section == "forum" else before_settings.get("forum_staff_group")) or "").strip() or None)
-        manage_staff_flags = (request.form.get("forum_manage_staff_flags") == "on") if settings_section == "forum" else str(before_settings.get("forum_manage_staff_flags") or "False") == "True"
-        set_setting_value("forum_manage_staff_flags", str(manage_staff_flags))
-        # Stored as the lines the rest of the application reads, composed from
-        # one box per kind of member: the left-hand side is fixed, so nobody
-        # should have to type it correctly.
-        if settings_section == "forum":
-            written = "\n".join(
-                f"{kind} = {name}" for kind, name in (
-                    (kind, (request.form.get(f"forum_group_{kind}") or "").strip())
-                    for kind in CATEGORY_ORDER
-                ) if name
-            )
-        else:
-            written = before_settings.get("forum_category_groups") or ""
-        set_setting_value("forum_category_groups", written.strip() or None)
-        set_setting_value("forum_lecture_groups", ((request.form.get("forum_lecture_groups") if settings_section == "forum" else before_settings.get("forum_lecture_groups")) or "").strip() or None)
-        set_setting_value("forum_archive_groups", ((request.form.get("forum_archive_groups") if settings_section == "forum" else before_settings.get("forum_archive_groups")) or "").strip() or None)
-        set_setting_value("forum_onboarding_path", ((request.form.get("forum_onboarding_path") if settings_section == "forum" else before_settings.get("forum_onboarding_path")) or "").strip() or "/")
-        set_setting_value("forum_avatar_max_bytes", forum_avatar_max_bytes or None)
-        set_setting_value("forum_avatar_allowed_types", forum_avatar_allowed_types or None)
-
-        existing_api_key = before_settings.get("discourse_api_key")
-        submitted_api_key = ((request.form.get("discourse_api_key") if settings_section == "forum" else "") or "").strip()
-        set_setting_value("discourse_api_key", submitted_api_key or existing_api_key)
-
-        existing_connect_secret = before_settings.get("discourse_connect_secret")
-        submitted_connect_secret = ((request.form.get("discourse_connect_secret") if settings_section == "forum" else "") or "").strip()
-        set_setting_value("discourse_connect_secret", submitted_connect_secret or existing_connect_secret)
-
-        existing_stripe_secret = before_settings.get("stripe_secret_key")
-        submitted_stripe_secret = ((request.form.get("stripe_secret_key") if settings_section == "billing" else "") or "").strip()
-        set_setting_value("stripe_secret_key", submitted_stripe_secret or existing_stripe_secret)
-
-        existing_webhook_secret = before_settings.get("stripe_webhook_secret")
-        submitted_webhook_secret = ((request.form.get("stripe_webhook_secret") if settings_section == "billing" else "") or "").strip()
-        set_setting_value("stripe_webhook_secret", submitted_webhook_secret or existing_webhook_secret)
-
-        after_settings = {
-            key: db.session.get(Setting, key).value if db.session.get(Setting, key) is not None else None
-            for key in tracked_setting_keys
-        }
-        changed_keys = sorted(
-            key for key in after_settings.keys()
-            if before_settings.get(key) != after_settings.get(key)
-        )
-        logged_before_settings, logged_after_settings = redact_settings_states_for_audit(before_settings, after_settings)
-        log_audit_event(
-            category="settings",
-            event_type="settings_updated",
-            actor_user=current_user,
-            target_user=current_user,
-            before=logged_before_settings,
-            after=logged_after_settings,
-            metadata={"changed_keys": changed_keys},
-        )
-        db.session.commit()
-        flash(_("Settings updated successfully!"), "success")
-        if moving_to_new_fee:
-            flash(_("%(count)s running subscription(s) move to the new price from their next renewal, "
-                    "in the background over the next minutes. Each member is emailed two weeks before their renewal.",
-                    count=moving_to_new_fee), "info")
-        return redirect(settings_redirect)
-
-    return render_template(
-        "admin_settings.html",
-        active_admin_section="settings",
-        **context,
-    )
+@admin_bp.route("/admin/settings/<any(general, notifications, billing, forum):section>", methods=["GET"])
+@login_required
+@requires(Permission.SETTINGS_GENERAL)
+def admin_settings_section(section):
+    """A section of the settings: drawn by the new front end (frontend/src/pages/admin/settings/)."""
+    if section in CREDENTIAL_SETTINGS_SECTIONS and not current_user.can(Permission.SETTINGS_CREDENTIALS):
+        return redirect(url_for("admin.admin_settings_section", section="general"))
+    return app_shell()
 
 
 @admin_bp.route("/admin/legal", methods=["GET"])

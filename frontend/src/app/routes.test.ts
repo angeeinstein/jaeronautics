@@ -35,6 +35,8 @@ describe('the pages the app draws', () => {
     ['/admin/money/rocket', true],
     ['/admin/money/rocket/transfer-code.svg', false],
     ['/admin/logs?user=12', true],
+    ['/admin/settings/forum', true],
+    ['/admin/settings#settings-mail', false],
     ['/account', false],
     ['https://example.org/admin', false],
     ['//example.org/admin', false],

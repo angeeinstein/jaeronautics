@@ -695,24 +695,23 @@ class TestTheBoxesOnTheSettingsPage:
     def _save(self, client, **groups):
         from conftest import db
 
-        form = {
-            "save_settings": "1",
-            "settings_section": "forum",
-            "forum_integration_enabled": "y",
-            "forum_provider": "discourse",
-            "forum_auth_strategy": "discourse_connect",
-            "forum_base_url": "https://forum.example.org",
-            "discourse_api_username": "system",
-            "forum_member_group": "members",
-            "forum_onboarding_group": "members-onboarding",
-            "forum_inactive_group": "membership-inactive",
-            "forum_lecture_groups": "students",
-            "forum_onboarding_path": "/",
-            "forum_avatar_max_bytes": "5242880",
-            "forum_avatar_allowed_types": "jpg,png",
+        from api_helpers import send
+
+        body = {
+            "enabled": True,
+            "base_url": "https://forum.example.org",
+            "api_username": "system",
+            "member_group": "members",
+            "onboarding_group": "members-onboarding",
+            "inactive_group": "membership-inactive",
+            "manage_staff_flags": False,
+            "category_groups": groups,
+            "lecture_groups": "students",
+            "onboarding_path": "/",
+            "avatar_max_bytes": 5242880,
+            "avatar_allowed_types": ["jpg", "png"],
         }
-        form.update({f"forum_group_{kind}": name for kind, name in groups.items()})
-        response = client.post("/admin/settings", data=form, follow_redirects=True)
+        response = send(client, "PUT", "/api/v1/admin/settings/forum", body)
         assert response.status_code == 200
         db.session.expire_all()
         return response
@@ -743,9 +742,8 @@ class TestTheBoxesOnTheSettingsPage:
         assert unknown_member_kinds(get_forum_settings_map()) == []
 
     def test_every_kind_gets_a_box(self, admin_client):
-        page = admin_client.get("/admin/settings").get_data(as_text=True)
-        for kind in CATEGORY_ORDER:
-            assert f'name="forum_group_{kind}"' in page
+        boxes = admin_client.get("/api/v1/admin/settings/forum").get_json()["category_groups"]
+        assert [box["kind"] for box in boxes] == list(CATEGORY_ORDER)
 
 
 @pytest.mark.forum_import  # the one-off import

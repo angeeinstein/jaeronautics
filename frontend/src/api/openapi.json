@@ -857,6 +857,130 @@
         "title": "BankIn",
         "type": "object"
       },
+      "BillingIn": {
+        "additionalProperties": false,
+        "properties": {
+          "price_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price Id"
+          },
+          "publishable_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Publishable Key"
+          },
+          "secret_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secret Key"
+          },
+          "webhook_secret": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Webhook Secret"
+          }
+        },
+        "title": "BillingIn",
+        "type": "object"
+      },
+      "BillingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          },
+          "publishable_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishable Key"
+          },
+          "secret_key_set": {
+            "title": "Secret Key Set",
+            "type": "boolean"
+          },
+          "webhook_secret_set": {
+            "title": "Webhook Secret Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "publishable_key",
+          "price_id",
+          "secret_key_set",
+          "webhook_secret_set"
+        ],
+        "title": "BillingOut",
+        "type": "object"
+      },
+      "BillingSavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "moving": {
+            "title": "Moving",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changed",
+          "moving"
+        ],
+        "title": "BillingSavedOut",
+        "type": "object"
+      },
       "BillingSyncOut": {
         "additionalProperties": false,
         "properties": {
@@ -1040,6 +1164,30 @@
         "title": "CandidatesQuery",
         "type": "object"
       },
+      "CategoryGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "group"
+        ],
+        "title": "CategoryGroup",
+        "type": "object"
+      },
       "Change": {
         "additionalProperties": false,
         "properties": {
@@ -1204,6 +1352,103 @@
           "changed"
         ],
         "title": "ChangedOut",
+        "type": "object"
+      },
+      "ChannelHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "backoff_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backoff Until"
+          },
+          "channel": {
+            "enum": [
+              "admin_general",
+              "admin_error",
+              "user_status"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "held_back": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Held Back",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_failure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure"
+          },
+          "next_send_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Send At"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel",
+          "label",
+          "enabled",
+          "pending",
+          "held_back",
+          "next_send_at",
+          "backoff_until",
+          "last_failure"
+        ],
+        "title": "ChannelHealth",
+        "type": "object"
+      },
+      "ConnectionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "message"
+        ],
+        "title": "ConnectionOut",
         "type": "object"
       },
       "Counts": {
@@ -1813,6 +2058,231 @@
         "title": "ForumCleanup",
         "type": "object"
       },
+      "ForumEndpoints": {
+        "additionalProperties": false,
+        "description": "The portal's addresses the forum is set up with.",
+        "properties": {
+          "connect": {
+            "title": "Connect",
+            "type": "string"
+          },
+          "entry": {
+            "title": "Entry",
+            "type": "string"
+          },
+          "logout": {
+            "title": "Logout",
+            "type": "string"
+          },
+          "public_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Base Url"
+          }
+        },
+        "required": [
+          "public_base_url",
+          "entry",
+          "connect",
+          "logout"
+        ],
+        "title": "ForumEndpoints",
+        "type": "object"
+      },
+      "ForumIn": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Api Key"
+          },
+          "api_username": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Api Username"
+          },
+          "archive_groups": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Archive Groups"
+          },
+          "avatar_allowed_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Avatar Allowed Types",
+            "type": "array"
+          },
+          "avatar_max_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Avatar Max Bytes"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Base Url"
+          },
+          "category_groups": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Category Groups",
+            "type": "object"
+          },
+          "connect_secret": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Connect Secret"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "inactive_group": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Inactive Group"
+          },
+          "lecture_groups": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lecture Groups"
+          },
+          "manage_staff_flags": {
+            "title": "Manage Staff Flags",
+            "type": "boolean"
+          },
+          "member_group": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Member Group"
+          },
+          "onboarding_group": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Onboarding Group"
+          },
+          "onboarding_path": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Onboarding Path"
+          },
+          "staff_group": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Staff Group"
+          }
+        },
+        "required": [
+          "enabled",
+          "manage_staff_flags"
+        ],
+        "title": "ForumIn",
+        "type": "object"
+      },
       "ForumResyncOut": {
         "additionalProperties": false,
         "properties": {
@@ -1834,6 +2304,113 @@
         "title": "ForumResyncOut",
         "type": "object"
       },
+      "ForumSettingsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "api_key_set": {
+            "title": "Api Key Set",
+            "type": "boolean"
+          },
+          "api_username": {
+            "title": "Api Username",
+            "type": "string"
+          },
+          "archive_groups": {
+            "title": "Archive Groups",
+            "type": "string"
+          },
+          "avatar_allowed_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Avatar Allowed Types",
+            "type": "array"
+          },
+          "avatar_max_bytes": {
+            "title": "Avatar Max Bytes",
+            "type": "integer"
+          },
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "category_groups": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryGroup"
+            },
+            "title": "Category Groups",
+            "type": "array"
+          },
+          "connect_secret_set": {
+            "title": "Connect Secret Set",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "endpoints": {
+            "$ref": "#/components/schemas/ForumEndpoints"
+          },
+          "inactive_group": {
+            "title": "Inactive Group",
+            "type": "string"
+          },
+          "lecture_groups": {
+            "title": "Lecture Groups",
+            "type": "string"
+          },
+          "manage_staff_flags": {
+            "title": "Manage Staff Flags",
+            "type": "boolean"
+          },
+          "member_group": {
+            "title": "Member Group",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "onboarding_group": {
+            "title": "Onboarding Group",
+            "type": "string"
+          },
+          "onboarding_path": {
+            "title": "Onboarding Path",
+            "type": "string"
+          },
+          "staff_group": {
+            "title": "Staff Group",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "base_url",
+          "api_username",
+          "api_key_set",
+          "connect_secret_set",
+          "onboarding_group",
+          "member_group",
+          "inactive_group",
+          "staff_group",
+          "manage_staff_flags",
+          "category_groups",
+          "lecture_groups",
+          "archive_groups",
+          "onboarding_path",
+          "avatar_max_bytes",
+          "avatar_allowed_types",
+          "endpoints",
+          "missing"
+        ],
+        "title": "ForumSettingsOut",
+        "type": "object"
+      },
       "ForumUsername": {
         "additionalProperties": false,
         "description": "Approving would make this the suggested forum username; the admin chooses.",
@@ -1852,6 +2429,156 @@
           "suggested"
         ],
         "title": "ForumUsername",
+        "type": "object"
+      },
+      "GeneralIn": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic_email_template": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Automatic Email Template"
+          },
+          "automatic_emails": {
+            "title": "Automatic Emails",
+            "type": "boolean"
+          },
+          "institutional_email_domains": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Institutional Email Domains"
+          },
+          "invoice_payments": {
+            "title": "Invoice Payments",
+            "type": "boolean"
+          },
+          "legal_pdfs_in_welcome_emails": {
+            "title": "Legal Pdfs In Welcome Emails",
+            "type": "boolean"
+          },
+          "welcome_email_sender": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Welcome Email Sender"
+          }
+        },
+        "required": [
+          "invoice_payments",
+          "automatic_emails",
+          "legal_pdfs_in_welcome_emails"
+        ],
+        "title": "GeneralIn",
+        "type": "object"
+      },
+      "GeneralOut": {
+        "additionalProperties": false,
+        "properties": {
+          "automatic_email_template": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Automatic Email Template"
+          },
+          "automatic_emails": {
+            "title": "Automatic Emails",
+            "type": "boolean"
+          },
+          "domains_in_use": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Domains In Use",
+            "type": "array"
+          },
+          "institutional_email_domains": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Institutional Email Domains"
+          },
+          "invoice_payments": {
+            "title": "Invoice Payments",
+            "type": "boolean"
+          },
+          "legal_pdfs_in_welcome_emails": {
+            "title": "Legal Pdfs In Welcome Emails",
+            "type": "boolean"
+          },
+          "senders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Senders",
+            "type": "array"
+          },
+          "templates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Templates",
+            "type": "array"
+          },
+          "welcome_email_sender": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Welcome Email Sender"
+          }
+        },
+        "required": [
+          "invoice_payments",
+          "automatic_emails",
+          "legal_pdfs_in_welcome_emails",
+          "domains_in_use",
+          "senders",
+          "templates"
+        ],
+        "title": "GeneralOut",
         "type": "object"
       },
       "GrantRoleIn": {
@@ -2916,6 +3643,96 @@
         "title": "Notice",
         "type": "object"
       },
+      "NotificationsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_error": {
+            "title": "Admin Error",
+            "type": "boolean"
+          },
+          "admin_general": {
+            "title": "Admin General",
+            "type": "boolean"
+          },
+          "sender": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sender"
+          },
+          "user_status": {
+            "title": "User Status",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "admin_general",
+          "admin_error",
+          "user_status"
+        ],
+        "title": "NotificationsIn",
+        "type": "object"
+      },
+      "NotificationsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_error": {
+            "title": "Admin Error",
+            "type": "boolean"
+          },
+          "admin_general": {
+            "title": "Admin General",
+            "type": "boolean"
+          },
+          "health": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelHealth"
+            },
+            "title": "Health",
+            "type": "array"
+          },
+          "sender": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sender"
+          },
+          "senders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Senders",
+            "type": "array"
+          },
+          "user_status": {
+            "title": "User Status",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "admin_general",
+          "admin_error",
+          "user_status",
+          "senders",
+          "health"
+        ],
+        "title": "NotificationsOut",
+        "type": "object"
+      },
       "OldForum": {
         "additionalProperties": false,
         "properties": {
@@ -3631,20 +4448,6 @@
           "redundant"
         ],
         "title": "RolesOut",
-        "type": "object"
-      },
-      "SavedOut": {
-        "additionalProperties": false,
-        "properties": {
-          "changed": {
-            "title": "Changed",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "changed"
-        ],
-        "title": "SavedOut",
         "type": "object"
       },
       "SessionOut": {
@@ -4736,6 +5539,37 @@
           "sync_problems"
         ],
         "title": "Waiting",
+        "type": "object"
+      },
+      "aeronautics_members__api__admin_settings__SavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "SavedOut",
+        "type": "object"
+      },
+      "aeronautics_members__api__admin_teams__SavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "SavedOut",
         "type": "object"
       }
     }
@@ -7123,6 +7957,524 @@
         ]
       }
     },
+    "/api/v1/admin/settings/billing": {
+      "get": {
+        "operationId": "admin_settings_billing",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The Stripe keys and the membership's price; of the secrets only whether one is set.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      },
+      "put": {
+        "operationId": "admin_settings_billing_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BillingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save the keys and the price. A new price moves every running membership to it from its",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/forum": {
+      "get": {
+        "operationId": "admin_settings_forum",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForumSettingsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The forum's address, credentials and groups; of the secrets only whether one is set.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      },
+      "put": {
+        "operationId": "admin_settings_forum_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForumIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/aeronautics_members__api__admin_settings__SavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save the forum's settings. A secret left empty stays as it is.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/forum/test": {
+      "post": {
+        "operationId": "admin_settings_forum_test",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Check that the forum answers with these settings. Grants nobody anything.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/general": {
+      "get": {
+        "operationId": "admin_settings_general",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneralOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Invoices, automatic emails, the welcome email and the students' email domains.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      },
+      "put": {
+        "operationId": "admin_settings_general_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneralIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/aeronautics_members__api__admin_settings__SavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save the general settings: only these, whatever else there is.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/notifications": {
+      "get": {
+        "operationId": "admin_settings_notifications",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Which notifications go out, from which account, and how each channel stands.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      },
+      "put": {
+        "operationId": "admin_settings_notifications_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/aeronautics_members__api__admin_settings__SavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save which notifications go out, and from which account.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      }
+    },
     "/api/v1/admin/team-settings": {
       "put": {
         "operationId": "admin_teams_settings",
@@ -7141,7 +8493,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SavedOut"
+                  "$ref": "#/components/schemas/aeronautics_members__api__admin_teams__SavedOut"
                 }
               }
             },

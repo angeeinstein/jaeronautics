@@ -19,9 +19,9 @@ test.describe('the admin frame', () => {
     const sections = page.getByRole('navigation', { name: 'Sections' }).last();
 
     await sections.getByRole('link', { name: 'Settings' }).click();
-    await sections.getByRole('link', { name: 'General' }).click();
+    await sections.getByRole('link', { name: 'Test tools' }).click();
 
-    await expect(page).toHaveURL(/\/admin\/settings#settings-general$/);
+    await expect(page).toHaveURL(/\/admin\/settings#settings-test$/);
     await expect(page.locator('#root')).toHaveCount(0); // Flask's own page, not the app
   });
 

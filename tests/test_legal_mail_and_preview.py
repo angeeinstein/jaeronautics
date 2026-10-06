@@ -177,14 +177,16 @@ class TestTheSwitch:
     def test_set_on_the_general_settings_and_kept_by_the_others(self, app, client):
         _login(client, _staff("boss@example.org", "admin").id)
 
-        client.post("/admin/settings", data={"save_settings": "1", "settings_section": "general",
-                                             "legal_pdfs_in_welcome_emails": "on"})
+        general = {"invoice_payments": False, "automatic_emails": False}
+
+        send(client, "PUT", "/api/v1/admin/settings/general", {**general, "legal_pdfs_in_welcome_emails": True})
         assert legal_pdf.attach_to_welcome_emails()
 
-        client.post("/admin/settings", data={"save_settings": "1", "settings_section": "notifications"})
+        send(client, "PUT", "/api/v1/admin/settings/notifications",
+             {"admin_general": True, "admin_error": True, "user_status": True})
         assert legal_pdf.attach_to_welcome_emails()
 
-        client.post("/admin/settings", data={"save_settings": "1", "settings_section": "general"})
+        send(client, "PUT", "/api/v1/admin/settings/general", {**general, "legal_pdfs_in_welcome_emails": False})
         assert not legal_pdf.attach_to_welcome_emails()
 
 

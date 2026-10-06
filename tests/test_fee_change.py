@@ -286,12 +286,10 @@ class TestANewMembershipFee:
         _paying_member(stripe_fake, "a@example.com", "sub_a")
         _login(client, _staff("boss@example.com", "superadmin").id)
 
-        body = client.post("/admin/settings", data={
-            "save_settings": "1", "settings_section": "billing", "stripe_price_id": "price_20",
-        }, follow_redirects=True).get_data(as_text=True)
+        body = send(client, "PUT", "/api/v1/admin/settings/billing", {"price_id": "price_20"}).get_json()
 
         assert db.session.get(Setting, "stripe_price_id").value == "price_20"
-        assert "1 running subscription(s) move to the new price" in body
+        assert body == {"changed": ["stripe_price_id"], "moving": 1}
         assert db.session.query(ExternalWorkItem).filter_by(kind=ExternalWorkItem.KIND_STRIPE_PRICE_MOVE).count() == 1
 
     def test_the_settings_page_refuses_an_unsuitable_price(self, app, client, stripe_fake):
@@ -300,12 +298,10 @@ class TestANewMembershipFee:
         _membership_price("price_15")
         _login(client, _staff("boss@example.com", "superadmin").id)
 
-        body = client.post("/admin/settings", data={
-            "save_settings": "1", "settings_section": "billing", "stripe_price_id": "price_20_monthly",
-        }, follow_redirects=True).get_data(as_text=True)
+        response = send(client, "PUT", "/api/v1/admin/settings/billing", {"price_id": "price_20_monthly"})
 
         assert db.session.get(Setting, "stripe_price_id").value == "price_15"
-        assert "yearly recurring price" in body
+        assert response.status_code == 400 and "yearly recurring price" in response.get_json()["error"]["fields"]["price_id"]
 
 
 # --- A team -------------------------------------------------------------------------------

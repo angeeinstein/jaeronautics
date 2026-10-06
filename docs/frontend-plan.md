@@ -228,6 +228,12 @@ server can update to it.
       (`components/PdfLink.tsx`, as legal-pdf-open.js does on Flask's pages).)*
    8. Settings, section by section (general, billing, mail, forum,
       notifications, maintenance with update, backup and restore)
+      *(General, Notifications, Membership fee and Forum done: `api/admin_settings.py`; the one
+      save for every section became a service per section (`services/settings_sections.py`), each
+      changing only its own settings and logging one entry when something changed; the
+      secrets are never sent to the browser, only whether one is set. Pages at
+      `/admin/settings/<section>`, `frontend/src/pages/admin/settings/`; an old link to a
+      section's tab opens its page.)*
 5. **Teams area:** overview, a team's page and join page with the rules
    dialog, the leads' management sections, the team's money.
 6. **My Account:** the overview, membership and payment status, forum card

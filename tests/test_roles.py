@@ -125,32 +125,24 @@ class TestTheUpdateSurfaceIsRestricted:
 
 
 class TestCredentialsAreRestricted:
-    def test_an_admin_cannot_post_the_billing_settings(self, client):
-        """The tab is not rendered, but the form is trivial to reconstruct."""
+    def test_an_admin_cannot_save_the_billing_settings(self, client):
+        """The page is not offered, but the request is trivial to make."""
         admin = _user("nokeys@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        response = client.post(
-            "/admin/settings",
-            data={
-                "save_settings": "1",
-                "settings_section": "billing",
-                "stripe_secret_key": "sk_live_attacker",
-            },
-        )
+        response = send(client, "PUT", "/api/v1/admin/settings/billing", {"secret_key": "sk_live_attacker"})
 
-        assert response.status_code == 302
+        assert response.status_code == 403
         assert db.session.get(app_module.Setting, "stripe_secret_key") is None
 
     def test_an_admin_cannot_post_the_forum_settings(self, client):
         admin = _user("nodiscourse@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        client.post(
-            "/admin/settings",
-            data={"save_settings": "1", "settings_section": "forum", "discourse_api_key": "leak"},
-        )
+        response = send(client, "PUT", "/api/v1/admin/settings/forum",
+                        {"enabled": True, "manage_staff_flags": False, "api_key": "leak"})
 
+        assert response.status_code == 403
         assert db.session.get(app_module.Setting, "discourse_api_key") is None
 
     def test_an_admin_may_still_save_the_general_settings(self, client):
@@ -158,12 +150,10 @@ class TestCredentialsAreRestricted:
         admin = _user("general@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        response = client.post(
-            "/admin/settings",
-            data={"save_settings": "1", "settings_section": "general", "automatic_emails_enabled": "on"},
-        )
+        response = send(client, "PUT", "/api/v1/admin/settings/general", {
+            "invoice_payments": False, "automatic_emails": True, "legal_pdfs_in_welcome_emails": False})
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         assert db.session.get(app_module.Setting, "automatic_emails_enabled").value == "True"
 
     def test_an_admin_cannot_export_the_smtp_passwords(self, client):
@@ -324,11 +314,13 @@ class TestTheUiHidesWhatItDoesNotOffer:
         body = client.get("/admin/settings").get_data(as_text=True)
 
         assert "settings-maintenance-tab" not in body
-        assert "settings-billing-tab" not in body
         assert "settings-mail-tab" not in body
         # Ordinary administration is untouched.
-        assert "settings-general-tab" in body
-        assert "settings-notifications-tab" in body
+        assert "settings-test-tab" in body
+        assert client.get("/admin/settings/general").status_code == 200
+        assert client.get("/admin/settings/billing").headers["Location"].endswith("/admin/settings/general")
+        assert client.get("/api/v1/admin/settings/billing").status_code == 403
+        assert client.get("/api/v1/admin/settings/forum").status_code == 403
 
     def test_a_superadmin_sees_them(self, client):
         boss = _user("visible@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
@@ -337,18 +329,22 @@ class TestTheUiHidesWhatItDoesNotOffer:
         body = client.get("/admin/settings").get_data(as_text=True)
 
         assert "settings-maintenance-tab" in body
-        assert "settings-billing-tab" in body
+        assert "settings-mail-tab" in body
+        assert client.get("/api/v1/admin/settings/billing").status_code == 200
 
-    def test_the_stored_secret_never_reaches_an_admins_browser(self, client):
-        """The point of hiding rather than disabling."""
+    def test_a_stored_secret_never_reaches_a_browser(self, client):
+        """Whether one is set, never what it is -- not even for whoever may change it."""
         app_module.set_setting_value("stripe_secret_key", "sk_test_supersecret")
+        app_module.set_setting_value("discourse_api_key", "discourse-supersecret")
         db.session.commit()
-        admin = _user("nosecret@example.com", ROLE_ADMIN)
-        _login(client, admin.id)
+        boss = _user("nosecret@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
+        _login(client, boss.id)
 
-        body = client.get("/admin/settings").get_data(as_text=True)
+        billing = client.get("/api/v1/admin/settings/billing")
+        forum = client.get("/api/v1/admin/settings/forum")
 
-        assert "sk_test_supersecret" not in body
+        assert billing.get_json()["secret_key_set"] is True and b"supersecret" not in billing.data
+        assert forum.get_json()["api_key_set"] is True and b"supersecret" not in forum.data
 
     def test_an_admin_sees_no_role_buttons(self, client):
         admin = _user("norolebuttons@example.com", ROLE_ADMIN)

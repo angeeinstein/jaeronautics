@@ -25,3 +25,16 @@ def get_stripe_settings_map():
     values = dict(DEFAULT_STRIPE_SETTINGS)
     values.update(get_settings_map(STRIPE_SETTING_KEYS))
     return values
+
+
+def set_setting_value(key, value):
+    """Store ``value`` under ``key``; ``None`` or "" removes it, so the default applies."""
+    setting = db.session.get(Setting, key)
+    if value is None or value == "":
+        if setting is not None:
+            db.session.delete(setting)
+        return
+    if setting is None:
+        db.session.add(Setting(key=key, value=str(value)))
+    else:
+        setting.value = str(value)

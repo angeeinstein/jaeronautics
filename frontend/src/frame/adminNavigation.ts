@@ -17,19 +17,20 @@ import {
 import { can, canAny, type Me } from '../api/session';
 import { compact, type NavItem, type SidebarContent } from './navigation';
 
-/** Settings' sections, until Settings has pages of its own (step 4.8): anchors on today's page. */
+/**
+ * Settings' sections: pages of their own as they move to the new front end
+ * (step 4.8), anchors on the old page until then.
+ */
 function settingsChildren(me: Me): NavItem[] {
   const section = (label: string, anchor: string): NavItem => ({ label, to: `/admin/settings#${anchor}` });
+  const page = (label: string, slug: string): NavItem => ({ label, to: `/admin/settings/${slug}` });
   // As today's page shows them: the parts holding secrets only with
   // settings.credentials, Maintenance only with system.update.
-  const children = [
-    section('General', 'settings-general'),
-    section('Notifications', 'settings-notifications'),
-  ];
+  const children = [page('General', 'general'), page('Notifications', 'notifications')];
   if (can(me, 'settings.credentials')) {
     children.push(
-      section('Membership fee', 'settings-billing'),
-      section('Forum', 'settings-forum'),
+      page('Membership fee', 'billing'),
+      page('Forum', 'forum'),
       section('Mail accounts', 'settings-mail'),
     );
   }

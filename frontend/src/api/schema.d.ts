@@ -497,6 +497,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Stripe keys and the membership's price; of the secrets only whether one is set. */
+        get: operations["admin_settings_billing"];
+        /** Save the keys and the price. A new price moves every running membership to it from its */
+        put: operations["admin_settings_billing_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/forum": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The forum's address, credentials and groups; of the secrets only whether one is set. */
+        get: operations["admin_settings_forum"];
+        /** Save the forum's settings. A secret left empty stays as it is. */
+        put: operations["admin_settings_forum_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/forum/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check that the forum answers with these settings. Grants nobody anything. */
+        post: operations["admin_settings_forum_test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/general": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Invoices, automatic emails, the welcome email and the students' email domains. */
+        get: operations["admin_settings_general"];
+        /** Save the general settings: only these, whatever else there is. */
+        put: operations["admin_settings_general_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Which notifications go out, from which account, and how each channel stands. */
+        get: operations["admin_settings_notifications"];
+        /** Save which notifications go out, and from which account. */
+        put: operations["admin_settings_notifications_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/team-settings": {
         parameters: {
             query?: never;
@@ -913,6 +1002,47 @@ export interface components {
              */
             iban?: string | null;
         };
+        /** BillingIn */
+        BillingIn: {
+            /**
+             * Price Id
+             * @default null
+             */
+            price_id?: string | null;
+            /**
+             * Publishable Key
+             * @default null
+             */
+            publishable_key?: string | null;
+            /**
+             * Secret Key
+             * @default null
+             */
+            secret_key?: string | null;
+            /**
+             * Webhook Secret
+             * @default null
+             */
+            webhook_secret?: string | null;
+        };
+        /** BillingOut */
+        BillingOut: {
+            /** Price Id */
+            price_id: string | null;
+            /** Publishable Key */
+            publishable_key: string | null;
+            /** Secret Key Set */
+            secret_key_set: boolean;
+            /** Webhook Secret Set */
+            webhook_secret_set: boolean;
+        };
+        /** BillingSavedOut */
+        BillingSavedOut: {
+            /** Changed */
+            changed: string[];
+            /** Moving */
+            moving: number;
+        };
         /** BillingSyncOut */
         BillingSyncOut: {
             /** Changed */
@@ -968,6 +1098,15 @@ export interface components {
              */
             q?: string;
         };
+        /** CategoryGroup */
+        CategoryGroup: {
+            /** Group */
+            group: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+        };
         /** Change */
         Change: {
             /** Current */
@@ -1015,6 +1154,35 @@ export interface components {
         ChangedOut: {
             /** Changed */
             changed: boolean;
+        };
+        /** ChannelHealth */
+        ChannelHealth: {
+            /** Backoff Until */
+            backoff_until: string | null;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "admin_general" | "admin_error" | "user_status";
+            /** Enabled */
+            enabled: boolean;
+            /** Held Back */
+            held_back: string[];
+            /** Label */
+            label: string;
+            /** Last Failure */
+            last_failure: string | null;
+            /** Next Send At */
+            next_send_at: string | null;
+            /** Pending */
+            pending: number;
+        };
+        /** ConnectionOut */
+        ConnectionOut: {
+            /** Message */
+            message: string;
+            /** Ok */
+            ok: boolean;
         };
         /**
          * Counts
@@ -1216,10 +1384,135 @@ export interface components {
             /** Failed */
             failed: boolean;
         };
+        /**
+         * ForumEndpoints
+         * @description The portal's addresses the forum is set up with.
+         */
+        ForumEndpoints: {
+            /** Connect */
+            connect: string;
+            /** Entry */
+            entry: string;
+            /** Logout */
+            logout: string;
+            /** Public Base Url */
+            public_base_url: string | null;
+        };
+        /** ForumIn */
+        ForumIn: {
+            /**
+             * Api Key
+             * @default null
+             */
+            api_key?: string | null;
+            /**
+             * Api Username
+             * @default null
+             */
+            api_username?: string | null;
+            /**
+             * Archive Groups
+             * @default null
+             */
+            archive_groups?: string | null;
+            /** Avatar Allowed Types */
+            avatar_allowed_types?: string[];
+            /**
+             * Avatar Max Bytes
+             * @default null
+             */
+            avatar_max_bytes?: number | null;
+            /**
+             * Base Url
+             * @default null
+             */
+            base_url?: string | null;
+            /** Category Groups */
+            category_groups?: {
+                [key: string]: string;
+            };
+            /**
+             * Connect Secret
+             * @default null
+             */
+            connect_secret?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Inactive Group
+             * @default null
+             */
+            inactive_group?: string | null;
+            /**
+             * Lecture Groups
+             * @default null
+             */
+            lecture_groups?: string | null;
+            /** Manage Staff Flags */
+            manage_staff_flags: boolean;
+            /**
+             * Member Group
+             * @default null
+             */
+            member_group?: string | null;
+            /**
+             * Onboarding Group
+             * @default null
+             */
+            onboarding_group?: string | null;
+            /**
+             * Onboarding Path
+             * @default null
+             */
+            onboarding_path?: string | null;
+            /**
+             * Staff Group
+             * @default null
+             */
+            staff_group?: string | null;
+        };
         /** ForumResyncOut */
         ForumResyncOut: {
             /** Error */
             error: string | null;
+        };
+        /** ForumSettingsOut */
+        ForumSettingsOut: {
+            /** Api Key Set */
+            api_key_set: boolean;
+            /** Api Username */
+            api_username: string;
+            /** Archive Groups */
+            archive_groups: string;
+            /** Avatar Allowed Types */
+            avatar_allowed_types: string[];
+            /** Avatar Max Bytes */
+            avatar_max_bytes: number;
+            /** Base Url */
+            base_url: string;
+            /** Category Groups */
+            category_groups: components["schemas"]["CategoryGroup"][];
+            /** Connect Secret Set */
+            connect_secret_set: boolean;
+            /** Enabled */
+            enabled: boolean;
+            endpoints: components["schemas"]["ForumEndpoints"];
+            /** Inactive Group */
+            inactive_group: string;
+            /** Lecture Groups */
+            lecture_groups: string;
+            /** Manage Staff Flags */
+            manage_staff_flags: boolean;
+            /** Member Group */
+            member_group: string;
+            /** Missing */
+            missing: string[];
+            /** Onboarding Group */
+            onboarding_group: string;
+            /** Onboarding Path */
+            onboarding_path: string;
+            /** Staff Group */
+            staff_group: string;
         };
         /**
          * ForumUsername
@@ -1230,6 +1523,60 @@ export interface components {
             current: string;
             /** Suggested */
             suggested: string;
+        };
+        /** GeneralIn */
+        GeneralIn: {
+            /**
+             * Automatic Email Template
+             * @default null
+             */
+            automatic_email_template?: string | null;
+            /** Automatic Emails */
+            automatic_emails: boolean;
+            /**
+             * Institutional Email Domains
+             * @default null
+             */
+            institutional_email_domains?: string | null;
+            /** Invoice Payments */
+            invoice_payments: boolean;
+            /** Legal Pdfs In Welcome Emails */
+            legal_pdfs_in_welcome_emails: boolean;
+            /**
+             * Welcome Email Sender
+             * @default null
+             */
+            welcome_email_sender?: string | null;
+        };
+        /** GeneralOut */
+        GeneralOut: {
+            /**
+             * Automatic Email Template
+             * @default null
+             */
+            automatic_email_template?: string | null;
+            /** Automatic Emails */
+            automatic_emails: boolean;
+            /** Domains In Use */
+            domains_in_use: string[];
+            /**
+             * Institutional Email Domains
+             * @default null
+             */
+            institutional_email_domains?: string | null;
+            /** Invoice Payments */
+            invoice_payments: boolean;
+            /** Legal Pdfs In Welcome Emails */
+            legal_pdfs_in_welcome_emails: boolean;
+            /** Senders */
+            senders: string[];
+            /** Templates */
+            templates: string[];
+            /**
+             * Welcome Email Sender
+             * @default null
+             */
+            welcome_email_sender?: string | null;
         };
         /** GrantRoleIn */
         GrantRoleIn: {
@@ -1592,6 +1939,38 @@ export interface components {
              */
             tone: "info" | "warning" | "danger";
         };
+        /** NotificationsIn */
+        NotificationsIn: {
+            /** Admin Error */
+            admin_error: boolean;
+            /** Admin General */
+            admin_general: boolean;
+            /**
+             * Sender
+             * @default null
+             */
+            sender?: string | null;
+            /** User Status */
+            user_status: boolean;
+        };
+        /** NotificationsOut */
+        NotificationsOut: {
+            /** Admin Error */
+            admin_error: boolean;
+            /** Admin General */
+            admin_general: boolean;
+            /** Health */
+            health: components["schemas"]["ChannelHealth"][];
+            /**
+             * Sender
+             * @default null
+             */
+            sender?: string | null;
+            /** Senders */
+            senders: string[];
+            /** User Status */
+            user_status: boolean;
+        };
         /** OldForum */
         OldForum: {
             /** Claimed At */
@@ -1806,11 +2185,6 @@ export interface components {
             changed: boolean;
             /** Redundant */
             redundant: string[];
-        };
-        /** SavedOut */
-        SavedOut: {
-            /** Changed */
-            changed: boolean;
         };
         /** SessionOut */
         SessionOut: {
@@ -2173,6 +2547,16 @@ export interface components {
             pictures: number | null;
             /** Sync Problems */
             sync_problems: number | null;
+        };
+        /** SavedOut */
+        aeronautics_members__api__admin_settings__SavedOut: {
+            /** Changed */
+            changed: string[];
+        };
+        /** SavedOut */
+        aeronautics_members__api__admin_teams__SavedOut: {
+            /** Changed */
+            changed: boolean;
         };
     };
     responses: never;
@@ -3885,6 +4269,445 @@ export interface operations {
             };
         };
     };
+    admin_settings_billing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_billing_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BillingIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingSavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_forum: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForumSettingsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_forum_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForumIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["aeronautics_members__api__admin_settings__SavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_forum_test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_general: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneralOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_general_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeneralIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["aeronautics_members__api__admin_settings__SavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_notifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_notifications_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationsIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["aeronautics_members__api__admin_settings__SavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_teams_settings: {
         parameters: {
             query?: never;
@@ -3904,7 +4727,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavedOut"];
+                    "application/json": components["schemas"]["aeronautics_members__api__admin_teams__SavedOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

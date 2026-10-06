@@ -352,6 +352,7 @@ from .services.members import (  # noqa: E402
 from .services.settings import (  # noqa: E402
     get_settings_map,
     get_stripe_settings_map,
+    set_setting_value,
 )
 from .services.membership import (  # noqa: E402
     RESUMABLE_MEMBER_STATUSES,
@@ -689,18 +690,6 @@ def _stand_down_while_paused(job_name):
     return False
 
 
-def set_setting_value(key, value):
-    setting = db.session.get(Setting, key)
-    if value is None or value == "":
-        if setting is not None:
-            db.session.delete(setting)
-        return
-
-    normalized_value = str(value)
-    if setting is None:
-        db.session.add(Setting(key=key, value=normalized_value))
-    else:
-        setting.value = normalized_value
 
 
 

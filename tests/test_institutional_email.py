@@ -278,23 +278,21 @@ class TestTheAdminSetting:
         return client
 
     def test_the_settings_page_shows_the_list_in_force(self, app, client):
-        body = self._admin_client(app, client).get("/admin/settings").get_data(as_text=True)
+        body = self._admin_client(app, client).get("/api/v1/admin/settings/general").get_json()
 
-        assert "institutional_email_domains" in body
-        assert "edu.fh-joanneum.at" in body
+        assert "edu.fh-joanneum.at" in body["domains_in_use"]
 
     def test_saving_it_changes_which_addresses_are_accepted(self, app, client):
         admin = self._admin_client(app, client)
 
-        response = admin.post("/admin/settings", data={
-            "save_settings": "1",
-            "settings_section": "general",
-            "welcome_email_sender": "",
-            "automatic_email_template": "",
-            "institutional_email_domains": "partner.example, other.example",
-        }, follow_redirects=True)
+        from api_helpers import send
 
-        assert response.status_code < 400
+        response = send(admin, "PUT", "/api/v1/admin/settings/general", {
+            "invoice_payments": False, "automatic_emails": False, "legal_pdfs_in_welcome_emails": False,
+            "institutional_email_domains": "partner.example, other.example",
+        })
+
+        assert response.status_code == 200 and "institutional_email_domains" in response.get_json()["changed"]
         assert get_institutional_domains() == ("partner.example", "other.example")
         assert is_institutional_email("someone@partner.example") is True
         assert is_institutional_email("someone@edu.fh-joanneum.at") is False

@@ -8,6 +8,18 @@
  * template-render tests.
  */
 document.addEventListener('DOMContentLoaded', function () {
+    // Sections that moved to pages of their own in the new front end: an old
+    // link to one of them goes there.
+    var moved = {
+        '#settings-general': '/admin/settings/general',
+        '#settings-notifications': '/admin/settings/notifications',
+        '#settings-billing': '/admin/settings/billing',
+        '#settings-forum': '/admin/settings/forum'
+    };
+    if (window.location.pathname === '/admin/settings' && moved[window.location.hash]) {
+        window.location.replace(moved[window.location.hash]);
+        return;
+    }
     // The admin settings (#settings-tab) and any other side list that asks
     // for it (data-remember-tab), such as a team's management page.
     var nav = document.querySelector('#settings-tab, [data-remember-tab]');
