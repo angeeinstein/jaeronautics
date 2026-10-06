@@ -64,7 +64,7 @@ class TestWhatIsInIt:
 class TestKept:
     def test_made_once_until_the_text_changes(self, app, with_translation, legal_dir, monkeypatch):  # noqa: F811
         made = []
-        monkeypatch.setattr(legal_pdf, "build", lambda version, team=None: made.append(version) or b"%PDF-1.7 fake")
+        monkeypatch.setattr(legal_pdf, "build", lambda version, team=None, **_: made.append(version) or b"%PDF-1.7 fake")
 
         legal_pdf.pdf_for(with_translation)
         legal_pdf.pdf_for(with_translation)
@@ -127,7 +127,7 @@ class TestThePages:
         assert client.get(path).status_code == 404
 
     def test_when_it_cannot_be_made_the_text_is_shown(self, client, with_translation, monkeypatch):
-        monkeypatch.setattr(legal_pdf, "pdf_for", lambda version, team=None: 1 / 0)
+        monkeypatch.setattr(legal_pdf, "ready", lambda version, team=None: 1 / 0)
 
         response = client.get("/legal/membership-terms/pdf")
 
@@ -148,6 +148,62 @@ class TestThePages:
         page = client.get("/legal/statutes/de/2019-03-17").get_data(as_text=True)
 
         assert 'href="/legal/statutes/pdf/2019-03-17"' in page
+
+
+class TestMadeBeforeItIsOpened:
+    """The page's script asks for the PDF to be made (?prepare=1), then opens it."""
+
+    def test_made_and_its_address_given(self, client, with_translation):
+        answer = client.get("/legal/membership-terms/pdf?prepare=1")
+
+        assert answer.status_code == 200 and answer.is_json
+        url = answer.get_json()["url"]
+        assert url.startswith("/legal/membership-terms/pdf?v=") and "prepare" not in url
+        assert list(legal_pdf.cache_dir().glob("membership-terms_2026-10-04_*.pdf"))
+        response = client.get(url)
+        assert response.status_code == 200 and response.mimetype == "application/pdf"
+
+    def test_the_address_changes_with_the_pdf(self, client, with_translation, legal_dir):  # noqa: F811
+        first = client.get("/legal/membership-terms/pdf?prepare=1").get_json()["url"]
+        english = legal_dir / "membership-terms" / "en" / "2026-10-04.md"
+        english.write_text(english.read_text(encoding="utf-8") + "\nMore.\n", encoding="utf-8")
+
+        second = client.get("/legal/membership-terms/pdf?prepare=1").get_json()["url"]
+
+        assert first != second
+
+    def test_never_kept_by_the_browser(self, client, with_translation):
+        response = client.get("/legal/membership-terms/pdf")
+
+        assert "no-store" in response.headers["Cache-Control"]
+
+    def test_when_it_cannot_be_made_the_script_is_told(self, client, with_translation, monkeypatch):
+        monkeypatch.setattr(legal_pdf, "ready", lambda version, team=None: 1 / 0)
+
+        answer = client.get("/legal/membership-terms/pdf?prepare=1")
+
+        assert answer.status_code == 500 and answer.get_json()["error"]
+
+    def test_every_pdf_link_is_made_first(self, client, with_translation):
+        page = client.get("/legal").get_data(as_text=True)
+
+        assert 'href="/legal/membership-terms/pdf" target="_blank" rel="noopener" data-legal-file' in page
+        assert "legal-pdf-open.js" in page
+
+
+class TestMadeAgain:
+    def test_remake_replaces_the_kept_file(self, app, with_translation):
+        path, _digest = legal_pdf.ready(with_translation)
+        path.write_bytes(b"%PDF stale")
+
+        assert legal_pdf.remake(with_translation) > 1000
+        assert path.read_bytes() != b"%PDF stale"
+
+    def test_forget_all(self, app, with_translation):
+        legal_pdf.pdf_for(with_translation)
+
+        assert legal_pdf.forget_all() == 1
+        assert not list(legal_pdf.cache_dir().glob("*.pdf"))
 
 
 def test_every_text_in_the_repository_makes_a_pdf(app):

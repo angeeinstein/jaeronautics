@@ -71,7 +71,7 @@
                                 <a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-dialog class="text-decoration-underline">{{ _('rules of %(team)s', team=team.name) }}</a>
                                 ({{ _('version of %(day)s', day=rules.day|date_display) }}).<span class="text-danger">*</span>
                             </label>
-                            <div class="form-text"><a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener">{{ _('Rules as PDF') }}</a></div>
+                            <div class="form-text"><a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-file>{{ _('Rules as PDF') }}</a></div>
                         </div>
                     {% elif rules %}
                         <div>

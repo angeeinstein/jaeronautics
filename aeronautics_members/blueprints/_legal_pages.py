@@ -8,8 +8,9 @@ the version in force, and ``crumbs``, the way back as (label, url) pairs.
 
 import io
 from datetime import date
+from urllib.parse import urlencode
 
-from flask import abort, current_app, flash, redirect, render_template, request, send_file
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, send_file
 from flask_babel import _
 
 from .. import legal_pdf
@@ -79,6 +80,27 @@ def text_page(slug, language, version, *, url, pdf_url, crumbs, label, team=None
     )
 
 
+def preparing():
+    """``?prepare=1``: the page's script asks for the PDF to be made, before opening it."""
+    return bool(request.args.get("prepare"))
+
+
+def prepared(digest):
+    """The answer to ``?prepare=1`` once the PDF is made: the address to open it at.
+
+    The address carries the PDF's hash (``v``), so it changes with the PDF and
+    a phone or browser holding an earlier copy cannot show that one instead.
+    """
+    args = request.args.to_dict()
+    args.pop("prepare", None)
+    args["v"] = digest
+    return jsonify(url=f"{request.path}?{urlencode(args)}")
+
+
+def not_prepared():
+    return jsonify(error=_("The PDF could not be made just now.")), 500
+
+
 def pdf(slug, version, *, back, team=None, owner=None):
     """The PDF of a text: the German version, then its English translation.
 
@@ -87,10 +109,15 @@ def pdf(slug, version, *, back, team=None, owner=None):
     """
     german = _german(slug, version, team)
     try:
-        data = legal_pdf.pdf_for(german, team=owner)
+        path, digest = legal_pdf.ready(german, team=owner)
+        data = None if preparing() else path.read_bytes()
     except Exception:  # noqa: BLE001 -- the text itself is still there to read
         current_app.logger.exception("Could not make the PDF of %s %s %s", team or "", slug, german.version)
+        if preparing():
+            return not_prepared()
         flash(_("The PDF could not be made just now. The text is below."), "warning")
         return redirect(back)
+    if data is None:
+        return prepared(digest)
     return send_file(io.BytesIO(data), mimetype="application/pdf",
                      download_name=legal_pdf.filename(german, team=owner))

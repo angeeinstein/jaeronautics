@@ -4799,8 +4799,9 @@ def create_app(config_overrides=None):
             sys.exit(1)
 
     @app.cli.command("build-legal-pdfs")
+    @click.option("--again", is_flag=True, help="Make each anew, even when a kept one looks current.")
     @with_appcontext
-    def build_legal_pdfs_command():
+    def build_legal_pdfs_command(again):
         """Make the PDF of every legal text version shown (into storage/legal_pdf).
 
         The pages make each one when it is first asked for; this makes them all
@@ -4809,7 +4810,7 @@ def create_app(config_overrides=None):
         from . import legal_pdf
 
         failed = 0
-        for version, result in legal_pdf.build_all():
+        for version, result in legal_pdf.build_all(again=again):
             name = f"{'teams/' + version.team + '/' if version.team else ''}{version.slug}/{version.version.isoformat()}"
             if isinstance(result, Exception):
                 failed += 1

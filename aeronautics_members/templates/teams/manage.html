@@ -187,7 +187,7 @@
                             <p class="mb-1">
                                 <a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}">{{ _('Rules of %(team)s', team=team.name) }}</a>
                                 ({{ _('version of %(day)s', day=rules.day|date_display) }}) ·
-                                <a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener">{{ _('PDF') }}</a>
+                                <a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-file>{{ _('PDF') }}</a>
                             </p>
                         {% elif rules %}
                             <div class="team-terms" tabindex="0" role="region" aria-label="{{ _('Rules of %(team)s', team=team.name) }}">{{ rules.text }}</div>
