@@ -22,9 +22,7 @@ from ..config import (
     RATELIMIT_ADMIN_EMAIL,
     STRIPE_SETTING_KEYS,
 )
-from ..services.diagnostics import collect_system_health
 from ..services.audit import (
-    get_recent_audit_logs,
     serialize_audit_value,
     log_audit_event,
     redact_settings_states_for_audit,
@@ -67,6 +65,7 @@ from ..services.privacy import (
     refresh_subscription_state_before_deletion,
 )
 from . import _legal_pages as legal_pages
+from .app_shell import app_shell
 from ._responses import json_download_response
 from ..services.notifications import (
     build_mail_accounts_export_payload,
@@ -167,7 +166,6 @@ from ..app import (
     build_forum_context,
     build_settings_page_context,
     decorate_pending_identity_requests,
-    get_admin_dashboard_metrics,
     limiter,
     requires,
     set_setting_value,
@@ -213,33 +211,8 @@ def _teams_context(user):
 @login_required
 @requires(Permission.ADMIN_ACCESS)
 def admin_dashboard():
-    metrics = get_admin_dashboard_metrics()
-    # Cancelled memberships mostly end on the same day -- the end of the paid
-    # period everybody shares -- and "ending 31.12." says more than
-    # "cancelled". Only claimed when it is true for all of them.
-    cancel_end_dates = db.session.execute(
-        db.select(Member.membership_ends_on)
-        .where(
-            Member.deleted_at.is_(None),
-            Member.cancel_at_period_end.is_(True),
-        )
-        .distinct()
-    ).scalars().all()
-    return render_template(
-        "admin_dashboard.html",
-        active_admin_section="dashboard",
-        metrics=metrics,
-        cancel_end_date=cancel_end_dates[0] if len(cancel_end_dates) == 1 else None,
-        waiting=reviews.waiting_counts(current_user),
-        oldest_waiting=reviews.oldest_waiting(current_user),
-        # Only a line pointing at the health report, which is where emails are
-        # retried and problems explained; for whoever can open that tab.
-        health_problems=(
-            collect_system_health()["problems"]
-            if current_user.can(Permission.SYSTEM_UPDATE) else []
-        ),
-        recent_logs=get_recent_audit_logs(limit=8) if current_user.can(Permission.LOGS_VIEW) else [],
-    )
+    """The dashboard, drawn by the new front end (frontend/src/pages/admin/AdminDashboard.tsx)."""
+    return app_shell()
 
 
 @admin_bp.route("/admin/accounts", methods=["GET"])

@@ -1,0 +1,26 @@
+.tile {
+  height: 100%;
+  background: var(--ja-surface);
+  transition: border-color 0.15s ease;
+}
+
+.tile[data-link]:hover {
+  border-color: var(--ja-accent);
+}
+
+.value {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ja-text);
+}
+
+.link {
+  display: block;
+  height: 100%;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--ja-accent);
+  outline-offset: 2px;
+}

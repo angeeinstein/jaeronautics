@@ -1271,6 +1271,8 @@ roll_back_installation() {
     # nginx configuration all match the code that is about to run.
     ensure_writable_directories
     ensure_virtualenv
+    ensure_nodejs
+    build_frontend
     render_service_file
     render_billing_reconcile_timer_files
     render_notifications_timer_files
@@ -1496,6 +1498,106 @@ ensure_virtualenv() {
         warn "Installing from requirements.txt: transitive versions are not pinned."
         run_as_app_user "${INSTALL_DIR}/.venv/bin/pip" install --no-cache-dir --upgrade -r "${INSTALL_DIR}/requirements.txt"
     fi
+}
+
+# The front end (frontend/) is built with Node.js on every install and update:
+# the current long-term-support release, from NodeSource's package repository,
+# because Ubuntu's own Node.js is too old for its build tools.
+NODE_MAJOR=24
+
+node_major() {
+    command_exists node || return 0
+    node --version 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/'
+}
+
+ensure_nodejs() {
+    [[ -n "${PACKAGE_MANAGER:-}" ]] || detect_package_manager
+    local have
+    have="$(node_major)"
+    if [[ -n "${have}" ]] && (( have >= NODE_MAJOR )); then
+        info "Node.js $(node --version) is installed."
+        return 0
+    fi
+
+    step "Installing Node.js ${NODE_MAJOR} (to build the front end)"
+    case "${PACKAGE_MANAGER}" in
+        apt)
+            install_packages ca-certificates curl gnupg
+            install -d -m 0755 /etc/apt/keyrings
+            local key
+            key="$(mktemp)"
+            retry 3 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o "${key}"
+            gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg "${key}"
+            rm -f "${key}"
+            chmod 0644 /etc/apt/keyrings/nodesource.gpg
+            printf 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_%s.x nodistro main\n' \
+                "${NODE_MAJOR}" > /etc/apt/sources.list.d/nodesource.list
+            # The new repository has to be read before its package can be found.
+            PACKAGE_CACHE_UPDATED=0
+            update_package_index_once
+            retry 3 apt-get "${APT_NETWORK_OPTS[@]}" install -y nodejs
+            ;;
+        dnf|yum)
+            install_packages nodejs npm
+            ;;
+    esac
+
+    have="$(node_major)"
+    if [[ -z "${have}" ]] || (( have < NODE_MAJOR )); then
+        die "Node.js ${NODE_MAJOR} or newer is needed to build the front end; found ${have:-none}."
+    fi
+    success "Node.js $(node --version) installed."
+}
+
+# Built into a folder beside the one being served and swapped in at the end,
+# so the portal never serves a half-written build. The previous build's files
+# stay one more update: a page opened before it still loads the scripts it
+# was built with. A build that fails stops the run like a failed Python
+# install does, before the portal is restarted.
+build_frontend() {
+    local frontend="${INSTALL_DIR}/frontend"
+    if [[ ! -f "${frontend}/package.json" ]]; then
+        info "This revision has no front end to build."
+        return 0
+    fi
+    local static="${INSTALL_DIR}/aeronautics_members/static"
+    local live="${static}/app"
+    local next="${static}/app.next"
+    local cache="/var/cache/${APP_NAME}/npm"
+
+    step "Building the front end"
+    install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${cache}"
+    rm -rf "${next}"
+    if ! run_as_app_user env HOME="${INSTALL_DIR}" npm --prefix "${frontend}" ci \
+        --no-audit --no-fund --cache "${cache}"; then
+        die "Installing the front end's packages failed."
+    fi
+    if ! run_as_app_user env HOME="${INSTALL_DIR}" npm --prefix "${frontend}" run build -- \
+        --outDir "${next}" --emptyOutDir; then
+        die "Building the front end failed."
+    fi
+    [[ -f "${next}/index.html" ]] || die "The front-end build produced no index.html."
+
+    # This build's own files, so the next one carries over these and not
+    # everything ever built.
+    (cd "${next}/assets" && ls -1) > "${next}/.build-files"
+    if [[ -f "${live}/.build-files" ]]; then
+        local name
+        while IFS= read -r name; do
+            if [[ -f "${live}/assets/${name}" && ! -e "${next}/assets/${name}" ]]; then
+                cp -p "${live}/assets/${name}" "${next}/assets/${name}"
+            fi
+        done < "${live}/.build-files"
+    fi
+
+    chown -R "${APP_USER}:${APP_GROUP}" "${next}"
+    rm -rf "${static}/app.previous"
+    if [[ -d "${live}" ]]; then
+        mv "${live}" "${static}/app.previous"
+    fi
+    mv "${next}" "${live}"
+    rm -rf "${static}/app.previous"
+    success "Front end built."
 }
 
 collect_configuration() {
@@ -2510,17 +2612,9 @@ render_nginx_config() {
     keepalive 32;
     keepalive_timeout 60s;
 }"
-    # The pages' Content-Security-Policy, left off PDFs (the legal texts): Chrome
-    # shows a PDF through its viewer plugin, which object-src 'none' forbids, and
-    # would refuse to show the file. An empty value makes nginx send no header.
-    local csp_variable="${upstream_name}_csp"
-    local csp="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; frame-ancestors 'self'; frame-src 'none';"
-    upstream_block="${upstream_block}
-
-map \$sent_http_content_type \$${csp_variable} {
-    ~^application/pdf \"\";
-    default \"${csp}\";
-}"
+    # No Content-Security-Policy here: the portal sets it on every answer itself,
+    # with a fresh nonce each time (aeronautics_members/content_security.py). A
+    # second, fixed policy from nginx would apply as well and block what it allows.
     mkdir -p "$(dirname "${NGINX_CONF_PATH}")"
 
     if [[ "${ENABLE_SSL}" == "1" ]] && cert_paths_exist; then
@@ -2551,7 +2645,6 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy \$${csp_variable} always;
 
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
@@ -2604,7 +2697,6 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy \$${csp_variable} always;
 
     real_ip_header CF-Connecting-IP;
     real_ip_recursive on;
@@ -3076,6 +3168,8 @@ install_or_update() {
 
     write_env_file
     ensure_virtualenv
+    ensure_nodejs
+    build_frontend
     ensure_database
     if [[ "${MIGRATE_DB_DATA}" == "1" ]]; then
         import_migrated_database

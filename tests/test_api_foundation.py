@@ -132,7 +132,8 @@ class TestAnswers:
 
         body = send(api, "POST", "/api/v1/_test/things/7").get_json()
 
-        assert body == {"error": {"code": "thing_taken", "message": "Thing 7 is taken.", "fields": {"name": "Taken."}}}
+        assert body == {"error": {"code": "thing_taken", "message": "Thing 7 is taken.",
+                                  "fields": {"name": "Taken."}, "details": None}}
 
     def test_times_in_utc_days_as_days(self, api):
         assert api.get("/api/v1/_test/when").get_json() == {"at": "2026-10-06T07:38:11Z", "day": "2026-10-06"}

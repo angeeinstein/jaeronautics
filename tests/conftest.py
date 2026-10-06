@@ -65,9 +65,20 @@ def _expected_head():
     return (revisions - parents).pop()
 
 
+# A stand-in for the front end's build (frontend/, npm run build), so the
+# pages it draws answer here without building it.
+STUB_FRONTEND_INDEX = (
+    '<!doctype html><html><head><meta name="csp-nonce" content="__CSP_NONCE__" /></head>'
+    '<body><div id="root"></div></body></html>'
+)
+
+
 @pytest.fixture
 def app(tmp_path):
     db_file = tmp_path / "test.db"
+    frontend = tmp_path / "frontend-build"
+    frontend.mkdir()
+    (frontend / "index.html").write_text(STUB_FRONTEND_INDEX)
     os.environ["DATABASE_URL"] = f"sqlite:///{db_file}"
     application = app_module.create_app(
         config_overrides={
@@ -79,6 +90,7 @@ def app(tmp_path):
             # Never the repository's own storage/backups or storage/legal_pdf.
             "BACKUP_DIR": str(tmp_path / "backups"),
             "LEGAL_PDF_DIR": str(tmp_path / "legal_pdf"),
+            "FRONTEND_DIST_DIR": str(frontend),
         }
     )
     with application.app_context():

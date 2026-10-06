@@ -540,11 +540,10 @@ class TestAddingARoleNeedsNoOtherChange:
         mod = _user("mod4@example.com", "photo_reviewer")
         _login(client, mod.id)
 
-        body = client.get("/admin").get_data(as_text=True)
+        # The sidebar (frontend/src/frame/adminNavigation.ts) follows these.
+        permissions = set(client.get("/api/v1/me").get_json()["permissions"])
 
-        assert "/admin/reviews" in body
-        assert "/admin/settings" not in body
-        assert "/admin/logs" not in body
+        assert permissions == {"admin.access", "forum.moderate"}  # Reviews shows for forum.moderate
 
     def test_the_account_filter_understands_a_role_it_never_heard_of(self, client, reviewer_role):
         """The filter asks about the capability, not about Role.slug == "admin".

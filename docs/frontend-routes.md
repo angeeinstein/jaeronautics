@@ -41,7 +41,7 @@ Status: `[ ]` to do, `[x]` done.
 ## Step 4 -- Admin area
 
 ### 4.1 Dashboard
-- [ ] `GET /admin` (page; also the endpoint alias `admin`) → dashboard
+- [x] `GET /admin` (page; also the endpoint alias `admin`) → dashboard (`GET /api/v1/admin/dashboard`)
 
 ### 4.2 Accounts
 - [ ] `GET /admin/accounts` (page) → list with filters and search

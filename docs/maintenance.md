@@ -300,9 +300,9 @@ later), with which it trims the fonts it embeds; `install.sh` installs them,
 also on an update. Ubuntu 24.04 has all of them; an older release's
 HarfBuzz is too old. Only
 the fonts and the logo in `static/` are read while laying out; an image a
-text points at elsewhere is left out. nginx sends PDFs without the pages'
-Content-Security-Policy, whose `object-src 'none'` would stop Chrome's PDF
-viewer from showing them.
+text points at elsewhere is left out. PDFs go without the pages'
+Content-Security-Policy (`content_security.py`), whose `object-src 'none'`
+would stop Chrome's PDF viewer from showing them.
 
 **Opening one:** a PDF link (`data-legal-file`, `static/legal-pdf-open.js`)
 first asks for the PDF to be made (`?prepare=1`), shows *Making the PDF…*
@@ -1857,6 +1857,26 @@ wheel for a newer Python, say — `USE_DEPENDENCY_LOCK=0 ./install.sh` falls bac
 to `requirements.txt`. That install is unpinned and unverified, so treat it as a
 way to get unstuck, not as a setting to leave in place.
 
+## The Front End
+
+The new front end (`frontend/`, React and TypeScript; `docs/frontend-plan.md`)
+is built on the server: `install.sh` installs Node.js 24 from NodeSource's
+package repository (Ubuntu's own is too old) and runs `npm ci` and
+`npm run build` on every install, update and rollback, before the portal
+restarts. The build goes into `aeronautics_members/static/app.next/` and is
+swapped in whole; the previous build's files stay one more update, so a page
+opened before it still loads its scripts. A build that fails stops the update
+like a failed Python install. npm's download cache is `/var/cache/jaeronautics/npm`.
+
+Its JavaScript dependencies are pinned in `frontend/package-lock.json`, with
+their hashes, as the Python ones are in the lock files. Working on it,
+the API's types and the tests: `frontend/README.md`.
+
+**Security policy.** The portal sets the Content-Security-Policy on every
+answer itself (`aeronautics_members/content_security.py`), with a fresh nonce
+each time, which the front end's `<style>` tags carry. nginx sets none: a
+second, fixed policy would apply as well and block what the first allows.
+
 ## Linting
 
 Ruff runs the pyflakes checks (real bugs: undefined names, unused imports):
@@ -1867,9 +1887,15 @@ ruff check .
 
 ## Continuous Integration
 
-`.github/workflows/ci.yml` runs `ruff check` and the pytest suite on every push
-and pull request. The tests use SQLite, so CI needs no database or other
-services.
+`.github/workflows/ci.yml` runs on every push and pull request, with the
+versions the servers run (Python 3.12, Node.js 24):
+
+- **test** -- `ruff check` and the pytest suite. The tests use SQLite, so CI
+  needs no database or other services.
+- **frontend** -- whether the API's types are current, the type check, ESLint,
+  Prettier, the component tests (Vitest) and the build (`frontend/README.md`).
+- **e2e** -- the built front end in Chromium against the real Flask app with
+  sample data (Playwright); traces of failed tests are kept for a week.
 
 ## Send a Welcome Email Manually
 

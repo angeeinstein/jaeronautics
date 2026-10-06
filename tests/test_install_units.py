@@ -207,6 +207,78 @@ def test_the_pdf_libraries_are_installed_with_the_rest(installer):
     assert all(pkg in apt for pkg in ("libpango-1.0-0", "libpangoft2-1.0-0", "libharfbuzz-subset0"))
 
 
+# --- The front end, built on every install and update --------------------------
+
+
+def test_the_front_end_is_built_before_the_portal_restarts(installer):
+    for function in ("install_or_update", "roll_back_installation"):
+        calls = [line.strip() for line in _function(installer, function).splitlines()]
+        assert calls.index("ensure_virtualenv") < calls.index("ensure_nodejs") < calls.index("build_frontend")
+        assert calls.index("build_frontend") < calls.index("reload_services"), function
+
+
+def _build(installer, tmp_path, *, fail=False, build_id):
+    """build_frontend with a fake npm that writes a build named ``build_id``."""
+    import subprocess
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    npm = bin_dir / "npm"
+    npm.write_text(
+        "#!/bin/bash\n"
+        '[[ "$3" == ci ]] && exit 0\n'
+        + ("exit 1\n" if fail else "")
+        + 'out=""; while [[ $# -gt 0 ]]; do [[ "$1" == --outDir ]] && out="$2"; shift; done\n'
+        f'mkdir -p "$out/assets"; echo page > "$out/index.html"; echo js > "$out/assets/index-{build_id}.js"\n'
+    )
+    npm.chmod(0o755)
+    install_dir = tmp_path / "portal"
+    (install_dir / "frontend").mkdir(parents=True, exist_ok=True)
+    (install_dir / "frontend" / "package.json").write_text("{}")
+    (install_dir / "aeronautics_members" / "static").mkdir(parents=True, exist_ok=True)
+    script = (
+        "set -Eeuo pipefail\n"
+        "step(){ :; }; info(){ :; }; success(){ :; }; die(){ echo \"DIED: $*\"; exit 3; }\n"
+        "run_as_app_user(){ \"$@\"; }; chown(){ :; }; install(){ mkdir -p \"${@: -1}\"; }\n"
+        f"INSTALL_DIR={install_dir}; APP_NAME=portal; APP_USER=u; APP_GROUP=g\n"
+        + _function(installer, "build_frontend").replace("/var/cache/", f"{tmp_path}/cache/")
+        + "\nbuild_frontend\n"
+    )
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30,
+                            env={"PATH": f"{bin_dir}:/usr/bin:/bin"})
+    live = install_dir / "aeronautics_members" / "static" / "app"
+    return result, live
+
+
+def _assets(live):
+    return sorted(path.name for path in (live / "assets").iterdir())
+
+
+def test_a_build_is_swapped_in_whole(installer, tmp_path):
+    result, live = _build(installer, tmp_path, build_id="one")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (live / "index.html").read_text() == "page\n" and _assets(live) == ["index-one.js"]
+    assert not (live.parent / "app.next").exists() and not (live.parent / "app.previous").exists()
+
+
+def test_open_pages_keep_the_previous_builds_scripts_and_no_older_ones(installer, tmp_path):
+    _build(installer, tmp_path, build_id="one")
+    _build(installer, tmp_path, build_id="two")
+    _, live = _build(installer, tmp_path, build_id="three")
+
+    assert _assets(live) == ["index-three.js", "index-two.js"]
+
+
+def test_a_failed_build_stops_and_leaves_the_live_one(installer, tmp_path):
+    _build(installer, tmp_path, build_id="one")
+
+    result, live = _build(installer, tmp_path, build_id="two", fail=True)
+
+    assert result.returncode == 3 and "Building the front end failed" in result.stdout
+    assert _assets(live) == ["index-one.js"]
+
+
 STATIC = Path(__file__).resolve().parent.parent / "aeronautics_members" / "static"
 
 

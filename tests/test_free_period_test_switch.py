@@ -38,7 +38,7 @@ def test_the_admin_pages_warn_while_it_is_set(app, client, monkeypatch):
     monkeypatch.setenv("TEST_FREE_PERIOD_START", "11-01")
     _login(client, _staff("boss@example.org", "admin").id)
 
-    body = client.get("/admin", follow_redirects=True).get_data(as_text=True)
+    [notice] = client.get("/api/v1/me").get_json()["admin_notices"]
 
-    assert "Test setting active" in body
-    assert "01.11." in body
+    assert notice["tone"] == "danger"
+    assert "Test setting active" in notice["message"] and "01.11." in notice["message"]

@@ -7,7 +7,7 @@ evening can have one approved and the other turned down.
 """
 import re
 import types
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -289,51 +289,6 @@ class TestTheCountOnTheTab:
         body = client.get("/admin/accounts").get_data(as_text=True)
 
         assert 'class="nav-count"' not in body
-
-
-class TestTheDashboard:
-    def test_waiting_items_are_listed_with_a_way_to_them(self, client, admin):
-        member = make_member(email="dash@example.com")
-        _name_change(member)
-        _picture(member)
-        _login(client, admin.id)
-
-        body = client.get("/admin").get_data(as_text=True)
-
-        assert "Needs your attention" in body
-        assert "Change request to review" in body
-        assert "Profile picture to review" in body
-        assert "Test Member &rarr; Test Photograph" in body
-        assert "/admin/reviews#review-queue" in body
-
-    def test_nothing_waiting_is_one_line(self, client, admin):
-        _login(client, admin.id)
-
-        body = client.get("/admin").get_data(as_text=True)
-
-        assert "Nothing needs your attention" in body
-        assert "Needs your attention" not in body
-
-    def test_four_figures_not_eleven(self, client, admin):
-        _login(client, admin.id)
-
-        body = client.get("/admin").get_data(as_text=True)
-
-        assert "Active members" in body
-        assert "On the forum" in body
-        for gone in ("Total Accounts", "Linked Members", "Pending Checkouts", "Forum Sync Errors"):
-            assert gone not in body
-
-    def test_a_shared_end_date_is_named(self, client, admin):
-        ends = date(date.today().year, 12, 31)
-        for index in range(2):
-            make_member(email=f"leaving{index}@example.com", cancel_at_period_end=True,
-                        membership_ends_on=ends, is_active=True)
-        _login(client, admin.id)
-
-        body = client.get("/admin").get_data(as_text=True)
-
-        assert f"Ending {ends:%d.%m.%Y}" in body
 
 
 class TestFiltersApplyThemselves:

@@ -1143,56 +1143,6 @@ def _invite_to_teams(member):
     return invite_to_teams(member.user) if member is not None else False
 
 
-def get_admin_dashboard_metrics():
-    # Erased rows stay -- they are the payment record -- but they are not people
-    # the association has any more, so they are excluded here exactly as they
-    # are in the health report. Counting them made the dashboard disagree with
-    # the Maintenance panel by the number of erasures, and any future import of
-    # non-member accounts would widen that gap until neither number meant
-    # anything.
-    present_user = User.deleted_at.is_(None)
-    present_member = Member.deleted_at.is_(None)
-    return {
-        # Portal accounts only. Counting the archive here would say the
-        # association has 760 accounts when it has twenty, and this number is
-        # read as "how many people use this".
-        #
-        # Somebody who has reconnected counts, though: they signed up, they
-        # pay, they are here. Excluding them on the grounds that they were once
-        # imported would leave this figure hundreds short after an intake, and
-        # permanently.
-        "total_accounts": db.session.scalar(
-            db.select(func.count()).select_from(User).where(
-                present_user,
-                ~User.imported_forum_profile.has(
-                    ImportedForumProfile.claimed_at.is_(None)
-                ),
-            )
-        ) or 0,
-        "archived_forum_accounts": db.session.scalar(
-            db.select(func.count()).select_from(ImportedForumProfile)
-        ) or 0,
-        "archived_forum_claimed": db.session.scalar(
-            db.select(func.count()).select_from(ImportedForumProfile).where(
-                ImportedForumProfile.claimed_at.is_not(None)
-            )
-        ) or 0,
-        "linked_members": db.session.scalar(
-            db.select(func.count()).select_from(Member).where(present_member, Member.user_id.is_not(None))
-        ) or 0,
-        "active_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.is_active.is_(True))) or 0,
-        "pending_checkouts": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.payment_status == "pending_checkout")) or 0,
-        "pending_identity_requests": db.session.scalar(db.select(func.count()).select_from(MemberProfileChangeRequest).where(MemberProfileChangeRequest.status == "pending")) or 0,
-        "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.cancel_at_period_end.is_(True))) or 0,
-        "forum_onboarding_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ONBOARDING)) or 0,
-        "forum_active_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ACTIVE)) or 0,
-        "forum_sync_errors": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_SYNC_ERROR)) or 0,
-        "pending_forum_avatars": db.session.scalar(db.select(func.count()).select_from(ForumAvatarSubmission).where(ForumAvatarSubmission.status == FORUM_AVATAR_STATUS_PENDING)) or 0,
-    }
-
-
-
-
 # The columns the account list can be sorted by, and the default. Roles are not
 # among them: one person can hold several, so there is no single value to sort.
 ACCOUNT_SORT_KEYS = ("email", "member", "account", "forum", "subscription", "active")
@@ -1764,6 +1714,12 @@ def create_app(config_overrides=None):
             host = host[1:-1]
         if not is_trusted_host(host):
             abort(400)
+
+    # The security policy of every answer (content_security.py): set here,
+    # per answer, with a nonce for the new front end's style tags.
+    from .content_security import apply as apply_content_security_policy
+
+    app.after_request(apply_content_security_policy)
 
     @app.after_request
     def disable_dynamic_page_caching(response):

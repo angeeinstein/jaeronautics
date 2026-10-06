@@ -675,7 +675,7 @@ class TestSeeingTheArchiveInTheAdmin:
 
     def test_the_dashboard_counts_them_apart_from_real_accounts(self, app, admin_client):
         """760 accounts when the association has twenty would be a lie."""
-        from aeronautics_members.app import get_admin_dashboard_metrics
+        from aeronautics_members.services.dashboard import metrics as get_admin_dashboard_metrics
 
         _archived()
         make_member(email="current@example.com")
@@ -694,7 +694,7 @@ class TestSeeingTheArchiveInTheAdmin:
         association can write to and take money from, so the count that says
         how many accounts are administered here has to move with them.
         """
-        from aeronautics_members.app import get_admin_dashboard_metrics
+        from aeronautics_members.services.dashboard import metrics as get_admin_dashboard_metrics
 
         _archived()
         member = _returning()

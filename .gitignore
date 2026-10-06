@@ -36,6 +36,11 @@ env/
 
 storage/
 
+# The front end's build: install.sh makes it on every install and update
+# (frontend/, npm run build), so it is never committed.
+aeronautics_members/static/app/
+aeronautics_members/static/app.next/
+
 
 # Written by install.sh on every run (Cloudflare Tunnel guidance for this
 # machine). Generated, so not tracked -- and without this line every update

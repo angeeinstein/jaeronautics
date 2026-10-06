@@ -1,0 +1,4 @@
+{
+  "$comment": "The addresses the new front end draws. Flask hands each of them the app (blueprints/app_shell.py, checked by tests/test_app_shell.py); every other address is still Flask's own page, reached by a full page load. React Router patterns.",
+  "paths": ["/admin"]
+}

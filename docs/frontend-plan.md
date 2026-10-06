@@ -105,7 +105,10 @@ a page are moved to its endpoint when the page is replaced.
 - React and TypeScript (strict), built with Vite.
 - Mantine for components, forms (`@mantine/form`), notifications and hooks.
 - TanStack Query to load and cache the API's data and refresh it after a
-  change; TanStack Table for the admin lists; React Router for the pages.
+  change; TanStack Table (version 9) for the admin lists, added with the first
+  list that needs it (step 4.2); React Router for the pages, each page's code
+  loaded when it is first opened.
+- Tabler Icons, the line icons in the sidebar.
 - Vitest for component tests, Playwright for end-to-end tests through the
   real Flask app (the browser is already set up in CI and here).
 - ESLint and Prettier, in CI like ruff is for Python.
@@ -118,8 +121,9 @@ spacing, forced dark. Pages never set colours or sizes of their own.
 where useful: `AppShell` with `TopBar`, `UserMenu` and the area `Sidebar`
 (groups, entries with counts, folding sections, back link), `Breadcrumbs`,
 `PageHeader`, `Pill` (status), `ConfirmButton` (two-step confirm), `StatTile`,
-`DataTable` (TanStack Table: clickable rows, filter chips, search), and the
-empty, loading and error states.
+and the empty, loading and error states. `DataTable` (clickable rows, filter
+chips, search) is built with the accounts list in step 4.2, shaped by a real
+list rather than guessed.
 
 **Addresses:** the URLs stay as they are (`/admin/accounts/12`, `/teams/rocket`,
 ...). For every page that has moved, Flask answers its URL with the front
@@ -131,13 +135,19 @@ therefore never broken, whichever side draws it.
 which nginx already serves under `/static/`. File names carry a hash, so they
 can be cached for a long time and an update never shows a stale script.
 
-**Security policy:** stays as strict as today in effect -- scripts and styles
-from the portal only, no third-party code -- but is built for the new front
-end rather than the front end bent around it. Mantine writes its colour
-variables into an inline `<style>` block; if that cannot simply be moved into
-our CSS file, the policy moves from nginx's fixed header to Flask, which adds
-a fresh nonce to every page for exactly that block. Settled at the start of
-step 3, before anything is built on it.
+**Security policy** *(settled in step 3)*: as strict as before in effect --
+scripts and styles from the portal only, no third-party code -- but built for
+the new front end. Mantine writes `<style>` tags as part of normal operation
+(its colour variables, its global classes, every responsive size), so turning
+them off would have meant giving up features. Instead the policy moved from
+nginx's fixed header into Flask (`aeronautics_members/content_security.py`),
+which sends it with every answer and a fresh nonce each time: a `<style>` tag
+carrying the nonce is allowed, `style=""` attributes and everything else
+inline stay blocked. The nonce reaches the app in `<meta name="csp-nonce">`;
+Mantine and the scroll lock of dialogs (`get-nonce`) put it on their tags.
+nginx sets no policy any more: a second, fixed one would apply as well and
+block what the first allows. Checked in Chromium: no violations, desktop and
+phone, every test of `e2e/`.
 
 ## 3. Build and deployment
 
@@ -146,8 +156,13 @@ step 3, before anything is built on it.
   and on every install and update runs `npm ci` and `npm run build` in
   `frontend/` before the portal restarts. A build that fails stops the update
   like a failed migration does, and the rollback applies.
-- **CI** gets a front-end job: install, type check, lint, Vitest, build; and
-  an end-to-end job running Playwright against the built front end and Flask.
+  The build goes into a folder beside the live one and is swapped in whole;
+  the previous build's files stay one more update, so a page opened before
+  the update still loads its scripts.
+- **CI** gets a front-end job: install, the API's types current, type check,
+  lint, formatting, Vitest, build; and an end-to-end job running Playwright
+  against the built front end and Flask. CI runs Python 3.12 and Node.js 24,
+  what the servers run.
 
 ## 4. Steps
 
@@ -162,14 +177,16 @@ server can update to it.
    helpers. A **route map** (`docs/frontend-routes.md`): every one of today's
    122 routes, marked as page (→ which API endpoints, which React page),
    action (→ which endpoint), download or redirect (stays), and its step.
-3. **Front-end foundation:** `frontend/` with Vite, React, TypeScript, Mantine
+3. **Front-end foundation** *(done: `frontend/`, `blueprints/app_shell.py`,
+   `content_security.py`, `install.sh`, CI)*: `frontend/` with Vite, React, TypeScript, Mantine
    and the theme; the security-policy check; the API client with types and
    TanStack Query; the router; `AppShell` with top bar, user menu and the
    admin sidebar; our components; Flask serving the app for moved paths;
    `install.sh` and CI. Ends with an empty admin area in the new frame.
 4. **Admin area**, one section at a time, each: its endpoints and tests, its
    React page, then the old route, template and page tests removed.
-   1. Dashboard
+   1. Dashboard *(done: `api/admin_dashboard.py`, `services/dashboard.py`,
+      `frontend/src/pages/admin/AdminDashboard.tsx`)*
    2. Accounts: list, detail with its tabs, and every action on an account
    3. Reviews (photo approvals)
    4. Teams (the admins' part)

@@ -233,7 +233,9 @@ def test_the_dashboard_counts_agree_with_the_health_report(app, monkeypatch):
     privacy.erase_account(leaving.user, initiated_by=privacy.INITIATED_BY_MEMBER)
     db.session.commit()
 
-    metrics = app_module.get_admin_dashboard_metrics()
+    from aeronautics_members.services.dashboard import metrics as dashboard_metrics
+
+    metrics = dashboard_metrics()
     health = diagnostics.collect_system_health()
 
     assert metrics["linked_members"] == health["membership"]["members"] == 1

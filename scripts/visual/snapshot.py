@@ -6,6 +6,12 @@ clicking through every page by hand hoping to spot the one that broke.
 
     python scripts/visual/snapshot.py shoot  OUT_DIR
     python scripts/visual/snapshot.py compare BEFORE_DIR AFTER_DIR
+    python scripts/visual/snapshot.py serve
+
+`serve` only starts that seeded portal (on SNAPSHOT_PORT, 8777) and keeps it
+running: for the front end's end-to-end tests (frontend/e2e/), or to click
+through the sample data by hand. Sign in as admin@example.org with the
+password below.
 
 `shoot` starts the portal on a throwaway SQLite database seeded with members
 in the states the pages show differently (new, photo needed, SEPA pending,
@@ -438,8 +444,32 @@ def compare(before_dir, after_dir):
         print(f"  {state}: {name}")
 
 
+def serve_forever():
+    import time
+
+    with tempfile.TemporaryDirectory() as tmp:
+        app, app_module = build_app(Path(tmp) / "snapshot.db")
+        with app.app_context():
+            from aeronautics_members.db_models import db
+
+            db.create_all()
+            subscriptions = go_offline(app_module)
+            seed(app, app_module, subscriptions)
+        server = serve(app)
+        print(f"Serving the seeded portal on {BASE} (admin@example.org / {PASSWORD}).", flush=True)
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.shutdown()
+
+
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "shoot":
+    if len(sys.argv) >= 2 and sys.argv[1] == "serve":
+        serve_forever()
+    elif len(sys.argv) >= 3 and sys.argv[1] == "shoot":
         shoot(sys.argv[2])
     elif len(sys.argv) >= 4 and sys.argv[1] == "compare":
         compare(sys.argv[2], sys.argv[3])

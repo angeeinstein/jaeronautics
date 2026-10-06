@@ -363,14 +363,14 @@ class TestResuming:
         _sign_in(client, "admin", "superadmin")
         background_jobs.pause("restore", backup_created_at="2026-09-01T10:00:00+00:00")
         db.session.commit()
-        assert "restored from a backup" in client.get("/admin").get_data(as_text=True)
+        assert "restored from a backup" in str(client.get("/api/v1/me").get_json()["admin_notices"])
 
         client.post("/admin/background-jobs/resume", data={})
         assert background_jobs.is_paused()
 
         client.post("/admin/background-jobs/resume", data={"confirm": "resume"})
         assert not background_jobs.is_paused()
-        assert "restored from a backup" not in client.get("/admin").get_data(as_text=True)
+        assert client.get("/api/v1/me").get_json()["admin_notices"] == []
 
     def test_the_checklist_runs_one_check_per_look(self, portal, client, checks):
         _sign_in(client, "admin", "superadmin")

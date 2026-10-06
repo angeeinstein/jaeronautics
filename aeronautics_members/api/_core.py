@@ -88,12 +88,9 @@ class ErrorOut(Model):
 
 
 def error(status, code, message, *, fields=None, details=None):
-    body = {"code": code, "message": message}
-    if fields:
-        body["fields"] = fields
-    if details:
-        body["details"] = details
-    return jsonify({"error": body}), status
+    """An error answer; ``fields`` and ``details`` are always there, ``null`` when empty."""
+    body = ErrorOut(error=ErrorBody(code=code, message=message, fields=fields or None, details=details or None))
+    return jsonify(body.model_dump(mode="json")), status
 
 
 def _field_errors(exc):

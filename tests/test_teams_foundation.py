@@ -289,7 +289,8 @@ class TestTheAdminPages:
         admin = _staff("admin@example.com", "admin")
         _login(client, admin.id)
 
-        assert 'href="/admin/teams"' in client.get("/admin").get_data(as_text=True)
+        # The admin sidebar shows Teams with this permission (frontend/src/frame/adminNavigation.ts).
+        assert "teams.manage" in client.get("/api/v1/me").get_json()["permissions"]
 
     def test_every_change_is_in_the_audit_log(self, app, client):
         admin = _staff("admin@example.com", "admin")

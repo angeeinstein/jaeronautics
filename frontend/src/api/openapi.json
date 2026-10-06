@@ -1,0 +1,610 @@
+{
+  "components": {
+    "schemas": {
+      "Activity": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "event_type",
+          "target",
+          "at"
+        ],
+        "title": "Activity",
+        "type": "object"
+      },
+      "Attention": {
+        "additionalProperties": false,
+        "description": "``None`` for a kind the person may not act on, so the page does not offer it.",
+        "properties": {
+          "health_problems": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Problems"
+          },
+          "name_changes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Waiting"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pictures": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Waiting"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sync_problems": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Waiting"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name_changes",
+          "pictures",
+          "sync_problems",
+          "health_problems"
+        ],
+        "title": "Attention",
+        "type": "object"
+      },
+      "Counts": {
+        "additionalProperties": false,
+        "description": "Numbers shown beside menu entries; 0 when there is nothing, or nothing the person may see.",
+        "properties": {
+          "reviews_waiting": {
+            "title": "Reviews Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reviews_waiting"
+        ],
+        "title": "Counts",
+        "type": "object"
+      },
+      "DashboardOut": {
+        "additionalProperties": false,
+        "properties": {
+          "attention": {
+            "$ref": "#/components/schemas/Attention"
+          },
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/Figure"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
+          "recent_activity": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Activity"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Activity"
+          }
+        },
+        "required": [
+          "attention",
+          "figures",
+          "recent_activity"
+        ],
+        "title": "DashboardOut",
+        "type": "object"
+      },
+      "ErrorBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Details"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fields"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorBody",
+        "type": "object"
+      },
+      "ErrorOut": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorOut",
+        "type": "object"
+      },
+      "Figure": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "enum": [
+              "active",
+              "cancelled",
+              "forum",
+              "archive"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "link_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Url"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value",
+          "note",
+          "link_url"
+        ],
+        "title": "Figure",
+        "type": "object"
+      },
+      "MeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_area": {
+            "title": "Admin Area",
+            "type": "boolean"
+          },
+          "admin_notices": {
+            "items": {
+              "$ref": "#/components/schemas/Notice"
+            },
+            "title": "Admin Notices",
+            "type": "array"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/Counts"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "forum_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Username"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "permissions": {
+            "items": {
+              "enum": [
+                "accounts.billing",
+                "accounts.privacy",
+                "accounts.view",
+                "admin.access",
+                "approvals.review",
+                "forum.admin",
+                "forum.moderate",
+                "forum.moderator",
+                "logs.view",
+                "notifications.manage",
+                "notifications.receive",
+                "roles.manage",
+                "settings.credentials",
+                "settings.general",
+                "system.backup",
+                "system.update",
+                "teams.manage",
+                "teams.money"
+              ],
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "team_labels": {
+            "$ref": "#/components/schemas/TeamLabels"
+          },
+          "teams_area": {
+            "title": "Teams Area",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "first_name",
+          "last_name",
+          "forum_username",
+          "roles",
+          "permissions",
+          "admin_area",
+          "teams_area",
+          "team_labels",
+          "counts",
+          "admin_notices"
+        ],
+        "title": "MeOut",
+        "type": "object"
+      },
+      "Notice": {
+        "additionalProperties": false,
+        "description": "A banner over every page of an area, for something that is off on purpose or by accident.",
+        "properties": {
+          "link_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Link Label"
+          },
+          "link_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Link Url"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "info",
+              "warning",
+              "danger"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tone",
+          "message"
+        ],
+        "title": "Notice",
+        "type": "object"
+      },
+      "SessionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "csrf_token": {
+            "title": "Csrf Token",
+            "type": "string"
+          },
+          "signed_in": {
+            "title": "Signed In",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "signed_in",
+          "csrf_token"
+        ],
+        "title": "SessionOut",
+        "type": "object"
+      },
+      "TeamLabels": {
+        "additionalProperties": false,
+        "description": "What teams are called here; an admin can rename them.",
+        "properties": {
+          "plural": {
+            "title": "Plural",
+            "type": "string"
+          },
+          "singular": {
+            "title": "Singular",
+            "type": "string"
+          }
+        },
+        "required": [
+          "singular",
+          "plural"
+        ],
+        "title": "TeamLabels",
+        "type": "object"
+      },
+      "Waiting": {
+        "additionalProperties": false,
+        "description": "How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          }
+        },
+        "required": [
+          "count",
+          "summary",
+          "at"
+        ],
+        "title": "Waiting",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Joanneum Aeronautics member portal",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/admin/dashboard": {
+      "get": {
+        "operationId": "admin_dashboard",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "What needs doing, the membership in four figures, and the latest log entries.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "admin.access"
+        ]
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          }
+        },
+        "summary": "The signed-in person, what they may see, and the counts for their menus.",
+        "tags": [
+          "Session"
+        ]
+      }
+    },
+    "/api/v1/session": {
+      "get": {
+        "operationId": "session_state",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Whether somebody is signed in, and the CSRF token for changes.",
+        "tags": [
+          "Session"
+        ]
+      }
+    }
+  }
+}

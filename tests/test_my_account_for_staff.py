@@ -26,13 +26,15 @@ def _login(client, user_id):
 
 
 class TestMyAccountWithoutAMembership:
-    def test_the_link_is_in_the_top_bar(self, client, app):
+    def test_the_top_bar_has_what_it_needs(self, client, app):
+        """The top bar (frontend/src/frame/TopBar.tsx) always offers My Account;
+        for a staff account without a membership it has no name to show, only the email."""
         staff = _staff("staff@example.org", "admin")
         _login(client, staff.id)
 
-        body = client.get("/admin").get_data(as_text=True)
+        me = client.get("/api/v1/me").get_json()
 
-        assert ">My Account</a>" in body
+        assert (me["first_name"], me["email"], me["admin_area"]) == (None, "staff@example.org", True)
 
     def test_it_shows_the_account_instead_of_the_payment_form(self, client, app):
         staff = _staff("staff2@example.org", "admin")
@@ -97,13 +99,9 @@ class TestHealthOnTheDashboard:
         db.session.commit()
         _login(client, boss.id)
 
-        body = client.get("/admin").get_data(as_text=True)
+        attention = client.get("/api/v1/admin/dashboard").get_json()["attention"]
 
-        assert "System health problem" in body
-        assert "1 email(s) could not be delivered." in body
-        assert "/admin/settings#settings-maintenance" in body
-        # Not the list with Retry buttons itself.
-        assert "/admin/undelivered-emails/" not in body
+        assert attention["health_problems"] == ["1 email(s) could not be delivered."]
 
     def test_not_shown_to_somebody_who_cannot_open_maintenance(self, client, app):
         admin = _staff("plainadmin@example.org", "admin")
@@ -111,15 +109,10 @@ class TestHealthOnTheDashboard:
         db.session.commit()
         _login(client, admin.id)
 
-        body = client.get("/admin").get_data(as_text=True)
-
-        assert "System health problem" not in body
+        assert client.get("/api/v1/admin/dashboard").get_json()["attention"]["health_problems"] is None
 
     def test_a_healthy_system_adds_nothing(self, client, app):
         boss = _staff("fine@example.org", "superadmin")
         _login(client, boss.id)
 
-        body = client.get("/admin").get_data(as_text=True)
-
-        assert "System health problem" not in body
-        assert "Nothing needs your attention" in body
+        assert client.get("/api/v1/admin/dashboard").get_json()["attention"]["health_problems"] == []
