@@ -225,6 +225,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/legal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The texts in force, the versions waiting, the PDFs, and what is wrong with the files. */
+        get: operations["admin_legal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/legal/pdfs/forget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove every kept PDF -- the first step of making them all again; each is */
+        post: operations["admin_legal_forget_pdfs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/legal/pdfs/make": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make one PDF again. What keeps it from being made is said (422 ``legal_pdf_failed``). */
+        post: operations["admin_legal_make_pdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/legal/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A new text as the PDF it will be, from its Markdown file (and its English translation), */
+        post: operations["admin_legal_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/logs": {
         parameters: {
             query?: never;
@@ -1110,6 +1178,11 @@ export interface components {
             /** Value */
             value: number;
         };
+        /** ForgottenOut */
+        ForgottenOut: {
+            /** Removed */
+            removed: number;
+        };
         /** Forum */
         Forum: {
             /** Account State */
@@ -1213,12 +1286,52 @@ export interface components {
              */
             page?: number;
         };
+        /** InForce */
+        InForce: {
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Page Url */
+            page_url: string;
+            /** Pdf Url */
+            pdf_url: string;
+            /** Revision */
+            revision: string | null;
+            /** Team Name */
+            team_name: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
+        };
         /** InStripeNow */
         InStripeNow: {
             /** Available */
             available: number;
             /** Pending */
             pending: number;
+        };
+        /** LegalOut */
+        LegalOut: {
+            /** In Force */
+            in_force: components["schemas"]["InForce"][];
+            /** Pdf Jobs */
+            pdf_jobs: components["schemas"]["PdfJob"][];
+            /** Preview Max Kb */
+            preview_max_kb: number;
+            /** Problems */
+            problems: string[];
+            /** Teams Without Rules */
+            teams_without_rules: string[];
+            /** Template Url */
+            template_url: string;
+            /** Waiting */
+            waiting: components["schemas"]["aeronautics_members__api__admin_legal__Waiting"][];
         };
         /** LogEntry */
         LogEntry: {
@@ -1277,6 +1390,16 @@ export interface components {
              * @default null
              */
             user?: number | null;
+        };
+        /** MadeOut */
+        MadeOut: {
+            /** Size Kb */
+            size_kb: number;
+        };
+        /** MakeIn */
+        MakeIn: {
+            /** Key */
+            key: string;
         };
         /** MeOut */
         MeOut: {
@@ -1528,6 +1651,23 @@ export interface components {
              * @default null
              */
             until?: string | null;
+        };
+        /**
+         * PdfJob
+         * @description One PDF that "Make all PDFs again" makes.
+         */
+        PdfJob: {
+            /** Key */
+            key: string;
+            /** Team Name */
+            team_name: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
         };
         /** Period */
         Period: {
@@ -1971,6 +2111,37 @@ export interface components {
             count: number;
             /** Summary */
             summary: string | null;
+        };
+        /**
+         * Waiting
+         * @description A version not shown yet: a draft, or one whose day has not come.
+         */
+        aeronautics_members__api__admin_legal__Waiting: {
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Has English */
+            has_english: boolean;
+            /** Pdf Url */
+            pdf_url: string;
+            /** Revision */
+            revision: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "scheduled";
+            /** Team Name */
+            team_name: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
         };
         /** Person */
         aeronautics_members__api__admin_logs__Person: {
@@ -2797,6 +2968,216 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal_forget_pdfs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForgottenOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal_make_pdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MakeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MadeOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_legal_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    english?: string;
+                    /** Format: binary */
+                    german: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -7,7 +7,7 @@ endpoints on ``api_bp``.
 """
 
 from . import (  # noqa: F401 -- registers their endpoints
-    admin_account, admin_accounts, admin_dashboard, admin_logs, admin_money, admin_reviews, admin_teams, session,
+    admin_account, admin_accounts, admin_dashboard, admin_legal, admin_logs, admin_money, admin_reviews, admin_teams, session,
 )
 from ._core import ENDPOINTS, api_bp, error, is_api_request
 

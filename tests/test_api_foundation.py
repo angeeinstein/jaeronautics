@@ -67,6 +67,15 @@ def when():
     return WhenOut(at=datetime(2026, 10, 6, 7, 38, 11), day=date(2026, 10, 6))
 
 
+@trial.endpoint("POST", "/upload", uploads={"main": True, "extra": False}, produces="text/plain")
+def upload(files):
+    """Answer the files' names, as a file."""
+    from flask import Response
+
+    names = [files["main"].filename, files["extra"].filename if files["extra"] else "-"]
+    return Response(" ".join(names), mimetype="text/plain")
+
+
 @pytest.fixture
 def api(app):
     app.register_blueprint(trial_bp)
@@ -205,6 +214,35 @@ class TestMe:
         signed_in(client, member.user)
 
         assert _error(client.get("/api/v1/me")) == (401, "not_signed_in")
+
+
+class TestFiles:
+    def test_the_files_reach_the_function_and_a_file_comes_back(self, api, app):
+        import io
+
+        signed_in(api, _staff("boss@example.org", "admin"))
+
+        response = api.post("/api/v1/_test/upload", data={"main": (io.BytesIO(b"x"), "a.md")},
+                            content_type="multipart/form-data", headers={"X-CSRFToken": "x"})
+
+        assert response.status_code == 200 and response.get_data(as_text=True) == "a.md -"
+
+    def test_a_required_file_missing_is_said_at_its_field(self, api, app):
+        signed_in(api, _staff("boss@example.org", "admin"))
+
+        response = api.post("/api/v1/_test/upload", data={}, content_type="multipart/form-data")
+
+        assert _error(response) == (400, "validation_error")
+        assert response.get_json()["error"]["fields"] == {"main": "Choose a file."}
+
+    def test_described_as_a_form_with_files_and_a_file_answer(self, app):
+        operation = openapi.build()["paths"]["/api/v1/admin/legal/preview"]["post"]
+
+        form = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
+        assert form["required"] == ["german"] and form["properties"]["english"]["format"] == "binary"
+        assert operation["responses"]["200"]["content"] == {
+            "application/pdf": {"schema": {"type": "string", "format": "binary"}}}
+        assert "400" in operation["responses"]
 
 
 class TestTheDescription:

@@ -1665,6 +1665,20 @@
         "title": "Figure",
         "type": "object"
       },
+      "ForgottenOut": {
+        "additionalProperties": false,
+        "properties": {
+          "removed": {
+            "title": "Removed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "title": "ForgottenOut",
+        "type": "object"
+      },
       "Forum": {
         "additionalProperties": false,
         "properties": {
@@ -1988,6 +2002,66 @@
         "title": "HistoryQuery",
         "type": "object"
       },
+      "InForce": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "format": "date",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "page_url": {
+            "title": "Page Url",
+            "type": "string"
+          },
+          "pdf_url": {
+            "title": "Pdf Url",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "format": "date",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "team_name",
+          "version",
+          "revision",
+          "effective_from",
+          "page_url",
+          "pdf_url"
+        ],
+        "title": "InForce",
+        "type": "object"
+      },
       "InStripeNow": {
         "additionalProperties": false,
         "properties": {
@@ -2005,6 +2079,65 @@
           "pending"
         ],
         "title": "InStripeNow",
+        "type": "object"
+      },
+      "LegalOut": {
+        "additionalProperties": false,
+        "properties": {
+          "in_force": {
+            "items": {
+              "$ref": "#/components/schemas/InForce"
+            },
+            "title": "In Force",
+            "type": "array"
+          },
+          "pdf_jobs": {
+            "items": {
+              "$ref": "#/components/schemas/PdfJob"
+            },
+            "title": "Pdf Jobs",
+            "type": "array"
+          },
+          "preview_max_kb": {
+            "title": "Preview Max Kb",
+            "type": "integer"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "teams_without_rules": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Teams Without Rules",
+            "type": "array"
+          },
+          "template_url": {
+            "title": "Template Url",
+            "type": "string"
+          },
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/aeronautics_members__api__admin_legal__Waiting"
+            },
+            "title": "Waiting",
+            "type": "array"
+          }
+        },
+        "required": [
+          "in_force",
+          "teams_without_rules",
+          "waiting",
+          "pdf_jobs",
+          "problems",
+          "preview_max_kb",
+          "template_url"
+        ],
+        "title": "LegalOut",
         "type": "object"
       },
       "LogEntry": {
@@ -2168,6 +2301,34 @@
           }
         },
         "title": "LogsQuery",
+        "type": "object"
+      },
+      "MadeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "size_kb": {
+            "title": "Size Kb",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size_kb"
+        ],
+        "title": "MadeOut",
+        "type": "object"
+      },
+      "MakeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "MakeIn",
         "type": "object"
       },
       "MeOut": {
@@ -2986,6 +3147,44 @@
           }
         },
         "title": "OverviewQuery",
+        "type": "object"
+      },
+      "PdfJob": {
+        "additionalProperties": false,
+        "description": "One PDF that \"Make all PDFs again\" makes.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "format": "date",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "team_name",
+          "version"
+        ],
+        "title": "PdfJob",
         "type": "object"
       },
       "Period": {
@@ -4358,6 +4557,76 @@
         "title": "Waiting",
         "type": "object"
       },
+      "aeronautics_members__api__admin_legal__Waiting": {
+        "additionalProperties": false,
+        "description": "A version not shown yet: a draft, or one whose day has not come.",
+        "properties": {
+          "effective_from": {
+            "format": "date",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "has_english": {
+            "title": "Has English",
+            "type": "boolean"
+          },
+          "pdf_url": {
+            "title": "Pdf Url",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "scheduled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "format": "date",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "team_name",
+          "version",
+          "revision",
+          "status",
+          "effective_from",
+          "has_english",
+          "pdf_url"
+        ],
+        "title": "Waiting",
+        "type": "object"
+      },
       "aeronautics_members__api__admin_logs__Person": {
         "additionalProperties": false,
         "properties": {
@@ -5617,6 +5886,266 @@
         ],
         "x-permissions": [
           "admin.access"
+        ]
+      }
+    },
+    "/api/v1/admin/legal": {
+      "get": {
+        "operationId": "admin_legal",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The texts in force, the versions waiting, the PDFs, and what is wrong with the files.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/pdfs/forget": {
+      "post": {
+        "operationId": "admin_legal_forget_pdfs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgottenOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Remove every kept PDF -- the first step of making them all again; each is",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/pdfs/make": {
+      "post": {
+        "operationId": "admin_legal_make_pdf",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MadeOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Make one PDF again. What keeps it from being made is said (422 ``legal_pdf_failed``).",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      }
+    },
+    "/api/v1/admin/legal/preview": {
+      "post": {
+        "operationId": "admin_legal_preview",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "english": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "german": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "german"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A new text as the PDF it will be, from its Markdown file (and its English translation),",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
         ]
       }
     },

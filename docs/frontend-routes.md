@@ -77,9 +77,9 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `GET /admin/logs` (page) → `GET /api/v1/admin/logs?q=&category=&user=&page=`; old links (`?category=all`) still work
 
 ### 4.7 Legal Texts
-- [ ] `GET /admin/legal` (page)
-- [ ] `POST /admin/legal` (upload a draft, answers its PDF) → API upload answering the PDF
-- [ ] `POST /admin/legal/pdfs/remake` (already JSON) → API
+- [x] `GET /admin/legal` (page) → `GET /api/v1/admin/legal`
+- [x] `POST /admin/legal` (upload a draft, answers its PDF) → `POST /api/v1/admin/legal/preview` (multipart, answers the PDF; what keeps it from being laid out is a 400 with `details.problems`)
+- [x] `POST /admin/legal/pdfs/remake` (already JSON) → `POST /api/v1/admin/legal/pdfs/forget`, then `POST /api/v1/admin/legal/pdfs/make {key}` per PDF
 - `GET /admin/legal/template`, `/admin/legal/waiting.pdf` (download) -- stay
 
 ### 4.8 Settings

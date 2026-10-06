@@ -70,12 +70,22 @@ def build():
         if declared.body is not None:
             operation["requestBody"] = {
                 "required": True, "content": {"application/json": {"schema": ref(declared.body, "validation")}}}
-        if declared.response is not None:
+        if declared.uploads:
+            operation["requestBody"] = {"required": True, "content": {"multipart/form-data": {"schema": {
+                "type": "object",
+                "properties": {name: {"type": "string", "format": "binary"} for name in declared.uploads},
+                "required": [name for name, required in declared.uploads.items() if required],
+            }}}}
+        if declared.produces is not None:
+            operation["responses"][str(declared.status)] = {
+                "description": "The file", "content": {declared.produces: {"schema": {"type": "string",
+                                                                                         "format": "binary"}}}}
+        elif declared.response is not None:
             operation["responses"][str(declared.status)] = {
                 "description": "OK", "content": {"application/json": {"schema": ref(declared.response)}}}
         else:
             operation["responses"]["204"] = {"description": "Done."}
-        relevant = {"400"} if declared.body or declared.query else set()
+        relevant = {"400"} if declared.body or declared.query or declared.uploads else set()
         if not declared.public:
             relevant.add("401")
         if declared.permissions:

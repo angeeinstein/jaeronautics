@@ -15,9 +15,12 @@ and the decorator does the rest, the same way for every endpoint:
 - **Input:** ``body`` (JSON) and ``query`` (the query string) are Pydantic
   models; what does not fit is ``400`` with a message per field, before the
   function runs. The function receives the parsed models.
+- **Files:** ``uploads`` names the files a ``multipart/form-data`` request
+  carries, each required or not (``{"german": True}``); the function receives
+  them as ``files`` -- a file, or ``None`` for one not chosen.
 - **Answer:** the function returns an instance of ``response`` (sent as JSON),
-  ``None`` (``204``), or a Flask response for the rare endpoint that sends
-  something else.
+  ``None`` (``204``), or -- with ``produces``, the media type -- a Flask
+  response with a file.
 
 Errors are always ``{"error": {"code", "message", "fields"?, "details"?}}``:
 ``code`` is stable for the front end to act on, ``message`` is for people.
@@ -128,6 +131,10 @@ class Endpoint:
     public: bool
     permissions: tuple = field(default_factory=tuple)
     status: int = 200
+    #: The files of a multipart request: ``{name: required}``.
+    uploads: dict = field(default_factory=dict)
+    #: The media type of a file answer, e.g. ``application/pdf``.
+    produces: str | None = None
 
 
 class Api:
@@ -140,14 +147,14 @@ class Api:
         blueprint.register_error_handler(ServiceError, _service_error)
 
     def endpoint(self, method, rule, *, response=None, body=None, query=None, public=False, permissions=(),
-                 status=200, tag="General"):
+                 status=200, tag="General", uploads=None, produces=None):
         """Declare an API endpoint; see the module's description."""
         method = method.upper()
 
         def decorator(view):
             summary = (view.__doc__ or "").strip().split("\n")[0]
             self.endpoints.append(Endpoint(method, rule, view.__name__, summary, tag, response, body, query,
-                                           public, tuple(permissions), status))
+                                           public, tuple(permissions), status, dict(uploads or {}), produces))
 
             @wraps(view)
             def handle(**path_args):
@@ -166,6 +173,14 @@ class Api:
                         arguments["body"] = body.model_validate(data)
                 except InputError as exc:
                     return _invalid(exc)
+                if uploads:
+                    files = {name: (request.files.get(name) if request.files.get(name) and
+                                    request.files[name].filename else None) for name in uploads}
+                    missing = {name: "Choose a file." for name, required in uploads.items()
+                               if required and files[name] is None}
+                    if missing:
+                        return error(400, "validation_error", "A file is missing.", fields=missing)
+                    arguments["files"] = files
                 return _answer(view(**arguments), status)
 
             self.blueprint.add_url_rule(rule, endpoint=view.__name__, view_func=handle, methods=[method])

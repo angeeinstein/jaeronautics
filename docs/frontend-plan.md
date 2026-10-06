@@ -222,7 +222,10 @@ server can update to it.
       `frontend/src/pages/admin/Logs.tsx` -- search, category, and new: everything about
       one person (`?user=`), which an account's Activity tab links to. Secrets stay out,
       as before. Links in text take the theme's link colour everywhere.)*
-   7. Legal Texts
+   7. Legal Texts *(done: `api/admin_legal.py`; `frontend/src/pages/admin/LegalTexts.tsx`.
+      The API core takes uploaded files (`uploads=`) and answers files (`produces=`), both
+      in the OpenAPI description. PDF links make the PDF first, then open it
+      (`components/PdfLink.tsx`, as legal-pdf-open.js does on Flask's pages).)*
    8. Settings, section by section (general, billing, mail, forum,
       notifications, maintenance with update, backup and restore)
 5. **Teams area:** overview, a team's page and join page with the rules

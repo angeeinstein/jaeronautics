@@ -406,69 +406,12 @@ def admin_settings():
     )
 
 
-@admin_bp.route("/admin/legal", methods=["GET", "POST"])
+@admin_bp.route("/admin/legal", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
 def admin_legal():
-    """The legal texts in force, the teams' rules, what is wrong with the files
-    on this server -- and a preview of a new text as its PDF, from uploaded
-    files that are checked as CI checks them and not kept."""
-    import io
-
-    from .. import legal_pdf
-    from ..services import legal_texts as legal
-    from ..services import teams as teams_service
-
-    preview_problems = None
-    if request.method == "POST":
-        german = request.files.get("german")
-        english = request.files.get("english")
-        if german is None or not german.filename:
-            flash(_("Choose the German file."), "warning")
-            return redirect(url_for("admin.admin_legal"))
-        uploads = [(german.read(legal_pdf.PREVIEW_MAX_BYTES + 1), german.filename)]
-        if english is not None and english.filename:
-            uploads.append((english.read(legal_pdf.PREVIEW_MAX_BYTES + 1), english.filename))
-        try:
-            data, preview_problems, name = legal_pdf.preview(*uploads)
-        except Exception:  # noqa: BLE001 -- a text WeasyPrint cannot lay out, say
-            current_app.logger.exception("Could not make a preview PDF")
-            data, preview_problems = None, [_("The PDF could not be made. See the log for why.")]
-        if data is not None:
-            return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=f"VORSCHAU_{name}")
-
-    all_teams = {team.slug: team for team in teams_service.all_teams(include_archived=True)}
-    team_slugs = set(all_teams)
-    waiting = []
-    for slug, team in [(text.slug, None) for text in legal.LEGAL_TEXTS] + [
-        (text.slug, team_slug) for team_slug in legal.teams_with_texts() for text in legal.TEAM_TEXTS
-    ]:
-        for version in legal.waiting(slug, team=team):
-            waiting.append({
-                "version": version,
-                "team_name": all_teams[team].name if team in all_teams else team,
-                "has_english": legal.find_any(slug, "en", version.version, team) is not None,
-                "url": url_for("admin.admin_legal_waiting_pdf", document=slug, version=version.version.isoformat(),
-                               team=team),
-            })
-    return render_template(
-        "admin_legal.html",
-        active_admin_section="legal",
-        page_title=_("Legal Texts"),
-        page_description=_("The texts in force, each team's rules, and a preview of a new text as a PDF."),
-        texts=legal.available(),
-        team_rules=[(team, teams_service.team_rules(team)) for team in teams_service.all_teams(include_archived=False)],
-        repo_problems=legal.problems(),
-        orphan_folders=[slug for slug in legal.teams_with_texts() if slug not in team_slugs],
-        waiting=waiting,
-        pdf_jobs=[{
-            "key": legal_pdf.job_key(version),
-            "version": version,
-            "team_name": all_teams[version.team].name if version.team in all_teams else version.team,
-        } for version, _team in legal_pdf.all_jobs()],
-        preview_problems=preview_problems,
-        max_kb=legal_pdf.PREVIEW_MAX_BYTES // 1024,
-    )
+    """Legal texts: drawn by the new front end (frontend/src/pages/admin/LegalTexts.tsx)."""
+    return app_shell()
 
 
 @admin_bp.route("/admin/legal/waiting.pdf", methods=["GET"])
@@ -509,60 +452,10 @@ def admin_legal_waiting_pdf():
         current_app.logger.exception("Could not make the PDF of the waiting version %s", german.path)
         if legal_pages.preparing():
             return legal_pages.not_prepared()
-        flash(_("The PDF could not be made. See the log for why."), "danger")
-        return redirect(url_for("admin.admin_legal"))
+        abort(500)
     if data is None:
         return legal_pages.prepared(digest)
     return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=name)
-
-
-@admin_bp.route("/admin/legal/pdfs/remake", methods=["POST"])
-@login_required
-@requires(Permission.SETTINGS_GENERAL)
-def admin_legal_remake_pdfs():
-    """Make the kept PDFs again.
-
-    The page's script sends one ``item`` at a time -- ``stored`` to remove the
-    kept files, then each version by its key -- and ticks it off with the
-    answer, so every PDF is one short request. Without the script, the form
-    comes without an item and everything is done in this one.
-    """
-    from .. import legal_pdf
-
-    item = request.form.get("item")
-    if item is None:
-        legal_pdf.forget_all()
-        made = legal_pdf.build_all(again=True)
-        failed = [version for version, result in made if isinstance(result, Exception)]
-        _audit_pdfs_remade(len(made))
-        if failed:
-            flash(_("%(count)s PDF(s) could not be made. See the log for why.", count=len(failed)), "warning")
-        else:
-            flash(_("All %(count)s PDFs were made again.", count=len(made)), "success")
-        return redirect(url_for("admin.admin_legal"))
-
-    if item == "stored":
-        removed = legal_pdf.forget_all()
-        _audit_pdfs_remade(len(legal_pdf.all_jobs()))
-        return jsonify(state="ok", detail=_("%(count)s removed", count=removed))
-    for version, team in legal_pdf.all_jobs():
-        if legal_pdf.job_key(version) != item:
-            continue
-        if isinstance(team, Exception):
-            return jsonify(state="failed", detail=str(team))
-        try:
-            size = legal_pdf.remake(version, team)
-        except Exception as exc:  # noqa: BLE001 -- shown on its line; the others go on
-            current_app.logger.exception("Could not make the PDF of %s", version.path)
-            return jsonify(state="failed", detail=str(exc) or exc.__class__.__name__)
-        return jsonify(state="ok", detail=f"{max(1, size // 1024)} KB")
-    return jsonify(state="failed", detail=_("No longer in legal/.")), 404
-
-
-def _audit_pdfs_remade(count):
-    log_audit_event(category="system", event_type="legal_pdfs_remade", actor_user=current_user,
-                    target_user=current_user, metadata={"pdfs": count})
-    db.session.commit()
 
 
 @admin_bp.route("/admin/legal/template", methods=["GET"])

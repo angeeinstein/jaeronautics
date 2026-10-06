@@ -18,9 +18,10 @@ test.describe('the admin frame', () => {
     if (isMobile) await page.getByRole('button', { name: 'Open the menu' }).click();
     const sections = page.getByRole('navigation', { name: 'Sections' }).last();
 
-    await sections.getByRole('link', { name: 'Legal texts' }).click();
+    await sections.getByRole('link', { name: 'Settings' }).click();
+    await sections.getByRole('link', { name: 'General' }).click();
 
-    await expect(page).toHaveURL(/\/admin\/legal$/);
+    await expect(page).toHaveURL(/\/admin\/settings#settings-general$/);
     await expect(page.locator('#root')).toHaveCount(0); // Flask's own page, not the app
   });
 

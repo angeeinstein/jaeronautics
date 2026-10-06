@@ -9,6 +9,7 @@
     "/admin/teams/:slug",
     "/admin/money",
     "/admin/money/:slug",
-    "/admin/logs"
+    "/admin/logs",
+    "/admin/legal"
   ]
 }
