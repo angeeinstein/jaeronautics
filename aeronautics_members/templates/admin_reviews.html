@@ -157,12 +157,9 @@
                             <td>{{ forum_account.last_error or _('The account is marked as out of sync.') }}</td>
                             <td>{{ forum_account.last_synced_at|datetime_display if forum_account.last_synced_at else _('never') }}</td>
                             <td class="text-end">
-                                {% if forum_account.user %}
-                                    <form method="POST" action="{{ url_for('admin.admin_resync_forum_account', user_id=forum_account.user.id) }}" class="mb-0 d-inline-block" data-busy-text="{{ _('Trying…') }}">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <input type="hidden" name="next" value="{{ url_for('admin.admin_reviews') }}">
-                                        <button type="submit" class="btn btn-sm btn-primary">{{ _('Try again') }}</button>
-                                    </form>
+                                {% if forum_account.user and current_user.can('accounts.view') %}
+                                    {#- Synced from the account page's Forum tab (the new front end). -#}
+                                    <a href="{{ url_for('admin.admin_account_detail', user_id=forum_account.user.id) }}#forum" class="btn btn-sm btn-primary">{{ _('Open') }}</a>
                                 {% endif %}
                             </td>
                         </tr>

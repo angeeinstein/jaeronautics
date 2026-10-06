@@ -346,9 +346,9 @@ class TestWhatTheScreensShow:
             year_group=None,
         )
 
-        body = admin_client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        membership = admin_client.get(f"/api/v1/admin/accounts/{member.user_id}").get_json()["membership"]
 
-        assert "Company or partner" in body
+        assert membership["category_label"] == "Company or partner"
 
     def test_an_alumnus_shows_both_facts(self, app, admin_client):
         member = make_member(
@@ -357,10 +357,9 @@ class TestWhatTheScreensShow:
             year_group="LAV11",
         )
 
-        body = admin_client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        membership = admin_client.get(f"/api/v1/admin/accounts/{member.user_id}").get_json()["membership"]
 
-        assert "Alumni" in body
-        assert "LAV11" in body
+        assert (membership["category_label"], membership["year_group"]) == ("Alumni", "LAV11")
 
     def test_the_signup_page_offers_every_category(self, app, client):
         body = client.get("/join").get_data(as_text=True)

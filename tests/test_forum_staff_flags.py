@@ -10,6 +10,7 @@ administer the members here is trusted to keep order on the forum (decided
 """
 import pytest
 
+from api_helpers import send
 from conftest import db, make_member
 
 from aeronautics_members import app as app_module
@@ -116,17 +117,14 @@ class TestSavingRolesReachesTheForum:
         db.session.commit()
         synced = []
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.admin.sync_member_forum_state",
+            "aeronautics_members.services.account_admin.sync_member_forum_state",
             lambda member, **kwargs: synced.append(member.id) or (None, None),
         )
         with client.session_transaction() as session:
             session["_user_id"] = str(boss.user.id)
             session["_fresh"] = True
 
-        client.post(
-            f"/admin/accounts/{target.user.id}/roles",
-            data={"roles": ["forum_moderator"]},
-        )
+        send(client, "PUT", f"/api/v1/admin/accounts/{target.user.id}/roles", {"roles": ["forum_moderator"]})
 
         assert synced == [target.id]
 
@@ -141,17 +139,14 @@ class TestSavingRolesReachesTheForum:
             raise RuntimeError("forum down")
 
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.admin.sync_member_forum_state",
+            "aeronautics_members.services.account_admin.sync_member_forum_state",
             unreachable,
         )
         with client.session_transaction() as session:
             session["_user_id"] = str(boss.user.id)
             session["_fresh"] = True
 
-        client.post(
-            f"/admin/accounts/{target.user.id}/roles",
-            data={"roles": ["forum_moderator"]},
-        )
+        send(client, "PUT", f"/api/v1/admin/accounts/{target.user.id}/roles", {"roles": ["forum_moderator"]})
 
         db.session.expire_all()
         assert target.user.can(Permission.FORUM_MODERATOR)

@@ -15,7 +15,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "api:types": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts",
+    "api:types": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts --default-non-nullable false",
     "e2e": "playwright test"
   },
   "dependencies": {

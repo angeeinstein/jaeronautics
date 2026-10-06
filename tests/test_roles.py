@@ -9,6 +9,7 @@ hidden while the URL behind it still works.
 """
 import pytest
 
+from api_helpers import send
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import ROLE_ADMIN, ROLE_SUPERADMIN, User
 from aeronautics_members.permissions import Permission, ROLE_PERMISSIONS, roles_with
@@ -179,7 +180,7 @@ class TestSettingRoles:
     """One endpoint takes the whole set, so the guards are about the result."""
 
     def _set(self, client, user_id, *slugs):
-        return client.post(f"/admin/accounts/{user_id}/roles", data={"roles": list(slugs)})
+        return send(client, "PUT", f"/api/v1/admin/accounts/{user_id}/roles", {"roles": list(slugs)})
 
     def test_an_admin_cannot_change_anyones_roles(self, client):
         admin = _user("nogrant@example.com", ROLE_ADMIN)
@@ -354,10 +355,10 @@ class TestTheUiHidesWhatItDoesNotOffer:
         target = make_member(email="someone@example.com")
         _login(client, admin.id)
 
-        body = client.get(f"/admin/accounts/{target.user_id}").get_data(as_text=True)
+        body = client.get(f"/api/v1/admin/accounts/{target.user_id}").get_json()
 
-        assert "grant-admin" not in body
-        assert "grant-superadmin" not in body
+        assert body["access"] is None
+        assert body["actions"]["manage_access"] is False
 
 
 class TestErasureKeepsSomebodyInCharge:
@@ -555,10 +556,13 @@ class TestRedundantRolesAreNotStoredTwice:
     """
 
     def _set(self, client, user_id, *slugs):
-        return client.post(
-            f"/admin/accounts/{user_id}/roles", data={"roles": list(slugs)},
-            follow_redirects=True,
-        )
+        return send(client, "PUT", f"/api/v1/admin/accounts/{user_id}/roles", {"roles": list(slugs)})
+
+    def _access(self, client, user_id):
+        return client.get(f"/api/v1/admin/accounts/{user_id}").get_json()["access"]
+
+    def _option(self, client, user_id, slug):
+        return next(o for o in self._access(client, user_id)["options"] if o["slug"] == slug)
 
     def test_ticking_both_stores_only_the_covering_role(self, client):
         boss = _user("redboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
@@ -585,18 +589,17 @@ class TestRedundantRolesAreNotStoredTwice:
         target = make_member(email="told@example.com")
         _login(client, boss.id)
 
-        body = self._set(client, target.user_id, ROLE_ADMIN, ROLE_SUPERADMIN).get_data(as_text=True)
+        body = self._set(client, target.user_id, ROLE_ADMIN, ROLE_SUPERADMIN).get_json()
 
-        assert "not stored separately" in body
+        assert body == {"changed": True, "redundant": ["Admin"]}
 
     def test_the_page_says_which_role_covers_which(self, client):
         boss = _user("redboss4@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
         target = _user("covered@example.com", ROLE_SUPERADMIN)
         _login(client, boss.id)
 
-        body = client.get(f"/admin/accounts/{target.id}").get_data(as_text=True)
-
-        assert "included in Super Admin" in body
+        assert self._option(client, target.id, ROLE_ADMIN)["covered_by"] == "Super Admin"
+        assert self._option(client, target.id, ROLE_SUPERADMIN)["covered_by"] is None
 
     def test_the_page_lists_what_the_account_can_actually_do(self, client):
         """So an unticked Admin box on a Super Admin is not alarming."""
@@ -604,22 +607,10 @@ class TestRedundantRolesAreNotStoredTwice:
         target = _user("effective@example.com", ROLE_SUPERADMIN)
         _login(client, boss.id)
 
-        body = client.get(f"/admin/accounts/{target.id}").get_data(as_text=True)
+        can_do = " / ".join(self._access(client, target.id)["effective_permissions"])
 
-        assert "Open the admin workspace" in body
-        assert "Install a new version" in body
-
-    def test_but_folded_away_until_asked(self, client):
-        """A dozen capability lines above the controls buries the controls."""
-        boss = _user("folded@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        target = _user("foldedtarget@example.com", ROLE_SUPERADMIN)
-        _login(client, boss.id)
-
-        body = client.get(f"/admin/accounts/{target.id}").get_data(as_text=True)
-
-        assert "Show what this account can currently do" in body
-        # No <details open>: everything on this page starts closed.
-        assert "<details open" not in body
+        assert "Open the admin workspace" in can_do
+        assert "Install a new version" in can_do
 
     def test_dropping_the_covering_role_leaves_the_other_tickable(self, client):
         """The covered box must still post, or unticking one would clear both."""
@@ -654,22 +645,11 @@ class TestRedundantRolesAreNotStoredTwice:
         target = make_member(email="inspectme@example.com")
         _login(client, boss.id)
 
-        body = client.get(f"/admin/accounts/{target.user_id}").get_data(as_text=True)
-
-        assert "Show what this role can do" in body
         # Super Admin's list names what only it carries...
-        assert "Install a new version and roll one back" in body
+        assert "Install a new version and roll one back" in self._option(
+            client, target.user_id, ROLE_SUPERADMIN)["permissions"]
         # ...and Admin's names what an ordinary administrator gets.
-        assert "Approve profile change requests" in body
-
-    def test_the_union_rule_is_stated_rather_than_implied(self, client):
-        boss = _user("union@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        target = make_member(email="unionme@example.com")
-        _login(client, boss.id)
-
-        body = client.get(f"/admin/accounts/{target.user_id}").get_data(as_text=True)
-
-        assert "combined permissions of every role selected" in body
+        assert "Approve profile change requests" in self._option(client, target.user_id, ROLE_ADMIN)["permissions"]
 
     def test_a_new_role_is_inspectable_with_no_template_change(self, app, monkeypatch, client):
         monkeypatch.setitem(
@@ -682,7 +662,4 @@ class TestRedundantRolesAreNotStoredTwice:
         target = make_member(email="newrolefor@example.com")
         _login(client, boss.id)
 
-        body = client.get(f"/admin/accounts/{target.user_id}").get_data(as_text=True)
-
-        assert 'value="moderator"' in body
-        assert "Moderate the forum and avatars" in body
+        assert "Moderate the forum and avatars" in self._option(client, target.user_id, "moderator")["permissions"]

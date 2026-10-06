@@ -21,6 +21,193 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/accounts/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One account: profile, membership, forum, teams, access, recent activity, and what may be done. */
+        get: operations["admin_account"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/billing-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask Stripe about this member's subscription and repair what a missed webhook left behind. */
+        post: operations["admin_account_billing_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/disabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Switch the account off -- no signing in, no forum -- or back on. The membership is left as it is. */
+        put: operations["admin_account_disabled"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Correct the private address of a member locked out by a wrong one. A confirmation link goes there. */
+        put: operations["admin_account_email"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Erase the account's personal data, keeping the payment record. Cannot be undone. */
+        post: operations["admin_account_erase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/erasure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What erasing the account's personal data would do. Asks Stripe, so it is read only when wanted. */
+        get: operations["admin_account_erasure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/forum-resync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bring the forum in line with this account now. */
+        post: operations["admin_account_forum_resync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/old-forum-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Old forum accounts nobody has claimed, to reconnect this account to by hand. */
+        get: operations["admin_account_old_forum_candidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/picture-replacement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Allow the member one new profile picture, or withdraw that. */
+        put: operations["admin_account_picture_replacement"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/reconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reconnect this account to an old forum account, for a member the address check did not find. */
+        post: operations["admin_account_reconnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the account's roles to exactly these. */
+        put: operations["admin_account_roles"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/dashboard": {
         parameters: {
             query?: never;
@@ -76,6 +263,41 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Access
+         * @description Roles and switching the account off -- for whoever manages access.
+         */
+        Access: {
+            /** Disable Blockers */
+            disable_blockers: string[];
+            /** Effective Permissions */
+            effective_permissions: string[];
+            /** Options */
+            options: components["schemas"]["RoleOption"][];
+            /** Removal Warning */
+            removal_warning: string | null;
+            /** Roles Locked */
+            roles_locked: string | null;
+        };
+        /** AccountActivity */
+        AccountActivity: {
+            /** Actor */
+            actor: string | null;
+            /** After */
+            after: unknown;
+            /** At */
+            at: string;
+            /** Before */
+            before: unknown;
+            /** Category */
+            category: string;
+            /** Details */
+            details: unknown;
+            /** Event Type */
+            event_type: string;
+            /** Id */
+            id: number;
+        };
         /** AccountListOut */
         AccountListOut: {
             /** Items */
@@ -99,49 +321,83 @@ export interface components {
              * @default all
              * @enum {string}
              */
-            account: "all" | "active" | "no_sign_in" | "disabled" | "erased";
+            account?: "all" | "active" | "no_sign_in" | "disabled" | "erased";
             /**
              * Dir
              * @default asc
              * @enum {string}
              */
-            dir: "asc" | "desc";
+            dir?: "asc" | "desc";
             /**
              * Kind
              * @description "archived": carried over from the old forum and not reconnected yet.
              * @default all
              * @enum {string}
              */
-            kind: "all" | "portal" | "archived";
+            kind?: "all" | "portal" | "archived";
             /**
              * Membership
              * @default all
              * @enum {string}
              */
-            membership: "all" | "active" | "ending" | "pending" | "failed" | "ended" | "none";
+            membership?: "all" | "active" | "ending" | "pending" | "failed" | "ended" | "none";
             /**
              * Page
              * @default 1
              */
-            page: number;
+            page?: number;
             /**
              * Q
              * @description Name, address or forum username; part of one is enough.
              * @default
              */
-            q: string;
+            q?: string;
             /**
              * Role
              * @description "all", "staff" (any admin role), "none" (no role) or a role's slug.
              * @default all
              */
-            role: string;
+            role?: string;
             /**
              * Sort
              * @default name
              * @enum {string}
              */
-            sort: "name" | "kind" | "membership" | "until" | "forum";
+            sort?: "name" | "kind" | "membership" | "until" | "forum";
+        };
+        /** AccountOut */
+        AccountOut: {
+            access: components["schemas"]["Access"] | null;
+            /**
+             * Account State
+             * @enum {string}
+             */
+            account_state: "active" | "no_sign_in" | "disabled" | "erased";
+            actions: components["schemas"]["Actions"];
+            /** Disabled At */
+            disabled_at: string | null;
+            /** Disabled Reason */
+            disabled_reason: string | null;
+            /** Email */
+            email: string;
+            /** Email Verified */
+            email_verified: boolean;
+            /** Erased At */
+            erased_at: string | null;
+            forum: components["schemas"]["Forum"];
+            /** Forum Username */
+            forum_username: string | null;
+            /** Id */
+            id: number;
+            membership: components["schemas"]["Membership"] | null;
+            /** Name */
+            name: string | null;
+            old_forum: components["schemas"]["OldForum"] | null;
+            /** Recent Activity */
+            recent_activity: components["schemas"]["AccountActivity"][];
+            /** Roles */
+            roles: components["schemas"]["Role"][];
+            teams: components["schemas"]["Teams"] | null;
         };
         /** AccountRow */
         AccountRow: {
@@ -180,6 +436,28 @@ export interface components {
             /** Year Group */
             year_group: string | null;
         };
+        /**
+         * Actions
+         * @description What the person looking may do to this account, by the same checks the actions run.
+         */
+        Actions: {
+            /** Correct Email */
+            correct_email: boolean;
+            /** Erase */
+            erase: boolean;
+            /** Export Data */
+            export_data: boolean;
+            /** Manage Access */
+            manage_access: boolean;
+            /** Picture Replacement */
+            picture_replacement: boolean;
+            /** Reconnect */
+            reconnect: boolean;
+            /** Resync Forum */
+            resync_forum: boolean;
+            /** Sync Billing */
+            sync_billing: boolean;
+        };
         /** Activity */
         Activity: {
             /** At */
@@ -204,6 +482,51 @@ export interface components {
             pictures: components["schemas"]["Waiting"] | null;
             sync_problems: components["schemas"]["Waiting"] | null;
         };
+        /** BillingSyncOut */
+        BillingSyncOut: {
+            /** Changed */
+            changed: boolean;
+            /** Forum Error */
+            forum_error: string | null;
+        };
+        /** Candidate */
+        Candidate: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string | null;
+            /** Id */
+            id: number;
+            /** Likely Because */
+            likely_because: ("address" | "name") | null;
+            /** Posts */
+            posts: number | null;
+            /** Username */
+            username: string;
+            /** Year Group */
+            year_group: string | null;
+        };
+        /** CandidatesOut */
+        CandidatesOut: {
+            /** Items */
+            items: components["schemas"]["Candidate"][];
+            /** Likely */
+            likely: boolean;
+        };
+        /** CandidatesQuery */
+        CandidatesQuery: {
+            /**
+             * Q
+             * @description Old username, name or address; none for the likely ones.
+             * @default
+             */
+            q?: string;
+        };
+        /** ChangedOut */
+        ChangedOut: {
+            /** Changed */
+            changed: boolean;
+        };
         /**
          * Counts
          * @description Numbers shown beside menu entries; 0 when there is nothing, or nothing the person may see.
@@ -220,6 +543,65 @@ export interface components {
             /** Recent Activity */
             recent_activity: components["schemas"]["Activity"][] | null;
         };
+        /** DisabledIn */
+        DisabledIn: {
+            /** Disabled */
+            disabled: boolean;
+            /**
+             * Reason
+             * @default null
+             */
+            reason?: string | null;
+        };
+        /** EmailIn */
+        EmailIn: {
+            /** Email */
+            email: string;
+        };
+        /** EmailOut */
+        EmailOut: {
+            /** Email */
+            email: string;
+        };
+        /** EraseIn */
+        EraseIn: {
+            /** Confirm Email */
+            confirm_email: string;
+            /**
+             * Reason
+             * @default null
+             */
+            reason?: string | null;
+        };
+        /** EraseOut */
+        EraseOut: {
+            /** Forum Deferred */
+            forum_deferred: boolean;
+            /** Subscription Cancelled */
+            subscription_cancelled: boolean;
+        };
+        /**
+         * ErasureOut
+         * @description What erasing this account would do, and what forbids it -- said before anybody confirms.
+         */
+        ErasureOut: {
+            /** Blockers */
+            blockers: string[];
+            /** Confirm Email */
+            confirm_email: string;
+            /** Coverage End */
+            coverage_end: string | null;
+            /** Has Forum Account */
+            has_forum_account: boolean;
+            /** Has Stripe Customer */
+            has_stripe_customer: boolean;
+            /** Paid Periods */
+            paid_periods: number;
+            /** Subscription Active */
+            subscription_active: boolean;
+            /** Subscription Status */
+            subscription_status: string | null;
+        };
         /** ErrorBody */
         ErrorBody: {
             /** Code */
@@ -228,14 +610,14 @@ export interface components {
              * Details
              * @default null
              */
-            details: {
+            details?: {
                 [key: string]: unknown;
             } | null;
             /**
              * Fields
              * @default null
              */
-            fields: {
+            fields?: {
                 [key: string]: string;
             } | null;
             /** Message */
@@ -261,6 +643,44 @@ export interface components {
             /** Value */
             value: number;
         };
+        /** Forum */
+        Forum: {
+            /** Account State */
+            account_state: string | null;
+            cleanup: components["schemas"]["ForumCleanup"] | null;
+            /** Error */
+            error: string | null;
+            /** Has Picture */
+            has_picture: boolean;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** Latest Picture */
+            latest_picture: string | null;
+            /** Review Note */
+            review_note: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "disabled" | "no_membership" | "account_disabled" | "payment_processing" | "inactive_membership" | "active" | "reconnect_waiting" | "pending_avatar" | "rejected_avatar" | "needs_avatar";
+            /** Status Label */
+            status_label: string;
+        };
+        /**
+         * ForumCleanup
+         * @description The forum account a reconnect left behind, while it is not removed yet.
+         */
+        ForumCleanup: {
+            /** Error */
+            error: string | null;
+            /** Failed */
+            failed: boolean;
+        };
+        /** ForumResyncOut */
+        ForumResyncOut: {
+            /** Error */
+            error: string | null;
+        };
         /** MeOut */
         MeOut: {
             /** Admin Area */
@@ -285,6 +705,42 @@ export interface components {
             team_labels: components["schemas"]["TeamLabels"];
             /** Teams Area */
             teams_area: boolean;
+        };
+        /** Membership */
+        Membership: {
+            /** Category */
+            category: string;
+            /** Category Label */
+            category_label: string;
+            /** Email Private */
+            email_private: string;
+            /** Ends On */
+            ends_on: string | null;
+            /** First Name */
+            first_name: string;
+            /** Has Billing */
+            has_billing: boolean;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Name */
+            last_name: string;
+            /** Payment Status */
+            payment_status: string;
+            /** Payment Status Label */
+            payment_status_label: string;
+            /** Picture Replacement Allowed Since */
+            picture_replacement_allowed_since: string | null;
+            /** Renews On */
+            renews_on: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "ending" | "pending" | "failed" | "ended" | "none";
+            /** Title */
+            title: string | null;
+            /** Year Group */
+            year_group: string | null;
         };
         /**
          * MembershipCounts
@@ -315,12 +771,12 @@ export interface components {
              * Link Label
              * @default null
              */
-            link_label: string | null;
+            link_label?: string | null;
             /**
              * Link Url
              * @default null
              */
-            link_url: string | null;
+            link_url?: string | null;
             /** Message */
             message: string;
             /**
@@ -329,12 +785,93 @@ export interface components {
              */
             tone: "info" | "warning" | "danger";
         };
+        /** OldForum */
+        OldForum: {
+            /** Claimed At */
+            claimed_at: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string | null;
+            /** Group */
+            group: string | null;
+            /** Group Reason */
+            group_reason: string | null;
+            /** Joined On */
+            joined_on: string | null;
+            /** Last Posted On */
+            last_posted_on: string | null;
+            /** Picture Url */
+            picture_url: string | null;
+            /** Posts */
+            posts: number | null;
+            /** Username */
+            username: string;
+            /** Year Group */
+            year_group: string | null;
+        };
+        /** PictureReplacementIn */
+        PictureReplacementIn: {
+            /** Allow */
+            allow: boolean;
+        };
+        /** PictureReplacementOut */
+        PictureReplacementOut: {
+            /** Allowed Since */
+            allowed_since: string | null;
+        };
+        /** ReconnectIn */
+        ReconnectIn: {
+            /** Profile Id */
+            profile_id: number;
+        };
+        /** ReconnectOut */
+        ReconnectOut: {
+            /** Account Id */
+            account_id: number;
+            /**
+             * Forum
+             * @enum {string}
+             */
+            forum: "synced" | "background";
+            /** Forum Error */
+            forum_error: string | null;
+            /** Old Username */
+            old_username: string;
+        };
         /** Role */
         Role: {
             /** Label */
             label: string;
             /** Slug */
             slug: string;
+        };
+        /** RoleOption */
+        RoleOption: {
+            /** Covered By */
+            covered_by: string | null;
+            /** Description */
+            description: string | null;
+            /** Held */
+            held: boolean;
+            /** Label */
+            label: string;
+            /** Permissions */
+            permissions: string[];
+            /** Slug */
+            slug: string;
+        };
+        /** RolesIn */
+        RolesIn: {
+            /** Roles */
+            roles: string[];
+        };
+        /** RolesOut */
+        RolesOut: {
+            /** Changed */
+            changed: boolean;
+            /** Redundant */
+            redundant: string[];
         };
         /** SessionOut */
         SessionOut: {
@@ -352,6 +889,35 @@ export interface components {
             plural: string;
             /** Singular */
             singular: string;
+        };
+        /** TeamMembership */
+        TeamMembership: {
+            /** End Reason Label */
+            end_reason_label: string | null;
+            /** Link Url */
+            link_url: string | null;
+            /** Since */
+            since: string | null;
+            /** Status Label */
+            status_label: string;
+            /** Team */
+            team: string;
+            /** Until */
+            until: string | null;
+        };
+        /** TeamRole */
+        TeamRole: {
+            /** Role Label */
+            role_label: string;
+            /** Team */
+            team: string;
+        };
+        /** Teams */
+        Teams: {
+            /** Memberships */
+            memberships: components["schemas"]["TeamMembership"][];
+            /** Roles */
+            roles: components["schemas"]["TeamRole"][];
         };
         /**
          * Waiting
@@ -421,6 +987,706 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_billing_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingSyncOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_disabled: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisabledIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_email: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_erase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EraseIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EraseOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_erasure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErasureOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_forum_resync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForumResyncOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_old_forum_candidates: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidatesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_picture_replacement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PictureReplacementIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PictureReplacementOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_reconnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReconnectIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconnectOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_account_roles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RolesIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

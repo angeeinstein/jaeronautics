@@ -25,6 +25,12 @@ export function formatDateTime(iso: string): string {
   return `${part(parts, 'day')}.${part(parts, 'month')}.${part(parts, 'year')} ${part(parts, 'hour')}:${part(parts, 'minute')}`;
 }
 
+/** The day of a moment (UTC from the API) as "31.12.2026", in Vienna. */
+export function formatDayOf(iso: string): string {
+  const parts = dateTimeParts.formatToParts(new Date(iso));
+  return `${part(parts, 'day')}.${part(parts, 'month')}.${part(parts, 'year')}`;
+}
+
 /** A day ("2026-12-31") as "31.12.2026" -- no time zone involved. */
 export function formatDate(day: string): string {
   const [year, month, date] = day.split('-');

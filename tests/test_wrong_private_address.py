@@ -16,6 +16,7 @@ from datetime import datetime
 
 import pytest
 
+from api_helpers import send
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import AuditLog, NotificationEvent, User
 from aeronautics_members.services import identity
@@ -69,9 +70,9 @@ class TestAnAdminCorrectsIt:
         user_id = member.user_id
         _login(client, _staff("boss@example.org", "admin").id)
 
-        response = client.post(f"/admin/accounts/{user_id}/email", data={"new_email": "Anna.Right@example.com"})
+        response = send(client, "PUT", f"/api/v1/admin/accounts/{user_id}/email", {"email": "Anna.Right@example.com"})
 
-        assert response.status_code == 302
+        assert response.get_json() == {"email": "anna.right@example.com"}
         user = db.session.get(User, user_id)
         assert (user.email, user.member.email_private) == ("anna.right@example.com", "anna.right@example.com")
         assert user.email_verified_at is None
@@ -85,7 +86,7 @@ class TestAnAdminCorrectsIt:
         member = _member(email="anna.old@example.com", confirmed=True)
         _login(client, _staff("boss@example.org", "admin").id)
 
-        client.post(f"/admin/accounts/{member.user_id}/email", data={"new_email": "anna.new@example.com"})
+        send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/email", {"email": "anna.new@example.com"})
 
         [notice] = db.session.query(NotificationEvent).filter_by(event_type="account_email_changed_by_admin").all()
         assert notice.recipient_email == "anna.old@example.com"
@@ -95,8 +96,9 @@ class TestAnAdminCorrectsIt:
         make_member(email="taken@example.com")
         _login(client, _staff("boss@example.org", "admin").id)
 
-        client.post(f"/admin/accounts/{member.user_id}/email", data={"new_email": "taken@example.com"})
+        response = send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/email", {"email": "taken@example.com"})
 
+        assert response.status_code == 409
         assert db.session.get(User, member.user_id).email == "anna.wrnog@example.com" and not emails
 
     def _with_a_role(self):
@@ -109,7 +111,7 @@ class TestAnAdminCorrectsIt:
         member = self._with_a_role()
         _login(client, _staff("boss@example.org", "admin").id)
 
-        client.post(f"/admin/accounts/{member.user_id}/email", data={"new_email": "anna.new@example.com"})
+        send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/email", {"email": "anna.new@example.com"})
 
         db.session.expire_all()
         assert db.session.get(User, member.user_id).email == "anna.wrnog@example.com" and not emails
@@ -118,7 +120,7 @@ class TestAnAdminCorrectsIt:
         member = self._with_a_role()
         _login(client, _staff("root@example.org", "superadmin").id)
 
-        client.post(f"/admin/accounts/{member.user_id}/email", data={"new_email": "anna.new@example.com"})
+        send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/email", {"email": "anna.new@example.com"})
 
         db.session.expire_all()
         assert db.session.get(User, member.user_id).email == "anna.new@example.com"
@@ -127,6 +129,15 @@ class TestAnAdminCorrectsIt:
         member = _member()
         _login(client, _staff("boss@example.org", "admin").id)
 
-        body = client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        body = client.get(f"/api/v1/admin/accounts/{member.user_id}").get_json()
 
-        assert "Correct the Private Email Address" in body and "never confirmed" in body
+        assert body["actions"]["correct_email"] is True and body["email_verified"] is False
+
+    def test_a_bad_address_is_refused_by_field(self, app, client, emails):
+        member = _member()
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        response = send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/email", {"email": "not-an-address"})
+
+        assert response.status_code == 400
+        assert response.get_json()["error"]["fields"] == {"email": "Enter a valid email address."}

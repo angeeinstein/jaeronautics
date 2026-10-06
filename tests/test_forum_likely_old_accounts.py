@@ -106,10 +106,10 @@ class TestTheAccountPage:
         member = _returning()
         _login(client, _staff("boss@example.org", "admin").id)
 
-        body = client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        body = client.get(f"/api/v1/admin/accounts/{member.user_id}/old-forum-candidates").get_json()
 
-        assert "Probably theirs" in body and "BergerA_L22" in body
-        assert "Differs only in dots or spelling" in body and "Reconnect" in body
+        assert body["likely"] is True
+        assert [(c["username"], c["likely_because"]) for c in body["items"]] == [("BergerA_L22", "address")]
 
 
 def test_the_command_lists_them(app):

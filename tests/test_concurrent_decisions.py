@@ -15,11 +15,11 @@ actions takes the lock.
 import pytest
 from sqlalchemy.dialects import mysql
 
+from api_helpers import send
 from conftest import db, make_member
 from aeronautics_members.blueprints import account as account_module
-from aeronautics_members.blueprints import admin as admin_module
 from aeronautics_members.db_models import ForumAvatarSubmission, MemberProfileChangeRequest, NotificationEvent
-from aeronautics_members.services import locking
+from aeronautics_members.services import account_admin, locking
 from test_admin_reviews import _login, _name_change, _picture, _staff, quiet_forum  # noqa: F401
 
 
@@ -100,14 +100,15 @@ def test_changes_to_who_administers_the_site_take_the_lock(app, client, monkeypa
     """Roles, switching an account off, erasure: all behind the one lock, so
     two of them cannot both find another admin left and leave none."""
     taken = []
-    monkeypatch.setattr(admin_module, "lock_administration", lambda: taken.append("admin"))
+    monkeypatch.setattr(account_admin, "lock_administration", lambda: taken.append("admin"))
     monkeypatch.setattr(account_module, "lock_administration", lambda: taken.append("account"))
     boss = _staff("boss2@example.org", "superadmin")
     target = make_member(email="target@example.com")
     _login(client, boss.id)
 
-    client.post(f"/admin/accounts/{target.user.id}/roles", data={"roles": ["admin"]})
-    client.post(f"/admin/accounts/{target.user.id}/disabled", data={"disable": "1", "reason": "x"})
-    client.post(f"/admin/accounts/{target.user.id}/delete", data={"confirm_email": "wrong"})
+    url = f"/api/v1/admin/accounts/{target.user.id}"
+    send(client, "PUT", f"{url}/roles", {"roles": ["admin"]})
+    send(client, "PUT", f"{url}/disabled", {"disabled": True, "reason": "x"})
+    send(client, "POST", f"{url}/erase", {"confirm_email": "wrong"})
 
     assert taken == ["admin", "admin", "admin"]

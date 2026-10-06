@@ -136,6 +136,10 @@ class TestTheAdminSideRenders:
             "/admin/logs",
             "/admin/settings",
             "/admin/reviews",
+            # The pages the new front end draws are answered by their data.
+            "/api/v1/admin/dashboard",
+            "/api/v1/admin/accounts",
+            f"/api/v1/admin/accounts/{member.user_id}",
         ):
             assert client.get(path).status_code == 200, path
 

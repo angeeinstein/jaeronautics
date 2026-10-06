@@ -7,6 +7,7 @@ what the claim left broken for the person it had just helped.
 """
 from datetime import datetime, timezone
 
+from api_helpers import send
 from conftest import db, make_member
 
 from aeronautics_members.db_models import (
@@ -669,7 +670,7 @@ class TestTheSyncWaitsForTheCleanup:
         self._queued(member)
         _login(client, _staff("boss@example.org", "admin").id)
 
-        client.post(f"/admin/accounts/{member.user_id}/forum-resync")
+        send(client, "POST", f"/api/v1/admin/accounts/{member.user_id}/forum-resync")
 
         assert order == ["cleanup", "sync"]
 
@@ -682,10 +683,11 @@ class TestTheSyncWaitsForTheCleanup:
         self._queued(member)
         _login(client, _staff("boss@example.org", "admin").id)
 
-        response = client.post(f"/admin/accounts/{member.user_id}/forum-resync", follow_redirects=True)
+        response = send(client, "POST", f"/api/v1/admin/accounts/{member.user_id}/forum-resync")
 
         assert "sync" not in order
-        assert "could not be removed yet" in response.get_data(as_text=True)
+        assert response.status_code == 409
+        assert "could not be removed yet" in response.get_json()["error"]["message"]
 
     def test_the_account_page_says_a_cleanup_is_waiting_or_gave_up(self, app, client):
         from test_admin_reviews import _login, _staff
@@ -694,11 +696,10 @@ class TestTheSyncWaitsForTheCleanup:
         discard = self._queued(member)
         _login(client, _staff("boss@example.org", "admin").id)
 
-        assert "is being removed in the background" in client.get(
-            f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        url = f"/api/v1/admin/accounts/{member.user_id}"
+        assert client.get(url).get_json()["forum"]["cleanup"] == {"failed": False, "error": None}
 
         discard.status, discard.last_error = ExternalWorkItem.STATUS_FAILED, "Discourse said no."
         db.session.commit()
-        body = client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
 
-        assert "could not be removed" in body and "Discourse said no." in body
+        assert client.get(url).get_json()["forum"]["cleanup"] == {"failed": True, "error": "Discourse said no."}

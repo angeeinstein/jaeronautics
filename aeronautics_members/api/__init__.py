@@ -6,7 +6,7 @@ whole API, from which the front end's types are generated: openapi.py
 endpoints on ``api_bp``.
 """
 
-from . import admin_accounts, admin_dashboard, session  # noqa: F401 -- registers their endpoints
+from . import admin_account, admin_accounts, admin_dashboard, session  # noqa: F401 -- registers their endpoints
 from ._core import ENDPOINTS, api_bp, error, is_api_request
 
 __all__ = ["ENDPOINTS", "api_bp", "error", "is_api_request"]

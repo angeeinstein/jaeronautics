@@ -45,17 +45,15 @@ Status: `[ ]` to do, `[x]` done.
 
 ### 4.2 Accounts
 - [x] `GET /admin/accounts` (page) → list with filters and search (`GET /api/v1/admin/accounts`)
-- [ ] `GET /admin/accounts/<id>` (page) → detail with tabs
-- [ ] `POST /admin/accounts/<id>/billing-sync` (action)
-- [ ] `POST /admin/accounts/<id>/delete` (action; cancels the Stripe subscription)
-- [ ] `POST /admin/accounts/<id>/disabled` (action)
-- [ ] `POST /admin/accounts/<id>/email` (action: correct the private email)
-- [ ] `POST /admin/accounts/<id>/forum-resync` (action)
-- [ ] `POST /admin/accounts/<id>/picture-replacement` (action)
-- [ ] `POST /admin/accounts/<id>/reconnect` (action: old forum account)
-- [ ] `POST /admin/accounts/<id>/roles` (action)
-- [ ] `POST /admin/forum-tasks/retry` (action)
-- [ ] `POST /admin/undelivered-emails/<job>/<retry|dismiss>` (action)
+- [x] `GET /admin/accounts/<id>` (page) → detail with tabs (`GET /api/v1/admin/accounts/<id>`; what erasing would do: `.../erasure`; old forum search: `.../old-forum-candidates`)
+- [x] `POST /admin/accounts/<id>/billing-sync` → `POST /api/v1/admin/accounts/<id>/billing-sync`
+- [x] `POST /admin/accounts/<id>/delete` (cancels the Stripe subscription) → `POST /api/v1/admin/accounts/<id>/erase`
+- [x] `POST /admin/accounts/<id>/disabled` → `PUT /api/v1/admin/accounts/<id>/disabled`
+- [x] `POST /admin/accounts/<id>/email` (correct the private email) → `PUT /api/v1/admin/accounts/<id>/email`
+- [x] `POST /admin/accounts/<id>/forum-resync` → `POST /api/v1/admin/accounts/<id>/forum-resync`
+- [x] `POST /admin/accounts/<id>/picture-replacement` → `PUT /api/v1/admin/accounts/<id>/picture-replacement`
+- [x] `POST /admin/accounts/<id>/reconnect` (old forum account) → `POST /api/v1/admin/accounts/<id>/reconnect`
+- [x] `POST /admin/accounts/<id>/roles` → `PUT /api/v1/admin/accounts/<id>/roles`
 - `GET /admin/accounts/<id>/archived-avatar`, `/admin/accounts/<id>/data-export` (download) -- stay
 
 ### 4.3 Reviews
@@ -93,6 +91,8 @@ Status: `[ ]` to do, `[x]` done.
 - [ ] `POST /admin/system-update`, `GET /admin/system-update/status` (action, already JSON) → API
 - [ ] `POST /admin/backup`, `GET /admin/backup/status` (action, already JSON) → API
 - [ ] `POST /admin/backup/files/<name>/delete` (action)
+- [ ] `POST /admin/forum-tasks/retry` (action; from the health report)
+- [ ] `POST /admin/undelivered-emails/<job>/<retry|dismiss>` (action; from the health report)
 - [ ] `GET /admin/background-jobs/checklist`, `POST .../again`, `.../dismiss`, `POST /admin/background-jobs/resume` (already JSON / action) → API
 - `POST /admin/settings/mail-accounts/export` (download) → becomes a GET download
 - `GET /admin/backup/files/<name>` (download) -- stays

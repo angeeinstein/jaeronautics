@@ -45,18 +45,18 @@ class TestTheAdminAccountPage:
         team, lead = _led()
         _login(client, _staff("admin@example.com", "admin").id)
 
-        body = client.get(f"/admin/accounts/{lead.id}").get_data(as_text=True)
+        teams = client.get(f"/api/v1/admin/accounts/{lead.id}").get_json()["teams"]
 
-        assert "Lead · Rocket" in body
-        assert f"/teams/rocket/manage/people/{lead.id}" in body
+        assert teams["roles"] == [{"role_label": "Lead", "team": "Rocket"}]
+        assert [m["link_url"] for m in teams["memberships"]] == [f"/teams/rocket/manage/people/{lead.id}"]
 
     def test_says_nothing_for_somebody_in_no_team(self, app, client):
         anna = _person()
         _login(client, _staff("admin@example.com", "admin").id)
 
-        body = client.get(f"/admin/accounts/{anna.id}").get_data(as_text=True)
+        teams = client.get(f"/api/v1/admin/accounts/{anna.id}").get_json()["teams"]
 
-        assert "Lead ·" not in body and "/teams/" not in body
+        assert teams == {"roles": [], "memberships": []}
 
 
 @pytest.mark.usefixtures("switched_on")

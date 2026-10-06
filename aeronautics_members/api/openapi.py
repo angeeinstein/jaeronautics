@@ -26,22 +26,27 @@ _ERRORS = {
 
 
 def _models():
-    found = {ErrorOut}
+    """Every model with how it is used: what comes in as it is accepted
+    ("validation": a field with a default may be left out), what goes out as
+    it is sent ("serialization": a time is a string there, every field is set)."""
+    found = {(ErrorOut, "serialization")}
     for declared in ENDPOINTS:
-        found.update(model for model in (declared.response, declared.body, declared.query) if model is not None)
-    return sorted(found, key=lambda model: model.__name__)
+        if declared.body is not None:
+            found.add((declared.body, "validation"))
+        if declared.query is not None:
+            found.add((declared.query, "validation"))
+        if declared.response is not None:
+            found.add((declared.response, "serialization"))
+    return sorted(found, key=lambda pair: (pair[0].__name__, pair[1]))
 
 
 def build():
     """The OpenAPI document, as a dict."""
-    models = _models()
-    # One schema per model, as it is sent: a time is a string there.
-    keyed, definitions = models_json_schema(
-        [(model, "serialization") for model in models], ref_template="#/components/schemas/{model}")
+    keyed, definitions = models_json_schema(_models(), ref_template="#/components/schemas/{model}")
     schemas = definitions.get("$defs", {})
 
-    def ref(model):
-        return keyed[(model, "serialization")]
+    def ref(model, mode="serialization"):
+        return keyed[(model, mode)]
 
     paths = {}
     for declared in sorted(ENDPOINTS, key=lambda e: (e.rule, e.method)):
@@ -64,7 +69,7 @@ def build():
                     {"name": name, "in": "query", "required": name in required, "schema": schema})
         if declared.body is not None:
             operation["requestBody"] = {
-                "required": True, "content": {"application/json": {"schema": ref(declared.body)}}}
+                "required": True, "content": {"application/json": {"schema": ref(declared.body, "validation")}}}
         if declared.response is not None:
             operation["responses"][str(declared.status)] = {
                 "description": "OK", "content": {"application/json": {"schema": ref(declared.response)}}}

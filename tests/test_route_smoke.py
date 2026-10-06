@@ -128,10 +128,10 @@ def test_all_routes_no_server_error(client, seeded):
     a, mu, nm = ids["admin_id"], ids["member_uid"], ids["nomember_id"]
     calls = []
 
-    def hit(method, path, uid=None, data=None):
+    def hit(method, path, uid=None, data=None, json=None):
         if uid is not None:
             _login(client, uid)
-        resp = client.open(path, method=method, data=data)
+        resp = client.open(path, method=method, data=data, json=json)
         calls.append((resp.status_code, method, path))
         assert resp.status_code < 500, f"{method} {path} -> {resp.status_code}"
 
@@ -166,12 +166,14 @@ def test_all_routes_no_server_error(client, seeded):
     hit("GET", "/forum/avatar/public/bad")
     hit("POST", "/forum/avatar", uid=mu, data={})
     # admin
-    for p in ["/admin", "/admin/accounts", f"/admin/accounts/{mu}", "/admin/reviews", "/admin/logs", "/admin/settings"]:
+    for p in ["/admin", "/admin/accounts", f"/admin/accounts/{mu}", "/admin/reviews", "/admin/logs", "/admin/settings",
+              f"/api/v1/admin/accounts/{mu}", f"/api/v1/admin/accounts/{mu}/erasure",
+              f"/api/v1/admin/accounts/{mu}/old-forum-candidates"]:
         hit("GET", p, uid=a)
-    hit("POST", f"/admin/accounts/{mu}/billing-sync", uid=a)
-    hit("POST", f"/admin/accounts/{mu}/forum-resync", uid=a)
-    hit("POST", f"/admin/accounts/{mu}/roles", uid=a, data={"roles": ["admin"]})
-    hit("POST", f"/admin/accounts/{mu}/roles", uid=a, data={})
+    hit("POST", f"/api/v1/admin/accounts/{mu}/billing-sync", uid=a)
+    hit("POST", f"/api/v1/admin/accounts/{mu}/forum-resync", uid=a)
+    hit("PUT", f"/api/v1/admin/accounts/{mu}/roles", uid=a, json={"roles": ["admin"]})
+    hit("PUT", f"/api/v1/admin/accounts/{mu}/roles", uid=a, json={"roles": []})
     hit("POST", f"/admin/reviews/pictures/{ids['sub_id']}/approve", uid=a, data={"review_note": "ok"})
     hit("POST", f"/admin/reviews/pictures/{ids['sub_id']}/reject", uid=a, data={"review_note": "no"})
     hit("POST", f"/admin/reviews/name-changes/{ids['pcr_id']}/approve", uid=a, data={"admin_note": "ok"})
@@ -197,10 +199,10 @@ def test_setting_roles_grants_and_revokes(client, seeded):
     _login(client, seeded["admin_id"])
     uid = seeded["member_uid"]
 
-    client.post(f"/admin/accounts/{uid}/roles", data={"roles": ["admin"]})
+    client.put(f"/api/v1/admin/accounts/{uid}/roles", json={"roles": ["admin"]})
     assert db.session.get(User, uid).has_role("admin")
 
-    client.post(f"/admin/accounts/{uid}/roles", data={})
+    client.put(f"/api/v1/admin/accounts/{uid}/roles", json={"roles": []})
     assert db.session.get(User, uid).has_role("admin") is False
 
 

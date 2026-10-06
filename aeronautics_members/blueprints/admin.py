@@ -11,19 +11,13 @@ from flask import Blueprint, current_app, jsonify
 
 from ..member_categories import CATEGORY_ORDER
 from ..permissions import (
-    PERMISSION_LABELS,
     Permission,
-    ROLE_PERMISSIONS,
-    covering_role,
-    role_description,
-    role_label,
 )
 from ..config import (
     RATELIMIT_ADMIN_EMAIL,
     STRIPE_SETTING_KEYS,
 )
 from ..services.audit import (
-    serialize_audit_value,
     log_audit_event,
     redact_settings_states_for_audit,
     snapshot_forum_account_for_audit,
@@ -40,7 +34,6 @@ from ..services.forum import (
     build_forum_username_base,
     generate_unique_forum_username,
     get_forum_service,
-    log_out_forum_session_if_possible,
     sync_member_forum_state,
 )
 from ..services.members import (
@@ -49,20 +42,9 @@ from ..services.members import (
 from ..services.membership import (
     member_has_active_access,
 )
-from ..services.access import (
-    assignable_roles,
-    describe_account_disable,
-    describe_role_change,
-    set_account_disabled,
-    set_account_roles,
-)
 from ..services.privacy import (
-    INITIATED_BY_ADMIN,
-    describe_deletion_impact,
-    erase_account,
     export_account_data,
     export_filename_for,
-    refresh_subscription_state_before_deletion,
 )
 from . import _legal_pages as legal_pages
 from .app_shell import app_shell
@@ -71,7 +53,6 @@ from ..services.notifications import (
     build_mail_accounts_export_payload,
     dismiss_email_delivery_job,
     normalize_imported_mail_accounts_payload,
-    queue_curated_admin_notification,
     queue_user_status_notification,
     requeue_email_delivery_job,
     sample_email_for,
@@ -85,12 +66,8 @@ from ..services.system_update import (
     describe_update_state,
     request_update,
 )
-from ..services.workflows import (
-    refresh_member_billing_state,
-)
 import json
 import os
-import stripe
 from datetime import (
     datetime,
     timezone,
@@ -113,7 +90,6 @@ from flask_login import (
     login_required,
 )
 from sqlalchemy import (
-    func,
     or_,
 )
 from sqlalchemy.exc import (
@@ -146,20 +122,17 @@ from ..forum_service import (
     FORUM_STATE_ACTIVE,
     ForumProviderError,
 )
-from ..services.forum_import import claim_archived_account
-from ..services.locking import lock_administration, locked
+from ..services.locking import locked
 from ..mail_utils import (
     load_mail_accounts_config,
     probe_mail_account_connection,
     send_mail,
 )
 from ..notification_service import (
-    ADMIN_ERROR_CHANNEL,
     NOTIFICATION_SETTING_KEYS,
 )
 from ..app import (
     AUDIT_LOG_PAGE_SIZE,
-    build_forum_context,
     build_settings_page_context,
     decorate_pending_identity_requests,
     limiter,
@@ -173,34 +146,6 @@ admin_bp = Blueprint("admin", __name__)
 # SETTINGS_GENERAL, so these sections carry their own check; kept beside the
 # route that enforces it so the list and the check cannot drift apart.
 CREDENTIAL_SETTINGS_SECTIONS = {"billing", "forum"}
-
-
-def _role_removal_warning(user):
-    """Why this account's roles cannot simply be cleared, if that is the case.
-
-    Shown beside the editor so the reason is visible before somebody unticks a
-    box and gets a refusal; the same check runs again when the form is posted.
-    """
-    if user.deleted_at is not None:
-        return None
-    blockers = describe_role_change(user, [])["blockers"]
-    return blockers[0][1] if blockers else None
-
-
-def _teams_context(user):
-    """Which teams this person is in or has been in, and their roles there."""
-    from ..services import teams as teams_service
-
-    if not current_user.can(Permission.TEAMS_MANAGE):
-        return {"team_memberships": [], "team_roles": []}
-    return {
-        "team_memberships": teams_service.memberships_of(user, include_archived=True),
-        "team_roles": teams_service.roles_of(user),
-        "team_status_labels": teams_service.STATUS_LABELS,
-        "team_end_reasons": teams_service.END_REASON_LABELS,
-        "team_role_labels": teams_service.TEAM_ROLE_LABELS,
-        "teams_are_on": teams_service.teams_enabled(),
-    }
 
 
 @admin_bp.route("/admin", methods=["GET"])
@@ -244,169 +189,8 @@ def admin_archived_avatar(user_id):
 @login_required
 @requires(Permission.ACCOUNTS_VIEW)
 def admin_account_detail(user_id):
-    user = db.session.execute(
-        db.select(User)
-        .options(selectinload(User.member), selectinload(User.roles))
-        .filter_by(id=user_id)
-    ).scalar_one_or_none()
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    conditions = [AuditLog.target_user_id == user.id, AuditLog.actor_user_id == user.id]
-    if user.member is not None:
-        conditions.append(AuditLog.target_member_id == user.member.id)
-
-    recent_logs = db.session.execute(
-        db.select(AuditLog)
-        .options(
-            selectinload(AuditLog.actor_user),
-            selectinload(AuditLog.target_user),
-            selectinload(AuditLog.target_member),
-        )
-        .where(or_(*conditions))
-        .order_by(AuditLog.created_at.desc())
-        .limit(15)
-    ).scalars().all()
-
-    return render_template(
-        "admin_account_detail.html",
-        active_admin_section="accounts",
-        user_record=user,
-        member=user.member,
-        forum_account=user.forum_account,
-        forum_context=build_forum_context(user.member),
-        forum_cleanup=_forum_cleanup_waiting(user),
-        latest_forum_submission=get_forum_service().get_latest_submission(user.member) if user.member else None,
-        recent_logs=recent_logs,
-        **_reconnect_context(user),
-        can_correct_email=(
-            user.member is not None and user.deleted_at is None and user.id != current_user.id
-            and current_user.can(Permission.APPROVALS_REVIEW)
-            and (not user.roles or current_user.can(Permission.ROLES_MANAGE))
-        ),
-        **_teams_context(user),
-        # The role editor. Every assignable role, whether this account holds it,
-        # and what refusing would say -- worked out server-side so the form and
-        # the guard cannot disagree about what is possible.
-        can_manage_roles=current_user.can(Permission.ROLES_MANAGE),
-        # Why the switch is missing matters more than the switch: "you cannot
-        # do this to yourself" and "nobody else could install an update" lead
-        # somewhere different.
-        disable_blockers=describe_account_disable(
-            user, actor_user=current_user, disable=True
-        )["blockers"],
-        role_options=[
-            {
-                "slug": slug,
-                "label": role_label(slug),
-                "description": role_description(slug),
-                "held": user.has_role(slug),
-                # Naming the role that already grants all of this is the whole
-                # answer to "why is Admin unticked on a Super Admin?".
-                "covered_by": (
-                    role_label(covering_role(slug, {r.slug for r in user.roles}))
-                    if covering_role(slug, {r.slug for r in user.roles})
-                    else None
-                ),
-                # What ticking this box would actually hand over. Reading the
-                # source to find that out is not a reasonable ask of somebody
-                # deciding whether a fellow student should have it.
-                "permissions": sorted(
-                    PERMISSION_LABELS.get(permission, permission)
-                    for permission in ROLE_PERMISSIONS[slug]
-                ),
-            }
-            for slug in assignable_roles()
-        ],
-        # What the account can actually do, which is the question the role list
-        # is really being asked.
-        effective_permissions=sorted(
-            PERMISSION_LABELS.get(permission, permission)
-            for permission in user.permissions
-        ),
-        role_change_blocked=(
-            _("You cannot change your own roles here.")
-            if current_user.id == user.id
-            else None
-        ),
-        role_removal_warning=_role_removal_warning(user),
-        deletion_impact=describe_deletion_impact(user, actor_user=current_user),
-        live_subscription=refresh_subscription_state_before_deletion(user.member),
-    )
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/billing-sync", methods=["POST"])
-@login_required
-@requires(Permission.ACCOUNTS_BILLING)
-def admin_sync_billing_account(user_id):
-    user = db.session.execute(
-        db.select(User)
-        .options(selectinload(User.member), selectinload(User.forum_account))
-        .filter_by(id=user_id)
-    ).scalar_one_or_none()
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    next_url = request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id)
-    if user.member is None:
-        flash(_("This account does not have a linked membership profile yet."), "warning")
-        return redirect(next_url)
-    if not (user.member.stripe_customer_id or user.member.stripe_subscription_id):
-        flash(_("No Stripe billing reference is stored for this membership yet."), "warning")
-        return redirect(next_url)
-
-    before_member = snapshot_member_for_audit(user.member)
-    try:
-        changed, stripe_subscription, forum_result = refresh_member_billing_state(user.member, force_stripe_sync=True, sync_forum=True)
-    except stripe.StripeError as exc:
-        db.session.rollback()
-        current_app.logger.error("Manual Stripe billing sync failed for member_id=%s: %s", user.member.id, exc)
-        queue_curated_admin_notification(
-            ADMIN_ERROR_CHANNEL,
-            "manual_billing_sync_failed",
-            _("A manual Stripe billing sync failed for %(email)s.", email=user.member.email_private),
-            payload={
-                "member_email": user.member.email_private,
-                "user_id": user.id,
-                "member_id": user.member.id,
-                "error": str(exc),
-            },
-            target_user=user,
-            target_member=user.member,
-            object_type="member",
-            object_id=user.member.id,
-            commit=True,
-        )
-        flash(_("Stripe billing sync failed right now. Please try again later."), "danger")
-        return redirect(next_url)
-
-    log_audit_event(
-        category="billing",
-        event_type="manual_billing_sync",
-        actor_user=current_user,
-        target_user=user,
-        target_member=user.member,
-        before=before_member,
-        after=snapshot_member_for_audit(user.member),
-        metadata={
-            "changed": changed,
-            "stripe_status": stripe_subscription.get("status") if stripe_subscription else None,
-            "stripe_cancel_at_period_end": stripe_subscription.get("cancel_at_period_end") if stripe_subscription else None,
-            "stripe_cancel_at": stripe_subscription.get("cancel_at") if stripe_subscription else None,
-            "forum_sync_error": forum_result.error if forum_result else None,
-        },
-    )
-    db.session.commit()
-
-    if changed:
-        flash(_("Billing state synchronized successfully."), "success")
-    else:
-        flash(_("Billing already matches the current Stripe state."), "info")
-    if forum_result and forum_result.error:
-        flash(_("Forum sync completed with an issue: %(message)s", message=forum_result.error), "warning")
-    return redirect(next_url)
+    """One account, drawn by the new front end (frontend/src/pages/admin/Account.tsx)."""
+    return app_shell()
 
 
 @admin_bp.route("/admin/reviews", methods=["GET"])
@@ -445,298 +229,6 @@ def admin_reviews():
         # not arrive folded shut.
         history_open="page" in request.args,
     )
-
-
-def _forum_cleanup_waiting(user):
-    from ..services.workflows import forum_cleanup_waiting
-
-    return forum_cleanup_waiting(user)
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/forum-resync", methods=["POST"])
-@login_required
-@requires(Permission.FORUM_MODERATE)
-def admin_resync_forum_account(user_id):
-    user = db.session.execute(
-        db.select(User)
-        .options(selectinload(User.member), selectinload(User.forum_account))
-        .filter_by(id=user_id)
-    ).scalar_one_or_none()
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    if user.member is None:
-        flash(_("This account does not have a linked membership profile yet."), "warning")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-    from ..services.workflows import cleanup_then_sync
-
-    before_state = snapshot_forum_account_for_audit(user.forum_account)
-    # A reconnect's leftover account first, or this sync is refused for its address.
-    result, waiting = cleanup_then_sync(user)
-    if result is None:
-        flash(_("The forum account left behind by the reconnection could not be removed yet, so the forum "
-                "still refuses this address: %(error)s", error=(waiting.last_error if waiting else None) or "-"),
-              "warning")
-        return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-    log_audit_event(
-        category="forum",
-        event_type="manual_forum_resync",
-        actor_user=current_user,
-        target_user=user,
-        target_member=user.member,
-        before=before_state,
-        after=snapshot_forum_account_for_audit(user.forum_account),
-        metadata={
-            "desired_state": result.desired_state if result else None,
-            "error": result.error if result else None,
-        },
-    )
-    db.session.commit()
-
-    if result and result.error:
-        flash(_("Forum sync completed with an issue: %(message)s", message=result.error), "warning")
-    else:
-        flash(_("Forum state synchronized successfully."), "success")
-    return redirect(request.form.get("next") or url_for("admin.admin_account_detail", user_id=user.id))
-
-
-RECONNECT_RESULT_LIMIT = 15
-
-
-def _reconnect_context(user):
-    """The old-forum search on an account page, for reconnecting by hand.
-
-    Only for an account that is not an old-forum account already, and only
-    for admins who decide identity changes.
-    """
-    can_reconnect = (
-        user.imported_forum_profile is None
-        and user.deleted_at is None
-        and current_user.can(Permission.APPROVALS_REVIEW)
-    )
-    query = (request.args.get("reconnect_q") or "").strip()
-    results = []
-    if can_reconnect and len(query) >= 2:
-        like = f"%{query.lower()}%"
-        results = db.session.execute(
-            db.select(ImportedForumProfile)
-            .join(User, User.id == ImportedForumProfile.user_id)
-            .where(
-                ImportedForumProfile.claimed_at.is_(None),
-                User.deleted_at.is_(None),
-                or_(
-                    func.lower(ImportedForumProfile.source_username).like(like),
-                    func.lower(ImportedForumProfile.display_name).like(like),
-                    func.lower(ImportedForumProfile.source_email).like(like),
-                ),
-            )
-            .order_by(ImportedForumProfile.source_username)
-            .limit(RECONNECT_RESULT_LIMIT)
-        ).scalars().all()
-    likely = {}
-    if can_reconnect and not query:
-        # Not searching: what is probably theirs, if anything.
-        from ..services.forum_import import likely_old_accounts
-
-        found = likely_old_accounts(user)
-        results = [profile for profile, _reason in found]
-        likely = {profile.id: reason for profile, reason in found}
-    return {"can_reconnect": can_reconnect, "reconnect_query": query, "reconnect_results": results,
-            "reconnect_likely": likely}
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/email", methods=["POST"])
-@login_required
-@requires(Permission.APPROVALS_REVIEW)
-def admin_correct_private_email(user_id):
-    """Correct a member's private address, for somebody locked out by a wrong one.
-
-    The private address is the login and where password resets go: mistyped
-    at signup or changed to a wrong one, and the password forgotten too, the
-    person cannot get back in. Changing it hands the account to whoever reads
-    the new address, so it is for an admin who knows who is asking. The new
-    address must then be confirmed like any other, the address replaced is
-    told when it was ever confirmed, and the change is logged with both.
-    """
-    import re
-
-    from ..config import CONTACT_EMAIL
-    from ..services.identity import send_email_verification_email
-    from ..services.notifications import flush_marked_notification_channels
-    from ..services.workflows import sync_member_primary_email
-
-    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
-    if user is None or user.deleted_at is not None or user.member is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-    back = url_for("admin.admin_account_detail", user_id=user_id)
-    member = user.member
-    new_email = (request.form.get("new_email") or "").strip().lower()
-    if user.id == current_user.id:
-        flash(_("Change your own address in your profile."), "warning")
-        return redirect(back)
-    if user.roles and not current_user.can(Permission.ROLES_MANAGE):
-        # Their address is a way into somebody else's admin rights.
-        flash(_("Only somebody who manages access can change the address of an account with a role."), "danger")
-        return redirect(back)
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", new_email):
-        flash(_("Enter a valid email address."), "danger")
-        return redirect(back)
-    old_email = user.email
-    if new_email == (old_email or "").strip().lower():
-        flash(_("That is the address the account has already."), "info")
-        return redirect(back)
-
-    has_forum_account = user.forum_account is not None or member_has_active_access(member)
-    if has_forum_account and get_forum_service().address_taken_by_another_forum_account(user, new_email):
-        flash(_("That address belongs to another account on the forum."), "danger")
-        return redirect(back)
-    old_was_confirmed = user.email_verified_at is not None
-    before = snapshot_user_for_audit(user)
-    try:
-        sync_member_primary_email(member, new_email)
-    except ValueError as exc:
-        db.session.rollback()
-        flash(str(exc), "danger")
-        return redirect(back)
-    log_audit_event(
-        category="profile",
-        event_type="private_email_corrected_by_admin",
-        actor_user=current_user,
-        target_user=user,
-        target_member=member,
-        before=before,
-        after=snapshot_user_for_audit(user),
-    )
-    if old_was_confirmed and old_email:
-        new_local, _at, new_domain = new_email.partition("@")
-        queue_user_status_notification(
-            "account_email_changed_by_admin",
-            f"The email address of account {user.id} was changed by an admin.",
-            old_email,
-            payload={"first_name": member.first_name,
-                     "new_email_masked": f"{new_local[:2]}…@{new_domain}",
-                     "contact_email": CONTACT_EMAIL},
-            target_user=user, target_member=member,
-        )
-    if has_forum_account:
-        sync_member_forum_state(member)
-    db.session.commit()
-    flush_marked_notification_channels()
-    try:
-        send_email_verification_email(current_app._get_current_object(), user)
-    except Exception as exc:  # noqa: BLE001 -- the change stands; they can ask for the link again
-        current_app.logger.warning("Could not send the verification email to the corrected address of user %s: %s",
-                                   user.id, exc)
-    flash(_("The address is now %(email)s. A confirmation link went there; with it, or with Forgot password, "
-            "they can get back in.", email=new_email), "success")
-    return redirect(back)
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/reconnect", methods=["POST"])
-@login_required
-@requires(Permission.APPROVALS_REVIEW)
-def admin_reconnect_old_forum_account(user_id):
-    """Reconnect a member to their old forum account by hand.
-
-    The ordinary way is confirming the university address the old forum had.
-    That fails when the address changed with a married name, no longer works,
-    or the old forum never had one -- and the student ends up with an empty
-    new forum account beside their old one. An admin who recognises them
-    picks the old account here instead; the reconnection itself is the same.
-    """
-    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
-    profile = db.session.execute(
-        locked(db.select(ImportedForumProfile).filter_by(id=request.form.get("profile_id", type=int)))
-    ).scalar_one_or_none()
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-    back = url_for("admin.admin_account_detail", user_id=user_id)
-    if user.imported_forum_profile is not None:
-        flash(_("This account is an old forum account already."), "warning")
-        return redirect(back)
-    if profile is None or profile.claimed_at is not None:
-        flash(_("That old forum account is taken already."), "warning")
-        return redirect(back)
-
-    old_username = profile.source_username
-    claimed = claim_archived_account(user, profile=profile)
-    if claimed is None:
-        db.session.rollback()
-        flash(_("Could not reconnect this account. See the log for why."), "danger")
-        return redirect(back)
-
-    archived = claimed.user
-    log_audit_event(
-        category="forum",
-        event_type="forum_account_reconnected_by_admin",
-        actor_user=current_user,
-        target_user=archived,
-        target_member=archived.member,
-        metadata={
-            "old_forum_username": old_username,
-            "source_user_id": claimed.source_user_id,
-            "retired_user_id": user_id,
-        },
-    )
-    db.session.commit()
-    flash(_("Reconnected to %(username)s.", username=old_username), "success")
-    # The account they leave behind holds their address; it goes first, then
-    # the forum is told -- now, so this page shows how it went.
-    from ..services.workflows import cleanup_then_sync
-
-    try:
-        result, _waiting = cleanup_then_sync(archived)
-        db.session.commit()
-    except Exception:  # noqa: BLE001 -- both stay queued and run in the background
-        db.session.rollback()
-        current_app.logger.exception("Forum cleanup and sync after reconnecting user %s", archived.id)
-        result = None
-    if result is None:
-        flash(_("The forum is updated in the background over the next minutes."), "info")
-    elif result.error:
-        flash(_("Forum sync completed with an issue: %(message)s", message=result.error), "warning")
-    # The account now lives on the old forum's row; the one it came from is gone.
-    return redirect(url_for("admin.admin_account_detail", user_id=archived.id))
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/picture-replacement", methods=["POST"])
-@login_required
-@requires(Permission.FORUM_MODERATE)
-def admin_picture_replacement(user_id):
-    """Allow a member one new profile picture, or withdraw that.
-
-    Members cannot change an approved picture themselves, on purpose; somebody
-    who wants to asks an admin. Their current picture, and their forum access
-    with it, stay until the new one is approved -- which uses the permission up.
-    Nobody is emailed: the admin has usually just spoken to them.
-    """
-    member = db.session.execute(
-        locked(db.select(Member).filter_by(user_id=user_id))
-    ).scalar_one_or_none()
-    back = url_for("admin.admin_account_detail", user_id=user_id)
-    if member is None:
-        flash(_("This account does not have a linked membership profile yet."), "warning")
-        return redirect(back)
-
-    allow = request.form.get("allow") == "1"
-    before = member.avatar_replacement_allowed_at
-    member.avatar_replacement_allowed_at = get_now_utc() if allow else None
-    log_audit_event(
-        category="forum",
-        event_type="avatar_replacement_allowed" if allow else "avatar_replacement_withdrawn",
-        actor_user=current_user,
-        target_user=member.user,
-        target_member=member,
-        before={"avatar_replacement_allowed_at": serialize_audit_value(before)},
-        after={"avatar_replacement_allowed_at": serialize_audit_value(member.avatar_replacement_allowed_at)},
-    )
-    db.session.commit()
-    flash(_("New picture allowed.") if allow else _("Permission withdrawn."), "success")
-    return redirect(back)
 
 
 @admin_bp.route("/admin/reviews/pictures/<int:submission_id>/approve", methods=["POST"])
@@ -916,155 +408,6 @@ def test_forum_connection():
     db.session.commit()
     flash(message, "success" if success else "danger")
     return redirect(f"{url_for('admin.admin_settings')}#settings-forum")
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/disabled", methods=["POST"])
-@login_required
-@requires(Permission.ROLES_MANAGE)
-def update_account_disabled(user_id):
-    """Switch an account off, or back on. Never touches the membership.
-
-    Behind ROLES_MANAGE because this decides who may use the site, which is
-    the same kind of decision as granting a role and wants the same people
-    making it.
-    """
-    lock_administration()
-    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    disable = request.form.get("disable") == "1"
-    before_user = snapshot_user_for_audit(user)
-    try:
-        change = set_account_disabled(
-            user,
-            disable=disable,
-            actor_user=current_user,
-            reason=request.form.get("reason"),
-        )
-    except ServiceError as exc:
-        db.session.rollback()
-        flash(str(exc), "danger")
-        return redirect(url_for("admin.admin_account_detail", user_id=user_id))
-
-    if not change["changed"]:
-        flash(_("No change was made."), "info")
-        return redirect(url_for("admin.admin_account_detail", user_id=user_id))
-
-    # The forum is a separate system holding its own group memberships, so
-    # barring somebody here means nothing there until this runs.
-    if user.member is not None:
-        try:
-            sync_member_forum_state(user.member)
-        except Exception as exc:  # noqa: BLE001 -- the decision stands either way
-            current_app.logger.warning(
-                "Could not sync forum state after disabling user_id=%s: %s", user.id, exc
-            )
-    # And out of the forum now. The sync takes their groups away, but a session
-    # already open stays open -- signed in, reading whatever an inactive member
-    # may -- until it expires on its own, which is not what "deactivate" says.
-    if disable:
-        try:
-            log_out_forum_session_if_possible(user)
-        except Exception as exc:  # noqa: BLE001
-            current_app.logger.warning(
-                "Could not end the forum session of user_id=%s: %s", user.id, exc
-            )
-
-    log_audit_event(
-        category="access",
-        event_type="account_disabled" if disable else "account_enabled",
-        actor_user=current_user,
-        target_user=user,
-        target_member=user.member,
-        before=before_user,
-        after=snapshot_user_for_audit(user),
-        metadata={"reason": user.disabled_reason},
-    )
-    db.session.commit()
-    flash(
-        _("The account has been deactivated. Their membership is unchanged.")
-        if disable
-        else _("The account has been reactivated."),
-        "success",
-    )
-    return redirect(url_for("admin.admin_account_detail", user_id=user_id))
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/roles", methods=["POST"])
-@login_required
-@requires(Permission.ROLES_MANAGE)
-def update_account_roles(user_id):
-    """Set an account's roles to exactly what the form ticked.
-
-    One endpoint rather than a grant and a revoke per role: the guards that
-    matter are about the resulting state -- is anybody left who can install an
-    update -- and a per-role endpoint has to re-derive that each time. It also
-    means a role added to permissions.py is assignable with no new route.
-    """
-    lock_administration()
-    user = db.session.execute(locked(db.select(User).filter_by(id=user_id))).scalar_one_or_none()
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    before_user = snapshot_user_for_audit(user)
-    try:
-        change = set_account_roles(
-            user, request.form.getlist("roles"), actor_user=current_user
-        )
-    except ServiceError as exc:
-        db.session.rollback()
-        flash(str(exc), "danger")
-        return redirect(url_for("admin.admin_account_detail", user_id=user_id))
-
-    # Saying so beats silently dropping a box somebody deliberately ticked.
-    if change["redundant"]:
-        flash(
-            _(
-                "%(roles)s already covered by another selected role, so it was not "
-                "stored separately. The account can do exactly the same either way.",
-                roles=", ".join(role_label(slug) for slug in change["redundant"]),
-            ),
-            "info",
-        )
-
-    if not change["changed"]:
-        flash(_("No role changes were made."), "info")
-        return redirect(url_for("admin.admin_account_detail", user_id=user_id))
-
-    # Roles decide forum groups and, when the portal manages them, the forum's
-    # own staff flags -- and until this ran, a role taken away here stayed on
-    # the forum until something unrelated happened to sync the account. The
-    # nightly check compares membership state, not roles, so it never would.
-    if user.member is not None:
-        try:
-            sync_member_forum_state(user.member)
-        except Exception as exc:  # noqa: BLE001 -- the roles are saved either way
-            current_app.logger.warning(
-                "Could not sync forum state after a role change for user_id=%s: %s",
-                user.id, exc,
-            )
-
-    log_audit_event(
-        category="access",
-        event_type="account_roles_changed",
-        actor_user=current_user,
-        target_user=user,
-        target_member=user.member,
-        before=before_user,
-        after=snapshot_user_for_audit(user),
-        metadata={
-            "granted_roles": change["granted"],
-            "revoked_roles": change["revoked"],
-            "permissions_gained": change["permissions_gained"],
-            "permissions_lost": change["permissions_lost"],
-        },
-    )
-    db.session.commit()
-    flash(_("Roles updated."), "success")
-    return redirect(url_for("admin.admin_account_detail", user_id=user_id))
 
 
 @admin_bp.route("/admin/settings", methods=["GET", "POST"])
@@ -2132,62 +1475,6 @@ def admin_export_account_data(user_id):
     db.session.commit()
 
     return json_download_response(payload, export_filename_for(user))
-
-
-@admin_bp.route("/admin/accounts/<int:user_id>/delete", methods=["POST"])
-@login_required
-@requires(Permission.ACCOUNTS_PRIVACY)
-def admin_delete_account(user_id):
-    """Erase a member's personal data, keeping the records that must survive.
-
-    Deliberately not blocked when the member still has a paid subscription: an
-    expelled member is exactly the case this exists for. The confirmation panel
-    states the consequences instead, and the subscription is cancelled here so
-    the association stops charging someone it no longer has a record of.
-    """
-    lock_administration()
-    user = db.session.execute(
-        locked(
-            db.select(User)
-            .options(selectinload(User.member), selectinload(User.roles), selectinload(User.forum_account))
-            .filter_by(id=user_id)
-        )
-    ).scalar_one_or_none()
-    if user is None:
-        flash(_("The selected account could not be found."), "warning")
-        return redirect(url_for("admin.admin_accounts"))
-
-    # Typing the address is the confirmation step; a stray double-click on a
-    # destructive button should not be enough.
-    typed = (request.form.get("confirm_email") or "").strip().lower()
-    if typed != (user.email or "").strip().lower():
-        flash(_("The typed email address did not match, so nothing was deleted."), "warning")
-        return redirect(url_for("admin.admin_account_detail", user_id=user.id))
-
-    try:
-        summary = erase_account(
-            user,
-            actor_user=current_user,
-            initiated_by=INITIATED_BY_ADMIN,
-            note=(request.form.get("reason") or "").strip() or None,
-        )
-    except ServiceError as exc:
-        db.session.rollback()
-        flash(exc.message, "warning" if exc.http_status < 500 else "danger")
-        return redirect(url_for("admin.admin_account_detail", user_id=user.id))
-
-    db.session.commit()
-
-    flash(_("The account's personal data has been erased."), "success")
-    if summary["subscription_cancelled"]:
-        flash(_("The Stripe subscription was cancelled. No refund was issued."), "info")
-    if summary["forum_deferred"]:
-        flash(
-            _("The forum could not be reached, so the forum account will be "
-              "anonymised automatically as soon as it is back."),
-            "warning",
-        )
-    return redirect(url_for("admin.admin_account_detail", user_id=user.id))
 
 
 # ---- Backup & Restore -----------------------------------------------------------------

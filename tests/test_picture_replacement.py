@@ -10,6 +10,7 @@ from io import BytesIO
 
 import pytest
 
+from api_helpers import send
 from conftest import db
 from aeronautics_members.db_models import ForumAccount, ForumAvatarSubmission, Member
 from aeronautics_members.forum_service import ForumService
@@ -62,10 +63,12 @@ class TestTheAdminsSide:
         admin = _staff("mod@example.org", "admin")
         _login(client, admin.id)
 
-        client.post(f"/admin/accounts/{member.user_id}/picture-replacement", data={"allow": "1"})
+        response = send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/picture-replacement",
+                        {"allow": True})
+        assert response.get_json()["allowed_since"].endswith("Z")
         assert db.session.get(Member, member.id).avatar_replacement_allowed_at is not None
 
-        client.post(f"/admin/accounts/{member.user_id}/picture-replacement", data={"allow": "0"})
+        send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/picture-replacement", {"allow": False})
         assert db.session.get(Member, member.id).avatar_replacement_allowed_at is None
 
 

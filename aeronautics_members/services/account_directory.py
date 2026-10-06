@@ -235,6 +235,11 @@ def page_of_accounts(*, search="", membership="all", role="all", account="all", 
     return [(user, state) for user, state in rows], total, page
 
 
+def membership_state_of(user):
+    """One account's membership state, by the same rule as the list's rows."""
+    return db.session.scalar(_joined(membership_state()).where(User.id == user.id))
+
+
 def account_state(user):
     """The account's own state: ``erased``, ``disabled``, ``no_sign_in`` (never set a password) or ``active``."""
     if user.deleted_at is not None:

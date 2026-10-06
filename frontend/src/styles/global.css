@@ -54,3 +54,11 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* A button that cannot be pressed yet still looks like a button -- dimmed,
+   with its outline -- rather than like a line of grey text. */
+.mantine-Button-root:where(:disabled, [data-disabled]) {
+  border: 1px solid var(--ja-border-strong);
+  background: transparent;
+  color: var(--ja-placeholder);
+}

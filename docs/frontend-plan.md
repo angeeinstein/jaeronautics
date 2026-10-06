@@ -194,7 +194,12 @@ server can update to it.
       active, ending, payment pending, payment failed, ended, none -- worked
       out by the database, so a row's label, the filter and the sort agree;
       the dashboard's "Ending" figure counts the same people. Links to the
-      old page's filters still work.)*
+      old page's filters still work. The account page done too: `api/admin_account.py`,
+      `services/account_admin.py` -- every action on an account as one service function,
+      checks, audit entry, forum and Stripe follow-ups included -- and
+      `frontend/src/pages/admin/account/`, a tab per subject plus Activity.
+      What erasing would do asks Stripe, so it is read only when the Danger zone
+      tab opens. The page offers an action only where the server would not refuse it.)*
    3. Reviews (photo approvals)
    4. Teams (the admins' part)
    5. Money

@@ -587,12 +587,11 @@ class TestSeeingTheArchiveInTheAdmin:
     def test_the_account_page_shows_what_the_archive_recorded(self, app, admin_client):
         profile = _archived()
 
-        body = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
+        old_forum = admin_client.get(f"/api/v1/admin/accounts/{profile.user_id}").get_json()["old_forum"]
 
-        assert "Old Forum Account" in body
-        assert "PopovicA_L23" in body
-        assert "LAV23" in body
-        assert "Unclaimed" in body
+        assert old_forum["username"] == "PopovicA_L23"
+        assert old_forum["year_group"] == "LAV23"
+        assert old_forum["claimed_at"] is None, "unclaimed"
 
     def test_a_reconnected_person_reads_as_a_member_not_an_archive(self, app, admin_client):
         """Claiming makes them a member; the account page says the archive was claimed.
@@ -604,15 +603,16 @@ class TestSeeingTheArchiveInTheAdmin:
         claim_archived_account(member.user)
         db.session.commit()
 
-        detail = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
-        assert "Claimed" in detail
+        detail = admin_client.get(f"/api/v1/admin/accounts/{profile.user_id}").get_json()
+        assert detail["old_forum"]["claimed_at"] is not None
+        assert detail["membership"] is not None
 
     def test_an_ordinary_account_grows_no_archive_panel(self, app, admin_client):
         member = make_member(email="current@example.com")
 
-        body = admin_client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        body = admin_client.get(f"/api/v1/admin/accounts/{member.user_id}").get_json()
 
-        assert "Old Forum Account" not in body
+        assert body["old_forum"] is None
 
     def test_the_dashboard_counts_them_apart_from_real_accounts(self, app, admin_client):
         """760 accounts when the association has twenty would be a lie."""
@@ -693,9 +693,9 @@ class TestTheArchivedAvatar:
     def test_the_account_page_shows_it(self, app, admin_client, tmp_path):
         profile = self._with_avatar(app, tmp_path)
 
-        body = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
+        body = admin_client.get(f"/api/v1/admin/accounts/{profile.user_id}").get_json()
 
-        assert f"/admin/accounts/{profile.user_id}/archived-avatar" in body
+        assert body["old_forum"]["picture_url"] == f"/admin/accounts/{profile.user_id}/archived-avatar"
 
     def test_somebody_without_one_is_not_a_broken_image(self, app, admin_client):
         profile = _archived()
@@ -703,8 +703,8 @@ class TestTheArchivedAvatar:
         assert admin_client.get(
             f"/admin/accounts/{profile.user_id}/archived-avatar"
         ).status_code == 404
-        body = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
-        assert "archived-avatar" not in body
+        body = admin_client.get(f"/api/v1/admin/accounts/{profile.user_id}").get_json()
+        assert body["old_forum"]["picture_url"] is None
 
     def test_it_is_not_public(self, app, client, tmp_path):
         """The staging directory also holds avatars awaiting review."""
@@ -827,11 +827,10 @@ class TestWhatTheOldForumSaidAboutThem:
         with client.session_transaction() as session:
             session["_user_id"] = str(admin.id)
 
-        body = client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
+        old_forum = client.get(f"/api/v1/admin/accounts/{profile.user_id}").get_json()["old_forum"]
 
-        assert "Group on the old forum" in body
-        assert "Banned" in body
-        assert "non active student" in body
+        assert old_forum["group"] == "Banned"
+        assert old_forum["group_reason"] == "non active student"
 
 
 class TestWhenTheySignedUpTheNormalWay:

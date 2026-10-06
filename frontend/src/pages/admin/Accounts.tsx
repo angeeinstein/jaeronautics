@@ -16,7 +16,7 @@ import { api, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
 import { columnsFor, DataTable, type Sort } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
-import { Pill, type Tone } from '../../components/Pill';
+import { Pill } from '../../components/Pill';
 import { ErrorState, LoadingState } from '../../components/States';
 import { formatDate } from '../../lib/format';
 import {
@@ -30,6 +30,7 @@ import {
   paramsFromFilters,
   type SortKey,
 } from './accountFilters';
+import { ACCOUNT_STATE_PILL, MEMBERSHIP_PILL } from './accountLabels';
 import classes from './Accounts.module.css';
 
 type AccountList = Schemas['AccountListOut'];
@@ -42,15 +43,6 @@ export function accountsQuery(filters: AccountFilters) {
   };
 }
 
-const MEMBERSHIP: Record<Row['membership'], { label: string; tone: Tone } | null> = {
-  active: { label: 'Active', tone: 'active' },
-  ending: { label: 'Ending', tone: 'pending' },
-  pending: { label: 'Payment pending', tone: 'pending' },
-  failed: { label: 'Payment failed', tone: 'failed' },
-  ended: { label: 'Ended', tone: 'neutral' },
-  none: null,
-};
-
 const MEMBERSHIP_CHIPS: Record<MembershipFilter, string> = {
   all: 'All',
   active: 'Active',
@@ -59,13 +51,6 @@ const MEMBERSHIP_CHIPS: Record<MembershipFilter, string> = {
   failed: 'Payment failed',
   ended: 'Ended',
   none: 'No membership',
-};
-
-const ACCOUNT_STATE: Record<Row['account_state'], { label: string; tone: Tone } | null> = {
-  active: null,
-  no_sign_in: { label: 'No sign-in yet', tone: 'neutral' },
-  disabled: { label: 'Deactivated', tone: 'failed' },
-  erased: { label: 'Erased', tone: 'neutral' },
 };
 
 const ACCOUNT_CHOICES = [
@@ -97,7 +82,7 @@ function initialsOf(row: Row): string {
 function Person({ row }: { row: Row }) {
   const title = row.name ?? row.email ?? row.old_forum_username ?? `Account ${String(row.id)}`;
   const under = row.name ? (row.email ?? row.old_forum_username) : null;
-  const state = ACCOUNT_STATE[row.account_state];
+  const state = ACCOUNT_STATE_PILL[row.account_state];
   return (
     <Group gap="sm" wrap="nowrap">
       <Avatar size={32} color="brand" variant="light" aria-hidden>
@@ -150,7 +135,7 @@ const columns = column.columns([
     id: 'membership',
     header: 'Membership',
     cell: ({ row }) => {
-      const state = MEMBERSHIP[row.original.membership];
+      const state = MEMBERSHIP_PILL[row.original.membership];
       return state ? <Pill tone={state.tone}>{state.label}</Pill> : none;
     },
   }),

@@ -1,6 +1,117 @@
 {
   "components": {
     "schemas": {
+      "Access": {
+        "additionalProperties": false,
+        "description": "Roles and switching the account off -- for whoever manages access.",
+        "properties": {
+          "disable_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Disable Blockers",
+            "type": "array"
+          },
+          "effective_permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Effective Permissions",
+            "type": "array"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/RoleOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "removal_warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removal Warning"
+          },
+          "roles_locked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roles Locked"
+          }
+        },
+        "required": [
+          "options",
+          "effective_permissions",
+          "roles_locked",
+          "removal_warning",
+          "disable_blockers"
+        ],
+        "title": "Access",
+        "type": "object"
+      },
+      "AccountActivity": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "after": {
+            "title": "After"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "details": {
+            "title": "Details"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "category",
+          "event_type",
+          "actor",
+          "before",
+          "after",
+          "details"
+        ],
+        "title": "AccountActivity",
+        "type": "object"
+      },
       "AccountListOut": {
         "additionalProperties": false,
         "properties": {
@@ -132,6 +243,169 @@
           }
         },
         "title": "AccountListQuery",
+        "type": "object"
+      },
+      "AccountOut": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Access"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "account_state": {
+            "enum": [
+              "active",
+              "no_sign_in",
+              "disabled",
+              "erased"
+            ],
+            "title": "Account State",
+            "type": "string"
+          },
+          "actions": {
+            "$ref": "#/components/schemas/Actions"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Reason"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "email_verified": {
+            "title": "Email Verified",
+            "type": "boolean"
+          },
+          "erased_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Erased At"
+          },
+          "forum": {
+            "$ref": "#/components/schemas/Forum"
+          },
+          "forum_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Username"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "membership": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Membership"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "old_forum": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OldForum"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recent_activity": {
+            "items": {
+              "$ref": "#/components/schemas/AccountActivity"
+            },
+            "title": "Recent Activity",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "teams": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Teams"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "email_verified",
+          "name",
+          "forum_username",
+          "roles",
+          "account_state",
+          "disabled_at",
+          "disabled_reason",
+          "erased_at",
+          "membership",
+          "old_forum",
+          "forum",
+          "teams",
+          "access",
+          "recent_activity",
+          "actions"
+        ],
+        "title": "AccountOut",
         "type": "object"
       },
       "AccountRow": {
@@ -305,6 +579,56 @@
         "title": "AccountRow",
         "type": "object"
       },
+      "Actions": {
+        "additionalProperties": false,
+        "description": "What the person looking may do to this account, by the same checks the actions run.",
+        "properties": {
+          "correct_email": {
+            "title": "Correct Email",
+            "type": "boolean"
+          },
+          "erase": {
+            "title": "Erase",
+            "type": "boolean"
+          },
+          "export_data": {
+            "title": "Export Data",
+            "type": "boolean"
+          },
+          "manage_access": {
+            "title": "Manage Access",
+            "type": "boolean"
+          },
+          "picture_replacement": {
+            "title": "Picture Replacement",
+            "type": "boolean"
+          },
+          "reconnect": {
+            "title": "Reconnect",
+            "type": "boolean"
+          },
+          "resync_forum": {
+            "title": "Resync Forum",
+            "type": "boolean"
+          },
+          "sync_billing": {
+            "title": "Sync Billing",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sync_billing",
+          "resync_forum",
+          "picture_replacement",
+          "correct_email",
+          "reconnect",
+          "manage_access",
+          "export_data",
+          "erase"
+        ],
+        "title": "Actions",
+        "type": "object"
+      },
       "Activity": {
         "additionalProperties": false,
         "properties": {
@@ -404,6 +728,158 @@
         "title": "Attention",
         "type": "object"
       },
+      "BillingSyncOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "forum_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Error"
+          }
+        },
+        "required": [
+          "changed",
+          "forum_error"
+        ],
+        "title": "BillingSyncOut",
+        "type": "object"
+      },
+      "Candidate": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "likely_because": {
+            "anyOf": [
+              {
+                "enum": [
+                  "address",
+                  "name"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Likely Because"
+          },
+          "posts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posts"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "year_group",
+          "email",
+          "posts",
+          "likely_because"
+        ],
+        "title": "Candidate",
+        "type": "object"
+      },
+      "CandidatesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "likely": {
+            "title": "Likely",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "likely"
+        ],
+        "title": "CandidatesOut",
+        "type": "object"
+      },
+      "CandidatesQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "q": {
+            "default": "",
+            "description": "Old username, name or address; none for the likely ones.",
+            "maxLength": 100,
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        "title": "CandidatesQuery",
+        "type": "object"
+      },
+      "ChangedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "ChangedOut",
+        "type": "object"
+      },
       "Counts": {
         "additionalProperties": false,
         "description": "Numbers shown beside menu entries; 0 when there is nothing, or nothing the person may see.",
@@ -453,6 +929,177 @@
           "recent_activity"
         ],
         "title": "DashboardOut",
+        "type": "object"
+      },
+      "DisabledIn": {
+        "additionalProperties": false,
+        "properties": {
+          "disabled": {
+            "title": "Disabled",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "disabled"
+        ],
+        "title": "DisabledIn",
+        "type": "object"
+      },
+      "EmailIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 255,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "EmailIn",
+        "type": "object"
+      },
+      "EmailOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "EmailOut",
+        "type": "object"
+      },
+      "EraseIn": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_email": {
+            "maxLength": 255,
+            "title": "Confirm Email",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "confirm_email"
+        ],
+        "title": "EraseIn",
+        "type": "object"
+      },
+      "EraseOut": {
+        "additionalProperties": false,
+        "properties": {
+          "forum_deferred": {
+            "title": "Forum Deferred",
+            "type": "boolean"
+          },
+          "subscription_cancelled": {
+            "title": "Subscription Cancelled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "subscription_cancelled",
+          "forum_deferred"
+        ],
+        "title": "EraseOut",
+        "type": "object"
+      },
+      "ErasureOut": {
+        "additionalProperties": false,
+        "description": "What erasing this account would do, and what forbids it -- said before anybody confirms.",
+        "properties": {
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "confirm_email": {
+            "title": "Confirm Email",
+            "type": "string"
+          },
+          "coverage_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage End"
+          },
+          "has_forum_account": {
+            "title": "Has Forum Account",
+            "type": "boolean"
+          },
+          "has_stripe_customer": {
+            "title": "Has Stripe Customer",
+            "type": "boolean"
+          },
+          "paid_periods": {
+            "title": "Paid Periods",
+            "type": "integer"
+          },
+          "subscription_active": {
+            "title": "Subscription Active",
+            "type": "boolean"
+          },
+          "subscription_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Status"
+          }
+        },
+        "required": [
+          "blockers",
+          "confirm_email",
+          "paid_periods",
+          "has_forum_account",
+          "has_stripe_customer",
+          "subscription_active",
+          "subscription_status",
+          "coverage_end"
+        ],
+        "title": "ErasureOut",
         "type": "object"
       },
       "ErrorBody": {
@@ -560,6 +1207,161 @@
           "link_url"
         ],
         "title": "Figure",
+        "type": "object"
+      },
+      "Forum": {
+        "additionalProperties": false,
+        "properties": {
+          "account_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account State"
+          },
+          "cleanup": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForumCleanup"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "has_picture": {
+            "title": "Has Picture",
+            "type": "boolean"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "latest_picture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Picture"
+          },
+          "review_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Note"
+          },
+          "status": {
+            "enum": [
+              "disabled",
+              "no_membership",
+              "account_disabled",
+              "payment_processing",
+              "inactive_membership",
+              "active",
+              "reconnect_waiting",
+              "pending_avatar",
+              "rejected_avatar",
+              "needs_avatar"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_state",
+          "status",
+          "status_label",
+          "latest_picture",
+          "review_note",
+          "last_synced_at",
+          "error",
+          "cleanup",
+          "has_picture"
+        ],
+        "title": "Forum",
+        "type": "object"
+      },
+      "ForumCleanup": {
+        "additionalProperties": false,
+        "description": "The forum account a reconnect left behind, while it is not removed yet.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "failed",
+          "error"
+        ],
+        "title": "ForumCleanup",
+        "type": "object"
+      },
+      "ForumResyncOut": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ForumResyncOut",
         "type": "object"
       },
       "MeOut": {
@@ -679,6 +1481,135 @@
         "title": "MeOut",
         "type": "object"
       },
+      "Membership": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "category_label": {
+            "title": "Category Label",
+            "type": "string"
+          },
+          "email_private": {
+            "title": "Email Private",
+            "type": "string"
+          },
+          "ends_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends On"
+          },
+          "first_name": {
+            "title": "First Name",
+            "type": "string"
+          },
+          "has_billing": {
+            "title": "Has Billing",
+            "type": "boolean"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_name": {
+            "title": "Last Name",
+            "type": "string"
+          },
+          "payment_status": {
+            "title": "Payment Status",
+            "type": "string"
+          },
+          "payment_status_label": {
+            "title": "Payment Status Label",
+            "type": "string"
+          },
+          "picture_replacement_allowed_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Replacement Allowed Since"
+          },
+          "renews_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renews On"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "ending",
+              "pending",
+              "failed",
+              "ended",
+              "none"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "title",
+          "first_name",
+          "last_name",
+          "email_private",
+          "category",
+          "category_label",
+          "year_group",
+          "state",
+          "payment_status",
+          "payment_status_label",
+          "is_active",
+          "ends_on",
+          "renews_on",
+          "has_billing",
+          "picture_replacement_allowed_since"
+        ],
+        "title": "Membership",
+        "type": "object"
+      },
       "MembershipCounts": {
         "additionalProperties": false,
         "description": "How many rows each membership filter shows, with the other filters as they are.",
@@ -773,6 +1704,224 @@
         "title": "Notice",
         "type": "object"
       },
+      "OldForum": {
+        "additionalProperties": false,
+        "properties": {
+          "claimed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "group_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Reason"
+          },
+          "joined_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined On"
+          },
+          "last_posted_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Posted On"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "posts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posts"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "display_name",
+          "username",
+          "year_group",
+          "email",
+          "group",
+          "group_reason",
+          "posts",
+          "joined_on",
+          "last_posted_on",
+          "claimed_at",
+          "picture_url"
+        ],
+        "title": "OldForum",
+        "type": "object"
+      },
+      "PictureReplacementIn": {
+        "additionalProperties": false,
+        "properties": {
+          "allow": {
+            "title": "Allow",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "allow"
+        ],
+        "title": "PictureReplacementIn",
+        "type": "object"
+      },
+      "PictureReplacementOut": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Since"
+          }
+        },
+        "required": [
+          "allowed_since"
+        ],
+        "title": "PictureReplacementOut",
+        "type": "object"
+      },
+      "ReconnectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "profile_id": {
+            "title": "Profile Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "profile_id"
+        ],
+        "title": "ReconnectIn",
+        "type": "object"
+      },
+      "ReconnectOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "title": "Account Id",
+            "type": "integer"
+          },
+          "forum": {
+            "enum": [
+              "synced",
+              "background"
+            ],
+            "title": "Forum",
+            "type": "string"
+          },
+          "forum_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Error"
+          },
+          "old_username": {
+            "title": "Old Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "old_username",
+          "forum",
+          "forum_error"
+        ],
+        "title": "ReconnectOut",
+        "type": "object"
+      },
       "Role": {
         "additionalProperties": false,
         "properties": {
@@ -790,6 +1939,102 @@
           "label"
         ],
         "title": "Role",
+        "type": "object"
+      },
+      "RoleOption": {
+        "additionalProperties": false,
+        "properties": {
+          "covered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covered By"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "held": {
+            "title": "Held",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "label",
+          "description",
+          "held",
+          "covered_by",
+          "permissions"
+        ],
+        "title": "RoleOption",
+        "type": "object"
+      },
+      "RolesIn": {
+        "additionalProperties": false,
+        "properties": {
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles"
+        ],
+        "title": "RolesIn",
+        "type": "object"
+      },
+      "RolesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "redundant": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Redundant",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed",
+          "redundant"
+        ],
+        "title": "RolesOut",
         "type": "object"
       },
       "SessionOut": {
@@ -829,6 +2074,117 @@
           "plural"
         ],
         "title": "TeamLabels",
+        "type": "object"
+      },
+      "TeamMembership": {
+        "additionalProperties": false,
+        "properties": {
+          "end_reason_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Reason Label"
+          },
+          "link_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link Url"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "team": {
+            "title": "Team",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          }
+        },
+        "required": [
+          "team",
+          "link_url",
+          "status_label",
+          "end_reason_label",
+          "since",
+          "until"
+        ],
+        "title": "TeamMembership",
+        "type": "object"
+      },
+      "TeamRole": {
+        "additionalProperties": false,
+        "properties": {
+          "role_label": {
+            "title": "Role Label",
+            "type": "string"
+          },
+          "team": {
+            "title": "Team",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role_label",
+          "team"
+        ],
+        "title": "TeamRole",
+        "type": "object"
+      },
+      "Teams": {
+        "additionalProperties": false,
+        "properties": {
+          "memberships": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMembership"
+            },
+            "title": "Memberships",
+            "type": "array"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/TeamRole"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles",
+          "memberships"
+        ],
+        "title": "Teams",
         "type": "object"
       },
       "Waiting": {
@@ -1048,6 +2404,932 @@
         ],
         "x-permissions": [
           "accounts.view"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}": {
+      "get": {
+        "operationId": "admin_account",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One account: profile, membership, forum, teams, access, recent activity, and what may be done.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "accounts.view"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/billing-sync": {
+      "post": {
+        "operationId": "admin_account_billing_sync",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingSyncOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Ask Stripe about this member's subscription and repair what a missed webhook left behind.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "accounts.billing"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/disabled": {
+      "put": {
+        "operationId": "admin_account_disabled",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisabledIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Switch the account off -- no signing in, no forum -- or back on. The membership is left as it is.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "roles.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/email": {
+      "put": {
+        "operationId": "admin_account_email",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Correct the private address of a member locked out by a wrong one. A confirmation link goes there.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "approvals.review"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/erase": {
+      "post": {
+        "operationId": "admin_account_erase",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EraseOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Erase the account's personal data, keeping the payment record. Cannot be undone.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "accounts.privacy"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/erasure": {
+      "get": {
+        "operationId": "admin_account_erasure",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "What erasing the account's personal data would do. Asks Stripe, so it is read only when wanted.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "accounts.privacy"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/forum-resync": {
+      "post": {
+        "operationId": "admin_account_forum_resync",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForumResyncOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Bring the forum in line with this account now.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "forum.moderate"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/old-forum-candidates": {
+      "get": {
+        "operationId": "admin_account_old_forum_candidates",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Old username, name or address; none for the likely ones.",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidatesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Old forum accounts nobody has claimed, to reconnect this account to by hand.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "approvals.review"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/picture-replacement": {
+      "put": {
+        "operationId": "admin_account_picture_replacement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PictureReplacementIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PictureReplacementOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Allow the member one new profile picture, or withdraw that.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "forum.moderate"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/reconnect": {
+      "post": {
+        "operationId": "admin_account_reconnect",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconnectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconnectOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Reconnect this account to an old forum account, for a member the address check did not find.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "approvals.review"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/roles": {
+      "put": {
+        "operationId": "admin_account_roles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RolesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Set the account's roles to exactly these.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "roles.manage"
         ]
       }
     },

@@ -41,6 +41,20 @@ RESUMABLE_MEMBER_STATUSES = {"pending_checkout", "processing", "failed", "unpaid
 # promote a member into one without such evidence.
 PAYMENT_EVIDENCE_STATUSES = {"paid", "free_period"}
 
+#: What each payment status means, in words, wherever one is shown.
+PAYMENT_STATUS_LABELS = {
+    "unpaid": "Unpaid",
+    "pending_checkout": "Payment setup not finished",
+    "processing": "Payment processing",
+    "paid": "Paid",
+    "free_period": "Free until the year ends",
+    "cancel_scheduled": "Renewal cancelled",
+    "canceled": "Subscription ended",
+    "failed": "Payment failed",
+    "expired": "Expired",
+    "dispute_lost": "Payment reversed after a dispute",
+}
+
 # How long a renewal Stripe is still collecting keeps somebody a member past
 # the end of their year. A SEPA debit takes days to confirm -- usually about
 # five business days, sometimes longer -- and it starts on Jan 1, a holiday.

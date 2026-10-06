@@ -1,1 +1,1 @@
-{ "paths": ["/admin", "/admin/accounts"] }
+{ "paths": ["/admin", "/admin/accounts", "/admin/accounts/:userId"] }

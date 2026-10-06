@@ -70,6 +70,7 @@ test.describe('the account list', () => {
       .click();
 
     await expect(page).toHaveURL(/\/admin\/accounts\/\d+$/);
+    await expect(page.getByRole('heading', { name: 'Carla Cancel', level: 1 })).toBeVisible();
   });
 
   test('on a phone the table scrolls, not the page', async ({ page, isMobile }) => {

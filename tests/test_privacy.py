@@ -10,6 +10,7 @@ from datetime import date
 
 import pytest
 
+from api_helpers import send
 from conftest import app_module, db, make_member, privacy
 from aeronautics_members.db_models import (
     AuditLog,
@@ -670,12 +671,10 @@ class TestAdminRoutes:
         victim = make_member(email="victim2@example.com")
         _login(client, member.user_id)
 
-        response = client.post(
-            f"/admin/accounts/{victim.user_id}/delete",
-            data={"confirm_email": "victim2@example.com"},
-        )
+        response = send(client, "POST", f"/api/v1/admin/accounts/{victim.user_id}/erase",
+                        {"confirm_email": "victim2@example.com"})
 
-        assert response.status_code in (302, 403)
+        assert response.status_code == 403
         assert victim.deleted_at is None
 
     def test_the_typed_address_must_match(self, client):
@@ -683,11 +682,11 @@ class TestAdminRoutes:
         victim = make_member(email="typo@example.com")
         _login(client, admin.id)
 
-        client.post(
-            f"/admin/accounts/{victim.user_id}/delete",
-            data={"confirm_email": "wrong@example.com"},
-        )
+        response = send(client, "POST", f"/api/v1/admin/accounts/{victim.user_id}/erase",
+                        {"confirm_email": "wrong@example.com"})
 
+        assert response.status_code == 400
+        assert response.get_json()["error"]["fields"] == {"confirm_email": "This is not the account's address."}
         assert victim.deleted_at is None
         assert victim.first_name == "Test"
 
@@ -696,10 +695,10 @@ class TestAdminRoutes:
         victim = make_member(email="goodbye@example.com")
         _login(client, admin.id)
 
-        client.post(
-            f"/admin/accounts/{victim.user_id}/delete",
-            data={"confirm_email": "goodbye@example.com", "reason": "expelled"},
-        )
+        response = send(client, "POST", f"/api/v1/admin/accounts/{victim.user_id}/erase",
+                        {"confirm_email": "goodbye@example.com", "reason": "expelled"})
+
+        assert response.get_json() == {"subscription_cancelled": False, "forum_deferred": False}
 
         assert victim.deleted_at is not None
         entry = db.session.execute(
@@ -714,7 +713,7 @@ class TestAdminRoutes:
         victim = make_member(email="navigated@example.com")
         _login(client, admin.id)
 
-        assert client.get(f"/admin/accounts/{victim.user_id}/delete").status_code == 405
+        assert client.get(f"/api/v1/admin/accounts/{victim.user_id}/erase").status_code == 405
         assert victim.deleted_at is None
 
     def test_the_detail_page_warns_about_an_active_subscription(self, client):
@@ -722,10 +721,10 @@ class TestAdminRoutes:
         victim = _paid_member(email="warned@example.com")
         _login(client, admin.id)
 
-        body = client.get(f"/admin/accounts/{victim.user_id}").get_data(as_text=True)
+        erasure = client.get(f"/api/v1/admin/accounts/{victim.user_id}/erasure").get_json()
 
-        assert "active subscription" in body
-        assert "No refund is issued" in body
+        assert erasure["subscription_active"] is True
+        assert erasure["blockers"] == []
 
 
 class TestMemberInitiatedDeletion:

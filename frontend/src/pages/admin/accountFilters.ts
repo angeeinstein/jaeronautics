@@ -10,10 +10,10 @@ import type { Schemas } from '../../api/client';
 
 type Query = Schemas['AccountListQuery'];
 
-export type MembershipFilter = Query['membership'];
-export type AccountFilter = Query['account'];
-export type KindFilter = Query['kind'];
-export type SortKey = Query['sort'];
+export type MembershipFilter = NonNullable<Query['membership']>;
+export type AccountFilter = NonNullable<Query['account']>;
+export type KindFilter = NonNullable<Query['kind']>;
+export type SortKey = NonNullable<Query['sort']>;
 
 export interface AccountFilters {
   q: string;
