@@ -38,6 +38,18 @@ export const routes: RouteObject[] = [
             path: 'reviews',
             lazy: async () => ({ Component: (await import('../pages/admin/reviews/Reviews')).Reviews }),
           },
+          {
+            path: 'teams',
+            lazy: async () => ({ Component: (await import('../pages/admin/teams/Teams')).Teams }),
+          },
+          {
+            path: 'teams/new',
+            lazy: async () => ({ Component: (await import('../pages/admin/teams/NewTeam')).NewTeam }),
+          },
+          {
+            path: 'teams/:slug',
+            lazy: async () => ({ Component: (await import('../pages/admin/teams/Team')).Team }),
+          },
         ],
       },
       { path: '*', element: <NotFound /> },

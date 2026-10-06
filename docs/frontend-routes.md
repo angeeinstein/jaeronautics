@@ -62,11 +62,11 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `POST /admin/reviews/pictures/<id>/approve|reject` → `POST /api/v1/admin/reviews/pictures/<id>/approve|reject`
 
 ### 4.4 Teams (the admins' part)
-- [ ] `GET|POST /admin/teams` (page + action: the list, creating)
-- [ ] `GET|POST /admin/teams/new` (page + action)
-- [ ] `GET|POST /admin/teams/<slug>` (page + action: the admins' settings)
-- [ ] `POST /admin/teams/<slug>/archive` (action)
-- [ ] `POST /admin/teams/<slug>/roles`, `/roles/revoke` (action)
+- [x] `GET|POST /admin/teams` (page + action: the list, creating) → `GET /api/v1/admin/teams`, `POST /api/v1/admin/teams`; the switch and names `PUT /api/v1/admin/team-settings`
+- [x] `GET|POST /admin/teams/new` (page + action) → the page; creating as above
+- [x] `GET|POST /admin/teams/<slug>` (page + action: the admins' settings) → `GET|PUT /api/v1/admin/teams/<slug>`; the fee `PUT /api/v1/admin/teams/<slug>/fee`
+- [x] `POST /admin/teams/<slug>/archive` (action) → `PUT /api/v1/admin/teams/<slug>/archived`
+- [x] `POST /admin/teams/<slug>/roles`, `/roles/revoke` (action) → `POST /api/v1/admin/teams/<slug>/roles`, `/roles/revoke`
 
 ### 4.5 Money
 - [ ] `GET /admin/money` (page)

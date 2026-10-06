@@ -291,6 +291,11 @@ def _snapshot(team):
     }
 
 
+#: Short names the addresses use themselves: /admin/teams/new is the form for a
+#: new team, so a team called "new" could never be opened.
+RESERVED_SLUGS = frozenset({"new"})
+
+
 def create_team(actor, *, slug, **fields):
     cleaned = _clean_team_fields(**fields)
     slug = (slug or "").strip().lower() or suggest_slug(cleaned["name"])
@@ -299,6 +304,9 @@ def create_team(actor, *, slug, **fields):
             "The short name may only contain lowercase letters, digits and hyphens.",
             code="team_slug_invalid",
         )
+    if slug in RESERVED_SLUGS:
+        raise ValidationError("That short name is used by the pages themselves. Choose another.",
+                              code="team_slug_reserved")
     if db.session.execute(db.select(Team.id).filter_by(slug=slug)).first() is not None:
         raise ConflictError("Another team already has that short name.", code="team_slug_taken")
 

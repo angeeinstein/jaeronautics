@@ -204,7 +204,12 @@ server can update to it.
       into `services/reviews.py` beside the queue they act on;
       `frontend/src/pages/admin/reviews/`. A decision on something decided meanwhile
       is a conflict, said as such.)*
-   4. Teams (the admins' part)
+   4. Teams (the admins' part) *(done: `api/admin_teams.py`;
+      `frontend/src/pages/admin/teams/` -- the list with the switch and names,
+      a new team, and a team's details, fee, roles and archiving, each saved on its
+      own. A fee change asks again and then says what it did to the members already in.
+      The short name `new` is refused, as `/admin/teams/new` is the form. What a team
+      says about itself stays on its management page until step 5.)*
    5. Money
    6. Logs
    7. Legal Texts

@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
+from api_helpers import send
 from conftest import db, make_member
 from aeronautics_members.db_models import ExternalWorkItem, NotificationEvent, Setting
 from aeronautics_members.services import ValidationError, outbox, payments
@@ -361,12 +362,11 @@ class TestANewTeamFee:
         team, _membership = self._team_with_subscription(stripe_fake)
         _login(client, _staff("admin@example.com", "admin").id)
 
-        body = client.post(f"/admin/teams/{team.slug}", data={
-            "name": team.name, "admission_mode": team.admission_mode, "applications_open": "on",
+        body = send(client, "PUT", f"/api/v1/admin/teams/{team.slug}/fee", {
             "payment_mode": "subscription", "stripe_price_id": "price_team12", "period_starts": "01.10, 01.04",
-        }, follow_redirects=True).get_data(as_text=True)
+        }).get_json()
 
-        assert "1 running subscription(s) move to the new price" in body
+        assert body == {"moving": 1, "stopping": 0, "switched": 0, "asked_to_pay": 0}
 
 
 @pytest.mark.usefixtures("outbox_fixture")

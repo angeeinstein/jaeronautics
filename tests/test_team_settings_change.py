@@ -11,6 +11,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from api_helpers import send
 from conftest import db
 from aeronautics_members.db_models import NotificationEvent
 from aeronautics_members.services import ConflictError, ValidationError, team_payments, teams
@@ -176,10 +177,10 @@ class TestArchivingAsksForTheName:
         team, _lead = _led()
         _login(client, _staff("admin@example.com", "admin").id)
 
-        assert "Type the team name, Rocket, to confirm" in client.get(f"/admin/teams/{team.slug}").get_data(as_text=True)
-        body = client.post(f"/admin/teams/{team.slug}/archive", data={"archived": "1", "confirm_name": "nope"},
-                           follow_redirects=True).get_data(as_text=True)
-        assert "Type the team&#39;s name to archive it." in body
+        response = send(client, "PUT", f"/api/v1/admin/teams/{team.slug}/archived",
+                        {"archived": True, "confirm_name": "nope"})
+        assert response.status_code == 400
+        assert response.get_json()["error"]["message"] == "Type the team's name to archive it."
         db.session.refresh(team)
         assert team.status == teams.STATUS_ACTIVE
 

@@ -327,6 +327,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/team-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Switch teams on or off for members, and say what they are called. */
+        put: operations["admin_teams_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether teams are on, what they are called, and every team. */
+        get: operations["admin_teams"];
+        put?: never;
+        /** Create a team. Its leads are given once it exists. */
+        post: operations["admin_team_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/teams/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One team: its details, fee and roles. */
+        get: operations["admin_team"];
+        /** Change a team's name, how people join, its size, forum group and access list. */
+        put: operations["admin_team_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/teams/{slug}/archived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Archive a team -- its members lose it at once, nothing is deleted -- or restore it. */
+        put: operations["admin_team_archived"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/teams/{slug}/fee": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change how a team charges. Checked with Stripe first; members already in are moved or asked, and emailed. */
+        put: operations["admin_team_fee"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/teams/{slug}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Give somebody a role in a team -- allowed before they are in it. */
+        post: operations["admin_team_grant_role"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/teams/{slug}/roles/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take a role away. The team's last lead only when confirmed (409 ``team_last_lead`` otherwise). */
+        post: operations["admin_team_revoke_role"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -573,6 +694,16 @@ export interface components {
             /** Target */
             target: string | null;
         };
+        /** ArchivedIn */
+        ArchivedIn: {
+            /** Archived */
+            archived: boolean;
+            /**
+             * Confirm Name
+             * @default null
+             */
+            confirm_name?: string | null;
+        };
         /**
          * Attention
          * @description ``None`` for a kind the person may not act on, so the page does not offer it.
@@ -772,6 +903,52 @@ export interface components {
         ErrorOut: {
             error: components["schemas"]["ErrorBody"];
         };
+        /** Fee */
+        Fee: {
+            /** Display */
+            display: string | null;
+            /**
+             * Payment Mode
+             * @enum {string}
+             */
+            payment_mode: "none" | "subscription" | "one_time";
+            /** Period Starts */
+            period_starts: string | null;
+            /** Stripe Price Id */
+            stripe_price_id: string | null;
+        };
+        /**
+         * FeeChangeOut
+         * @description What a change of fee did to the members already in.
+         */
+        FeeChangeOut: {
+            /** Asked To Pay */
+            asked_to_pay: number;
+            /** Moving */
+            moving: number;
+            /** Stopping */
+            stopping: number;
+            /** Switched */
+            switched: number;
+        };
+        /** FeeIn */
+        FeeIn: {
+            /**
+             * Payment Mode
+             * @enum {string}
+             */
+            payment_mode: "none" | "subscription" | "one_time";
+            /**
+             * Period Starts
+             * @default null
+             */
+            period_starts?: string | null;
+            /**
+             * Stripe Price Id
+             * @default null
+             */
+            stripe_price_id?: string | null;
+        };
         /** Figure */
         Figure: {
             /**
@@ -835,6 +1012,17 @@ export interface components {
             current: string;
             /** Suggested */
             suggested: string;
+        };
+        /** GrantRoleIn */
+        GrantRoleIn: {
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @default lead
+             * @enum {string}
+             */
+            role?: "lead" | "treasurer";
         };
         /** HistoryItem */
         HistoryItem: {
@@ -960,6 +1148,38 @@ export interface components {
             none: number;
             /** Pending */
             pending: number;
+        };
+        /** NewTeamIn */
+        NewTeamIn: {
+            /**
+             * Access List Enabled
+             * @default false
+             */
+            access_list_enabled?: boolean;
+            /**
+             * Admission Mode
+             * @enum {string}
+             */
+            admission_mode: "approval" | "open";
+            /** @default null */
+            fee?: components["schemas"]["FeeIn"] | null;
+            /**
+             * Forum Group
+             * @default null
+             */
+            forum_group?: string | null;
+            /**
+             * Max Members
+             * @default null
+             */
+            max_members?: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Slug
+             * @default null
+             */
+            slug?: string | null;
         };
         /** NoteIn */
         NoteIn: {
@@ -1093,12 +1313,45 @@ export interface components {
             sync_problems: components["schemas"]["SyncProblem"][] | null;
             waiting: components["schemas"]["aeronautics_members__api__admin_reviews__Waiting"];
         };
+        /** RevokeRoleIn */
+        RevokeRoleIn: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed?: boolean;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "lead" | "treasurer";
+            /** User Id */
+            user_id: number;
+        };
         /** Role */
         Role: {
             /** Label */
             label: string;
             /** Slug */
             slug: string;
+        };
+        /** RoleHolder */
+        RoleHolder: {
+            /** Email */
+            email: string;
+            /** In Force */
+            in_force: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "lead" | "treasurer";
+            /** Role Label */
+            role_label: string;
+            /** User Id */
+            user_id: number;
         };
         /** RoleOption */
         RoleOption: {
@@ -1127,6 +1380,11 @@ export interface components {
             /** Redundant */
             redundant: string[];
         };
+        /** SavedOut */
+        SavedOut: {
+            /** Changed */
+            changed: boolean;
+        };
         /** SessionOut */
         SessionOut: {
             /** Csrf Token */
@@ -1144,6 +1402,31 @@ export interface components {
             last_synced_at: string | null;
             /** User Id */
             user_id: number | null;
+        };
+        /** TeamDetailsIn */
+        TeamDetailsIn: {
+            /**
+             * Access List Enabled
+             * @default false
+             */
+            access_list_enabled?: boolean;
+            /**
+             * Admission Mode
+             * @enum {string}
+             */
+            admission_mode: "approval" | "open";
+            /**
+             * Forum Group
+             * @default null
+             */
+            forum_group?: string | null;
+            /**
+             * Max Members
+             * @default null
+             */
+            max_members?: number | null;
+            /** Name */
+            name: string;
         };
         /**
          * TeamLabels
@@ -1170,6 +1453,42 @@ export interface components {
             /** Until */
             until: string | null;
         };
+        /** TeamOut */
+        TeamOut: {
+            /** Access List Enabled */
+            access_list_enabled: boolean;
+            /**
+             * Admission Mode
+             * @enum {string}
+             */
+            admission_mode: "approval" | "open";
+            /** Archived At */
+            archived_at: string | null;
+            fee: components["schemas"]["Fee"];
+            /** Forum Group */
+            forum_group: string | null;
+            /** Has Lead In Force */
+            has_lead_in_force: boolean;
+            /** Logo Url */
+            logo_url: string | null;
+            /** Manage Url */
+            manage_url: string;
+            /** Max Members */
+            max_members: number | null;
+            /** Members */
+            members: number;
+            /** Name */
+            name: string;
+            /** Roles */
+            roles: components["schemas"]["RoleHolder"][];
+            /** Slug */
+            slug: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+        };
         /** TeamRole */
         TeamRole: {
             /** Role Label */
@@ -1177,12 +1496,65 @@ export interface components {
             /** Team */
             team: string;
         };
+        /** TeamRow */
+        TeamRow: {
+            /**
+             * Admission Mode
+             * @enum {string}
+             */
+            admission_mode: "approval" | "open";
+            /** Applications Open */
+            applications_open: boolean;
+            /** Fee */
+            fee: string | null;
+            /** Has Lead In Force */
+            has_lead_in_force: boolean;
+            /** Leads */
+            leads: string[];
+            /** Logo Url */
+            logo_url: string | null;
+            /** Members */
+            members: number;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+        };
+        /** TeamSettings */
+        TeamSettings: {
+            /** Enabled */
+            enabled: boolean;
+            /** Label Plural */
+            label_plural: string;
+            /** Label Singular */
+            label_singular: string;
+        };
+        /** TeamSettingsIn */
+        TeamSettingsIn: {
+            /** Enabled */
+            enabled: boolean;
+            /** Label Plural */
+            label_plural: string;
+            /** Label Singular */
+            label_singular: string;
+        };
         /** Teams */
         Teams: {
             /** Memberships */
             memberships: components["schemas"]["TeamMembership"][];
             /** Roles */
             roles: components["schemas"]["TeamRole"][];
+        };
+        /** TeamsOut */
+        TeamsOut: {
+            settings: components["schemas"]["TeamSettings"];
+            /** Teams */
+            teams: components["schemas"]["TeamRow"][];
         };
         /**
          * Waiting
@@ -2330,6 +2702,568 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_teams_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_teams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewTeamIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamDetailsIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_archived: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArchivedIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_fee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeChangeOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_grant_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantRoleIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_revoke_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeRoleIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
             };
             /** @description The input is not valid (see error.fields). */
             400: {

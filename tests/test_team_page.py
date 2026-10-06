@@ -11,6 +11,7 @@ from io import BytesIO
 
 import pytest
 
+from api_helpers import send
 from conftest import app_module, db
 from aeronautics_members.db_models import AuditLog, User
 from aeronautics_members.services.clock import get_membership_today
@@ -230,16 +231,17 @@ class TestEditingThePage:
         client.post("/teams/rocket/manage/settings", data={"section": "page", "about": "From the admins."})
 
         assert team.about == "From the admins."
-        admin_form = client.get("/admin/teams/rocket").get_data(as_text=True)
-        assert 'href="/teams/rocket/manage"' in admin_form and "Rules to accept" not in admin_form
+        admin_view = client.get("/api/v1/admin/teams/rocket").get_json()
+        assert admin_view["manage_url"] == "/teams/rocket/manage"
+        assert "about" not in admin_view and "rules" not in admin_view, "the leads' part is theirs"
 
     def test_the_admin_form_leaves_the_leads_part_be(self, app, client):
         team, _lead = _led(application_prompt="Why?")
         teams.update_team_by_lead(None, team, description="Rockets.", applications_open=False)
         _login(client, _admin().id)
 
-        client.post("/admin/teams/rocket", data={
-            "name": "Rocket Team", "admission_mode": "approval", "access_list_enabled": "on",
+        send(client, "PUT", "/api/v1/admin/teams/rocket", {
+            "name": "Rocket Team", "admission_mode": "approval", "access_list_enabled": True,
         })
 
         assert (team.name, team.description, team.application_prompt, team.applications_open) == (

@@ -26,20 +26,9 @@ from ..services import teams as teams_service
 from ..services.audit import log_audit_event
 from ..services.clock import get_membership_today
 from . import _legal_pages as legal_pages
+from .app_shell import app_shell
 
 teams_bp = Blueprint("teams", __name__)
-
-
-def _team_form_fields(form):
-    """The admins' part of a team. The rest -- its texts, pictures, rules, the
-    question for applicants -- the leads keep on the team's management page,
-    which site admins can open too."""
-    return {
-        "name": form.get("name"),
-        "admission_mode": form.get("admission_mode"),
-        "max_members": form.get("max_members"),
-        "forum_group": form.get("forum_group"),
-    }
 
 
 def _apply_access_list(team, form):
@@ -49,37 +38,6 @@ def _apply_access_list(team, form):
         dates=form.get("access_list_dates"),
         auto_send=form.get("access_list_auto_send") == "on",
     )
-
-
-def _apply_payment(team, form):
-    """The fee, from the admins' form only; the leads' settings do not carry it."""
-    if "payment_mode" in form:
-        from ..services.team_payments import update_payment_settings
-
-        return update_payment_settings(
-            current_user, team,
-            payment_mode=form.get("payment_mode"),
-            stripe_price_id=form.get("stripe_price_id"),
-            period_starts=form.get("period_starts"),
-        )
-    return {}
-
-
-def _flash_moving(outcome):
-    """What a change to the fee did to the members already in, after it is saved."""
-    if outcome.get("moving"):
-        flash(_("%(count)s running subscription(s) move to the new price from their next renewal, "
-                "in the background over the next minutes. Each member is emailed two weeks before their renewal.",
-                count=outcome["moving"]), "info")
-    if outcome.get("stopping"):
-        flash(_("%(count)s running subscription(s) stop at the end of what is paid; those members stay "
-                "in the team for free and are emailed.", count=outcome["stopping"]), "info")
-    if outcome.get("switched"):
-        flash(_("%(count)s member(s) keep what they paid for and pay the new way from then on; they are emailed.",
-                count=outcome["switched"]), "info")
-    if outcome.get("asked_to_pay"):
-        flash(_("%(count)s member(s) stay free until the next period starts and are emailed to pay by then "
-                "to stay.", count=outcome["asked_to_pay"]), "info")
 
 
 def _apply_logo(team, form, files):
@@ -123,185 +81,14 @@ def team_logo(token):
     return send_file(path, mimetype="image/png", conditional=True, max_age=86400)
 
 
-def _render_admin_teams(**context):
-    singular, plural = teams_service.team_labels()
-    return render_template(
-        "admin_teams.html",
-        active_admin_section="teams",
-        page_title=plural,
-        page_description=_("Create teams and appoint their leads."),
-        teams_enabled=teams_service.teams_enabled(),
-        label_singular=singular,
-        label_plural=plural,
-        teams=teams_service.all_teams(),
-        has_lead_in_force=teams_service.has_lead_in_force,
-        **context,
-    )
-
-
-@teams_bp.route("/admin/teams", methods=["GET", "POST"])
+@teams_bp.route("/admin/teams", methods=["GET"])
+@teams_bp.route("/admin/teams/new", methods=["GET"])
+@teams_bp.route("/admin/teams/<slug>", methods=["GET"])
 @login_required
 @requires(Permission.TEAMS_MANAGE)
-def admin_teams():
-    if request.method == "POST":
-        try:
-            changed = teams_service.save_team_settings(
-                current_user,
-                enabled=request.form.get("teams_enabled") == "on",
-                label_singular=request.form.get("label_singular"),
-                label_plural=request.form.get("label_plural"),
-            )
-        except ServiceError as error:
-            db.session.rollback()
-            flash(error.message, "danger")
-            return redirect(url_for("teams.admin_teams"))
-        db.session.commit()
-        flash(_("Saved.") if changed else _("Nothing changed."), "success" if changed else "info")
-        return redirect(url_for("teams.admin_teams"))
-    return _render_admin_teams()
-
-
-@teams_bp.route("/admin/teams/new", methods=["GET", "POST"])
-@login_required
-@requires(Permission.TEAMS_MANAGE)
-def admin_team_new():
-    singular, _plural = teams_service.team_labels()
-    form = request.form if request.method == "POST" else {}
-    if request.method == "POST":
-        try:
-            team = teams_service.create_team(
-                current_user, slug=request.form.get("slug"), **_team_form_fields(request.form)
-            )
-            teams_service.set_access_list_enabled(current_user, team, request.form.get("access_list_enabled") == "on")
-            moving = _apply_payment(team, request.form)
-        except ServiceError as error:
-            db.session.rollback()
-            flash(error.message, "danger")
-        else:
-            db.session.commit()
-            flash(_("Created."), "success")
-            _flash_moving(moving)
-            return redirect(url_for("teams.admin_team_detail", slug=team.slug))
-    return render_template(
-        "admin_team_form.html",
-        active_admin_section="teams",
-        page_title=_("New %(label)s", label=singular),
-        page_description=_("Give it a lead once it exists."),
-        team=None,
-        form=form,
-        admission_modes=teams_service.ADMISSION_MODES,
-        label_plural=teams_service.team_labels()[1],
-    )
-
-
-@teams_bp.route("/admin/teams/<slug>", methods=["GET", "POST"])
-@login_required
-@requires(Permission.TEAMS_MANAGE)
-def admin_team_detail(slug):
-    try:
-        team = teams_service.get_team(slug)
-    except ServiceError as error:
-        flash(error.message, "warning")
-        return redirect(url_for("teams.admin_teams"))
-
-    form = request.form if request.method == "POST" else {}
-    if request.method == "POST":
-        try:
-            teams_service.update_team(current_user, team, **_team_form_fields(request.form))
-            teams_service.set_access_list_enabled(current_user, team, request.form.get("access_list_enabled") == "on")
-            moving = _apply_payment(team, request.form)
-        except ServiceError as error:
-            db.session.rollback()
-            flash(error.message, "danger")
-        else:
-            db.session.commit()
-            flash(_("Saved."), "success")
-            _flash_moving(moving)
-            return redirect(url_for("teams.admin_team_detail", slug=team.slug))
-
-    return render_template(
-        "admin_team_form.html",
-        active_admin_section="teams",
-        page_title=team.name,
-        page_description=_("Details and roles."),
-        team=team,
-        form=form,
-        admission_modes=teams_service.ADMISSION_MODES,
-        role_holders=teams_service.role_holders(team),
-        role_counts=teams_service.role_counts,
-        has_lead_in_force=teams_service.has_lead_in_force(team),
-        team_roles=teams_service.TEAM_ROLE_LABELS,
-        label_plural=teams_service.team_labels()[1],
-    )
-
-
-@teams_bp.route("/admin/teams/<slug>/archive", methods=["POST"])
-@login_required
-@requires(Permission.TEAMS_MANAGE)
-def admin_team_archive(slug):
-    try:
-        team = teams_service.get_team(slug)
-    except ServiceError as error:
-        flash(error.message, "warning")
-        return redirect(url_for("teams.admin_teams"))
-    archived = request.form.get("archived") == "1"
-    try:
-        teams_service.set_team_archived(current_user, team, archived,
-                                        confirmed_name=request.form.get("confirm_name"))
-    except ServiceError as error:
-        db.session.rollback()
-        flash(error.message, "danger")
-        return redirect(url_for("teams.admin_team_detail", slug=team.slug))
-    db.session.commit()
-    flash(_("Archived.") if archived else _("Restored."), "success")
-    return redirect(url_for("teams.admin_team_detail", slug=team.slug))
-
-
-@teams_bp.route("/admin/teams/<slug>/roles", methods=["POST"])
-@login_required
-@requires(Permission.TEAMS_MANAGE)
-def admin_team_grant_role(slug):
-    back = url_for("teams.admin_team_detail", slug=slug)
-    try:
-        team = teams_service.get_team(slug)
-        user = teams_service.find_account(request.form.get("email"))
-        teams_service.grant_team_role(current_user, team, user, request.form.get("role") or teams_service.ROLE_LEAD)
-    except ServiceError as error:
-        db.session.rollback()
-        flash(error.message, "danger")
-        return redirect(back)
-    db.session.commit()
-    flash(_("Role given."), "success")
-    return redirect(back)
-
-
-@teams_bp.route("/admin/teams/<slug>/roles/revoke", methods=["POST"])
-@login_required
-@requires(Permission.TEAMS_MANAGE)
-def admin_team_revoke_role(slug):
-    back = url_for("teams.admin_team_detail", slug=slug)
-    try:
-        team = teams_service.get_team(slug)
-        user = db.session.get(User, request.form.get("user_id", type=int) or 0)
-        if user is None:
-            raise ServiceError(_("That account does not exist."))
-        teams_service.revoke_team_role(
-            current_user, team, user, request.form.get("role"),
-            confirmed=request.form.get("confirmed") == "1",
-        )
-    except ServiceError as error:
-        db.session.rollback()
-        flash(error.message, "danger")
-        return redirect(back)
-    db.session.commit()
-    flash(_("Role removed."), "success")
-    return redirect(back)
-
-
-# --- For members --------------------------------------------------------------
-#
-# None of this exists while teams are switched off: every page answers 404, so
-# a link somebody kept does not lead into a half-working feature.
+def admin_teams(slug=None):
+    """Teams, the admins' part: drawn by the new front end (frontend/src/pages/admin/teams/)."""
+    return app_shell()
 
 
 def _teams_or_404():

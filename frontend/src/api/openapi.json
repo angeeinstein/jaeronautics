@@ -670,6 +670,33 @@
         "title": "Activity",
         "type": "object"
       },
+      "ArchivedIn": {
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "confirm_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confirm Name"
+          }
+        },
+        "required": [
+          "archived"
+        ],
+        "title": "ArchivedIn",
+        "type": "object"
+      },
       "Attention": {
         "additionalProperties": false,
         "description": "``None`` for a kind the person may not act on, so the page does not offer it.",
@@ -1314,6 +1341,136 @@
         "title": "ErrorOut",
         "type": "object"
       },
+      "Fee": {
+        "additionalProperties": false,
+        "properties": {
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "payment_mode": {
+            "enum": [
+              "none",
+              "subscription",
+              "one_time"
+            ],
+            "title": "Payment Mode",
+            "type": "string"
+          },
+          "period_starts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Starts"
+          },
+          "stripe_price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Price Id"
+          }
+        },
+        "required": [
+          "payment_mode",
+          "stripe_price_id",
+          "period_starts",
+          "display"
+        ],
+        "title": "Fee",
+        "type": "object"
+      },
+      "FeeChangeOut": {
+        "additionalProperties": false,
+        "description": "What a change of fee did to the members already in.",
+        "properties": {
+          "asked_to_pay": {
+            "title": "Asked To Pay",
+            "type": "integer"
+          },
+          "moving": {
+            "title": "Moving",
+            "type": "integer"
+          },
+          "stopping": {
+            "title": "Stopping",
+            "type": "integer"
+          },
+          "switched": {
+            "title": "Switched",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "moving",
+          "stopping",
+          "switched",
+          "asked_to_pay"
+        ],
+        "title": "FeeChangeOut",
+        "type": "object"
+      },
+      "FeeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "payment_mode": {
+            "enum": [
+              "none",
+              "subscription",
+              "one_time"
+            ],
+            "title": "Payment Mode",
+            "type": "string"
+          },
+          "period_starts": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Period Starts"
+          },
+          "stripe_price_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Stripe Price Id"
+          }
+        },
+        "required": [
+          "payment_mode"
+        ],
+        "title": "FeeIn",
+        "type": "object"
+      },
       "Figure": {
         "additionalProperties": false,
         "properties": {
@@ -1534,6 +1691,30 @@
           "suggested"
         ],
         "title": "ForumUsername",
+        "type": "object"
+      },
+      "GrantRoleIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 255,
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "default": "lead",
+            "enum": [
+              "lead",
+              "treasurer"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "GrantRoleIn",
         "type": "object"
       },
       "HistoryItem": {
@@ -1949,6 +2130,85 @@
           "none"
         ],
         "title": "MembershipCounts",
+        "type": "object"
+      },
+      "NewTeamIn": {
+        "additionalProperties": false,
+        "properties": {
+          "access_list_enabled": {
+            "default": false,
+            "title": "Access List Enabled",
+            "type": "boolean"
+          },
+          "admission_mode": {
+            "enum": [
+              "approval",
+              "open"
+            ],
+            "title": "Admission Mode",
+            "type": "string"
+          },
+          "fee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeeIn"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "forum_group": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Forum Group"
+          },
+          "max_members": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Members"
+          },
+          "name": {
+            "maxLength": 120,
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "name",
+          "admission_mode"
+        ],
+        "title": "NewTeamIn",
         "type": "object"
       },
       "NoteIn": {
@@ -2421,6 +2681,34 @@
         "title": "ReviewsOut",
         "type": "object"
       },
+      "RevokeRoleIn": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "lead",
+              "treasurer"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "role"
+        ],
+        "title": "RevokeRoleIn",
+        "type": "object"
+      },
       "Role": {
         "additionalProperties": false,
         "properties": {
@@ -2438,6 +2726,49 @@
           "label"
         ],
         "title": "Role",
+        "type": "object"
+      },
+      "RoleHolder": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "in_force": {
+            "title": "In Force",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "lead",
+              "treasurer"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "role_label": {
+            "title": "Role Label",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "role",
+          "role_label",
+          "in_force"
+        ],
+        "title": "RoleHolder",
         "type": "object"
       },
       "RoleOption": {
@@ -2536,6 +2867,20 @@
         "title": "RolesOut",
         "type": "object"
       },
+      "SavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "SavedOut",
+        "type": "object"
+      },
       "SessionOut": {
         "additionalProperties": false,
         "properties": {
@@ -2610,6 +2955,61 @@
           "last_synced_at"
         ],
         "title": "SyncProblem",
+        "type": "object"
+      },
+      "TeamDetailsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "access_list_enabled": {
+            "default": false,
+            "title": "Access List Enabled",
+            "type": "boolean"
+          },
+          "admission_mode": {
+            "enum": [
+              "approval",
+              "open"
+            ],
+            "title": "Admission Mode",
+            "type": "string"
+          },
+          "forum_group": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Forum Group"
+          },
+          "max_members": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Members"
+          },
+          "name": {
+            "maxLength": 120,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "admission_mode"
+        ],
+        "title": "TeamDetailsIn",
         "type": "object"
       },
       "TeamLabels": {
@@ -2699,6 +3099,123 @@
         "title": "TeamMembership",
         "type": "object"
       },
+      "TeamOut": {
+        "additionalProperties": false,
+        "properties": {
+          "access_list_enabled": {
+            "title": "Access List Enabled",
+            "type": "boolean"
+          },
+          "admission_mode": {
+            "enum": [
+              "approval",
+              "open"
+            ],
+            "title": "Admission Mode",
+            "type": "string"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "fee": {
+            "$ref": "#/components/schemas/Fee"
+          },
+          "forum_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Group"
+          },
+          "has_lead_in_force": {
+            "title": "Has Lead In Force",
+            "type": "boolean"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "manage_url": {
+            "title": "Manage Url",
+            "type": "string"
+          },
+          "max_members": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Members"
+          },
+          "members": {
+            "title": "Members",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/RoleHolder"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "status",
+          "logo_url",
+          "admission_mode",
+          "max_members",
+          "forum_group",
+          "access_list_enabled",
+          "fee",
+          "roles",
+          "has_lead_in_force",
+          "members",
+          "archived_at",
+          "manage_url"
+        ],
+        "title": "TeamOut",
+        "type": "object"
+      },
       "TeamRole": {
         "additionalProperties": false,
         "properties": {
@@ -2716,6 +3233,140 @@
           "team"
         ],
         "title": "TeamRole",
+        "type": "object"
+      },
+      "TeamRow": {
+        "additionalProperties": false,
+        "properties": {
+          "admission_mode": {
+            "enum": [
+              "approval",
+              "open"
+            ],
+            "title": "Admission Mode",
+            "type": "string"
+          },
+          "applications_open": {
+            "title": "Applications Open",
+            "type": "boolean"
+          },
+          "fee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee"
+          },
+          "has_lead_in_force": {
+            "title": "Has Lead In Force",
+            "type": "boolean"
+          },
+          "leads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Leads",
+            "type": "array"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "members": {
+            "title": "Members",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "status",
+          "logo_url",
+          "admission_mode",
+          "applications_open",
+          "members",
+          "fee",
+          "leads",
+          "has_lead_in_force"
+        ],
+        "title": "TeamRow",
+        "type": "object"
+      },
+      "TeamSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "label_plural": {
+            "title": "Label Plural",
+            "type": "string"
+          },
+          "label_singular": {
+            "title": "Label Singular",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "label_singular",
+          "label_plural"
+        ],
+        "title": "TeamSettings",
+        "type": "object"
+      },
+      "TeamSettingsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "label_plural": {
+            "maxLength": 50,
+            "title": "Label Plural",
+            "type": "string"
+          },
+          "label_singular": {
+            "maxLength": 50,
+            "title": "Label Singular",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "label_singular",
+          "label_plural"
+        ],
+        "title": "TeamSettingsIn",
         "type": "object"
       },
       "Teams": {
@@ -2741,6 +3392,27 @@
           "memberships"
         ],
         "title": "Teams",
+        "type": "object"
+      },
+      "TeamsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/TeamSettings"
+          },
+          "teams": {
+            "items": {
+              "$ref": "#/components/schemas/TeamRow"
+            },
+            "title": "Teams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "settings",
+          "teams"
+        ],
+        "title": "TeamsOut",
         "type": "object"
       },
       "aeronautics_members__api__admin_dashboard__Waiting": {
@@ -4449,6 +5121,728 @@
         ],
         "x-permissions": [
           "forum.moderate"
+        ]
+      }
+    },
+    "/api/v1/admin/team-settings": {
+      "put": {
+        "operationId": "admin_teams_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Switch teams on or off for members, and say what they are called.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/teams": {
+      "get": {
+        "operationId": "admin_teams",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Whether teams are on, what they are called, and every team.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      },
+      "post": {
+        "operationId": "admin_team_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewTeamIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Create a team. Its leads are given once it exists.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/teams/{slug}": {
+      "get": {
+        "operationId": "admin_team",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One team: its details, fee and roles.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      },
+      "put": {
+        "operationId": "admin_team_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamDetailsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Change a team's name, how people join, its size, forum group and access list.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/teams/{slug}/archived": {
+      "put": {
+        "operationId": "admin_team_archived",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchivedIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Archive a team -- its members lose it at once, nothing is deleted -- or restore it.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/teams/{slug}/fee": {
+      "put": {
+        "operationId": "admin_team_fee",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeeChangeOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Change how a team charges. Checked with Stripe first; members already in are moved or asked, and emailed.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/teams/{slug}/roles": {
+      "post": {
+        "operationId": "admin_team_grant_role",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRoleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Give somebody a role in a team -- allowed before they are in it.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/teams/{slug}/roles/revoke": {
+      "post": {
+        "operationId": "admin_team_revoke_role",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRoleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Take a role away. The team's last lead only when confirmed (409 ``team_last_lead`` otherwise).",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.manage"
         ]
       }
     },

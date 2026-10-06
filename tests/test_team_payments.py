@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
+from api_helpers import send
 from conftest import db
 from aeronautics_members.db_models import MembershipPeriod, NotificationEvent, Payment, Setting
 from aeronautics_members.services import ConflictError, ValidationError, payments, privacy, team_payments, teams
@@ -165,8 +166,7 @@ class TestTheSettings:
         team, _lead = _led()
         _login(client, _staff("admin@example.com", "admin").id)
 
-        client.post(f"/admin/teams/{team.slug}", data={
-            "name": team.name, "admission_mode": team.admission_mode, "applications_open": "on",
+        send(client, "PUT", f"/api/v1/admin/teams/{team.slug}/fee", {
             "payment_mode": "subscription", "stripe_price_id": PRICE_ID, "period_starts": "1.4, 1.10",
         })
 
