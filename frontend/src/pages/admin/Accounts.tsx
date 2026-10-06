@@ -5,17 +5,16 @@
  * a row opens the account. Data: GET /api/v1/admin/accounts
  * (aeronautics_members/api/admin_accounts.py).
  */
-import { Avatar, Button, Card, Chip, Group, Pagination, Select, Stack, Text, TextInput } from '@mantine/core';
-import { useDebouncedCallback } from '@mantine/hooks';
-import { IconSearch } from '@tabler/icons-react';
+import { Avatar, Button, Card, Chip, Group, Pagination, Select, Stack, Text } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { api, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
 import { columnsFor, DataTable, type Sort } from '../../components/DataTable';
 import { PageHeader } from '../../components/PageHeader';
+import { SearchField } from '../../components/SearchField';
 import { Pill } from '../../components/Pill';
 import { ErrorState, LoadingState } from '../../components/States';
 import { formatDate } from '../../lib/format';
@@ -182,38 +181,6 @@ function roleChoices(list: AccountList | undefined, current: string) {
   return choices;
 }
 
-/** The search field: the list follows what is typed, a moment after typing stops. */
-function Search({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
-  const [text, setText] = useState(value);
-  const sent = useRef(value);
-  const send = useDebouncedCallback((q: string) => {
-    sent.current = q.trim();
-    onSearch(q.trim());
-  }, 300);
-
-  // The address changed by other means (Reset, the back button): show that.
-  useEffect(() => {
-    if (value !== sent.current) {
-      sent.current = value;
-      setText(value);
-    }
-  }, [value]);
-
-  return (
-    <TextInput
-      className={classes.search}
-      leftSection={<IconSearch size={16} aria-hidden />}
-      placeholder="Search name, email or forum username"
-      aria-label="Search accounts"
-      value={text}
-      onChange={(event) => {
-        setText(event.currentTarget.value);
-        send(event.currentTarget.value);
-      }}
-    />
-  );
-}
-
 export function Accounts() {
   const [params, setParams] = useSearchParams();
   const filters = useMemo(() => filtersFromParams(params), [params]);
@@ -247,7 +214,10 @@ export function Accounts() {
       />
       <Stack gap="md">
         <Group gap="sm" align="flex-end" className={classes.filters}>
-          <Search
+          <SearchField
+            label="Search accounts"
+            placeholder="Search name, email or forum username"
+            className={classes.search}
             value={filters.q}
             onSearch={(q) => {
               update({ q }, { replace: true });

@@ -72,22 +72,16 @@ from flask_login import (
     current_user,
     login_required,
 )
-from sqlalchemy import (
-    or_,
-)
 from sqlalchemy.exc import (
     IntegrityError,
 )
 from sqlalchemy.orm import (
-    aliased,
     selectinload,
 )
 from ..db_models import (
-    AuditLog,
     EmailDeliveryJob,
     ImportedForumProfile,
     MailAccount,
-    Member,
     Setting,
     User,
     db,
@@ -109,7 +103,6 @@ from ..notification_service import (
     NOTIFICATION_SETTING_KEYS,
 )
 from ..app import (
-    AUDIT_LOG_PAGE_SIZE,
     build_settings_page_context,
     limiter,
     requires,
@@ -592,57 +585,8 @@ def admin_legal_template():
 @login_required
 @requires(Permission.LOGS_VIEW)
 def admin_logs():
-    actor_user = aliased(User)
-    target_user = aliased(User)
-    target_member = aliased(Member)
-    search_term = (request.args.get("q") or "").strip()
-    category = request.args.get("category", "all")
-    page = request.args.get("page", 1, type=int)
-
-    query = (
-        db.select(AuditLog)
-        .options(
-            selectinload(AuditLog.actor_user),
-            selectinload(AuditLog.target_user),
-            selectinload(AuditLog.target_member),
-        )
-        .outerjoin(actor_user, AuditLog.actor_user_id == actor_user.id)
-        .outerjoin(target_user, AuditLog.target_user_id == target_user.id)
-        .outerjoin(target_member, AuditLog.target_member_id == target_member.id)
-    )
-
-    if search_term:
-        pattern = f"%{search_term}%"
-        query = query.where(
-            or_(
-                actor_user.email.ilike(pattern),
-                target_user.email.ilike(pattern),
-                target_member.email_private.ilike(pattern),
-                AuditLog.category.ilike(pattern),
-                AuditLog.event_type.ilike(pattern),
-            )
-        )
-
-    if category != "all":
-        query = query.where(AuditLog.category == category)
-
-    pagination = db.paginate(
-        query.order_by(AuditLog.created_at.desc()),
-        page=page,
-        per_page=AUDIT_LOG_PAGE_SIZE,
-        error_out=False,
-    )
-    categories = db.session.execute(
-        db.select(AuditLog.category).distinct().order_by(AuditLog.category.asc())
-    ).scalars().all()
-    return render_template(
-        "admin_logs.html",
-        active_admin_section="logs",
-        pagination=pagination,
-        categories=categories,
-        category=category,
-        search_term=search_term,
-    )
+    """The log: drawn by the new front end (frontend/src/pages/admin/Logs.tsx)."""
+    return app_shell()
 
 
 @admin_bp.route("/admin/settings/mail-accounts", methods=["POST"])

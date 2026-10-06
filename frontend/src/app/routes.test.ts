@@ -34,6 +34,7 @@ describe('the pages the app draws', () => {
     ['/admin/money?check=1&since=2026-01-01', true],
     ['/admin/money/rocket', true],
     ['/admin/money/rocket/transfer-code.svg', false],
+    ['/admin/logs?user=12', true],
     ['/account', false],
     ['https://example.org/admin', false],
     ['//example.org/admin', false],

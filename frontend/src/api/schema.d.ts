@@ -225,6 +225,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One page of the log, newest first. */
+        get: operations["admin_logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/money": {
         parameters: {
             query?: never;
@@ -1203,6 +1220,64 @@ export interface components {
             /** Pending */
             pending: number;
         };
+        /** LogEntry */
+        LogEntry: {
+            actor: components["schemas"]["aeronautics_members__api__admin_logs__Person"] | null;
+            /** After */
+            after: unknown;
+            /** At */
+            at: string;
+            /** Before */
+            before: unknown;
+            /** Category */
+            category: string;
+            /** Details */
+            details: unknown;
+            /** Event Type */
+            event_type: string;
+            /** Id */
+            id: number;
+            target: components["schemas"]["aeronautics_members__api__admin_logs__Person"] | null;
+        };
+        /** LogsOut */
+        LogsOut: {
+            about: components["schemas"]["aeronautics_members__api__admin_logs__Person"] | null;
+            /** Accounts Linked */
+            accounts_linked: boolean;
+            /** Categories */
+            categories: string[];
+            /** Items */
+            items: components["schemas"]["LogEntry"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /** LogsQuery */
+        LogsQuery: {
+            /**
+             * Category
+             * @default null
+             */
+            category?: string | null;
+            /**
+             * Page
+             * @default 1
+             */
+            page?: number;
+            /**
+             * Q
+             * @default
+             */
+            q?: string;
+            /**
+             * User
+             * @default null
+             */
+            user?: number | null;
+        };
         /** MeOut */
         MeOut: {
             /** Admin Area */
@@ -1461,18 +1536,6 @@ export interface components {
             /** Paid Until */
             paid_until: string | null;
         };
-        /**
-         * Person
-         * @description The member the item is about.
-         */
-        Person: {
-            /** Email */
-            email: string | null;
-            /** Name */
-            name: string;
-            /** User Id */
-            user_id: number | null;
-        };
         /** Picture */
         Picture: {
             /** Forum Username */
@@ -1507,7 +1570,7 @@ export interface components {
              * @enum {string}
              */
             kind: "name_change" | "picture";
-            person: components["schemas"]["Person"];
+            person: components["schemas"]["aeronautics_members__api__admin_reviews__Person"];
             picture: components["schemas"]["Picture"] | null;
         };
         /** ReconnectIn */
@@ -1908,6 +1971,25 @@ export interface components {
             count: number;
             /** Summary */
             summary: string | null;
+        };
+        /** Person */
+        aeronautics_members__api__admin_logs__Person: {
+            /** Email */
+            email: string;
+            /** User Id */
+            user_id: number | null;
+        };
+        /**
+         * Person
+         * @description The member the item is about.
+         */
+        aeronautics_members__api__admin_reviews__Person: {
+            /** Email */
+            email: string | null;
+            /** Name */
+            name: string;
+            /** User Id */
+            user_id: number | null;
         };
         /**
          * Waiting
@@ -2702,6 +2784,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_logs: {
+        parameters: {
+            query?: {
+                q?: string;
+                category?: string | null;
+                user?: number | null;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogsOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Not signed in. */

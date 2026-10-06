@@ -16,7 +16,6 @@ from typing import Any, Literal
 from flask import url_for
 from flask_login import current_user
 from pydantic import Field
-from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from ..db_models import AuditLog, User, db
@@ -26,7 +25,7 @@ from ..services import NotFoundError
 from ..services import account_admin as actions
 from ..services import account_directory as directory
 from ..services.access import assignable_roles, describe_account_disable, describe_role_change
-from ..services.audit import redact_sensitive_audit_value
+from ..services.audit import about_user, redact_sensitive_audit_value
 from ..services.membership import PAYMENT_STATUS_LABELS
 from ..services.privacy import describe_deletion_impact, refresh_subscription_state_before_deletion
 from ._core import Model, UtcDateTime, endpoint
@@ -348,13 +347,10 @@ def _access(user):
 
 
 def _activity(user):
-    conditions = [AuditLog.target_user_id == user.id, AuditLog.actor_user_id == user.id]
-    if user.member is not None:
-        conditions.append(AuditLog.target_member_id == user.member.id)
     entries = db.session.execute(
         db.select(AuditLog)
         .options(selectinload(AuditLog.actor_user))
-        .where(or_(*conditions))
+        .where(about_user(user))
         .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
         .limit(RECENT_ACTIVITY)
     ).scalars().all()

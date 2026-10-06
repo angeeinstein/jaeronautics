@@ -74,7 +74,7 @@ Status: `[ ]` to do, `[x]` done.
 - `GET /admin/money/<slug>/transfer-code.svg?amount=&reference=` (image: the GiroCode for the amount and reference typed) -- stays
 
 ### 4.6 Logs
-- [ ] `GET /admin/logs` (page)
+- [x] `GET /admin/logs` (page) → `GET /api/v1/admin/logs?q=&category=&user=&page=`; old links (`?category=all`) still work
 
 ### 4.7 Legal Texts
 - [ ] `GET /admin/legal` (page)

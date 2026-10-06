@@ -218,7 +218,10 @@ server can update to it.
       dashboard shows what is open instead of the membership figures. Days are typed and
       shown as 31.12.2026 (`components/DayInput.tsx`, Mantine's date input); amounts as
       €1,234.50, on the server too.)*
-   6. Logs
+   6. Logs *(done: `api/admin_logs.py`, the reading moved into `services/audit.py`;
+      `frontend/src/pages/admin/Logs.tsx` -- search, category, and new: everything about
+      one person (`?user=`), which an account's Activity tab links to. Secrets stay out,
+      as before. Links in text take the theme's link colour everywhere.)*
    7. Legal Texts
    8. Settings, section by section (general, billing, mail, forum,
       notifications, maintenance with update, backup and restore)

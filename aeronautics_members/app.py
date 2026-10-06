@@ -531,7 +531,6 @@ def requires(*permissions):
 # default to a generous one-year window.
 AUDIT_LOG_RETENTION_DAYS = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "0"))
 NOTIFICATION_RETENTION_DAYS = int(os.getenv("NOTIFICATION_RETENTION_DAYS", "365"))
-AUDIT_LOG_PAGE_SIZE = 50
 
 
 

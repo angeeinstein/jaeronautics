@@ -291,27 +291,13 @@ class TestTheCountOnTheTab:
         _picture(member)
         _login(client, admin.id)
 
-        body = client.get("/admin/logs").get_data(as_text=True)
+        body = client.get("/admin/settings").get_data(as_text=True)
 
         assert re.search(r'Reviews<span class="nav-count"[^>]*>2</span>', body)
 
     def test_it_is_absent_when_nothing_waits(self, client, admin):
         _login(client, admin.id)
 
-        body = client.get("/admin/logs").get_data(as_text=True)
+        body = client.get("/admin/settings").get_data(as_text=True)
 
         assert 'class="nav-count"' not in body
-
-
-class TestFiltersApplyThemselves:
-    @pytest.mark.parametrize("path, results", [("/admin/logs", "log-results")])
-    def test_the_form_is_wired_up_and_reset_stays(self, client, admin, path, results):
-        _login(client, admin.id)
-
-        body = client.get(path).get_data(as_text=True)
-
-        assert f'data-live-filter="#{results}"' in body
-        assert f'id="{results}"' in body
-        assert "live-filter.js" in body
-        assert "Apply Filters" not in body
-        assert ">Reset</a>" in body

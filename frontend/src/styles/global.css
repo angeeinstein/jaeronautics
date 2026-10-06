@@ -40,6 +40,17 @@ body {
   background: var(--ja-bg);
 }
 
+/* A plain link in text. :where() keeps it below any class, so buttons and
+   navigation drawn as links keep their own colours. */
+:where(a) {
+  color: var(--ja-link);
+}
+
+:where(a):hover,
+:where(a):focus-visible {
+  color: var(--ja-link-hover);
+}
+
 /* Figures line up in columns. */
 .ja-figures {
   font-family: var(--mantine-font-family-monospace);

@@ -8,6 +8,7 @@
     "/admin/teams/new",
     "/admin/teams/:slug",
     "/admin/money",
-    "/admin/money/:slug"
+    "/admin/money/:slug",
+    "/admin/logs"
   ]
 }
