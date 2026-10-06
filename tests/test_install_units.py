@@ -196,6 +196,47 @@ def test_pausing_waits_for_a_running_job_and_a_failure_resumes(tmp_path):
     assert [c for c in calls if c.startswith("start")] == [f"start portal-{t}.timer" for t in JOB_TIMERS]
 
 
+# --- A package that helps but is not needed --------------------------------------
+
+
+@pytest.mark.parametrize("archive, outcome", [
+    ("has", "installed libharfbuzz-subset0"),
+    ("lacks", "warned: Optional package libharfbuzz-subset0 is not available here; going on without it."),
+])
+def test_an_optional_package_never_stops_an_update(installer, tmp_path, archive, outcome):
+    """HarfBuzz-Subset for the legal PDFs: installed where apt has it; where the
+    distribution's archive lacks it, a warning, and the update goes on -- under
+    the installer's own set -Eeuo pipefail and ERR trap."""
+    import subprocess
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "apt-cache").write_text(f"#!/bin/bash\n[[ {archive} == has ]]\n")
+    (bin_dir / "apt-get").write_text('#!/bin/bash\necho "installed ${@: -1}"\n')
+    for tool in ("apt-cache", "apt-get"):
+        (bin_dir / tool).chmod(0o755)
+    script = (
+        "set -Eeuo pipefail\ntrap 'echo TRAPPED; exit 9' ERR\n"
+        "warn(){ echo \"warned: $*\"; }\nupdate_package_index_once(){ :; }\n"
+        "packages_missing(){ printf '%s\\n' \"$@\"; }\nretry(){ shift; \"$@\"; }\n"
+        "APT_NETWORK_OPTS=()\nPACKAGE_MANAGER=apt\n"
+        + _function(installer, "optional_packages") + _function(installer, "install_optional_packages")
+        + "\nmapfile -t pkgs < <(optional_packages)\ninstall_optional_packages \"${pkgs[@]}\"\necho went-on\n"
+    )
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30,
+                            env={"PATH": f"{bin_dir}:/usr/bin:/bin"})
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines() == [outcome, "went-on"]
+
+
+def test_the_optional_packages_are_installed_on_every_run(installer):
+    body = _function(installer, "install_or_update")
+
+    assert body.index("install_packages \"${base_pkg_list[@]}\"") < \
+        body.index("install_optional_packages \"${optional_pkg_list[@]}\"")
+
+
 STATIC = Path(__file__).resolve().parent.parent / "aeronautics_members" / "static"
 
 

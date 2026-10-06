@@ -295,7 +295,11 @@ the layout or a logo changes. `flask build-legal-pdfs` makes them all ahead
 (`--again`: anew, even the ones that look current) and names any text that
 cannot be laid out; the tests make every one, so that fails
 CI first. WeasyPrint needs Pango from the system (`libpango-1.0-0`,
-`libpangoft2-1.0-0`), which `install.sh` installs, also on an update. Only
+`libpangoft2-1.0-0`), which `install.sh` installs, also on an update; and,
+where the distribution has it, HarfBuzz-Subset (`libharfbuzz-subset0`, 4.1
+or later), with which it trims the fonts it embeds -- without it, fontTools
+does that and WeasyPrint warns that a later version will need it. A missing
+one is a warning in the update log, never a failed update. Only
 the fonts and the logo in `static/` are read while laying out; an image a
 text points at elsewhere is left out. nginx sends PDFs without the pages'
 Content-Security-Policy, whose `object-src 'none'` would stop Chrome's PDF
