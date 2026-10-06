@@ -5,7 +5,24 @@ front end on a JSON API. The *what* -- areas, sidebars, page patterns, the
 look -- is in `docs/frontend-structure.md` (version A of the mockups) and
 `docs/design.md`; this is the *how* and the order.
 
-## Decisions
+## Principle: no compromises for the old code's sake
+
+The new front end is not fitted around how things are done today. Where the
+code, a library, a policy or the installer is in the way of a better, more
+modern or simpler result, it is changed -- the security policy, the session
+setup, the way settings are stored, the installer, the tests -- not worked
+around. Bigger changes that affect how the server is run or what members see
+are asked first; technical ones are decided and written down here.
+
+What must stay compatible:
+- **The live database and its data.** Every change to it is an Alembic
+  migration that carries the live data over, and the update from `main` to
+  this branch is tested on a copy of real data before the merge.
+- **Links already sent out:** password reset, email confirmation and welcome
+  links in emails, and the Stripe and forum return addresses, keep working.
+- **What the portal does:** the business rules (payments, memberships, teams,
+  forum) are kept, not reimplemented. Changing them is a decision of its own.
+
 
 | | Decided |
 |---|---|
@@ -105,11 +122,13 @@ therefore never broken, whichever side draws it.
 which nginx already serves under `/static/`. File names carry a hash, so they
 can be cached for a long time and an update never shows a stale script.
 
-**Security policy:** the portal allows scripts and styles from its own server
-only. React and the built files fit that. Mantine normally writes its colour
-variables into an inline `<style>` block, which the policy blocks; Mantine can
-leave that out, with the variables in our own CSS file instead. This is the
-first thing checked in step 2, before anything is built on it.
+**Security policy:** stays as strict as today in effect -- scripts and styles
+from the portal only, no third-party code -- but is built for the new front
+end rather than the front end bent around it. Mantine writes its colour
+variables into an inline `<style>` block; if that cannot simply be moved into
+our CSS file, the policy moves from nginx's fixed header to Flask, which adds
+a fresh nonce to every page for exactly that block. Settled at the start of
+step 3, before anything is built on it.
 
 ## 3. Build and deployment
 
