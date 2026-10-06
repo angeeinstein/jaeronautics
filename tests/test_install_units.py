@@ -196,6 +196,17 @@ def test_pausing_waits_for_a_running_job_and_a_failure_resumes(tmp_path):
     assert [c for c in calls if c.startswith("start")] == [f"start portal-{t}.timer" for t in JOB_TIMERS]
 
 
+# --- What the legal PDFs need from the system -----------------------------------
+
+
+def test_the_pdf_libraries_are_installed_with_the_rest(installer):
+    """Pango lays the PDFs out; HarfBuzz-Subset trims the fonts in them (WeasyPrint's
+    fallback for it, fontTools, is going away)."""
+    apt = _function(installer, "base_packages").split("dnf|yum)")[0]
+
+    assert all(pkg in apt for pkg in ("libpango-1.0-0", "libpangoft2-1.0-0", "libharfbuzz-subset0"))
+
+
 STATIC = Path(__file__).resolve().parent.parent / "aeronautics_members" / "static"
 
 

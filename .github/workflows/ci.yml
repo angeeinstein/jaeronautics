@@ -17,11 +17,11 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install Pango
-        # WeasyPrint makes the legal texts' PDFs with it; usually on the runner already.
+      - name: Install Pango and HarfBuzz-Subset
+        # WeasyPrint makes the legal texts' PDFs with them; usually on the runner already.
         run: |
-          dpkg -s libpango-1.0-0 libpangoft2-1.0-0 >/dev/null 2>&1 \
-            || (sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0)
+          dpkg -s libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 >/dev/null 2>&1 \
+            || (sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0)
 
       - name: Install dependencies
         # The lock file, so CI tests the exact versions a deploy installs.

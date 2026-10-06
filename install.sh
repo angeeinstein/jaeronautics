@@ -676,9 +676,10 @@ base_packages() {
             # mariadb-client always: the data has to be readable whether the
             # database is on this box or elsewhere. mariadb-server only once
             # the local/external answer is known, from install_or_update.
-            # Pango (libpango, libpangoft2): WeasyPrint lays out the legal texts' PDFs with it.
+            # Pango (libpango, libpangoft2): WeasyPrint lays out the legal texts' PDFs with it;
+            # HarfBuzz-Subset (4.1 or later, Ubuntu 24.04 has 8.3) trims the fonts it embeds.
             printf '%s\n' ca-certificates curl git nginx mariadb-client openssl python3 python3-pip python3-venv redis-server \
-                libpango-1.0-0 libpangoft2-1.0-0
+                libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
             ;;
         dnf|yum)
             printf '%s\n' ca-certificates curl git nginx mariadb openssl python3 python3-pip redis pango

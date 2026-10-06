@@ -4,7 +4,7 @@ Membership management app for Joanneum Aeronautics, built with Flask, Stripe, SQ
 
 ## Quick Install
 
-Run this on a clean Linux server. It downloads a tiny GitHub-hosted bootstrap script, and that bootstrap fetches and runs the latest installer. After the repo is installed, use the local `install.sh` for update, repair, or uninstall.
+Run this on a clean Linux server, Ubuntu 24.04 LTS or newer. It downloads a tiny GitHub-hosted bootstrap script, and that bootstrap fetches and runs the latest installer. After the repo is installed, use the local `install.sh` for update, repair, or uninstall.
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/angeeinstein/jaeronautics/main/bootstrap.sh)"
