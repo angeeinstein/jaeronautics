@@ -83,16 +83,19 @@ Status: `[ ]` to do, `[x]` done.
 - `GET /admin/legal/template`, `/admin/legal/waiting.pdf` (download) -- stay
 
 ### 4.8 Settings
-- [ ] `GET|POST /admin/settings` (page + action: every section's save) -- the save is gone: each section has a page of its own, `/admin/settings/<section>`; the page keeps Mail accounts, Test tools and Maintenance until they move
+- [ ] `GET|POST /admin/settings` (page + action: every section's save) -- the save is gone: each section has a page of its own, `/admin/settings/<section>`; the page keeps Maintenance until it moves
   - [x] General → `GET|PUT /api/v1/admin/settings/general`
   - [x] Notifications → `GET|PUT /api/v1/admin/settings/notifications`
   - [x] Membership fee → `GET|PUT /api/v1/admin/settings/billing`
   - [x] Forum → `GET|PUT /api/v1/admin/settings/forum`
-- [ ] `POST /admin/settings/mail-accounts` (action: add or change)
-- [ ] `POST /admin/settings/mail-accounts/<id>/delete` (action)
-- [ ] `POST /admin/settings/mail-accounts/<id>/test-connection` (action)
-- [ ] `POST /admin/settings/mail-accounts/import` (action, upload)
-- [ ] `POST /admin/settings/send-test-email` (action)
+  - [x] Mail accounts → `GET /api/v1/admin/settings/mail`
+  - [x] Test email → `GET /api/v1/admin/settings/test-email`
+- [x] `POST /admin/settings/mail-accounts` (action: add or change) → `POST /api/v1/admin/settings/mail/accounts`, `PUT .../accounts/<id>`
+- [x] `POST /admin/settings/mail-accounts/<id>/delete` (action) → `DELETE /api/v1/admin/settings/mail/accounts/<id>`
+- [x] `POST /admin/settings/mail-accounts/<id>/test-connection` (action) → `POST /api/v1/admin/settings/mail/accounts/<id>/test`
+- [x] `POST /admin/settings/mail-accounts/import` (action, upload) → `POST /api/v1/admin/settings/mail/import`
+- [x] `POST /admin/settings/mail-accounts/export` (download) → `POST /api/v1/admin/settings/mail/export`: asks for the current password, answers the file
+- [x] `POST /admin/settings/send-test-email` (action) → `POST /api/v1/admin/settings/test-email`
 - [x] `POST /admin/settings/test-forum-connection` (action) → `POST /api/v1/admin/settings/forum/test`
 - [ ] `POST /admin/system-update`, `GET /admin/system-update/status` (action, already JSON) → API
 - [ ] `POST /admin/backup`, `GET /admin/backup/status` (action, already JSON) → API
@@ -100,7 +103,6 @@ Status: `[ ]` to do, `[x]` done.
 - [ ] `POST /admin/forum-tasks/retry` (action; from the health report)
 - [ ] `POST /admin/undelivered-emails/<job>/<retry|dismiss>` (action; from the health report)
 - [ ] `GET /admin/background-jobs/checklist`, `POST .../again`, `.../dismiss`, `POST /admin/background-jobs/resume` (already JSON / action) → API
-- `POST /admin/settings/mail-accounts/export` (download) → becomes a GET download
 - `GET /admin/backup/files/<name>` (download) -- stays
 
 ## Step 5 -- Teams area

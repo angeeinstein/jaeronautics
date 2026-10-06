@@ -28,13 +28,9 @@ function settingsChildren(me: Me): NavItem[] {
   // settings.credentials, Maintenance only with system.update.
   const children = [page('General', 'general'), page('Notifications', 'notifications')];
   if (can(me, 'settings.credentials')) {
-    children.push(
-      page('Membership fee', 'billing'),
-      page('Forum', 'forum'),
-      section('Mail accounts', 'settings-mail'),
-    );
+    children.push(page('Membership fee', 'billing'), page('Forum', 'forum'), page('Mail accounts', 'mail'));
   }
-  children.push(section('Test tools', 'settings-test'));
+  if (can(me, 'notifications.manage')) children.push(page('Test email', 'test-email'));
   if (can(me, 'system.update')) children.push(section('Maintenance', 'settings-maintenance'));
   return children;
 }

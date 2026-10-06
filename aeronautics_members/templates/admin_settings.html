@@ -1,6 +1,6 @@
 {% extends "admin_layout.html" %}
 {% set page_title = _('Settings') %}
-{% set page_description = _('Sender accounts, the test email and maintenance.') %}
+{% set page_description = _('Maintenance: health, updates, backups.') %}
 {% block admin_content %}
 <div class="row g-4">
     <div class="col-xl-3">
@@ -14,12 +14,8 @@
                       an update sees Maintenance. The routes check for
                       themselves -- this only keeps the secrets out of the HTML.
                     #}
-                    {% if current_user.can('settings.credentials') %}
-                    <button class="nav-link active" id="settings-mail-tab" data-bs-toggle="pill" data-bs-target="#settings-mail" type="button" role="tab" aria-controls="settings-mail" aria-selected="true">{{ _('Mail Accounts') }}</button>
-                    {% endif %}
-                    <button class="nav-link{% if not current_user.can('settings.credentials') %} active{% endif %}" id="settings-test-tab" data-bs-toggle="pill" data-bs-target="#settings-test" type="button" role="tab" aria-controls="settings-test" aria-selected="{{ 'false' if current_user.can('settings.credentials') else 'true' }}">{{ _('Test Tools') }}</button>
                     {% if current_user.can('system.update') %}
-                    <button class="nav-link" id="settings-maintenance-tab" data-bs-toggle="pill" data-bs-target="#settings-maintenance" type="button" role="tab" aria-controls="settings-maintenance" aria-selected="false">{{ _('Maintenance') }}</button>
+                    <button class="nav-link active" id="settings-maintenance-tab" data-bs-toggle="pill" data-bs-target="#settings-maintenance" type="button" role="tab" aria-controls="settings-maintenance" aria-selected="true">{{ _('Maintenance') }}</button>
                     {% endif %}
                 </div>
             </div>
@@ -28,148 +24,8 @@
 
     <div class="col-xl-9">
         <div class="tab-content settings-tab-content" id="settings-tabContent">
-            {% if current_user.can('settings.credentials') %}
-            <div class="tab-pane fade show active" id="settings-mail" role="tabpanel" aria-labelledby="settings-mail-tab" tabindex="0">
-                <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h4 class="mb-0">{{ _('Mail Accounts') }}</h4>
-                        {% if editing_mail_account %}
-                            <a href="{{ url_for('admin.admin_settings') }}#settings-mail" class="btn btn-sm btn-secondary">{{ _('Cancel Edit') }}</a>
-                        {% endif %}
-                    </div>
-                    <div class="card-body">
-                        <div class="card mb-4 settings-subcard">
-                            <div class="card-body">
-                                <div class="d-flex flex-column gap-3 mb-3">
-                                    <div>
-                                        <h5 class="mb-1">{{ _('Import or Export Sender Accounts') }}</h5>
-                                        <p class="text-muted mb-0">{{ _('SMTP providers usually do not offer a standard export file format. Use the Jaeronautics JSON export, the legacy MAIL_ACCOUNTS_JSON mapping, or a JSON list with common SMTP keys.') }}</p>
-                                    </div>
-                                    <form method="POST" action="{{ url_for('admin.export_mail_accounts') }}" class="row g-3 align-items-end">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <div class="col-lg-6">
-                                            <label for="export-password" class="form-label">{{ _('Confirm Current Password for Export') }}</label>
-                                            <input type="password" class="form-control" id="export-password" name="export_password" autocomplete="current-password" required>
-                                        </div>
-                                        <div class="col-lg-6 d-flex justify-content-lg-end">
-                                            <button type="submit" class="btn btn-secondary">{{ _('Export JSON') }}</button>
-                                        </div>
-                                        <div class="col-12">
-                                            <small class="text-muted">{{ _('The export includes SMTP passwords in plaintext, so only export when necessary and store the file securely.') }}</small>
-                                        </div>
-                                    </form>
-                                </div>
-                                <form method="POST" action="{{ url_for('admin.import_mail_accounts') }}" enctype="multipart/form-data" class="row g-3 align-items-end">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <div class="col-lg-6">
-                                        <label for="mail-accounts-file" class="form-label">{{ _('Import JSON File') }}</label>
-                                        <input type="file" class="form-control" id="mail-accounts-file" name="mail_accounts_file" accept=".json,application/json" required>
-                                    </div>
-                                    <div class="col-lg-3">
-                                        <div class="form-check mt-4 pt-2">
-                                            <input class="form-check-input" type="checkbox" value="1" id="overwrite-existing-mail-accounts" name="overwrite_existing">
-                                            <label class="form-check-label" for="overwrite-existing-mail-accounts">{{ _('Overwrite matching keys') }}</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-lg-3 d-flex justify-content-lg-end">
-                                        <button type="submit" class="btn btn-primary">{{ _('Import JSON') }}</button>
-                                    </div>
-                                    <div class="col-12">
-                                        <small class="text-muted">{{ _('Exported files include SMTP passwords in plaintext, so store them carefully.') }}</small>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-
-                        <form method="POST" action="{{ url_for('admin.save_mail_account') }}">
-                            {# hidden_tag() already emits mail_account_id along with the CSRF
-                               token; rendering it again produced two elements with the same
-                               id, which breaks label association and getElementById. #}
-                            {{ mail_account_form.hidden_tag() }}
-                            <div class="row g-3">
-                                <div class="col-md-4">{{ mail_account_form.account_key.label(class="form-label") }}{{ mail_account_form.account_key(class="form-control", placeholder=_('e.g. office')) }}</div>
-                                <div class="col-md-4">{{ mail_account_form.host.label(class="form-label") }}{{ mail_account_form.host(class="form-control", placeholder=_('smtp.example.com')) }}</div>
-                                <div class="col-md-4">{{ mail_account_form.port.label(class="form-label") }}{{ mail_account_form.port(class="form-control", placeholder='587') }}</div>
-                                <div class="col-md-6">{{ mail_account_form.username.label(class="form-label") }}{{ mail_account_form.username(class="form-control", placeholder=_('noreply@example.com')) }}</div>
-                                <div class="col-md-6">{{ mail_account_form.password.label(class="form-label") }}{{ mail_account_form.password(class="form-control", placeholder=editing_mail_account and _('Leave blank to keep the current password') or _('SMTP password')) }}</div>
-                            </div>
-                            <div class="row g-3 mt-0">
-                                <div class="col-md-6">{{ mail_account_form.from_email.label(class="form-label") }}{{ mail_account_form.from_email(class="form-control", placeholder=_('Same as the username')) }}</div>
-                                <div class="col-md-6">{{ mail_account_form.from_name.label(class="form-label") }}{{ mail_account_form.from_name(class="form-control", placeholder=_('e.g. Joanneum Aeronautics')) }}</div>
-                            </div>
-                            <div class="form-text">{{ _('Optional. Needed where the login is not an email address, such as Brevo: the address emails come from, verified with the provider.') }}</div>
-                            <div class="form-check mt-3">{{ mail_account_form.starttls(class="form-check-input") }}{{ mail_account_form.starttls.label(class="form-check-label") }}</div>
-                            <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
-                                <button type="submit" class="btn btn-primary">{% if editing_mail_account %}{{ _('Update Mail Account') }}{% else %}{{ _('Add Mail Account') }}{% endif %}</button>
-                                <small class="text-muted">{% if editing_mail_account %}{{ _('Leave the password blank to keep the current SMTP password.') }}{% else %}{{ _('Stored sender accounts become available immediately in the welcome-email and test-email settings.') }}{% endif %}</small>
-                            </div>
-                        </form>
-
-                        {% if mail_account_records %}
-                            <div class="table-responsive mt-4">
-                                <table class="table table-striped align-middle mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th>{{ _('Key') }}</th>
-                                            <th>{{ _('Host') }}</th>
-                                            <th>{{ _('Port') }}</th>
-                                            <th>{{ _('Username') }}</th>
-                                            <th>{{ _('Security') }}</th>
-                                            <th class="text-end">{{ _('Actions') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for mail_account in mail_account_records %}
-                                            <tr>
-                                                <td>{{ mail_account.account_key }}</td>
-                                                <td>{{ mail_account.host }}</td>
-                                                <td>{{ mail_account.port }}</td>
-                                                <td>{{ mail_account.username }}{% if mail_account.from_email %}<div class="small text-muted">{{ _('sends as') }} {% if mail_account.from_name %}{{ mail_account.from_name }} &lt;{{ mail_account.from_email }}&gt;{% else %}{{ mail_account.from_email }}{% endif %}</div>{% endif %}</td>
-                                                <td>{% if mail_account.starttls %}STARTTLS{% else %}SSL/TLS{% endif %}</td>
-                                                <td class="text-end">
-                                                    <div class="d-inline-flex flex-wrap justify-content-end gap-2">
-                                                        <a href="{{ url_for('admin.admin_settings', edit_mail_account=mail_account.id) }}#settings-mail" class="btn btn-sm btn-primary">{{ _('Edit') }}</a>
-                                                        <form method="POST" action="{{ url_for('admin.test_mail_account_connection', mail_account_id=mail_account.id) }}" class="mb-0">
-                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                            <button type="submit" class="btn btn-sm btn-secondary">{{ _('Test') }}</button>
-                                                        </form>
-                                                        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteMailAccountModal" data-delete-url="{{ url_for('admin.delete_mail_account', mail_account_id=mail_account.id) }}" data-account-key="{{ mail_account.account_key }}">{{ _('Delete') }}</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% else %}
-                            <div class="alert alert-warning mt-4 mb-0" role="alert">{{ _('No database-managed sender accounts are configured yet. Add one above to enable email sending from the admin area.') }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            {% endif %}
-            <div class="tab-pane fade{% if not current_user.can('settings.credentials') %} show active{% endif %}" id="settings-test" role="tabpanel" aria-labelledby="settings-test-tab" tabindex="0">
-                <div class="card">
-                    <div class="card-header"><h4 class="mb-0">{{ _('Send Test Email') }}</h4></div>
-                    <div class="card-body">
-                        {% if test_email_form.sender.choices %}
-                            <form method="POST" action="{{ url_for('admin.send_test_email') }}">
-                                {{ test_email_form.hidden_tag() }}
-                                <div class="mb-3">{{ test_email_form.sender.label(class="form-label") }}{{ test_email_form.sender(class="form-select") }}</div>
-                                <div class="mb-3">{{ test_email_form.recipient.label(class="form-label") }}{{ test_email_form.recipient(class="form-control", placeholder=_('recipient@example.com')) }}</div>
-                                <div class="mb-3">{{ test_email_form.template.label(class="form-label") }}{{ test_email_form.template(class="form-select") }}</div>
-                                <button type="submit" name="send_generic_test" class="btn btn-primary">{{ _('Send Test Email') }}</button>
-                            </form>
-                        {% else %}
-                            <div class="alert alert-warning mb-0" role="alert">{{ _('No sender email accounts are configured yet. Add one in the Mail Accounts section to use this feature.') }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
             {% if current_user.can('system.update') %}
-            <div class="tab-pane fade" id="settings-maintenance" role="tabpanel" aria-labelledby="settings-maintenance-tab" tabindex="0">
+            <div class="tab-pane fade show active" id="settings-maintenance" role="tabpanel" aria-labelledby="settings-maintenance-tab" tabindex="0">
                 <div class="card mb-4">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h4 class="mb-0">{{ _('System Health') }}</h4>
@@ -465,27 +321,6 @@
     </div>
 </div>
 
-<div class="modal fade" id="deleteMailAccountModal" tabindex="-1" aria-labelledby="deleteMailAccountModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="deleteMailAccountModalLabel">{{ _('Delete Mail Account') }}</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
-            </div>
-            <div class="modal-body">
-                <p class="mb-0">{{ _('Do you really want to delete this mail account?') }} <strong id="delete-mail-account-name"></strong></p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('Cancel') }}</button>
-                <form method="POST" action="#" id="delete-mail-account-form" class="mb-0">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-danger">{{ _('Delete') }}</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-<script src="{{ url_for('static', filename='mail-account-delete-modal.js') }}"></script>
 <script src="{{ url_for('static', filename='admin-settings-tabs.js') }}"></script>
 <script src="{{ url_for('static', filename='update-progress.js') }}"></script>
 <script src="{{ url_for('static', filename='backup-restore.js') }}"></script>

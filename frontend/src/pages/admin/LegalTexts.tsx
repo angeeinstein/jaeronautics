@@ -28,6 +28,7 @@ import { Panel } from '../../components/Panel';
 import { PdfLink } from '../../components/PdfLink';
 import { Pill } from '../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../components/States';
+import { fileNameOf, openFile } from '../../lib/files';
 import { formatDate } from '../../lib/format';
 import { notifyFailed } from '../../lib/notify';
 import classes from './LegalTexts.module.css';
@@ -38,30 +39,6 @@ const legalQuery = {
   queryKey: ['admin', 'legal'] as const,
   queryFn: () => call(api.GET('/api/v1/admin/legal')),
 };
-
-/** The file's name from the answer, as the server named it. */
-function fileName(response: Response | undefined, fallback: string): string {
-  const disposition = response?.headers.get('Content-Disposition') ?? '';
-  return /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)?.[1] ?? fallback;
-}
-
-/** A PDF made in the browser's memory: in a new tab where allowed, saved otherwise. */
-function show(pdf: Blob, name: string) {
-  const url = URL.createObjectURL(pdf);
-  const tab = window.open(url, '_blank');
-  if (tab) {
-    tab.opener = null;
-  } else {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = decodeURIComponent(name);
-    link.click();
-  }
-  // Long enough for the tab or the download to have read it.
-  window.setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 60_000);
-}
 
 function Preview({ data }: { data: LegalOut }) {
   const [german, setGerman] = useState<File | null>(null);
@@ -87,11 +64,11 @@ function Preview({ data }: { data: LegalOut }) {
         await call(Promise.resolve({ data: undefined, error, response }));
         throw new ApiError(response.status, 'unexpected', 'The PDF could not be made just now.');
       }
-      return { pdf, name: fileName(response, 'VORSCHAU.pdf') };
+      return { pdf, name: fileNameOf(response, 'VORSCHAU.pdf') };
     },
     onSuccess: ({ pdf, name }) => {
       setProblems([]);
-      show(pdf, name);
+      openFile(pdf, name);
     },
     onError: (error) => {
       const listed = error instanceof ApiError ? error.details.problems : undefined;

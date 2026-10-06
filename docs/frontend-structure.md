@@ -98,7 +98,8 @@ Entered with **Admin** in the top bar; opens on the Dashboard.
 - *System* -- **Logs**, **Settings** ▸
   - Settings folds open in place (chevron) to its parts: **General**,
     **Notifications**, **Membership fee**, **Forum**, **Mail accounts**,
-    **Test tools**, **Maintenance**. Clicking *Settings* opens it on General.
+    **Test email**, **Maintenance**. Clicking *Settings* opens it on General.
+    (The forum's connection test is on the Forum page, beside what it tests.)
     While one is on a settings page it stays open.
 
 Group labels are small, upper-case and muted; the current item is highlighted

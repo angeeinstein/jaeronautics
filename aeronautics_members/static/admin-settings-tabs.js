@@ -14,7 +14,9 @@ document.addEventListener('DOMContentLoaded', function () {
         '#settings-general': '/admin/settings/general',
         '#settings-notifications': '/admin/settings/notifications',
         '#settings-billing': '/admin/settings/billing',
-        '#settings-forum': '/admin/settings/forum'
+        '#settings-forum': '/admin/settings/forum',
+        '#settings-mail': '/admin/settings/mail',
+        '#settings-test': '/admin/settings/test-email'
     };
     if (window.location.pathname === '/admin/settings' && moved[window.location.hash]) {
         window.location.replace(moved[window.location.hash]);

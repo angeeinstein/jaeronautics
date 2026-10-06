@@ -50,14 +50,29 @@ describe('the admin sidebar', () => {
   });
 
   it('the settings sections with secrets only with settings.credentials', () => {
-    const me = makeMe({ permissions: ['admin.access', 'settings.general'] });
+    const me = makeMe({ permissions: ['admin.access', 'settings.general', 'notifications.manage'] });
     const settings = adminSidebar(me)
       .groups.at(-1)
       ?.items.find((item) => item.label === 'Settings');
     expect(settings?.children?.map((child) => child.label)).toEqual([
       'General',
       'Notifications',
-      'Test tools',
+      'Test email',
+    ]);
+  });
+
+  it('every section, each at its own address, for somebody who may do everything', () => {
+    const settings = adminSidebar(makeMe())
+      .groups.at(-1)
+      ?.items.find((item) => item.label === 'Settings');
+    expect(settings?.children?.map((child) => child.to)).toEqual([
+      '/admin/settings/general',
+      '/admin/settings/notifications',
+      '/admin/settings/billing',
+      '/admin/settings/forum',
+      '/admin/settings/mail',
+      '/admin/settings/test-email',
+      '/admin/settings#settings-maintenance',
     ]);
   });
 

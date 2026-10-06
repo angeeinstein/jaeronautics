@@ -12,6 +12,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     admin_dashboard,
     admin_legal,
     admin_logs,
+    admin_mail,
     admin_money,
     admin_reviews,
     admin_settings,

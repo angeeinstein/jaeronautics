@@ -241,9 +241,11 @@ class TestTheTestEmail:
         with client.session_transaction() as session:
             session["_user_id"] = str(admin.user.id)
 
-        client.post("/admin/settings/send-test-email", data={
+        from api_helpers import send
+
+        assert send(client, "POST", "/api/v1/admin/settings/test-email", {
             "sender": "office", "recipient": "me@example.org", "template": template,
-        })
+        }).get_json() == {"ok": True}
 
         (text,) = _parts(outbox[-1], "text/plain")
         body = text.get_payload(decode=True).decode()

@@ -98,25 +98,31 @@ class TestTheSettingsPage:
     def test_saved_and_shown(self, app, client):
         self._admin(client)
 
-        client.post("/admin/settings/mail-accounts", data={
-            "mail-account_key": "brevo", "mail-host": "smtp-relay.brevo.com", "mail-port": "587",
-            "mail-username": "bc6766001@smtp-brevo.com", "mail-password": "key", "mail-starttls": "y",
-            "mail-from_email": "NoReply@joanneum-aeronautics.at", "mail-from_name": "Joanneum Aeronautics",
+        from api_helpers import send
+
+        send(client, "POST", "/api/v1/admin/settings/mail/accounts", {
+            "key": "brevo", "host": "smtp-relay.brevo.com", "port": 587,
+            "username": "bc6766001@smtp-brevo.com", "password": "key", "starttls": True,
+            "from_email": "NoReply@joanneum-aeronautics.at", "from_name": "Joanneum Aeronautics",
         })
 
         account = db.session.query(MailAccount).filter_by(account_key="brevo").one()
         assert (account.from_email, account.from_name) == ("noreply@joanneum-aeronautics.at", "Joanneum Aeronautics")
-        body = client.get("/admin/settings").get_data(as_text=True)
-        assert "sends as Joanneum Aeronautics &lt;noreply@joanneum-aeronautics.at&gt;" in body
+        [shown] = client.get("/api/v1/admin/settings/mail").get_json()["accounts"]
+        assert (shown["from_email"], shown["from_name"]) == ("noreply@joanneum-aeronautics.at", "Joanneum Aeronautics")
+        assert "password" not in shown
 
     def test_not_an_address_is_refused(self, app, client):
         self._admin(client)
 
-        client.post("/admin/settings/mail-accounts", data={
-            "mail-account_key": "brevo", "mail-host": "h", "mail-port": "587",
-            "mail-username": "u", "mail-password": "p", "mail-from_email": "noreply at example",
+        from api_helpers import send
+
+        response = send(client, "POST", "/api/v1/admin/settings/mail/accounts", {
+            "key": "brevo", "host": "h", "port": 587, "username": "u", "password": "p",
+            "from_email": "noreply at example",
         })
 
+        assert response.status_code == 400 and "from_email" in response.get_json()["error"]["fields"]
         assert db.session.query(MailAccount).count() == 0
 
     def test_travels_with_the_export_and_import(self, app):

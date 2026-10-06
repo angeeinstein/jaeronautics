@@ -2,8 +2,6 @@ from flask_babel import _, lazy_gettext as _l
 from flask_wtf import FlaskForm
 from wtforms import (
     BooleanField,
-    HiddenField,
-    IntegerField,
     PasswordField,
     RadioField,
     SelectField,
@@ -17,7 +15,6 @@ from wtforms.validators import (
     EqualTo,
     InputRequired,
     Length,
-    NumberRange,
     Optional,
     Regexp,
     StopValidation,
@@ -374,30 +371,3 @@ class IdentityChangeRequestForm(FlaskForm):
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     member_note = TextAreaField(_l("Why should this be changed?"), validators=[Optional(), Length(max=1000)])
     submit = SubmitField(_("Submit Change Request"))
-
-
-class TestEmailForm(FlaskForm):
-    sender = SelectField(_l("Sender"), validators=[DataRequired()])
-    recipient = StringField(_("Recipient Email"), validators=[DataRequired(), Email()])
-    template = SelectField(_l("Template"), validators=[DataRequired()])
-    submit = SubmitField(_("Send Test Email"))
-
-
-class MailAccountForm(FlaskForm):
-    mail_account_id = HiddenField()
-    account_key = StringField(
-        _l("Account Key"),
-        validators=[
-            DataRequired(),
-            Length(max=80),
-            Regexp(r"^[a-zA-Z0-9_-]+$", message=_l("Use only letters, numbers, dashes, and underscores.")),
-        ],
-    )
-    host = StringField(_l("SMTP Host"), validators=[DataRequired(), Length(max=255)])
-    port = IntegerField(_l("SMTP Port"), validators=[DataRequired(), NumberRange(min=1, max=65535)])
-    username = StringField(_l("SMTP Username"), validators=[DataRequired(), Length(max=255)])
-    password = PasswordField(_l("SMTP Password"), validators=[Optional(), Length(max=255)])
-    starttls = BooleanField(_l("Use STARTTLS"))
-    from_email = StringField(_l("Sender Address"), validators=[Optional(), Email(), Length(max=255)])
-    from_name = StringField(_l("Sender Name"), validators=[Optional(), Length(max=120)])
-    submit = SubmitField(_l("Save Mail Account"))

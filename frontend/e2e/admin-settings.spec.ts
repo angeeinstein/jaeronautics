@@ -42,12 +42,32 @@ test.describe('settings', () => {
     await expect(page.getByText(/None set yet\.|One is set\./).first()).toBeVisible();
   });
 
+  test('a mail account: added, listed without its password, removed', async ({ page }) => {
+    await page.goto('/admin/settings/mail');
+    const form = page.getByRole('region', { name: 'Add an account' });
+    await form.getByRole('textbox', { name: 'Key', exact: true }).fill('e2e-office');
+    await form.getByRole('textbox', { name: 'SMTP server' }).fill('smtp.example.org');
+    await form.getByRole('textbox', { name: 'Username' }).fill('office@example.org');
+    await form.getByLabel('Password', { exact: true }).fill('not-shown');
+    await form.getByRole('button', { name: 'Add' }).click();
+
+    const row = page.getByRole('table', { name: 'Mail accounts' }).getByRole('row', { name: /e2e-office/ });
+    await expect(row).toContainText('smtp.example.org');
+    await expect(page.getByText('not-shown')).toHaveCount(0);
+
+    await row.getByRole('button', { name: 'Remove' }).click();
+    await page.getByRole('button', { name: 'Yes, remove' }).click();
+    await expect(row).toHaveCount(0);
+  });
+
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
     for (const path of [
       '/admin/settings/general',
       '/admin/settings/notifications',
       '/admin/settings/forum',
+      '/admin/settings/mail',
+      '/admin/settings/test-email',
     ]) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

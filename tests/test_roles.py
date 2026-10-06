@@ -160,10 +160,9 @@ class TestCredentialsAreRestricted:
         admin = _user("nosmtp@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        response = client.post("/admin/settings/mail-accounts/export", data={"export_password": "x"})
+        response = send(client, "POST", "/api/v1/admin/settings/mail/export", {"password": "x"})
 
-        assert response.status_code == 302
-        assert "application/json" not in response.headers.get("Content-Type", "")
+        assert response.status_code == 403 and response.mimetype == "application/json"
 
 
 class TestSettingRoles:
@@ -311,12 +310,11 @@ class TestTheUiHidesWhatItDoesNotOffer:
         admin = _user("hidden@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        body = client.get("/admin/settings").get_data(as_text=True)
-
-        assert "settings-maintenance-tab" not in body
-        assert "settings-mail-tab" not in body
+        # Maintenance is the old page's only part left: without it, General.
+        assert client.get("/admin/settings").headers["Location"].endswith("/admin/settings/general")
+        assert client.get("/admin/settings/mail").headers["Location"].endswith("/admin/settings/general")
+        assert client.get("/api/v1/admin/settings/mail").status_code == 403
         # Ordinary administration is untouched.
-        assert "settings-test-tab" in body
         assert client.get("/admin/settings/general").status_code == 200
         assert client.get("/admin/settings/billing").headers["Location"].endswith("/admin/settings/general")
         assert client.get("/api/v1/admin/settings/billing").status_code == 403
@@ -329,8 +327,8 @@ class TestTheUiHidesWhatItDoesNotOffer:
         body = client.get("/admin/settings").get_data(as_text=True)
 
         assert "settings-maintenance-tab" in body
-        assert "settings-mail-tab" in body
         assert client.get("/api/v1/admin/settings/billing").status_code == 200
+        assert client.get("/api/v1/admin/settings/mail").status_code == 200
 
     def test_a_stored_secret_never_reaches_a_browser(self, client):
         """Whether one is set, never what it is -- not even for whoever may change it."""

@@ -17,7 +17,6 @@ from ..config import (
 )
 from ..services.audit import (
     log_audit_event,
-    snapshot_mail_account_for_audit,
 )
 from ..services.privacy import (
     export_account_data,
@@ -27,11 +26,8 @@ from . import _legal_pages as legal_pages
 from .app_shell import app_shell
 from ._responses import json_download_response
 from ..services.notifications import (
-    build_mail_accounts_export_payload,
     dismiss_email_delivery_job,
-    normalize_imported_mail_accounts_payload,
     requeue_email_delivery_job,
-    sample_email_for,
 )
 from ..services import (
     ServiceError,
@@ -42,12 +38,7 @@ from ..services.system_update import (
     describe_update_state,
     request_update,
 )
-import json
 import os
-from datetime import (
-    datetime,
-    timezone,
-)
 from flask import (
     abort,
     flash,
@@ -65,28 +56,14 @@ from flask_login import (
     current_user,
     login_required,
 )
-from sqlalchemy.exc import (
-    IntegrityError,
-)
 from sqlalchemy.orm import (
     selectinload,
 )
 from ..db_models import (
     EmailDeliveryJob,
     ImportedForumProfile,
-    MailAccount,
-    Setting,
     User,
     db,
-)
-from ..forms import (
-    MailAccountForm,
-    TestEmailForm,
-)
-from ..mail_utils import (
-    load_mail_accounts_config,
-    probe_mail_account_connection,
-    send_mail,
 )
 from ..app import (
     build_settings_page_context,
@@ -96,10 +73,6 @@ from ..app import (
 
 admin_bp = Blueprint("admin", __name__)
 
-# Settings tabs holding third-party credentials. The page itself only needs
-# SETTINGS_GENERAL, so these sections carry their own check; kept beside the
-# route that enforces it so the list and the check cannot drift apart.
-CREDENTIAL_SETTINGS_SECTIONS = {"billing", "forum"}
 
 
 @admin_bp.route("/admin", methods=["GET"])
@@ -165,22 +138,29 @@ def admin_reviews():
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
 def admin_settings():
-    """The settings not moved to the new front end yet: mail accounts, the test
-    email and maintenance (docs/frontend-routes.md, 4.8)."""
-    edit_mail_account_id = request.args.get("edit_mail_account", type=int)
-    context = build_settings_page_context(edit_mail_account_id=edit_mail_account_id)
-    if edit_mail_account_id and context["editing_mail_account"] is None:
-        flash(_("The selected mail account could not be found."), "warning")
-        return redirect(url_for("admin.admin_settings"))
-    return render_template("admin_settings.html", active_admin_section="settings", **context)
+    """Maintenance, the one part of the settings not moved to the new front end yet
+    (docs/frontend-routes.md, 4.8). Whoever may not install updates goes to General."""
+    if not current_user.can(Permission.SYSTEM_UPDATE):
+        return redirect(url_for("admin.admin_settings_section", section="general"))
+    return render_template("admin_settings.html", active_admin_section="settings", **build_settings_page_context())
 
 
-@admin_bp.route("/admin/settings/<any(general, notifications, billing, forum):section>", methods=["GET"])
+#: A section of the settings, and what it needs beyond the general settings permission.
+SETTINGS_SECTIONS = {
+    "general": None, "notifications": None, "billing": Permission.SETTINGS_CREDENTIALS,
+    "forum": Permission.SETTINGS_CREDENTIALS, "mail": Permission.SETTINGS_CREDENTIALS,
+    "test-email": Permission.NOTIFICATIONS_MANAGE,
+}
+
+
+@admin_bp.route("/admin/settings/<any(general, notifications, billing, forum, mail, 'test-email'):section>",
+                methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
 def admin_settings_section(section):
     """A section of the settings: drawn by the new front end (frontend/src/pages/admin/settings/)."""
-    if section in CREDENTIAL_SETTINGS_SECTIONS and not current_user.can(Permission.SETTINGS_CREDENTIALS):
+    needed = SETTINGS_SECTIONS[section]
+    if needed is not None and not current_user.can(needed):
         return redirect(url_for("admin.admin_settings_section", section="general"))
     return app_shell()
 
@@ -259,335 +239,6 @@ def admin_legal_template():
 def admin_logs():
     """The log: drawn by the new front end (frontend/src/pages/admin/Logs.tsx)."""
     return app_shell()
-
-
-@admin_bp.route("/admin/settings/mail-accounts", methods=["POST"])
-@login_required
-@requires(Permission.SETTINGS_CREDENTIALS)
-def save_mail_account():
-    form = MailAccountForm(prefix="mail")
-    account_id = int(form.mail_account_id.data) if form.mail_account_id.data else None
-
-    if not form.validate_on_submit():
-        flash(_("Please correct the mail account form and try again."), "danger")
-        for field_name, errors in form.errors.items():
-            if field_name == "csrf_token":
-                for error in errors:
-                    flash(error, "danger")
-                continue
-            label = getattr(form, field_name).label.text if hasattr(form, field_name) else field_name
-            for error in errors:
-                flash(f"{label}: {error}", "danger")
-        redirect_kwargs = {"edit_mail_account": account_id} if account_id else {}
-        return redirect(url_for("admin.admin_settings", **redirect_kwargs))
-
-    account_key = form.account_key.data.strip()
-    existing_account = db.session.execute(
-        db.select(MailAccount).filter_by(account_key=account_key)
-    ).scalar_one_or_none()
-
-    if existing_account is not None and existing_account.id != account_id:
-        flash(_("A mail account with this key already exists."), "danger")
-        target_id = account_id or existing_account.id
-        return redirect(url_for("admin.admin_settings", edit_mail_account=target_id))
-
-    if account_id:
-        mail_account = db.session.get(MailAccount, account_id)
-        if mail_account is None:
-            flash(_("The selected mail account could not be found."), "warning")
-            return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-    else:
-        if not form.password.data:
-            flash(_("A password is required for new mail accounts."), "danger")
-            return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-        mail_account = MailAccount()
-        db.session.add(mail_account)
-
-    before_mail_account = snapshot_mail_account_for_audit(mail_account)
-    is_new_mail_account = mail_account.id is None
-    mail_account.account_key = account_key
-    mail_account.host = form.host.data.strip()
-    mail_account.port = int(form.port.data)
-    mail_account.username = form.username.data.strip()
-    if form.password.data:
-        mail_account.password = form.password.data
-    mail_account.starttls = bool(form.starttls.data)
-    mail_account.from_email = (form.from_email.data or "").strip().lower() or None
-    mail_account.from_name = (form.from_name.data or "").strip() or None
-
-    try:
-        db.session.flush()
-        log_audit_event(
-            category="settings",
-            event_type="mail_account_created" if is_new_mail_account else "mail_account_updated",
-            actor_user=current_user,
-            target_user=current_user,
-            before=before_mail_account,
-            after=snapshot_mail_account_for_audit(mail_account),
-            metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key},
-        )
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        flash(_("A mail account with this key already exists."), "danger")
-        redirect_kwargs = {"edit_mail_account": account_id} if account_id else {}
-        return redirect(url_for("admin.admin_settings", **redirect_kwargs))
-
-    flash(_("Mail account saved successfully."), "success")
-    return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-
-@admin_bp.route("/admin/settings/mail-accounts/<int:mail_account_id>/delete", methods=["POST"])
-@login_required
-@requires(Permission.SETTINGS_CREDENTIALS)
-def delete_mail_account(mail_account_id):
-    mail_account = db.session.get(MailAccount, mail_account_id)
-    if mail_account is None:
-        flash(_("The selected mail account could not be found."), "warning")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-    before_mail_account = snapshot_mail_account_for_audit(mail_account)
-    welcome_sender_setting = Setting.query.get("welcome_email_sender")
-    removed_welcome_sender = False
-    if welcome_sender_setting and welcome_sender_setting.value == mail_account.account_key:
-        db.session.delete(welcome_sender_setting)
-        removed_welcome_sender = True
-
-    log_audit_event(
-        category="settings",
-        event_type="mail_account_deleted",
-        actor_user=current_user,
-        target_user=current_user,
-        before=before_mail_account,
-        after=None,
-        metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key, "removed_welcome_sender": removed_welcome_sender},
-    )
-    db.session.delete(mail_account)
-    db.session.commit()
-    flash(_("Mail account deleted successfully."), "success")
-    return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-
-@admin_bp.route("/admin/settings/mail-accounts/import", methods=["POST"])
-@login_required
-@requires(Permission.SETTINGS_CREDENTIALS)
-def import_mail_accounts():
-    upload = request.files.get("mail_accounts_file")
-    overwrite_existing = request.form.get("overwrite_existing") == "1"
-
-    if upload is None or not upload.filename:
-        flash(_("Please choose a JSON file to import."), "warning")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-    try:
-        raw_payload = upload.stream.read()
-        payload = json.loads(raw_payload.decode("utf-8-sig"))
-        imported_accounts = normalize_imported_mail_accounts_payload(payload)
-    except UnicodeDecodeError:
-        flash(_("The uploaded file is not valid UTF-8 JSON."), "danger")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-    except json.JSONDecodeError:
-        flash(_("The uploaded file is not valid JSON."), "danger")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-    except ValueError as exc:
-        flash(str(exc), "danger")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-    created_count = 0
-    updated_count = 0
-    skipped_keys = []
-
-    try:
-        for imported_account in imported_accounts:
-            mail_account = db.session.execute(
-                db.select(MailAccount).filter_by(account_key=imported_account["account_key"])
-            ).scalar_one_or_none()
-
-            if mail_account is not None and not overwrite_existing:
-                skipped_keys.append(imported_account["account_key"])
-                continue
-
-            before_mail_account = snapshot_mail_account_for_audit(mail_account)
-            is_new_mail_account = mail_account is None
-            if mail_account is None:
-                mail_account = MailAccount()
-                db.session.add(mail_account)
-
-            mail_account.account_key = imported_account["account_key"]
-            mail_account.host = imported_account["host"]
-            mail_account.port = imported_account["port"]
-            mail_account.username = imported_account["username"]
-            mail_account.password = imported_account["password"]
-            mail_account.starttls = imported_account["starttls"]
-            mail_account.from_email = imported_account["from_email"]
-            mail_account.from_name = imported_account["from_name"]
-            db.session.flush()
-
-            log_audit_event(
-                category="settings",
-                event_type="mail_account_created" if is_new_mail_account else "mail_account_updated",
-                actor_user=current_user,
-                target_user=current_user,
-                before=before_mail_account,
-                after=snapshot_mail_account_for_audit(mail_account),
-                metadata={
-                    "mail_account_id": mail_account.id,
-                    "account_key": mail_account.account_key,
-                    "source": "json_import",
-                    "overwrite_existing": overwrite_existing,
-                },
-            )
-
-            if is_new_mail_account:
-                created_count += 1
-            else:
-                updated_count += 1
-
-        log_audit_event(
-            category="settings",
-            event_type="mail_accounts_imported",
-            actor_user=current_user,
-            target_user=current_user,
-            before=None,
-            after={"created": created_count, "updated": updated_count, "skipped": len(skipped_keys)},
-            metadata={
-                "overwrite_existing": overwrite_existing,
-                "imported_keys": [account["account_key"] for account in imported_accounts],
-                "skipped_keys": skipped_keys,
-            },
-        )
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        flash(_("Import failed because one of the account keys already exists."), "danger")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-    if created_count or updated_count:
-        flash(
-            _(
-                "Mail account import finished. Created: %(created)s, updated: %(updated)s, skipped: %(skipped)s.",
-                created=created_count,
-                updated=updated_count,
-                skipped=len(skipped_keys),
-            ),
-            "success",
-        )
-    else:
-        flash(_("No mail accounts were imported."), "info")
-
-    if skipped_keys:
-        flash(
-            _(
-                "Skipped existing account keys: %(keys)s",
-                keys=", ".join(skipped_keys),
-            ),
-            "warning",
-        )
-
-    return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-
-@admin_bp.route("/admin/settings/mail-accounts/export", methods=["POST"])
-@login_required
-@requires(Permission.SETTINGS_CREDENTIALS)
-def export_mail_accounts():
-    confirm_password = request.form.get("export_password", "")
-    if not current_user.check_password(confirm_password):
-        flash(_("Please confirm your current password to export sender accounts."), "danger")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-    payload = build_mail_accounts_export_payload()
-    log_audit_event(
-        category="settings",
-        event_type="mail_accounts_exported",
-        actor_user=current_user,
-        target_user=current_user,
-        metadata={"count": len(payload["mail_accounts"]), "format": payload["format"], "version": payload["version"]},
-    )
-    db.session.commit()
-
-    export_timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    response = current_app.response_class(
-        json.dumps(payload, indent=2),
-        mimetype="application/json",
-    )
-    response.headers["Content-Disposition"] = f'attachment; filename="jaeronautics-mail-accounts-{export_timestamp}.json"'
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
-
-@admin_bp.route("/admin/settings/mail-accounts/<int:mail_account_id>/test-connection", methods=["POST"])
-@login_required
-@requires(Permission.SETTINGS_CREDENTIALS)
-@limiter.limit(RATELIMIT_ADMIN_EMAIL)
-def test_mail_account_connection(mail_account_id):
-    mail_account = db.session.get(MailAccount, mail_account_id)
-    if mail_account is None:
-        flash(_("The selected mail account could not be found."), "warning")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-mail")
-
-    success, message = probe_mail_account_connection(mail_account.to_config())
-    log_audit_event(
-        category="settings",
-        event_type="mail_account_connection_tested",
-        actor_user=current_user,
-        target_user=current_user,
-        before=snapshot_mail_account_for_audit(mail_account),
-        after=None,
-        metadata={"mail_account_id": mail_account.id, "account_key": mail_account.account_key, "success": success, "message": message},
-    )
-    db.session.commit()
-
-    if success:
-        flash(_("Connection test succeeded for %(account_key)s.", account_key=mail_account.account_key), "success")
-    else:
-        flash(_("Connection test failed for %(account_key)s: %(message)s", account_key=mail_account.account_key, message=message), "danger")
-    return redirect(url_for("admin.admin_settings", edit_mail_account=mail_account.id))
-
-
-@admin_bp.route("/admin/settings/send-test-email", methods=["POST"])
-@login_required
-@requires(Permission.NOTIFICATIONS_MANAGE)
-@limiter.limit(RATELIMIT_ADMIN_EMAIL)
-def send_test_email():
-    form = TestEmailForm()
-
-    try:
-        mail_accounts = load_mail_accounts_config()
-        form.sender.choices = [(acc, acc) for acc in mail_accounts.keys()]
-
-        email_template_dir = os.path.join(current_app.root_path, "templates", "emails")
-        if os.path.isdir(email_template_dir):
-            form.template.choices = [(f, f) for f in sorted(os.listdir(email_template_dir)) if f.endswith(".html") and not f.startswith("_")]
-    except Exception as exc:
-        current_app.logger.error(f"Could not load email accounts or templates for test form validation: {exc}")
-        form.sender.choices = []
-        form.template.choices = []
-
-    if form.validate_on_submit():
-        sender = form.sender.data
-        recipient = form.recipient.data
-        template = form.template.data
-
-        subject, template_vars = sample_email_for(template)
-        success = send_mail(
-            from_account=sender,
-            to_email=recipient,
-            subject=f"Test: {subject}",
-            template_name=template,
-            **template_vars,
-        )
-
-        if success:
-            flash(_("Test email sent successfully to %(recipient)s!", recipient=recipient), "success")
-        else:
-            flash(_("Failed to send test email. Please check the server logs."), "danger")
-    else:
-        flash(_("Invalid form submission. Please check the fields and try again."), "warning")
-
-    return redirect(f"{url_for('admin.admin_settings')}#settings-test")
 
 
 @admin_bp.route("/admin/undelivered-emails/<int:job_id>/<any(retry, dismiss):action>", methods=["POST"])

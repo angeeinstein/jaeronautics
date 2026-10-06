@@ -15,6 +15,7 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
       'approvals.review',
       'forum.moderate',
       'logs.view',
+      'notifications.manage',
       'settings.credentials',
       'settings.general',
       'system.backup',

@@ -285,19 +285,23 @@ class TestWhoSeesWhat:
 
 
 class TestTheCountOnTheTab:
-    def test_it_shows_what_is_waiting(self, client, admin):
+    """On the pages still drawn by Flask -- by now only Settings -> Maintenance,
+    which needs system.update; the new front end's sidebar has its own count."""
+
+    def test_it_shows_what_is_waiting(self, client):
         member = make_member(email="count@example.com")
         _name_change(member)
         _picture(member)
-        _login(client, admin.id)
+        _login(client, _staff("boss@example.org", "superadmin").id)
 
         body = client.get("/admin/settings").get_data(as_text=True)
 
         assert re.search(r'Reviews<span class="nav-count"[^>]*>2</span>', body)
 
-    def test_it_is_absent_when_nothing_waits(self, client, admin):
-        _login(client, admin.id)
+    def test_it_is_absent_when_nothing_waits(self, client):
+        _login(client, _staff("boss@example.org", "superadmin").id)
 
-        body = client.get("/admin/settings").get_data(as_text=True)
+        response = client.get("/admin/settings")
 
-        assert 'class="nav-count"' not in body
+        assert response.status_code == 200
+        assert 'class="nav-count"' not in response.get_data(as_text=True)

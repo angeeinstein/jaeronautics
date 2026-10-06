@@ -180,12 +180,17 @@ def test_all_routes_no_server_error(client, seeded):
     hit("POST", f"/api/v1/admin/reviews/pictures/{ids['sub_id']}/reject", uid=a, json={"note": "no"})
     hit("POST", f"/api/v1/admin/reviews/name-changes/{ids['pcr_id']}/approve", uid=a, json={"note": "ok"})
     hit("POST", f"/api/v1/admin/reviews/name-changes/{ids['pcr_id']}/reject", uid=a, json={"note": "no"})
-    hit("POST", "/admin/settings/mail-accounts", uid=a, data={"mail-account_key": "office2", "mail-host": "smtp.x", "mail-port": "587", "mail-username": "u", "mail-password": "p", "mail-starttls": "y"})
-    hit("POST", f"/admin/settings/mail-accounts/{ids['mail_id']}/test-connection", uid=a)
-    hit("POST", "/admin/settings/mail-accounts/export", uid=a, data={"export_password": "secretsecret"})
-    hit("POST", "/admin/settings/send-test-email", uid=a, data={"sender": "office", "recipient": "x@t.co", "template": "welcome_email"})
-    hit("POST", "/admin/settings/test-forum-connection", uid=a)
-    hit("POST", f"/admin/settings/mail-accounts/{ids['mail_id']}/delete", uid=a)
+    hit("GET", "/api/v1/admin/settings/mail", uid=a)
+    hit("POST", "/api/v1/admin/settings/mail/accounts", uid=a, json={
+        "key": "office2", "host": "smtp.x", "port": 587, "username": "u", "password": "p", "starttls": True})
+    hit("POST", f"/api/v1/admin/settings/mail/accounts/{ids['mail_id']}/test", uid=a)
+    hit("POST", "/api/v1/admin/settings/mail/export", uid=a, json={"password": "secretsecret"})
+    hit("POST", "/api/v1/admin/settings/test-email", uid=a,
+        json={"sender": "office", "recipient": "x@t.co", "template": "welcome_email.html"})
+    hit("POST", "/api/v1/admin/settings/forum/test", uid=a)
+    for section in ("general", "notifications", "billing", "forum"):
+        hit("GET", f"/api/v1/admin/settings/{section}", uid=a)
+    hit("DELETE", f"/api/v1/admin/settings/mail/accounts/{ids['mail_id']}", uid=a)
 
     assert len(calls) >= 45
 

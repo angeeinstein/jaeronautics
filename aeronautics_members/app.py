@@ -73,12 +73,10 @@ try:
         EmailRequestForm,
         IdentityChangeRequestForm,
         LoginForm,
-        MailAccountForm,
         MemberProfileForm,
         MembershipForm,
         RegistrationForm,
         SetPasswordForm,
-        TestEmailForm,
     )
     from .forum_service import (
         FORUM_AVATAR_STATUS_APPROVED,
@@ -136,12 +134,10 @@ except ImportError:
         EmailRequestForm,
         IdentityChangeRequestForm,
         LoginForm,
-        MailAccountForm,
         MemberProfileForm,
         MembershipForm,
         RegistrationForm,
         SetPasswordForm,
-        TestEmailForm,
     )
     from forum_service import (
         FORUM_AVATAR_STATUS_APPROVED,
@@ -1112,93 +1108,17 @@ def _invite_to_teams(member):
     return invite_to_teams(member.user) if member is not None else False
 
 
-def build_settings_page_context(edit_mail_account_id=None):
-    test_email_form = TestEmailForm()
-    mail_account_form = MailAccountForm(prefix="mail")
-    editing_mail_account = None
-    sender_choices = []
-    template_choices = get_email_template_choices(current_app._get_current_object())
-    mail_account_records = get_db_mail_accounts()
-    general_settings = get_settings_map([
-        "invoice_payments_enabled",
-        "automatic_emails_enabled",
-        "legal_pdfs_in_welcome_emails",
-        "welcome_email_sender",
-        "automatic_email_template",
-        INSTITUTIONAL_EMAIL_SETTING_KEY,
-    ])
-    notification_settings = normalize_notification_settings(get_notification_settings_map())
-    forum_settings = normalize_forum_settings(get_forum_settings_map())
-    stripe_settings = get_stripe_settings_map()
-    forum_service = ForumService(forum_settings)
-    notification_service = NotificationService(current_app._get_current_object())
-    try:
-        mail_accounts = load_mail_accounts_config()
-        sender_choices = [(account_key, account_key) for account_key in mail_accounts.keys()]
-    except Exception as exc:
-        current_app.logger.error(f"Could not load email accounts for admin settings: {exc}")
-
-    if edit_mail_account_id:
-        editing_mail_account = db.session.get(MailAccount, edit_mail_account_id)
-        if editing_mail_account is not None:
-            mail_account_form.mail_account_id.data = str(editing_mail_account.id)
-            mail_account_form.account_key.data = editing_mail_account.account_key
-            mail_account_form.host.data = editing_mail_account.host
-            mail_account_form.port.data = editing_mail_account.port
-            mail_account_form.username.data = editing_mail_account.username
-            mail_account_form.starttls.data = editing_mail_account.starttls
-            mail_account_form.from_email.data = editing_mail_account.from_email
-            mail_account_form.from_name.data = editing_mail_account.from_name
-
-    test_email_form.sender.choices = sender_choices
-    test_email_form.template.choices = template_choices
+def build_settings_page_context():
+    """What Settings -> Maintenance shows: the version and its updates, the
+    system's health with the undelivered emails behind it, and the backups."""
     return {
-        # Version/update state for the Maintenance tab. Same service call the
-        # JSON status endpoint uses, so the page and the API cannot disagree.
+        # The same service call the JSON status endpoint uses, so the page and it cannot disagree.
         "update_state": describe_update_state(),
         "system_health": collect_system_health(),
         "backup_page": describe_backup_page(),
         # The health report counts undelivered emails; this is what an admin
-        # needs to actually resolve one -- who it was for, and why it failed.
+        # needs to resolve one -- who it was for, and why it failed.
         "undelivered_emails": list_undelivered_emails(),
-        "test_email_form": test_email_form,
-        "mail_account_form": mail_account_form,
-        "mail_account_records": mail_account_records,
-        "editing_mail_account": editing_mail_account,
-        "sender_choices": sender_choices,
-        "template_choices": template_choices,
-        "general_settings": general_settings,
-        # The list actually in force, which is not the same as the stored text
-        # when the box is empty and the built-in default applies.
-        "institutional_email_domains": get_institutional_domains(),
-        "notification_settings": notification_settings,
-        "notification_health": notification_service.get_health_snapshot(),
-        "forum_settings": forum_settings,
-        # One box per kind of member rather than a text area somebody has to
-        # write both sides of. The left-hand side is fixed -- it is what this
-        # portal stores on a member -- so it belongs in the label, not in
-        # something to be typed correctly.
-        "forum_category_group_fields": [
-            {
-                "kind": kind,
-                "label": category_label(kind),
-                "value": member_category_groups(forum_settings).get(kind, ""),
-            }
-            for kind in CATEGORY_ORDER
-        ],
-        "stripe_settings": stripe_settings,
-        "forum_service": forum_service,
-        "forum_endpoint_urls": {
-            "entry": build_public_url("forum.forum_entry"),
-            "connect": build_public_url("forum.forum_discourse_connect"),
-            "logout": build_public_url("forum.forum_logout"),
-        },
-        "public_base_url": current_app.config.get("PUBLIC_BASE_URL") or "",
-        "forum_provider_choices": [("discourse", _("Discourse"))],
-        "forum_auth_strategy_choices": [
-            ("discourse_connect", _("DiscourseConnect")),
-            ("oauth2_provider", _("OAuth2 Provider (reserved)")),
-        ],
     }
 
 

@@ -1502,6 +1502,20 @@
         "title": "DashboardOut",
         "type": "object"
       },
+      "DeletedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "removed_welcome_sender": {
+            "title": "Removed Welcome Sender",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "removed_welcome_sender"
+        ],
+        "title": "DeletedOut",
+        "type": "object"
+      },
       "DisabledIn": {
         "additionalProperties": false,
         "properties": {
@@ -1731,6 +1745,21 @@
           "error"
         ],
         "title": "ErrorOut",
+        "type": "object"
+      },
+      "ExportIn": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 255,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "ExportIn",
         "type": "object"
       },
       "Fee": {
@@ -2729,6 +2758,45 @@
         "title": "HistoryQuery",
         "type": "object"
       },
+      "ImportOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created",
+          "updated",
+          "skipped"
+        ],
+        "title": "ImportOut",
+        "type": "object"
+      },
+      "ImportQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          }
+        },
+        "title": "ImportQuery",
+        "type": "object"
+      },
       "InForce": {
         "additionalProperties": false,
         "properties": {
@@ -3042,6 +3110,162 @@
           "size_kb"
         ],
         "title": "MadeOut",
+        "type": "object"
+      },
+      "MailAccountIn": {
+        "additionalProperties": false,
+        "properties": {
+          "from_email": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "From Email"
+          },
+          "from_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "From Name"
+          },
+          "host": {
+            "maxLength": 255,
+            "title": "Host",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 80,
+            "title": "Key",
+            "type": "string"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Password"
+          },
+          "port": {
+            "title": "Port",
+            "type": "integer"
+          },
+          "starttls": {
+            "default": true,
+            "title": "Starttls",
+            "type": "boolean"
+          },
+          "username": {
+            "maxLength": 255,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "host",
+          "port",
+          "username"
+        ],
+        "title": "MailAccountIn",
+        "type": "object"
+      },
+      "MailAccountOut": {
+        "additionalProperties": false,
+        "properties": {
+          "from_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Email"
+          },
+          "from_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Name"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "port": {
+            "title": "Port",
+            "type": "integer"
+          },
+          "starttls": {
+            "title": "Starttls",
+            "type": "boolean"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "host",
+          "port",
+          "username",
+          "starttls",
+          "from_email",
+          "from_name"
+        ],
+        "title": "MailAccountOut",
+        "type": "object"
+      },
+      "MailOut": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/MailAccountOut"
+            },
+            "title": "Accounts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "title": "MailOut",
         "type": "object"
       },
       "MakeIn": {
@@ -4450,6 +4674,20 @@
         "title": "RolesOut",
         "type": "object"
       },
+      "SentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "SentOut",
+        "type": "object"
+      },
       "SessionOut": {
         "additionalProperties": false,
         "properties": {
@@ -5165,6 +5403,58 @@
           "teams"
         ],
         "title": "TeamsOut",
+        "type": "object"
+      },
+      "TestEmailIn": {
+        "additionalProperties": false,
+        "properties": {
+          "recipient": {
+            "maxLength": 255,
+            "title": "Recipient",
+            "type": "string"
+          },
+          "sender": {
+            "maxLength": 100,
+            "title": "Sender",
+            "type": "string"
+          },
+          "template": {
+            "maxLength": 200,
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sender",
+          "recipient",
+          "template"
+        ],
+        "title": "TestEmailIn",
+        "type": "object"
+      },
+      "TestEmailOut": {
+        "additionalProperties": false,
+        "properties": {
+          "senders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Senders",
+            "type": "array"
+          },
+          "templates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "senders",
+          "templates"
+        ],
+        "title": "TestEmailOut",
         "type": "object"
       },
       "Totals": {
@@ -8359,6 +8649,534 @@
         ]
       }
     },
+    "/api/v1/admin/settings/mail": {
+      "get": {
+        "operationId": "admin_mail_accounts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The accounts the portal sends email from, without their passwords.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/accounts": {
+      "post": {
+        "operationId": "admin_mail_account_add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailAccountIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Add an account to send from.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/accounts/{account_id}": {
+      "delete": {
+        "operationId": "admin_mail_account_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Remove an account.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      },
+      "put": {
+        "operationId": "admin_mail_account_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailAccountIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailAccountOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Change an account. An empty password keeps the one it has.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/accounts/{account_id}/test": {
+      "post": {
+        "operationId": "admin_mail_account_test",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Sign in to the account's server. Sends nothing.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/export": {
+      "post": {
+        "operationId": "admin_mail_export",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Every account as a JSON file, passwords included -- with the current password confirmed.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/mail/import": {
+      "post": {
+        "operationId": "admin_mail_import",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "overwrite",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Overwrite",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Accounts from a JSON file: this portal's export, the older mapping, or a list of accounts.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.credentials"
+        ]
+      }
+    },
     "/api/v1/admin/settings/notifications": {
       "get": {
         "operationId": "admin_settings_notifications",
@@ -8472,6 +9290,122 @@
         ],
         "x-permissions": [
           "settings.general"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/test-email": {
+      "get": {
+        "operationId": "admin_test_email",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestEmailOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "What a test email can be sent from, and with.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "notifications.manage"
+        ]
+      },
+      "post": {
+        "operationId": "admin_test_email_send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestEmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Send one email from a template, filled in as a member's would be. Whether the server took it.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "notifications.manage"
         ]
       }
     },

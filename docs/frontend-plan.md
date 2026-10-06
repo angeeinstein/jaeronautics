@@ -233,7 +233,9 @@ server can update to it.
       changing only its own settings and logging one entry when something changed; the
       secrets are never sent to the browser, only whether one is set. Pages at
       `/admin/settings/<section>`, `frontend/src/pages/admin/settings/`; an old link to a
-      section's tab opens its page.)*
+      section's tab opens its page. Mail accounts and Test email done: `api/admin_mail.py`,
+      `services/mail_accounts.py`; the export of the accounts with their passwords now asks
+      for the current password.)*
 5. **Teams area:** overview, a team's page and join page with the rules
    dialog, the leads' management sections, the team's money.
 6. **My Account:** the overview, membership and payment status, forum card
