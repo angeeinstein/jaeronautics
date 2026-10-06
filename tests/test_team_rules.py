@@ -3,11 +3,9 @@
 legal/teams/<team>/team-rules/<language>/<day>.md, approved by the association,
 versioned, German applying and English a translation, each version a PDF with
 the team's logo. Applying or joining ticks the version in force, read in a
-window over the form; the membership keeps its day. Rules typed into the
-portal before still apply until the team has a file, and become one with
-``flask export-team-rules``.
+window over the form; the membership keeps its day.
 """
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -17,7 +15,7 @@ from aeronautics_members.services import legal_texts as legal
 from aeronautics_members.services import teams
 from aeronautics_members.services.clock import get_membership_today
 from test_legal_texts import legal_dir  # noqa: F401 -- fixture
-from test_team_page import RULES, _png, _with_rules
+from test_team_page import _png
 from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
 from test_teams_foundation import _in_team
 
@@ -67,17 +65,6 @@ class TestApplying:
 
         membership = teams.ongoing_membership(anna, team)
         assert membership.terms_version == datetime.combine(TODAY, datetime.min.time())
-
-    def test_the_file_takes_over_from_the_portals_text(self, app, client, rules_file):
-        team, _lead = _led()
-        _with_rules(team)
-        rules_file()
-        _login(client, _person().id)
-
-        body = client.get("/teams/rocket/about").get_data(as_text=True)
-
-        assert "Safety briefing" not in body and 'href="/teams/rocket/rules"' in body
-        assert teams.team_rules(team).from_file
 
     def test_a_draft_or_another_teams_file_is_no_rules(self, app, client, rules_file):
         team, _lead = _led()
@@ -196,37 +183,3 @@ class TestTheFiles:
         [(version, result)] = [(v, r) for v, r in legal_pdf.build_all() if v.team == "ghost"]
 
         assert isinstance(result, LookupError) and "ghost" in str(result)
-
-
-@pytest.mark.usefixtures("switched_on")
-class TestFromThePortal:
-    def test_written_as_a_file_of_the_version_its_members_accepted(self, app, legal_dir):  # noqa: F811
-        team, _lead = _led()
-        _with_rules(team)
-        anna = _person()
-        membership = teams.join_or_apply(anna, team, accepted_terms=True)
-        db.session.commit()
-
-        relative, content = teams.portal_rules_as_file(team)
-        (legal_dir / relative).parent.mkdir(parents=True)
-        (legal_dir / relative).write_text(content, encoding="utf-8")
-
-        assert legal.problems() == []
-        rules = teams.team_rules(team, today=date(9999, 1, 1))
-        assert rules.from_file and teams.accepted_rules_in_force(membership, rules)
-        assert "flight.  \n2. Tools" in content  # the line break typed kept
-
-    def test_nothing_without_rules(self, app):
-        team, _lead = _led()
-
-        assert teams.portal_rules_as_file(team) is None
-
-    def test_the_command(self, app, tmp_path, legal_dir):  # noqa: F811
-        team, _lead = _led()
-        _with_rules(team)
-
-        result = app.test_cli_runner().invoke(args=["export-team-rules", "--out", str(tmp_path / "out")])
-
-        written = list((tmp_path / "out" / "teams" / "rocket" / "team-rules" / "de").glob("*.md"))
-        assert result.exit_code == 0 and len(written) == 1
-        assert RULES.split("\n")[0] in written[0].read_text(encoding="utf-8")

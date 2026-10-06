@@ -63,7 +63,7 @@
                             <textarea class="form-control" id="application-text" name="application_text" rows="4" maxlength="5000"></textarea>
                         </div>
                     {% endif %}
-                    {% if rules and rules.from_file %}
+                    {% if rules %}
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="accept-terms" name="accept_terms" required>
                             <label class="form-check-label" for="accept-terms">
@@ -72,16 +72,6 @@
                                 ({{ _('version of %(day)s', day=rules.day|date_display) }}).<span class="text-danger">*</span>
                             </label>
                             <div class="form-text"><a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-file>{{ _('Rules as PDF') }}</a></div>
-                        </div>
-                    {% elif rules %}
-                        <div>
-                            <div class="form-label">{{ _('Rules of %(team)s', team=team.name) }}</div>
-                            <div class="team-terms" tabindex="0" role="region" aria-label="{{ _('Rules of %(team)s', team=team.name) }}">{{ rules.text }}</div>
-                            <div class="form-text">{{ _('As of %(day)s.', day=rules.day|date_display) }}</div>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="accept-terms" name="accept_terms" required>
-                            <label class="form-check-label" for="accept-terms">{{ _('I accept the rules of %(team)s.', team=team.name) }}</label>
                         </div>
                     {% endif %}
                     <div>
@@ -94,5 +84,5 @@
         {% endif %}
     </div>
 </section>
-{% if rules and rules.from_file %}<script src="{{ url_for('static', filename='legal-dialog.js') }}"></script>{% endif %}
+{% if rules %}<script src="{{ url_for('static', filename='legal-dialog.js') }}"></script>{% endif %}
 {% endblock %}

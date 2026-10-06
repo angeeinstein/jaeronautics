@@ -80,8 +80,7 @@ urgent.
   version dated, with its history in the repository. Accepted with a tick
   when applying or joining; the membership keeps when, and which version (its
   day). Members already in are not asked to accept a new version; their team
-  page says the rules have changed. Rules typed into the portal before apply
-  until the team has a file.
+  page says the rules have changed.
 - **Leads' notes about a person** — never shown to that person. See 10.
 - Team bank details (account holder, IBAN, BIC) — the team's account, which
   may be a private person's. Every change logged with old and new value.

@@ -358,11 +358,8 @@ beside the association's and its name (on white: the logo field asks teams for o
 window over the form. The membership keeps the version's day. Leads can no
 longer change their rules in the portal; they send the new text to the
 association. A folder whose short name matches no team is reported by `flask
-build-legal-pdfs`. Before this, leads typed rules into the portal: those still
-apply to a team until it has a file, and `flask export-team-rules --out
-<folder>` writes them as files -- dated the day they last changed, the
-version its members accepted -- to check, copy into `legal/teams/`, commit
-and deploy.
+build-legal-pdfs`. A team without a file in force has no rules: joining it
+asks for none.
 
 **At signup** the one checkbox names every text accepted then, each a link.
 A click opens the text in a window over the form (`static/legal-dialog.js`

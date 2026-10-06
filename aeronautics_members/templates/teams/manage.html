@@ -183,15 +183,12 @@
                     <div>
                         <div class="form-label">{{ _('Rules to accept') }}</div>
                         {% set rules = team_rules(team) %}
-                        {% if rules and rules.from_file %}
+                        {% if rules %}
                             <p class="mb-1">
                                 <a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}">{{ _('Rules of %(team)s', team=team.name) }}</a>
                                 ({{ _('version of %(day)s', day=rules.day|date_display) }}) ·
                                 <a href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-file>{{ _('PDF') }}</a>
                             </p>
-                        {% elif rules %}
-                            <div class="team-terms" tabindex="0" role="region" aria-label="{{ _('Rules of %(team)s', team=team.name) }}">{{ rules.text }}</div>
-                            <p class="small text-muted mb-1 mt-1">{{ _('As of %(day)s, entered here before the rules moved to the association.', day=rules.day|date_display) }}</p>
                         {% else %}
                             <p class="mb-1 text-muted">{{ _('None. Whoever joins accepts the association\'s rules only.') }}</p>
                         {% endif %}

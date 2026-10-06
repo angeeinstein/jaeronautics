@@ -47,15 +47,14 @@
         {% for team, rules in team_rules %}
             <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
                 <div>
-                    {% if rules and rules.from_file %}<a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}">{{ rules.version.title }}</a>{% else %}{{ _('Rules of %(team)s', team=team.name) }}{% endif %}
+                    {% if rules %}<a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}">{{ rules.version.title }}</a>{% else %}{{ _('Rules of %(team)s', team=team.name) }}{% endif %}
                     <div class="small text-muted">
                         {{ team.name }} ·
-                        {% if rules and rules.from_file %}{{ _('Version of %(day)s', day=rules.version.version|date_display) }} · {{ _('in force since %(day)s', day=rules.version.effective_from|date_display) }}
-                        {% elif rules %}<span class="text-warning">{{ _('Typed into the portal, no file yet: flask export-team-rules writes one.') }}</span>
+                        {% if rules %}{{ _('Version of %(day)s', day=rules.version.version|date_display) }} · {{ _('in force since %(day)s', day=rules.version.effective_from|date_display) }}
                         {% else %}{{ _('None in force') }}{% endif %}
                     </div>
                 </div>
-                {% if rules and rules.from_file %}<a class="text-nowrap" href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-file>{{ _('PDF') }}</a>{% endif %}
+                {% if rules %}<a class="text-nowrap" href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-file>{{ _('PDF') }}</a>{% endif %}
             </li>
         {% endfor %}
     </ul>
