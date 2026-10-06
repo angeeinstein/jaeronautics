@@ -272,3 +272,304 @@ def review_history(user, page=1, per_page=HISTORY_PAGE_SIZE):
         pages=pages,
         total=total,
     )
+
+
+# --- Deciding ----------------------------------------------------------------------
+#
+# Each decision is one whole action: the change, the audit entry, the email to
+# the member, the forum follow-up, the commit. Each first locks its record, so
+# a second admin deciding the same thing at the same moment waits, then finds
+# it decided (services/locking.py) and is told so -- a conflict, not an error.
+
+
+def forum_username_change(request_record):
+    """What approving this request would do to the forum username: ``(current, suggested)``,
+    or None when it would stay the same -- the admin decides whether to change it."""
+    from .forum import generate_unique_forum_username
+
+    user = request_record.member.user if request_record.member is not None else None
+    current = user.forum_username if user is not None else None
+    suggested = generate_unique_forum_username(
+        request_record.requested_first_name,
+        request_record.requested_last_name,
+        request_record.requested_year_group,
+        exclude_user_id=user.id if user is not None else None,
+    )
+    return (current, suggested) if current and current != suggested else None
+
+
+def _no_longer_waiting(what):
+    from . import ConflictError
+
+    return ConflictError(f"That {what} is no longer waiting for review.", code="already_decided")
+
+
+def _locked_submission(submission_id):
+    from .locking import locked
+
+    submission = db.session.execute(
+        locked(
+            db.select(ForumAvatarSubmission)
+            .options(
+                selectinload(ForumAvatarSubmission.user),
+                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
+            )
+            .where(ForumAvatarSubmission.id == submission_id)
+        )
+    ).scalar_one_or_none()
+    if submission is None or submission.status != FORUM_AVATAR_STATUS_PENDING:
+        raise _no_longer_waiting("profile picture")
+    return submission
+
+
+def _forum_snapshots(submission):
+    from .audit import snapshot_forum_account_for_audit, snapshot_forum_avatar_submission_for_audit
+
+    return {
+        "submission": snapshot_forum_avatar_submission_for_audit(submission),
+        "forum_account": snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None),
+    }
+
+
+def approve_picture(submission_id, *, review_note, actor_user):
+    """Approve a profile picture and send it to the forum.
+
+    ``{"forum_error": str | None}``: the approval stands even when the forum
+    could not be told; the next sync carries it there.
+    """
+    from . import ExternalServiceError
+    from ..forum_service import FORUM_STATE_ACTIVE, ForumProviderError
+    from .audit import log_audit_event
+    from .forum import get_forum_service
+    from .notifications import queue_user_status_notification
+
+    submission = _locked_submission(submission_id)
+    forum_service = get_forum_service()
+    before = _forum_snapshots(submission)
+    review_note = (review_note or "").strip() or None
+    account = submission.user.forum_account if submission.user else None
+    was_active = account is not None and account.state == FORUM_STATE_ACTIVE
+    # A replacement an admin allowed: the member already has a picture.
+    replacing = submission.member is not None and (
+        forum_service.get_current_approved_submission(submission.member) is not None
+        or forum_service.get_reclaimed_avatar(submission.member) is not None
+    )
+    try:
+        result = forum_service.approve_avatar_submission(submission, reviewer=actor_user, review_note=review_note)
+    except ForumProviderError as exc:
+        db.session.rollback()
+        raise ExternalServiceError(str(exc)) from exc
+
+    log_audit_event(
+        category="forum",
+        event_type="avatar_approved" if not result.error else "avatar_approval_failed",
+        actor_user=actor_user,
+        target_user=submission.user,
+        target_member=submission.member,
+        before=before,
+        after=_forum_snapshots(submission),
+        metadata={"review_note": review_note, "error": result.error, "desired_state": result.desired_state},
+    )
+    # The moment their forum access becomes complete, which they were waiting
+    # for. Not for somebody replacing a picture: their access was complete.
+    if not result.error and replacing:
+        # The one replacement allowed is used; the next one needs asking again.
+        submission.member.avatar_replacement_allowed_at = None
+        queue_user_status_notification(
+            "forum_avatar_replaced",
+            "Your new profile picture was approved.",
+            recipient_email=submission.user.email if submission.user is not None else None,
+            payload={"first_name": submission.member.first_name},
+            target_user=submission.user,
+            target_member=submission.member,
+            object_type="forum_avatar_submission",
+            object_id=submission.id,
+        )
+    elif not result.error and result.desired_state == FORUM_STATE_ACTIVE and not was_active:
+        queue_user_status_notification(
+            "forum_avatar_approved",
+            "Your profile picture was approved.",
+            recipient_email=submission.user.email if submission.user is not None else None,
+            payload={"first_name": submission.member.first_name if submission.member is not None else None},
+            target_user=submission.user,
+            target_member=submission.member,
+            object_type="forum_avatar_submission",
+            object_id=submission.id,
+        )
+    db.session.commit()
+    return {"forum_error": result.error}
+
+
+def reject_picture(submission_id, *, review_note, actor_user):
+    """Reject a profile picture. The member is emailed, with the note, and uploads another."""
+    from . import ExternalServiceError
+    from ..forum_service import ForumProviderError
+    from .audit import log_audit_event
+    from .forum import get_forum_service
+    from .notifications import queue_user_status_notification
+
+    submission = _locked_submission(submission_id)
+    before = _forum_snapshots(submission)
+    review_note = (review_note or "").strip() or None
+    try:
+        result = get_forum_service().reject_avatar_submission(submission, reviewer=actor_user, review_note=review_note)
+    except ForumProviderError as exc:
+        db.session.rollback()
+        raise ExternalServiceError(str(exc)) from exc
+
+    log_audit_event(
+        category="forum",
+        event_type="avatar_rejected",
+        actor_user=actor_user,
+        target_user=submission.user,
+        target_member=submission.member,
+        before=before,
+        after=_forum_snapshots(submission),
+        metadata={"review_note": review_note, "error": result.error if result else None},
+    )
+    member = submission.member
+    queue_user_status_notification(
+        "forum_avatar_rejected",
+        "Your forum profile picture was rejected.",
+        recipient_email=(submission.user.email if submission.user is not None
+                         else (member.email_private if member is not None else None)),
+        payload={"first_name": member.first_name if member is not None else None, "review_note": review_note},
+        target_user=submission.user,
+        target_member=member,
+        object_type="forum_avatar_submission",
+        object_id=submission.id,
+    )
+    db.session.commit()
+
+
+def _locked_change_request(request_id):
+    from .locking import locked
+
+    record = db.session.execute(
+        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
+    ).scalar_one_or_none()
+    if record is None or record.status != "pending":
+        raise _no_longer_waiting("change request")
+    return record
+
+
+def approve_change(request_id, *, admin_note, forum_username, actor_user):
+    """Approve a change request: the member's record takes the requested details.
+
+    ``forum_username``: None keeps the forum username; a name (or "" for the
+    suggested one) renames them on the forum too -- a number is added when it
+    is taken. ``{"rename_pending": bool, "forum_error": str | None}``.
+    """
+    from . import outbox
+    from ..db_models import ExternalWorkItem
+    from .audit import log_audit_event, snapshot_member_for_audit, snapshot_user_for_audit
+    from .clock import get_now_utc
+    from .forum import build_forum_username_base, generate_unique_forum_username, sync_member_forum_state
+    from .members import IDENTITY_MEMBER_FIELDS
+    from .membership import member_has_active_access
+    from .notifications import queue_user_status_notification
+
+    record = _locked_change_request(request_id)
+    member = record.member
+    user = member.user
+    before_member = snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)
+    before_user = snapshot_user_for_audit(user)
+    previous_forum_username = user.forum_username if user is not None else None
+
+    member.salutation = record.requested_salutation
+    member.title = record.requested_title
+    member.first_name = record.requested_first_name
+    member.last_name = record.requested_last_name
+    member.member_category = record.requested_member_category
+    member.year_group = record.requested_year_group
+
+    if user is not None and forum_username is not None:
+        preferred = forum_username.strip() or build_forum_username_base(
+            member.first_name, member.last_name, member.year_group)
+        user.forum_username = generate_unique_forum_username(
+            member.first_name, member.last_name, member.year_group, exclude_user_id=user.id, preferred=preferred)
+        if user.forum_username != previous_forum_username:
+            # A rename has to be asked for as one: the sync below leaves the
+            # forum's username alone on purpose. Queued first, so that sync
+            # does not take the old name back from the forum meanwhile.
+            outbox.enqueue_forum_rename(user, reason="Forum username changed on approval.")
+
+    record.status = "approved"
+    record.admin_note = (admin_note or "").strip() or None
+    record.reviewed_by = actor_user
+    record.reviewed_at = get_now_utc()
+    forum_result = None
+    if user is not None and (user.forum_account is not None or member_has_active_access(member)):
+        forum_result, _service = sync_member_forum_state(member)
+    log_audit_event(
+        category="profile_change_request",
+        event_type="identity_request_approved",
+        actor_user=actor_user,
+        target_user=user,
+        target_member=member,
+        before={"request_status": "pending", "user": before_user, "member": before_member},
+        after={"request_status": record.status, "user": snapshot_user_for_audit(user),
+               "member": snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)},
+        metadata={
+            "request_id": record.id,
+            "member_note": record.member_note,
+            "admin_note": record.admin_note,
+            "previous_forum_username": previous_forum_username,
+            "new_forum_username": user.forum_username if user is not None else None,
+            "forum_sync_error": forum_result.error if forum_result else None,
+        },
+    )
+    queue_user_status_notification(
+        "identity_request_approved",
+        "Your identity change request was approved.",
+        recipient_email=user.email if user is not None else member.email_private,
+        payload={"first_name": member.first_name, "admin_note": record.admin_note},
+        target_user=user,
+        target_member=member,
+        object_type="member_profile_change_request",
+        object_id=record.id,
+    )
+    db.session.commit()
+    rename_pending = False
+    if user is not None:
+        # Done now rather than on the next worker pass, so the member sees the
+        # new name when they next look. Left queued if the forum is down.
+        outbox.process_pending(limit=5, kinds=[ExternalWorkItem.KIND_FORUM_RENAME], user_id=user.id)
+        rename_pending = outbox.pending_count(kinds=[ExternalWorkItem.KIND_FORUM_RENAME], user_id=user.id) > 0
+    return {"rename_pending": rename_pending, "forum_error": forum_result.error if forum_result else None}
+
+
+def reject_change(request_id, *, admin_note, actor_user):
+    """Turn a change request down. The member is emailed, with the note."""
+    from .audit import log_audit_event
+    from .clock import get_now_utc
+    from .notifications import queue_user_status_notification
+
+    record = _locked_change_request(request_id)
+    record.status = "rejected"
+    record.admin_note = (admin_note or "").strip() or None
+    record.reviewed_by = actor_user
+    record.reviewed_at = get_now_utc()
+    member = record.member
+    user = member.user if member is not None else None
+    log_audit_event(
+        category="profile_change_request",
+        event_type="identity_request_rejected",
+        actor_user=actor_user,
+        target_user=user,
+        target_member=member,
+        before={"request_id": record.id, "status": "pending"},
+        after={"request_id": record.id, "status": record.status},
+        metadata={"member_note": record.member_note, "admin_note": record.admin_note},
+    )
+    queue_user_status_notification(
+        "identity_request_rejected",
+        "Your identity change request was rejected.",
+        recipient_email=(user.email if user is not None else member.email_private) if member is not None else None,
+        payload={"first_name": member.first_name if member is not None else None, "admin_note": record.admin_note},
+        target_user=user,
+        target_member=member,
+        object_type="member_profile_change_request",
+        object_id=record.id,
+    )
+    db.session.commit()

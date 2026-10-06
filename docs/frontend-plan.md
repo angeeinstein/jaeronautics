@@ -200,7 +200,10 @@ server can update to it.
       `frontend/src/pages/admin/account/`, a tab per subject plus Activity.
       What erasing would do asks Stripe, so it is read only when the Danger zone
       tab opens. The page offers an action only where the server would not refuse it.)*
-   3. Reviews (photo approvals)
+   3. Reviews (photo approvals) *(done: `api/admin_reviews.py`; the four decisions moved
+      into `services/reviews.py` beside the queue they act on;
+      `frontend/src/pages/admin/reviews/`. A decision on something decided meanwhile
+      is a conflict, said as such.)*
    4. Teams (the admins' part)
    5. Money
    6. Logs

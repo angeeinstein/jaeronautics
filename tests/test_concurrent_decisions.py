@@ -47,10 +47,10 @@ def test_a_picture_rejected_meanwhile_is_not_approved_as_well(app, client):
     _committed_elsewhere(ForumAvatarSubmission, picture.id, status="rejected")
     _login(client, _staff("second@example.org", "admin").id)
 
-    body = client.post(f"/admin/reviews/pictures/{picture.id}/approve",
-                       follow_redirects=True).get_data(as_text=True)
+    response = send(client, "POST", f"/api/v1/admin/reviews/pictures/{picture.id}/approve", {})
 
-    assert "no longer waiting for review" in body
+    assert response.status_code == 409
+    assert "no longer waiting for review" in response.get_json()["error"]["message"]
     assert db.session.get(ForumAvatarSubmission, picture.id).status == "rejected"
     assert _emails("forum_avatar_approved") == 0, "the member is not told both"
 
@@ -63,7 +63,7 @@ def test_a_picture_approved_meanwhile_is_not_rejected_as_well(app, client):
     _committed_elsewhere(ForumAvatarSubmission, picture.id, status="approved")
     _login(client, _staff("second2@example.org", "admin").id)
 
-    client.post(f"/admin/reviews/pictures/{picture.id}/reject")
+    send(client, "POST", f"/api/v1/admin/reviews/pictures/{picture.id}/reject", {})
 
     assert db.session.get(ForumAvatarSubmission, picture.id).status == "approved"
     assert _emails("forum_avatar_rejected") == 0
@@ -77,7 +77,7 @@ def test_a_change_request_rejected_meanwhile_does_not_change_the_profile(app, cl
     _committed_elsewhere(MemberProfileChangeRequest, change.id, status="rejected")
     _login(client, _staff("second3@example.org", "admin").id)
 
-    client.post(f"/admin/reviews/name-changes/{change.id}/approve")
+    send(client, "POST", f"/api/v1/admin/reviews/name-changes/{change.id}/approve", {})
 
     db.session.expire_all()
     assert member.last_name == "Before"

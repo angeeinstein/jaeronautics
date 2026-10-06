@@ -1,0 +1,59 @@
+.card {
+  padding: 1rem;
+  background: var(--ja-surface);
+  border: 1px solid var(--ja-border);
+}
+
+.who {
+  min-width: 0;
+}
+
+.name {
+  color: var(--ja-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.name:hover,
+.name:focus-visible {
+  color: var(--ja-link-hover);
+  text-decoration: underline;
+}
+
+.photo {
+  width: 10rem;
+  height: 10rem;
+  object-fit: cover;
+  border: 1px solid var(--ja-border);
+}
+
+.decision {
+  flex: 1 1 20rem;
+  min-width: 0;
+}
+
+.changeLabel {
+  color: var(--ja-muted);
+  font-weight: 400;
+  padding-right: 1.5rem;
+}
+
+.was {
+  color: var(--ja-muted);
+  text-decoration: line-through;
+}
+
+.fold {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-link);
+}
+
+.fold:hover {
+  color: var(--ja-link-hover);
+}
+
+/* As wide as what it holds, so the old and the new value sit side by side. */
+.changes {
+  align-self: flex-start;
+  width: auto;
+}

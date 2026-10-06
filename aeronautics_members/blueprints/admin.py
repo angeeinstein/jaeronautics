@@ -20,27 +20,11 @@ from ..config import (
 from ..services.audit import (
     log_audit_event,
     redact_settings_states_for_audit,
-    snapshot_forum_account_for_audit,
-    snapshot_forum_avatar_submission_for_audit,
     snapshot_mail_account_for_audit,
-    snapshot_member_for_audit,
-    snapshot_user_for_audit,
-)
-from ..services.clock import (
-    get_now_utc,
 )
 from ..services.institutional_email import SETTING_KEY as INSTITUTIONAL_EMAIL_SETTING_KEY
 from ..services.forum import (
-    build_forum_username_base,
-    generate_unique_forum_username,
     get_forum_service,
-    sync_member_forum_state,
-)
-from ..services.members import (
-    IDENTITY_MEMBER_FIELDS,
-)
-from ..services.membership import (
-    member_has_active_access,
 )
 from ..services.privacy import (
     export_account_data,
@@ -53,7 +37,6 @@ from ..services.notifications import (
     build_mail_accounts_export_payload,
     dismiss_email_delivery_job,
     normalize_imported_mail_accounts_payload,
-    queue_user_status_notification,
     requeue_email_delivery_job,
     sample_email_for,
 )
@@ -102,12 +85,9 @@ from sqlalchemy.orm import (
 from ..db_models import (
     AuditLog,
     EmailDeliveryJob,
-    ExternalWorkItem,
-    ForumAvatarSubmission,
     ImportedForumProfile,
     MailAccount,
     Member,
-    MemberProfileChangeRequest,
     Setting,
     User,
     db,
@@ -117,12 +97,9 @@ from ..forms import (
     TestEmailForm,
 )
 from ..forum_service import (
-    FORUM_AVATAR_STATUS_PENDING,
     FORUM_SETTING_KEYS,
-    FORUM_STATE_ACTIVE,
     ForumProviderError,
 )
-from ..services.locking import locked
 from ..mail_utils import (
     load_mail_accounts_config,
     probe_mail_account_connection,
@@ -134,7 +111,6 @@ from ..notification_service import (
 from ..app import (
     AUDIT_LOG_PAGE_SIZE,
     build_settings_page_context,
-    decorate_pending_identity_requests,
     limiter,
     requires,
     set_setting_value,
@@ -197,192 +173,14 @@ def admin_account_detail(user_id):
 @login_required
 @requires(Permission.ADMIN_ACCESS)
 def admin_reviews():
-    # Name changes need APPROVALS_REVIEW, pictures and sync problems
-    # FORUM_MODERATE; the page is for anybody holding either and shows each
-    # of them only their part. The approve and reject routes check again.
+    """Reviews, drawn by the new front end (frontend/src/pages/admin/Reviews.tsx).
+
+    For anybody who decides change requests or pictures; somebody in the
+    admin area who decides neither goes back to the dashboard.
+    """
     if not reviews.can_review_anything(current_user):
-        flash(_("You do not have permission to access this page."), "danger")
         return redirect(url_for("admin.admin_dashboard"))
-
-    queue = reviews.review_queue(current_user)
-    decorate_pending_identity_requests(
-        [item.record for item in queue if item.kind == reviews.KIND_NAME_CHANGE]
-    )
-    for item in queue:
-        if item.kind == reviews.KIND_NAME_CHANGE:
-            item.changes = reviews.describe_changes(item.record)
-            item.is_name_change = reviews.is_name_change(item.changes)
-    history_page = request.args.get("page", 1, type=int)
-    history = reviews.review_history(current_user, page=history_page)
-    for item in history.items:
-        if item.kind == reviews.KIND_NAME_CHANGE:
-            item.is_name_change = reviews.is_name_change(reviews.describe_changes(item.record))
-    return render_template(
-        "admin_reviews.html",
-        active_admin_section="reviews",
-        queue=queue,
-        waiting=reviews.waiting_counts(current_user),
-        queue_limit=reviews.QUEUE_LIMIT,
-        sync_problems=reviews.sync_problems(current_user),
-        history=history,
-        # Opened when somebody is paging through it, so the next page does
-        # not arrive folded shut.
-        history_open="page" in request.args,
-    )
-
-
-@admin_bp.route("/admin/reviews/pictures/<int:submission_id>/approve", methods=["POST"])
-@login_required
-@requires(Permission.FORUM_MODERATE)
-def approve_forum_avatar_submission(submission_id):
-    # Locked: another admin deciding the same picture waits here, then finds
-    # it decided (services/locking.py).
-    submission = db.session.execute(
-        locked(
-            db.select(ForumAvatarSubmission)
-            .options(
-                selectinload(ForumAvatarSubmission.user),
-                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
-            )
-            .where(ForumAvatarSubmission.id == submission_id)
-        )
-    ).scalar_one_or_none()
-    if submission is None or submission.status != FORUM_AVATAR_STATUS_PENDING:
-        flash(_("That profile picture is no longer waiting for review."), "warning")
-        return redirect(url_for("admin.admin_reviews"))
-
-    forum_service = get_forum_service()
-    before_submission = snapshot_forum_avatar_submission_for_audit(submission)
-    before_account = snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None)
-    review_note = (request.form.get("review_note") or "").strip() or None
-    account = submission.user.forum_account if submission.user else None
-    was_active = account is not None and account.state == FORUM_STATE_ACTIVE
-    # A replacement an admin allowed: the member already has a picture.
-    replacing = submission.member is not None and (
-        forum_service.get_current_approved_submission(submission.member) is not None
-        or forum_service.get_reclaimed_avatar(submission.member) is not None
-    )
-
-    try:
-        result = forum_service.approve_avatar_submission(submission, reviewer=current_user, review_note=review_note)
-    except ForumProviderError as exc:
-        flash(str(exc), "danger")
-        return redirect(url_for("admin.admin_reviews"))
-
-    event_type = "avatar_approved" if not result.error else "avatar_approval_failed"
-    log_audit_event(
-        category="forum",
-        event_type=event_type,
-        actor_user=current_user,
-        target_user=submission.user,
-        target_member=submission.member,
-        before={"submission": before_submission, "forum_account": before_account},
-        after={
-            "submission": snapshot_forum_avatar_submission_for_audit(submission),
-            "forum_account": snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None),
-        },
-        metadata={"review_note": review_note, "error": result.error, "desired_state": result.desired_state},
-    )
-    # The moment their forum access becomes complete, which they were waiting
-    # for -- and until now only heard about if the picture was rejected. Not
-    # for somebody replacing a picture: their access was complete already.
-    if not result.error and replacing:
-        # The one replacement allowed is used; the next one needs asking again.
-        submission.member.avatar_replacement_allowed_at = None
-        queue_user_status_notification(
-            "forum_avatar_replaced",
-            _("Your new profile picture was approved."),
-            recipient_email=(submission.user.email if submission.user is not None else None),
-            payload={
-                "first_name": submission.member.first_name,
-            },
-            target_user=submission.user,
-            target_member=submission.member,
-            object_type="forum_avatar_submission",
-            object_id=submission.id,
-        )
-    elif not result.error and result.desired_state == FORUM_STATE_ACTIVE and not was_active:
-        queue_user_status_notification(
-            "forum_avatar_approved",
-            _("Your profile picture was approved."),
-            recipient_email=(submission.user.email if submission.user is not None else None),
-            payload={
-                "first_name": submission.member.first_name if submission.member is not None else None,
-            },
-            target_user=submission.user,
-            target_member=submission.member,
-            object_type="forum_avatar_submission",
-            object_id=submission.id,
-        )
-    db.session.commit()
-
-    if result.error:
-        flash(_("The profile picture was approved, but sending it to the forum failed: %(message)s", message=result.error), "warning")
-    else:
-        flash(_("Profile picture approved and sent to the forum."), "success")
-    return redirect(url_for("admin.admin_reviews"))
-
-
-@admin_bp.route("/admin/reviews/pictures/<int:submission_id>/reject", methods=["POST"])
-@login_required
-@requires(Permission.FORUM_MODERATE)
-def reject_forum_avatar_submission(submission_id):
-    # Locked: another admin deciding the same picture waits here, then finds
-    # it decided (services/locking.py).
-    submission = db.session.execute(
-        locked(
-            db.select(ForumAvatarSubmission)
-            .options(
-                selectinload(ForumAvatarSubmission.user),
-                selectinload(ForumAvatarSubmission.member).selectinload(Member.user),
-            )
-            .where(ForumAvatarSubmission.id == submission_id)
-        )
-    ).scalar_one_or_none()
-    if submission is None or submission.status != FORUM_AVATAR_STATUS_PENDING:
-        flash(_("That profile picture is no longer waiting for review."), "warning")
-        return redirect(url_for("admin.admin_reviews"))
-
-    forum_service = get_forum_service()
-    before_submission = snapshot_forum_avatar_submission_for_audit(submission)
-    before_account = snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None)
-    review_note = (request.form.get("review_note") or "").strip() or None
-
-    try:
-        result = forum_service.reject_avatar_submission(submission, reviewer=current_user, review_note=review_note)
-    except ForumProviderError as exc:
-        flash(str(exc), "danger")
-        return redirect(url_for("admin.admin_reviews"))
-
-    log_audit_event(
-        category="forum",
-        event_type="avatar_rejected",
-        actor_user=current_user,
-        target_user=submission.user,
-        target_member=submission.member,
-        before={"submission": before_submission, "forum_account": before_account},
-        after={
-            "submission": snapshot_forum_avatar_submission_for_audit(submission),
-            "forum_account": snapshot_forum_account_for_audit(submission.user.forum_account if submission.user else None),
-        },
-        metadata={"review_note": review_note, "error": result.error if result else None},
-    )
-    queue_user_status_notification(
-        "forum_avatar_rejected",
-        _("Your forum profile picture was rejected."),
-        recipient_email=(submission.user.email if submission.user is not None else (submission.member.email_private if submission.member is not None else None)),
-        payload={
-            "first_name": submission.member.first_name if submission.member is not None else None,
-            "review_note": review_note,
-        },
-        target_user=submission.user,
-        target_member=submission.member,
-        object_type="forum_avatar_submission",
-        object_id=submission.id,
-    )
-    db.session.commit()
-    flash(_("Profile picture rejected."), "success")
-    return redirect(url_for("admin.admin_reviews"))
+    return app_shell()
 
 
 @admin_bp.route("/admin/settings/test-forum-connection", methods=["POST"])
@@ -845,141 +643,6 @@ def admin_logs():
         category=category,
         search_term=search_term,
     )
-
-
-@admin_bp.route("/admin/reviews/name-changes/<int:request_id>/approve", methods=["POST"])
-@login_required
-@requires(Permission.APPROVALS_REVIEW)
-def approve_profile_change_request(request_id):
-    request_record = db.session.execute(
-        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
-    ).scalar_one_or_none()
-    if request_record is None or request_record.status != "pending":
-        flash(_("That change request is no longer waiting for review."), "warning")
-        return redirect(url_for("admin.admin_reviews"))
-
-    member = request_record.member
-    before_member = snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)
-    before_user = snapshot_user_for_audit(member.user)
-    previous_forum_username = member.user.forum_username if member.user is not None else None
-
-    member.salutation = request_record.requested_salutation
-    member.title = request_record.requested_title
-    member.first_name = request_record.requested_first_name
-    member.last_name = request_record.requested_last_name
-    member.member_category = request_record.requested_member_category
-    member.year_group = request_record.requested_year_group
-
-    if member.user is not None and request.form.get("override_forum_username") == "1":
-        preferred_username = (request.form.get("forum_username_override") or "").strip()
-        if not preferred_username:
-            preferred_username = build_forum_username_base(member.first_name, member.last_name, member.year_group)
-        member.user.forum_username = generate_unique_forum_username(
-            member.first_name,
-            member.last_name,
-            member.year_group,
-            exclude_user_id=member.user.id,
-            preferred=preferred_username,
-        )
-        if member.user.forum_username != previous_forum_username:
-            # A rename has to be asked for as one: the sync below leaves the
-            # forum's username alone on purpose. Queued first, so that sync
-            # does not take the old name back from the forum meanwhile.
-            outbox.enqueue_forum_rename(member.user, reason="Forum username changed on approval.")
-
-    request_record.status = "approved"
-    request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
-    request_record.reviewed_by = current_user
-    request_record.reviewed_at = get_now_utc()
-    forum_result = None
-    if member.user is not None and (member.user.forum_account is not None or member_has_active_access(member)):
-        forum_result, _forum_service = sync_member_forum_state(member)
-    log_audit_event(
-        category="profile_change_request",
-        event_type="identity_request_approved",
-        actor_user=current_user,
-        target_user=member.user,
-        target_member=member,
-        before={"request_status": "pending", "user": before_user, "member": before_member},
-        after={"request_status": request_record.status, "user": snapshot_user_for_audit(member.user), "member": snapshot_member_for_audit(member, fields=IDENTITY_MEMBER_FIELDS)},
-        metadata={
-            "request_id": request_record.id,
-            "member_note": request_record.member_note,
-            "admin_note": request_record.admin_note,
-            "previous_forum_username": previous_forum_username,
-            "new_forum_username": member.user.forum_username if member.user is not None else None,
-            "forum_sync_error": forum_result.error if forum_result else None,
-        },
-    )
-    queue_user_status_notification(
-        "identity_request_approved",
-        _("Your identity change request was approved."),
-        recipient_email=(member.user.email if member.user is not None else member.email_private),
-        payload={
-            "first_name": member.first_name,
-            "admin_note": request_record.admin_note,
-        },
-        target_user=member.user,
-        target_member=member,
-        object_type="member_profile_change_request",
-        object_id=request_record.id,
-    )
-    db.session.commit()
-    rename_pending = False
-    if member.user is not None:
-        # Done now rather than on the next worker pass, so the member sees the
-        # new name when they next look. Left queued if the forum is down.
-        outbox.process_pending(limit=5, kinds=[ExternalWorkItem.KIND_FORUM_RENAME], user_id=member.user.id)
-        rename_pending = outbox.pending_count(kinds=[ExternalWorkItem.KIND_FORUM_RENAME], user_id=member.user.id) > 0
-    flash(_("Change request approved."), "success")
-    if rename_pending:
-        flash(_("The forum could not be renamed just now; it will be tried again automatically."), "warning")
-    if forum_result and forum_result.error:
-        flash(_("The forum profile could not be synchronized right now. Please run a forum resync after checking the settings."), "warning")
-    return redirect(url_for("admin.admin_reviews"))
-
-
-@admin_bp.route("/admin/reviews/name-changes/<int:request_id>/reject", methods=["POST"])
-@login_required
-@requires(Permission.APPROVALS_REVIEW)
-def reject_profile_change_request(request_id):
-    request_record = db.session.execute(
-        locked(db.select(MemberProfileChangeRequest).where(MemberProfileChangeRequest.id == request_id))
-    ).scalar_one_or_none()
-    if request_record is None or request_record.status != "pending":
-        flash(_("That change request is no longer waiting for review."), "warning")
-        return redirect(url_for("admin.admin_reviews"))
-
-    request_record.status = "rejected"
-    request_record.admin_note = (request.form.get("admin_note") or "").strip() or None
-    request_record.reviewed_by = current_user
-    request_record.reviewed_at = get_now_utc()
-    log_audit_event(
-        category="profile_change_request",
-        event_type="identity_request_rejected",
-        actor_user=current_user,
-        target_user=request_record.member.user,
-        target_member=request_record.member,
-        before={"request_id": request_record.id, "status": "pending"},
-        after={"request_id": request_record.id, "status": request_record.status},
-        metadata={"member_note": request_record.member_note, "admin_note": request_record.admin_note},
-    )
-    queue_user_status_notification(
-        "identity_request_rejected",
-        _("Your identity change request was rejected."),
-        recipient_email=((request_record.member.user.email if request_record.member.user is not None else request_record.member.email_private) if request_record.member is not None else None),
-        payload={
-            "first_name": request_record.member.first_name if request_record.member is not None else None,
-            "admin_note": request_record.admin_note,
-        },
-        target_user=request_record.member.user if request_record.member is not None else None,
-        target_member=request_record.member,
-        object_type="member_profile_change_request",
-        object_id=request_record.id,
-    )
-    db.session.commit()
-    flash(_("Change request rejected."), "success")
-    return redirect(url_for("admin.admin_reviews"))
 
 
 @admin_bp.route("/admin/settings/mail-accounts", methods=["POST"])

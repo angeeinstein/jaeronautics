@@ -27,6 +27,7 @@ describe('the pages the app draws', () => {
     ['/admin/accounts?membership=active', true],
     ['/admin/accounts/12', true],
     ['/admin/accounts/12/data-export', false],
+    ['/admin/reviews#review-queue', true],
     ['/account', false],
     ['https://example.org/admin', false],
     ['//example.org/admin', false],

@@ -15,8 +15,9 @@ from datetime import datetime
 
 import pytest
 
+from api_helpers import send
 from conftest import db, make_member
-from aeronautics_members.blueprints import admin as admin_module
+from aeronautics_members.services import forum as forum_module
 from aeronautics_members.db_models import (
     ExternalWorkItem,
     ForumAccount,
@@ -75,7 +76,7 @@ def forum(app, monkeypatch):
         _record_the_name_the_forum_gave(member.user, {"id": 7, "username": discourse.name})
         return None, None
 
-    monkeypatch.setattr(admin_module, "sync_member_forum_state", the_sync_that_undid_it)
+    monkeypatch.setattr(forum_module, "sync_member_forum_state", the_sync_that_undid_it)
     return discourse
 
 
@@ -95,11 +96,8 @@ def _approve(client, member, *, rename=True, wanted=NEW):
     admin = _staff("boss@example.org", "admin")
     change = _name_change(member, last_name="Maier")
     _login(client, admin.id)
-    data = {"forum_username_override": wanted}
-    if rename:
-        data["override_forum_username"] = "1"
-    return client.post(f"/admin/reviews/name-changes/{change.id}/approve", data=data,
-                       follow_redirects=True)
+    body = {"forum_username": wanted} if rename else {}
+    return send(client, "POST", f"/api/v1/admin/reviews/name-changes/{change.id}/approve", body)
 
 
 def _rename_items():
@@ -118,7 +116,7 @@ def test_a_forum_that_is_down_is_tried_again_and_the_name_is_not_taken_back(clie
 
     response = _approve(client, member)
 
-    assert "tried again automatically" in response.get_data(as_text=True)
+    assert response.get_json()["rename_pending"] is True, "the page says it is tried again automatically"
     user = db.session.get(type(member.user), member.user.id)
     assert user.forum_username == NEW, "not followed back to the old one meanwhile"
     item = _rename_items()[0]

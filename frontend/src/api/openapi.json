@@ -691,7 +691,7 @@
           "name_changes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Waiting"
+                "$ref": "#/components/schemas/aeronautics_members__api__admin_dashboard__Waiting"
               },
               {
                 "type": "null"
@@ -701,7 +701,7 @@
           "pictures": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Waiting"
+                "$ref": "#/components/schemas/aeronautics_members__api__admin_dashboard__Waiting"
               },
               {
                 "type": "null"
@@ -711,7 +711,7 @@
           "sync_problems": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Waiting"
+                "$ref": "#/components/schemas/aeronautics_members__api__admin_dashboard__Waiting"
               },
               {
                 "type": "null"
@@ -864,6 +864,158 @@
           }
         },
         "title": "CandidatesQuery",
+        "type": "object"
+      },
+      "Change": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "requested": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested"
+          }
+        },
+        "required": [
+          "field",
+          "label",
+          "current",
+          "requested"
+        ],
+        "title": "Change",
+        "type": "object"
+      },
+      "ChangeApproveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "forum_username": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Forum Username"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Note"
+          }
+        },
+        "title": "ChangeApproveIn",
+        "type": "object"
+      },
+      "ChangeApprovedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "forum_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Error"
+          },
+          "rename_pending": {
+            "title": "Rename Pending",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rename_pending",
+          "forum_error"
+        ],
+        "title": "ChangeApprovedOut",
+        "type": "object"
+      },
+      "ChangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/Change"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "forum_username": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForumUsername"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_name_change": {
+            "title": "Is Name Change",
+            "type": "boolean"
+          },
+          "member_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Note"
+          },
+          "requested_full_name": {
+            "title": "Requested Full Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "is_name_change",
+          "requested_full_name",
+          "member_note",
+          "changes",
+          "forum_username"
+        ],
+        "title": "ChangeRequest",
         "type": "object"
       },
       "ChangedOut": {
@@ -1364,6 +1516,150 @@
         "title": "ForumResyncOut",
         "type": "object"
       },
+      "ForumUsername": {
+        "additionalProperties": false,
+        "description": "Approving would make this the suggested forum username; the admin chooses.",
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "string"
+          },
+          "suggested": {
+            "title": "Suggested",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current",
+          "suggested"
+        ],
+        "title": "ForumUsername",
+        "type": "object"
+      },
+      "HistoryItem": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "decision": {
+            "enum": [
+              "approved",
+              "rejected",
+              "withdrawn"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_name_change": {
+            "title": "Is Name Change",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "name_change",
+              "picture"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "member_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Email"
+          },
+          "requested_full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Full Name"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "is_name_change",
+          "requested_full_name",
+          "member_email",
+          "decision",
+          "by"
+        ],
+        "title": "HistoryItem",
+        "type": "object"
+      },
+      "HistoryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "pages",
+          "total"
+        ],
+        "title": "HistoryOut",
+        "type": "object"
+      },
+      "HistoryQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        "title": "HistoryQuery",
+        "type": "object"
+      },
       "MeOut": {
         "additionalProperties": false,
         "properties": {
@@ -1655,6 +1951,26 @@
         "title": "MembershipCounts",
         "type": "object"
       },
+      "NoteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Note"
+          }
+        },
+        "title": "NoteIn",
+        "type": "object"
+      },
       "Notice": {
         "additionalProperties": false,
         "description": "A banner over every page of an area, for something that is off on purpose or by accident.",
@@ -1833,6 +2149,99 @@
         "title": "OldForum",
         "type": "object"
       },
+      "Person": {
+        "additionalProperties": false,
+        "description": "The member the item is about.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email"
+        ],
+        "title": "Person",
+        "type": "object"
+      },
+      "Picture": {
+        "additionalProperties": false,
+        "properties": {
+          "forum_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Username"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          }
+        },
+        "required": [
+          "image_url",
+          "forum_username"
+        ],
+        "title": "Picture",
+        "type": "object"
+      },
+      "PictureApprovedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "forum_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Error"
+          }
+        },
+        "required": [
+          "forum_error"
+        ],
+        "title": "PictureApprovedOut",
+        "type": "object"
+      },
       "PictureReplacementIn": {
         "additionalProperties": false,
         "properties": {
@@ -1866,6 +2275,60 @@
           "allowed_since"
         ],
         "title": "PictureReplacementOut",
+        "type": "object"
+      },
+      "QueueItem": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChangeRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "name_change",
+              "picture"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "person": {
+            "$ref": "#/components/schemas/Person"
+          },
+          "picture": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Picture"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "person",
+          "change",
+          "picture"
+        ],
+        "title": "QueueItem",
         "type": "object"
       },
       "ReconnectIn": {
@@ -1920,6 +2383,42 @@
           "forum_error"
         ],
         "title": "ReconnectOut",
+        "type": "object"
+      },
+      "ReviewsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "queue": {
+            "items": {
+              "$ref": "#/components/schemas/QueueItem"
+            },
+            "title": "Queue",
+            "type": "array"
+          },
+          "sync_problems": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SyncProblem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Problems"
+          },
+          "waiting": {
+            "$ref": "#/components/schemas/aeronautics_members__api__admin_reviews__Waiting"
+          }
+        },
+        "required": [
+          "waiting",
+          "queue",
+          "sync_problems"
+        ],
+        "title": "ReviewsOut",
         "type": "object"
       },
       "Role": {
@@ -2056,6 +2555,63 @@
         "title": "SessionOut",
         "type": "object"
       },
+      "SyncProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "user_id",
+          "email",
+          "error",
+          "last_synced_at"
+        ],
+        "title": "SyncProblem",
+        "type": "object"
+      },
       "TeamLabels": {
         "additionalProperties": false,
         "description": "What teams are called here; an admin can rename them.",
@@ -2187,7 +2743,7 @@
         "title": "Teams",
         "type": "object"
       },
-      "Waiting": {
+      "aeronautics_members__api__admin_dashboard__Waiting": {
         "additionalProperties": false,
         "description": "How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words.",
         "properties": {
@@ -2222,6 +2778,52 @@
           "count",
           "summary",
           "at"
+        ],
+        "title": "Waiting",
+        "type": "object"
+      },
+      "aeronautics_members__api__admin_reviews__Waiting": {
+        "additionalProperties": false,
+        "description": "How much waits of each kind; ``None`` for a kind this person does not decide.",
+        "properties": {
+          "name_changes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Changes"
+          },
+          "pictures": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pictures"
+          },
+          "sync_problems": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Problems"
+          }
+        },
+        "required": [
+          "name_changes",
+          "pictures",
+          "sync_problems"
         ],
         "title": "Waiting",
         "type": "object"
@@ -3374,6 +3976,479 @@
         ],
         "x-permissions": [
           "admin.access"
+        ]
+      }
+    },
+    "/api/v1/admin/reviews": {
+      "get": {
+        "operationId": "admin_reviews",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "What waits for this person's decision, oldest first, and the forum sync problems.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "admin.access"
+        ]
+      }
+    },
+    "/api/v1/admin/reviews/history": {
+      "get": {
+        "operationId": "admin_reviews_history",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Past decisions this person could have made, newest first.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "admin.access"
+        ]
+      }
+    },
+    "/api/v1/admin/reviews/name-changes/{request_id}/approve": {
+      "post": {
+        "operationId": "admin_review_change_approve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeApproveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeApprovedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Approve a change request: the member's record takes the requested details.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "approvals.review"
+        ]
+      }
+    },
+    "/api/v1/admin/reviews/name-changes/{request_id}/reject": {
+      "post": {
+        "operationId": "admin_review_change_reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Turn a change request down; the member is told, with the note.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "approvals.review"
+        ]
+      }
+    },
+    "/api/v1/admin/reviews/pictures/{submission_id}/approve": {
+      "post": {
+        "operationId": "admin_review_picture_approve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PictureApprovedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Approve a profile picture and send it to the forum.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "forum.moderate"
+        ]
+      }
+    },
+    "/api/v1/admin/reviews/pictures/{submission_id}/reject": {
+      "post": {
+        "operationId": "admin_review_picture_reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Reject a profile picture; the member is asked for another.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "forum.moderate"
         ]
       }
     },

@@ -34,6 +34,10 @@ export const routes: RouteObject[] = [
             path: 'accounts/:userId',
             lazy: async () => ({ Component: (await import('../pages/admin/account/Account')).Account }),
           },
+          {
+            path: 'reviews',
+            lazy: async () => ({ Component: (await import('../pages/admin/reviews/Reviews')).Reviews }),
+          },
         ],
       },
       { path: '*', element: <NotFound /> },

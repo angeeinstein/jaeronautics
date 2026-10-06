@@ -144,16 +144,30 @@ def seed(app, app_module, subscriptions):
     admin.grant_role(app_module.get_role("superadmin"))
     admin.grant_role(app_module.get_role("admin"))
 
+    # The pictures the submissions point at, so the pages show a picture
+    # rather than a broken image: a plain square in a colour per person, kept
+    # beside the throwaway database.
+    from PIL import Image
+
+    pictures = Path(db.engine.url.database).parent
+
+    def picture_file(name, colour):
+        path = pictures / f"{name}.png"
+        Image.new("RGB", (240, 240), colour).save(path)
+        return dict(storage_path=str(path), content_type="image/png")
+
     new = person("new", "Nora", "Neumann", verified=False, work_verified=False,
                  payment_status="pending_checkout", is_active=False,
                  membership_starts_on=None, membership_ends_on=None, renewal_due_on=None)
     photo = person("photo-needed", "Paul", "Photo")
     pending = person("photo-pending", "Petra", "Pending")
     db.session.add(ForumAvatarSubmission(user_id=pending.user.id, member_id=pending.id,
-                                         status="pending", public_token="snap-pending"))
+                                         status="pending", public_token="snap-pending",
+                                         **picture_file("snap-pending", (70, 140, 170))))
     rejected = person("photo-rejected", "Rene", "Rejected")
     db.session.add(ForumAvatarSubmission(user_id=rejected.user.id, member_id=rejected.id,
                                          status="rejected", public_token="snap-rejected",
+                                         **picture_file("snap-rejected", (170, 90, 70)),
                                          review_note="Please use a photo of yourself.",
                                          reviewed_at=now))
     active = person("active", "Anna", "Maximilian-Hofstetter-Wallensteiner",
@@ -161,6 +175,7 @@ def seed(app, app_module, subscriptions):
                     stripe_subscription_id="sub_snap_active")
     db.session.add(ForumAvatarSubmission(user_id=active.user.id, member_id=active.id,
                                          status="approved", public_token="snap-approved",
+                                         **picture_file("snap-approved", (90, 160, 100)),
                                          reviewed_at=now))
     person("sepa", "Sepp", "Sepa", payment_status="processing", is_active=False,
            stripe_customer_id="cus_snap_sepa")
@@ -205,7 +220,7 @@ def seed(app, app_module, subscriptions):
     # A made-up logo for one team; the other has none, as many will not.
     from io import BytesIO
 
-    from PIL import Image, ImageDraw
+    from PIL import ImageDraw
 
     logo = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
     draw = ImageDraw.Draw(logo)

@@ -57,9 +57,9 @@ Status: `[ ]` to do, `[x]` done.
 - `GET /admin/accounts/<id>/archived-avatar`, `/admin/accounts/<id>/data-export` (download) -- stay
 
 ### 4.3 Reviews
-- [ ] `GET /admin/reviews` (page)
-- [ ] `POST /admin/reviews/name-changes/<id>/approve|reject` (action)
-- [ ] `POST /admin/reviews/pictures/<id>/approve|reject` (action)
+- [x] `GET /admin/reviews` (page) → `GET /api/v1/admin/reviews`; past decisions `GET /api/v1/admin/reviews/history`
+- [x] `POST /admin/reviews/name-changes/<id>/approve|reject` → `POST /api/v1/admin/reviews/name-changes/<id>/approve|reject`
+- [x] `POST /admin/reviews/pictures/<id>/approve|reject` → `POST /api/v1/admin/reviews/pictures/<id>/approve|reject`
 
 ### 4.4 Teams (the admins' part)
 - [ ] `GET|POST /admin/teams` (page + action: the list, creating)

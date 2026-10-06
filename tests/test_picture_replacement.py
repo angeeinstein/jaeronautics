@@ -127,19 +127,20 @@ def test_a_replacement_never_takes_them_out_of_the_members_group(app, client, tm
 
 
 def test_approving_the_new_picture_uses_the_permission_up_and_says_so(app, client, tmp_path, monkeypatch):
-    from aeronautics_members.blueprints import admin as admin_module
+    from aeronautics_members.services import forum as forum_module
+    from aeronautics_members.services import notifications as notifications_module
 
     member, pending = _with_pictures(tmp_path, client)
     service = ForumService({"forum_integration_enabled": "True"})
     service.provider = RecordingProvider()
     monkeypatch.setattr(service, "is_ready", lambda: True)
-    monkeypatch.setattr(admin_module, "get_forum_service", lambda: service)
+    monkeypatch.setattr(forum_module, "get_forum_service", lambda: service)
     told = []
-    monkeypatch.setattr(admin_module, "queue_user_status_notification",
+    monkeypatch.setattr(notifications_module, "queue_user_status_notification",
                         lambda event_type, *a, **k: told.append(event_type))
     _login(client, _staff("mod2@example.org", "admin").id)
 
-    client.post(f"/admin/reviews/pictures/{pending.id}/approve")
+    send(client, "POST", f"/api/v1/admin/reviews/pictures/{pending.id}/approve", {})
 
     assert db.session.get(Member, member.id).avatar_replacement_allowed_at is None
     assert told == ["forum_avatar_replaced"]
@@ -148,16 +149,16 @@ def test_approving_the_new_picture_uses_the_permission_up_and_says_so(app, clien
 
 def test_a_rejected_new_picture_keeps_the_permission(app, client, tmp_path, monkeypatch):
     """The old picture stays, and they may try again."""
-    from aeronautics_members.blueprints import admin as admin_module
+    from aeronautics_members.services import forum as forum_module
 
     member, pending = _with_pictures(tmp_path, client)
     service = ForumService({"forum_integration_enabled": "True"})
     service.provider = RecordingProvider()
     monkeypatch.setattr(service, "is_ready", lambda: True)
-    monkeypatch.setattr(admin_module, "get_forum_service", lambda: service)
+    monkeypatch.setattr(forum_module, "get_forum_service", lambda: service)
     _login(client, _staff("mod3@example.org", "admin").id)
 
-    client.post(f"/admin/reviews/pictures/{pending.id}/reject", data={"review_note": "Blurry"})
+    send(client, "POST", f"/api/v1/admin/reviews/pictures/{pending.id}/reject", {"note": "Blurry"})
 
     assert db.session.get(Member, member.id).avatar_replacement_allowed_at is not None
 

@@ -1053,24 +1053,6 @@ def populate_identity_change_form(form, member, pending_request=None):
     form.member_category.data = member.member_category
 
 
-def decorate_pending_identity_requests(requests_):
-    for request_record in requests_:
-        request_record.current_forum_username = (
-            request_record.member.user.forum_username if request_record.member and request_record.member.user else None
-        )
-        request_record.suggested_forum_username = generate_unique_forum_username(
-            request_record.requested_first_name,
-            request_record.requested_last_name,
-            request_record.requested_year_group,
-            exclude_user_id=request_record.member.user.id if request_record.member and request_record.member.user else None,
-        )
-        request_record.username_would_change = bool(
-            request_record.current_forum_username
-            and request_record.current_forum_username != request_record.suggested_forum_username
-        )
-    return requests_
-
-
 def render_account_dashboard(profile_form=None, identity_form=None):
     member = get_current_member_for_user(current_user)
     if member is None:

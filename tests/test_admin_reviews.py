@@ -21,6 +21,9 @@ from aeronautics_members.db_models import (
 from aeronautics_members.member_categories import MemberCategory
 from aeronautics_members.permissions import Permission, ROLE_PERMISSIONS
 from aeronautics_members.services import reviews
+from api_helpers import send
+
+API = "/api/v1/admin/reviews"
 
 
 def _login(client, user_id):
@@ -75,7 +78,7 @@ def admin(app):
 @pytest.fixture
 def quiet_forum(monkeypatch):
     """Approving a picture talks to the forum; this answers for it."""
-    from aeronautics_members.blueprints import admin as admin_module
+    from aeronautics_members.services import forum as forum_module
 
     class FakeForum:
         def get_current_approved_submission(self, member):
@@ -96,23 +99,32 @@ def quiet_forum(monkeypatch):
             submission.reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None)
             return types.SimpleNamespace(error=None)
 
-    monkeypatch.setattr(admin_module, "get_forum_service", lambda: FakeForum())
-    monkeypatch.setattr(admin_module, "sync_member_forum_state", lambda member: (None, None))
+    monkeypatch.setattr(forum_module, "get_forum_service", lambda: FakeForum())
+    monkeypatch.setattr(forum_module, "sync_member_forum_state", lambda member: (None, None))
+
+
+def _queue(client):
+    response = client.get(API)
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()
+
+
+def _ids(body, kind):
+    return [item["id"] for item in body["queue"] if item["kind"] == kind]
 
 
 class TestOneQueueSeparateDecisions:
-    def test_both_kinds_are_listed_each_with_its_own_approve_and_reject(self, client, admin):
+    def test_both_kinds_are_listed_each_on_its_own(self, client, admin):
         member = make_member(email="both@example.com")
         change = _name_change(member)
         picture = _picture(member)
         _login(client, admin.id)
 
-        body = client.get("/admin/reviews").get_data(as_text=True)
+        body = _queue(client)
 
-        assert f"/admin/reviews/name-changes/{change.id}/approve" in body
-        assert f"/admin/reviews/name-changes/{change.id}/reject" in body
-        assert f"/admin/reviews/pictures/{picture.id}/approve" in body
-        assert f"/admin/reviews/pictures/{picture.id}/reject" in body
+        assert _ids(body, "name_change") == [change.id]
+        assert _ids(body, "picture") == [picture.id]
+        assert body["waiting"] == {"name_changes": 1, "pictures": 1, "sync_problems": 0}
 
     def test_the_picture_can_be_approved_and_the_name_change_rejected(self, client, admin, quiet_forum):
         member = make_member(email="split@example.com")
@@ -120,8 +132,9 @@ class TestOneQueueSeparateDecisions:
         picture = _picture(member)
         _login(client, admin.id)
 
-        client.post(f"/admin/reviews/pictures/{picture.id}/approve", data={"review_note": ""})
-        client.post(f"/admin/reviews/name-changes/{change.id}/reject", data={"admin_note": "Please use your legal name."})
+        assert send(client, "POST", f"{API}/pictures/{picture.id}/approve", {"note": ""}).status_code == 200
+        assert send(client, "POST", f"{API}/name-changes/{change.id}/reject",
+                    {"note": "Please use your legal name."}).status_code == 204
 
         db.session.refresh(picture)
         db.session.refresh(change)
@@ -136,11 +149,11 @@ class TestOneQueueSeparateDecisions:
         picture = _picture(member)
         _login(client, admin.id)
 
-        client.post(f"/admin/reviews/pictures/{picture.id}/reject", data={"review_note": "Blurry"})
+        send(client, "POST", f"{API}/pictures/{picture.id}/reject", {"note": "Blurry"})
 
-        body = client.get("/admin/reviews").get_data(as_text=True)
-        assert f"/admin/reviews/name-changes/{change.id}/approve" in body
-        assert f"/admin/reviews/pictures/{picture.id}/approve" not in body
+        body = _queue(client)
+        assert _ids(body, "name_change") == [change.id]
+        assert _ids(body, "picture") == []
 
     def test_oldest_comes_first_whatever_its_kind(self, app, admin):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -160,11 +173,11 @@ class TestOneQueueSeparateDecisions:
         _name_change(member, last_name="Membr", member_note="Typo")
         _login(client, admin.id)
 
-        body = client.get("/admin/reviews").get_data(as_text=True)
+        [item] = _queue(client)["queue"]
 
-        assert "Last name" in body
-        assert "Year group" not in body
-        assert "Name change" in body
+        assert [change["label"] for change in item["change"]["changes"]] == ["Last name"]
+        assert item["change"]["is_name_change"] is True
+        assert item["change"]["member_note"] == "Typo"
 
     def test_a_change_without_a_new_name_is_called_a_details_change(self, app):
         member = make_member(email="alum@example.com", member_category=MemberCategory.STUDENT)
@@ -177,15 +190,13 @@ class TestOneQueueSeparateDecisions:
 
 
 class TestEmptySectionsStayAway:
-    def test_nothing_waiting_is_one_line(self, client, admin):
+    def test_nothing_waiting(self, client, admin):
         _login(client, admin.id)
 
-        body = client.get("/admin/reviews").get_data(as_text=True)
+        body = _queue(client)
 
-        assert "Nothing waiting for review" in body
-        assert "Forum sync problems" not in body
-        # No history yet either, so no folded-up empty section.
-        assert 'id="review-history"' not in body
+        assert body["queue"] == [] and body["sync_problems"] == []
+        assert client.get(f"{API}/history").get_json()["total"] == 0
 
     def test_sync_problems_appear_when_there_are_some(self, client, admin):
         member = make_member(email="stuck@example.com")
@@ -194,25 +205,25 @@ class TestEmptySectionsStayAway:
         db.session.commit()
         _login(client, admin.id)
 
-        body = client.get("/admin/reviews").get_data(as_text=True)
+        [problem] = _queue(client)["sync_problems"]
 
-        assert "Forum sync problems" in body
-        assert "The forum could not be reached." in body
+        assert problem["error"] == "The forum could not be reached."
+        assert problem["user_id"] == member.user_id
 
     def test_history_holds_both_kinds(self, client, admin, quiet_forum):
         member = make_member(email="past@example.com")
         change = _name_change(member)
         picture = _picture(member)
         _login(client, admin.id)
-        client.post(f"/admin/reviews/name-changes/{change.id}/approve", data={})
-        client.post(f"/admin/reviews/pictures/{picture.id}/reject", data={})
+        send(client, "POST", f"{API}/name-changes/{change.id}/approve", {})
+        send(client, "POST", f"{API}/pictures/{picture.id}/reject", {})
 
-        history = reviews.review_history(admin)
-        body = client.get("/admin/reviews").get_data(as_text=True)
+        history = client.get(f"{API}/history").get_json()
 
-        assert history.total == 2
-        assert {item.kind for item in history.items} == {reviews.KIND_NAME_CHANGE, reviews.KIND_PICTURE}
-        assert "2 past decisions" in body
+        assert history["total"] == 2
+        assert {(item["kind"], item["decision"]) for item in history["items"]} == {
+            ("name_change", "approved"), ("picture", "rejected")}
+        assert {item["by"] for item in history["items"]} == {"boss@example.org"}
 
     def test_history_pages_do_not_overlap(self, app, admin):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -253,10 +264,12 @@ class TestWhoSeesWhat:
         picture = _picture(member)
         _login(client, checker.id)
 
-        body = client.get("/admin/reviews").get_data(as_text=True)
+        body = _queue(client)
 
-        assert f"/admin/reviews/pictures/{picture.id}/approve" in body
-        assert f"/admin/reviews/name-changes/{change.id}/approve" not in body
+        assert _ids(body, "picture") == [picture.id]
+        assert _ids(body, "name_change") == [] and change.id
+        assert body["waiting"]["name_changes"] is None, "not a kind they decide"
+        assert send(client, "POST", f"{API}/name-changes/{change.id}/approve", {}).status_code == 403
 
     def test_somebody_who_reviews_nothing_is_sent_back(self, client, monkeypatch, app):
         monkeypatch.setitem(ROLE_PERMISSIONS, "viewer", frozenset({Permission.ADMIN_ACCESS}))
@@ -266,10 +279,9 @@ class TestWhoSeesWhat:
         _login(client, viewer.id)
 
         response = client.get("/admin/reviews")
-        dashboard = client.get("/admin").get_data(as_text=True)
 
         assert response.status_code == 302
-        assert "/admin/reviews" not in dashboard
+        assert client.get(API).status_code == 403
 
 
 class TestTheCountOnTheTab:

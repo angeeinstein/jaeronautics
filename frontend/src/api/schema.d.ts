@@ -225,6 +225,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What waits for this person's decision, oldest first, and the forum sync problems. */
+        get: operations["admin_reviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reviews/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Past decisions this person could have made, newest first. */
+        get: operations["admin_reviews_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reviews/name-changes/{request_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a change request: the member's record takes the requested details. */
+        post: operations["admin_review_change_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reviews/name-changes/{request_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Turn a change request down; the member is told, with the note. */
+        post: operations["admin_review_change_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reviews/pictures/{submission_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a profile picture and send it to the forum. */
+        post: operations["admin_review_picture_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reviews/pictures/{submission_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a profile picture; the member is asked for another. */
+        post: operations["admin_review_picture_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -478,9 +580,9 @@ export interface components {
         Attention: {
             /** Health Problems */
             health_problems: string[] | null;
-            name_changes: components["schemas"]["Waiting"] | null;
-            pictures: components["schemas"]["Waiting"] | null;
-            sync_problems: components["schemas"]["Waiting"] | null;
+            name_changes: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
+            pictures: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
+            sync_problems: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
         };
         /** BillingSyncOut */
         BillingSyncOut: {
@@ -521,6 +623,49 @@ export interface components {
              * @default
              */
             q?: string;
+        };
+        /** Change */
+        Change: {
+            /** Current */
+            current: string | null;
+            /** Field */
+            field: string;
+            /** Label */
+            label: string;
+            /** Requested */
+            requested: string | null;
+        };
+        /** ChangeApproveIn */
+        ChangeApproveIn: {
+            /**
+             * Forum Username
+             * @default null
+             */
+            forum_username?: string | null;
+            /**
+             * Note
+             * @default null
+             */
+            note?: string | null;
+        };
+        /** ChangeApprovedOut */
+        ChangeApprovedOut: {
+            /** Forum Error */
+            forum_error: string | null;
+            /** Rename Pending */
+            rename_pending: boolean;
+        };
+        /** ChangeRequest */
+        ChangeRequest: {
+            /** Changes */
+            changes: components["schemas"]["Change"][];
+            forum_username: components["schemas"]["ForumUsername"] | null;
+            /** Is Name Change */
+            is_name_change: boolean;
+            /** Member Note */
+            member_note: string | null;
+            /** Requested Full Name */
+            requested_full_name: string;
         };
         /** ChangedOut */
         ChangedOut: {
@@ -681,6 +826,60 @@ export interface components {
             /** Error */
             error: string | null;
         };
+        /**
+         * ForumUsername
+         * @description Approving would make this the suggested forum username; the admin chooses.
+         */
+        ForumUsername: {
+            /** Current */
+            current: string;
+            /** Suggested */
+            suggested: string;
+        };
+        /** HistoryItem */
+        HistoryItem: {
+            /** At */
+            at: string;
+            /** By */
+            by: string | null;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approved" | "rejected" | "withdrawn";
+            /** Id */
+            id: number;
+            /** Is Name Change */
+            is_name_change: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "name_change" | "picture";
+            /** Member Email */
+            member_email: string | null;
+            /** Requested Full Name */
+            requested_full_name: string | null;
+        };
+        /** HistoryOut */
+        HistoryOut: {
+            /** Items */
+            items: components["schemas"]["HistoryItem"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /** HistoryQuery */
+        HistoryQuery: {
+            /**
+             * Page
+             * @default 1
+             */
+            page?: number;
+        };
         /** MeOut */
         MeOut: {
             /** Admin Area */
@@ -762,6 +961,14 @@ export interface components {
             /** Pending */
             pending: number;
         };
+        /** NoteIn */
+        NoteIn: {
+            /**
+             * Note
+             * @default null
+             */
+            note?: string | null;
+        };
         /**
          * Notice
          * @description A banner over every page of an area, for something that is off on purpose or by accident.
@@ -810,6 +1017,30 @@ export interface components {
             /** Year Group */
             year_group: string | null;
         };
+        /**
+         * Person
+         * @description The member the item is about.
+         */
+        Person: {
+            /** Email */
+            email: string | null;
+            /** Name */
+            name: string;
+            /** User Id */
+            user_id: number | null;
+        };
+        /** Picture */
+        Picture: {
+            /** Forum Username */
+            forum_username: string | null;
+            /** Image Url */
+            image_url: string | null;
+        };
+        /** PictureApprovedOut */
+        PictureApprovedOut: {
+            /** Forum Error */
+            forum_error: string | null;
+        };
         /** PictureReplacementIn */
         PictureReplacementIn: {
             /** Allow */
@@ -819,6 +1050,21 @@ export interface components {
         PictureReplacementOut: {
             /** Allowed Since */
             allowed_since: string | null;
+        };
+        /** QueueItem */
+        QueueItem: {
+            /** At */
+            at: string;
+            change: components["schemas"]["ChangeRequest"] | null;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "name_change" | "picture";
+            person: components["schemas"]["Person"];
+            picture: components["schemas"]["Picture"] | null;
         };
         /** ReconnectIn */
         ReconnectIn: {
@@ -838,6 +1084,14 @@ export interface components {
             forum_error: string | null;
             /** Old Username */
             old_username: string;
+        };
+        /** ReviewsOut */
+        ReviewsOut: {
+            /** Queue */
+            queue: components["schemas"]["QueueItem"][];
+            /** Sync Problems */
+            sync_problems: components["schemas"]["SyncProblem"][] | null;
+            waiting: components["schemas"]["aeronautics_members__api__admin_reviews__Waiting"];
         };
         /** Role */
         Role: {
@@ -879,6 +1133,17 @@ export interface components {
             csrf_token: string;
             /** Signed In */
             signed_in: boolean;
+        };
+        /** SyncProblem */
+        SyncProblem: {
+            /** Email */
+            email: string | null;
+            /** Error */
+            error: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** User Id */
+            user_id: number | null;
         };
         /**
          * TeamLabels
@@ -923,13 +1188,25 @@ export interface components {
          * Waiting
          * @description How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words.
          */
-        Waiting: {
+        aeronautics_members__api__admin_dashboard__Waiting: {
             /** At */
             at: string | null;
             /** Count */
             count: number;
             /** Summary */
             summary: string | null;
+        };
+        /**
+         * Waiting
+         * @description How much waits of each kind; ``None`` for a kind this person does not decide.
+         */
+        aeronautics_members__api__admin_reviews__Waiting: {
+            /** Name Changes */
+            name_changes: number | null;
+            /** Pictures */
+            pictures: number | null;
+            /** Sync Problems */
+            sync_problems: number | null;
         };
     };
     responses: never;
@@ -1725,6 +2002,373 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_reviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_reviews_history: {
+        parameters: {
+            query?: {
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_review_change_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeApproveIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeApprovedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_review_change_reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteIn"];
+            };
+        };
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_review_picture_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PictureApprovedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_review_picture_reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteIn"];
+            };
+        };
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
