@@ -128,6 +128,27 @@ after the update therefore stays. If you also need the data as it was, the
 rollback point names the dump taken just before the update, and you restore it
 by hand.
 
+**While an update runs**, the portal keeps serving the old code until the
+restart at the end; usually that is a few seconds, longer when new packages
+are installed. Meanwhile:
+
+- **Background jobs are paused** (billing reconcile, notifications, log
+  cleanup, forum drift, external work): their timers stop before the new code
+  arrives, a job already running is let finish (up to three minutes), and they
+  start again with the restart -- or straight away if the update fails. A job
+  started halfway would run the new code against packages and a database not
+  updated yet, and these talk to Discourse, send emails and change
+  memberships.
+- **During the restart** nginx answers with a page of its own,
+  `static/maintenance.html` ("Back in a moment", in English and German,
+  reloading itself every 20 seconds), instead of "Bad gateway" -- also when the
+  portal is down for any other reason. It is sent as 503: Stripe sends a
+  webhook it gets again later, and nothing is lost. Somebody paying on
+  Stripe's checkout page is not affected; if they come back during the
+  restart, they see this page and are told their payment is not lost. It
+  cannot show when the whole server or the Cloudflare tunnel is down: then
+  Cloudflare shows its own error page.
+
 Two things about the timing are easy to trip over:
 
 - `update` runs `install.sh` **from the current checkout**, and the rollback
@@ -312,7 +333,7 @@ with `team: "<short name>"` in the front matter as well; everything else --
 versions, drafts, `effective_from`, English as a translation of the same
 version, the checks in CI -- works as above. Shown at `/teams/<team>/rules`
 (signed-in only), as a PDF at `/teams/<team>/rules/pdf` with the team's logo
-on a dark badge and its name, and ticked when applying or joining, read in a
+beside the association's and its name (on white: the logo field asks teams for one visible on dark and on white), and ticked when applying or joining, read in a
 window over the form. The membership keeps the version's day. Leads can no
 longer change their rules in the portal; they send the new text to the
 association. A folder whose short name matches no team is reported by `flask
