@@ -545,64 +545,6 @@ class TestAddingARoleNeedsNoOtherChange:
 
         assert permissions == {"admin.access", "forum.moderate"}  # Reviews shows for forum.moderate
 
-    def test_the_account_filter_understands_a_role_it_never_heard_of(self, client, reviewer_role):
-        """The filter asks about the capability, not about Role.slug == "admin".
-
-        Hard-coding the slug filed a moderator under "member only" and meant the
-        dropdown had to be edited for every new role -- the exact coupling this
-        arrangement is meant to remove.
-        """
-        boss = _user("filterboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        _user("filtermod@example.com", "photo_reviewer")
-        _login(client, boss.id)
-
-        staff = client.get("/admin/accounts?role=staff").get_data(as_text=True)
-        assert "filtermod@example.com" in staff
-
-        # And it must not be mistaken for an ordinary member.
-        members_only = client.get("/admin/accounts?role=member").get_data(as_text=True)
-        assert "filtermod@example.com" not in members_only
-
-        by_role = client.get("/admin/accounts?role=role:photo_reviewer").get_data(as_text=True)
-        assert "filtermod@example.com" in by_role
-        assert "filterboss@example.com" not in by_role
-
-    def test_the_filter_dropdown_lists_it(self, client, reviewer_role):
-        boss = _user("dropdownboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        _login(client, boss.id)
-
-        body = client.get("/admin/accounts").get_data(as_text=True)
-
-        assert 'value="role:photo_reviewer"' in body
-
-
-class TestTheAccountListIsReadOnly:
-    """Role changes belong on the account, where the consequences are visible.
-
-    Deciding from a list means deciding without knowing what else the account
-    holds, or whether anybody else could still do the job.
-    """
-
-    def test_no_role_controls_appear_for_anyone(self, client):
-        boss = _user("listboss@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        make_member(email="listed@example.com")
-        _login(client, boss.id)
-
-        body = client.get("/admin/accounts").get_data(as_text=True)
-
-        assert "/roles" not in body
-        assert "Grant Admin" not in body
-        assert "Revoke Admin" not in body
-
-    def test_the_view_link_is_still_there(self, client):
-        boss = _user("listboss2@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
-        target = make_member(email="listed2@example.com")
-        _login(client, boss.id)
-
-        body = client.get("/admin/accounts").get_data(as_text=True)
-
-        assert f"/admin/accounts/{target.user_id}" in body
-
 
 class TestRedundantRolesAreNotStoredTwice:
     """"Admin + Super Admin" and "Super Admin" describe the same account.

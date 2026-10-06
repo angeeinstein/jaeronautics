@@ -105,19 +105,19 @@ def _figures():
     figures = [Figure(
         key="active", label="Active members", value=numbers["active_memberships"],
         note=f"of {numbers['total_accounts']} accounts" + (f" · {waiting} waiting for payment" if waiting else ""),
-        link_url=link("active=active"),
+        link_url=link("membership=active"),
     )]
     cancelled = numbers["cancel_scheduled_memberships"]
     ends = dashboard.shared_cancellation_end()
     if ends is not None:
         figures.append(Figure(key="cancelled", label=f"Ending {format_membership_date_display(ends)}",
                               value=cancelled, note="cancelled, stay active until then",
-                              link_url=link("membership_status=cancel_scheduled")))
+                              link_url=link("membership=ending")))
     else:
         figures.append(Figure(
             key="cancelled", label="Cancelled", value=cancelled,
             note="stay active until their paid period ends" if cancelled else "nobody has cancelled",
-            link_url=link("membership_status=cancel_scheduled"),
+            link_url=link("membership=ending"),
         ))
     setting_up = numbers["forum_onboarding_accounts"]
     figures.append(Figure(

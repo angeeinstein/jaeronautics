@@ -15,6 +15,7 @@ from ..db_models import (
     User,
     db,
 )
+from . import account_directory
 from ..forum_service import (
     FORUM_AVATAR_STATUS_PENDING,
     FORUM_STATE_ACTIVE,
@@ -64,7 +65,8 @@ def metrics():
         "active_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.is_active.is_(True))) or 0,
         "pending_checkouts": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.payment_status == "pending_checkout")) or 0,
         "pending_identity_requests": db.session.scalar(db.select(func.count()).select_from(MemberProfileChangeRequest).where(MemberProfileChangeRequest.status == "pending")) or 0,
-        "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.cancel_at_period_end.is_(True))) or 0,
+        # Still members, but not renewing -- the list's "Ending" filter, which the figure links to.
+        "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, account_directory.ending())) or 0,
         "forum_onboarding_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ONBOARDING)) or 0,
         "forum_active_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ACTIVE)) or 0,
         "forum_sync_errors": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_SYNC_ERROR)) or 0,
@@ -81,7 +83,7 @@ def shared_cancellation_end():
     """
     days = db.session.execute(
         db.select(Member.membership_ends_on)
-        .where(Member.deleted_at.is_(None), Member.cancel_at_period_end.is_(True))
+        .where(Member.deleted_at.is_(None), account_directory.ending())
         .distinct()
     ).scalars().all()
     return days[0] if len(days) == 1 else None

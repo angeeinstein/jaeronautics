@@ -295,9 +295,6 @@ class TestTheAdminScreens:
             session["_user_id"] = str(second_admin.id)
         return client
 
-    def _rows(self, response):
-        return response.get_data(as_text=True).count('class="account-row"')
-
     def test_the_account_page_shows_both_states(self, app, admin_client):
         member = _paid_member()
 
@@ -366,21 +363,3 @@ class TestTheAdminScreens:
 
         assert "Deactivate Account" not in body
         assert "your own account" in body
-
-    def test_the_list_filters_by_account_state(self, app, admin_client):
-        member = _paid_member()
-        set_account_disabled(member.user, disable=True, actor_user=None)
-        db.session.commit()
-
-        assert self._rows(admin_client.get("/admin/accounts?account=disabled")) == 1
-        assert self._rows(admin_client.get("/admin/accounts?account=active")) == 2
-
-    def test_the_list_shows_the_two_states_in_separate_columns(self, app, admin_client):
-        member = _paid_member()
-        set_account_disabled(member.user, disable=True, actor_user=None)
-        db.session.commit()
-
-        body = admin_client.get("/admin/accounts?account=disabled").get_data(as_text=True)
-
-        assert "Deactivated" in body
-        assert "Membership Active" in body

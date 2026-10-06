@@ -12,7 +12,8 @@ test('the dashboard: what is waiting, the figures, the latest log entries', asyn
   await expect(page.getByRole('link', { name: /Active members/ })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Recent activity' })).toBeVisible();
 
-  // A figure leads to its list -- still one of Flask's pages.
+  // A figure leads to its list, already narrowed to what it counts.
   await page.getByRole('link', { name: /Active members/ }).click();
-  await expect(page).toHaveURL(/\/admin\/accounts\?active=active$/);
+  await expect(page).toHaveURL(/\/admin\/accounts\?membership=active$/);
+  await expect(page.getByRole('radio', { name: /^Active/ })).toBeChecked();
 });

@@ -5,6 +5,8 @@
  */
 import { Badge } from '@mantine/core';
 
+import classes from './Pill.module.css';
+
 export type Tone = 'active' | 'pending' | 'failed' | 'neutral' | 'info';
 
 const COLOURS: Record<Tone, string> = {
@@ -17,7 +19,13 @@ const COLOURS: Record<Tone, string> = {
 
 export function Pill({ tone, children }: { tone: Tone; children: string }) {
   return (
-    <Badge color={COLOURS[tone]} variant="light" size="sm" radius={0} data-tone={tone}>
+    <Badge
+      color={COLOURS[tone]}
+      variant="light"
+      radius={0}
+      classNames={{ root: classes.pill, label: classes.label }}
+      data-tone={tone}
+    >
       {children}
     </Badge>
   );

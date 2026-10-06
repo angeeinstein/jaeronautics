@@ -1,0 +1,16 @@
+/* docs/design.md, "Status labels": small capitals, 0.75rem, semibold. Never
+   cut short -- a state that ends in "…" is not a state. */
+.pill {
+  --badge-fz: 0.75rem;
+  --badge-height: 1.375rem;
+  --badge-padding-x: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.label {
+  overflow: visible;
+  white-space: nowrap;
+}

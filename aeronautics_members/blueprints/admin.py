@@ -158,11 +158,7 @@ from ..notification_service import (
     NOTIFICATION_SETTING_KEYS,
 )
 from ..app import (
-    ADMIN_DIRECTORY_PAGE_SIZE,
     AUDIT_LOG_PAGE_SIZE,
-    ACCOUNT_SORT_DEFAULT,
-    ACCOUNT_SORT_KEYS,
-    build_account_directory_query,
     build_forum_context,
     build_settings_page_context,
     decorate_pending_identity_requests,
@@ -219,45 +215,8 @@ def admin_dashboard():
 @login_required
 @requires(Permission.ACCOUNTS_VIEW)
 def admin_accounts():
-    search_term = (request.args.get("q") or "").strip()
-    role_filter = request.args.get("role", "all")
-    membership_filter = request.args.get("membership_status", "all")
-    active_filter = request.args.get("active", "all")
-    kind_filter = request.args.get("kind", "all")
-    account_filter = request.args.get("account", "all")
-    page = request.args.get("page", 1, type=int)
-    sort = request.args.get("sort", ACCOUNT_SORT_DEFAULT[0])
-    direction = request.args.get("dir", ACCOUNT_SORT_DEFAULT[1])
-    if sort not in ACCOUNT_SORT_KEYS or direction not in ("asc", "desc"):
-        sort, direction = ACCOUNT_SORT_DEFAULT
-
-    pagination = db.paginate(
-        build_account_directory_query(
-            search_term, role_filter, membership_filter, active_filter,
-            kind_filter, account_filter, sort=sort, direction=direction,
-        ),
-        page=page,
-        per_page=ADMIN_DIRECTORY_PAGE_SIZE,
-        error_out=False,
-    )
-    return render_template(
-        "admin_accounts.html",
-        active_admin_section="accounts",
-        pagination=pagination,
-        search_term=search_term,
-        role_filter=role_filter,
-        # Built from the permission table, so a role added there is filterable
-        # without this dropdown being edited.
-        role_choices=[(slug, role_label(slug)) for slug in sorted(ROLE_PERMISSIONS)],
-        can_manage_roles=current_user.can(Permission.ROLES_MANAGE),
-        membership_filter=membership_filter,
-        active_filter=active_filter,
-        kind_filter=kind_filter,
-        account_filter=account_filter,
-        sort=sort,
-        sort_dir=direction,
-        sort_is_default=(sort, direction) == ACCOUNT_SORT_DEFAULT,
-    )
+    """The account list, drawn by the new front end (frontend/src/pages/admin/Accounts.tsx)."""
+    return app_shell()
 
 
 @admin_bp.route("/admin/accounts/<int:user_id>/archived-avatar", methods=["GET"])

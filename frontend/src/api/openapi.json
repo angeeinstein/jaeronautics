@@ -1,6 +1,310 @@
 {
   "components": {
     "schemas": {
+      "AccountListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccountRow"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "membership_counts": {
+            "$ref": "#/components/schemas/MembershipCounts"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "per_page": {
+            "title": "Per Page",
+            "type": "integer"
+          },
+          "role_choices": {
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "title": "Role Choices",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pages",
+          "per_page",
+          "membership_counts",
+          "role_choices"
+        ],
+        "title": "AccountListOut",
+        "type": "object"
+      },
+      "AccountListQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "default": "all",
+            "enum": [
+              "all",
+              "active",
+              "no_sign_in",
+              "disabled",
+              "erased"
+            ],
+            "title": "Account",
+            "type": "string"
+          },
+          "dir": {
+            "default": "asc",
+            "enum": [
+              "asc",
+              "desc"
+            ],
+            "title": "Dir",
+            "type": "string"
+          },
+          "kind": {
+            "default": "all",
+            "description": "\"archived\": carried over from the old forum and not reconnected yet.",
+            "enum": [
+              "all",
+              "portal",
+              "archived"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "membership": {
+            "default": "all",
+            "enum": [
+              "all",
+              "active",
+              "ending",
+              "pending",
+              "failed",
+              "ended",
+              "none"
+            ],
+            "title": "Membership",
+            "type": "string"
+          },
+          "page": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "q": {
+            "default": "",
+            "description": "Name, address or forum username; part of one is enough.",
+            "maxLength": 200,
+            "title": "Q",
+            "type": "string"
+          },
+          "role": {
+            "default": "all",
+            "description": "\"all\", \"staff\" (any admin role), \"none\" (no role) or a role's slug.",
+            "title": "Role",
+            "type": "string"
+          },
+          "sort": {
+            "default": "name",
+            "enum": [
+              "name",
+              "kind",
+              "membership",
+              "until",
+              "forum"
+            ],
+            "title": "Sort",
+            "type": "string"
+          }
+        },
+        "title": "AccountListQuery",
+        "type": "object"
+      },
+      "AccountRow": {
+        "additionalProperties": false,
+        "properties": {
+          "account_state": {
+            "enum": [
+              "active",
+              "no_sign_in",
+              "disabled",
+              "erased"
+            ],
+            "title": "Account State",
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "category_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Label"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled Reason"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "forum_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forum Username"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "membership": {
+            "enum": [
+              "active",
+              "ending",
+              "pending",
+              "failed",
+              "ended",
+              "none"
+            ],
+            "title": "Membership",
+            "type": "string"
+          },
+          "membership_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership Until"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "old_forum": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unclaimed",
+                  "reconnected"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Forum"
+          },
+          "old_forum_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Forum Username"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "year_group",
+          "category",
+          "category_label",
+          "old_forum",
+          "old_forum_username",
+          "account_state",
+          "disabled_reason",
+          "forum_username",
+          "roles",
+          "membership",
+          "membership_until"
+        ],
+        "title": "AccountRow",
+        "type": "object"
+      },
       "Activity": {
         "additionalProperties": false,
         "properties": {
@@ -375,6 +679,51 @@
         "title": "MeOut",
         "type": "object"
       },
+      "MembershipCounts": {
+        "additionalProperties": false,
+        "description": "How many rows each membership filter shows, with the other filters as they are.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "integer"
+          },
+          "all": {
+            "title": "All",
+            "type": "integer"
+          },
+          "ended": {
+            "title": "Ended",
+            "type": "integer"
+          },
+          "ending": {
+            "title": "Ending",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "none": {
+            "title": "None",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "all",
+          "active",
+          "ending",
+          "pending",
+          "failed",
+          "ended",
+          "none"
+        ],
+        "title": "MembershipCounts",
+        "type": "object"
+      },
       "Notice": {
         "additionalProperties": false,
         "description": "A banner over every page of an area, for something that is off on purpose or by accident.",
@@ -422,6 +771,25 @@
           "message"
         ],
         "title": "Notice",
+        "type": "object"
+      },
+      "Role": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "label"
+        ],
+        "title": "Role",
         "type": "object"
       },
       "SessionOut": {
@@ -510,6 +878,179 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/accounts": {
+      "get": {
+        "operationId": "admin_accounts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Name, address or forum username; part of one is enough.",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "membership",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "active",
+                "ending",
+                "pending",
+                "failed",
+                "ended",
+                "none"
+              ],
+              "title": "Membership",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "\"all\", \"staff\" (any admin role), \"none\" (no role) or a role's slug.",
+              "title": "Role",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "active",
+                "no_sign_in",
+                "disabled",
+                "erased"
+              ],
+              "title": "Account",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "\"archived\": carried over from the old forum and not reconnected yet.",
+              "enum": [
+                "all",
+                "portal",
+                "archived"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "name",
+              "enum": [
+                "name",
+                "kind",
+                "membership",
+                "until",
+                "forum"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dir",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Dir",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "One page of the account list, with how many each membership filter would show.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "accounts.view"
+        ]
+      }
+    },
     "/api/v1/admin/dashboard": {
       "get": {
         "operationId": "admin_dashboard",

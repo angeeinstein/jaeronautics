@@ -68,6 +68,10 @@ installs Node.js and builds on every install and update.
 3. Its Flask route answers `app_shell()`; the old template and its page tests go.
 4. Tick it off in `docs/frontend-routes.md`.
 
+Lists: `DataTable` (`src/components/DataTable.tsx`) for every table of
+records -- the server sorts and pages, the page keeps filters, sort and page
+in its address (see `src/pages/admin/Accounts.tsx` and `accountFilters.ts`).
+
 Links: use `AppLink` (`src/app/AppLink.tsx`) for every internal link -- it
 moves within the app where the page is the app's, and loads the page where it
 is still Flask's.

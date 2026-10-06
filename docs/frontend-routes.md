@@ -44,7 +44,7 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `GET /admin` (page; also the endpoint alias `admin`) → dashboard (`GET /api/v1/admin/dashboard`)
 
 ### 4.2 Accounts
-- [ ] `GET /admin/accounts` (page) → list with filters and search
+- [x] `GET /admin/accounts` (page) → list with filters and search (`GET /api/v1/admin/accounts`)
 - [ ] `GET /admin/accounts/<id>` (page) → detail with tabs
 - [ ] `POST /admin/accounts/<id>/billing-sync` (action)
 - [ ] `POST /admin/accounts/<id>/delete` (action; cancels the Stripe subscription)

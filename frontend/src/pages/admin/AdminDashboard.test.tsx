@@ -22,7 +22,7 @@ function dashboard(overrides: Partial<Dashboard> = {}): Dashboard {
         label: 'Active members',
         value: 214,
         note: 'of 230 accounts',
-        link_url: '/admin/accounts?active=active',
+        link_url: '/admin/accounts?membership=active',
       },
       { key: 'forum', label: 'On the forum', value: 180, note: 'nobody still setting up', link_url: null },
     ],
@@ -104,7 +104,7 @@ describe('the figures and the log', () => {
     show(dashboard());
 
     const active = await screen.findByRole('link', { name: /Active members/ });
-    expect(active).toHaveAttribute('href', '/admin/accounts?active=active');
+    expect(active).toHaveAttribute('href', '/admin/accounts?membership=active');
     expect(screen.queryByRole('link', { name: /On the forum/ })).toBeNull();
   });
 

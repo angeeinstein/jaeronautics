@@ -99,8 +99,25 @@ class TestTheFigures:
 
         links = {figure["key"]: figure["link_url"] for figure in _dashboard(client)["figures"]}
 
-        assert links == {"active": "/admin/accounts?active=active",
-                         "cancelled": "/admin/accounts?membership_status=cancel_scheduled", "forum": None}
+        assert links == {"active": "/admin/accounts?membership=active",
+                         "cancelled": "/admin/accounts?membership=ending", "forum": None}
+
+    def test_the_ending_figure_and_its_list_count_the_same_people(self, client, admin):
+        """Still a member, not renewing. One whose membership is already over
+        is not "ending" any more, whatever the cancellation flag still says."""
+        ends = date(date.today().year, 12, 31)
+        make_member(email="leaving@example.com", cancel_at_period_end=True, membership_ends_on=ends,
+                    payment_status="cancel_scheduled", is_active=True)
+        make_member(email="stopped@example.com", payment_status="canceled", membership_ends_on=ends, is_active=True)
+        make_member(email="gone@example.com", cancel_at_period_end=True, payment_status="expired",
+                    membership_ends_on=date(date.today().year - 1, 12, 31), is_active=False)
+        signed_in(client, admin)
+
+        figure = _dashboard(client)["figures"][1]
+        listed = client.get("/api/v1/admin/accounts?membership=ending").get_json()
+
+        assert figure["value"] == 2
+        assert listed["total"] == 2 and listed["membership_counts"]["ending"] == 2
 
     def test_but_not_for_somebody_who_may_not_open_it(self, client):
         signed_in(client, _staff("money@example.org", "treasurer"))

@@ -584,53 +584,6 @@ class TestSeeingTheArchiveInTheAdmin:
             session["_user_id"] = str(admin.id)
         return client
 
-    def _rows(self, response):
-        return response.get_data(as_text=True).count('class="account-row"')
-
-    def test_they_appear_in_the_ordinary_account_list(self, app, admin_client):
-        _archived()
-
-        body = admin_client.get("/admin/accounts").get_data(as_text=True)
-
-        assert "PopovicA_L23" in body
-
-    def test_a_row_shows_who_it_was_not_a_placeholder_address(self, app, admin_client):
-        """forum-mybb-645@imported.invalid tells an admin nothing."""
-        _archived()
-
-        body = admin_client.get("/admin/accounts").get_data(as_text=True)
-
-        assert OLD_EMAIL in body
-        assert "imported.invalid" not in body
-        assert ">Old forum</span>" in body
-
-    def test_the_filter_narrows_to_them(self, app, admin_client):
-        _archived()
-        make_member(email="current@example.com")
-        db.session.commit()
-
-        # The admin doing the looking is an account too.
-        assert self._rows(admin_client.get("/admin/accounts")) == 3
-        assert self._rows(admin_client.get("/admin/accounts?kind=archived")) == 1
-        assert self._rows(admin_client.get("/admin/accounts?kind=portal")) == 2
-
-    def test_asking_for_active_members_leaves_them_out(self, app, admin_client):
-        """The filter that was already there, which is why this fits the page."""
-        _archived()
-
-        assert self._rows(admin_client.get("/admin/accounts?active=active")) == 0
-
-    def test_they_can_be_searched_by_their_forum_name(self, app, admin_client):
-        _archived()
-
-        assert self._rows(admin_client.get("/admin/accounts?q=PopovicA")) == 1
-
-    def test_they_can_be_searched_by_the_address_the_forum_held(self, app, admin_client):
-        """An admin who is asked "is my old account in there" has an address."""
-        _archived()
-
-        assert self._rows(admin_client.get("/admin/accounts?q=a.popovic")) == 1
-
     def test_the_account_page_shows_what_the_archive_recorded(self, app, admin_client):
         profile = _archived()
 
@@ -642,26 +595,14 @@ class TestSeeingTheArchiveInTheAdmin:
         assert "Unclaimed" in body
 
     def test_a_reconnected_person_reads_as_a_member_not_an_archive(self, app, admin_client):
-        """Claiming makes them a member. The row should say so.
+        """Claiming makes them a member; the account page says the archive was claimed.
 
-        The archive row and the membership are the same account afterwards, so
-        showing the old placeholder treatment would file a current member under
-        "former forum member" for ever.
+        The list's side of this: tests/test_api_admin_accounts.py.
         """
         profile = _archived()
         member = _returning()
         claim_archived_account(member.user)
         db.session.commit()
-
-        # "Old forum" is what is left of a person who never came back, so the
-        # filter must not offer them up as one any more.
-        archives = admin_client.get("/admin/accounts?kind=archived").get_data(as_text=True)
-        assert ">Old forum</span>" not in archives  # scoped: the dropdown names it too
-        assert "PopovicA_L23" not in archives
-
-        # They read as an ordinary member, with the history still on show.
-        listing = admin_client.get("/admin/accounts").get_data(as_text=True)
-        assert "Reconnected" in listing, "but it is still visible that they came back"
 
         detail = admin_client.get(f"/admin/accounts/{profile.user_id}").get_data(as_text=True)
         assert "Claimed" in detail

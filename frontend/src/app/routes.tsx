@@ -26,6 +26,10 @@ export const routes: RouteObject[] = [
             index: true,
             lazy: async () => ({ Component: (await import('../pages/admin/AdminDashboard')).AdminDashboard }),
           },
+          {
+            path: 'accounts',
+            lazy: async () => ({ Component: (await import('../pages/admin/Accounts')).Accounts }),
+          },
         ],
       },
       { path: '*', element: <NotFound /> },

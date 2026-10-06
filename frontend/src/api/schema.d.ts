@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v1/admin/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One page of the account list, with how many each membership filter would show. */
+        get: operations["admin_accounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/dashboard": {
         parameters: {
             query?: never;
@@ -59,6 +76,110 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountListOut */
+        AccountListOut: {
+            /** Items */
+            items: components["schemas"]["AccountRow"][];
+            membership_counts: components["schemas"]["MembershipCounts"];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Role Choices */
+            role_choices: components["schemas"]["Role"][];
+            /** Total */
+            total: number;
+        };
+        /** AccountListQuery */
+        AccountListQuery: {
+            /**
+             * Account
+             * @default all
+             * @enum {string}
+             */
+            account: "all" | "active" | "no_sign_in" | "disabled" | "erased";
+            /**
+             * Dir
+             * @default asc
+             * @enum {string}
+             */
+            dir: "asc" | "desc";
+            /**
+             * Kind
+             * @description "archived": carried over from the old forum and not reconnected yet.
+             * @default all
+             * @enum {string}
+             */
+            kind: "all" | "portal" | "archived";
+            /**
+             * Membership
+             * @default all
+             * @enum {string}
+             */
+            membership: "all" | "active" | "ending" | "pending" | "failed" | "ended" | "none";
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Q
+             * @description Name, address or forum username; part of one is enough.
+             * @default
+             */
+            q: string;
+            /**
+             * Role
+             * @description "all", "staff" (any admin role), "none" (no role) or a role's slug.
+             * @default all
+             */
+            role: string;
+            /**
+             * Sort
+             * @default name
+             * @enum {string}
+             */
+            sort: "name" | "kind" | "membership" | "until" | "forum";
+        };
+        /** AccountRow */
+        AccountRow: {
+            /**
+             * Account State
+             * @enum {string}
+             */
+            account_state: "active" | "no_sign_in" | "disabled" | "erased";
+            /** Category */
+            category: string | null;
+            /** Category Label */
+            category_label: string | null;
+            /** Disabled Reason */
+            disabled_reason: string | null;
+            /** Email */
+            email: string | null;
+            /** Forum Username */
+            forum_username: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Membership
+             * @enum {string}
+             */
+            membership: "active" | "ending" | "pending" | "failed" | "ended" | "none";
+            /** Membership Until */
+            membership_until: string | null;
+            /** Name */
+            name: string | null;
+            /** Old Forum */
+            old_forum: ("unclaimed" | "reconnected") | null;
+            /** Old Forum Username */
+            old_forum_username: string | null;
+            /** Roles */
+            roles: components["schemas"]["Role"][];
+            /** Year Group */
+            year_group: string | null;
+        };
         /** Activity */
         Activity: {
             /** At */
@@ -166,6 +287,26 @@ export interface components {
             teams_area: boolean;
         };
         /**
+         * MembershipCounts
+         * @description How many rows each membership filter shows, with the other filters as they are.
+         */
+        MembershipCounts: {
+            /** Active */
+            active: number;
+            /** All */
+            all: number;
+            /** Ended */
+            ended: number;
+            /** Ending */
+            ending: number;
+            /** Failed */
+            failed: number;
+            /** None */
+            none: number;
+            /** Pending */
+            pending: number;
+        };
+        /**
          * Notice
          * @description A banner over every page of an area, for something that is off on purpose or by accident.
          */
@@ -187,6 +328,13 @@ export interface components {
              * @enum {string}
              */
             tone: "info" | "warning" | "danger";
+        };
+        /** Role */
+        Role: {
+            /** Label */
+            label: string;
+            /** Slug */
+            slug: string;
         };
         /** SessionOut */
         SessionOut: {
@@ -226,6 +374,62 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    admin_accounts: {
+        parameters: {
+            query?: {
+                q?: string;
+                membership?: "all" | "active" | "ending" | "pending" | "failed" | "ended" | "none";
+                role?: string;
+                account?: "all" | "active" | "no_sign_in" | "disabled" | "erased";
+                kind?: "all" | "portal" | "archived";
+                sort?: "name" | "kind" | "membership" | "until" | "forum";
+                dir?: "asc" | "desc";
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountListOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_dashboard: {
         parameters: {
             query?: never;

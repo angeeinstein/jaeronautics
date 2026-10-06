@@ -279,20 +279,20 @@ class TestTheCountOnTheTab:
         _picture(member)
         _login(client, admin.id)
 
-        body = client.get("/admin/accounts").get_data(as_text=True)
+        body = client.get("/admin/logs").get_data(as_text=True)
 
         assert re.search(r'Reviews<span class="nav-count"[^>]*>2</span>', body)
 
     def test_it_is_absent_when_nothing_waits(self, client, admin):
         _login(client, admin.id)
 
-        body = client.get("/admin/accounts").get_data(as_text=True)
+        body = client.get("/admin/logs").get_data(as_text=True)
 
         assert 'class="nav-count"' not in body
 
 
 class TestFiltersApplyThemselves:
-    @pytest.mark.parametrize("path, results", [("/admin/accounts", "account-results"), ("/admin/logs", "log-results")])
+    @pytest.mark.parametrize("path, results", [("/admin/logs", "log-results")])
     def test_the_form_is_wired_up_and_reset_stays(self, client, admin, path, results):
         _login(client, admin.id)
 
@@ -303,14 +303,3 @@ class TestFiltersApplyThemselves:
         assert "live-filter.js" in body
         assert "Apply Filters" not in body
         assert ">Reset</a>" in body
-
-    def test_account_pages_keep_every_filter(self, client, admin):
-        """The page links used to drop the account-type and account filters."""
-        for index in range(55):
-            make_member(email=f"many{index}@example.com")
-        _login(client, admin.id)
-
-        body = client.get("/admin/accounts?kind=portal&account=active").get_data(as_text=True)
-
-        assert "kind=portal" in body.split('aria-label="Accounts Pagination"')[1]
-        assert "account=active" in body.split('aria-label="Accounts Pagination"')[1]

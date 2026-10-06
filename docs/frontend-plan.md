@@ -188,6 +188,13 @@ server can update to it.
    1. Dashboard *(done: `api/admin_dashboard.py`, `services/dashboard.py`,
       `frontend/src/pages/admin/AdminDashboard.tsx`)*
    2. Accounts: list, detail with its tabs, and every action on an account
+      *(list done: `api/admin_accounts.py`, `services/account_directory.py`,
+      `frontend/src/pages/admin/Accounts.tsx`, `components/DataTable.tsx`.
+      Its two overlapping membership filters became one, by state --
+      active, ending, payment pending, payment failed, ended, none -- worked
+      out by the database, so a row's label, the filter and the sort agree;
+      the dashboard's "Ending" figure counts the same people. Links to the
+      old page's filters still work.)*
    3. Reviews (photo approvals)
    4. Teams (the admins' part)
    5. Money
