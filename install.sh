@@ -670,51 +670,19 @@ bootstrap_packages() {
     esac
 }
 
-install_optional_packages() {
-    # Installed where the distribution has them. One its archive lacks, or a
-    # mirror that fails, is a warning -- never a failed install or update.
-    # Asks the mirrors nothing once they are there.
-    local missing=() pkg
-    if (( $# == 0 )); then
-        return 0
-    fi
-    mapfile -t missing < <(packages_missing "$@")
-    for pkg in "${missing[@]}"; do
-        if ! update_package_index_once || ! apt-cache show "${pkg}" >/dev/null 2>&1; then
-            warn "Optional package ${pkg} is not available here; going on without it."
-            continue
-        fi
-        if ! retry 3 apt-get "${APT_NETWORK_OPTS[@]}" install -y "${pkg}"; then
-            warn "Optional package ${pkg} could not be installed; going on without it."
-        fi
-    done
-}
-
 base_packages() {
     case "${PACKAGE_MANAGER}" in
         apt)
             # mariadb-client always: the data has to be readable whether the
             # database is on this box or elsewhere. mariadb-server only once
             # the local/external answer is known, from install_or_update.
-            # Pango (libpango, libpangoft2): WeasyPrint lays out the legal texts' PDFs with it.
+            # Pango (libpango, libpangoft2): WeasyPrint lays out the legal texts' PDFs with it;
+            # HarfBuzz-Subset (4.1 or later, Ubuntu 24.04 has 8.3) trims the fonts it embeds.
             printf '%s\n' ca-certificates curl git nginx mariadb-client openssl python3 python3-pip python3-venv redis-server \
-                libpango-1.0-0 libpangoft2-1.0-0
+                libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
             ;;
         dnf|yum)
             printf '%s\n' ca-certificates curl git nginx mariadb openssl python3 python3-pip redis pango
-            ;;
-    esac
-}
-
-# Helpful but not needed; see install_optional_packages.
-optional_packages() {
-    case "${PACKAGE_MANAGER}" in
-        apt)
-            # HarfBuzz-Subset: WeasyPrint trims the fonts embedded in the legal
-            # texts' PDFs with it (from 4.1; with fontTools otherwise, which a
-            # later WeasyPrint will no longer do). dnf/yum: in harfbuzz, which
-            # Pango already brings.
-            printf '%s\n' libharfbuzz-subset0
             ;;
     esac
 }
@@ -3068,8 +3036,6 @@ install_or_update() {
     detect_package_manager
     mapfile -t base_pkg_list < <(base_packages)
     install_packages "${base_pkg_list[@]}"
-    mapfile -t optional_pkg_list < <(optional_packages)
-    install_optional_packages "${optional_pkg_list[@]}"
 
     source_existing_env
     if [[ "${INSTALLATION_EXISTS}" == "1" ]]; then
