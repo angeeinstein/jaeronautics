@@ -1,0 +1,170 @@
+# New Front End: Plan
+
+How the portal moves from server-rendered pages (Jinja, Bootstrap) to a React
+front end on a JSON API. The *what* -- areas, sidebars, page patterns, the
+look -- is in `docs/frontend-structure.md` (version A of the mockups) and
+`docs/design.md`; this is the *how* and the order.
+
+## Decisions
+
+| | Decided |
+|---|---|
+| Branch | `claude/new-frontend`. The test server runs it; the live site stays on `main` and gets fixes from `claude/membership-site-review-12nfxx` as before. Merged to `main` only when the new front end is complete. |
+| Old pages | Deleted as soon as their new page exists: one version of each page, never two. Pages may be missing in between -- only the test server runs this branch. |
+| Order | API foundation, then the front end's frame, then **admin area → teams area → My Account → public pages and signup**. |
+| Build | On the server, by `install.sh`, on every install and update. |
+| Components | Mantine, themed with our design; our own components where the portal needs its own; TanStack Table for data tables. |
+| Look | Dark only (`docs/frontend-structure.md` §15). |
+| Language | English only, as today. Text in the front end, no translation layer until a second language is wanted. |
+
+## What stays on the server
+
+Not everything becomes a React page. These stay Flask, unchanged:
+
+- **Emails** (Jinja templates, `emails/_layout.html`) and the **legal PDFs**.
+- **Redirects to other services:** Stripe Checkout and the billing portal,
+  the forum's single sign-on (DiscourseConnect), the Stripe webhook.
+- **File downloads:** data export, backups, legal PDFs, the legal text
+  template, CSV exports. The front end links to them.
+- **Background jobs, CLI commands, `install.sh`** -- untouched.
+- **Business logic:** everything in `aeronautics_members/services/`. The API
+  calls the same functions the pages call today; nothing is written twice.
+
+## 1. The API
+
+**Where:** a new package `aeronautics_members/api/`, one module per area
+(`me.py`, `admin_accounts.py`, `teams.py`, ...), all under `/api/v1/`.
+
+**Signed in:** the same session cookie as today (Flask-Login). No tokens: the
+front end and the API share one domain. Not signed in, the API answers `401`
+with JSON -- never the redirect to the login page the pages get.
+
+**CSRF:** Flask-WTF's protection stays on. The front end reads the token from
+`GET /api/v1/session` and sends it as `X-CSRFToken` on every change.
+
+**Permissions:** checked on the server for every endpoint, with the
+`requires(Permission...)` decorators the pages use today. The front end only
+uses them to decide what to show: `GET /api/v1/me` returns the person, their
+roles and permissions, and the counts the sidebar shows (reviews waiting,
+applications).
+
+**Answers:**
+- Success: the data, as JSON. Lists: `{"items": [...], "total": n}`, with
+  `page`, `per_page`, `sort` and filters as query parameters where a list
+  needs them.
+- Errors, always the same shape:
+  `{"error": {"code": "team_not_joinable", "message": "...", "fields": {...}}}`.
+  The services' errors (`ValidationError` 400, `PermissionError_` 403,
+  `NotFoundError` 404, `ConflictError` 409, `ExternalServiceError` 502)
+  already carry a code, a message and a status; one error handler turns them
+  into this. `fields` holds per-field messages for forms.
+
+**Schemas:** every request and answer is a Pydantic model. That gives
+validation of what comes in, one place that says what goes out, and an
+OpenAPI description of the whole API. From that description the front end's
+TypeScript types are generated (`openapi-typescript`), so a field renamed on
+the server is a type error in the front end, not a blank on a page.
+
+**Rate limits:** the same Flask-Limiter limits as the pages they replace.
+
+**Tests:** every endpoint gets pytest tests like the pages have now -- signed
+out, without the permission, with bad input, and the real thing. The tests of
+a page are moved to its endpoint when the page is replaced.
+
+## 2. The front end
+
+**Where:** `frontend/` at the top of the repository.
+
+**Stack:**
+- React and TypeScript (strict), built with Vite.
+- Mantine for components, forms (`@mantine/form`), notifications and hooks.
+- TanStack Query to load and cache the API's data and refresh it after a
+  change; TanStack Table for the admin lists; React Router for the pages.
+- Vitest for component tests, Playwright for end-to-end tests through the
+  real Flask app (the browser is already set up in CI and here).
+- ESLint and Prettier, in CI like ruff is for Python.
+
+**Theme:** `docs/design.md` becomes one Mantine theme: our colours, Inter,
+Archivo and IBM Plex Mono (self-hosted, as now), zero rounded corners,
+spacing, forced dark. Pages never set colours or sizes of their own.
+
+**Our own components** (`frontend/src/components/`), built from Mantine pieces
+where useful: `AppShell` with `TopBar`, `UserMenu` and the area `Sidebar`
+(groups, entries with counts, folding sections, back link), `Breadcrumbs`,
+`PageHeader`, `Pill` (status), `ConfirmButton` (two-step confirm), `StatTile`,
+`DataTable` (TanStack Table: clickable rows, filter chips, search), and the
+empty, loading and error states.
+
+**Addresses:** the URLs stay as they are (`/admin/accounts/12`, `/teams/rocket`,
+...). For every page that has moved, Flask answers its URL with the front
+end's one HTML file, which loads the app; the app shows the page. Paths that
+have not moved are still Flask's pages until they do. A page's URL is
+therefore never broken, whichever side draws it.
+
+**Files:** the build writes to `aeronautics_members/static/app/` (not in git),
+which nginx already serves under `/static/`. File names carry a hash, so they
+can be cached for a long time and an update never shows a stale script.
+
+**Security policy:** the portal allows scripts and styles from its own server
+only. React and the built files fit that. Mantine normally writes its colour
+variables into an inline `<style>` block, which the policy blocks; Mantine can
+leave that out, with the variables in our own CSS file instead. This is the
+first thing checked in step 2, before anything is built on it.
+
+## 3. Build and deployment
+
+- **`install.sh`** installs Node.js (current LTS, from NodeSource's package
+  repository -- Ubuntu's own is too old for Vite) with the other packages,
+  and on every install and update runs `npm ci` and `npm run build` in
+  `frontend/` before the portal restarts. A build that fails stops the update
+  like a failed migration does, and the rollback applies.
+- **CI** gets a front-end job: install, type check, lint, Vitest, build; and
+  an end-to-end job running Playwright against the built front end and Flask.
+
+## 4. Steps
+
+Each step ends with tests, a full test run, a commit and a push; the test
+server can update to it.
+
+1. **This plan** -- for review.
+2. **API foundation:** the `api` package, JSON errors, `401` instead of
+   redirects, CSRF header, `GET /api/v1/session` and `GET /api/v1/me`,
+   Pydantic schemas, the OpenAPI document and the type generation, test
+   helpers. A **route map** (`docs/frontend-routes.md`): every one of today's
+   122 routes, marked as page (→ which API endpoints, which React page),
+   action (→ which endpoint), download or redirect (stays), and its step.
+3. **Front-end foundation:** `frontend/` with Vite, React, TypeScript, Mantine
+   and the theme; the security-policy check; the API client with types and
+   TanStack Query; the router; `AppShell` with top bar, user menu and the
+   admin sidebar; our components; Flask serving the app for moved paths;
+   `install.sh` and CI. Ends with an empty admin area in the new frame.
+4. **Admin area**, one section at a time, each: its endpoints and tests, its
+   React page, then the old route, template and page tests removed.
+   1. Dashboard
+   2. Accounts: list, detail with its tabs, and every action on an account
+   3. Reviews (photo approvals)
+   4. Teams (the admins' part)
+   5. Money
+   6. Logs
+   7. Legal Texts
+   8. Settings, section by section (general, billing, mail, forum,
+      notifications, maintenance with update, backup and restore)
+5. **Teams area:** overview, a team's page and join page with the rules
+   dialog, the leads' management sections, the team's money.
+6. **My Account:** the overview, membership and payment status, forum card
+   with the photo upload and cropper, change requests, password, data export
+   and deletion.
+7. **Public pages and signing in:** the new home page (association
+   information), signup on its own page with the legal texts in a dialog,
+   login, password reset, email confirmation, thank-you and cancel pages,
+   the legal texts' pages.
+8. **Clean-up:** remove Bootstrap, `base.html`, the page templates, WTForms
+   where nothing uses it any more, and their CSS and scripts; update the
+   docs; a full review of the branch; then the merge to `main` and the live
+   site's update.
+
+## 5. Open, to decide on the way
+
+- **What the association's Treasurer sees** -- `docs/frontend-structure.md`
+  §15; needed at step 4.5 (Money).
+- **The new home page's content** -- needed at step 7.
