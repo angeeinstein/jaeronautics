@@ -240,6 +240,25 @@ hr {
     padding-bottom: 0.25rem;
 }
 
+/* TEST_SERVER in .env: under the header on every page, never on the live site. */
+.test-server-bar {
+    background-color: #c62828;
+    color: #ffffff;
+    font-family: "Archivo", sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 0.3rem 1rem;
+}
+
+.test-server-bar span {
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: none;
+}
+
 .app-navbar .navbar-brand {
     display: inline-flex;
     align-items: center;

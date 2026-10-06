@@ -165,6 +165,15 @@ cannot, and — because a missing file is the normal state before the first
 update — the panel silently showed nothing at all. It now says why it is empty,
 and an unreadable file is logged.
 
+## Marking a Test Server
+
+`TEST_SERVER=true` in `.env` puts a red "Test server" bar under the header of
+every page and every email, and `[TEST]` before each email's subject and the
+browser tab's title. Leave it out (or `false`) on the live site. It is read at
+start-up, so restart the portal after changing it
+(`sudo systemctl restart jaeronautics`). The forum is not covered: Discourse
+draws its own pages.
+
 ## Renewing on 1 January
 
 Everybody renews on the same day, and the portal only records a year once its

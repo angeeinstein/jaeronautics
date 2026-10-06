@@ -399,6 +399,7 @@ from .config import (  # noqa: E402
     STRIPE_SECRET_KEY,
     STRIPE_SETTING_KEYS,
     STRIPE_WEBHOOK_SECRET,
+    TEST_SERVER,
     TRANSLATIONS_DIR,
 )
 
@@ -1579,6 +1580,7 @@ def create_app(config_overrides=None):
     app.config["PUBLIC_BASE_URL"] = PUBLIC_BASE_URL
     app.config["ADDITIONAL_ALLOWED_HOSTS"] = ADDITIONAL_ALLOWED_HOSTS
     app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+    app.config["TEST_SERVER"] = TEST_SERVER
 
     app.config.update(
         SESSION_COOKIE_SECURE=True,
@@ -1675,7 +1677,7 @@ def create_app(config_overrides=None):
             "privacy_url": PRIVACY_URL,
             "statutes_url": STATUTES_URL,
             "contact_email": CONTACT_EMAIL,
-        })
+        }, test_server=bool(app.config.get("TEST_SERVER")))
 
     @app.context_processor
     def inject_member_category_rules():
