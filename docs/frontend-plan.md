@@ -210,7 +210,14 @@ server can update to it.
       own. A fee change asks again and then says what it did to the members already in.
       The short name `new` is refused, as `/admin/teams/new` is the form. What a team
       says about itself stays on its management page until step 5.)*
-   5. Money
+   5. Money *(done: `api/admin_money.py`; `frontend/src/pages/admin/money/` -- what
+      each team is owed, the check against Stripe on request, and a team's money on the
+      association's side at `/admin/money/<slug>`: transfers, with a GiroCode that
+      follows the amount and reference typed, and bank details. Recording transfers left
+      the team's own Money page, which its leads keep until step 5. The Treasurer's
+      dashboard shows what is open instead of the membership figures. Days are typed and
+      shown as 31.12.2026 (`components/DayInput.tsx`, Mantine's date input); amounts as
+      €1,234.50, on the server too.)*
    6. Logs
    7. Legal Texts
    8. Settings, section by section (general, billing, mail, forum,
@@ -231,6 +238,4 @@ server can update to it.
 
 ## 5. Open, to decide on the way
 
-- **What the association's Treasurer sees** -- `docs/frontend-structure.md`
-  §15; needed at step 4.5 (Money).
 - **The new home page's content** -- needed at step 7.

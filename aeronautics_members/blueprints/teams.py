@@ -8,7 +8,7 @@ docs/teams-plan.md.
 
 import csv
 import io
-from datetime import date, timedelta
+from datetime import timedelta
 
 from flask import (
     Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file, url_for,
@@ -626,25 +626,19 @@ def team_money(slug):
 
     team = _money_team_or_404(slug)
     permissions = teams_service.team_permissions(current_user, team)
-    summary = money.summary(team)
-    pays_out = current_user.can(Permission.TEAMS_MONEY)
-    reference = money.default_reference(team)
     return render_template(
         "teams/money.html",
         team=team,
-        summary=summary,
+        summary=money.summary(team),
         permissions=permissions,
         TeamPermission=teams_service.TeamPermission,
         manages_people=_manages_people(team),
-        pays_out=pays_out,
-        reference=reference,
-        qr_svg=money.payout_qr_svg(team, summary["open"], reference) if pays_out else None,
-        today=get_membership_today(),
+        # Transfers are recorded on the association's side of it.
+        pays_out=current_user.can(Permission.TEAMS_MONEY),
         euros=money.euros,
         counts=money.counts,
         payer_name=money.payer_name,
         masked_iban=money.masked_iban,
-        grouped_iban=money.grouped_iban,
     )
 
 
@@ -703,76 +697,35 @@ def team_money_bank(slug):
     )
 
 
-@teams_bp.route("/teams/<slug>/money/payouts", methods=["POST"])
-@login_required
-@requires(Permission.TEAMS_MONEY)
-def team_money_payout(slug):
-    from ..services.team_money import record_payout
-
-    return _money_action(
-        slug, teams_service.TeamPermission.VIEW_MONEY,
-        lambda team: record_payout(
-            current_user, team,
-            amount=request.form.get("amount"),
-            paid_on=request.form.get("paid_on"),
-            reference=request.form.get("reference"),
-        ),
-        _("Transfer recorded."),
-    )
-
-
-def _money_period(since, until, today):
-    """The period asked for: from ``since`` (blank: the start) to ``until`` (blank: today)."""
-    def day(text):
-        try:
-            return date.fromisoformat((text or "").strip())
-        except ValueError:
-            return None
-
-    until = min(day(until) or today, today)
-    since = day(since)
-    if since is not None and (since > until or since.year < 2000):
-        since = None
-    return since, until
-
-
 @teams_bp.route("/admin/money", methods=["GET"])
 @login_required
 @requires(Permission.TEAMS_MONEY)
 def admin_money():
+    """Money, the association's side: drawn by the new front end (frontend/src/pages/admin/money/)."""
+    return app_shell()
+
+
+@teams_bp.route("/admin/money/<slug>", methods=["GET"])
+@login_required
+@requires(Permission.TEAMS_MONEY)
+def admin_team_money(slug):
+    return app_shell()
+
+
+@teams_bp.route("/admin/money/<slug>/transfer-code.svg", methods=["GET"])
+@login_required
+@requires(Permission.TEAMS_MONEY)
+def admin_team_money_code(slug):
+    """The GiroCode for a transfer to the team: ``amount`` in cents, and the ``reference``.
+    A banking app that scans it has the whole transfer filled in."""
     from ..services import team_money as money
 
-    rows = money.all_teams_money()
-    today = get_membership_today()
-    since, until = _money_period(request.args.get("since"), request.args.get("until"), today)
-    overview = None
-    if request.args.get("check") == "1":
-        # On request only: it pages through Stripe and takes a few seconds.
-        import stripe
-
-        from ..services.money_overview import overview as money_overview
-
-        try:
-            overview = money_overview(since, until)
-        except stripe.StripeError as exc:
-            current_app.logger.warning("Money overview: Stripe could not be asked: %s", exc)
-            flash(_("Stripe could not be asked. Please try again in a few minutes."), "danger")
-    return render_template(
-        "admin_money.html",
-        active_admin_section="money",
-        page_title=_("Money"),
-        page_description=_("The association's money on Stripe, and what each team's members paid."),
-        rows=rows,
-        total_open=sum(row["open"] for row in rows),
-        euros=money.euros,
-        masked_iban=money.masked_iban,
-        since=since,
-        until=until,
-        today=today,
-        shortcuts=[
-            (_("Since the start"), None, today),
-            (str(today.year), date(today.year, 1, 1), today),
-            (str(today.year - 1), date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)),
-        ],
-        overview=overview,
-    )
+    try:
+        team = teams_service.get_team(slug)
+    except ServiceError:
+        abort(404)
+    cents = request.args.get("amount", type=int) or 0
+    svg = money.payout_qr_svg(team, cents, (request.args.get("reference") or "")[:140])
+    if svg is None:
+        abort(404)
+    return Response(svg, mimetype="image/svg+xml", headers={"Cache-Control": "private, no-store"})

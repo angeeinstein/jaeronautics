@@ -281,6 +281,15 @@ def owed_to_teams_on(until):
     return earned - passed_on
 
 
+def period_asked(since, until, today):
+    """The period asked for: from ``since`` (None: the start) to ``until`` (None: today).
+    Never past today; a start after the end, or before 2000, counts as none."""
+    until = min(until or today, today)
+    if since is not None and (since > until or since.year < 2000):
+        since = None
+    return since, until
+
+
 def overview(since, until):
     """The money from ``since`` (None: from the first booking) to ``until``, both days
     included, in cents, with the check. Raises stripe.StripeError when Stripe cannot be asked."""

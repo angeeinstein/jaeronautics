@@ -852,7 +852,7 @@ class NotificationService:
                   iban=payload.get("iban") or "–"),
                 _("If that was not agreed with the team, check it before the next transfer."),
             ]
-            url, label = build_public_url("teams.team_money", slug=slug), _("Open Money")
+            url, label = build_public_url("teams.admin_team_money", slug=slug), _("Open Money")
         else:
             return None
         return (

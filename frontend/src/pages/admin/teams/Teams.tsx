@@ -13,6 +13,7 @@ import { AppLink } from '../../../app/AppLink';
 import { PageHeader } from '../../../components/PageHeader';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
+import { TeamMark } from '../../../components/TeamMark';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
 import { notifyDone, notifyNote } from '../../../lib/notify';
 import { teamsQuery, useTeamChange } from './shared';
@@ -110,10 +111,7 @@ export function Teams() {
                       <Table.Tr key={team.slug}>
                         <Table.Td>
                           <Group gap="sm" wrap="nowrap">
-                            {/* Logos are often wide: shown whole, in a box the initials share. */}
-                            <span className={classes.logo} aria-hidden>
-                              {team.logo_url ? <img src={team.logo_url} alt="" /> : team.name[0]}
-                            </span>
+                            <TeamMark name={team.name} logoUrl={team.logo_url} />
                             <AppLink to={`/admin/teams/${team.slug}`} className={classes.name}>
                               {team.name}
                             </AppLink>

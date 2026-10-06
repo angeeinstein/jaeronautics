@@ -6,6 +6,8 @@
     "/admin/reviews",
     "/admin/teams",
     "/admin/teams/new",
-    "/admin/teams/:slug"
+    "/admin/teams/:slug",
+    "/admin/money",
+    "/admin/money/:slug"
   ]
 }

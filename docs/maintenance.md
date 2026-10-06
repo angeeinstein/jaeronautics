@@ -1048,11 +1048,13 @@ and site admins for every team (Admin → Money), also archived ones.
   Treasurer and site admins can set them. The IBAN is checked by its check
   digits. Every change is in the log with before and after, and the
   association's Treasurer is emailed when somebody else made it.
-- **Transferring**: the association's Treasurer (or an admin) opens the team's
-  Money page, scans the GiroCode with the banking app -- it fills in account,
-  open amount and reference -- sends it, then *Mark as transferred*. A
-  transfer is recorded with the account it went to and cannot exceed what is
-  open.
+- **Transferring**: the association's Treasurer (or an admin) opens Admin →
+  Money → the team, scans the GiroCode with the banking app -- it fills in
+  account, amount and reference as they stand in the form, the whole open
+  amount unless changed -- sends it, then *Mark as transferred* and confirms.
+  A transfer is recorded with the account it went to and cannot exceed what
+  is open. The dashboard shows the Treasurer how many teams are owed money,
+  how much in all, and which of them have no bank details yet.
 
 **Before teams charge on the live portal** -- things only Stripe's dashboard
 can show:

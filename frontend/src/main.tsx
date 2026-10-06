@@ -3,6 +3,7 @@ import '@fontsource-variable/archivo/wght.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/600.css';
 import '@mantine/core/styles.css';
+import '@mantine/dates/styles.css';
 import '@mantine/notifications/styles.css';
 import './styles/global.css';
 

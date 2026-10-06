@@ -69,7 +69,9 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `POST /admin/teams/<slug>/roles`, `/roles/revoke` (action) → `POST /api/v1/admin/teams/<slug>/roles`, `/roles/revoke`
 
 ### 4.5 Money
-- [ ] `GET /admin/money` (page)
+- [x] `GET /admin/money` (page) → `GET /api/v1/admin/money`; the check against Stripe `GET /api/v1/admin/money/overview?since=&until=` (the page keeps `?check=1&since=&until=`)
+- [x] new: `GET /admin/money/<slug>` (page: a team's money, the association's side) → `GET /api/v1/admin/money/<slug>`; `POST .../transfers`, `PUT .../bank`
+- `GET /admin/money/<slug>/transfer-code.svg?amount=&reference=` (image: the GiroCode for the amount and reference typed) -- stays
 
 ### 4.6 Logs
 - [ ] `GET /admin/logs` (page)
@@ -115,7 +117,7 @@ Status: `[ ]` to do, `[x]` done.
 - [ ] `POST /teams/<slug>/manage/treasurer`, `/treasurer/remove` (action)
 - [ ] `GET /teams/<slug>/manage/access-list` (page), `POST .../send` (action)
 - [ ] `GET /teams/<slug>/money` (page)
-- [ ] `POST /teams/<slug>/money/bank`, `/money/payouts` (action)
+- [ ] `POST /teams/<slug>/money/bank` (action); `/money/payouts` is gone: transfers are recorded at 4.5
 - `GET /teams/<slug>/manage/export.csv`, `/teams/<slug>/money.csv` (download) -- stay
 
 ## Step 6 -- My Account

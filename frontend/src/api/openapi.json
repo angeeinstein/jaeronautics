@@ -744,15 +744,117 @@
                 "type": "null"
               }
             ]
+          },
+          "transfers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transfers"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "name_changes",
           "pictures",
           "sync_problems",
-          "health_problems"
+          "health_problems",
+          "transfers"
         ],
         "title": "Attention",
+        "type": "object"
+      },
+      "Bank": {
+        "additionalProperties": false,
+        "properties": {
+          "account_holder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Holder"
+          },
+          "bic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bic"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          }
+        },
+        "required": [
+          "account_holder",
+          "iban",
+          "bic"
+        ],
+        "title": "Bank",
+        "type": "object"
+      },
+      "BankIn": {
+        "additionalProperties": false,
+        "properties": {
+          "account_holder": {
+            "anyOf": [
+              {
+                "maxLength": 70,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account Holder"
+          },
+          "bic": {
+            "anyOf": [
+              {
+                "maxLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bic"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "maxLength": 42,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Iban"
+          }
+        },
+        "title": "BankIn",
         "type": "object"
       },
       "BillingSyncOut": {
@@ -779,6 +881,51 @@
           "forum_error"
         ],
         "title": "BillingSyncOut",
+        "type": "object"
+      },
+      "Books": {
+        "additionalProperties": false,
+        "properties": {
+          "balance_at_end": {
+            "title": "Balance At End",
+            "type": "integer"
+          },
+          "membership": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "other": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "other_bookings": {
+            "title": "Other Bookings",
+            "type": "integer"
+          },
+          "paid_out": {
+            "title": "Paid Out",
+            "type": "integer"
+          },
+          "stripe_fees": {
+            "title": "Stripe Fees",
+            "type": "integer"
+          },
+          "team": {
+            "$ref": "#/components/schemas/Totals"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Totals"
+          }
+        },
+        "required": [
+          "membership",
+          "team",
+          "other",
+          "total",
+          "stripe_fees",
+          "other_bookings",
+          "paid_out",
+          "balance_at_end"
+        ],
+        "title": "Books",
         "type": "object"
       },
       "Candidate": {
@@ -1841,6 +1988,25 @@
         "title": "HistoryQuery",
         "type": "object"
       },
+      "InStripeNow": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "pending"
+        ],
+        "title": "InStripeNow",
+        "type": "object"
+      },
       "MeOut": {
         "additionalProperties": false,
         "properties": {
@@ -2132,6 +2298,152 @@
         "title": "MembershipCounts",
         "type": "object"
       },
+      "Mismatch": {
+        "additionalProperties": false,
+        "description": "A paid invoice and the portal's records that do not agree.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "invoice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invoice"
+          },
+          "kind": {
+            "enum": [
+              "team",
+              "membership"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "stripe_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Amount"
+          },
+          "what": {
+            "title": "What",
+            "type": "string"
+          },
+          "who": {
+            "title": "Who",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "what",
+          "invoice",
+          "amount",
+          "stripe_amount",
+          "who"
+        ],
+        "title": "Mismatch",
+        "type": "object"
+      },
+      "MoneyOut": {
+        "additionalProperties": false,
+        "properties": {
+          "teams": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyRow"
+            },
+            "title": "Teams",
+            "type": "array"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          },
+          "total_open": {
+            "title": "Total Open",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "teams",
+          "total_open",
+          "today"
+        ],
+        "title": "MoneyOut",
+        "type": "object"
+      },
+      "MoneyRow": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          },
+          "last_transfer_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Transfer On"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "paid_out": {
+            "title": "Paid Out",
+            "type": "integer"
+          },
+          "team": {
+            "$ref": "#/components/schemas/TeamRef"
+          }
+        },
+        "required": [
+          "team",
+          "earned",
+          "paid_out",
+          "open",
+          "last_transfer_on",
+          "account"
+        ],
+        "title": "MoneyRow",
+        "type": "object"
+      },
       "NewTeamIn": {
         "additionalProperties": false,
         "properties": {
@@ -2407,6 +2719,137 @@
           "picture_url"
         ],
         "title": "OldForum",
+        "type": "object"
+      },
+      "OverviewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "association_own": {
+            "title": "Association Own",
+            "type": "integer"
+          },
+          "books": {
+            "$ref": "#/components/schemas/Books"
+          },
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "in_stripe_now": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InStripeNow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mismatches": {
+            "items": {
+              "$ref": "#/components/schemas/Mismatch"
+            },
+            "title": "Mismatches",
+            "type": "array"
+          },
+          "owed_to_teams": {
+            "title": "Owed To Teams",
+            "type": "integer"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "teams_share": {
+            "title": "Teams Share",
+            "type": "integer"
+          },
+          "until": {
+            "format": "date",
+            "title": "Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "until",
+          "books",
+          "in_stripe_now",
+          "teams_share",
+          "association_own",
+          "owed_to_teams",
+          "mismatches",
+          "checked_at"
+        ],
+        "title": "OverviewOut",
+        "type": "object"
+      },
+      "OverviewQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Since"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Until"
+          }
+        },
+        "title": "OverviewQuery",
+        "type": "object"
+      },
+      "Period": {
+        "additionalProperties": false,
+        "properties": {
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          },
+          "paid_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Until"
+          }
+        },
+        "required": [
+          "paid_until",
+          "earned"
+        ],
+        "title": "Period",
         "type": "object"
       },
       "Person": {
@@ -3099,6 +3542,78 @@
         "title": "TeamMembership",
         "type": "object"
       },
+      "TeamMoneyOut": {
+        "additionalProperties": false,
+        "properties": {
+          "bank": {
+            "$ref": "#/components/schemas/Bank"
+          },
+          "by_period": {
+            "items": {
+              "$ref": "#/components/schemas/Period"
+            },
+            "title": "By Period",
+            "type": "array"
+          },
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          },
+          "export_url": {
+            "title": "Export Url",
+            "type": "string"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "paid_out": {
+            "title": "Paid Out",
+            "type": "integer"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/TeamPayment"
+            },
+            "title": "Payments",
+            "type": "array"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "team": {
+            "$ref": "#/components/schemas/TeamRef"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          },
+          "transfers": {
+            "items": {
+              "$ref": "#/components/schemas/Transfer"
+            },
+            "title": "Transfers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "team",
+          "earned",
+          "paid_out",
+          "open",
+          "bank",
+          "reference",
+          "today",
+          "by_period",
+          "transfers",
+          "payments",
+          "export_url"
+        ],
+        "title": "TeamMoneyOut",
+        "type": "object"
+      },
       "TeamOut": {
         "additionalProperties": false,
         "properties": {
@@ -3214,6 +3729,117 @@
           "manage_url"
         ],
         "title": "TeamOut",
+        "type": "object"
+      },
+      "TeamPayment": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "counts": {
+            "title": "Counts",
+            "type": "integer"
+          },
+          "disputed": {
+            "title": "Disputed",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "paid_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Until"
+          },
+          "refunded": {
+            "title": "Refunded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "paid_at",
+          "name",
+          "paid_until",
+          "amount",
+          "refunded",
+          "disputed",
+          "counts"
+        ],
+        "title": "TeamPayment",
+        "type": "object"
+      },
+      "TeamRef": {
+        "additionalProperties": false,
+        "properties": {
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "status",
+          "logo_url"
+        ],
+        "title": "TeamRef",
         "type": "object"
       },
       "TeamRole": {
@@ -3413,6 +4039,160 @@
           "teams"
         ],
         "title": "TeamsOut",
+        "type": "object"
+      },
+      "Totals": {
+        "additionalProperties": false,
+        "properties": {
+          "fees": {
+            "title": "Fees",
+            "type": "integer"
+          },
+          "net": {
+            "title": "Net",
+            "type": "integer"
+          },
+          "received": {
+            "title": "Received",
+            "type": "integer"
+          },
+          "refunded": {
+            "title": "Refunded",
+            "type": "integer"
+          },
+          "returned": {
+            "title": "Returned",
+            "type": "integer"
+          },
+          "taken_back": {
+            "title": "Taken Back",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "received",
+          "returned",
+          "refunded",
+          "taken_back",
+          "fees",
+          "net"
+        ],
+        "title": "Totals",
+        "type": "object"
+      },
+      "Transfer": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "paid_on": {
+            "format": "date",
+            "title": "Paid On",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          }
+        },
+        "required": [
+          "id",
+          "paid_on",
+          "amount",
+          "reference",
+          "to"
+        ],
+        "title": "Transfer",
+        "type": "object"
+      },
+      "TransferIn": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 20,
+            "title": "Amount",
+            "type": "string"
+          },
+          "paid_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Paid On"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "maxLength": 140,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reference"
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "title": "TransferIn",
+        "type": "object"
+      },
+      "Transfers": {
+        "additionalProperties": false,
+        "description": "What the teams are owed and not yet sent, in cents.",
+        "properties": {
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "teams": {
+            "title": "Teams",
+            "type": "integer"
+          },
+          "without_account": {
+            "title": "Without Account",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "teams",
+          "open",
+          "without_account"
+        ],
+        "title": "Transfers",
         "type": "object"
       },
       "aeronautics_members__api__admin_dashboard__Waiting": {
@@ -4648,6 +5428,394 @@
         ],
         "x-permissions": [
           "admin.access"
+        ]
+      }
+    },
+    "/api/v1/admin/money": {
+      "get": {
+        "operationId": "admin_money",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Every team that charges or ever earned anything: earned, transferred, open.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.money"
+        ]
+      }
+    },
+    "/api/v1/admin/money/overview": {
+      "get": {
+        "operationId": "admin_money_overview",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The money on Stripe for a period, by what it was for, checked invoice by invoice",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.money"
+        ]
+      }
+    },
+    "/api/v1/admin/money/{slug}": {
+      "get": {
+        "operationId": "admin_team_money",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMoneyOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One team's money: the balance, where transfers go, and every payment and transfer.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.money"
+        ]
+      }
+    },
+    "/api/v1/admin/money/{slug}/bank": {
+      "put": {
+        "operationId": "admin_team_money_bank",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BankIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMoneyOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Where the team is paid. Checked, logged, and the other treasurers are told.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.money"
+        ]
+      }
+    },
+    "/api/v1/admin/money/{slug}/transfers": {
+      "post": {
+        "operationId": "admin_team_money_transfer",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMoneyOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Record that the association transferred money to the team -- once it has really been sent.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.money"
         ]
       }
     },

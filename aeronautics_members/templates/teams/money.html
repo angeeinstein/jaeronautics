@@ -16,7 +16,7 @@
                 <a class="btn btn-secondary" href="{{ url_for('teams.team_manage', slug=team.slug) }}">{{ _('Team management') }}</a>
             {% endif %}
             {% if pays_out %}
-                <a class="btn btn-secondary" href="{{ url_for('teams.admin_money') }}">{{ _('All teams') }}</a>
+                <a class="btn btn-secondary" href="{{ url_for('teams.admin_team_money', slug=team.slug) }}">{{ _('Transfers (Admin)') }}</a>
             {% endif %}
             <a class="btn btn-secondary" href="{{ url_for('teams.team_money_export', slug=team.slug) }}">{{ _('Export payments') }}</a>
         </div>
@@ -49,58 +49,6 @@
     </div>
 </section>
 
-{% if pays_out %}
-<section class="card mb-4" aria-labelledby="transfer-heading">
-    <div class="card-header">
-        <h4 class="mb-0" id="transfer-heading">{{ _('Transfer to the team') }}</h4>
-    </div>
-    <div class="card-body">
-        {% if summary.open <= 0 %}
-            <p class="text-muted mb-0">{{ _('Nothing open.') }}</p>
-        {% else %}
-            <div class="row g-4">
-                <div class="col-lg-5">
-                    {% if qr_svg %}
-                        <div class="payout-qr">{{ qr_svg|safe }}</div>
-                        <p class="small text-muted mt-2 mb-0">{{ _('Scan with your banking app (GiroCode). It fills in the whole open amount.') }}</p>
-                    {% else %}
-                        <p class="text-warning mb-0">{{ _('The team has no bank details yet, so there is no code to scan.') }}</p>
-                    {% endif %}
-                </div>
-                <div class="col-lg-7">
-                    {% if team.bank_iban %}
-                        <dl class="row small mb-3">
-                            <dt class="col-sm-4">{{ _('Account holder') }}</dt><dd class="col-sm-8">{{ team.bank_account_holder }}</dd>
-                            <dt class="col-sm-4">{{ _('IBAN') }}</dt><dd class="col-sm-8"><code>{{ grouped_iban(team.bank_iban) }}</code></dd>
-                            {% if team.bank_bic %}<dt class="col-sm-4">{{ _('BIC') }}</dt><dd class="col-sm-8"><code>{{ team.bank_bic }}</code></dd>{% endif %}
-                            <dt class="col-sm-4">{{ _('Reference') }}</dt><dd class="col-sm-8">{{ reference }}</dd>
-                        </dl>
-                    {% endif %}
-                    <form method="POST" action="{{ url_for('teams.team_money_payout', slug=team.slug) }}" class="mb-0"
-                          data-confirm-label="{{ _('Yes, record it') }}" data-confirm="{{ _('Record a transfer of €{amount} to %(team)s? Only once the money has really been sent: it is kept in the records and cannot be undone here.', team=team.name) }}">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="row g-2">
-                            <div class="col-sm-4">
-                                <label class="form-label" for="payout-amount">{{ _('Amount (€)') }}</label>
-                                <input class="form-control" id="payout-amount" name="amount" inputmode="decimal" required value="{{ '%.2f'|format(summary.open / 100) }}">
-                            </div>
-                            <div class="col-sm-4">
-                                <label class="form-label" for="payout-date">{{ _('Sent on') }}</label>
-                                <input class="form-control" id="payout-date" name="paid_on" type="date" required value="{{ today.isoformat() }}" max="{{ today.isoformat() }}">
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label" for="payout-reference">{{ _('Reference') }}</label>
-                                <input class="form-control" id="payout-reference" name="reference" maxlength="140" value="{{ reference }}">
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary mt-3">{{ _('Mark as transferred') }}</button>
-                    </form>
-                </div>
-            </div>
-        {% endif %}
-    </div>
-</section>
-{% endif %}
 
 <section class="card mb-4" aria-labelledby="bank-heading">
     <div class="card-header">

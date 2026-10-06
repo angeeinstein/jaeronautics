@@ -225,6 +225,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/money": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every team that charges or ever earned anything: earned, transferred, open. */
+        get: operations["admin_money"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/money/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The money on Stripe for a period, by what it was for, checked invoice by invoice */
+        get: operations["admin_money_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/money/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One team's money: the balance, where transfers go, and every payment and transfer. */
+        get: operations["admin_team_money"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/money/{slug}/bank": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Where the team is paid. Checked, logged, and the other treasurers are told. */
+        put: operations["admin_team_money_bank"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/money/{slug}/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record that the association transferred money to the team -- once it has really been sent. */
+        post: operations["admin_team_money_transfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/reviews": {
         parameters: {
             query?: never;
@@ -714,6 +799,34 @@ export interface components {
             name_changes: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
             pictures: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
             sync_problems: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
+            transfers: components["schemas"]["Transfers"] | null;
+        };
+        /** Bank */
+        Bank: {
+            /** Account Holder */
+            account_holder: string | null;
+            /** Bic */
+            bic: string | null;
+            /** Iban */
+            iban: string | null;
+        };
+        /** BankIn */
+        BankIn: {
+            /**
+             * Account Holder
+             * @default null
+             */
+            account_holder?: string | null;
+            /**
+             * Bic
+             * @default null
+             */
+            bic?: string | null;
+            /**
+             * Iban
+             * @default null
+             */
+            iban?: string | null;
         };
         /** BillingSyncOut */
         BillingSyncOut: {
@@ -721,6 +834,21 @@ export interface components {
             changed: boolean;
             /** Forum Error */
             forum_error: string | null;
+        };
+        /** Books */
+        Books: {
+            /** Balance At End */
+            balance_at_end: number;
+            membership: components["schemas"]["Totals"];
+            other: components["schemas"]["Totals"];
+            /** Other Bookings */
+            other_bookings: number;
+            /** Paid Out */
+            paid_out: number;
+            /** Stripe Fees */
+            stripe_fees: number;
+            team: components["schemas"]["Totals"];
+            total: components["schemas"]["Totals"];
         };
         /** Candidate */
         Candidate: {
@@ -1068,6 +1196,13 @@ export interface components {
              */
             page?: number;
         };
+        /** InStripeNow */
+        InStripeNow: {
+            /** Available */
+            available: number;
+            /** Pending */
+            pending: number;
+        };
         /** MeOut */
         MeOut: {
             /** Admin Area */
@@ -1148,6 +1283,53 @@ export interface components {
             none: number;
             /** Pending */
             pending: number;
+        };
+        /**
+         * Mismatch
+         * @description A paid invoice and the portal's records that do not agree.
+         */
+        Mismatch: {
+            /** Amount */
+            amount: number | null;
+            /** Invoice */
+            invoice: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "team" | "membership";
+            /** Stripe Amount */
+            stripe_amount: number | null;
+            /** What */
+            what: string;
+            /** Who */
+            who: string;
+        };
+        /** MoneyOut */
+        MoneyOut: {
+            /** Teams */
+            teams: components["schemas"]["MoneyRow"][];
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
+            /** Total Open */
+            total_open: number;
+        };
+        /** MoneyRow */
+        MoneyRow: {
+            /** Account */
+            account: string | null;
+            /** Earned */
+            earned: number;
+            /** Last Transfer On */
+            last_transfer_on: string | null;
+            /** Open */
+            open: number;
+            /** Paid Out */
+            paid_out: number;
+            team: components["schemas"]["TeamRef"];
         };
         /** NewTeamIn */
         NewTeamIn: {
@@ -1236,6 +1418,48 @@ export interface components {
             username: string;
             /** Year Group */
             year_group: string | null;
+        };
+        /** OverviewOut */
+        OverviewOut: {
+            /** Association Own */
+            association_own: number;
+            books: components["schemas"]["Books"];
+            /** Checked At */
+            checked_at: string;
+            in_stripe_now: components["schemas"]["InStripeNow"] | null;
+            /** Mismatches */
+            mismatches: components["schemas"]["Mismatch"][];
+            /** Owed To Teams */
+            owed_to_teams: number;
+            /** Since */
+            since: string | null;
+            /** Teams Share */
+            teams_share: number;
+            /**
+             * Until
+             * Format: date
+             */
+            until: string;
+        };
+        /** OverviewQuery */
+        OverviewQuery: {
+            /**
+             * Since
+             * @default null
+             */
+            since?: string | null;
+            /**
+             * Until
+             * @default null
+             */
+            until?: string | null;
+        };
+        /** Period */
+        Period: {
+            /** Earned */
+            earned: number;
+            /** Paid Until */
+            paid_until: string | null;
         };
         /**
          * Person
@@ -1453,6 +1677,32 @@ export interface components {
             /** Until */
             until: string | null;
         };
+        /** TeamMoneyOut */
+        TeamMoneyOut: {
+            bank: components["schemas"]["Bank"];
+            /** By Period */
+            by_period: components["schemas"]["Period"][];
+            /** Earned */
+            earned: number;
+            /** Export Url */
+            export_url: string;
+            /** Open */
+            open: number;
+            /** Paid Out */
+            paid_out: number;
+            /** Payments */
+            payments: components["schemas"]["TeamPayment"][];
+            /** Reference */
+            reference: string;
+            team: components["schemas"]["TeamRef"];
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
+            /** Transfers */
+            transfers: components["schemas"]["Transfer"][];
+        };
         /** TeamOut */
         TeamOut: {
             /** Access List Enabled */
@@ -1481,6 +1731,39 @@ export interface components {
             name: string;
             /** Roles */
             roles: components["schemas"]["RoleHolder"][];
+            /** Slug */
+            slug: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+        };
+        /** TeamPayment */
+        TeamPayment: {
+            /** Amount */
+            amount: number;
+            /** Counts */
+            counts: number;
+            /** Disputed */
+            disputed: boolean;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string | null;
+            /** Paid At */
+            paid_at: string | null;
+            /** Paid Until */
+            paid_until: string | null;
+            /** Refunded */
+            refunded: number;
+        };
+        /** TeamRef */
+        TeamRef: {
+            /** Logo Url */
+            logo_url: string | null;
+            /** Name */
+            name: string;
             /** Slug */
             slug: string;
             /**
@@ -1555,6 +1838,64 @@ export interface components {
             settings: components["schemas"]["TeamSettings"];
             /** Teams */
             teams: components["schemas"]["TeamRow"][];
+        };
+        /** Totals */
+        Totals: {
+            /** Fees */
+            fees: number;
+            /** Net */
+            net: number;
+            /** Received */
+            received: number;
+            /** Refunded */
+            refunded: number;
+            /** Returned */
+            returned: number;
+            /** Taken Back */
+            taken_back: number;
+        };
+        /** Transfer */
+        Transfer: {
+            /** Amount */
+            amount: number;
+            /** Id */
+            id: number;
+            /**
+             * Paid On
+             * Format: date
+             */
+            paid_on: string;
+            /** Reference */
+            reference: string | null;
+            /** To */
+            to: string | null;
+        };
+        /** TransferIn */
+        TransferIn: {
+            /** Amount */
+            amount: string;
+            /**
+             * Paid On
+             * @default null
+             */
+            paid_on?: string | null;
+            /**
+             * Reference
+             * @default null
+             */
+            reference?: string | null;
+        };
+        /**
+         * Transfers
+         * @description What the teams are owed and not yet sent, in cents.
+         */
+        Transfers: {
+            /** Open */
+            open: number;
+            /** Teams */
+            teams: number;
+            /** Without Account */
+            without_account: number;
         };
         /**
          * Waiting
@@ -2374,6 +2715,285 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_money: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_money_overview: {
+        parameters: {
+            query?: {
+                since?: string | null;
+                until?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_money: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMoneyOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_money_bank: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMoneyOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_team_money_transfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMoneyOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

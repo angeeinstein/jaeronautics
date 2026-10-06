@@ -335,7 +335,10 @@ The mockup's CSS is at the top of `docs/design/navigation-mockup.html`.
   different things: the admins' part (name, joining, fee, forum group, access
   list switch, leads, archiving) and the leads' part (people, team page,
   applying, access list, roles). They link to each other.
-- **What the association's Treasurer sees** -- *open, for later.* Direction:
-  everything that touches the money they transfer to the teams (Money, each
-  team's money and bank details, and whatever leads to those amounts), and
-  nothing else of the admin area.
+- **What the association's Treasurer sees** -- *decided (step 4.5).* Everything
+  that touches the money they transfer to the teams, and nothing else of the admin
+  area: Money (what each team is owed, the check against Stripe), each team's money
+  with its payments, transfers and bank details, and a dashboard that shows what is
+  open to transfer -- not the membership figures, which need the accounts
+  permission. Who paid is shown, as it is what leads to the amounts; no other member
+  data.

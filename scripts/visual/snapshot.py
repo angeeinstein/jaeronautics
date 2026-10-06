@@ -143,6 +143,13 @@ def seed(app, app_module, subscriptions):
     db.session.flush()
     admin.grant_role(app_module.get_role("superadmin"))
     admin.grant_role(app_module.get_role("admin"))
+    # The association's treasurer: the money and nothing else of the admin area.
+    treasurer = User(email="treasurer@example.org", forum_username="TreasurerT")
+    treasurer.set_password(PASSWORD)
+    treasurer.email_verified_at = now
+    db.session.add(treasurer)
+    db.session.flush()
+    treasurer.grant_role(app_module.get_role("treasurer"))
 
     # The pictures the submissions point at, so the pages show a picture
     # rather than a broken image: a plain square in a colour per person, kept
@@ -348,6 +355,8 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--money", "user": "active@example.org", "path": "/teams/rocket-team/money"},
         {"name": "teams--money-treasurer", "user": "admin@example.org", "path": "/teams/rocket-team/money"},
         {"name": "admin--money", "user": "admin@example.org", "path": "/admin/money"},
+        {"name": "admin--money-team", "user": "admin@example.org", "path": "/admin/money/rocket-team"},
+        {"name": "admin--dashboard-treasurer", "user": "treasurer@example.org", "path": "/admin"},
     ]
 
 

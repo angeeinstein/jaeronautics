@@ -1273,17 +1273,6 @@ textarea.form-control {
     min-width: 0;
 }
 
-/* The GiroCode for a transfer to a team: black on white, whatever the theme,
-   so every banking app reads it. */
-.payout-qr svg {
-    display: block;
-    width: 100%;
-    max-width: 240px;
-    height: auto;
-    background: #ffffff;
-    border-radius: 4px;
-}
-
 /* The two-step confirm button (confirm-submit.js): it fills up before it can
    be pressed, then waits highlighted for the second click. */
 .confirm-arming,

@@ -11,7 +11,7 @@ from typing import Literal
 from flask_login import current_user
 
 from ..permissions import Permission
-from ..services import dashboard, reviews
+from ..services import dashboard, reviews, team_money
 from ..services.audit import get_recent_audit_logs
 from ..services.diagnostics import collect_system_health
 from ..services.membership import format_membership_date_display
@@ -26,6 +26,15 @@ class Waiting(Model):
     at: UtcDateTime | None
 
 
+class Transfers(Model):
+    """What the teams are owed and not yet sent, in cents."""
+
+    teams: int
+    open: int
+    #: Of those teams, how many have given no account to send it to.
+    without_account: int
+
+
 class Attention(Model):
     """``None`` for a kind the person may not act on, so the page does not offer it."""
 
@@ -33,6 +42,7 @@ class Attention(Model):
     pictures: Waiting | None
     sync_problems: Waiting | None
     health_problems: list[str] | None
+    transfers: Transfers | None
 
 
 class Figure(Model):
@@ -53,6 +63,7 @@ class Activity(Model):
 
 class DashboardOut(Model):
     attention: Attention
+    #: Empty without the permission to see member accounts.
     figures: list[Figure]
     #: ``None`` without the permission to read the log.
     recent_activity: list[Activity] | None
@@ -90,16 +101,22 @@ def _attention():
     health = None
     if current_user.can(Permission.SYSTEM_UPDATE):
         health = list(collect_system_health()["problems"])
+    transfers = None
+    if current_user.can(Permission.TEAMS_MONEY):
+        transfers = Transfers(**team_money.open_transfers())
     return Attention(name_changes=name_changes, pictures=pictures, sync_problems=sync_problems,
-                     health_problems=health)
+                     health_problems=health, transfers=transfers)
 
 
 def _figures():
+    # How the membership stands is for whoever looks after the members; the
+    # association's treasurer sees the money and nothing else of it.
+    if not current_user.can(Permission.ACCOUNTS_VIEW):
+        return []
     numbers = dashboard.metrics()
-    accounts = current_user.can(Permission.ACCOUNTS_VIEW)
 
     def link(query):
-        return f"/admin/accounts?{query}" if accounts else None
+        return f"/admin/accounts?{query}"
 
     waiting = numbers["pending_checkouts"]
     figures = [Figure(

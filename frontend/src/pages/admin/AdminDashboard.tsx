@@ -15,7 +15,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { StatTile } from '../../components/StatTile';
 import { EmptyState, ErrorState, LoadingState } from '../../components/States';
-import { formatDateTime, plural, titleFromCode } from '../../lib/format';
+import { formatDateTime, formatEuros, plural, titleFromCode } from '../../lib/format';
 import classes from './AdminDashboard.module.css';
 
 type Dashboard = Schemas['DashboardOut'];
@@ -39,7 +39,13 @@ interface Task {
 /** What is waiting, as one task per kind -- only kinds with something waiting. */
 export function tasksOf(attention: Attention): Task[] {
   const tasks: Task[] = [];
-  const { name_changes: changes, pictures, sync_problems: sync, health_problems: health } = attention;
+  const {
+    name_changes: changes,
+    pictures,
+    sync_problems: sync,
+    health_problems: health,
+    transfers,
+  } = attention;
   if (changes?.count) {
     tasks.push({
       key: 'name_changes',
@@ -86,7 +92,33 @@ export function tasksOf(attention: Attention): Task[] {
       primary: false,
     });
   }
+  if (transfers?.teams) {
+    tasks.push({
+      key: 'transfers',
+      count: transfers.teams,
+      title: plural(transfers.teams, 'Team to transfer money to', 'Teams to transfer money to'),
+      detail: `${formatEuros(transfers.open)} open${
+        transfers.without_account
+          ? `; ${plural(transfers.without_account, '1 team has', `${String(transfers.without_account)} teams have`)} no bank details yet`
+          : ''
+      }`,
+      to: '/admin/money',
+      action: 'Open Money',
+      primary: false,
+    });
+  }
   return tasks;
+}
+
+/** The all-clear line, naming what the person would otherwise have seen. */
+function allClearDetail(attention: Attention): string {
+  const clear: string[] = [];
+  if (attention.name_changes !== null || attention.pictures !== null) clear.push('no reviews waiting');
+  if (attention.sync_problems !== null) clear.push('no forum problems');
+  if (attention.health_problems !== null) clear.push('no system problems');
+  if (attention.transfers !== null) clear.push('nothing to transfer to the teams');
+  const sentence = clear.join(', ');
+  return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
 }
 
 function NeedsAttention({ attention }: { attention: Attention }) {
@@ -96,19 +128,11 @@ function NeedsAttention({ attention }: { attention: Attention }) {
     attention.pictures,
     attention.sync_problems,
     attention.health_problems,
+    attention.transfers,
   ].some((kind) => kind !== null);
   if (!tasks.length) {
     if (!seesAnyKind) return null;
-    return (
-      <AllClear
-        title="Nothing needs your attention"
-        detail={
-          attention.health_problems !== null
-            ? 'No reviews waiting, no forum or system problems.'
-            : 'No reviews waiting, no forum problems.'
-        }
-      />
-    );
+    return <AllClear title="Nothing needs your attention" detail={allClearDetail(attention)} />;
   }
   return (
     <Panel title="Needs your attention" flush>
@@ -169,7 +193,11 @@ export function AdminDashboard() {
     <>
       <PageHeader
         title="Dashboard"
-        description="What needs doing, and how the membership stands."
+        description={
+          dashboard.data?.figures.length === 0
+            ? 'What needs doing.'
+            : 'What needs doing, and how the membership stands.'
+        }
         crumbs={[{ label: 'Admin', to: '/admin' }, { label: 'Dashboard' }]}
       />
       {dashboard.isPending ? (
@@ -179,17 +207,19 @@ export function AdminDashboard() {
       ) : (
         <Stack gap="lg">
           <NeedsAttention attention={dashboard.data.attention} />
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: dashboard.data.figures.length }} spacing="md">
-            {dashboard.data.figures.map((figure) => (
-              <StatTile
-                key={figure.key}
-                value={figure.value}
-                label={figure.label}
-                note={figure.note}
-                to={figure.link_url ?? undefined}
-              />
-            ))}
-          </SimpleGrid>
+          {dashboard.data.figures.length ? (
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: dashboard.data.figures.length }} spacing="md">
+              {dashboard.data.figures.map((figure) => (
+                <StatTile
+                  key={figure.key}
+                  value={figure.value}
+                  label={figure.label}
+                  note={figure.note}
+                  to={figure.link_url ?? undefined}
+                />
+              ))}
+            </SimpleGrid>
+          ) : null}
           <RecentActivity entries={dashboard.data.recent_activity} />
         </Stack>
       )}

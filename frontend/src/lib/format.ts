@@ -50,3 +50,10 @@ export function titleFromCode(code: string): string {
 export function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
+
+const euroFormat = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' });
+
+/** Cents as "€1,234.50", as the server writes them (services/team_money.py). */
+export function formatEuros(cents: number): string {
+  return euroFormat.format(cents / 100);
+}

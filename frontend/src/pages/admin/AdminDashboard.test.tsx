@@ -15,7 +15,13 @@ const none = { count: 0, summary: null, at: null };
 
 function dashboard(overrides: Partial<Dashboard> = {}): Dashboard {
   return {
-    attention: { name_changes: none, pictures: none, sync_problems: none, health_problems: [] },
+    attention: {
+      name_changes: none,
+      pictures: none,
+      sync_problems: none,
+      health_problems: [],
+      transfers: null,
+    },
     figures: [
       {
         key: 'active',
@@ -51,6 +57,7 @@ describe('what is waiting', () => {
       pictures: { count: 1, summary: 'Bernd Back', at: '2026-07-01T12:05:00Z' },
       sync_problems: none,
       health_problems: ['1 email(s) could not be delivered.', 'Backups are old.'],
+      transfers: null,
     });
 
     expect(tasks.map((task) => [task.title, task.detail])).toEqual([
@@ -68,6 +75,7 @@ describe('what is waiting', () => {
           pictures: none,
           sync_problems: none,
           health_problems: [],
+          transfers: null,
         },
       }),
     );
@@ -83,19 +91,59 @@ describe('what is waiting', () => {
     show(dashboard());
 
     expect(await screen.findByText('Nothing needs your attention')).toBeInTheDocument();
-    expect(screen.getByText('No reviews waiting, no forum or system problems.')).toBeInTheDocument();
+    expect(
+      screen.getByText('No reviews waiting, no forum problems, no system problems.'),
+    ).toBeInTheDocument();
   });
 
   it('neither for somebody who may act on none of it', async () => {
     show(
       dashboard({
-        attention: { name_changes: null, pictures: null, sync_problems: null, health_problems: null },
+        attention: {
+          name_changes: null,
+          pictures: null,
+          sync_problems: null,
+          health_problems: null,
+          transfers: null,
+        },
       }),
     );
     await screen.findByText('Active members');
 
     expect(screen.queryByText('Nothing needs your attention')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Needs your attention' })).toBeNull();
+  });
+});
+
+describe('for the treasurer', () => {
+  const treasurer = (transfers: Dashboard['attention']['transfers']) =>
+    dashboard({
+      attention: {
+        name_changes: null,
+        pictures: null,
+        sync_problems: null,
+        health_problems: null,
+        transfers,
+      },
+      figures: [],
+      recent_activity: null,
+    });
+
+  it('what the teams are owed, as a task', async () => {
+    show(treasurer({ teams: 2, open: 123450, without_account: 1 }));
+    const panel = await screen.findByRole('region', { name: 'Needs your attention' });
+
+    expect(panel).toHaveTextContent('Teams to transfer money to');
+    expect(panel).toHaveTextContent('€1,234.50 open; 1 team has no bank details yet');
+    expect(within(panel).getByRole('link', { name: 'Open Money' })).toHaveAttribute('href', '/admin/money');
+  });
+
+  it('nothing open is the all-clear, and no figures about the membership', async () => {
+    show(treasurer({ teams: 0, open: 0, without_account: 0 }));
+
+    expect(await screen.findByText('Nothing to transfer to the teams.')).toBeInTheDocument();
+    expect(screen.getByText('What needs doing.')).toBeInTheDocument();
+    expect(screen.queryByText('Active members')).toBeNull();
   });
 });
 

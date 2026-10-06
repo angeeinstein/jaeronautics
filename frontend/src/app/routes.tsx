@@ -50,6 +50,14 @@ export const routes: RouteObject[] = [
             path: 'teams/:slug',
             lazy: async () => ({ Component: (await import('../pages/admin/teams/Team')).Team }),
           },
+          {
+            path: 'money',
+            lazy: async () => ({ Component: (await import('../pages/admin/money/Money')).Money }),
+          },
+          {
+            path: 'money/:slug',
+            lazy: async () => ({ Component: (await import('../pages/admin/money/TeamMoney')).TeamMoney }),
+          },
         ],
       },
       { path: '*', element: <NotFound /> },

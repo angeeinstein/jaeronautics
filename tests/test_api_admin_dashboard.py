@@ -64,7 +64,23 @@ class TestWhatIsWaiting:
         attention = _dashboard(client)["attention"]
 
         assert attention == {"name_changes": None, "pictures": None, "sync_problems": None,
-                             "health_problems": None}
+                             "health_problems": None,
+                             "transfers": {"teams": 0, "open": 0, "without_account": 0}}
+
+    def test_what_the_teams_are_owed_for_whoever_transfers_it(self, client):
+        from aeronautics_members.db_models import Payment
+        from test_teams_foundation import _team
+
+        rocket, glider = _team("Rocket"), _team("Glider")
+        rocket.bank_account_holder, rocket.bank_iban = "Rocket Team", "AT611904300234573201"
+        for team in (rocket, glider):
+            db.session.add(Payment(purpose="team", team_id=team.id, amount_cents=2500, currency="eur"))
+        db.session.commit()
+        signed_in(client, _staff("money@example.org", "treasurer"))
+
+        transfers = _dashboard(client)["attention"]["transfers"]
+
+        assert transfers == {"teams": 2, "open": 5000, "without_account": 1}
 
 
 class TestTheFigures:
@@ -119,10 +135,11 @@ class TestTheFigures:
         assert figure["value"] == 2
         assert listed["total"] == 2 and listed["membership_counts"]["ending"] == 2
 
-    def test_but_not_for_somebody_who_may_not_open_it(self, client):
+    def test_only_for_whoever_looks_after_the_members(self, client):
+        """The association's treasurer sees the money, not how the membership stands."""
         signed_in(client, _staff("money@example.org", "treasurer"))
 
-        assert {figure["link_url"] for figure in _dashboard(client)["figures"]} == {None}
+        assert _dashboard(client)["figures"] == []
 
 
 class TestRecentActivity:
