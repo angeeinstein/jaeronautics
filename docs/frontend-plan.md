@@ -82,6 +82,15 @@ OpenAPI description of the whole API. From that description the front end's
 TypeScript types are generated (`openapi-typescript`), so a field renamed on
 the server is a type error in the front end, not a blank on a page.
 
+**Names and formats:** fields keep the names the database and services use,
+snake_case in the JSON too, so one thing has one name everywhere. Times are
+UTC with a `Z` (`2026-10-06T07:38:11Z`); days are `YYYY-MM-DD`. A request
+with a field the endpoint does not know is refused, so a misspelt field is an
+error, not silently ignored.
+
+**Leaving for another site** (Stripe Checkout or billing, the forum): the
+endpoint answers `{"redirect_url": ...}` and the front end goes there.
+
 **Rate limits:** the same Flask-Limiter limits as the pages they replace.
 
 **Tests:** every endpoint gets pytest tests like the pages have now -- signed
@@ -146,7 +155,8 @@ Each step ends with tests, a full test run, a commit and a push; the test
 server can update to it.
 
 1. **This plan** -- for review.
-2. **API foundation:** the `api` package, JSON errors, `401` instead of
+2. **API foundation** *(done: `aeronautics_members/api/`, `tests/test_api_foundation.py`,
+   `docs/frontend-routes.md`)*: the `api` package, JSON errors, `401` instead of
    redirects, CSRF header, `GET /api/v1/session` and `GET /api/v1/me`,
    Pydantic schemas, the OpenAPI document and the type generation, test
    helpers. A **route map** (`docs/frontend-routes.md`): every one of today's

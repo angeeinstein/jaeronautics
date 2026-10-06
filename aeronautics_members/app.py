@@ -1633,8 +1633,10 @@ def create_app(config_overrides=None):
     from .blueprints.public import public_bp
     from .blueprints.teams import teams_bp
     from .blueprints.webhook import webhook_bp
+    from .api import api_bp
 
     csrf.exempt(webhook_bp)
+    app.register_blueprint(api_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(auth_bp)
@@ -4798,6 +4800,21 @@ def create_app(config_overrides=None):
         else:
             sys.exit(1)
 
+    @app.cli.command("api-schema")
+    @click.option("--out", default="-", show_default=True, help="File to write; - for the screen.")
+    @with_appcontext
+    def api_schema_command(out):
+        """Write the API's OpenAPI description (from api/), for the front end's types."""
+        from .api import openapi
+
+        text = json.dumps(openapi.build(), indent=2, sort_keys=True) + "\n"
+        if out == "-":
+            click.echo(text, nl=False)
+        else:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            Path(out).write_text(text, encoding="utf-8")
+            click.echo(f"Written to {out}.")
+
     @app.cli.command("build-legal-pdfs")
     @click.option("--again", is_flag=True, help="Make each anew, even when a kept one looks current.")
     @with_appcontext
@@ -4941,13 +4958,21 @@ def create_app(config_overrides=None):
 
 
 
+    # The API answers its errors as JSON (api/_core.py); these handlers serve
+    # the pages and pass the API's requests on.
+    from .api import error as api_error, is_api_request
+
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
+        if is_api_request():
+            return api_error(400, "csrf_failed", "The session has expired. Reload the page and try again.")
         flash(_("Your session has expired or the form is invalid. Please try submitting again."), "warning")
         return redirect(request.referrer or url_for("public.index"))
 
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
+        if is_api_request():
+            return api_error(429, "rate_limited", "Too many requests. Please wait a moment and try again.")
         # Rendered, not redirected. Browsers do not follow a Location header on
         # a 429, so returning a redirect left the member on an unstyled
         # "Redirecting..." page that never went anywhere and explained nothing.
@@ -4955,6 +4980,8 @@ def create_app(config_overrides=None):
 
     @app.errorhandler(413)
     def request_entity_too_large(e):
+        if is_api_request():
+            return api_error(413, "too_large", "The upload is too large.")
         flash(_("The submitted data is too large to process. Please reduce the file size and try again."), "danger")
         if request.path == url_for("forum.upload_forum_avatar"):
             return redirect(url_for("forum.forum_entry"))
@@ -4962,7 +4989,15 @@ def create_app(config_overrides=None):
 
     @app.errorhandler(404)
     def page_not_found(e):
+        if is_api_request():
+            return api_error(404, "not_found", "Not found.")
         return render_template("404.html"), 404
+
+    @app.errorhandler(405)
+    def method_not_allowed(e):
+        if is_api_request():
+            return api_error(405, "method_not_allowed", "Not possible with this method.")
+        return e
 
     @app.errorhandler(500)
     def internal_server_error(e):
@@ -4983,6 +5018,8 @@ def create_app(config_overrides=None):
             severity="critical",
             commit=True,
         )
+        if is_api_request():
+            return api_error(500, "server_error", "Something went wrong on our side. Please try again later.")
         return render_template("500.html"), 500
 
     @app.cli.command("send-welcome-email")
