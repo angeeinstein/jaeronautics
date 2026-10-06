@@ -4,21 +4,23 @@ Every signed-in visitor sees it, at /teams/<team>/about; the team's own page,
 with who is in it, is for its members, and sends anybody else here.
 A team with rules needs them ticked to apply or join, and the membership
 keeps when and which version. Leads and site admins edit the page, but no
-longer the rules: those are the association's files now (test_team_rules.py).
-Rules typed into the portal before still apply, as here, until there is one.
+longer the rules: those are the association's files (test_team_rules.py).
 """
+from datetime import datetime, time
 from io import BytesIO
 
 import pytest
 
 from conftest import app_module, db
 from aeronautics_members.db_models import AuditLog, User
-from aeronautics_members.services.clock import get_now_utc
+from aeronautics_members.services.clock import get_membership_today
 from aeronautics_members.services import ValidationError, privacy, teams
+from test_legal_texts import legal_dir  # noqa: F401 -- fixture
 from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
 from test_teams_foundation import _in_team
 
 RULES = "1. Safety briefing before every flight.\n2. Tools go back where they came from."
+RULES_DAY = datetime.combine(get_membership_today(), time())
 
 
 def _png(size=(2400, 1200)):
@@ -35,11 +37,20 @@ def picture_dir(app, tmp_path):
     return tmp_path / "team_pictures"
 
 
-def _with_rules(team, text=RULES):
-    """Rules as a lead typed them into the portal, before they became files."""
-    team.terms_text, team.terms_updated_at = text, get_now_utc()
-    db.session.commit()
-    return team
+@pytest.fixture
+def with_rules(legal_dir):  # noqa: F811
+    """``put(team)``: the team's rules as the association keeps them, in force from today."""
+
+    def put(team, text=RULES):
+        day = get_membership_today().isoformat()
+        folder = legal_dir / "teams" / team.slug / "team-rules" / "de"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{day}.md").write_text(
+            f'---\ntitle: "Teamordnung"\ndocument: "team-rules"\nlanguage: "de"\nteam: "{team.slug}"\n'
+            f'version: "{day}"\neffective_from: "{day}"\nstatus: "published"\n---\n\n{text}\n', encoding="utf-8")
+        return team
+
+    return put
 
 
 def _admin():
@@ -75,14 +86,14 @@ class TestThePage:
 
         assert 'href="/teams/rocket/about"' in body and 'action="/teams/rocket/join"' not in body
 
-    def test_shows_the_rules_with_a_box_to_tick(self, app, client):
+    def test_shows_the_rules_with_a_box_to_tick(self, app, client, with_rules):
         team, _lead = _led()
-        _with_rules(team)
+        with_rules(team)
         _login(client, _person().id)
 
         body = client.get("/teams/rocket/about").get_data(as_text=True)
 
-        assert "Safety briefing before every flight." in body and 'name="accept_terms"' in body
+        assert 'href="/teams/rocket/rules"' in body and 'name="accept_terms"' in body
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -93,10 +104,10 @@ class TestTheTeamsOwnPage:
 
         assert client.get("/teams/rocket").headers["Location"].endswith("/teams/rocket/about")
 
-    def test_shows_members_their_team_without_the_join_page(self, app, client, picture_dir):
+    def test_shows_members_their_team_without_the_join_page(self, app, client, picture_dir, with_rules):
         team, _lead = _led()
         teams.update_team_page(None, team, about="We build rockets.")
-        _with_rules(team)
+        with_rules(team)
         teams.set_team_picture(None, team, _png())
         anna = _person()
         _in_team(anna, team)
@@ -139,9 +150,9 @@ class TestThePicture:
 
 @pytest.mark.usefixtures("switched_on")
 class TestTheRules:
-    def test_needed_to_apply_and_kept_with_their_version(self, app, client):
+    def test_needed_to_apply_and_kept_with_their_version(self, app, client, with_rules):
         team, _lead = _led()
-        _with_rules(team)
+        with_rules(team)
         anna = _person()
         _login(client, anna.id)
 
@@ -152,26 +163,24 @@ class TestTheRules:
         client.post("/teams/rocket/join", data={"accept_terms": "on"})
         membership = teams.ongoing_membership(anna, team)
         assert membership.terms_accepted_at is not None
-        assert membership.terms_version == team.terms_updated_at
+        assert membership.terms_version == RULES_DAY
 
-    def test_also_to_join_an_open_team(self, app):
+    def test_also_to_join_an_open_team(self, app, with_rules):
         team, _lead = _led(admission_mode="open")
-        _with_rules(team)
+        with_rules(team)
 
         with pytest.raises(ValidationError, match="accept the rules"):
             teams.join_or_apply(_person(), team)
 
-    def test_no_longer_changed_in_the_portal(self, app, client):
+    def test_not_changed_in_the_portal(self, app, client, with_rules):
         team, lead = _led()
-        _with_rules(team)
-        version = team.terms_updated_at
+        with_rules(team)
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/settings", data={"section": "applying", "terms_text": "Anything goes."})
         body = client.get("/teams/rocket/manage").get_data(as_text=True)
 
-        assert (team.terms_text, team.terms_updated_at) == (RULES, version)
         assert 'name="terms_text"' not in body and "send the new text to the association" in body
+        assert 'href="/teams/rocket/rules"' in body
 
     def test_without_rules_nothing_is_ticked_or_kept(self, app):
         team, _lead = _led()
@@ -180,9 +189,9 @@ class TestTheRules:
 
         assert membership.terms_accepted_at is None and membership.terms_version is None
 
-    def test_in_the_members_data(self, app):
+    def test_in_the_members_data(self, app, with_rules):
         team, _lead = _led()
-        _with_rules(team)
+        with_rules(team)
         anna = _person()
         teams.join_or_apply(anna, team, accepted_terms=True)
         db.session.commit()
@@ -227,15 +236,14 @@ class TestEditingThePage:
     def test_the_admin_form_leaves_the_leads_part_be(self, app, client):
         team, _lead = _led(application_prompt="Why?")
         teams.update_team_by_lead(None, team, description="Rockets.", applications_open=False)
-        _with_rules(team)
         _login(client, _admin().id)
 
         client.post("/admin/teams/rocket", data={
             "name": "Rocket Team", "admission_mode": "approval", "access_list_enabled": "on",
         })
 
-        assert (team.name, team.description, team.application_prompt, team.applications_open, team.terms_text) == (
-            "Rocket Team", "Rockets.", "Why?", False, RULES)
+        assert (team.name, team.description, team.application_prompt, team.applications_open) == (
+            "Rocket Team", "Rockets.", "Why?", False)
         assert team.access_list_enabled is True
 
 
@@ -243,15 +251,13 @@ class TestEditingThePage:
 class TestTheManagementPage:
     def test_one_section_saved_leaves_the_others_be(self, app, client):
         team, lead = _led(application_prompt="Why?")
-        _with_rules(team)
         teams.update_team_page(None, team, about="We build rockets.")
         db.session.commit()
         _login(client, lead.id)
 
         client.post("/teams/rocket/manage/settings", data={"section": "page", "description": "Rockets.", "about": "New."})
 
-        assert (team.description, team.about, team.terms_text, team.application_prompt) == (
-            "Rockets.", "New.", RULES, "Why?")
+        assert (team.description, team.about, team.application_prompt) == ("Rockets.", "New.", "Why?")
         assert team.applications_open is True
 
     def test_back_to_the_section_saved(self, app, client):

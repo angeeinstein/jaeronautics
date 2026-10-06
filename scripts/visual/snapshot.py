@@ -220,14 +220,6 @@ def seed(app, app_module, subscriptions):
               "We meet every Tuesday at 18:00 in the workshop. New members start in one of the sub-teams: "
               "structures, propulsion, avionics or recovery.",
     )
-    # Rules as leads typed them into the portal before they became the association's files.
-    rocket.terms_text = (
-        "1. Everyone attends the safety briefing before working in the workshop.\n"
-        "2. Tools and materials go back where they came from.\n"
-        "3. Launch days follow the range safety officer's instructions without exception.\n"
-        "4. Photos and data from the team are shared only with the leads' agreement."
-    )
-    rocket.terms_updated_at = datetime.utcnow()
     db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now,
                                   payment_mode="subscription", stripe_subscription_id="sub_example_1",
                                   paid_until=date(2027, 3, 31), payment_state="paid"))

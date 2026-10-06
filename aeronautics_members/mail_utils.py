@@ -236,6 +236,8 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
         # such as Brevo signs in with an id of its own and sends from a
         # verified address, which the account then names.
         sender = (config.get("from") or config["user"]).strip()
+        if has_app_context() and current_app.config.get("TEST_SERVER") and not subject.startswith("[TEST]"):
+            subject = f"[TEST] {subject}"
         # The body and the pictures in it belong together ("related"); files
         # attached to the mail sit beside that, in a "mixed" message around it.
         body_part = MIMEMultipart("related")

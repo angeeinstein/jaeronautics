@@ -481,26 +481,19 @@ def team_by_logo_token(token):
 # Kept with the association's legal texts, which approves them like its own:
 # legal/teams/<slug>/team-rules/<language>/<day>.md (services/legal_texts.py),
 # German, optionally with an English translation, each version dated, a PDF
-# of each. Before that, leads typed them into the portal (Team.terms_text);
-# that text still applies to a team until it has a file -- ``flask
-# export-team-rules`` writes one from it -- and can no longer be changed here.
+# of each.
 
 
 @dataclass(frozen=True)
 class TeamRules:
-    """The rules somebody joining a team accepts."""
+    """The rules somebody joining a team accepts: the team's file in force."""
 
-    version: object = None  # a legal_texts.Version: the team's file in force
-    text: str = None  # or, until there is one, the text kept in the portal
-    stamp: datetime = None  # kept with a membership as the version accepted
+    version: object  # a legal_texts.Version
+    stamp: datetime  # kept with a membership as the version accepted
 
     @property
     def day(self):
         return self.stamp.date()
-
-    @property
-    def from_file(self):
-        return self.version is not None
 
 
 def team_rules(team, today=None):
@@ -508,38 +501,9 @@ def team_rules(team, today=None):
     from . import legal_texts as legal
 
     version = legal.current_version(legal.TEAM_RULES, today, team=team.slug)
-    if version is not None:
-        return TeamRules(version=version, stamp=datetime.combine(version.version, time()))
-    if team.terms_text:
-        return TeamRules(text=team.terms_text, stamp=team.terms_updated_at or team.created_at)
-    return None
-
-
-def portal_rules_as_file(team):
-    """The rules a lead typed into the portal, as a file for legal/:
-    ``(relative path, content)``, or None when there are none.
-
-    Dated the day they were last changed -- the day kept with every member who
-    accepted them -- so those acceptances name this file's version. Line
-    breaks are kept as they were typed.
-    """
-    if not team.terms_text:
+    if version is None:
         return None
-    from . import legal_texts as legal
-
-    day = (team.terms_updated_at or team.created_at).date().isoformat()
-    lines = team.terms_text.replace("\r\n", "\n").strip().split("\n")
-    body = "\n".join(
-        line.rstrip() + ("  " if line.strip() and index + 1 < len(lines) and lines[index + 1].strip() else "")
-        for index, line in enumerate(lines)
-    )
-    title = f"Teamordnung {team.name}".replace('"', "'")
-    content = (
-        f'---\ntitle: "{title}"\ndocument: "{legal.TEAM_RULES}"\nlanguage: "{legal.AUTHORITATIVE}"\n'
-        f'team: "{team.slug}"\nversion: "{day}"\neffective_from: "{day}"\nstatus: "published"\n---\n\n{body}\n'
-    )
-    path = f"{legal.TEAMS_FOLDER}/{team.slug}/{legal.TEAM_RULES}/{legal.AUTHORITATIVE}/{day}.md"
-    return path, content
+    return TeamRules(version=version, stamp=datetime.combine(version.version, time()))
 
 
 def accepted_rules_in_force(membership, rules):

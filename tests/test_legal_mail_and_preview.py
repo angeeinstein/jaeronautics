@@ -341,3 +341,78 @@ class TestThePage:
         _login(client, member.user.id)
 
         assert client.get("/admin/legal").status_code in (302, 403)
+
+
+class TestMakingThemAllAgain:
+    """Admin -> Legal Texts -> "Make all PDFs again": one PDF per request, ticked off by the page."""
+
+    def test_listed_one_line_each(self, app, client, texts):  # noqa: F811
+        texts("statutes", "2019-03-17", title="Statuten")
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        body = client.get("/admin/legal").get_data(as_text=True)
+        progress = body.split('id="legal-pdfs-progress"')[1].split("</ul>")[0]
+
+        assert 'data-item="stored"' in progress and 'data-item="/statutes/2019-03-17"' in progress
+        assert "legal-pdf-remake.js" in body
+
+    def test_kept_ones_removed_then_each_made(self, app, client, texts, monkeypatch):  # noqa: F811
+        texts("statutes", "2019-03-17", title="Statuten")
+        made = []
+        monkeypatch.setattr(legal_pdf, "build", lambda german, team=None, **_: made.append(german.slug) or b"%PDF-1.7 x")
+        _login(client, _staff("boss@example.org", "admin").id)
+        legal_pdf.pdf_for(legal.current_version("statutes", today=TODAY))
+
+        stored = client.post("/admin/legal/pdfs/remake", data={"item": "stored"}).get_json()
+        assert stored["state"] == "ok" and stored["detail"] == "1 removed"
+        assert not list(legal_pdf.cache_dir().glob("*.pdf"))
+
+        one = client.post("/admin/legal/pdfs/remake", data={"item": "/statutes/2019-03-17"}).get_json()
+        assert one == {"state": "ok", "detail": "1 KB"}
+        assert made == ["statutes", "statutes"]
+
+    def test_one_that_cannot_be_made_says_why(self, app, client, texts, monkeypatch):  # noqa: F811
+        texts("statutes", "2019-03-17", title="Statuten")
+        monkeypatch.setattr(legal_pdf, "build", lambda *a, **k: 1 / 0)
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        answer = client.post("/admin/legal/pdfs/remake", data={"item": "/statutes/2019-03-17"}).get_json()
+
+        assert answer["state"] == "failed" and "division" in answer["detail"]
+
+    def test_one_no_longer_there(self, app, client, texts):  # noqa: F811
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        response = client.post("/admin/legal/pdfs/remake", data={"item": "/statutes/1999-01-01"})
+
+        assert response.status_code == 404 and response.get_json()["state"] == "failed"
+
+    def test_without_the_script_all_in_one_go(self, app, client, texts, monkeypatch):  # noqa: F811
+        texts("statutes", "2019-03-17", title="Statuten")
+        monkeypatch.setattr(legal_pdf, "build", lambda german, team=None, **_: b"%PDF-1.7 x")
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        response = client.post("/admin/legal/pdfs/remake", follow_redirects=True)
+
+        assert "All 1 PDFs were made again." in response.get_data(as_text=True)
+        assert len(list(legal_pdf.cache_dir().glob("statutes_*.pdf"))) == 1
+
+    def test_only_for_those_who_manage_the_settings(self, app, client, texts):  # noqa: F811
+        texts("statutes", "2019-03-17", title="Statuten")
+        _login(client, make_member(email="someone@example.org").user.id)
+
+        assert client.post("/admin/legal/pdfs/remake", data={"item": "stored"}).status_code in (302, 403)
+
+
+class TestTheDraftsPdfMadeFirst:
+    def test_prepare_then_open(self, app, client, texts, monkeypatch):  # noqa: F811
+        texts("statutes", "2099-01-01", title="Statuten", status="draft")
+        made = []
+        monkeypatch.setattr(legal_pdf, "build", lambda german, team=None, **_: made.append(1) or b"%PDF-1.7 x")
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        url = client.get("/admin/legal/waiting.pdf?document=statutes&version=2099-01-01&prepare=1").get_json()["url"]
+        response = client.get(url)
+
+        assert "&v=" in url and response.mimetype == "application/pdf"
+        assert made == [1]  # made once, opened from the kept file

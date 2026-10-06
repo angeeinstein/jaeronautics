@@ -60,6 +60,13 @@
                                  style="display:block; width:100%; max-width:{{ email_width|default(640) }}px; height:auto; border:0; color:#ffffff; font-size:18px; line-height:1.4;">
                         </td>
                     </tr>
+                    {% if test_server %}
+                    <tr>
+                        <td align="center" bgcolor="#c62828" style="background-color:#c62828; padding:8px 16px; color:#ffffff; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:13px; line-height:1.4; font-weight:700; letter-spacing:2px;">
+                            TEST SERVER <span style="font-weight:400; letter-spacing:0;">&middot; not the real membership portal</span>
+                        </td>
+                    </tr>
+                    {% endif %}
                     <tr>
                         <td class="content" style="padding:32px 34px; color:#ffffff; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size:16px; line-height:1.6;">
                             {% block content %}{% endblock %}

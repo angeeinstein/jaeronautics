@@ -165,6 +165,15 @@ cannot, and — because a missing file is the normal state before the first
 update — the panel silently showed nothing at all. It now says why it is empty,
 and an unreadable file is logged.
 
+## Marking a Test Server
+
+`TEST_SERVER=true` in `.env` puts a red "Test server" bar under the header of
+every page and every email, and `[TEST]` before each email's subject and the
+browser tab's title. Leave it out (or `false`) on the live site. It is read at
+start-up, so restart the portal after changing it
+(`sudo systemctl restart jaeronautics`). The forum is not covered: Discourse
+draws its own pages.
+
 ## Renewing on 1 January
 
 Everybody renews on the same day, and the portal only records a year once its
@@ -282,14 +291,23 @@ notice that German applies. Made by WeasyPrint
 (`legal_pdf.py`, layout in `templates/legal/pdf.html`) from the
 same Markdown -- tables included -- when first asked for, then kept in
 `storage/legal_pdf/` (not in backups) until the text, its translation or
-the layout changes. `flask build-legal-pdfs` makes them all ahead and names
-any text that cannot be laid out; the tests make every one, so that fails
+the layout or a logo changes. `flask build-legal-pdfs` makes them all ahead
+(`--again`: anew, even the ones that look current) and names any text that
+cannot be laid out; the tests make every one, so that fails
 CI first. WeasyPrint needs Pango from the system (`libpango-1.0-0`,
 `libpangoft2-1.0-0`), which `install.sh` installs, also on an update. Only
 the fonts and the logo in `static/` are read while laying out; an image a
 text points at elsewhere is left out. nginx sends PDFs without the pages'
 Content-Security-Policy, whose `object-src 'none'` would stop Chrome's PDF
 viewer from showing them.
+
+**Opening one:** a PDF link (`data-legal-file`, `static/legal-pdf-open.js`)
+first asks for the PDF to be made (`?prepare=1`), shows *Making the PDF…*
+with a spinner meanwhile, and opens it once it is there -- in a new tab where
+the browser still allows one after the wait, else in the same tab. The address
+it opens carries the PDF's hash (`?v=…`), so a phone or browser holding an
+earlier copy cannot show that one instead; the PDFs are sent `no-store` as
+well. Without JavaScript the links are plain links.
 
 **In the welcome emails** (Settings → General, *Attach the legal texts as
 PDFs to welcome emails*, off until switched on): the association's welcome
@@ -304,7 +322,10 @@ the same.
 PDFs; under *Not in force yet*, every draft and every published version whose
 `effective_from` has not come, the association's and the teams', each with a
 *Preview PDF* (with its English file of the same version, marked ENTWURF or
-VORSCHAU, made when asked for and not kept); and whatever is wrong with the
+VORSCHAU, kept like the others until the file changes); *PDFs* -- *Make all
+PDFs again* removes the kept ones and makes each anew, one line per PDF ticked
+off as it is done, with its size or why it failed (after an update, or when a
+PDF looks out of date; nothing needs it otherwise); and whatever is wrong with the
 files in `legal/` on this server (also a folder for a team that does not
 exist). **Preview:** upload the Markdown file
 of a new version -- and its English translation, if any -- and it comes back
@@ -337,11 +358,8 @@ beside the association's and its name (on white: the logo field asks teams for o
 window over the form. The membership keeps the version's day. Leads can no
 longer change their rules in the portal; they send the new text to the
 association. A folder whose short name matches no team is reported by `flask
-build-legal-pdfs`. Before this, leads typed rules into the portal: those still
-apply to a team until it has a file, and `flask export-team-rules --out
-<folder>` writes them as files -- dated the day they last changed, the
-version its members accepted -- to check, copy into `legal/teams/`, commit
-and deploy.
+build-legal-pdfs`. A team without a file in force has no rules: joining it
+asks for none.
 
 **At signup** the one checkbox names every text accepted then, each a link.
 A click opens the text in a window over the form (`static/legal-dialog.js`

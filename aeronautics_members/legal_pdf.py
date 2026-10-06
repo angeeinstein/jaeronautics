@@ -117,15 +117,16 @@ def _sections(german, versions=None):
     return sections
 
 
-def _source_hash(german, team=None):
+def _source_hash(german, team=None, versions=None, watermark=None):
     """Everything the PDF is made from, as one hash."""
     digest = hashlib.sha256(LAYOUT_VERSION.encode())
     if team is not None:
         digest.update(team.name.encode())
         logo = _team_logo(team)
         digest.update(logo.read_bytes() if logo is not None else b"no logo")
-    for version in parts(german):
+    for version in versions or parts(german):
         digest.update(version.path.read_bytes())
+    digest.update((watermark or "").encode())
     source, _name, _uptodate = current_app.jinja_loader.get_source(current_app.jinja_env, TEMPLATE)
     digest.update(source.encode())
     digest.update((_static_dir() / "logo_joanneum_aeronautics_positiv.svg").read_bytes())
@@ -150,16 +151,26 @@ def build(german, team=None, versions=None, watermark=None):
     return document.write_pdf()
 
 
-def pdf_for(german, team=None):
-    """The PDF of a German version, from storage or made and kept. Bytes."""
-    folder = cache_dir()
+def _stem(german, watermark=None):
     stem = f"{german.slug}_{german.version.isoformat()}"
     if german.team:
         stem = f"team-{german.team}_{stem}"
-    path = folder / f"{stem}_{_source_hash(german, team)}.pdf"
+    return f"{watermark.lower()}_{stem}" if watermark else stem
+
+
+def ready(german, team=None, versions=None, watermark=None):
+    """The kept file of this PDF, made now if it is not there yet. ``(path, hash)``.
+
+    The hash names what the file was made from; it goes into the address the
+    PDF is opened at, so a browser never shows a copy of an earlier one.
+    """
+    folder = cache_dir()
+    stem = _stem(german, watermark)
+    digest = _source_hash(german, team, versions, watermark)
+    path = folder / f"{stem}_{digest}.pdf"
     if path.is_file():
-        return path.read_bytes()
-    data = build(german, team)
+        return path, digest
+    data = build(german, team, versions=versions, watermark=watermark)
     folder.mkdir(parents=True, exist_ok=True)
     # Written aside and moved into place, so two workers making it at once
     # cannot hand anybody half a file.
@@ -170,13 +181,42 @@ def pdf_for(german, team=None):
     for older in folder.glob(f"{stem}_*.pdf"):
         if older != path:
             older.unlink(missing_ok=True)
-    return data
+    return path, digest
 
 
-def build_all():
-    """Make the PDF of every version that may be shown, the teams' too. ``[(version, size or error)]``.
+def pdf_for(german, team=None):
+    """The PDF of a German version, from storage or made and kept. Bytes."""
+    return ready(german, team)[0].read_bytes()
 
-    A team folder whose slug names no team is reported as an error: its rules
+
+def forget_all():
+    """Remove every kept PDF, so each is made again when next asked for. How many there were."""
+    folder = cache_dir()
+    if not folder.is_dir():
+        return 0
+    removed = 0
+    for path in folder.glob("*.pdf"):  # not a .part another worker is still writing
+        path.unlink(missing_ok=True)
+        removed += 1
+    return removed
+
+
+def remake(german, team=None):
+    """Make this version's PDF again, even when a kept one looks current. Its size in bytes."""
+    for path in cache_dir().glob(f"{_stem(german)}_*.pdf"):
+        path.unlink(missing_ok=True)
+    return ready(german, team)[0].stat().st_size
+
+
+def job_key(version):
+    """How one PDF of ``all_jobs`` is named in a request: ``team/document/version``."""
+    return f"{version.team or ''}/{version.slug}/{version.version.isoformat()}"
+
+
+def all_jobs():
+    """Every version whose PDF may be shown, the teams' too. ``[(version, team or error)]``.
+
+    A team folder whose slug names no team comes with an error: its rules
     would be shown nowhere.
     """
     from .services import NotFoundError
@@ -193,13 +233,21 @@ def build_all():
             for version in legal.versions(text.slug, legal.AUTHORITATIVE, team=slug):
                 jobs.append((version, team if team is not None else LookupError(
                     f"no team has the slug {slug!r}; its folder legal/teams/{slug}/ is shown nowhere")))
+    return jobs
+
+
+def build_all(again=False):
+    """Make the PDF of every version that may be shown. ``[(version, size or error)]``.
+
+    ``again`` makes each anew, even when a kept one looks current.
+    """
     made = []
-    for version, team in jobs:
+    for version, team in all_jobs():
         if isinstance(team, Exception):
             made.append((version, team))
             continue
         try:
-            made.append((version, len(pdf_for(version, team))))
+            made.append((version, remake(version, team) if again else len(pdf_for(version, team))))
         except Exception as exc:  # noqa: BLE001 -- report every text, not just the first that fails
             made.append((version, exc))
     return made
@@ -360,11 +408,22 @@ def preview(german_upload, english_upload=None):
         return data, [], filename(german, team)
 
 
+def _waiting_parts(german):
+    english = legal.find_any(german.slug, "en", german.version, german.team)
+    return [german] + ([english] if english is not None else []), (
+        "ENTWURF" if german.status == "draft" else "VORSCHAU")
+
+
+def waiting_ready(german, team=None):
+    """``ready`` for a version not shown yet: ``(path, hash, download name)``."""
+    versions, watermark = _waiting_parts(german)
+    path, digest = ready(german, team, versions=versions, watermark=watermark)
+    return path, digest, f"{watermark}_{filename(german, team)}"
+
+
 def waiting_pdf(german, team=None):
     """A version not shown yet -- a draft, or one whose day has not come -- with
     its English file of the same version, if any, marked across every page.
-    Made when asked for and not kept: drafts change until they are approved."""
-    english = legal.find_any(german.slug, "en", german.version, german.team)
-    versions = [german] + ([english] if english is not None else [])
-    watermark = "ENTWURF" if german.status == "draft" else "VORSCHAU"
-    return build(german, team, versions=versions, watermark=watermark), f"{watermark}_{filename(german, team)}"
+    Kept like the others: a changed draft has another hash, so a new file."""
+    path, _digest, name = waiting_ready(german, team)
+    return path.read_bytes(), name

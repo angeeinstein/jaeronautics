@@ -113,6 +113,9 @@ RATELIMIT_EMAIL_RESEND = os.getenv("RATELIMIT_EMAIL_RESEND", "10 per hour")
 # A person signs in to the forum a few times a day; this only stops a loop.
 RATELIMIT_FORUM_CONNECT = os.getenv("RATELIMIT_FORUM_CONNECT", "20 per 10 minute")
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
+# A test server says so: a red bar under the header on every page and in
+# every email, and "[TEST]" before each email's subject and the tab title.
+TEST_SERVER = os.getenv("TEST_SERVER", "").strip().lower() in {"1", "true", "yes", "on"}
 
 # Domains that prove somebody is currently a student or staff. An admin can
 # edit the list at runtime; this is only the fallback for a fresh install, and

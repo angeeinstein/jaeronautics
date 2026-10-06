@@ -41,24 +41,51 @@
                     <a href="{{ url_for('public.legal_text', slug=text.slug) }}">{{ version.title }}</a>
                     <div class="small text-muted">{{ _('Version of %(day)s', day=version.version|date_display) }}{% if version.revision %} ({{ version.revision }}){% endif %} · {{ _('in force since %(day)s', day=version.effective_from|date_display) }}</div>
                 </div>
-                <a class="text-nowrap" href="{{ url_for('public.legal_text_pdf', slug=text.slug) }}" target="_blank" rel="noopener">{{ _('PDF') }}</a>
+                <a class="text-nowrap" href="{{ url_for('public.legal_text_pdf', slug=text.slug) }}" target="_blank" rel="noopener" data-legal-file>{{ _('PDF') }}</a>
             </li>
         {% endfor %}
         {% for team, rules in team_rules %}
             <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
                 <div>
-                    {% if rules and rules.from_file %}<a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}">{{ rules.version.title }}</a>{% else %}{{ _('Rules of %(team)s', team=team.name) }}{% endif %}
+                    {% if rules %}<a href="{{ url_for('teams.team_rules_text', slug=team.slug) }}">{{ rules.version.title }}</a>{% else %}{{ _('Rules of %(team)s', team=team.name) }}{% endif %}
                     <div class="small text-muted">
                         {{ team.name }} ·
-                        {% if rules and rules.from_file %}{{ _('Version of %(day)s', day=rules.version.version|date_display) }} · {{ _('in force since %(day)s', day=rules.version.effective_from|date_display) }}
-                        {% elif rules %}<span class="text-warning">{{ _('Typed into the portal, no file yet: flask export-team-rules writes one.') }}</span>
+                        {% if rules %}{{ _('Version of %(day)s', day=rules.version.version|date_display) }} · {{ _('in force since %(day)s', day=rules.version.effective_from|date_display) }}
                         {% else %}{{ _('None in force') }}{% endif %}
                     </div>
                 </div>
-                {% if rules and rules.from_file %}<a class="text-nowrap" href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener">{{ _('PDF') }}</a>{% endif %}
+                {% if rules %}<a class="text-nowrap" href="{{ url_for('teams.team_rules_pdf', slug=team.slug) }}" target="_blank" rel="noopener" data-legal-file>{{ _('PDF') }}</a>{% endif %}
             </li>
         {% endfor %}
     </ul>
+</div>
+
+<div class="card mb-4" id="legal-pdfs">
+    <div class="card-header"><h4 class="mb-0">{{ _('PDFs') }}</h4></div>
+    <div class="card-body">
+        <p class="text-muted small">{{ _('Each PDF is made the first time somebody opens it and kept. A changed text, layout or logo makes a new one by itself; this makes them all again now -- after an update, say, or when a PDF looks out of date.') }}</p>
+        <form method="POST" action="{{ url_for('admin.admin_legal_remake_pdfs') }}" data-pdf-remake>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-primary">{{ _('Make all PDFs again') }}</button>
+        </form>
+        <ul class="checklist mt-3 mb-0" id="legal-pdfs-progress" hidden
+            data-failed-label="{{ _('No answer from the server.') }}">
+            <li class="checklist-item checklist-pending" data-item="stored">
+                <span class="checklist-icon"><span class="checklist-dot" aria-hidden="true"></span></span>
+                <span><span class="checklist-label">{{ _('Remove the kept PDFs') }}</span> <span class="checklist-detail"></span></span>
+            </li>
+            {% for job in pdf_jobs %}
+                {% set v = job.version %}
+                <li class="checklist-item checklist-pending" data-item="{{ job.key }}">
+                    <span class="checklist-icon"><span class="checklist-dot" aria-hidden="true"></span></span>
+                    <span>
+                        <span class="checklist-label">{{ v.title }}{% if job.team_name %} · {{ job.team_name }}{% endif %} · {{ _('Version of %(day)s', day=v.version|date_display) }}</span>
+                        <span class="checklist-detail"></span>
+                    </span>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
 </div>
 
 <div class="card mb-4" id="legal-waiting">
@@ -76,7 +103,7 @@
                             {% if item.has_english %} · {{ _('with English') }}{% endif %}
                         </div>
                     </div>
-                    <a class="text-nowrap" href="{{ item.url }}" target="_blank" rel="noopener">{{ _('Preview PDF') }}</a>
+                    <a class="text-nowrap" href="{{ item.url }}" target="_blank" rel="noopener" data-legal-file>{{ _('Preview PDF') }}</a>
                 </li>
             {% endfor %}
         </ul>
@@ -99,4 +126,5 @@
         {% endif %}
     </div>
 </div>
+<script src="{{ url_for('static', filename='legal-pdf-remake.js') }}"></script>
 {% endblock %}

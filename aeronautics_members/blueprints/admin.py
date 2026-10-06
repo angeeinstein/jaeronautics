@@ -66,6 +66,7 @@ from ..services.privacy import (
     export_filename_for,
     refresh_subscription_state_before_deletion,
 )
+from . import _legal_pages as legal_pages
 from ._responses import json_download_response
 from ..services.notifications import (
     build_mail_accounts_export_payload,
@@ -1394,6 +1395,11 @@ def admin_legal():
         repo_problems=legal.problems(),
         orphan_folders=[slug for slug in legal.teams_with_texts() if slug not in team_slugs],
         waiting=waiting,
+        pdf_jobs=[{
+            "key": legal_pdf.job_key(version),
+            "version": version,
+            "team_name": all_teams[version.team].name if version.team in all_teams else version.team,
+        } for version, _team in legal_pdf.all_jobs()],
         preview_problems=preview_problems,
         max_kb=legal_pdf.PREVIEW_MAX_BYTES // 1024,
     )
@@ -1431,12 +1437,66 @@ def admin_legal_waiting_pdf():
         except NotFoundError:
             team = None
     try:
-        data, name = legal_pdf.waiting_pdf(german, team)
+        path, digest, name = legal_pdf.waiting_ready(german, team)
+        data = None if legal_pages.preparing() else path.read_bytes()
     except Exception:  # noqa: BLE001
         current_app.logger.exception("Could not make the PDF of the waiting version %s", german.path)
+        if legal_pages.preparing():
+            return legal_pages.not_prepared()
         flash(_("The PDF could not be made. See the log for why."), "danger")
         return redirect(url_for("admin.admin_legal"))
+    if data is None:
+        return legal_pages.prepared(digest)
     return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=name)
+
+
+@admin_bp.route("/admin/legal/pdfs/remake", methods=["POST"])
+@login_required
+@requires(Permission.SETTINGS_GENERAL)
+def admin_legal_remake_pdfs():
+    """Make the kept PDFs again.
+
+    The page's script sends one ``item`` at a time -- ``stored`` to remove the
+    kept files, then each version by its key -- and ticks it off with the
+    answer, so every PDF is one short request. Without the script, the form
+    comes without an item and everything is done in this one.
+    """
+    from .. import legal_pdf
+
+    item = request.form.get("item")
+    if item is None:
+        legal_pdf.forget_all()
+        made = legal_pdf.build_all(again=True)
+        failed = [version for version, result in made if isinstance(result, Exception)]
+        _audit_pdfs_remade(len(made))
+        if failed:
+            flash(_("%(count)s PDF(s) could not be made. See the log for why.", count=len(failed)), "warning")
+        else:
+            flash(_("All %(count)s PDFs were made again.", count=len(made)), "success")
+        return redirect(url_for("admin.admin_legal"))
+
+    if item == "stored":
+        removed = legal_pdf.forget_all()
+        _audit_pdfs_remade(len(legal_pdf.all_jobs()))
+        return jsonify(state="ok", detail=_("%(count)s removed", count=removed))
+    for version, team in legal_pdf.all_jobs():
+        if legal_pdf.job_key(version) != item:
+            continue
+        if isinstance(team, Exception):
+            return jsonify(state="failed", detail=str(team))
+        try:
+            size = legal_pdf.remake(version, team)
+        except Exception as exc:  # noqa: BLE001 -- shown on its line; the others go on
+            current_app.logger.exception("Could not make the PDF of %s", version.path)
+            return jsonify(state="failed", detail=str(exc) or exc.__class__.__name__)
+        return jsonify(state="ok", detail=f"{max(1, size // 1024)} KB")
+    return jsonify(state="failed", detail=_("No longer in legal/.")), 404
+
+
+def _audit_pdfs_remade(count):
+    log_audit_event(category="system", event_type="legal_pdfs_remade", actor_user=current_user,
+                    target_user=current_user, metadata={"pdfs": count})
+    db.session.commit()
 
 
 @admin_bp.route("/admin/legal/template", methods=["GET"])
