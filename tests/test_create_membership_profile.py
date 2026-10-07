@@ -19,7 +19,7 @@ import pytest
 from conftest import db
 
 from aeronautics_members.db_models import Setting, User
-from aeronautics_members.blueprints import _signup as signup
+from aeronautics_members.services import signup
 
 FORM = {
     "salutation": "Mr", "first_name": "Angelo", "last_name": "Popovic",

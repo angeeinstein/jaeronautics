@@ -23,3 +23,15 @@ export function messageOf(error: unknown): string {
 export function notifyFailed(error: unknown) {
   notifications.show({ title: 'That did not work', message: messageOf(error), color: 'red' });
 }
+
+const TONE_COLOURS = { info: 'brand', success: 'green', warning: 'yellow' } as const;
+
+/** A message from the server in its own tone ("Saved.", "Please confirm …"). */
+export function notifyMessage({ tone, text }: { tone: keyof typeof TONE_COLOURS; text: string }) {
+  notifications.show({
+    message: text,
+    color: TONE_COLOURS[tone],
+    // Something to act on stays until it is closed.
+    autoClose: tone === 'warning' ? false : undefined,
+  });
+}

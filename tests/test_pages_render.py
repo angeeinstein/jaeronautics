@@ -64,6 +64,6 @@ def test_admin_account_detail_renders(client, admin_user, active_member):
 
 def test_account_and_forum_render(client, active_member):
     _login(client, active_member.user_id)
-    for path in ["/account?rt=1", "/forum"]:
+    for path in ["/account", "/api/v1/account", "/forum"]:
         resp = client.get(path)
         assert resp.status_code < 500, f"{path} returned {resp.status_code}"

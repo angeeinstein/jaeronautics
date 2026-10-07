@@ -76,7 +76,7 @@ def build_app(db_path):
 def go_offline(app_module):
     """Stripe, the forum and the git remote answer without a network."""
     from aeronautics_members.forum_service import DiscourseConnectProvider, ForumProviderError
-    from aeronautics_members.services import system_update
+    from aeronautics_members.services import system_update, workflows
 
     def offline(self, *args, **kwargs):
         raise ForumProviderError("Offline for screenshots.")
@@ -90,6 +90,7 @@ def go_offline(app_module):
         return False, subscriptions.get(member.email_private), None
 
     app_module.refresh_member_billing_state = refresh
+    workflows.refresh_member_billing_state = refresh
     return subscriptions
 
 

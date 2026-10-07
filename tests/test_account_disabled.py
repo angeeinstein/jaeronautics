@@ -11,6 +11,7 @@ So the property these tests really protect is the independence. Anything that
 made disabling touch the membership would mean suspending a person by
 cancelling what they had paid for.
 """
+from flask import g
 from datetime import date, datetime
 
 import pytest
@@ -207,12 +208,14 @@ class TestWhatADisabledAccountCanDo:
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user_id)
 
-        assert client.get("/account").status_code < 400
+        assert client.get("/api/v1/account").status_code == 200
 
         set_account_disabled(member.user, disable=True, actor_user=admin)
         db.session.commit()
+        # The test's one application context keeps the user the last request found.
+        g.pop("_login_user", None)
 
-        assert client.get("/account").status_code in (302, 401)
+        assert client.get("/api/v1/account").status_code == 401
 
     def test_the_forum_syncs_them_out_even_though_they_paid(self, app, admin):
         """Discourse holds its own groups, so barring here means nothing there."""

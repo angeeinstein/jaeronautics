@@ -743,6 +743,79 @@
         "title": "AccountRow",
         "type": "object"
       },
+      "AccountSavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/MyAccountOut"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages",
+          "account"
+        ],
+        "title": "AccountSavedOut",
+        "type": "object"
+      },
+      "AccountTeamOut": {
+        "additionalProperties": false,
+        "properties": {
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "opens": {
+            "enum": [
+              "team",
+              "about"
+            ],
+            "title": "Opens",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Label"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "logo_url",
+          "status_label",
+          "opens"
+        ],
+        "title": "AccountTeamOut",
+        "type": "object"
+      },
       "Actions": {
         "additionalProperties": false,
         "description": "What the person looking may do to this account, by the same checks the actions run.",
@@ -1906,6 +1979,193 @@
         "title": "ChangeRequest",
         "type": "object"
       },
+      "ChangeRequestIn": {
+        "additionalProperties": false,
+        "properties": {
+          "first_name": {
+            "maxLength": 100,
+            "title": "First Name",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "member_category": {
+            "maxLength": 20,
+            "title": "Member Category",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Note"
+          },
+          "salutation": {
+            "maxLength": 20,
+            "title": "Salutation",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "salutation",
+          "first_name",
+          "last_name",
+          "member_category"
+        ],
+        "title": "ChangeRequestIn",
+        "type": "object"
+      },
+      "ChangeRequestOut": {
+        "additionalProperties": false,
+        "properties": {
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "member_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Category"
+          },
+          "member_category_label": {
+            "title": "Member Category Label",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "salutation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salutation"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "username_could_become": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username Could Become"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "id",
+          "salutation",
+          "title",
+          "first_name",
+          "last_name",
+          "member_category",
+          "member_category_label",
+          "year_group",
+          "note",
+          "username_could_become"
+        ],
+        "title": "ChangeRequestOut",
+        "type": "object"
+      },
       "ChangedOut": {
         "additionalProperties": false,
         "properties": {
@@ -2076,6 +2336,25 @@
         "title": "CheckoutOut",
         "type": "object"
       },
+      "ChoiceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ChoiceOut",
+        "type": "object"
+      },
       "ConnectionOut": {
         "additionalProperties": false,
         "properties": {
@@ -2093,6 +2372,200 @@
           "message"
         ],
         "title": "ConnectionOut",
+        "type": "object"
+      },
+      "ContactIn": {
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "maxLength": 100,
+            "title": "City",
+            "type": "string"
+          },
+          "country": {
+            "maxLength": 100,
+            "title": "Country",
+            "type": "string"
+          },
+          "email_private": {
+            "maxLength": 255,
+            "title": "Email Private",
+            "type": "string"
+          },
+          "email_work": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Email Work"
+          },
+          "house_number": {
+            "maxLength": 20,
+            "title": "House Number",
+            "type": "string"
+          },
+          "phone_private": {
+            "maxLength": 50,
+            "title": "Phone Private",
+            "type": "string"
+          },
+          "phone_work": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Phone Work"
+          },
+          "postal_code": {
+            "maxLength": 20,
+            "title": "Postal Code",
+            "type": "string"
+          },
+          "street": {
+            "maxLength": 255,
+            "title": "Street",
+            "type": "string"
+          }
+        },
+        "required": [
+          "street",
+          "house_number",
+          "postal_code",
+          "city",
+          "country",
+          "phone_private",
+          "email_private"
+        ],
+        "title": "ContactIn",
+        "type": "object"
+      },
+      "ContactOut": {
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "email_private": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Private"
+          },
+          "email_work": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Work"
+          },
+          "house_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "House Number"
+          },
+          "phone_private": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Private"
+          },
+          "phone_work": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Work"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code"
+          },
+          "street": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Street"
+          }
+        },
+        "required": [
+          "street",
+          "house_number",
+          "postal_code",
+          "city",
+          "country",
+          "phone_private",
+          "email_private",
+          "phone_work",
+          "email_work"
+        ],
+        "title": "ContactOut",
         "type": "object"
       },
       "Counts": {
@@ -2274,6 +2747,25 @@
           "team"
         ],
         "title": "DoneOut",
+        "type": "object"
+      },
+      "EmailAddressOut": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "address",
+          "confirmed"
+        ],
+        "title": "EmailAddressOut",
         "type": "object"
       },
       "EmailIn": {
@@ -2672,6 +3164,55 @@
         "title": "Figure",
         "type": "object"
       },
+      "FlashedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "info",
+              "success",
+              "warning",
+              "danger"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tone",
+          "text"
+        ],
+        "title": "FlashedOut",
+        "type": "object"
+      },
+      "FooterLinkOut": {
+        "additionalProperties": false,
+        "properties": {
+          "external": {
+            "title": "External",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url",
+          "external"
+        ],
+        "title": "FooterLinkOut",
+        "type": "object"
+      },
       "ForgottenOut": {
         "additionalProperties": false,
         "properties": {
@@ -2684,6 +3225,44 @@
           "removed"
         ],
         "title": "ForgottenOut",
+        "type": "object"
+      },
+      "FormOptionsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "countries": {
+            "items": {
+              "$ref": "#/components/schemas/ChoiceOut"
+            },
+            "title": "Countries",
+            "type": "array"
+          },
+          "invoice_payments": {
+            "title": "Invoice Payments",
+            "type": "boolean"
+          },
+          "member_categories": {
+            "items": {
+              "$ref": "#/components/schemas/MemberCategoryOut"
+            },
+            "title": "Member Categories",
+            "type": "array"
+          },
+          "salutations": {
+            "items": {
+              "$ref": "#/components/schemas/ChoiceOut"
+            },
+            "title": "Salutations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "countries",
+          "salutations",
+          "member_categories",
+          "invoice_payments"
+        ],
+        "title": "FormOptionsOut",
         "type": "object"
       },
       "FormerMembersOut": {
@@ -2856,6 +3435,68 @@
           "has_picture"
         ],
         "title": "Forum",
+        "type": "object"
+      },
+      "ForumCardOut": {
+        "additionalProperties": false,
+        "properties": {
+          "may_open": {
+            "title": "May Open",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "open_url": {
+            "title": "Open Url",
+            "type": "string"
+          },
+          "picture": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PictureOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problem": {
+            "title": "Problem",
+            "type": "boolean"
+          },
+          "reconnect_waiting": {
+            "title": "Reconnect Waiting",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "username",
+          "reconnect_waiting",
+          "may_open",
+          "open_url",
+          "problem",
+          "picture"
+        ],
+        "title": "ForumCardOut",
         "type": "object"
       },
       "ForumCleanup": {
@@ -3408,6 +4049,20 @@
         "title": "GeneralOut",
         "type": "object"
       },
+      "GoToOut": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "GoToOut",
+        "type": "object"
+      },
       "GoneOut": {
         "additionalProperties": false,
         "properties": {
@@ -3680,6 +4335,92 @@
           }
         },
         "title": "HomeQuery",
+        "type": "object"
+      },
+      "IdentityOut": {
+        "additionalProperties": false,
+        "properties": {
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "member_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Category"
+          },
+          "member_category_label": {
+            "title": "Member Category Label",
+            "type": "string"
+          },
+          "salutation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salutation"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "salutation",
+          "title",
+          "first_name",
+          "last_name",
+          "member_category",
+          "member_category_label",
+          "year_group"
+        ],
+        "title": "IdentityOut",
         "type": "object"
       },
       "ImportOut": {
@@ -4790,6 +5531,119 @@
         "title": "MeOut",
         "type": "object"
       },
+      "MemberAccountOut": {
+        "additionalProperties": false,
+        "properties": {
+          "change_request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChangeRequestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactOut"
+          },
+          "deletion_note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forum": {
+            "$ref": "#/components/schemas/ForumCardOut"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/IdentityOut"
+          },
+          "may_cancel_instead": {
+            "title": "May Cancel Instead",
+            "type": "boolean"
+          },
+          "membership": {
+            "$ref": "#/components/schemas/MembershipCardOut"
+          },
+          "teams": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeamsCardOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "work_email": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmailAddressOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "work_email",
+          "membership",
+          "forum",
+          "teams",
+          "contact",
+          "identity",
+          "change_request",
+          "deletion_note",
+          "may_cancel_instead"
+        ],
+        "title": "MemberAccountOut",
+        "type": "object"
+      },
+      "MemberCategoryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "university_email_required": {
+            "title": "University Email Required",
+            "type": "boolean"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          },
+          "year_group": {
+            "enum": [
+              "required",
+              "optional",
+              "hidden"
+            ],
+            "title": "Year Group",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label",
+          "description",
+          "year_group",
+          "university_email_required"
+        ],
+        "title": "MemberCategoryOut",
+        "type": "object"
+      },
       "MemberOut": {
         "additionalProperties": false,
         "properties": {
@@ -5052,6 +5906,121 @@
         "title": "Membership",
         "type": "object"
       },
+      "MembershipCardOut": {
+        "additionalProperties": false,
+        "properties": {
+          "activating": {
+            "title": "Activating",
+            "type": "boolean"
+          },
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "auto_renew": {
+            "title": "Auto Renew",
+            "type": "boolean"
+          },
+          "ends_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends On"
+          },
+          "invoice_payments": {
+            "title": "Invoice Payments",
+            "type": "boolean"
+          },
+          "may_manage_billing": {
+            "title": "May Manage Billing",
+            "type": "boolean"
+          },
+          "may_rejoin": {
+            "title": "May Rejoin",
+            "type": "boolean"
+          },
+          "may_resume_payment": {
+            "title": "May Resume Payment",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "renews_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renews On"
+          },
+          "starts_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts On"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "active",
+              "pending",
+              "failed",
+              "neutral"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "status_label",
+          "tone",
+          "active",
+          "starts_on",
+          "ends_on",
+          "renews_on",
+          "auto_renew",
+          "activating",
+          "note",
+          "may_manage_billing",
+          "may_resume_payment",
+          "may_rejoin",
+          "invoice_payments"
+        ],
+        "title": "MembershipCardOut",
+        "type": "object"
+      },
       "MembershipCounts": {
         "additionalProperties": false,
         "description": "How many rows each membership filter shows, with the other filters as they are.",
@@ -5153,6 +6122,47 @@
           "erased_members"
         ],
         "title": "MembershipOut",
+        "type": "object"
+      },
+      "MessageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "info",
+              "success",
+              "warning"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tone",
+          "text"
+        ],
+        "title": "MessageOut",
+        "type": "object"
+      },
+      "MessagesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/FlashedOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "MessagesOut",
         "type": "object"
       },
       "Mismatch": {
@@ -5301,6 +6311,46 @@
         "title": "MoneyRow",
         "type": "object"
       },
+      "MyAccountOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/EmailAddressOut"
+          },
+          "export_url": {
+            "title": "Export Url",
+            "type": "string"
+          },
+          "member": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberAccountOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_confirm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "to_confirm",
+          "member",
+          "export_url"
+        ],
+        "title": "MyAccountOut",
+        "type": "object"
+      },
       "NewTeamIn": {
         "additionalProperties": false,
         "properties": {
@@ -5398,6 +6448,32 @@
           }
         },
         "title": "NoteIn",
+        "type": "object"
+      },
+      "NoteOut": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "plain",
+              "info",
+              "success",
+              "warning",
+              "danger"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tone",
+          "text"
+        ],
+        "title": "NoteOut",
         "type": "object"
       },
       "Notice": {
@@ -6106,6 +7182,65 @@
         "title": "PictureApprovedOut",
         "type": "object"
       },
+      "PictureOut": {
+        "additionalProperties": false,
+        "description": "The profile picture: what may be uploaded, and the one waiting for review.",
+        "properties": {
+          "formats": {
+            "title": "Formats",
+            "type": "string"
+          },
+          "max_bytes": {
+            "title": "Max Bytes",
+            "type": "integer"
+          },
+          "max_label": {
+            "title": "Max Label",
+            "type": "string"
+          },
+          "pending_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Url"
+          },
+          "rejected_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Reason"
+          },
+          "replacing": {
+            "title": "Replacing",
+            "type": "boolean"
+          },
+          "upload": {
+            "title": "Upload",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "upload",
+          "replacing",
+          "pending_url",
+          "rejected_reason",
+          "formats",
+          "max_bytes",
+          "max_label"
+        ],
+        "title": "PictureOut",
+        "type": "object"
+      },
       "PictureReplacementIn": {
         "additionalProperties": false,
         "properties": {
@@ -6341,6 +7476,55 @@
           "forum_error"
         ],
         "title": "ReconnectOut",
+        "type": "object"
+      },
+      "RejoinIn": {
+        "additionalProperties": false,
+        "properties": {
+          "payment_method": {
+            "default": "checkout",
+            "enum": [
+              "checkout",
+              "invoice"
+            ],
+            "title": "Payment Method",
+            "type": "string"
+          }
+        },
+        "title": "RejoinIn",
+        "type": "object"
+      },
+      "RejoinOut": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "url",
+          "message"
+        ],
+        "title": "RejoinOut",
         "type": "object"
       },
       "RemoveIn": {
@@ -6862,6 +8046,28 @@
           "csrf_token"
         ],
         "title": "SessionOut",
+        "type": "object"
+      },
+      "SiteOut": {
+        "additionalProperties": false,
+        "properties": {
+          "copyright": {
+            "title": "Copyright",
+            "type": "string"
+          },
+          "footer": {
+            "items": {
+              "$ref": "#/components/schemas/FooterLinkOut"
+            },
+            "title": "Footer",
+            "type": "array"
+          }
+        },
+        "required": [
+          "footer",
+          "copyright"
+        ],
+        "title": "SiteOut",
         "type": "object"
       },
       "StepOut": {
@@ -8305,6 +9511,33 @@
         "title": "Teams",
         "type": "object"
       },
+      "TeamsCardOut": {
+        "additionalProperties": false,
+        "properties": {
+          "invite": {
+            "title": "Invite",
+            "type": "boolean"
+          },
+          "mine": {
+            "items": {
+              "$ref": "#/components/schemas/AccountTeamOut"
+            },
+            "title": "Mine",
+            "type": "array"
+          },
+          "plural": {
+            "title": "Plural",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plural",
+          "mine",
+          "invite"
+        ],
+        "title": "TeamsCardOut",
+        "type": "object"
+      },
       "TeamsHomeOut": {
         "additionalProperties": false,
         "properties": {
@@ -9091,6 +10324,486 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/account": {
+      "get": {
+        "operationId": "account",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyAccountOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          }
+        },
+        "summary": "My Account: everything on the page, with what to do next.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/billing": {
+      "post": {
+        "operationId": "account_billing",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoToOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Stripe's billing page: payment method, invoices, cancelling. It comes back here.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/change-request": {
+      "post": {
+        "operationId": "account_change_request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Ask for a new name, salutation, kind of membership or year group; an admin decides.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/change-request/{request_id}": {
+      "delete": {
+        "operationId": "account_change_request_cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Take back a change request not decided yet.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/contact": {
+      "put": {
+        "operationId": "account_contact",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Address, phones and both email addresses: saved at once. A new address waits to be confirmed.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/deletion": {
+      "post": {
+        "operationId": "account_deletion",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Email the link that deletes the account; nothing is deleted until it is opened.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/emails/private/confirmation": {
+      "post": {
+        "operationId": "account_private_email_confirmation",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Send the link confirming the private address -- the login -- again.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/emails/work/confirmation": {
+      "post": {
+        "operationId": "account_work_email_confirmation",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Send the link confirming the university or company address again.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/payment": {
+      "post": {
+        "operationId": "account_payment",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoToOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Stripe's payment page again, for a payment not finished.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/rejoin": {
+      "post": {
+        "operationId": "account_rejoin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejoinIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RejoinOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Start the membership again after it ended: a new subscription, on the same Stripe customer.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
     "/api/v1/admin/accounts": {
       "get": {
         "operationId": "admin_accounts",
@@ -14152,6 +15865,27 @@
         ]
       }
     },
+    "/api/v1/forms/options": {
+      "get": {
+        "operationId": "form_options",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormOptionsOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "The choices of the member forms, and what each kind of member is asked.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
     "/api/v1/me": {
       "get": {
         "operationId": "me",
@@ -14183,6 +15917,27 @@
         ]
       }
     },
+    "/api/v1/messages": {
+      "get": {
+        "operationId": "flashed_messages",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagesOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "What a Flask route said before sending the browser to one of the app's pages -- an",
+        "tags": [
+          "Session"
+        ]
+      }
+    },
     "/api/v1/session": {
       "get": {
         "operationId": "session_state",
@@ -14199,6 +15954,27 @@
           }
         },
         "summary": "Whether somebody is signed in, and the CSRF token for changes.",
+        "tags": [
+          "Session"
+        ]
+      }
+    },
+    "/api/v1/site": {
+      "get": {
+        "operationId": "site",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "The footer: the legal texts, contact and the association's website.",
         "tags": [
           "Session"
         ]

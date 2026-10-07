@@ -12,14 +12,16 @@ import pytest
 
 from conftest import app_module, db, make_member
 from aeronautics_members.blueprints import public, account, auth, forum, admin
-from aeronautics_members.blueprints import _signup as signup
+from aeronautics_members.services import account as account_service
+from aeronautics_members.services import forum as forum_services
+from aeronautics_members.services import signup, workflows
 from aeronautics_members.db_models import (
     User, Member, MemberProfileChangeRequest, ForumAvatarSubmission, MailAccount,
 )
 from aeronautics_members.forum_service import ForumProviderError
 
 # signup is where both membership forms start paying, so it is patched with them.
-BLUEPRINT_MODULES = [app_module, public, account, auth, forum, admin, signup]
+BLUEPRINT_MODULES = [app_module, public, account, auth, forum, admin, signup, account_service, workflows, forum_services]
 
 
 class _FakeCheckout:
@@ -33,6 +35,7 @@ class _FakeForumService:
     def get_pending_submission(self, m): return None
     def get_current_approved_submission(self, m): return None
     def get_latest_submission(self, m): return None
+    def get_reclaimed_avatar(self, m): return None
     def get_upload_request_limit(self): return 10 * 1024 * 1024
     def get_desired_state(self, m): return "inactive"
     def sync_member(self, m): return types.SimpleNamespace(changed=False, desired_state=None, forum_account=None, error=None)
@@ -58,12 +61,15 @@ def mocked(app, monkeypatch):
 
     patch_all("send_member_welcome_email", lambda *a, **k: None)
     patch_all("send_email_verification_email", lambda *a, **k: True)
+    patch_all("send_work_email_verification_email", lambda *a, **k: True)
+    patch_all("send_account_deletion_email", lambda *a, **k: True)
     patch_all("send_password_reset_email", lambda *a, **k: True)
     patch_all("send_mail", lambda *a, **k: None)
     patch_all("probe_mail_account_connection", lambda *a, **k: (True, "ok"))
     patch_all("create_checkout_session_for_member", lambda m: (_FakeCheckout(), {"free_period": False, "thank_you_phase": "prorated"}))
     patch_all("create_invoice_membership_for_member", lambda m: (types.SimpleNamespace(id="sub_x"), {"free_period": True, "thank_you_phase": "free_period"}))
     patch_all("refresh_member_billing_state", lambda *a, **k: (False, None, None))
+    patch_all("billing_portal_session", lambda m: _FakeCheckout())
     patch_all("get_forum_service", lambda: _FakeForumService())
 
     import stripe
@@ -119,8 +125,13 @@ MEMBERSHIP = {"salutation": "Mr", "first_name": "A", "last_name": "B", "year_gro
 
 
 def _login(client, uid):
+    from flask import g
+
     with client.session_transaction() as sess:
         sess["_user_id"] = str(uid)
+    # The app fixture keeps one application context open, and Flask-Login keeps
+    # the user it found on it: after /logout everybody stayed signed out.
+    g.pop("_login_user", None)
 
 
 def test_all_routes_no_server_error(client, seeded):
@@ -151,14 +162,20 @@ def test_all_routes_no_server_error(client, seeded):
     hit("POST", "/change-password", uid=mu, data={"current_password": "password123", "new_password": "password124", "confirm_new_password": "password124"})
     hit("POST", "/logout", uid=mu)
     # account
-    hit("GET", "/account?rt=1", uid=mu)
+    hit("GET", "/account", uid=mu)
+    hit("GET", "/api/v1/account", uid=mu)
+    hit("GET", "/api/v1/account", uid=nm)
+    hit("GET", "/api/v1/forms/options")
     hit("GET", "/account/create-membership", uid=nm)
-    hit("POST", "/account/profile", uid=mu, data={f"profile-{k}": v for k, v in {**PROFILE, "city": "Vienna"}.items()})
-    hit("POST", "/account/identity-request", uid=mu, data={"identity-salutation": "Mr", "identity-first_name": "X", "identity-last_name": "Y", "identity-year_group": "LAV25", "identity-member_note": "n"})
-    hit("POST", f"/account/identity-request/{ids['pcr_id']}/cancel", uid=mu)
-    hit("POST", "/account/billing", uid=mu, data={"action": "cancel"})
-    hit("POST", "/account/resume-payment", uid=mu)
-    hit("POST", "/account/resend-verification", uid=mu)
+    hit("PUT", "/api/v1/account/contact", uid=mu, json={**PROFILE, "city": "Vienna"})
+    hit("POST", "/api/v1/account/change-request", uid=mu, json={"salutation": "Mr", "first_name": "X", "last_name": "Y", "member_category": "student", "year_group": "LAV25", "note": "n"})
+    hit("DELETE", f"/api/v1/account/change-request/{ids['pcr_id']}", uid=mu)
+    hit("POST", "/api/v1/account/billing", uid=mu)
+    hit("POST", "/api/v1/account/payment", uid=mu)
+    hit("POST", "/api/v1/account/rejoin", uid=mu, json={})
+    hit("POST", "/api/v1/account/emails/private/confirmation", uid=mu)
+    hit("POST", "/api/v1/account/emails/work/confirmation", uid=mu)
+    hit("POST", "/api/v1/account/deletion", uid=mu)
     # forum
     hit("GET", "/forum", uid=mu)
     hit("GET", "/forum/discourse/connect", uid=mu)
@@ -215,6 +232,6 @@ def test_setting_roles_grants_and_revokes(client, seeded):
 
 def test_profile_save_persists(client, seeded):
     _login(client, seeded["member_uid"])
-    resp = client.post("/account/profile", data={f"profile-{k}": v for k, v in {**PROFILE, "city": "Vienna"}.items()})
-    assert resp.status_code == 302
+    resp = client.put("/api/v1/account/contact", json={**PROFILE, "city": "Vienna"})
+    assert resp.status_code == 200
     assert db.session.get(Member, seeded["member_id"]).city == "Vienna"

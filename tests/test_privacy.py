@@ -729,18 +729,19 @@ class TestAdminRoutes:
 
 class TestMemberInitiatedDeletion:
     def test_the_button_only_sends_an_email(self, client, monkeypatch):
-        from aeronautics_members.blueprints import account as account_bp_module
+        from aeronautics_members.services import account as account_service
 
         sent = []
         monkeypatch.setattr(
-            account_bp_module, "send_account_deletion_email",
+            account_service, "send_account_deletion_email",
             lambda app, user: sent.append(user.id) or True,
         )
         member = make_member(email="askfirst@example.com")
         _login(client, member.user_id)
 
-        client.post("/account/delete")
+        response = client.post("/api/v1/account/deletion")
 
+        assert "askfirst@example.com" in response.get_json()["text"]
         assert sent == [member.user_id]
         assert member.deleted_at is None
 
@@ -837,7 +838,7 @@ class TestMemberInitiatedDeletion:
         assert member.deleted_at is None
 
     def test_deletion_needs_a_login(self, client):
-        assert client.post("/account/delete").status_code in (302, 401)
+        assert client.post("/api/v1/account/deletion").status_code == 401
 
 
 class TestErasedAccountsStayErased:

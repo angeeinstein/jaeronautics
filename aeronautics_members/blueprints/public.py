@@ -22,6 +22,7 @@ from ..services.audit import (
     snapshot_user_for_audit,
 )
 from ..services.billing import (
+    can_resume_payment,
     create_checkout_session_for_member,
 )
 from ..services.clock import (
@@ -73,7 +74,6 @@ from ..forms import (
     MembershipForm,
 )
 from ..app import (
-    can_resume_payment,
     get_member_portal_target,
     limiter,
     rate_limit_network,

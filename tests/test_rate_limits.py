@@ -128,7 +128,8 @@ def test_signed_in_limits_count_per_account(limited_app):
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user.id)
         return [
-            client.post("/account/resend-verification", environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
+            client.post("/api/v1/account/emails/private/confirmation",
+                        environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
             for _ in range(10)
         ]
 

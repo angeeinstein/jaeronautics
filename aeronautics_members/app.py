@@ -760,35 +760,9 @@ def is_safe_next_url(target):
 
 
 
-def create_identity_change_request(member, requested_by_user, form_data):
-    if member.open_identity_change_request is not None:
-        raise ValueError(_("You already have a pending identity change request."))
-
-    request_record = MemberProfileChangeRequest(
-        member=member,
-        requested_by=requested_by_user,
-        requested_salutation=form_data["salutation"],
-        requested_title=normalize_optional_member_value("title", form_data.get("title")),
-        requested_first_name=form_data["first_name"],
-        requested_last_name=form_data["last_name"],
-        requested_member_category=form_data["member_category"],
-        requested_year_group=normalize_optional_member_value("year_group", form_data.get("year_group")),
-        member_note=(form_data.get("member_note") or "").strip() or None,
-        status="pending",
-    )
-    db.session.add(request_record)
-    return request_record
 
 
 
-def has_identity_changes(member, form_data):
-    for field_name in IDENTITY_MEMBER_FIELDS:
-        current_value = getattr(member, field_name)
-        requested_value = normalize_optional_member_value(field_name, form_data.get(field_name))
-        if current_value != requested_value:
-            return True
-    member_note = (form_data.get("member_note") or "").strip()
-    return bool(member_note)
 
 
 
@@ -880,14 +854,6 @@ def get_current_member_for_user(user):
 
 
 
-def can_resume_payment(member):
-    if member is None:
-        return False
-    if member_has_active_access(member):
-        return False
-    if member.payment_status not in RESUMABLE_MEMBER_STATUSES:
-        return False
-    return not member.stripe_customer_id
 
 
 
@@ -940,16 +906,6 @@ def get_member_portal_target(user):
 
 
 
-def get_portal_session(member):
-    if not member or not member.stripe_customer_id:
-        raise ValueError(_("No Stripe billing profile is available for this membership yet."))
-
-    refresh_token = int(datetime.now(timezone.utc).timestamp())
-    apply_runtime_stripe_config()
-    return stripe.billing_portal.Session.create(
-        customer=member.stripe_customer_id,
-        return_url=build_public_url("account.account", refresh_billing=1, rt=refresh_token),
-    )
 
 
 
@@ -1010,101 +966,6 @@ def backfill_member_user_links():
     if changed:
         db.session.commit()
 
-
-
-def populate_member_profile_form(form, member):
-    for field_name in DIRECT_MEMBER_PROFILE_FIELDS:
-        getattr(form, field_name).data = getattr(member, field_name)
-
-
-def populate_identity_change_form(form, member, pending_request=None):
-    if pending_request is not None:
-        form.salutation.data = pending_request.requested_salutation
-        form.title.data = pending_request.requested_title
-        form.first_name.data = pending_request.requested_first_name
-        form.last_name.data = pending_request.requested_last_name
-        form.year_group.data = pending_request.requested_year_group
-        form.member_category.data = pending_request.requested_member_category
-        form.member_note.data = pending_request.member_note
-        return
-
-    form.salutation.data = member.salutation
-    form.title.data = member.title
-    form.first_name.data = member.first_name
-    form.last_name.data = member.last_name
-    form.year_group.data = member.year_group
-    form.member_category.data = member.member_category
-
-
-def render_account_dashboard(profile_form=None, identity_form=None):
-    member = get_current_member_for_user(current_user)
-    if member is None:
-        return render_template("account/no_membership.html")
-
-    has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
-    stripe_subscription = None
-    if has_stripe_reference:
-        try:
-            billing_changed, stripe_subscription, _forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
-            if billing_changed:
-                db.session.commit()
-        except stripe.StripeError as exc:
-            current_app.logger.warning("Could not refresh Stripe billing state for member_id=%s: %s", member.id, exc)
-    elif sync_member_active_state(member):
-        db.session.commit()
-
-    pending_request = member.open_identity_change_request
-    profile_form = profile_form or MemberProfileForm(prefix="profile")
-    profile_form.member_category_value = member.member_category
-    identity_form = identity_form or IdentityChangeRequestForm(prefix="identity")
-
-    if not profile_form.is_submitted():
-        populate_member_profile_form(profile_form, member)
-    if not identity_form.is_submitted():
-        populate_identity_change_form(identity_form, member, pending_request=pending_request)
-
-    suggested_username_from_request = None
-    if pending_request is not None and member.user is not None:
-        suggested_username_from_request = generate_unique_forum_username(
-            pending_request.requested_first_name,
-            pending_request.requested_last_name,
-            pending_request.requested_year_group,
-            exclude_user_id=member.user.id,
-        )
-
-    forum_context = build_forum_context(member)
-    payment_arriving = checkout_completed_but_not_yet_confirmed(member)
-    # A failed payment on a subscription Stripe is still running -- a renewal
-    # debit that bounced, say. Stripe tries again, and a new card or account
-    # under Manage Billing is what helps. "Rejoin" would only be refused.
-    payment_needs_attention = (
-        member.payment_status == "failed"
-        and (stripe_subscription or {}).get("status") in LIVE_SUBSCRIPTION_STATUSES
-    )
-
-    return render_template(
-        "account/index.html",
-        member=member,
-        profile_form=profile_form,
-        identity_form=identity_form,
-        pending_request=pending_request,
-        suggested_username_from_request=suggested_username_from_request,
-        can_manage_billing=bool(member.stripe_customer_id),
-        can_resume_payment=can_resume_payment(member) and not payment_arriving,
-        payment_arriving=payment_arriving,
-        has_access=member_has_active_access(member),
-        can_rejoin=can_rejoin(member) and not payment_needs_attention,
-        payment_needs_attention=payment_needs_attention,
-        invoice_payments_enabled=invoice_payments_allowed(),
-        forum_context=forum_context,
-        teams_invite=_invite_to_teams(member),
-    )
-
-
-def _invite_to_teams(member):
-    from .services.teams import invite_to_teams
-
-    return invite_to_teams(member.user) if member is not None else False
 
 
 def build_forum_context(member):

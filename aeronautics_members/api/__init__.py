@@ -7,6 +7,7 @@ endpoints on ``api_bp``.
 """
 
 from . import (  # noqa: F401 -- registers their endpoints
+    account,
     admin_account,
     admin_backup,
     admin_accounts,
@@ -19,7 +20,9 @@ from . import (  # noqa: F401 -- registers their endpoints
     admin_settings,
     admin_system,
     admin_teams,
+    form_options,
     session,
+    site,
     team_manage,
     teams,
     teams_money,

@@ -40,16 +40,12 @@ class TestMyAccountWithoutAMembership:
         staff = _staff("staff2@example.org", "admin")
         _login(client, staff.id)
 
-        response = client.get("/account", follow_redirects=True)
-        body = response.get_data(as_text=True)
+        account = client.get("/api/v1/account").get_json()
 
-        assert response.status_code == 200
-        assert "staff2@example.org" in body
-        assert "This account has no membership." in body
-        assert "/change-password" in body
-        assert "/account/create-membership" in body
-        # Not the membership form itself.
-        assert 'name="first_name"' not in body
+        # The page says it has no membership, with the way to start one
+        # (frontend/src/pages/account/Account.tsx) -- not the membership form itself.
+        assert account["email"]["address"] == "staff2@example.org"
+        assert account["member"] is None
 
     def test_a_password_change_comes_back_to_my_account(self, client, app):
         staff = _staff("staff3@example.org", "admin")
@@ -68,9 +64,9 @@ class TestMyAccountWithoutAMembership:
         member = make_member(email="member@example.org")
         _login(client, member.user.id)
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        account = client.get("/api/v1/account").get_json()
 
-        assert "This account has no membership." not in body
+        assert account["member"]["contact"]["email_private"] == "member@example.org"
 
 
 class TestTheAdminPagesNoLongerCarryAccountShortcuts:

@@ -88,7 +88,9 @@ class TestSwitchedOff:
     def test_and_there_is_no_link(self, app, client):
         _login(client, _person().id)
 
-        assert 'href="/teams"' not in client.get("/account", follow_redirects=True).get_data(as_text=True)
+        # The top bar offers Teams by this (frontend/src/frame/TopBar.tsx), and My Account has no card.
+        assert client.get("/api/v1/me").get_json()["teams_area"] is False
+        assert client.get("/api/v1/account").get_json()["member"]["teams"] is None
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -96,7 +98,7 @@ class TestJoining:
     def test_the_link_is_there_once_switched_on(self, app, client):
         _login(client, _person().id)
 
-        assert 'href="/teams"' in client.get("/account", follow_redirects=True).get_data(as_text=True)
+        assert client.get("/api/v1/me").get_json()["teams_area"] is True
 
     def test_an_open_team_is_joined_at_once_and_the_leads_are_told(self, app, client):
         team, lead = _led("Glider", admission_mode="open")

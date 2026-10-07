@@ -7,6 +7,7 @@
  */
 import type { RouteObject } from 'react-router';
 
+import { AccountLayout } from '../frame/AccountLayout';
 import { AdminLayout } from '../frame/AdminLayout';
 import { TeamManageLayout } from '../frame/TeamManageLayout';
 import { TeamsLayout } from '../frame/TeamsLayout';
@@ -20,6 +21,16 @@ export const routes: RouteObject[] = [
     // While the first page's own code is still on its way.
     hydrateFallbackElement: <LoadingState />,
     children: [
+      {
+        path: '/account',
+        element: <AccountLayout />,
+        children: [
+          {
+            index: true,
+            lazy: async () => ({ Component: (await import('../pages/account/Account')).Account }),
+          },
+        ],
+      },
       {
         path: '/teams/:slug/money',
         element: <TeamManageLayout optional />,

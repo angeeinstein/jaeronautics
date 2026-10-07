@@ -91,7 +91,9 @@ def test_a_member_cannot_cancel_what_was_decided_meanwhile(app, client):
     _committed_elsewhere(MemberProfileChangeRequest, change.id, status="approved")
     _login(client, member.user.id)
 
-    client.post(f"/account/identity-request/{change.id}/cancel")
+    response = client.delete(f"/api/v1/account/change-request/{change.id}")
+
+    assert response.status_code == 409
 
     assert db.session.get(MemberProfileChangeRequest, change.id).status == "approved"
 

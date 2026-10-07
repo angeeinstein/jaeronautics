@@ -258,6 +258,19 @@ server can update to it.
 6. **My Account:** the overview, membership and payment status, forum card
    with the photo upload and cropper, change requests, password, data export
    and deletion.
+   *(The overview done: `api/account.py` works out the whole page once -- both
+   addresses and whether each is confirmed, the membership's state with what to do
+   about it, the forum, one's teams, what deleting would cost -- and the changes
+   moved out of the routes into `services/account.py`; `frontend/src/pages/account/`.
+   The member forms are checked by their WTForms rules through the API
+   (`api/_forms.py`), so the signup in step 7 checks exactly what My Account does;
+   their choices come from `GET /api/v1/forms/options`. Starting to pay is one
+   service for every door (`services/signup.py`, `begin_membership`). New for every
+   app page: the footer (`GET /api/v1/site`), and a message Flask flashes before
+   sending the browser to an app page is shown there (`GET /api/v1/messages`).
+   The forum page with the picture upload, the password and the deletion link's
+   page follow; the membership form for an account without one moves with the
+   signup.)*
 7. **Public pages and signing in:** the new home page (association
    information), signup on its own page with the legal texts in a dialog,
    login, password reset, email confirmation, thank-you and cancel pages,

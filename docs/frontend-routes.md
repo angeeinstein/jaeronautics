@@ -129,14 +129,14 @@ Status: `[ ]` to do, `[x]` done.
 
 ## Step 6 -- My Account
 
-- [ ] `GET /account` (page today by redirect; link in emails) → My Account
-- [ ] `POST /account/profile` (action)
-- [ ] `POST /account/identity-request`, `/identity-request/<id>/cancel` (action)
-- [ ] `POST /account/resend-verification`, `/resend-work-verification` (action)
-- [ ] `POST /account/billing` (out: Stripe billing portal)
-- [ ] `POST /account/resume-payment`, `/account/rejoin` (out: Stripe Checkout)
-- [ ] `GET|POST /account/create-membership` (page + out: membership for an account without one)
-- [ ] `POST /account/delete` (action: asks for confirmation by email)
+- [x] `GET /account` (page; link in emails) → My Account; `GET /api/v1/account` (`api/account.py`), one answer for the page. The `?rt=` reload trick is gone
+- [x] `POST /account/profile` (action) → `PUT /api/v1/account/contact`, checked by the same form rules (`api/_forms.py`); the choices of the forms `GET /api/v1/forms/options`
+- [x] `POST /account/identity-request`, `/identity-request/<id>/cancel` (action) → `POST /api/v1/account/change-request`, `DELETE .../change-request/<id>`
+- [x] `POST /account/resend-verification`, `/resend-work-verification` (action) → `POST /api/v1/account/emails/private/confirmation`, `.../work/confirmation`
+- [x] `POST /account/billing` (out: Stripe billing portal) → `POST /api/v1/account/billing` answers Stripe's address
+- [x] `POST /account/resume-payment`, `/account/rejoin` (out: Stripe Checkout) → `POST /api/v1/account/payment`, `/account/rejoin` answer where to pay
+- [ ] `GET|POST /account/create-membership` (page + out: membership for an account without one) -- with the signup in step 7: the same form
+- [x] `POST /account/delete` (action: asks for confirmation by email) → `POST /api/v1/account/deletion`
 - [ ] `GET|POST /account/delete/<token>` (page + action; link in emails)
 - [ ] `GET|POST /change-password` (page + action) → part of My Account
 - [ ] `GET /forum` (page; link in emails) → the forum card's page; *Open forum* stays a link out

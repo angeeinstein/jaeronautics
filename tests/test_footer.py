@@ -26,9 +26,12 @@ def test_signed_in_pages_have_it_too(client, app):
     member = make_member(email="footer@example.com")
     _login(client, member.user.id)
 
-    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+    # The app's pages draw it from here (frontend/src/frame/Footer.tsx).
+    site = client.get("/api/v1/site").get_json()
 
-    assert '<footer class="site-footer">' in body
+    assert [link["label"] for link in site["footer"]] == [
+        "Impressum", "Privacy", "Statutes", "Legal texts", "Contact", "Website"]
+    assert site["copyright"].startswith("© 20")
 
 
 def test_until_configured_the_links_lead_to_the_portals_own_legal_texts(client):

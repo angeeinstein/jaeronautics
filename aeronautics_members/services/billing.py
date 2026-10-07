@@ -36,6 +36,7 @@ from .members import (
 )
 from .membership import (
     PAYMENT_EVIDENCE_STATUSES,
+    RESUMABLE_MEMBER_STATUSES,
     build_membership_cycle,
     format_membership_date_display,
     has_payment_evidence,
@@ -297,6 +298,31 @@ def can_rejoin(member):
     if member_has_active_access(member):
         return False
     return member.payment_status in REJOINABLE_MEMBER_STATUSES
+
+
+def can_resume_payment(member):
+    """Whether the payment of a membership never paid can be started again
+    from the portal: no access yet, and no Stripe customer, whose billing
+    page would be the way instead."""
+    if member is None:
+        return False
+    if member_has_active_access(member):
+        return False
+    if member.payment_status not in RESUMABLE_MEMBER_STATUSES:
+        return False
+    return not member.stripe_customer_id
+
+
+def billing_portal_session(member):
+    """Stripe's billing page for this member, which comes back to My Account.
+    A ValueError when there is no Stripe customer yet."""
+    if not member or not member.stripe_customer_id:
+        raise ValueError(_("No Stripe billing profile is available for this membership yet."))
+    apply_runtime_stripe_config()
+    return stripe.billing_portal.Session.create(
+        customer=member.stripe_customer_id,
+        return_url=build_public_url("account.account"),
+    )
 
 
 def find_live_stripe_subscription(member):

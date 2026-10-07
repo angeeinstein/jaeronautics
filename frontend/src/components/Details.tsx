@@ -9,9 +9,10 @@ import classes from './Details.module.css';
 
 export type Detail = [label: string, value: ReactNode];
 
-export function Details({ items }: { items: Detail[] }) {
+/** ``compact``: a narrow label column, for a card half the page wide. */
+export function Details({ items, compact = false }: { items: Detail[]; compact?: boolean }) {
   return (
-    <dl className={classes.list}>
+    <dl className={classes.list} data-compact={compact || undefined}>
       {items.map(([label, value]) => (
         <div key={label} className={classes.row}>
           <dt className={classes.label}>{label}</dt>

@@ -32,17 +32,17 @@ class TestTheMembersSide:
     def test_without_permission_there_is_no_upload(self, app, client):
         _paid_member(client, verified=True)
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        forum_card = client.get("/api/v1/account").get_json()["member"]["forum"]
 
-        assert "data-avatar-upload-root" not in body
+        assert forum_card["picture"] is None
 
     def test_a_direct_upload_without_permission_is_refused(self, app, client, monkeypatch):
         member = _paid_member(client, verified=True)
 
-        response = client.post("/forum/avatar", data={"avatar": (_png(), "new.png")},
-                               content_type="multipart/form-data", follow_redirects=True)
+        client.post("/forum/avatar", data={"avatar": (_png(), "new.png")}, content_type="multipart/form-data")
 
-        assert "please ask an admin" in response.get_data(as_text=True)
+        (said,) = client.get("/api/v1/messages").get_json()["messages"]
+        assert "please ask an admin" in said["text"]
         assert db.session.query(ForumAvatarSubmission).filter_by(member_id=member.id).count() == 0
 
     def test_once_allowed_the_upload_is_offered(self, app, client):
@@ -50,11 +50,11 @@ class TestTheMembersSide:
         member.avatar_replacement_allowed_at = datetime(2026, 10, 1)
         db.session.commit()
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        forum_card = client.get("/api/v1/account").get_json()["member"]["forum"]
 
-        assert "data-avatar-upload-root" in body
-        assert "Upload your new picture." in body
-        assert "Open Forum" in body, "their access is untouched meanwhile"
+        assert forum_card["picture"]["upload"] is True
+        assert forum_card["picture"]["replacing"] is True
+        assert forum_card["may_open"] is True, "their access is untouched meanwhile"
 
 
 class TestTheAdminsSide:
@@ -170,6 +170,6 @@ def test_the_upload_hint_names_what_may_be_uploaded(app, client):
     member.avatar_replacement_allowed_at = datetime(2026, 10, 1)
     db.session.commit()
 
-    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+    picture = client.get("/api/v1/account").get_json()["member"]["forum"]["picture"]
 
-    assert "JPG, PNG, WebP, AVIF" in body
+    assert picture["formats"] == "JPG, PNG, WebP, AVIF"

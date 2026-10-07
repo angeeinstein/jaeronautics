@@ -298,7 +298,8 @@ class TestAtSignup:
         assert "legal-dialog.js" in body
 
     def test_the_versions_ticked_are_kept(self, app, client, texts, monkeypatch):
-        from aeronautics_members.blueprints import _signup, public
+        from aeronautics_members.blueprints import public
+        from aeronautics_members.services import signup as _signup
 
         texts("statutes", "2019-03-17")
         texts("privacy-policy", "2026-10-04")

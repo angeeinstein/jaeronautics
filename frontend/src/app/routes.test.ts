@@ -43,7 +43,10 @@ describe('the pages the app draws', () => {
     ['/admin/settings/updates', true],
     ['/admin/settings#backup-restore', true],
     ['/admin/settings/backup', true],
-    ['/account', false],
+    ['/account', true],
+    ['/account?rt=123', true],
+    ['/account/data-export', false],
+    ['/account/create-membership', false],
     ['https://example.org/admin', false],
     ['//example.org/admin', false],
   ])('%s is drawn by the app: %s', (href, expected) => {

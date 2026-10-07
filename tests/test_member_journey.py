@@ -14,6 +14,7 @@ from aeronautics_members import app as app_module
 from aeronautics_members.blueprints import forum as forum_blueprint
 from aeronautics_members.forum_service import ForumProviderError
 from aeronautics_members.services import forum as forum_services
+from aeronautics_members.services import workflows
 
 FORUM_SSO = "https://forum.test/session/sso?return_path=%2F"
 
@@ -77,6 +78,10 @@ def _paid_member(client, verified):
     with client.session_transaction() as session:
         session["_user_id"] = str(member.user.id)
     return member
+
+
+def _account(client):
+    return client.get("/api/v1/account").get_json()
 
 
 def _flashes(client):
@@ -146,19 +151,20 @@ class TestJustAfterPaying:
         self._pending(client)
         self._stripe_says(monkeypatch, "complete")
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        membership = _account(client)["member"]["membership"]
 
-        assert "Payment received" in body
-        assert "Resume Payment" not in body
+        assert membership["status_label"] == "Payment received"
+        assert membership["activating"] is True
+        assert membership["may_resume_payment"] is False
 
     def test_an_abandoned_one_still_is(self, app, client, monkeypatch):
         self._pending(client)
         self._stripe_says(monkeypatch, "open")
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        membership = _account(client)["member"]["membership"]
 
-        assert "Resume Payment" in body
-        assert "Payment received" not in body
+        assert membership["may_resume_payment"] is True
+        assert membership["status_label"] != "Payment received"
 
 
 class TestWhileASepaDebitClears:
@@ -171,13 +177,13 @@ class TestWhileASepaDebitClears:
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user.id)
         # The page asks Stripe for the latest on every load; there is no Stripe here.
-        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+        monkeypatch.setattr(workflows, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        member = _account(client)["member"]
 
-        assert "SEPA takes a few days" in body
-        assert "starts as soon as your payment has cleared" in body
-        assert "not active" not in body
+        assert "SEPA Direct Debit takes a few days" in member["membership"]["note"]["text"]
+        assert "starts as soon as your payment has cleared" in member["forum"]["message"]
+        assert "not active" not in str(member)
 
 
 class TestAReturningStudentBeforeConfirming:
@@ -195,14 +201,14 @@ class TestAReturningStudentBeforeConfirming:
         member.email_work = "back@edu.fh-joanneum.at"
         member.user.forum_username = "BackB_L21-2"
         db.session.commit()
-        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+        monkeypatch.setattr(workflows, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        forum_card = _account(client)["member"]["forum"]
 
-        assert "Confirm your university email address to get your old account back" in body
-        assert "Upload Profile Picture" not in body
-        assert "BackB_L21-2" not in body   # the username they are about to lose
-        assert "BackB_L21" not in body     # nor the one that is not proven theirs yet
+        assert "Confirm your university email address to get your old account back" in forum_card["message"]
+        assert forum_card["picture"] is None
+        assert forum_card["username"] is None  # neither the one they are about to lose,
+        assert forum_card["reconnect_waiting"] is True  # nor the one not proven theirs yet
 
 
 class TestAFailedRenewal:
@@ -216,22 +222,22 @@ class TestAFailedRenewal:
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user.id)
         monkeypatch.setattr(
-            app_module, "refresh_member_billing_state",
+            workflows, "refresh_member_billing_state",
             lambda *a, **k: (False, {"id": "sub_b", "status": subscription_status}, None),
         )
-        return client.get("/account", follow_redirects=True).get_data(as_text=True)
+        return _account(client)["member"]["membership"]
 
     def test_while_stripe_retries_they_are_asked_to_update_payment(self, app, client, monkeypatch):
-        body = self._failed(client, monkeypatch, "past_due")
+        membership = self._failed(client, monkeypatch, "past_due")
 
-        assert "update your payment method under Manage Billing" in body
-        assert "/account/rejoin" not in body
+        assert "update your payment method under Manage billing" in membership["note"]["text"]
+        assert membership["may_rejoin"] is False
 
     def test_once_the_subscription_has_ended_they_can_rejoin(self, app, client, monkeypatch):
-        body = self._failed(client, monkeypatch, "canceled")
+        membership = self._failed(client, monkeypatch, "canceled")
 
-        assert "/account/rejoin" in body
-        assert "update your payment method" not in body
+        assert membership["may_rejoin"] is True
+        assert "update your payment method" not in membership["note"]["text"]
 
 
 class TestErrorsSayWhatIsWrong:
@@ -249,16 +255,16 @@ class TestErrorsSayWhatIsWrong:
         member = make_member(email="typo@example.com")
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user.id)
-        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+        monkeypatch.setattr(workflows, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
 
-        body = client.post("/account/profile", data={
-            "profile-street": "Main", "profile-house_number": "1", "profile-postal_code": "8010",
-            "profile-city": "Graz", "profile-country": "Austria",
-            "profile-phone_private": "call me maybe", "profile-email_private": "typo@example.com",
-        }).get_data(as_text=True)
+        response = client.put("/api/v1/account/contact", json={
+            "street": "Main", "house_number": "1", "postal_code": "8010",
+            "city": "Graz", "country": "Austria",
+            "phone_private": "call me maybe", "email_private": "typo@example.com",
+        })
 
-        assert "Private Phone:" in body
-        assert "Invalid phone number format" in body
+        assert response.status_code == 400
+        assert response.get_json()["error"]["fields"]["phone_private"] == "Invalid phone number format"
 
     def test_a_forum_error_is_not_shown_raw(self, app, client, forum, monkeypatch):
         from aeronautics_members.db_models import ForumAccount
@@ -268,12 +274,12 @@ class TestErrorsSayWhatIsWrong:
                                     external_id=str(member.user.id), state="active",
                                     last_error="Discourse API request failed (422): Primary email has already been taken"))
         db.session.commit()
-        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+        monkeypatch.setattr(workflows, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        account = _account(client)
 
-        assert "Discourse API request failed" not in body
-        assert "could not be updated just now" in body
+        assert "Discourse API request failed" not in str(account)
+        assert account["member"]["forum"]["problem"] is True
 
 
 class TestThePhotoUpload:
@@ -282,33 +288,33 @@ class TestThePhotoUpload:
         for key, value in forum_state.items():
             setattr(forum, key, value)
         _paid_member(client, verified=True)
-        monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
-        return client.get("/account", follow_redirects=True).get_data(as_text=True)
+        monkeypatch.setattr(workflows, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+        return _account(client)["member"]["forum"]
 
-    def test_says_what_photo_is_wanted(self, app, client, forum, monkeypatch):
-        body = self._page(client, forum, monkeypatch)
+    def test_asks_for_one(self, app, client, forum, monkeypatch):
+        """What photo is wanted is said by the page (frontend/src/pages/account/Picture.tsx)."""
+        forum_card = self._page(client, forum, monkeypatch)
 
-        assert "A real photo of you" in body
-        assert "optimized down to the avatar limit" not in body
+        assert forum_card["status"] == "needs_avatar"
+        assert forum_card["picture"]["upload"] is True
 
     def test_a_rejection_gives_its_reason_as_a_reason(self, app, client, forum, monkeypatch):
         rejected = types.SimpleNamespace(status="rejected", review_note="That is a giraffe.")
         forum.get_latest_submission = lambda member: rejected
 
-        body = self._page(client, forum, monkeypatch)
+        forum_card = self._page(client, forum, monkeypatch)
 
-        assert "Reason: That is a giraffe." in body
+        assert forum_card["picture"]["rejected_reason"] == "That is a giraffe."
 
 
 def test_the_forum_card_says_its_status_once(app, client, forum, monkeypatch):
     forum.photo_approved = False
     _paid_member(client, verified=True)
-    monkeypatch.setattr(app_module, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
+    monkeypatch.setattr(workflows, "refresh_member_billing_state", lambda *a, **k: (False, None, None))
 
-    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+    forum_card = _account(client)["member"]["forum"]
 
-    assert body.count("Upload a profile picture to complete your forum access.") == 1
-    assert "Please upload a profile picture before your forum access can be completed." not in body
+    assert forum_card["message"] == "Upload a profile picture to complete your forum access."
 
 
 def test_the_portal_is_english_whatever_the_browser_asks(app, client):
@@ -346,7 +352,8 @@ class TestTheSignupSentTwice:
 
     @pytest.fixture
     def checkouts(self, monkeypatch):
-        from aeronautics_members.blueprints import _signup, public
+        from aeronautics_members.blueprints import public
+        from aeronautics_members.services import signup as _signup
 
         opened = []
 
@@ -407,7 +414,7 @@ class TestAnEmailPerClickNoMore:
     made each new one kill the last, so the first to arrive said "invalid"."""
 
     def test_confirmation_resent_once_within_the_minute(self, app, client, monkeypatch):
-        from aeronautics_members.blueprints import account as account_module
+        from aeronautics_members.services import account as account_module
 
         sent = []
         monkeypatch.setattr(account_module, "send_email_verification_email",
@@ -416,14 +423,14 @@ class TestAnEmailPerClickNoMore:
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user.id)
 
-        client.post("/account/resend-verification")
-        client.post("/account/resend-verification")
+        client.post("/api/v1/account/emails/private/confirmation")
+        second = client.post("/api/v1/account/emails/private/confirmation").get_json()
 
         assert sent == ["twice@example.com"]
-        assert any("a moment ago" in text for text in _flashes(client))
+        assert "a moment ago" in second["text"]
 
     def test_university_confirmation_resent_once_within_the_minute(self, app, client, monkeypatch):
-        from aeronautics_members.blueprints import account as account_module
+        from aeronautics_members.services import account as account_module
 
         sent = []
         monkeypatch.setattr(account_module, "send_work_email_verification_email",
@@ -432,8 +439,8 @@ class TestAnEmailPerClickNoMore:
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user.id)
 
-        client.post("/account/resend-work-verification")
-        client.post("/account/resend-work-verification")
+        client.post("/api/v1/account/emails/work/confirmation")
+        client.post("/api/v1/account/emails/work/confirmation")
 
         assert sent == ["twice@edu.fh-joanneum.at"]
 
@@ -463,7 +470,7 @@ class TestAnEmailPerClickNoMore:
 
 
 def test_creating_a_profile_twice_goes_on_to_payment(app, client, monkeypatch):
-    from aeronautics_members.blueprints import account as account_module
+    from aeronautics_members.services import account as account_module
 
     member = make_member(email="profile-twice@example.com", payment_status="pending_checkout")
     with client.session_transaction() as session:
@@ -534,16 +541,6 @@ def test_everything_the_stylesheet_loads_is_there(app):
     assert [name for name in referenced if not (static / name).is_file()] == []
 
 
-def test_the_navbar_marks_the_section_you_are_in(app, client):
-    member = make_member(email="nav@example.com")
-    with client.session_transaction() as session:
-        session["_user_id"] = str(member.user_id)
-
-    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
-
-    assert 'class="nav-link active" aria-current="page" href="/account"' in body
-
-
 def test_a_success_message_carries_the_tick(app, client):
     with client.session_transaction() as session:
         session["_flashes"] = [("success", "Saved."), ("warning", "Careful.")]
@@ -580,7 +577,7 @@ class TestTheConfirmationReminder:
     only one -- every alumnus, partner and lecturer without a university address."""
 
     def _page(self, client):
-        return client.get("/account", follow_redirects=True).get_data(as_text=True)
+        return _account(client)["to_confirm"]["text"]
 
     def test_one_address_is_called_one(self, app, client, forum):
         _paid_member(client, verified=False)

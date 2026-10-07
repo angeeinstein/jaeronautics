@@ -4,6 +4,176 @@
  */
 
 export interface paths {
+    "/api/v1/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Account: everything on the page, with what to do next. */
+        get: operations["account"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stripe's billing page: payment method, invoices, cancelling. It comes back here. */
+        post: operations["account_billing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/change-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask for a new name, salutation, kind of membership or year group; an admin decides. */
+        post: operations["account_change_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/change-request/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Take back a change request not decided yet. */
+        delete: operations["account_change_request_cancel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Address, phones and both email addresses: saved at once. A new address waits to be confirmed. */
+        put: operations["account_contact"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email the link that deletes the account; nothing is deleted until it is opened. */
+        post: operations["account_deletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/emails/private/confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send the link confirming the private address -- the login -- again. */
+        post: operations["account_private_email_confirmation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/emails/work/confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send the link confirming the university or company address again. */
+        post: operations["account_work_email_confirmation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/payment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stripe's payment page again, for a payment not finished. */
+        post: operations["account_payment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/rejoin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start the membership again after it ended: a new subscription, on the same Stripe customer. */
+        post: operations["account_rejoin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/accounts": {
         parameters: {
             query?: never;
@@ -1017,6 +1187,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/forms/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The choices of the member forms, and what each kind of member is asked. */
+        get: operations["form_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -1034,6 +1221,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a Flask route said before sending the browser to one of the app's pages -- an */
+        get: operations["flashed_messages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/session": {
         parameters: {
             query?: never;
@@ -1043,6 +1247,23 @@ export interface paths {
         };
         /** Whether somebody is signed in, and the CSRF token for changes. */
         get: operations["session_state"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The footer: the legal texts, contact and the association's website. */
+        get: operations["site"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1783,6 +2004,28 @@ export interface components {
             /** Year Group */
             year_group: string | null;
         };
+        /** AccountSavedOut */
+        AccountSavedOut: {
+            account: components["schemas"]["MyAccountOut"];
+            /** Messages */
+            messages: components["schemas"]["MessageOut"][];
+        };
+        /** AccountTeamOut */
+        AccountTeamOut: {
+            /** Logo Url */
+            logo_url: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Opens
+             * @enum {string}
+             */
+            opens: "team" | "about";
+            /** Slug */
+            slug: string;
+            /** Status Label */
+            status_label: string | null;
+        };
         /**
          * Actions
          * @description What the person looking may do to this account, by the same checks the actions run.
@@ -2132,6 +2375,55 @@ export interface components {
             /** Requested Full Name */
             requested_full_name: string;
         };
+        /** ChangeRequestIn */
+        ChangeRequestIn: {
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Member Category */
+            member_category: string;
+            /**
+             * Note
+             * @default null
+             */
+            note?: string | null;
+            /** Salutation */
+            salutation: string;
+            /**
+             * Title
+             * @default null
+             */
+            title?: string | null;
+            /**
+             * Year Group
+             * @default null
+             */
+            year_group?: string | null;
+        };
+        /** ChangeRequestOut */
+        ChangeRequestOut: {
+            /** First Name */
+            first_name: string | null;
+            /** Id */
+            id: number;
+            /** Last Name */
+            last_name: string | null;
+            /** Member Category */
+            member_category: string | null;
+            /** Member Category Label */
+            member_category_label: string;
+            /** Note */
+            note: string | null;
+            /** Salutation */
+            salutation: string | null;
+            /** Title */
+            title: string | null;
+            /** Username Could Become */
+            username_could_become: string | null;
+            /** Year Group */
+            year_group: string | null;
+        };
         /** ChangedOut */
         ChangedOut: {
             /** Changed */
@@ -2187,12 +2479,67 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** ChoiceOut */
+        ChoiceOut: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
         /** ConnectionOut */
         ConnectionOut: {
             /** Message */
             message: string;
             /** Ok */
             ok: boolean;
+        };
+        /** ContactIn */
+        ContactIn: {
+            /** City */
+            city: string;
+            /** Country */
+            country: string;
+            /** Email Private */
+            email_private: string;
+            /**
+             * Email Work
+             * @default null
+             */
+            email_work?: string | null;
+            /** House Number */
+            house_number: string;
+            /** Phone Private */
+            phone_private: string;
+            /**
+             * Phone Work
+             * @default null
+             */
+            phone_work?: string | null;
+            /** Postal Code */
+            postal_code: string;
+            /** Street */
+            street: string;
+        };
+        /** ContactOut */
+        ContactOut: {
+            /** City */
+            city: string | null;
+            /** Country */
+            country: string | null;
+            /** Email Private */
+            email_private: string | null;
+            /** Email Work */
+            email_work: string | null;
+            /** House Number */
+            house_number: string | null;
+            /** Phone Private */
+            phone_private: string | null;
+            /** Phone Work */
+            phone_work: string | null;
+            /** Postal Code */
+            postal_code: string | null;
+            /** Street */
+            street: string | null;
         };
         /**
          * Counts
@@ -2246,6 +2593,13 @@ export interface components {
             /** Message */
             message: string;
             team: components["schemas"]["TeamPageOut"];
+        };
+        /** EmailAddressOut */
+        EmailAddressOut: {
+            /** Address */
+            address: string;
+            /** Confirmed */
+            confirmed: boolean;
         };
         /** EmailIn */
         EmailIn: {
@@ -2388,10 +2742,40 @@ export interface components {
             /** Value */
             value: number;
         };
+        /** FlashedOut */
+        FlashedOut: {
+            /** Text */
+            text: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "info" | "success" | "warning" | "danger";
+        };
+        /** FooterLinkOut */
+        FooterLinkOut: {
+            /** External */
+            external: boolean;
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+        };
         /** ForgottenOut */
         ForgottenOut: {
             /** Removed */
             removed: number;
+        };
+        /** FormOptionsOut */
+        FormOptionsOut: {
+            /** Countries */
+            countries: components["schemas"]["ChoiceOut"][];
+            /** Invoice Payments */
+            invoice_payments: boolean;
+            /** Member Categories */
+            member_categories: components["schemas"]["MemberCategoryOut"][];
+            /** Salutations */
+            salutations: components["schemas"]["ChoiceOut"][];
         };
         /** FormerMembersOut */
         FormerMembersOut: {
@@ -2433,6 +2817,24 @@ export interface components {
             status: "disabled" | "no_membership" | "account_disabled" | "payment_processing" | "inactive_membership" | "active" | "reconnect_waiting" | "pending_avatar" | "rejected_avatar" | "needs_avatar";
             /** Status Label */
             status_label: string;
+        };
+        /** ForumCardOut */
+        ForumCardOut: {
+            /** May Open */
+            may_open: boolean;
+            /** Message */
+            message: string;
+            /** Open Url */
+            open_url: string;
+            picture: components["schemas"]["PictureOut"] | null;
+            /** Problem */
+            problem: boolean;
+            /** Reconnect Waiting */
+            reconnect_waiting: boolean;
+            /** Status */
+            status: string;
+            /** Username */
+            username: string | null;
         };
         /**
          * ForumCleanup
@@ -2638,6 +3040,11 @@ export interface components {
              */
             welcome_email_sender?: string | null;
         };
+        /** GoToOut */
+        GoToOut: {
+            /** Url */
+            url: string;
+        };
         /** GoneOut */
         GoneOut: {
             /** Email */
@@ -2730,6 +3137,23 @@ export interface components {
              * @default null
              */
             paid?: string | null;
+        };
+        /** IdentityOut */
+        IdentityOut: {
+            /** First Name */
+            first_name: string | null;
+            /** Last Name */
+            last_name: string | null;
+            /** Member Category */
+            member_category: string | null;
+            /** Member Category Label */
+            member_category_label: string;
+            /** Salutation */
+            salutation: string | null;
+            /** Title */
+            title: string | null;
+            /** Year Group */
+            year_group: string | null;
         };
         /** ImportOut */
         ImportOut: {
@@ -3099,6 +3523,35 @@ export interface components {
             /** Teams Area */
             teams_area: boolean;
         };
+        /** MemberAccountOut */
+        MemberAccountOut: {
+            change_request: components["schemas"]["ChangeRequestOut"] | null;
+            contact: components["schemas"]["ContactOut"];
+            deletion_note: components["schemas"]["NoteOut"] | null;
+            forum: components["schemas"]["ForumCardOut"];
+            identity: components["schemas"]["IdentityOut"];
+            /** May Cancel Instead */
+            may_cancel_instead: boolean;
+            membership: components["schemas"]["MembershipCardOut"];
+            teams: components["schemas"]["TeamsCardOut"] | null;
+            work_email: components["schemas"]["EmailAddressOut"] | null;
+        };
+        /** MemberCategoryOut */
+        MemberCategoryOut: {
+            /** Description */
+            description: string;
+            /** Label */
+            label: string;
+            /** University Email Required */
+            university_email_required: boolean;
+            /** Value */
+            value: string;
+            /**
+             * Year Group
+             * @enum {string}
+             */
+            year_group: "required" | "optional" | "hidden";
+        };
         /** MemberOut */
         MemberOut: {
             /** Cohort */
@@ -3167,6 +3620,39 @@ export interface components {
             /** Year Group */
             year_group: string | null;
         };
+        /** MembershipCardOut */
+        MembershipCardOut: {
+            /** Activating */
+            activating: boolean;
+            /** Active */
+            active: boolean;
+            /** Auto Renew */
+            auto_renew: boolean;
+            /** Ends On */
+            ends_on: string | null;
+            /** Invoice Payments */
+            invoice_payments: boolean;
+            /** May Manage Billing */
+            may_manage_billing: boolean;
+            /** May Rejoin */
+            may_rejoin: boolean;
+            /** May Resume Payment */
+            may_resume_payment: boolean;
+            note: components["schemas"]["NoteOut"] | null;
+            /** Renews On */
+            renews_on: string | null;
+            /** Starts On */
+            starts_on: string | null;
+            /** Status */
+            status: string;
+            /** Status Label */
+            status_label: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "active" | "pending" | "failed" | "neutral";
+        };
         /**
          * MembershipCounts
          * @description How many rows each membership filter shows, with the other filters as they are.
@@ -3209,6 +3695,21 @@ export interface components {
             members: number;
             /** Revoked Periods */
             revoked_periods: number;
+        };
+        /** MessageOut */
+        MessageOut: {
+            /** Text */
+            text: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "info" | "success" | "warning";
+        };
+        /** MessagesOut */
+        MessagesOut: {
+            /** Messages */
+            messages: components["schemas"]["FlashedOut"][];
         };
         /**
          * Mismatch
@@ -3257,6 +3758,14 @@ export interface components {
             paid_out: number;
             team: components["schemas"]["TeamRef"];
         };
+        /** MyAccountOut */
+        MyAccountOut: {
+            email: components["schemas"]["EmailAddressOut"];
+            /** Export Url */
+            export_url: string;
+            member: components["schemas"]["MemberAccountOut"] | null;
+            to_confirm: components["schemas"]["NoteOut"] | null;
+        };
         /** NewTeamIn */
         NewTeamIn: {
             /**
@@ -3296,6 +3805,16 @@ export interface components {
              * @default null
              */
             note?: string | null;
+        };
+        /** NoteOut */
+        NoteOut: {
+            /** Text */
+            text: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "plain" | "info" | "success" | "warning" | "danger";
         };
         /**
          * Notice
@@ -3512,6 +4031,26 @@ export interface components {
             /** Forum Error */
             forum_error: string | null;
         };
+        /**
+         * PictureOut
+         * @description The profile picture: what may be uploaded, and the one waiting for review.
+         */
+        PictureOut: {
+            /** Formats */
+            formats: string;
+            /** Max Bytes */
+            max_bytes: number;
+            /** Max Label */
+            max_label: string;
+            /** Pending Url */
+            pending_url: string | null;
+            /** Rejected Reason */
+            rejected_reason: string | null;
+            /** Replacing */
+            replacing: boolean;
+            /** Upload */
+            upload: boolean;
+        };
         /** PictureReplacementIn */
         PictureReplacementIn: {
             /** Allow */
@@ -3583,6 +4122,22 @@ export interface components {
             forum_error: string | null;
             /** Old Username */
             old_username: string;
+        };
+        /** RejoinIn */
+        RejoinIn: {
+            /**
+             * Payment Method
+             * @default checkout
+             * @enum {string}
+             */
+            payment_method?: "checkout" | "invoice";
+        };
+        /** RejoinOut */
+        RejoinOut: {
+            /** Message */
+            message: string | null;
+            /** Url */
+            url: string | null;
         };
         /** RemoveIn */
         RemoveIn: {
@@ -3755,6 +4310,13 @@ export interface components {
             csrf_token: string;
             /** Signed In */
             signed_in: boolean;
+        };
+        /** SiteOut */
+        SiteOut: {
+            /** Copyright */
+            copyright: string;
+            /** Footer */
+            footer: components["schemas"]["FooterLinkOut"][];
         };
         /** StepOut */
         StepOut: {
@@ -4177,6 +4739,15 @@ export interface components {
             /** Roles */
             roles: components["schemas"]["TeamRole"][];
         };
+        /** TeamsCardOut */
+        TeamsCardOut: {
+            /** Invite */
+            invite: boolean;
+            /** Mine */
+            mine: components["schemas"]["AccountTeamOut"][];
+            /** Plural */
+            plural: string;
+        };
         /** TeamsHomeOut */
         TeamsHomeOut: {
             /** Is Member */
@@ -4439,6 +5010,427 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyAccountOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_billing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoToOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_change_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeRequestIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_change_request_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSavedOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_contact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountSavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_deletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_private_email_confirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_work_email_confirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_payment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoToOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_rejoin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejoinIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RejoinOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_accounts: {
         parameters: {
             query?: {
@@ -8308,6 +9300,26 @@ export interface operations {
             };
         };
     };
+    form_options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormOptionsOut"];
+                };
+            };
+        };
+    };
     me: {
         parameters: {
             query?: never;
@@ -8337,6 +9349,26 @@ export interface operations {
             };
         };
     };
+    flashed_messages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessagesOut"];
+                };
+            };
+        };
+    };
     session_state: {
         parameters: {
             query?: never;
@@ -8353,6 +9385,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+        };
+    };
+    site: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteOut"];
                 };
             };
         };

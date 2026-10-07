@@ -129,7 +129,8 @@ def test_a_real_signup_goes_without_a_trace_with_foreign_keys_enforced(app, clie
     account is refused there, though SQLite lets it pass unless asked."""
     from test_member_journey import TestTheSignupSentTwice
 
-    from aeronautics_members.blueprints import _signup, public
+    from aeronautics_members.blueprints import public
+    from aeronautics_members.services import signup as _signup
     from aeronautics_members.services.clock import get_now_utc
 
     def open_checkout(member):

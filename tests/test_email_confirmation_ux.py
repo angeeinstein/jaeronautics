@@ -43,38 +43,36 @@ def _signed_in(client, member):
 class TestTheAccountPageShowsBoth:
     def test_both_addresses_appear_with_their_state(self, app, client):
         member = _member()
-        page = _signed_in(client, member).get("/account", follow_redirects=True).get_data(as_text=True)
+        account = _signed_in(client, member).get("/api/v1/account").get_json()
 
-        assert "private@example.com" in page
-        assert OLD_EMAIL in page, "the university address was never shown at all"
-        assert "Not confirmed" in page
+        assert account["email"] == {"address": "private@example.com", "confirmed": True}
+        # The university address was never shown at all.
+        assert account["member"]["work_email"] == {"address": OLD_EMAIL, "confirmed": False}
 
     def test_it_says_the_university_one_restores_the_old_account(self, app, client):
         """The reason to bother, at the moment it matters."""
         member = _member(work_verified=False)
-        page = _signed_in(client, member).get("/account", follow_redirects=True).get_data(as_text=True)
+        account = _signed_in(client, member).get("/api/v1/account").get_json()
 
-        assert "old forum" in page
+        assert "old forum" in account["to_confirm"]["text"]
 
     def test_nothing_is_outstanding_once_both_are_confirmed(self, app, client):
         member = _member(work_verified=True)
-        page = _signed_in(client, member).get("/account", follow_redirects=True).get_data(as_text=True)
+        account = _signed_in(client, member).get("/api/v1/account").get_json()
 
-        assert "Both email addresses need confirming" not in page
+        assert account["to_confirm"] is None
 
 
 class TestAskingForTheUniversityEmailAgain:
     def test_it_can_be_requested(self, app, client, monkeypatch):
         sent = []
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.account.send_work_email_verification_email",
+            "aeronautics_members.services.account.send_work_email_verification_email",
             lambda app_, member: sent.append(member.email_work) or True,
         )
         member = _member()
 
-        response = _signed_in(client, member).post(
-            "/account/resend-work-verification", follow_redirects=True
-        )
+        response = _signed_in(client, member).post("/api/v1/account/emails/work/confirmation")
 
         assert response.status_code == 200
         assert sent == [OLD_EMAIL]
@@ -82,15 +80,14 @@ class TestAskingForTheUniversityEmailAgain:
     def test_it_is_not_offered_once_confirmed(self, app, client, monkeypatch):
         sent = []
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.account.send_work_email_verification_email",
+            "aeronautics_members.services.account.send_work_email_verification_email",
             lambda app_, member: sent.append(member.email_work) or True,
         )
         member = _member(work_verified=True)
 
-        _signed_in(client, member).post(
-            "/account/resend-work-verification", follow_redirects=True
-        )
+        response = _signed_in(client, member).post("/api/v1/account/emails/work/confirmation")
 
+        assert response.status_code == 409
         assert sent == [], "already proved; sending again proves nothing"
 
     def test_a_failure_to_send_does_not_break_the_page(self, app, client, monkeypatch):
@@ -98,21 +95,22 @@ class TestAskingForTheUniversityEmailAgain:
             raise RuntimeError("the mail server is down")
 
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.account.send_work_email_verification_email",
+            "aeronautics_members.services.account.send_work_email_verification_email",
             explode,
         )
         member = _member()
 
-        response = _signed_in(client, member).post(
-            "/account/resend-work-verification", follow_redirects=True
-        )
+        response = _signed_in(client, member).post("/api/v1/account/emails/work/confirmation")
 
-        assert response.status_code == 200
+        # Said, not a server error; and the page still opens.
+        assert response.status_code == 502
+        assert "could not send" in response.get_json()["error"]["message"]
+        assert client.get("/api/v1/account").status_code == 200
 
     def test_signing_in_is_required(self, app, client):
-        response = client.post("/account/resend-work-verification")
+        response = client.post("/api/v1/account/emails/work/confirmation")
 
-        assert response.status_code in (302, 401)
+        assert response.status_code == 401
 
 
 class TestReconnectingAtSignIn:

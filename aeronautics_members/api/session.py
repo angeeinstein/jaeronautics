@@ -9,6 +9,7 @@ entry is only a convenience; every endpoint checks the permission again.
 
 from typing import Literal
 
+from flask import get_flashed_messages
 from flask_login import current_user
 from flask_wtf.csrf import generate_csrf
 
@@ -29,6 +30,28 @@ class SessionOut(Model):
 def session_state():
     """Whether somebody is signed in, and the CSRF token for changes."""
     return SessionOut(signed_in=bool(current_user.is_authenticated), csrf_token=generate_csrf())
+
+
+class FlashedOut(Model):
+    tone: Literal["info", "success", "warning", "danger"]
+    text: str
+
+
+class MessagesOut(Model):
+    messages: list[FlashedOut]
+
+
+TONES = {"success": "success", "warning": "warning", "danger": "danger", "error": "danger"}
+
+
+@endpoint("GET", "/messages", response=MessagesOut, public=True, tag="Session")
+def flashed_messages():
+    """What a Flask route said before sending the browser to one of the app's pages -- an
+    expired link, a step to do first. Each is handed out once; the app asks when it starts."""
+    return MessagesOut(messages=[
+        FlashedOut(tone=TONES.get(category, "info"), text=str(text))
+        for category, text in get_flashed_messages(with_categories=True)
+    ])
 
 
 #: Every permission there is, so the front end's checks are spelt right (a type error otherwise).

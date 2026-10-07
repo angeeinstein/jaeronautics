@@ -56,14 +56,12 @@ def _returning(uid, username, address, private):
     )
 
 
-def _profile_form(private, work):
-    return {
-        "profile-street": "Main", "profile-house_number": "1",
-        "profile-postal_code": "8010", "profile-city": "Graz",
-        "profile-country": "Austria", "profile-phone_private": "+43123",
-        "profile-email_private": private,
-        "profile-email_work": work,
-    }
+def _save_contact(client, private, work):
+    response = client.put("/api/v1/account/contact", json={
+        "street": "Main", "house_number": "1", "postal_code": "8010", "city": "Graz",
+        "country": "Austria", "phone_private": "+43123", "email_private": private, "email_work": work,
+    })
+    assert response.status_code == 200, response.get_json()
 
 
 class TestChangingTheUniversityAddress:
@@ -79,9 +77,7 @@ class TestChangingTheUniversityAddress:
         db.session.commit()
         _sign_in(client, member.user.id)
 
-        client.post("/account/profile", data=_profile_form(
-            "someone@example.com", "somebody.else@edu.fh-joanneum.at",
-        ))
+        _save_contact(client, "someone@example.com", "somebody.else@edu.fh-joanneum.at")
 
         db.session.expire_all()
         member = db.session.get(Member, member.id)
@@ -99,9 +95,7 @@ class TestChangingTheUniversityAddress:
         _sign_in(client, member.user.id)
 
         # Only the capitalisation differs, which is the same mailbox.
-        client.post("/account/profile", data=_profile_form(
-            "keeper@example.com", "Keeper@edu.fh-joanneum.at",
-        ))
+        _save_contact(client, "keeper@example.com", "Keeper@edu.fh-joanneum.at")
 
         db.session.expire_all()
         assert db.session.get(Member, member.id).email_work_verified_at is not None
@@ -118,9 +112,7 @@ class TestChangingTheUniversityAddress:
         member.user.email_verified_at = _now()
         db.session.commit()
         _sign_in(client, member.user.id)
-        client.post("/account/profile", data=_profile_form(
-            "intruder@example.com", "victim@edu.fh-joanneum.at",
-        ))
+        _save_contact(client, "intruder@example.com", "victim@edu.fh-joanneum.at")
         client.post("/logout")
 
         client.post("/login", data={

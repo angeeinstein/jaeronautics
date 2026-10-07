@@ -85,6 +85,13 @@ The member side needs no sidebar: it is a handful of pages, reached from the
 top bar and from links on the pages themselves. Sidebars are for the places
 where people *work*: running a team, running the association.
 
+### The footer
+
+Under every page, as the column above it is wide: Impressum, Privacy,
+Statutes, Legal texts, Contact and Website, then the copyright -- small and
+quiet, the links wrapping on a phone. The first three lead to the portal's
+own legal texts unless an address elsewhere is configured.
+
 ## 4. The admin area
 
 Entered with **Admin** in the top bar; opens on the Dashboard.
@@ -176,6 +183,15 @@ One narrow column of cards, two side by side on wide screens:
 uploading the picture, profile change requests, deleting the account -- stay
 on this page as cards that appear when they apply, at the top when something
 is to be done.
+
+As built: what is to be done first (addresses waiting to be confirmed), then
+**Membership**, **Forum**, **Email addresses** and **Teams** two by two;
+then **Contact details** (saved at once), **Name and membership type** (a
+request an admin decides; while one waits it is shown instead of the form)
+and **Your data** (download, deletion by emailed link -- with cancelling
+offered instead while a paid membership runs). *Change password* is in the
+page header. An account without a membership shows the parts there are and
+*Become a member*.
 
 ## 7. Page patterns
 

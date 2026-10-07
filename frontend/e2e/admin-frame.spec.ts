@@ -12,7 +12,7 @@ test.describe('the admin frame', () => {
     await expect(page).toHaveTitle(/Dashboard/);
   });
 
-  test('a page not moved yet opens from the sidebar as a whole page', async ({ page, isMobile }) => {
+  test('back to the portal: My Account, within the app', async ({ page, isMobile }) => {
     await signIn(page);
     await page.goto('/admin');
     if (isMobile) await page.getByRole('button', { name: 'Open the menu' }).click();
@@ -20,8 +20,11 @@ test.describe('the admin frame', () => {
 
     await sections.getByRole('link', { name: 'Back to the portal' }).click();
 
-    await expect(page).toHaveURL(/\/account(\?.*)?$/);
-    await expect(page.locator('#root')).toHaveCount(0); // Flask's own page, not the app
+    await expect(page).toHaveURL(/\/account$/);
+    await expect(page.getByRole('heading', { name: 'My Account', level: 1 })).toBeVisible();
+    await expect(
+      page.getByRole('navigation', { name: 'Areas' }).getByRole('link', { name: 'My Account' }),
+    ).toHaveAttribute('aria-current', 'page');
   });
 
   test('on a phone the sidebar is a drawer', async ({ page, isMobile }) => {

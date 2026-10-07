@@ -12,6 +12,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 
+import { showFlashedMessages } from './app/flashed';
 import { cspNonce, Providers } from './app/Providers';
 import { routes } from './app/routes';
 import { reloadOnStaleBuild } from './app/staleBuild';
@@ -34,3 +35,5 @@ createRoot(root).render(
     </Providers>
   </StrictMode>,
 );
+
+void showFlashedMessages();

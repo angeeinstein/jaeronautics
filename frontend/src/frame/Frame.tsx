@@ -1,6 +1,7 @@
 /**
  * The page around every signed-in page: the top bar, the area's sidebar
- * where it has one (a drawer on a phone), the area's notices, then the page.
+ * where it has one (a drawer on a phone), the area's notices, the page, and
+ * the footer.
  * Waits for the person (``/me``) once; a page inside never shows without it.
  */
 import { Alert, AppShell, Button, Center, Drawer, Group, Loader, Stack, Text } from '@mantine/core';
@@ -11,6 +12,7 @@ import { AppLink } from '../app/AppLink';
 import type { Schemas } from '../api/client';
 import { type Me, useMe } from '../api/session';
 import { ErrorState } from '../components/States';
+import { Footer } from './Footer';
 import classes from './Frame.module.css';
 import type { SidebarContent } from './navigation';
 import { Sidebar } from './Sidebar';
@@ -95,6 +97,12 @@ export function Frame({ sidebar, notices, narrow = false, children }: FrameProps
           </div>
         </div>
       </AppShell.Main>
+      {/* Outside <main>, so it is the page's footer; kept clear of the sidebar. */}
+      <div className={classes.footerShell}>
+        <div className={narrow ? classes.contentNarrow : classes.content}>
+          <Footer />
+        </div>
+      </div>
       {content ? (
         <Drawer
           opened={drawerOpened}

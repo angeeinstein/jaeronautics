@@ -1,5 +1,6 @@
 {
   "paths": [
+    "/account",
     "/teams",
     "/teams/:slug",
     "/teams/:slug/about",

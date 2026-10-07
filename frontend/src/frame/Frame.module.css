@@ -148,3 +148,44 @@
 .header {
   padding: 0.5rem 0.75rem 0.75rem;
 }
+
+/* The footer: a line above, the links small and quiet, the copyright quieter. */
+.footerShell {
+  padding: 0 1.5rem 1.5rem;
+  padding-inline-start: calc(var(--app-shell-navbar-offset, 0rem) + 1.5rem);
+}
+
+@media (max-width: $mantine-breakpoint-sm) {
+  .footerShell {
+    padding: 0 1rem 1.25rem;
+  }
+}
+
+.footer {
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--ja-border);
+  text-align: center;
+}
+
+.footerLinks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.footerLink {
+  color: var(--ja-muted);
+  font-size: 0.8125rem;
+}
+
+.footerLink:hover,
+.footerLink:focus-visible {
+  color: var(--ja-link);
+}
+
+.copyright {
+  margin-top: 0.25rem;
+  color: var(--ja-muted);
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
