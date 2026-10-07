@@ -3,12 +3,13 @@
  * current entry is marked (aria-current); an entry with children folds them
  * open, and stays open while one of them is the current page.
  */
-import { Badge, NavLink, ScrollArea, Stack } from '@mantine/core';
+import { Badge, Group, NavLink, ScrollArea, Stack, Text } from '@mantine/core';
 import { IconChevronLeft } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useLocation } from 'react-router';
 
 import { AppLink } from '../app/AppLink';
+import { TeamMark } from '../components/TeamMark';
 import classes from './Frame.module.css';
 import { containsCurrent, isCurrent, type NavItem, type SidebarContent } from './navigation';
 
@@ -68,6 +69,14 @@ export function Sidebar({ content, onNavigate }: { content: SidebarContent; onNa
             <IconChevronLeft size={16} stroke={1.6} aria-hidden />
             {content.back.label}
           </AppLink>
+          {content.header ? (
+            <Group gap="sm" wrap="nowrap" className={classes.header}>
+              <TeamMark name={content.header.label} logoUrl={content.header.logoUrl} />
+              <Text fw={600} size="sm" lineClamp={2}>
+                {content.header.label}
+              </Text>
+            </Group>
+          ) : null}
           {content.groups.map((group) => (
             <section key={group.label} aria-label={group.label}>
               <div className={classes.groupLabel} aria-hidden>

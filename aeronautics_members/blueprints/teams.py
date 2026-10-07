@@ -16,11 +16,10 @@ from flask_babel import gettext as _
 from flask_login import current_user, login_required
 
 from ..app import requires
-from ..db_models import User, db
+from ..db_models import db
 from ..permissions import Permission
 from ..services import ServiceError
 from ..services import legal_texts as legal
-from ..services import team_payments
 from ..services import teams as teams_service
 from ..services.audit import log_audit_event
 from ..services.clock import get_membership_today
@@ -28,37 +27,6 @@ from . import _legal_pages as legal_pages
 from .app_shell import app_shell
 
 teams_bp = Blueprint("teams", __name__)
-
-
-def _apply_access_list(team, form):
-    teams_service.update_access_list(
-        current_user, team,
-        recipients=form.get("access_list_recipients"),
-        dates=form.get("access_list_dates"),
-        auto_send=form.get("access_list_auto_send") == "on",
-    )
-
-
-def _apply_logo(team, form, files):
-    """Replace or remove the logo, if the form asks for either."""
-    upload = files.get("logo")
-    if upload is not None and upload.filename:
-        teams_service.set_team_logo(current_user, team, upload.read())
-    elif form.get("remove_logo") == "on":
-        teams_service.remove_team_logo(current_user, team)
-
-
-def _apply_page(team, form, files):
-    """The team's page: its longer text and its picture -- each only if the
-    form has it, so a form for one leaves the other be. (Its rules are files
-    the association keeps: teams_service.team_rules.)"""
-    if "about" in form:
-        teams_service.update_team_page(current_user, team, about=form.get("about"))
-    upload = files.get("picture")
-    if upload is not None and upload.filename:
-        teams_service.set_team_picture(current_user, team, upload.read())
-    elif form.get("remove_picture") == "on":
-        teams_service.remove_team_picture(current_user, team)
 
 
 @teams_bp.route("/teams/picture/<token>", methods=["GET"])
@@ -165,190 +133,34 @@ def team_rules_pdf(slug, version=None):
 
 
 @teams_bp.route("/teams/<slug>/manage", methods=["GET"])
+@teams_bp.route("/teams/<slug>/manage/<any(members, former, page, applying, roles):section>", methods=["GET"])
 @login_required
-def team_manage(slug):
+def team_manage(slug, section=None):
+    """A team's management, for its leads: drawn by the new front end
+    (frontend/src/pages/teams/manage/). An old link to a tab
+    (``#manage-applying``) opens that section's page."""
     team = _team_or_404(slug)
     _may(team, teams_service.TeamPermission.VIEW_MEMBERS)
-    permissions = teams_service.team_permissions(current_user, team)
-    return render_template(
-        "teams/manage.html",
-        team=team,
-        permissions=permissions,
-        TeamPermission=teams_service.TeamPermission,
-        applications=teams_service.team_memberships(
-            team, {teams_service.APPLIED, teams_service.INVITED, teams_service.APPROVED}
-        ),
-        roster=teams_service.roster(team),
-        former=teams_service.former_members(team),
-        status_labels=teams_service.STATUS_LABELS,
-        end_reasons=teams_service.END_REASON_LABELS,
-        person_details=teams_service.person_details,
-        has_lead_in_force=teams_service.has_lead_in_force(team),
-        access_list_recipients=teams_service.parse_recipients(team.access_list_recipients),
-        next_access_list_date=teams_service.next_access_list_date(team),
-        charges=team_payments.charges(team),
-        renewal_open=team_payments.renewal_open,
-        needs_to_pay=team_payments.needs_to_pay,
-        leads=teams_service.role_holders(team, teams_service.ROLE_LEAD),
-        treasurers=teams_service.role_holders(team, teams_service.ROLE_TREASURER),
-        role_counts=teams_service.role_counts,
-        team_rules=teams_service.team_rules,
-    )
+    return app_shell()
 
 
 @teams_bp.route("/teams/<slug>/manage/people/<int:user_id>", methods=["GET"])
 @login_required
 def team_person(slug, user_id):
+    """A person, as the team's leads see them: drawn by the new front end."""
+    return team_manage(slug)
+
+
+@teams_bp.route("/teams/<slug>/manage/access-list", methods=["GET"])
+@login_required
+def team_access_list(slug):
+    """The access list -- who receives it, and the email as it would go out:
+    drawn by the new front end."""
     team = _team_or_404(slug)
-    _may(team, teams_service.TeamPermission.VIEW_MEMBERS)
-    person = db.session.get(User, user_id)
-    history = teams_service.history_of(team, person) if person is not None else []
-    if not history:
+    _may(team, teams_service.TeamPermission.SEND_ACCESS_LIST)
+    if not team.access_list_enabled:
         abort(404)
-    return render_template(
-        "teams/person.html",
-        team=team,
-        person=person,
-        details=teams_service.person_details(person),
-        history=history,
-        current=next((membership for membership in history if membership.status in teams_service.ONGOING), None),
-        notes=teams_service.notes_about(team, person),
-        permissions=teams_service.team_permissions(current_user, team),
-        TeamPermission=teams_service.TeamPermission,
-        status_labels=teams_service.STATUS_LABELS,
-        end_reasons=teams_service.END_REASON_LABELS,
-    )
-
-
-def _lead_action(slug, permission, action, success_message, back=None):
-    team = _team_or_404(slug)
-    _may(team, permission)
-    try:
-        result = action(team)
-    except ServiceError as error:
-        db.session.rollback()
-        flash(error.message, "danger")
-    else:
-        db.session.commit()
-        from ..services.notifications import flush_marked_notification_channels
-
-        flush_marked_notification_channels()
-        flash(success_message, "success")
-        if back is None and result is not None and hasattr(result, "user_id"):
-            back = url_for("teams.team_person", slug=team.slug, user_id=result.user_id)
-    return redirect(back or request.referrer or url_for("teams.team_manage", slug=team.slug))
-
-
-@teams_bp.route("/teams/<slug>/manage/memberships/<int:membership_id>/invite", methods=["POST"])
-@login_required
-def team_invite(slug, membership_id):
-    return _lead_action(
-        slug, teams_service.TeamPermission.REVIEW_APPLICATIONS,
-        lambda team: teams_service.invite(current_user, team, membership_id, request.form.get("meeting_details")),
-        _("Invitation sent."),
-    )
-
-
-@teams_bp.route("/teams/<slug>/manage/memberships/<int:membership_id>/approve", methods=["POST"])
-@login_required
-def team_approve(slug, membership_id):
-    return _lead_action(
-        slug, teams_service.TeamPermission.REVIEW_APPLICATIONS,
-        lambda team: teams_service.approve(current_user, team, membership_id),
-        _("Approved."),
-    )
-
-
-@teams_bp.route("/teams/<slug>/manage/memberships/<int:membership_id>/reject", methods=["POST"])
-@login_required
-def team_reject(slug, membership_id):
-    return _lead_action(
-        slug, teams_service.TeamPermission.REVIEW_APPLICATIONS,
-        lambda team: teams_service.reject(current_user, team, membership_id),
-        _("Not accepted."),
-    )
-
-
-@teams_bp.route("/teams/<slug>/manage/memberships/<int:membership_id>/remove", methods=["POST"])
-@login_required
-def team_remove(slug, membership_id):
-    return _lead_action(
-        slug, teams_service.TeamPermission.REMOVE_MEMBERS,
-        lambda team: teams_service.remove(current_user, team, membership_id, request.form.get("reason")),
-        _("Removed from the team."),
-    )
-
-
-@teams_bp.route("/teams/<slug>/manage/people/<int:user_id>/notes", methods=["POST"])
-@login_required
-def team_add_note(slug, user_id):
-    def add(team):
-        person = db.session.get(User, user_id)
-        if person is None:
-            raise ServiceError(_("That person does not exist."))
-        teams_service.add_note(current_user, team, person, request.form.get("body"))
-
-    return _lead_action(
-        slug, teams_service.TeamPermission.WRITE_NOTES, add, _("Note saved."),
-        back=url_for("teams.team_person", slug=slug, user_id=user_id),
-    )
-
-
-#: The parts of the leads' settings, each saved by a form of its own.
-SETTINGS_SECTIONS = ("page", "applying", "access_list")
-
-
-@teams_bp.route("/teams/<slug>/manage/settings", methods=["POST"])
-@login_required
-def team_lead_settings(slug):
-    """Save one section of the leads' settings -- or, without a section, all."""
-    form = request.form
-    section = form.get("section")
-    sections = {section} if section in SETTINGS_SECTIONS else set(SETTINGS_SECTIONS)
-
-    def save(team):
-        keep = teams_service.KEEP
-        if "page" in sections:
-            teams_service.update_team_by_lead(current_user, team, description=form.get("description"))
-            _apply_logo(team, form, request.files)
-        if "applying" in sections:
-            teams_service.update_team_by_lead(
-                current_user, team,
-                application_prompt=form.get("application_prompt") if section or "application_prompt" in form else keep,
-                applications_open=form.get("applications_open") == "on",
-            )
-        # The texts and the picture: whichever of them the form carries.
-        _apply_page(team, form, request.files)
-        if "access_list" in sections and team.access_list_enabled:
-            _apply_access_list(team, form)
-
-    anchor = {"page": "#manage-page", "applying": "#manage-applying", "access_list": "#manage-access-list"}
-    return _lead_action(
-        slug, teams_service.TeamPermission.EDIT_SETTINGS, save, _("Saved."),
-        back=url_for("teams.team_manage", slug=slug) + anchor.get(section, ""),
-    )
-
-
-@teams_bp.route("/teams/<slug>/manage/treasurer", methods=["POST"])
-@login_required
-def team_appoint_treasurer(slug):
-    return _lead_action(
-        slug, teams_service.TeamPermission.APPOINT_TREASURER,
-        lambda team: teams_service.appoint_treasurer(current_user, team, request.form.get("user_id", type=int)),
-        _("Treasurer appointed."),
-        back=url_for("teams.team_manage", slug=slug) + "#manage-roles",
-    )
-
-
-@teams_bp.route("/teams/<slug>/manage/treasurer/remove", methods=["POST"])
-@login_required
-def team_dismiss_treasurer(slug):
-    return _lead_action(
-        slug, teams_service.TeamPermission.APPOINT_TREASURER,
-        lambda team: teams_service.dismiss_treasurer(current_user, team, request.form.get("user_id", type=int)),
-        _("No longer treasurer."),
-        back=url_for("teams.team_manage", slug=slug) + "#manage-roles",
-    )
+    return app_shell()
 
 
 @teams_bp.route("/teams/<slug>/manage/export.csv", methods=["GET"])
@@ -368,37 +180,6 @@ def team_export(slug):
         "﻿" + buffer.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@teams_bp.route("/teams/<slug>/manage/access-list", methods=["GET"])
-@login_required
-def team_access_list(slug):
-    """The email exactly as it would go out, with a button to send it now."""
-    team = _team_or_404(slug)
-    _may(team, teams_service.TeamPermission.SEND_ACCESS_LIST)
-    if not team.access_list_enabled:
-        abort(404)
-    subject, message = teams_service.access_list_message(team)
-    return render_template(
-        "teams/access_list.html",
-        team=team,
-        subject=subject,
-        message=message,
-        recipients=teams_service.parse_recipients(team.access_list_recipients),
-        cc=teams_service.access_list_cc(team),
-        missing_university_email=sum(1 for row in message["rows"] if not row["email"]),
-    )
-
-
-@teams_bp.route("/teams/<slug>/manage/access-list/send", methods=["POST"])
-@login_required
-def team_access_list_send(slug):
-    return _lead_action(
-        slug, teams_service.TeamPermission.SEND_ACCESS_LIST,
-        lambda team: teams_service.send_access_list(current_user, team),
-        _("Sent."),
-        back=url_for("teams.team_manage", slug=slug),
     )
 
 

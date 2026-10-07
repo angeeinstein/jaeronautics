@@ -248,7 +248,9 @@ server can update to it.
    leaving done: `api/teams.py` works out once what somebody sees of their membership --
    its state, what is owed or coming, the buttons -- for every page that shows it; a legal
    text has one answer (`api/legal.py`) and one view (`components/legal/`), which step 7
-   reuses for the association's texts.)*
+   reuses for the association's texts. The leads' management done: a page per section with
+   the team's own sidebar (`frame/TeamManageLayout.tsx`, `api/team_manage.py`); each team's
+   permissions are checked per team.)*
 6. **My Account:** the overview, membership and payment status, forum card
    with the photo upload and cropper, change requests, password, data export
    and deletion.

@@ -24,6 +24,8 @@ export interface NavGroup {
 
 export interface SidebarContent {
   back: { label: string; to: string };
+  /** What the area is about, under the way back: a team's mark and name. */
+  header?: { label: string; logoUrl: string | null };
   groups: NavGroup[];
 }
 

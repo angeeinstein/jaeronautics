@@ -20,6 +20,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     admin_system,
     admin_teams,
     session,
+    team_manage,
     teams,
 )
 from ._core import ENDPOINTS, api_bp, error, is_api_request

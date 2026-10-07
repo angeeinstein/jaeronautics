@@ -59,6 +59,170 @@
         "title": "Access",
         "type": "object"
       },
+      "AccessListIn": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_send": {
+            "default": false,
+            "title": "Auto Send",
+            "type": "boolean"
+          },
+          "dates": {
+            "default": "",
+            "maxLength": 255,
+            "title": "Dates",
+            "type": "string"
+          },
+          "recipients": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Recipients",
+            "type": "string"
+          }
+        },
+        "title": "AccessListIn",
+        "type": "object"
+      },
+      "AccessListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_send": {
+            "title": "Auto Send",
+            "type": "boolean"
+          },
+          "cc": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cc",
+            "type": "array"
+          },
+          "compared_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compared Note"
+          },
+          "dates": {
+            "title": "Dates",
+            "type": "string"
+          },
+          "gone": {
+            "items": {
+              "$ref": "#/components/schemas/GoneOut"
+            },
+            "title": "Gone",
+            "type": "array"
+          },
+          "intro": {
+            "title": "Intro",
+            "type": "string"
+          },
+          "last_sent_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sent On"
+          },
+          "may_edit": {
+            "title": "May Edit",
+            "type": "boolean"
+          },
+          "next_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next On"
+          },
+          "recipients": {
+            "title": "Recipients",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AccessRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "To",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipients",
+          "dates",
+          "auto_send",
+          "next_on",
+          "last_sent_on",
+          "may_edit",
+          "subject",
+          "to",
+          "cc",
+          "intro",
+          "rows",
+          "compared_note",
+          "gone"
+        ],
+        "title": "AccessListOut",
+        "type": "object"
+      },
+      "AccessRowOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "new": {
+            "title": "New",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "new"
+        ],
+        "title": "AccessRowOut",
+        "type": "object"
+      },
       "AccountActivity": {
         "additionalProperties": false,
         "properties": {
@@ -668,6 +832,146 @@
           "at"
         ],
         "title": "Activity",
+        "type": "object"
+      },
+      "ApplicationOut": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied On"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "payment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment"
+          },
+          "status": {
+            "enum": [
+              "applied",
+              "invited",
+              "approved"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "status",
+          "status_label",
+          "payment",
+          "applied_on"
+        ],
+        "title": "ApplicationOut",
+        "type": "object"
+      },
+      "ApplicationsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "applications": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationOut"
+            },
+            "title": "Applications",
+            "type": "array"
+          }
+        },
+        "required": [
+          "applications"
+        ],
+        "title": "ApplicationsOut",
+        "type": "object"
+      },
+      "ApplyingIn": {
+        "additionalProperties": false,
+        "properties": {
+          "application_prompt": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Application Prompt"
+          },
+          "applications_open": {
+            "title": "Applications Open",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "applications_open"
+        ],
+        "title": "ApplyingIn",
+        "type": "object"
+      },
+      "ApplyingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "application_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Prompt"
+          },
+          "applications_open": {
+            "title": "Applications Open",
+            "type": "boolean"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RulesInfoOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "applications_open",
+          "application_prompt",
+          "rules"
+        ],
+        "title": "ApplyingOut",
         "type": "object"
       },
       "ArchivedIn": {
@@ -1371,6 +1675,25 @@
         "title": "Candidate",
         "type": "object"
       },
+      "CandidateOut": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
       "CandidatesOut": {
         "additionalProperties": false,
         "properties": {
@@ -1835,6 +2158,63 @@
           "removed_welcome_sender"
         ],
         "title": "DeletedOut",
+        "type": "object"
+      },
+      "DetailsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cohort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cohort"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "private_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Private Email"
+          },
+          "university_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "University Email"
+          }
+        },
+        "required": [
+          "university_email",
+          "private_email",
+          "phone",
+          "cohort"
+        ],
+        "title": "DetailsOut",
         "type": "object"
       },
       "DisabledIn": {
@@ -2304,6 +2684,71 @@
           "removed"
         ],
         "title": "ForgottenOut",
+        "type": "object"
+      },
+      "FormerMembersOut": {
+        "additionalProperties": false,
+        "properties": {
+          "former": {
+            "items": {
+              "$ref": "#/components/schemas/FormerOut"
+            },
+            "title": "Former",
+            "type": "array"
+          }
+        },
+        "required": [
+          "former"
+        ],
+        "title": "FormerMembersOut",
+        "type": "object"
+      },
+      "FormerOut": {
+        "additionalProperties": false,
+        "properties": {
+          "last_active": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "periods": {
+            "title": "Periods",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "periods",
+          "last_active",
+          "why"
+        ],
+        "title": "FormerOut",
         "type": "object"
       },
       "Forum": {
@@ -2963,6 +3408,39 @@
         "title": "GeneralOut",
         "type": "object"
       },
+      "GoneOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ],
+        "title": "GoneOut",
+        "type": "object"
+      },
       "GrantRoleIn": {
         "additionalProperties": false,
         "properties": {
@@ -3161,6 +3639,30 @@
         "title": "HistoryQuery",
         "type": "object"
       },
+      "HolderOut": {
+        "additionalProperties": false,
+        "properties": {
+          "in_force": {
+            "title": "In Force",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "in_force"
+        ],
+        "title": "HolderOut",
+        "type": "object"
+      },
       "HomeQuery": {
         "additionalProperties": false,
         "properties": {
@@ -3296,6 +3798,21 @@
           "pending"
         ],
         "title": "InStripeNow",
+        "type": "object"
+      },
+      "InviteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "meeting_details": {
+            "maxLength": 2000,
+            "title": "Meeting Details",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_details"
+        ],
+        "title": "InviteIn",
         "type": "object"
       },
       "JoinIn": {
@@ -4085,6 +4602,77 @@
         "title": "MakeIn",
         "type": "object"
       },
+      "ManageOut": {
+        "additionalProperties": false,
+        "description": "What the management's sidebar and heading need.",
+        "properties": {
+          "access_list_enabled": {
+            "title": "Access List Enabled",
+            "type": "boolean"
+          },
+          "applications": {
+            "title": "Applications",
+            "type": "integer"
+          },
+          "has_lead_in_force": {
+            "title": "Has Lead In Force",
+            "type": "boolean"
+          },
+          "labels": {
+            "$ref": "#/components/schemas/LabelsOut"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "enum": [
+                "team.view_members",
+                "team.review_applications",
+                "team.remove_members",
+                "team.write_notes",
+                "team.export",
+                "team.edit_settings",
+                "team.send_access_list",
+                "team.view_money",
+                "team.edit_bank_details",
+                "team.appoint_treasurer"
+              ],
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "logo_url",
+          "labels",
+          "permissions",
+          "applications",
+          "has_lead_in_force",
+          "access_list_enabled"
+        ],
+        "title": "ManageOut",
+        "type": "object"
+      },
       "MeOut": {
         "additionalProperties": false,
         "properties": {
@@ -4200,6 +4788,139 @@
           "admin_notices"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "MemberOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cohort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cohort"
+          },
+          "is_lead": {
+            "title": "Is Lead",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "paid_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Until"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "university_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "University Email"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "picture_url",
+          "is_lead",
+          "university_email",
+          "cohort",
+          "since",
+          "paid_until",
+          "notes"
+        ],
+        "title": "MemberOut",
+        "type": "object"
+      },
+      "MembersOut": {
+        "additionalProperties": false,
+        "properties": {
+          "charges": {
+            "title": "Charges",
+            "type": "boolean"
+          },
+          "max_members": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Members"
+          },
+          "may_export": {
+            "title": "May Export",
+            "type": "boolean"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/MemberOut"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "max_members",
+          "charges",
+          "may_export",
+          "members"
+        ],
+        "title": "MembersOut",
         "type": "object"
       },
       "Membership": {
@@ -4374,6 +5095,30 @@
           "none"
         ],
         "title": "MembershipCounts",
+        "type": "object"
+      },
+      "MembershipNoteOut": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "plain",
+              "info",
+              "warning"
+            ],
+            "title": "Tone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tone",
+          "text"
+        ],
+        "title": "MembershipNoteOut",
         "type": "object"
       },
       "MembershipOut": {
@@ -4655,30 +5400,6 @@
         "title": "NoteIn",
         "type": "object"
       },
-      "NoteOut": {
-        "additionalProperties": false,
-        "properties": {
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "tone": {
-            "enum": [
-              "plain",
-              "info",
-              "warning"
-            ],
-            "title": "Tone",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tone",
-          "text"
-        ],
-        "title": "NoteOut",
-        "type": "object"
-      },
       "Notice": {
         "additionalProperties": false,
         "description": "A banner over every page of an area, for something that is off on purpose or by accident.",
@@ -4816,6 +5537,73 @@
           "health"
         ],
         "title": "NotificationsOut",
+        "type": "object"
+      },
+      "NowOut": {
+        "additionalProperties": false,
+        "description": "Their attempt under way, and what may be decided about it.",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "meeting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting"
+          },
+          "membership_id": {
+            "title": "Membership Id",
+            "type": "integer"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "status": {
+            "enum": [
+              "applied",
+              "invited",
+              "approved",
+              "active"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "membership_id",
+          "status",
+          "status_label",
+          "question",
+          "answer",
+          "meeting"
+        ],
+        "title": "NowOut",
         "type": "object"
       },
       "OldForum": {
@@ -5076,6 +5864,96 @@
         "title": "OverviewQuery",
         "type": "object"
       },
+      "PageIn": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "About"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          }
+        },
+        "title": "PageIn",
+        "type": "object"
+      },
+      "PageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "logo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Url"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          }
+        },
+        "required": [
+          "description",
+          "about",
+          "picture_url",
+          "logo_url"
+        ],
+        "title": "PageOut",
+        "type": "object"
+      },
       "PausedOut": {
         "additionalProperties": false,
         "properties": {
@@ -5172,49 +6050,6 @@
           "earned"
         ],
         "title": "Period",
-        "type": "object"
-      },
-      "PersonOut": {
-        "additionalProperties": false,
-        "properties": {
-          "is_lead": {
-            "title": "Is Lead",
-            "type": "boolean"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "picture_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Picture Url"
-          },
-          "university_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "University Email"
-          }
-        },
-        "required": [
-          "name",
-          "picture_url",
-          "is_lead",
-          "university_email"
-        ],
-        "title": "PersonOut",
         "type": "object"
       },
       "Picture": {
@@ -5506,6 +6341,21 @@
           "forum_error"
         ],
         "title": "ReconnectOut",
+        "type": "object"
+      },
+      "RemoveIn": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RemoveIn",
         "type": "object"
       },
       "ResolvedOut": {
@@ -5816,6 +6666,74 @@
           "database_backup"
         ],
         "title": "RollbackPointOut",
+        "type": "object"
+      },
+      "RosterPersonOut": {
+        "additionalProperties": false,
+        "properties": {
+          "is_lead": {
+            "title": "Is Lead",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "university_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "University Email"
+          }
+        },
+        "required": [
+          "name",
+          "picture_url",
+          "is_lead",
+          "university_email"
+        ],
+        "title": "RosterPersonOut",
+        "type": "object"
+      },
+      "RulesInfoOut": {
+        "additionalProperties": false,
+        "properties": {
+          "page_url": {
+            "title": "Page Url",
+            "type": "string"
+          },
+          "pdf_url": {
+            "title": "Pdf Url",
+            "type": "string"
+          },
+          "version": {
+            "format": "date",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "page_url",
+          "pdf_url"
+        ],
+        "title": "RulesInfoOut",
         "type": "object"
       },
       "RulesOut": {
@@ -6149,6 +7067,75 @@
         "title": "TeamDetailsIn",
         "type": "object"
       },
+      "TeamHistoryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied On"
+          },
+          "ended_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended On"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "status",
+          "status_label",
+          "applied_on",
+          "ended_on",
+          "why",
+          "note"
+        ],
+        "title": "TeamHistoryOut",
+        "type": "object"
+      },
       "TeamLabels": {
         "additionalProperties": false,
         "description": "What teams are called here; an admin can rename them.",
@@ -6294,7 +7281,7 @@
           },
           "notes": {
             "items": {
-              "$ref": "#/components/schemas/NoteOut"
+              "$ref": "#/components/schemas/MembershipNoteOut"
             },
             "title": "Notes",
             "type": "array"
@@ -6430,6 +7417,52 @@
           "export_url"
         ],
         "title": "TeamMoneyOut",
+        "type": "object"
+      },
+      "TeamNoteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 5000,
+            "title": "Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "TeamNoteIn",
+        "type": "object"
+      },
+      "TeamNoteOut": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "author",
+          "body"
+        ],
+        "title": "TeamNoteOut",
         "type": "object"
       },
       "TeamOut": {
@@ -6614,7 +7647,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/PersonOut"
+                  "$ref": "#/components/schemas/RosterPersonOut"
                 },
                 "type": "array"
               },
@@ -6752,6 +7785,71 @@
         "title": "TeamPayment",
         "type": "object"
       },
+      "TeamPersonOut": {
+        "additionalProperties": false,
+        "properties": {
+          "details": {
+            "$ref": "#/components/schemas/DetailsOut"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/TeamHistoryOut"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "may_remove": {
+            "title": "May Remove",
+            "type": "boolean"
+          },
+          "may_review": {
+            "title": "May Review",
+            "type": "boolean"
+          },
+          "may_write_notes": {
+            "title": "May Write Notes",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/TeamNoteOut"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "now": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NowOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "details",
+          "now",
+          "history",
+          "notes",
+          "may_review",
+          "may_remove",
+          "may_write_notes"
+        ],
+        "title": "TeamPersonOut",
+        "type": "object"
+      },
       "TeamRef": {
         "additionalProperties": false,
         "properties": {
@@ -6809,6 +7907,44 @@
           "team"
         ],
         "title": "TeamRole",
+        "type": "object"
+      },
+      "TeamRolesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "leads": {
+            "items": {
+              "$ref": "#/components/schemas/HolderOut"
+            },
+            "title": "Leads",
+            "type": "array"
+          },
+          "may_appoint": {
+            "title": "May Appoint",
+            "type": "boolean"
+          },
+          "treasurers": {
+            "items": {
+              "$ref": "#/components/schemas/HolderOut"
+            },
+            "title": "Treasurers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "leads",
+          "treasurers",
+          "may_appoint",
+          "candidates"
+        ],
+        "title": "TeamRolesOut",
         "type": "object"
       },
       "TeamRow": {
@@ -7265,6 +8401,20 @@
           "without_account"
         ],
         "title": "Transfers",
+        "type": "object"
+      },
+      "TreasurerIn": {
+        "additionalProperties": false,
+        "properties": {
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "TreasurerIn",
         "type": "object"
       },
       "UndeliveredOut": {
@@ -13199,6 +14349,1624 @@
           }
         },
         "summary": "Leave -- at once, or at the end of what is paid.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage": {
+      "get": {
+        "operationId": "team_manage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "The team's management: what this person may do in it, and how many applications wait.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/access-list": {
+      "get": {
+        "operationId": "team_access_list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Who receives the list of current members and when -- and the email exactly as it would go out.",
+        "tags": [
+          "Teams"
+        ]
+      },
+      "put": {
+        "operationId": "team_access_list_save",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessListIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save who receives the list, on which days, and whether it goes out by itself.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/access-list/send": {
+      "post": {
+        "operationId": "team_access_list_send",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Send the list now, to whoever receives it, with the leads in copy.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/applications": {
+      "get": {
+        "operationId": "team_applications",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Who has applied, been invited, or been approved and is paying -- newest first.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/applying": {
+      "get": {
+        "operationId": "team_applying",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyingOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Whether the team takes new members, the question for applicants, and the rules they accept.",
+        "tags": [
+          "Teams"
+        ]
+      },
+      "put": {
+        "operationId": "team_applying_save",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyingOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save whether the team takes new members and the question for applicants.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/former": {
+      "get": {
+        "operationId": "team_former_members",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormerMembersOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Everybody who was in the team and is not now, most recently active first. Kept for good.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/members": {
+      "get": {
+        "operationId": "team_members",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MembersOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Who is in the team, by surname.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/memberships/{membership_id}/approve": {
+      "post": {
+        "operationId": "team_approve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamPersonOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Approve: in the team, or -- where there is a fee -- paying is all that is left. They are emailed.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/memberships/{membership_id}/invite": {
+      "post": {
+        "operationId": "team_invite",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamPersonOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Invite an applicant to meet the leads. They are emailed.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/memberships/{membership_id}/reject": {
+      "post": {
+        "operationId": "team_reject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamPersonOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Not accept an application. They are emailed.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/memberships/{membership_id}/remove": {
+      "post": {
+        "operationId": "team_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "membership_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamPersonOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Remove somebody from the team now.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/page": {
+      "get": {
+        "operationId": "team_page_settings",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "What everybody sees about the team: its description, the longer text, the picture and the logo.",
+        "tags": [
+          "Teams"
+        ]
+      },
+      "put": {
+        "operationId": "team_page_save",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save the description and the longer text.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/page/logo": {
+      "delete": {
+        "operationId": "team_logo_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "No logo.",
+        "tags": [
+          "Teams"
+        ]
+      },
+      "post": {
+        "operationId": "team_logo_upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "image": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "image"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A new logo: PNG, JPG or WebP. Seen on dark pages and on the white pages of the rules' PDF.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/page/picture": {
+      "delete": {
+        "operationId": "team_picture_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "No picture.",
+        "tags": [
+          "Teams"
+        ]
+      },
+      "post": {
+        "operationId": "team_picture_upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "image": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "image"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A new picture for the About page: PNG, JPG or WebP.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/people/{user_id}": {
+      "get": {
+        "operationId": "team_person",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamPersonOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "A person as the leads see them: how to reach them, their application, their history, the notes.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/people/{user_id}/notes": {
+      "post": {
+        "operationId": "team_add_note",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamNoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamPersonOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A note about somebody, for the leads and the admins. Not shown to them, but part of their data.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/roles": {
+      "get": {
+        "operationId": "team_roles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamRolesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "The team's leads (appointed by the association's admins) and its treasurer.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/treasurer": {
+      "post": {
+        "operationId": "team_treasurer_appoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TreasurerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamRolesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Make a member the team's treasurer: they see its money and keep its bank details, nothing about people.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/treasurer/{user_id}": {
+      "delete": {
+        "operationId": "team_treasurer_dismiss",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamRolesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "No longer the team's treasurer.",
         "tags": [
           "Teams"
         ]

@@ -38,7 +38,7 @@ class LabelsOut(Model):
     plural: str
 
 
-class NoteOut(Model):
+class MembershipNoteOut(Model):
     tone: Literal["plain", "info", "warning"]
     text: str
 
@@ -54,7 +54,7 @@ class TeamMembershipOut(Model):
     #: The fee, while not a member yet.
     fee: str | None
     #: What is owed or coming, in order.
-    notes: list[NoteOut]
+    notes: list[MembershipNoteOut]
     #: When invited: where and when the leads would like to meet.
     meeting: str | None
     #: The buttons, in order; the first of the pay ones is the main one.
@@ -108,7 +108,7 @@ class JoiningOut(Model):
     submit_label: str
 
 
-class PersonOut(Model):
+class RosterPersonOut(Model):
     name: str
     picture_url: str | None
     is_lead: bool
@@ -135,7 +135,7 @@ class TeamPageOut(Model):
     #: None when there is a membership under way.
     joining: JoiningOut | None
     #: Who is in the team, for those who see its page.
-    members: list[PersonOut] | None
+    members: list[RosterPersonOut] | None
 
 
 class HomeQuery(Model):
@@ -200,7 +200,7 @@ def _notes(team, current, just_paid):
     notes = []
 
     def say(text, tone="plain"):
-        notes.append(NoteOut(tone=tone, text=text))
+        notes.append(MembershipNoteOut(tone=tone, text=text))
 
     processing = current is not None and current.payment_state == "processing"
     if current is not None and current.status == teams_service.APPROVED and team_payments.charges(team):
@@ -368,7 +368,7 @@ def _team_out(team, just_paid=None):
         labels=_labels(), is_member=is_member, membership=membership, sees_team_page=sees,
         can_manage=_manages_people(team), can_see_money=_sees_money(team),
         rules=_rules(team, current), joining=_joining(team) if current is None else None,
-        members=[PersonOut(name=row["name"], picture_url=_picture_url(row["avatar_token"]), is_lead=row["is_lead"],
+        members=[RosterPersonOut(name=row["name"], picture_url=_picture_url(row["avatar_token"]), is_lead=row["is_lead"],
                            university_email=row["university_email"])
                  for row in teams_service.roster(team)] if sees else None,
     )

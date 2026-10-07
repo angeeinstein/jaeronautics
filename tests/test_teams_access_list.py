@@ -9,12 +9,15 @@ from datetime import date
 
 import pytest
 
+from api_helpers import send
 from conftest import db
 from aeronautics_members.db_models import AuditLog, NotificationEvent, TeamMembership
 from aeronautics_members.services import ValidationError, privacy, teams
 from test_emails import FakeSMTP, _parts, outbox  # noqa: F401
 from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
 from test_teams_foundation import _in_team
+
+API = "/api/v1/teams"
 
 
 def _configured(team, recipients="office@uni.example", dates="15.10, 15.03", auto_send=True):
@@ -167,14 +170,15 @@ class TestThePages:
         _with_members(_configured(team))
         _login(client, lead.id)
 
-        manage = client.get("/teams/rocket/manage").get_data(as_text=True)
-        assert "office@uni.example" in manage and "Preview and send" in manage
+        assert client.get(f"{API}/rocket/manage").get_json()["access_list_enabled"] is True
 
-        preview = client.get("/teams/rocket/manage/access-list").get_data(as_text=True)
-        assert "Anna Berger" in preview and "anna@edu.example" in preview
-        assert "2 member(s) have no university email." in preview  # Ben, and the lead
+        preview = client.get(f"{API}/rocket/manage/access-list").get_json()
+        assert preview["to"] == ["office@uni.example"]
+        assert {"name": "Anna Berger", "email": "anna@edu.example", "new": False} in preview["rows"]
+        assert sum(1 for row in preview["rows"] if not row["email"]) == 2  # Ben, and the lead
 
-        client.post("/teams/rocket/manage/access-list/send")
+        sent = send(client, "POST", f"{API}/rocket/manage/access-list/send").get_json()
+        assert sent["last_sent_on"] is not None
         assert FakeSMTP.sent and team.access_list_last_sent_on is not None
 
     def test_an_ordinary_member_cannot(self, app, client):
@@ -185,7 +189,8 @@ class TestThePages:
         _login(client, anna.id)
 
         assert client.get("/teams/rocket/manage/access-list").status_code == 403
-        assert client.post("/teams/rocket/manage/access-list/send").status_code == 403
+        assert client.get(f"{API}/rocket/manage/access-list").status_code == 403
+        assert send(client, "POST", f"{API}/rocket/manage/access-list/send").status_code == 403
 
     def test_the_lead_sets_it_up(self, app, client):
         team, lead = _led()
@@ -193,11 +198,8 @@ class TestThePages:
         db.session.commit()
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/settings", data={
-            "access_list_recipients": "office@uni.example",
-            "access_list_dates": "15.10",
-            "access_list_auto_send": "on",
-        })
+        send(client, "PUT", f"{API}/rocket/manage/access-list",
+             {"recipients": "office@uni.example", "dates": "15.10", "auto_send": True})
 
         db.session.refresh(team)
         assert (team.access_list_recipients, team.access_list_dates, team.access_list_auto_send) == (
@@ -210,13 +212,13 @@ class TestThePages:
         db.session.commit()
         _login(client, lead.id)
 
-        response = client.post("/teams/rocket/manage/settings", data={
-            "description": "Changed", "access_list_dates": "31.02",
-        }, follow_redirects=True)
+        response = send(client, "PUT", f"{API}/rocket/manage/access-list",
+                        {"recipients": "office@uni.example", "dates": "31.02"})
 
-        assert "Not a day of the year: 31.02" in response.get_data(as_text=True)
+        assert response.status_code == 400
+        assert "Not a day of the year: 31.02" in response.get_json()["error"]["message"]
         db.session.refresh(team)
-        assert team.description is None
+        assert team.access_list_recipients is None
 
 
 @pytest.mark.usefixtures("outbox", "switched_on")
@@ -280,10 +282,10 @@ class TestComparedWithTheLastList:
         db.session.commit()
         _login(client, lead.id)
 
-        body = client.get("/teams/rocket/manage/access-list").get_data(as_text=True)
+        body = client.get(f"{API}/rocket/manage/access-list").get_json()
 
-        assert "New: not on our list of 15.10.2026." in body
-        assert body.count('status-label status-info">New<') == 1
+        assert body["compared_note"] == "New: not on our list of 15.10.2026."
+        assert [row["name"] for row in body["rows"] if row["new"]] == ["Cara Cole"]
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -291,11 +293,11 @@ def test_switched_off_the_leads_see_none_of_it(app, client):
     team, lead = _led()
     _login(client, lead.id)
 
-    body = client.get("/teams/rocket/manage").get_data(as_text=True)
-    assert "manage-access-list" not in body and 'name="access_list_recipients"' not in body
-    client.post("/teams/rocket/manage/settings", data={"section": "access_list", "access_list_recipients": "x@uni.example"})
-    assert team.access_list_recipients is None
+    assert client.get(f"{API}/rocket/manage").get_json()["access_list_enabled"] is False
+    assert client.get(f"{API}/rocket/manage/access-list").status_code == 404
+    refused = send(client, "PUT", f"{API}/rocket/manage/access-list", {"recipients": "x@uni.example"})
+    assert refused.status_code == 404 and team.access_list_recipients is None
 
     teams.set_access_list_enabled(None, team, True)
     db.session.commit()
-    assert 'name="access_list_recipients"' in client.get("/teams/rocket/manage").get_data(as_text=True)
+    assert client.get(f"{API}/rocket/manage/access-list").get_json()["may_edit"] is True

@@ -495,9 +495,10 @@ def test_the_leads_see_paid_until(app, client, monkeypatch, fake_stripe):
     _paid_member(client, monkeypatch, team, lead)
     _login(client, lead.id)
 
-    body = client.get(f"/teams/{team.slug}/manage").get_data(as_text=True)
+    members = client.get(f"/api/v1/teams/{team.slug}/manage/members").get_json()
 
-    assert "Paid until" in body and "31.03.2027" in body
+    assert members["charges"] is True
+    assert "2027-03-31" in [row["paid_until"] for row in members["members"]]
 
 
 @pytest.mark.usefixtures("outbox")

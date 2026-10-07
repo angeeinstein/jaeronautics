@@ -143,3 +143,8 @@
   margin: 0 auto;
   max-width: var(--ja-content-narrow);
 }
+
+/* The area's own heading in its sidebar: a team's mark and name. */
+.header {
+  padding: 0.5rem 0.75rem 0.75rem;
+}

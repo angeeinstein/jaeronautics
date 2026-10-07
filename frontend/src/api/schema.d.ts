@@ -1120,6 +1120,334 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's management: what this person may do in it, and how many applications wait. */
+        get: operations["team_manage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/access-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who receives the list of current members and when -- and the email exactly as it would go out. */
+        get: operations["team_access_list"];
+        /** Save who receives the list, on which days, and whether it goes out by itself. */
+        put: operations["team_access_list_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/access-list/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send the list now, to whoever receives it, with the leads in copy. */
+        post: operations["team_access_list_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who has applied, been invited, or been approved and is paying -- newest first. */
+        get: operations["team_applications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/applying": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the team takes new members, the question for applicants, and the rules they accept. */
+        get: operations["team_applying"];
+        /** Save whether the team takes new members and the question for applicants. */
+        put: operations["team_applying_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/former": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Everybody who was in the team and is not now, most recently active first. Kept for good. */
+        get: operations["team_former_members"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who is in the team, by surname. */
+        get: operations["team_members"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/memberships/{membership_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve: in the team, or -- where there is a fee -- paying is all that is left. They are emailed. */
+        post: operations["team_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/memberships/{membership_id}/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Invite an applicant to meet the leads. They are emailed. */
+        post: operations["team_invite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/memberships/{membership_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Not accept an application. They are emailed. */
+        post: operations["team_reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/memberships/{membership_id}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove somebody from the team now. */
+        post: operations["team_remove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What everybody sees about the team: its description, the longer text, the picture and the logo. */
+        get: operations["team_page_settings"];
+        /** Save the description and the longer text. */
+        put: operations["team_page_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/page/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A new logo: PNG, JPG or WebP. Seen on dark pages and on the white pages of the rules' PDF. */
+        post: operations["team_logo_upload"];
+        /** No logo. */
+        delete: operations["team_logo_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/page/picture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A new picture for the About page: PNG, JPG or WebP. */
+        post: operations["team_picture_upload"];
+        /** No picture. */
+        delete: operations["team_picture_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/people/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A person as the leads see them: how to reach them, their application, their history, the notes. */
+        get: operations["team_person"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/people/{user_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A note about somebody, for the leads and the admins. Not shown to them, but part of their data. */
+        post: operations["team_add_note"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's leads (appointed by the association's admins) and its treasurer. */
+        get: operations["team_roles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/treasurer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a member the team's treasurer: they see its money and keep its bank details, nothing about people. */
+        post: operations["team_treasurer_appoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/treasurer/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** No longer the team's treasurer. */
+        delete: operations["team_treasurer_dismiss"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/pay": {
         parameters: {
             query?: never;
@@ -1207,6 +1535,62 @@ export interface components {
             removal_warning: string | null;
             /** Roles Locked */
             roles_locked: string | null;
+        };
+        /** AccessListIn */
+        AccessListIn: {
+            /**
+             * Auto Send
+             * @default false
+             */
+            auto_send?: boolean;
+            /**
+             * Dates
+             * @default
+             */
+            dates?: string;
+            /**
+             * Recipients
+             * @default
+             */
+            recipients?: string;
+        };
+        /** AccessListOut */
+        AccessListOut: {
+            /** Auto Send */
+            auto_send: boolean;
+            /** Cc */
+            cc: string[];
+            /** Compared Note */
+            compared_note: string | null;
+            /** Dates */
+            dates: string;
+            /** Gone */
+            gone: components["schemas"]["GoneOut"][];
+            /** Intro */
+            intro: string;
+            /** Last Sent On */
+            last_sent_on: string | null;
+            /** May Edit */
+            may_edit: boolean;
+            /** Next On */
+            next_on: string | null;
+            /** Recipients */
+            recipients: string;
+            /** Rows */
+            rows: components["schemas"]["AccessRowOut"][];
+            /** Subject */
+            subject: string;
+            /** To */
+            to: string[];
+        };
+        /** AccessRowOut */
+        AccessRowOut: {
+            /** Email */
+            email: string | null;
+            /** Name */
+            name: string;
+            /** New */
+            new: boolean;
         };
         /** AccountActivity */
         AccountActivity: {
@@ -1399,6 +1783,47 @@ export interface components {
             id: number;
             /** Target */
             target: string | null;
+        };
+        /** ApplicationOut */
+        ApplicationOut: {
+            /** Applied On */
+            applied_on: string | null;
+            /** Name */
+            name: string;
+            /** Payment */
+            payment: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "applied" | "invited" | "approved";
+            /** Status Label */
+            status_label: string;
+            /** User Id */
+            user_id: number;
+        };
+        /** ApplicationsOut */
+        ApplicationsOut: {
+            /** Applications */
+            applications: components["schemas"]["ApplicationOut"][];
+        };
+        /** ApplyingIn */
+        ApplyingIn: {
+            /**
+             * Application Prompt
+             * @default null
+             */
+            application_prompt?: string | null;
+            /** Applications Open */
+            applications_open: boolean;
+        };
+        /** ApplyingOut */
+        ApplyingOut: {
+            /** Application Prompt */
+            application_prompt: string | null;
+            /** Applications Open */
+            applications_open: boolean;
+            rules: components["schemas"]["RulesInfoOut"] | null;
         };
         /** ArchivedIn */
         ArchivedIn: {
@@ -1598,6 +2023,13 @@ export interface components {
             /** Year Group */
             year_group: string | null;
         };
+        /** CandidateOut */
+        CandidateOut: {
+            /** Name */
+            name: string;
+            /** User Id */
+            user_id: number;
+        };
         /** CandidatesOut */
         CandidatesOut: {
             /** Items */
@@ -1748,6 +2180,17 @@ export interface components {
         DeletedOut: {
             /** Removed Welcome Sender */
             removed_welcome_sender: boolean;
+        };
+        /** DetailsOut */
+        DetailsOut: {
+            /** Cohort */
+            cohort: string | null;
+            /** Phone */
+            phone: string | null;
+            /** Private Email */
+            private_email: string | null;
+            /** University Email */
+            university_email: string | null;
         };
         /** DisabledIn */
         DisabledIn: {
@@ -1915,6 +2358,24 @@ export interface components {
         ForgottenOut: {
             /** Removed */
             removed: number;
+        };
+        /** FormerMembersOut */
+        FormerMembersOut: {
+            /** Former */
+            former: components["schemas"]["FormerOut"][];
+        };
+        /** FormerOut */
+        FormerOut: {
+            /** Last Active */
+            last_active: string | null;
+            /** Name */
+            name: string;
+            /** Periods */
+            periods: string;
+            /** User Id */
+            user_id: number;
+            /** Why */
+            why: string | null;
         };
         /** Forum */
         Forum: {
@@ -2143,6 +2604,13 @@ export interface components {
              */
             welcome_email_sender?: string | null;
         };
+        /** GoneOut */
+        GoneOut: {
+            /** Email */
+            email: string | null;
+            /** Name */
+            name: string | null;
+        };
         /** GrantRoleIn */
         GrantRoleIn: {
             /** Email */
@@ -2212,6 +2680,15 @@ export interface components {
              */
             page?: number;
         };
+        /** HolderOut */
+        HolderOut: {
+            /** In Force */
+            in_force: boolean;
+            /** Name */
+            name: string;
+            /** User Id */
+            user_id: number;
+        };
         /** HomeQuery */
         HomeQuery: {
             /**
@@ -2266,6 +2743,11 @@ export interface components {
             available: number;
             /** Pending */
             pending: number;
+        };
+        /** InviteIn */
+        InviteIn: {
+            /** Meeting Details */
+            meeting_details: string;
         };
         /** JoinIn */
         JoinIn: {
@@ -2537,6 +3019,27 @@ export interface components {
             /** Key */
             key: string;
         };
+        /**
+         * ManageOut
+         * @description What the management's sidebar and heading need.
+         */
+        ManageOut: {
+            /** Access List Enabled */
+            access_list_enabled: boolean;
+            /** Applications */
+            applications: number;
+            /** Has Lead In Force */
+            has_lead_in_force: boolean;
+            labels: components["schemas"]["LabelsOut"];
+            /** Logo Url */
+            logo_url: string | null;
+            /** Name */
+            name: string;
+            /** Permissions */
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer")[];
+            /** Slug */
+            slug: string;
+        };
         /** MeOut */
         MeOut: {
             /** Admin Area */
@@ -2561,6 +3064,38 @@ export interface components {
             team_labels: components["schemas"]["TeamLabels"];
             /** Teams Area */
             teams_area: boolean;
+        };
+        /** MemberOut */
+        MemberOut: {
+            /** Cohort */
+            cohort: string | null;
+            /** Is Lead */
+            is_lead: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string[];
+            /** Paid Until */
+            paid_until: string | null;
+            /** Picture Url */
+            picture_url: string | null;
+            /** Since */
+            since: string | null;
+            /** University Email */
+            university_email: string | null;
+            /** User Id */
+            user_id: number;
+        };
+        /** MembersOut */
+        MembersOut: {
+            /** Charges */
+            charges: boolean;
+            /** Max Members */
+            max_members: number | null;
+            /** May Export */
+            may_export: boolean;
+            /** Members */
+            members: components["schemas"]["MemberOut"][];
         };
         /** Membership */
         Membership: {
@@ -2617,6 +3152,16 @@ export interface components {
             none: number;
             /** Pending */
             pending: number;
+        };
+        /** MembershipNoteOut */
+        MembershipNoteOut: {
+            /** Text */
+            text: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "plain" | "info" | "warning";
         };
         /** MembershipOut */
         MembershipOut: {
@@ -2718,16 +3263,6 @@ export interface components {
              */
             note?: string | null;
         };
-        /** NoteOut */
-        NoteOut: {
-            /** Text */
-            text: string;
-            /**
-             * Tone
-             * @enum {string}
-             */
-            tone: "plain" | "info" | "warning";
-        };
         /**
          * Notice
          * @description A banner over every page of an area, for something that is off on purpose or by accident.
@@ -2782,6 +3317,27 @@ export interface components {
             senders: string[];
             /** User Status */
             user_status: boolean;
+        };
+        /**
+         * NowOut
+         * @description Their attempt under way, and what may be decided about it.
+         */
+        NowOut: {
+            /** Answer */
+            answer: string | null;
+            /** Meeting */
+            meeting: string | null;
+            /** Membership Id */
+            membership_id: number;
+            /** Question */
+            question: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "applied" | "invited" | "approved" | "active";
+            /** Status Label */
+            status_label: string;
         };
         /** OldForum */
         OldForum: {
@@ -2855,6 +3411,30 @@ export interface components {
              */
             until?: string | null;
         };
+        /** PageIn */
+        PageIn: {
+            /**
+             * About
+             * @default null
+             */
+            about?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description?: string | null;
+        };
+        /** PageOut */
+        PageOut: {
+            /** About */
+            about: string | null;
+            /** Description */
+            description: string | null;
+            /** Logo Url */
+            logo_url: string | null;
+            /** Picture Url */
+            picture_url: string | null;
+        };
         /** PausedOut */
         PausedOut: {
             /** Backup Created At */
@@ -2885,17 +3465,6 @@ export interface components {
             earned: number;
             /** Paid Until */
             paid_until: string | null;
-        };
-        /** PersonOut */
-        PersonOut: {
-            /** Is Lead */
-            is_lead: boolean;
-            /** Name */
-            name: string;
-            /** Picture Url */
-            picture_url: string | null;
-            /** University Email */
-            university_email: string | null;
         };
         /** Picture */
         Picture: {
@@ -2980,6 +3549,11 @@ export interface components {
             forum_error: string | null;
             /** Old Username */
             old_username: string;
+        };
+        /** RemoveIn */
+        RemoveIn: {
+            /** Reason */
+            reason: string;
         };
         /** ResolvedOut */
         ResolvedOut: {
@@ -3082,6 +3656,29 @@ export interface components {
             recorded_at: string | null;
             /** Short Revision */
             short_revision: string;
+        };
+        /** RosterPersonOut */
+        RosterPersonOut: {
+            /** Is Lead */
+            is_lead: boolean;
+            /** Name */
+            name: string;
+            /** Picture Url */
+            picture_url: string | null;
+            /** University Email */
+            university_email: string | null;
+        };
+        /** RulesInfoOut */
+        RulesInfoOut: {
+            /** Page Url */
+            page_url: string;
+            /** Pdf Url */
+            pdf_url: string;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
         };
         /** RulesOut */
         RulesOut: {
@@ -3192,6 +3789,21 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** TeamHistoryOut */
+        TeamHistoryOut: {
+            /** Applied On */
+            applied_on: string | null;
+            /** Ended On */
+            ended_on: string | null;
+            /** Note */
+            note: string | null;
+            /** Status */
+            status: string;
+            /** Status Label */
+            status_label: string;
+            /** Why */
+            why: string | null;
+        };
         /**
          * TeamLabels
          * @description What teams are called here; an admin can rename them.
@@ -3231,7 +3843,7 @@ export interface components {
             /** Meeting */
             meeting: string | null;
             /** Notes */
-            notes: components["schemas"]["NoteOut"][];
+            notes: components["schemas"]["MembershipNoteOut"][];
             /** Ongoing */
             ongoing: boolean;
             /** Status */
@@ -3266,6 +3878,20 @@ export interface components {
             today: string;
             /** Transfers */
             transfers: components["schemas"]["Transfer"][];
+        };
+        /** TeamNoteIn */
+        TeamNoteIn: {
+            /** Body */
+            body: string;
+        };
+        /** TeamNoteOut */
+        TeamNoteOut: {
+            /** At */
+            at: string;
+            /** Author */
+            author: string | null;
+            /** Body */
+            body: string;
         };
         /** TeamOut */
         TeamOut: {
@@ -3320,7 +3946,7 @@ export interface components {
             /** Logo Url */
             logo_url: string | null;
             /** Members */
-            members: components["schemas"]["PersonOut"][] | null;
+            members: components["schemas"]["RosterPersonOut"][] | null;
             membership: components["schemas"]["TeamMembershipOut"];
             /** Name */
             name: string;
@@ -3351,6 +3977,25 @@ export interface components {
             /** Refunded */
             refunded: number;
         };
+        /** TeamPersonOut */
+        TeamPersonOut: {
+            details: components["schemas"]["DetailsOut"];
+            /** History */
+            history: components["schemas"]["TeamHistoryOut"][];
+            /** May Remove */
+            may_remove: boolean;
+            /** May Review */
+            may_review: boolean;
+            /** May Write Notes */
+            may_write_notes: boolean;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: components["schemas"]["TeamNoteOut"][];
+            now: components["schemas"]["NowOut"] | null;
+            /** User Id */
+            user_id: number;
+        };
         /** TeamRef */
         TeamRef: {
             /** Logo Url */
@@ -3371,6 +4016,17 @@ export interface components {
             role_label: string;
             /** Team */
             team: string;
+        };
+        /** TeamRolesOut */
+        TeamRolesOut: {
+            /** Candidates */
+            candidates: components["schemas"]["CandidateOut"][];
+            /** Leads */
+            leads: components["schemas"]["HolderOut"][];
+            /** May Appoint */
+            may_appoint: boolean;
+            /** Treasurers */
+            treasurers: components["schemas"]["HolderOut"][];
         };
         /** TeamRow */
         TeamRow: {
@@ -3528,6 +4184,11 @@ export interface components {
             teams: number;
             /** Without Account */
             without_account: number;
+        };
+        /** TreasurerIn */
+        TreasurerIn: {
+            /** User Id */
+            user_id: number;
         };
         /** UndeliveredOut */
         UndeliveredOut: {
@@ -7825,6 +8486,1231 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_manage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_access_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessListOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_access_list_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessListIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessListOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_access_list_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessListOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_applications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_applying: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplyingOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_applying_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyingIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplyingOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_former_members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormerMembersOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembersOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                membership_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPersonOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                membership_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPersonOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                membership_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPersonOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                membership_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPersonOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_page_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_page_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_logo_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    image: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_logo_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_picture_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    image: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_picture_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_person: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPersonOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_add_note: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamNoteIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPersonOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_roles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRolesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_treasurer_appoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TreasurerIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRolesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_treasurer_dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRolesOut"];
                 };
             };
             /** @description Not signed in. */

@@ -46,7 +46,7 @@ def test_every_app_address_gets_the_app(app, client, built, pattern):
     from aeronautics_members.services import teams
 
     teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
-    _team(slug="rocket-team")
+    teams.set_access_list_enabled(None, _team(slug="rocket-team"), True)
     _login(client, _staff("boss@example.org", "superadmin").id)
 
     response = client.get(_concrete(pattern))

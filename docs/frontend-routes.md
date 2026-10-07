@@ -116,13 +116,13 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `POST /teams/<slug>/pay` (out: Stripe Checkout) → `POST /api/v1/teams/<slug>/pay` answers Stripe's address
 - [x] `GET|POST /teams/<slug>/leave` (page + action) → `GET|POST /api/v1/teams/<slug>/leave`
 - [x] `POST /teams/<slug>/stay`, `/withdraw` (action) → `POST /api/v1/teams/<slug>/stay`, `/withdraw`
-- [ ] `GET /teams/<slug>/manage` (page) → management, its sections
-- [ ] `POST /teams/<slug>/manage/settings` (action: each section's save)
-- [ ] `POST /teams/<slug>/manage/memberships/<id>/approve|invite|reject|remove` (action)
-- [ ] `GET /teams/<slug>/manage/people/<user>` (page) → a person, with notes
-- [ ] `POST /teams/<slug>/manage/people/<user>/notes` (action)
-- [ ] `POST /teams/<slug>/manage/treasurer`, `/treasurer/remove` (action)
-- [ ] `GET /teams/<slug>/manage/access-list` (page), `POST .../send` (action)
+- [x] `GET /teams/<slug>/manage` (page) → management, a page per section with the team's sidebar (`/manage/members`, `/former`, `/page`, `/applying`, `/access-list`, `/roles`; an old `#manage-…` link opens its page); `GET /api/v1/teams/<slug>/manage` and one endpoint per section (`api/team_manage.py`)
+- [x] `POST /teams/<slug>/manage/settings` (action: each section's save) → `PUT /api/v1/teams/<slug>/manage/page`, `/applying`, `/access-list`; the logo and the picture `POST|DELETE .../manage/page/logo|picture`
+- [x] `POST /teams/<slug>/manage/memberships/<id>/approve|invite|reject|remove` (action) → `POST /api/v1/teams/<slug>/manage/memberships/<id>/…`
+- [x] `GET /teams/<slug>/manage/people/<user>` (page) → a person, with notes
+- [x] `POST /teams/<slug>/manage/people/<user>/notes` (action) → `POST /api/v1/teams/<slug>/manage/people/<user>/notes`
+- [x] `POST /teams/<slug>/manage/treasurer`, `/treasurer/remove` (action) → `POST /api/v1/teams/<slug>/manage/treasurer`, `DELETE .../treasurer/<user>`
+- [x] `GET /teams/<slug>/manage/access-list` (page), `POST .../send` (action) → the Access list page, with its settings; `POST /api/v1/teams/<slug>/manage/access-list/send`
 - [ ] `GET /teams/<slug>/money` (page)
 - [ ] `POST /teams/<slug>/money/bank` (action); `/money/payouts` is gone: transfers are recorded at 4.5
 - `GET /teams/<slug>/manage/export.csv`, `/teams/<slug>/money.csv` (download) -- stay

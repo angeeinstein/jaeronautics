@@ -218,7 +218,7 @@ class TestWhoSeesWhat:
 
         page = client.get("/teams/rocket/money").get_data(as_text=True)
         assert "€25.00" in page and 'name="iban"' in page and "Mark as transferred" not in page
-        assert 'href="/teams/rocket/money"' in client.get("/teams/rocket/manage").get_data(as_text=True)
+        assert "team.view_money" in client.get("/api/v1/teams/rocket/manage").get_json()["permissions"]
         assert send(client, "POST", "/api/v1/admin/money/rocket/transfers", {"amount": "5"}).status_code == 403
         assert db.session.query(TeamPayout).count() == 0
         client.post("/teams/rocket/money/bank", data={"account_holder": "Rocket Team", "iban": IBAN})

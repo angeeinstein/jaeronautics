@@ -8,6 +8,7 @@
 import type { RouteObject } from 'react-router';
 
 import { AdminLayout } from '../frame/AdminLayout';
+import { TeamManageLayout } from '../frame/TeamManageLayout';
 import { TeamsLayout } from '../frame/TeamsLayout';
 import { LoadingState } from '../components/States';
 import { NotFound } from '../pages/NotFound';
@@ -19,6 +20,46 @@ export const routes: RouteObject[] = [
     // While the first page's own code is still on its way.
     hydrateFallbackElement: <LoadingState />,
     children: [
+      {
+        path: '/teams/:slug/manage',
+        element: <TeamManageLayout />,
+        children: [
+          {
+            index: true,
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/People')).Applications }),
+          },
+          {
+            path: 'members',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/People')).Members }),
+          },
+          {
+            path: 'former',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/People')).FormerMembers }),
+          },
+          {
+            path: 'people/:userId',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Person')).Person }),
+          },
+          {
+            path: 'page',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Settings')).PageSettings }),
+          },
+          {
+            path: 'applying',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Settings')).Applying }),
+          },
+          {
+            path: 'access-list',
+            lazy: async () => ({
+              Component: (await import('../pages/teams/manage/Settings')).AccessListPage,
+            }),
+          },
+          {
+            path: 'roles',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Settings')).RolesPage }),
+          },
+        ],
+      },
       {
         path: '/teams',
         element: <TeamsLayout />,
