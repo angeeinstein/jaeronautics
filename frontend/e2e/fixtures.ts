@@ -39,14 +39,11 @@ export const test = base.extend<{ watched: Watched }>({
 
 export async function signIn(page: Page, email = ADMIN) {
   await page.goto('/login');
-  await page.getByLabel(/email/i).first().fill(email);
-  await page
-    .getByLabel(/password/i)
-    .first()
-    .fill(PASSWORD);
+  await page.getByLabel(/^Email/).fill(email);
+  await page.getByLabel(/^Password/).fill(PASSWORD);
   await Promise.all([
     page.waitForURL((url) => !url.pathname.startsWith('/login')),
-    page.locator('form[action$="/login"] [type=submit]').click(),
+    page.getByRole('button', { name: 'Sign in', exact: true }).click(),
   ]);
 }
 

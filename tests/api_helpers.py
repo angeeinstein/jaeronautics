@@ -19,3 +19,9 @@ def csrf_token(client):
 
 def send(client, method, path, json=None):
     return client.open(path, method=method, json=json, headers={"X-CSRFToken": csrf_token(client)})
+
+
+def said(client):
+    """What Flask flashed before sending the browser on, as an app page shows it
+    (GET /api/v1/messages): the texts, joined."""
+    return " ".join(message["text"] for message in client.get("/api/v1/messages").get_json()["messages"])

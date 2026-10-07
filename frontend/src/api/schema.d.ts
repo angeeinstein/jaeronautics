@@ -1307,6 +1307,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email a link to choose a new password. The answer is the same whether or not the account exists. */
+        post: operations["password_reset_ask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/password-reset/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the link still works, before a new password is typed. */
+        get: operations["password_reset_link"];
+        /** Choose the new password. The link works once. */
+        put: operations["password_reset"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/session": {
         parameters: {
             query?: never;
@@ -1317,8 +1352,10 @@ export interface paths {
         /** Whether somebody is signed in, and the CSRF token for changes. */
         get: operations["session_state"];
         put?: never;
-        post?: never;
-        delete?: never;
+        /** Sign in; the answer says where to go next. */
+        post: operations["sign_in"];
+        /** Sign out here, and on the forum where that can be done. The start page says how it went. */
+        delete: operations["sign_out"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3153,6 +3190,11 @@ export interface components {
              */
             welcome_email_sender?: string | null;
         };
+        /** GoOnOut */
+        GoOnOut: {
+            /** Go To */
+            go_to: string;
+        };
         /** GoToOut */
         GoToOut: {
             /** Url */
@@ -3466,6 +3508,11 @@ export interface components {
              * Format: date
              */
             version: string;
+        };
+        /** LinkOut */
+        LinkOut: {
+            /** Valid */
+            valid: boolean;
         };
         /** LogEntry */
         LogEntry: {
@@ -4264,6 +4311,16 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** ResetAskIn */
+        ResetAskIn: {
+            /** Email */
+            email: string;
+        };
+        /** ResetIn */
+        ResetIn: {
+            /** Password */
+            password: string;
+        };
         /** ResolvedOut */
         ResolvedOut: {
             /** Recipient */
@@ -4401,6 +4458,11 @@ export interface components {
              */
             version: string;
         };
+        /** SaidOut */
+        SaidOut: {
+            /** Text */
+            text: string;
+        };
         /** SchemaOut */
         SchemaOut: {
             /** Applied */
@@ -4430,6 +4492,18 @@ export interface components {
             csrf_token: string;
             /** Signed In */
             signed_in: boolean;
+        };
+        /** SignInIn */
+        SignInIn: {
+            /** Email */
+            email: string;
+            /**
+             * Next
+             * @default null
+             */
+            next?: string | null;
+            /** Password */
+            password: string;
         };
         /** SiteOut */
         SiteOut: {
@@ -9729,6 +9803,132 @@ export interface operations {
             };
         };
     };
+    password_reset_ask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetAskIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaidOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    password_reset_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    password_reset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaidOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     session_state: {
         parameters: {
             query?: never;
@@ -9745,6 +9945,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+        };
+    };
+    sign_in: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignInIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoOnOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    sign_out: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoOnOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };

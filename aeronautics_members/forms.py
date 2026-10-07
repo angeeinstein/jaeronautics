@@ -311,30 +311,6 @@ class CreateMembershipProfileForm(FlaskForm):
     submit = SubmitField(_("Create Membership and Proceed to Payment"))
 
 
-class RegistrationForm(FlaskForm):
-    email = StringField(_("Email"), validators=[DataRequired(), Email()])
-    password = PasswordField(_("Password"), validators=[DataRequired(), Length(min=8)])
-    confirm_password = PasswordField(_("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
-    submit = SubmitField(_("Register"))
-
-
-class LoginForm(FlaskForm):
-    email = StringField(_("Email"), validators=[DataRequired(), Email()])
-    password = PasswordField(_("Password"), validators=[DataRequired()])
-    submit = SubmitField(_("Login"))
-
-
-class EmailRequestForm(FlaskForm):
-    email = StringField(_("Email"), validators=[DataRequired(), Email()])
-    submit = SubmitField(_("Send Link"))
-
-
-class SetPasswordForm(FlaskForm):
-    password = PasswordField(_("Password"), validators=[DataRequired(), Length(min=8, max=128)])
-    confirm_password = PasswordField(_("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
-    submit = SubmitField(_("Save Password"))
-
-
 class MemberProfileForm(FlaskForm):
     street = StringField(_l("Street"), validators=[DataRequired(), Length(max=255)])
     house_number = StringField(_l("House Number"), validators=[DataRequired()])

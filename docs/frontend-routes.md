@@ -150,10 +150,10 @@ Status: `[ ]` to do, `[x]` done.
 - [ ] `POST /process-membership` (out: signup, then Stripe Checkout)
 - [ ] `GET|POST /register` (action today)
 - [ ] `GET /thank-you`, `GET /cancel` (page; Stripe's return addresses) → pages
-- [ ] `GET|POST /login` (page + action; also the forum's sign-in return) → login page, `POST /api/v1/session` to sign in
-- [ ] `POST /logout` (action) → `DELETE /api/v1/session`
-- [ ] `GET|POST /forgot-password` (page + action)
-- [ ] `GET|POST /reset-password/<token>` (page + action; link in emails)
+- [x] `GET|POST /login` (page + action; also the forum's sign-in return) → login page, `POST /api/v1/session` to sign in; it answers where to go on (`?next=`, kept on this site)
+- [ ] `POST /logout` (action) → `DELETE /api/v1/session` (the app's menu uses it; the Flask route goes with the last Flask page)
+- [x] `GET|POST /forgot-password` (page + action) → `POST /api/v1/password-reset`
+- [x] `GET|POST /reset-password/<token>` (page + action; link in emails) → `GET|PUT /api/v1/password-reset/<token>`
 - [ ] `GET /verify-email/<token>`, `/verify-work-email/<token>` (link in emails) → Flask confirms and redirects to a page, as today
 - [ ] `GET /legal` (page) → list of legal texts
 - [ ] `GET /legal/<slug>[/<language>[/<version>]]` (page) → a legal text, also shown in the dialog over the signup form

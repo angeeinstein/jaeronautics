@@ -10,7 +10,7 @@ def _login(client, user_id):
         session["_user_id"] = str(user_id)
 
 
-@pytest.mark.parametrize("path", ["/", "/login", "/legal", "/forgot-password"])
+@pytest.mark.parametrize("path", ["/", "/legal"])
 def test_every_public_page_has_it(client, path):
     body = client.get(path).get_data(as_text=True)
 
@@ -35,7 +35,7 @@ def test_signed_in_pages_have_it_too(client, app):
 
 
 def test_until_configured_the_links_lead_to_the_portals_own_legal_texts(client):
-    body = client.get("/login").get_data(as_text=True)
+    body = client.get("/").get_data(as_text=True)
     footer = body.split('<footer class="site-footer">')[1]
 
     for path in ("/legal/legal-notice", "/legal/privacy-policy", "/legal/statutes", "/legal"):
@@ -51,7 +51,7 @@ def test_configured_addresses_are_used(client, monkeypatch):
     monkeypatch.setattr(config, "PRIVACY_URL", "https://example.org/privacy")
     monkeypatch.setattr(config, "STATUTES_URL", "https://example.org/statutes")
 
-    footer = client.get("/login").get_data(as_text=True).split('<footer class="site-footer">')[1]
+    footer = client.get("/").get_data(as_text=True).split('<footer class="site-footer">')[1]
 
     assert 'href="https://example.org/impressum"' in footer
     assert 'href="https://example.org/privacy"' in footer

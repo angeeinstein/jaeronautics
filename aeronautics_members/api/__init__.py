@@ -22,6 +22,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     admin_teams,
     form_options,
     session,
+    sign_in,
     site,
     team_manage,
     teams,

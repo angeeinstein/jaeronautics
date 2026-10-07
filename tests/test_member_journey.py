@@ -445,7 +445,7 @@ class TestAnEmailPerClickNoMore:
         assert sent == ["twice@edu.fh-joanneum.at"]
 
     def test_a_double_click_on_forgot_password_keeps_the_first_link_working(self, app, client, monkeypatch):
-        from aeronautics_members.blueprints import auth as auth_module
+        from aeronautics_members.api import sign_in as auth_module
         from aeronautics_members.db_models import User
 
         sent = []
@@ -453,8 +453,8 @@ class TestAnEmailPerClickNoMore:
                             lambda app, user, requested_with=None: sent.append(user.password_reset_nonce) or True)
         make_member(email="forgot@example.com")
 
-        client.post("/forgot-password", data={"email": "forgot@example.com"})
-        client.post("/forgot-password", data={"email": "forgot@example.com"})
+        client.post("/api/v1/password-reset", json={"email": "forgot@example.com"})
+        client.post("/api/v1/password-reset", json={"email": "forgot@example.com"})
 
         user = db.session.execute(db.select(User).filter_by(email="forgot@example.com")).scalar_one()
         assert len(sent) == 1
@@ -545,7 +545,7 @@ def test_a_success_message_carries_the_tick(app, client):
     with client.session_transaction() as session:
         session["_flashes"] = [("success", "Saved."), ("warning", "Careful.")]
 
-    body = client.get("/login").get_data(as_text=True)
+    body = client.get("/").get_data(as_text=True)
 
     assert body.count('class="success-check"') == 1
     assert '<div class="alert alert-warning">Careful.</div>' in body
@@ -563,7 +563,7 @@ def test_states_are_shown_as_status_labels_not_bootstrap_badges():
 
 def test_the_tab_icon_is_the_square_mark(app, client):
     """The full logo was unreadable at tab size."""
-    body = client.get("/login").get_data(as_text=True)
+    body = client.get("/").get_data(as_text=True)
     static = Path(app.static_folder)
 
     for name in ("favicon.svg", "favicon-32.png", "apple-touch-icon.png"):

@@ -16,6 +16,7 @@ from datetime import datetime
 
 import pytest
 
+from api_helpers import said
 from conftest import db, make_member
 from aeronautics_members.db_models import (
     AuditLog,
@@ -400,9 +401,9 @@ class TestThroughTheVerificationLink:
         _archived()
         member = _returning(verified=False)
 
-        body = self._verify(client, member.user).get_data(as_text=True)
+        self._verify(client, member.user)
 
-        assert "PopovicA_L23" in body
+        assert "PopovicA_L23" in said(client)
 
     def test_a_member_with_no_archive_just_gets_verified(self, app, client):
         member = _returning(email="newcomer@edu.fh-joanneum.at", verified=False)
@@ -540,8 +541,7 @@ class TestThroughTheUniversityLink:
         response = self._verify_work(client, member)
 
         assert response.status_code < 400
-        body = response.get_data(as_text=True)
-        assert "PopovicA_L23" in body
+        assert "PopovicA_L23" in said(client)
         db.session.expire_all()
         moved = db.session.execute(db.select(Member)).scalars().one()
         assert moved.email_work_is_verified is True

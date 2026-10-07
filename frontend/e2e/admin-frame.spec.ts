@@ -41,13 +41,13 @@ test.describe('the admin frame', () => {
     await expect(drawer).toBeHidden();
   });
 
-  test('the account menu, and logging out', async ({ page }) => {
+  test('the account menu, and signing out', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin');
 
     await page.getByRole('button', { name: /Account menu/ }).click();
     await expect(page.getByRole('menu')).toContainText(ADMIN_EMAIL);
-    await page.getByRole('menuitem', { name: 'Log out' }).click();
+    await page.getByRole('menuitem', { name: 'Sign out' }).click();
 
     await page.waitForURL((url) => url.pathname === '/');
     await page.goto('/admin');

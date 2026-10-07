@@ -9,6 +9,7 @@ import type { RouteObject } from 'react-router';
 
 import { AccountLayout } from '../frame/AccountLayout';
 import { AdminLayout } from '../frame/AdminLayout';
+import { PublicLayout } from '../frame/PublicLayout';
 import { TeamManageLayout } from '../frame/TeamManageLayout';
 import { TeamsLayout } from '../frame/TeamsLayout';
 import { LoadingState } from '../components/States';
@@ -21,6 +22,25 @@ export const routes: RouteObject[] = [
     // While the first page's own code is still on its way.
     hydrateFallbackElement: <LoadingState />,
     children: [
+      {
+        element: <PublicLayout />,
+        children: [
+          {
+            path: '/login',
+            lazy: async () => ({ Component: (await import('../pages/public/SignIn')).SignIn }),
+          },
+          {
+            path: '/forgot-password',
+            lazy: async () => ({
+              Component: (await import('../pages/public/ForgotPassword')).ForgotPassword,
+            }),
+          },
+          {
+            path: '/reset-password/:token',
+            lazy: async () => ({ Component: (await import('../pages/public/ResetPassword')).ResetPassword }),
+          },
+        ],
+      },
       {
         path: '/account',
         element: <AccountLayout />,

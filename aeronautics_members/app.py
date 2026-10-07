@@ -69,13 +69,9 @@ try:
     )
     from .forms import (
         CreateMembershipProfileForm,
-        EmailRequestForm,
         IdentityChangeRequestForm,
-        LoginForm,
         MemberProfileForm,
         MembershipForm,
-        RegistrationForm,
-        SetPasswordForm,
     )
     from .forum_service import (
         FORUM_AVATAR_STATUS_APPROVED,
@@ -129,13 +125,9 @@ except ImportError:
     )
     from forms import (
         CreateMembershipProfileForm,
-        EmailRequestForm,
         IdentityChangeRequestForm,
-        LoginForm,
         MemberProfileForm,
         MembershipForm,
-        RegistrationForm,
-        SetPasswordForm,
     )
     from forum_service import (
         FORUM_AVATAR_STATUS_APPROVED,
@@ -442,7 +434,9 @@ def rate_limit_network_and_address():
     account lock that account's guessing from that network, and nobody else's.
     The address is hashed so the limiter's store holds no email addresses.
     """
-    address = (request.form.get("email") or request.form.get("email_private") or "").strip().lower()
+    body = request.get_json(silent=True) if request.is_json else None
+    sent = body if isinstance(body, dict) else request.form
+    address = str(sent.get("email") or sent.get("email_private") or "").strip().lower()
     digest = hashlib.sha256(address.encode("utf-8")).hexdigest()[:16] if address else "-"
     return f"{rate_limit_network()}|{digest}"
 

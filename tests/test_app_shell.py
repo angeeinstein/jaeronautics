@@ -41,6 +41,10 @@ def _concrete(pattern):
     return re.sub(r":(\w+)", lambda part: EXAMPLES.get(part.group(1), "1"), pattern)
 
 
+#: Pages for somebody not signed in: a signed-in visitor is sent on (below).
+SIGNED_OUT = {"/login", "/forgot-password"}
+
+
 @pytest.mark.parametrize("pattern", PATHS)
 def test_every_app_address_gets_the_app(app, client, built, pattern):
     from aeronautics_members.services import teams
@@ -51,12 +55,22 @@ def test_every_app_address_gets_the_app(app, client, built, pattern):
     boss = make_member(email="boss@example.org").user
     boss.grant_role(app_module.get_role("superadmin"))
     db.session.commit()
-    _login(client, boss.id)
+    if pattern not in SIGNED_OUT:
+        _login(client, boss.id)
 
     response = client.get(_concrete(pattern))
 
     assert response.status_code == 200 and response.mimetype == "text/html"
     assert '<div id="root"></div>' in response.get_data(as_text=True)
+
+
+def test_signed_in_the_sign_in_page_goes_on(app, client, built):
+    _login(client, _staff("boss@example.org", "admin").id)
+
+    assert client.get("/login").headers["Location"] == "/admin"
+    assert client.get("/login?next=/teams").headers["Location"] == "/teams"
+    assert client.get("/login?next=https://elsewhere.example/").headers["Location"] == "/admin"
+    assert client.get("/forgot-password").headers["Location"] == "/admin"
 
 
 def test_the_nonce_in_the_page_is_the_policys(app, client, built):

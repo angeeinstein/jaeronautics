@@ -45,17 +45,10 @@ export function initials(me: Me): string {
 }
 
 /**
- * Log out: the server ends the session (and the forum's, where it can), then
- * the browser goes to the start page.
+ * Sign out: the server ends the session (and the forum's, where it can), then
+ * the browser goes to the start page, which says how it went.
  */
 export async function logOut(): Promise<void> {
-  const session = (await fetch('/api/v1/session', { credentials: 'same-origin', cache: 'no-store' }).then(
-    (r) => r.json(),
-  )) as Schemas['SessionOut'];
-  await fetch('/logout', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'X-CSRFToken': session.csrf_token },
-  });
-  window.location.assign('/');
+  const { go_to } = await call(api.DELETE('/api/v1/session'));
+  window.location.assign(go_to);
 }

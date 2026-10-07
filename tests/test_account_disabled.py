@@ -194,7 +194,7 @@ class TestWhatADisabledAccountCanDo:
 
         assert member.user.check_password("the-password") is True
 
-        response = client.post("/login", data={
+        response = client.post("/api/v1/session", json={
             "email": member.email_private, "password": "the-password",
         }, follow_redirects=True)
         body = response.get_data(as_text=True)

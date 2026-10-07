@@ -154,10 +154,11 @@ def test_all_routes_no_server_error(client, seeded):
     # auth
     for p in ["/login", "/register", "/forgot-password", "/verify-email/bad", "/reset-password/bad"]:
         hit("GET", p)
-    hit("POST", "/login", data={"email": "m@t.co", "password": "password123"})
-    hit("POST", "/forgot-password", data={"email": "m@t.co"})
+    hit("POST", "/api/v1/session", json={"email": "m@t.co", "password": "password123"})
+    hit("POST", "/api/v1/password-reset", json={"email": "m@t.co"})
     hit("POST", "/register", data={"email": "new2@t.co", "password": "password123", "confirm_password": "password123"})
-    hit("POST", "/reset-password/bad", data={"password": "password123", "confirm_password": "password123"})
+    hit("GET", "/api/v1/password-reset/bad")
+    hit("PUT", "/api/v1/password-reset/bad", json={"password": "password123"})
     hit("GET", "/change-password", uid=mu)
     hit("PUT", "/api/v1/account/password", uid=mu, json={"current_password": "password123", "new_password": "password124"})
     hit("POST", "/logout", uid=mu)

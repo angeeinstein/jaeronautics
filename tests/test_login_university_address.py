@@ -11,7 +11,7 @@ from datetime import datetime
 import pytest
 
 from conftest import db, make_member
-from aeronautics_members.blueprints import auth as auth_module
+from aeronautics_members.api import sign_in as auth_module
 from aeronautics_members.services import identity
 
 UNI = "a.huber@edu.fh-joanneum.at"
@@ -26,7 +26,7 @@ def _member(email="huber@example.com", work=UNI, confirmed=True):
 
 
 def _login(client, address, password="initial-password"):
-    return client.post("/login", data={"email": address, "password": password})
+    return client.post("/api/v1/session", json={"email": address, "password": password})
 
 
 def _signed_in_as(client):
@@ -105,7 +105,7 @@ def test_a_reset_asked_with_the_university_address_goes_to_the_private_one(app, 
     member.user.email_verified_at = datetime(2026, 9, 1)  # the mailbox the account belongs to
     db.session.commit()
 
-    client.post("/forgot-password", data={"email": UNI})
+    client.post("/api/v1/password-reset", json={"email": UNI})
 
     assert reset_mails == ["huber@example.com"]
 
@@ -113,6 +113,6 @@ def test_a_reset_asked_with_the_university_address_goes_to_the_private_one(app, 
 def test_no_reset_for_an_unconfirmed_university_address(app, client, reset_mails):
     _member(confirmed=False)
 
-    client.post("/forgot-password", data={"email": UNI})
+    client.post("/api/v1/password-reset", json={"email": UNI})
 
     assert reset_mails == []

@@ -44,7 +44,6 @@ def test_staff_land_where_logging_in_would_take_them(client, app):
     assert client.get("/").headers["Location"] == "/admin"
 
 
-def test_the_login_page_points_new_people_at_the_form(client):
-    body = client.get("/login").get_data(as_text=True)
-
-    assert 'href="/join"' in body
+def test_the_login_page_is_the_apps(client):
+    """It points new people at the form (frontend/src/pages/public/SignIn.tsx)."""
+    assert '<div id="root">' in client.get("/login").get_data(as_text=True)

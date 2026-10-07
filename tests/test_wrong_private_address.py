@@ -52,7 +52,7 @@ class TestTheResetLink:
                             lambda app, to_email, **kwargs: sent.append(to_email) or True)
         _member(work="anna.berger@edu.fh-joanneum.at", work_confirmed=True)
 
-        client.post("/forgot-password", data={"email": "Anna.Berger@edu.fh-joanneum.at"})
+        client.post("/api/v1/password-reset", json={"email": "Anna.Berger@edu.fh-joanneum.at"})
 
         assert sent == ["anna.berger@edu.fh-joanneum.at"]
 

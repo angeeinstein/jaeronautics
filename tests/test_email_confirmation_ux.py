@@ -138,7 +138,7 @@ class TestReconnectingAtSignIn:
         profile = self._archived()
         _member(work_verified=True)  # verified, but never claimed
 
-        client.post("/login", data={
+        client.post("/api/v1/session", json={
             "email": "private@example.com", "password": "hunter2hunter2",
         }, follow_redirects=True)
 
@@ -149,7 +149,7 @@ class TestReconnectingAtSignIn:
         member = _member(work_verified=True)
         user_id = member.user_id
 
-        response = client.post("/login", data={
+        response = client.post("/api/v1/session", json={
             "email": "private@example.com", "password": "hunter2hunter2",
         }, follow_redirects=True)
 
@@ -167,7 +167,7 @@ class TestReconnectingAtSignIn:
         self._archived()
         _member(work_verified=True)
 
-        response = client.post("/login", data={
+        response = client.post("/api/v1/session", json={
             "email": "private@example.com", "password": "hunter2hunter2",
         }, follow_redirects=True)
 

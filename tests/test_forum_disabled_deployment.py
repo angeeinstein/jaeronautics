@@ -62,12 +62,10 @@ class TestTheMemberJourney:
         member = _member()
 
         response = client.post(
-            "/login",
-            data={"email": member.email_private, "password": "Str0ngPassw0rd!x"},
-            follow_redirects=True,
+            "/api/v1/session", json={"email": member.email_private, "password": "Str0ngPassw0rd!x"},
         )
 
-        assert response.status_code == 200
+        assert response.get_json() == {"go_to": "/account"}
 
     def test_the_account_page_renders(self, client):
         member = _member("account@example.com")

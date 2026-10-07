@@ -892,11 +892,9 @@ class TestErasedAccountsStayErased:
         db.session.commit()
 
         response = client.post(
-            "/login",
-            data={"email": "ghost@example.com", "password": "initial-password"},
-            follow_redirects=True,
+            "/api/v1/session", json={"email": "ghost@example.com", "password": "initial-password"},
         )
 
         with client.session_transaction() as session:
             assert "_user_id" not in session
-        assert response.status_code == 200
+        assert response.get_json()["error"]["code"] == "invalid_credentials"

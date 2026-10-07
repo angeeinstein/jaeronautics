@@ -59,7 +59,7 @@ def app_with_limiter_store_down(tmp_path, monkeypatch):
 
 def _login(client, email, ip="203.0.113.7"):
     return client.post(
-        "/login", data={"email": email, "password": "wrong-password"},
+        "/api/v1/session", json={"email": email, "password": "wrong-password"},
         environ_base={"REMOTE_ADDR": ip},
     )
 
@@ -144,7 +144,7 @@ def test_logging_in_keeps_working_when_the_limiter_store_is_down(app_with_limite
     statuses = [_login(client, "target@example.com").status_code for _ in range(11)]
 
     assert 500 not in statuses
-    assert statuses[0] == 200     # the form again, "invalid email or password"
+    assert statuses[0] == 400     # "invalid email or password"
     assert statuses[10] == 429    # and still limited, in memory
 
 

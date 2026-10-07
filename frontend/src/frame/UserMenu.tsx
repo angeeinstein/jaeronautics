@@ -45,7 +45,7 @@ export function UserMenu({ me }: { me: Me }) {
         </Menu.Item>
         <Menu.Divider />
         <Menu.Item leftSection={<IconLogout size={16} />} onClick={() => void logOut()}>
-          Log out
+          Sign out
         </Menu.Item>
       </Menu.Dropdown>
     </Menu>

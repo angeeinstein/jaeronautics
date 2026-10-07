@@ -7,7 +7,7 @@ what the claim left broken for the person it had just helped.
 """
 from datetime import datetime, timezone
 
-from api_helpers import send
+from api_helpers import said, send
 from conftest import db, make_member
 
 from aeronautics_members.db_models import (
@@ -115,7 +115,7 @@ class TestChangingTheUniversityAddress:
         _save_contact(client, "intruder@example.com", "victim@edu.fh-joanneum.at")
         client.post("/logout")
 
-        client.post("/login", data={
+        client.post("/api/v1/session", json={
             "email": "intruder@example.com", "password": "initial-password",
         })
 
@@ -202,7 +202,7 @@ class TestStayingSignedIn:
         member.user.email_verified_at = _now()
         db.session.commit()
 
-        client.post("/login", data={"email": "sign@example.com", "password": "initial-password"})
+        client.post("/api/v1/session", json={"email": "sign@example.com", "password": "initial-password"})
 
         response = client.get("/account", follow_redirects=True)
         assert response.request.path == "/account"
@@ -257,9 +257,9 @@ class TestStayingSignedIn:
         db.session.commit()
 
         forged = generate_token("verify-email", **{**claims, "nonce": "guessed"})
-        body = client.get(f"/verify-email/{forged}", follow_redirects=True).get_data(as_text=True)
+        client.get(f"/verify-email/{forged}", follow_redirects=True)
 
-        assert "invalid or has expired" in body
+        assert "invalid or has expired" in said(client)
         account = db.session.execute(
             db.select(User).filter_by(email="nonce@example.com")
         ).scalar_one()
