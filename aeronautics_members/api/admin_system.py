@@ -20,7 +20,7 @@ from ..permissions import Permission
 from ..services import maintenance
 from ..services.diagnostics import collect_system_health
 from ..services.notifications import list_undelivered_emails
-from ..services.system_update import describe_update_state, parse_time
+from ..services.system_update import describe_update_state, parse_time, read_full_log
 from ._core import Model, UtcDateTime, endpoint
 
 TAG = "Admin"
@@ -145,12 +145,23 @@ class VersionOut(Model):
     subject: str | None
 
 
+class UpdateStepOut(Model):
+    #: As the installer says it: "Installing Python dependencies".
+    label: str
+    #: Pending: still to come, as the last successful update went.
+    state: Literal["done", "running", "failed", "pending"]
+    #: Its warnings, or why it failed.
+    detail: str | None
+
+
 class ProgressOut(Model):
     steps_done: int
     #: How many the last successful update took; None before the first.
     steps_expected: int | None
     percent: int | None
     current_step: str | None
+    #: The running update's steps -- or else the last one's -- to tick off.
+    steps: list[UpdateStepOut]
 
 
 class RollbackPointOut(Model):
@@ -218,6 +229,20 @@ class UpdatesQuery(Model):
 def admin_updates(query):
     """The version running and the newest; while an update runs, how far it is. The page asks again and again."""
     return _updates(force_remote_check=query.refresh)
+
+
+class UpdateLogOut(Model):
+    #: The latest update's whole output, as in a terminal; None before the first.
+    text: str | None
+    #: Only its end, the output being very long.
+    cut: bool
+
+
+@endpoint("GET", "/admin/settings/updates/log", response=UpdateLogOut, permissions=SYSTEM, tag=TAG)
+def admin_update_log():
+    """Everything the latest update printed. The page asks again while one runs."""
+    text, cut = read_full_log()
+    return UpdateLogOut(text=text, cut=cut)
 
 
 class UpdateIn(Model):

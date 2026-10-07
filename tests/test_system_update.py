@@ -360,8 +360,8 @@ class TestRunnerRollbackHandling:
 
     def test_runner_only_honours_the_known_action(self):
         source = self.RUNNER.read_text()
-        assert 'action="$(read_request_field action)"' in source
-        assert '"${action}" == "rollback"' in source
+        assert 'if [[ "$(read_request_field action)" == "rollback" ]]; then' in source
+        assert 'ACTION="update"' in source  # anything else is an update
 
     def test_runner_does_not_take_a_revision_from_the_request(self):
         source = self.RUNNER.read_text()
@@ -522,8 +522,21 @@ class TestAnUpdateThatNeverFinishes:
         self._run_runner(state_dir, self._command(tmp_path, 'echo "[STEP] one"'))
 
         status = self._status(state_dir)
-        assert status["state"] == "completed" and status["boot_id"]
+        assert status["state"] == "completed" and status["boot_id"] and status["action"] == "update"
         assert not (state_dir / "request.processing.json").exists()
+
+    def test_a_rollback_says_it_was_one(self, tmp_path):
+        state_dir = tmp_path / "updates"
+        state_dir.mkdir()
+        (state_dir / "request.json").write_text('{"requested_at": "x", "action": "rollback"}')
+        self._run_runner(state_dir, self._command(tmp_path, 'echo "[STEP] Rolling back"'))
+
+        assert self._status(state_dir)["action"] == "rollback"
+
+    def test_the_last_runs_output_is_gone_before_the_next_says_it_runs(self):
+        """Else the page would read the previous run's steps as this one's, for a moment."""
+        runner = self.RUNNER.read_text()
+        assert runner.index(': > "${LOG_FILE}"') < runner.index('write_status "running"')
 
     def test_a_runner_that_is_stopped_says_so(self, tmp_path):
         """What systemd does at its time limit, on a service stop or a reboot."""

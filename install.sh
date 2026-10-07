@@ -1704,7 +1704,10 @@ prepare_frontend() {
         return 0
     fi
 
-    step "Fetching the front end built by CI for ${sha:0:8}"
+    # The step's name stays the same from update to update, so the admin page
+    # can list it ahead as one still to come; the revision goes on its own line.
+    step "Fetching the front end built by CI"
+    info "Built from ${sha:0:8}."
     wait_for_ci "${slug}" "${sha}"
 
     local name="frontend-${FRONTEND_TREE}.tar.gz"

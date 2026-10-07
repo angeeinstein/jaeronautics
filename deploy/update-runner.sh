@@ -77,12 +77,13 @@ write_status() {
     local state="$1" exit_code="$2" started_at="$3" finished_at="$4"
     local revision_before="$5" revision_after="$6" log_tail="$7"
     local steps_done="${8:-0}" steps_expected="${9:-0}"
-    local requested_at="${REQUESTED_AT:-}" requested_by="${REQUESTED_BY:-null}"
+    local requested_at="${REQUESTED_AT:-}" requested_by="${REQUESTED_BY:-null}" action="${ACTION:-update}"
 
     local tmp="${STATUS_FILE}.tmp"
     cat > "${tmp}" <<EOF
 {
   "state": "$(json_escape "${state}")",
+  "action": "$(json_escape "${action}")",
   "requested_at": "$(json_escape "${requested_at}")",
   "requested_by_user_id": ${requested_by:-null},
   "started_at": "$(json_escape "${started_at}")",
@@ -175,9 +176,10 @@ main() {
     # whole of its influence: which revision to return to comes from this side,
     # from the rollback point install.sh recorded. Anything unrecognised is
     # treated as an update rather than trusted.
-    local action command_args=()
-    action="$(read_request_field action)"
-    if [[ "${action}" == "rollback" ]]; then
+    local command_args=()
+    ACTION="update"
+    if [[ "$(read_request_field action)" == "rollback" ]]; then
+        ACTION="rollback"
         command_args=(--rollback)
     fi
 
@@ -194,11 +196,11 @@ main() {
     trap 'on_interrupt "stopped by a signal: SIGTERM -- a time limit, a service stop or a reboot"' TERM
     trap 'on_interrupt "stopped by a signal: SIGINT"' INT
     trap 'on_interrupt "stopped by a signal: SIGHUP"' HUP
-    write_status "running" 0 "${started_at}" "" "${revision_before}" "" "" 0 "${expected_steps}"
-
     # Create the log and make it readable before the update starts, so the admin
-    # page can tail it live rather than only seeing output once everything is
+    # page can follow it live rather than only seeing output once everything is
     # over. stdbuf keeps the installer's output unbuffered for the same reason.
+    # Emptied before the status says "running", so the page never reads the
+    # previous run's steps as this one's.
     : > "${LOG_FILE}"
     if [[ -n "${LOG_GROUP}" ]]; then
         chgrp "${LOG_GROUP}" "${LOG_FILE}" 2>/dev/null || true
@@ -206,6 +208,8 @@ main() {
     else
         chmod 600 "${LOG_FILE}" 2>/dev/null || true
     fi
+    write_status "running" 0 "${started_at}" "" "${revision_before}" "" "" 0 "${expected_steps}"
+
 
     # In the background and waited for, rather than in the foreground: bash
     # holds a trapped signal until a foreground command ends, so a stop request

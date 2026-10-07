@@ -239,7 +239,8 @@ server can update to it.
       `services/mail_accounts.py`; the export of the accounts with their passwords now asks
       for the current password. Maintenance became three pages: System health and Updates done
       (`api/admin_system.py`, `services/maintenance.py`); the Updates page follows an update
-      through the restart and then loads itself again, and the app loads itself again when a
+      through the restart -- its steps ticked off as on the backup page, the whole terminal
+      output folded away below -- and then loads itself again, and the app loads itself again when a
       part of an older build is gone (`src/app/staleBuild.ts`). Backup and restore done
       (`api/admin_backup.py`), with the paused background jobs of a restored portal and the
       checklist after resuming them (`components/Checklist.tsx`). Every settings page is now

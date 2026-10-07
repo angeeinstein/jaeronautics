@@ -1152,6 +1152,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/updates/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Everything the latest update printed. The page asks again while one runs. */
+        get: operations["admin_update_log"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/team-settings": {
         parameters: {
             query?: never;
@@ -4490,6 +4507,8 @@ export interface components {
             current_step: string | null;
             /** Percent */
             percent: number | null;
+            /** Steps */
+            steps: components["schemas"]["UpdateStepOut"][];
             /** Steps Done */
             steps_done: number;
             /** Steps Expected */
@@ -5458,6 +5477,25 @@ export interface components {
              * @enum {string}
              */
             action: "update" | "rollback";
+        };
+        /** UpdateLogOut */
+        UpdateLogOut: {
+            /** Cut */
+            cut: boolean;
+            /** Text */
+            text: string | null;
+        };
+        /** UpdateStepOut */
+        UpdateStepOut: {
+            /** Detail */
+            detail: string | null;
+            /** Label */
+            label: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "done" | "running" | "failed" | "pending";
         };
         /** UpdatesOut */
         UpdatesOut: {
@@ -9530,6 +9568,44 @@ export interface operations {
             };
             /** @description Not possible in the current state. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_update_log: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateLogOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

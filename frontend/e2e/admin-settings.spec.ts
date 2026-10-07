@@ -69,13 +69,17 @@ test.describe('settings', () => {
     await expect(page.getByRole('region', { name: 'Background work' })).toContainText('Emails queued');
   });
 
-  test('updates: the version running; nothing can start without the runner', async ({ page }) => {
+  test('updates: the last one, its steps ticked off, and its whole output to unfold', async ({ page }) => {
     await page.goto('/admin/settings/updates');
 
     await expect(page.getByRole('region', { name: 'Version', exact: true })).toContainText('Installed');
-    // The sample server has no update runner: said, and the button stays off.
-    await expect(page.getByText(/the update runner is not installed/)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Install update now' })).toBeDisabled();
+    const steps = page.getByRole('list', { name: 'Steps of the last update' });
+    await expect(steps.getByRole('listitem')).toHaveCount(12);
+    await expect(steps).toContainText('Fetching the front end built by CI: Done');
+    await expect(steps).toContainText('CI is still running for this revision');
+
+    await page.getByRole('button', { name: 'Show the terminal output' }).click();
+    await expect(page.getByText(/Running upgrade a7d3e9f1c5b2 -> b8e4f2a6c1d9/)).toBeVisible();
   });
 
   test('backup and restore: the steps of a backup, made in the background', async ({ page }) => {

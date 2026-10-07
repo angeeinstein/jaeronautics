@@ -45,6 +45,14 @@ class TestHealth:
         assert db.session.query(AuditLog).filter_by(event_type="forum_tasks_retried").count() == 0
 
 
+def _ran(state_dir, state, log, action="update"):
+    """A run of the update runner, as its files say: its status and its output."""
+    (state_dir / system_update.STATUS_FILENAME).write_text(json.dumps(
+        {"state": state, "action": action, "started_at": "2999-01-01T00:00:00+00:00",
+         "finished_at": None if state == "running" else f"2999-01-01T00:{len(log) % 60:02d}:00+00:00"}))
+    (state_dir / system_update.LOG_FILENAME).write_text(log)
+
+
 class TestUpdates:
     def test_while_one_runs_how_far_it_is(self, boss, state_dir):
         (state_dir / system_update.STATUS_FILENAME).write_text(json.dumps(
@@ -55,8 +63,91 @@ class TestUpdates:
 
         assert body["in_progress"] is True
         assert body["progress"] == {"steps_done": 2, "steps_expected": 4, "percent": 50,
-                                    "current_step": "Installing"}
+                                    "current_step": "Installing", "steps": [
+                                        {"label": "Fetching", "state": "done", "detail": None},
+                                        {"label": "Installing", "state": "running", "detail": None}]}
         assert "Installing" in body["last_run"]["log_tail"]
+
+    def test_the_steps_still_to_come_as_the_last_good_update_went(self, boss, state_dir):
+        _ran(state_dir, "completed", "[STEP] Fetching\n[STEP] Installing\n[STEP] Restarting\n[STEP] Verifying\n")
+        boss.get(UPDATES)  # the page sees it finished, and keeps its steps
+        _ran(state_dir, "running", "[STEP] Fetching\n[INFO] 12 files\n[STEP] Installing\n")
+
+        steps = boss.get(UPDATES).get_json()["progress"]["steps"]
+
+        assert [(step["label"], step["state"]) for step in steps] == [
+            ("Fetching", "done"), ("Installing", "running"), ("Restarting", "pending"), ("Verifying", "pending")]
+
+    def test_a_step_not_planned_does_not_upset_the_list(self, boss, state_dir):
+        _ran(state_dir, "completed", "[STEP] Fetching\n[STEP] Installing\n[STEP] Verifying\n")
+        boss.get(UPDATES)
+        _ran(state_dir, "running", "[STEP] Fetching\n[STEP] Building here instead\n")
+
+        steps = boss.get(UPDATES).get_json()["progress"]["steps"]
+
+        assert [(step["label"], step["state"]) for step in steps] == [
+            ("Fetching", "done"), ("Building here instead", "running"), ("Installing", "pending"),
+            ("Verifying", "pending")]
+
+    def test_a_rollback_is_not_what_the_next_update_expects(self, boss, state_dir):
+        _ran(state_dir, "completed", "[STEP] Rolling back to abcdef12\n[STEP] Verifying\n", action="rollback")
+        boss.get(UPDATES)
+        _ran(state_dir, "running", "[STEP] Fetching\n")
+
+        steps = boss.get(UPDATES).get_json()["progress"]["steps"]
+
+        assert [step["label"] for step in steps] == ["Fetching"]
+
+    def test_what_went_wrong_and_what_was_warned_is_said_with_its_step(self, boss, state_dir):
+        _ran(state_dir, "failed", "[STEP] Fetching\n[WARN] CI is slow\n[WARN] still slow\n[WARN] very slow\n"
+                                  "[STEP] Installing\npip says no\n[ERR] Python dependencies failed.\n")
+
+        steps = boss.get(UPDATES).get_json()["progress"]["steps"]
+
+        assert steps == [
+            {"label": "Fetching", "state": "done", "detail": "CI is slow · still slow (and 1 more)"},
+            {"label": "Installing", "state": "failed", "detail": "Python dependencies failed."}]
+
+    def test_a_run_that_failed_before_its_first_step_says_why(self, boss, state_dir):
+        _ran(state_dir, "failed", "[ERROR] The update was stopped before it finished (SIGTERM).\n")
+
+        steps = boss.get(UPDATES).get_json()["progress"]["steps"]
+
+        assert steps == [{"label": "Starting the update", "state": "failed",
+                          "detail": "The update was stopped before it finished (SIGTERM)."}]
+
+    def test_a_new_request_does_not_show_the_last_runs_steps(self, boss, state_dir):
+        _ran(state_dir, "completed", "[STEP] Fetching\n[STEP] Verifying\n")
+        boss.get(UPDATES)
+        (state_dir / system_update.REQUEST_FILENAME).write_text(json.dumps(
+            {"requested_at": "2999-01-01T00:00:00+00:00", "action": "update"}))
+
+        steps = boss.get(UPDATES).get_json()["progress"]["steps"]
+
+        assert [(step["label"], step["state"]) for step in steps] == [
+            ("Starting the update", "running"), ("Fetching", "pending"), ("Verifying", "pending")]
+
+    def test_the_whole_output_without_the_terminal_colours(self, boss, state_dir):
+        lines = [f"line {number}" for number in range(100)]
+        _ran(state_dir, "completed", "\x1b[0;34m[STEP]\x1b[0m Fetching\n" + "\n".join(lines) + "\n")
+
+        body = boss.get(f"{UPDATES}/log").get_json()
+
+        assert body["cut"] is False
+        assert body["text"].startswith("[STEP] Fetching\nline 0\n") and "line 99" in body["text"]
+        assert boss.get(UPDATES).get_json()["progress"]["steps"][0]["label"] == "Fetching"
+
+    def test_a_very_long_output_is_given_from_its_end(self, boss, state_dir, monkeypatch):
+        monkeypatch.setattr(system_update, "LOG_READ_LIMIT", 100)
+        _ran(state_dir, "completed", "".join(f"line {number}\n" for number in range(100)))
+
+        body = boss.get(f"{UPDATES}/log").get_json()
+
+        assert body["cut"] is True
+        assert body["text"].startswith("line ") and body["text"].rstrip().endswith("line 99")
+
+    def test_no_output_before_the_first_update(self, boss, state_dir):
+        assert boss.get(f"{UPDATES}/log").get_json() == {"text": None, "cut": False}
 
     def test_a_second_one_while_one_runs_is_refused(self, boss, state_dir):
         assert send(boss, "POST", UPDATES, {"action": "update"}).status_code == 202

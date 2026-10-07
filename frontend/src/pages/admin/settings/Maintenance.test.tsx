@@ -150,7 +150,7 @@ const upToDate: Schemas['UpdatesOut'] = {
   runner_installed: true,
   in_progress: false,
   request_never_picked_up: false,
-  progress: { steps_done: 0, steps_expected: null, percent: null, current_step: null },
+  progress: { steps_done: 0, steps_expected: null, percent: null, current_step: null, steps: [] },
   rollback_point: null,
   last_run: {
     state: null,
@@ -165,7 +165,18 @@ const upToDate: Schemas['UpdatesOut'] = {
 const running: Schemas['UpdatesOut'] = {
   ...upToDate,
   in_progress: true,
-  progress: { steps_done: 3, steps_expected: 6, percent: 50, current_step: 'Building the front end' },
+  progress: {
+    steps_done: 3,
+    steps_expected: 6,
+    percent: 50,
+    current_step: 'Building the front end',
+    steps: [
+      { label: 'Pausing background jobs for the update', state: 'done', detail: null },
+      { label: 'Installing Python dependencies', state: 'done', detail: 'pip is slow today' },
+      { label: 'Building the front end', state: 'running', detail: null },
+      { label: 'Verifying deployment', state: 'pending', detail: null },
+    ],
+  },
   last_run: { ...upToDate.last_run, state: 'running', log_tail: '[STEP] Building the front end' },
 };
 
@@ -191,7 +202,17 @@ describe('updates', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Install update now' }));
     await userEvent.click(screen.getByRole('button', { name: 'Yes, install' }));
     expect(await screen.findByText('Update running')).toBeInTheDocument();
-    expect(screen.getByText('Building the front end')).toBeInTheDocument();
+    const steps = screen.getByRole('list', { name: 'Update steps' });
+    expect(
+      within(steps)
+        .getAllByRole('listitem')
+        .map((line) => line.textContent),
+    ).toEqual([
+      'Pausing background jobs for the update: Done',
+      'Installing Python dependencies: Donepip is slow today',
+      'Building the front end: In progress',
+      'Verifying deployment: Not started',
+    ]);
 
     // The server goes away while it restarts: said, and asked again.
     answers[UPDATES] = { status: 502, body: { error: { code: 'down', message: 'Bad gateway', fields: {} } } };
@@ -208,6 +229,35 @@ describe('updates', () => {
     await waitFor(() => {
       expect(reloadPage).toHaveBeenCalledOnce();
     });
+  });
+
+  it('the terminal output, folded away until asked for', async () => {
+    const { calls } = show(<Updates />, {
+      [UPDATES]: {
+        body: {
+          ...upToDate,
+          last_run: { ...upToDate.last_run, state: 'failed', exit_code: 1, log_tail: 'the end' },
+          progress: {
+            ...upToDate.progress,
+            steps: [
+              { label: 'Fetching the front end built by CI', state: 'done', detail: null },
+              { label: 'Installing Python dependencies', state: 'failed', detail: 'No space left on device' },
+            ],
+          },
+        },
+      },
+      [`${UPDATES}/log`]: {
+        body: { text: '[STEP] Fetching\n[STEP] Installing\n[ERR] No space', cut: false },
+      },
+    });
+
+    const steps = await screen.findByRole('list', { name: 'Steps of the last update' });
+    expect(steps).toHaveTextContent('Installing Python dependencies: FailedNo space left on device');
+    expect(calls.some((call) => call.url.endsWith('/log'))).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show the terminal output' }));
+
+    expect(await screen.findByText(/\[ERR\] No space/)).toBeInTheDocument();
   });
 
   it('a rollback point, offered', async () => {

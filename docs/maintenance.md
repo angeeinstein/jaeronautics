@@ -114,11 +114,20 @@ Tests point the app at SQLite via the `DATABASE_URL` environment variable, which
 
 ## Updating and Rolling Back
 
-Settings → Maintenance has the update button. The web process never installs
+Settings → Updates has the update button. The web process never installs
 anything itself: it writes a request file, and a root-owned watcher acts on it.
 The request carries no branch, remote or revision, so reaching that endpoint
 cannot choose what gets deployed — which is the whole reason this is not a
 sudoers rule.
+
+While an update runs, the page lists its steps as the installer reaches them
+(its `[STEP]` lines in `/var/lib/jaeronautics/updates/last-run.log`) -- done,
+under way, failed -- with any warning or error under its step, and the steps
+still to come as the last successful update went (kept by the portal in
+`step-plan.json` beside the log). Below, folded away, is everything the
+installer printed, as in a terminal; after the update the same list and output
+stay under *Last update*. A step's name is the same on every update, so a
+revision or a count it mentions goes on a line of its own.
 
 **A rollback restores the program only.** It does *not* restore the database.
 The schema is deliberately left where it is, because every migration here adds

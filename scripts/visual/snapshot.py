@@ -73,6 +73,47 @@ def build_app(db_path):
     return app, app_module
 
 
+UPDATE_LOG = """[INFO] Requested update for branch main.
+[STEP] Pausing background jobs for the update
+[OK] Background jobs paused; they resume when the update is done.
+[STEP] Re-running installer from the latest repository copy
+From https://github.com/example/portal
+   1a2b3c4..5d6e7f8  main       -> origin/main
+[STEP] Fetching the front end built by CI
+[INFO] Built from 5d6e7f80.
+[WARN] CI is still running for this revision; waiting up to 25 minutes.
+[OK] Front end downloaded and checked.
+[STEP] Putting the front end in place
+[STEP] Installing Python dependencies
+Requirement already satisfied: Flask==3.1.1 in ./venv/lib/python3.12/site-packages
+Requirement already satisfied: SQLAlchemy==2.0.41 in ./venv/lib/python3.12/site-packages
+[STEP] Writing application environment file
+[STEP] Initializing database schema
+INFO  [alembic.runtime.migration] Running upgrade a7d3e9f1c5b2 -> b8e4f2a6c1d9, team photos
+[STEP] Writing systemd service
+[STEP] Installing admin-page update runner
+[STEP] Writing nginx configuration
+[STEP] Reloading system services
+[STEP] Verifying deployment
+[OK] The portal answers on http://127.0.0.1:8000.
+[OK] Update complete.
+"""
+
+
+def _an_update_that_ran(system_update):
+    """The Updates page as after an update: its steps, and the whole output to unfold."""
+    state_dir = Path(os.environ["DATABASE_URL"].removeprefix("sqlite:///")).parent / "updates"
+    state_dir.mkdir(exist_ok=True)
+    (state_dir / system_update.LOG_FILENAME).write_text(UPDATE_LOG)
+    (state_dir / system_update.STATUS_FILENAME).write_text(json.dumps({
+        "state": "completed", "action": "update", "exit_code": 0,
+        "started_at": "2026-10-01T09:58:00+02:00", "finished_at": "2026-10-01T10:04:00+02:00",
+        "revision_after": "5d6e7f8090a1b2c3", "steps_expected": UPDATE_LOG.count("[STEP]"),
+        "log_tail": "\n".join(UPDATE_LOG.splitlines()[-40:]),
+    }))
+    system_update.UPDATE_STATE_DIR = state_dir
+
+
 def go_offline(app_module):
     """Stripe, the forum and the git remote answer without a network."""
     from aeronautics_members.forum_service import DiscourseConnectProvider, ForumProviderError
@@ -83,6 +124,7 @@ def go_offline(app_module):
 
     DiscourseConnectProvider._request = offline
     system_update.get_remote_version = lambda force=False: None
+    _an_update_that_ran(system_update)
 
     subscriptions = {}  # email -> the Stripe subscription the page should see
 
@@ -374,6 +416,7 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--reviews", "user": "admin@example.org", "path": "/admin/reviews"},
         {"name": "admin--logs", "user": "admin@example.org", "path": "/admin/logs"},
         {"name": "admin--settings", "user": "admin@example.org", "path": "/admin/settings"},
+        {"name": "admin--settings-updates", "user": "admin@example.org", "path": "/admin/settings/updates"},
         {"name": "admin--teams", "user": "admin@example.org", "path": "/admin/teams"},
         {"name": "admin--team-detail", "user": "admin@example.org", "path": "/admin/teams/rocket-team"},
         {"name": "admin--team-new", "user": "admin@example.org", "path": "/admin/teams/new"},

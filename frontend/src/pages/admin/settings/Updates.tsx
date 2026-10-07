@@ -1,6 +1,8 @@
 /**
  * Settings -> Updates: the version running and the newest one, installing
- * it, going back to the one before, and how the last update went.
+ * it, going back to the one before, and how the last update went -- its steps
+ * ticked off as they happen, and below them, folded away, everything the
+ * installer printed, as in a terminal.
  *
  * An update restarts the very server that answers this page, so while one
  * runs the page asks again every two seconds, takes a failed answer for the
@@ -13,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
 import { api, call, type Schemas } from '../../../api/client';
+import { type CheckState, Checklist } from '../../../components/Checklist';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { type Detail, Details } from '../../../components/Details';
 import { PageHeader } from '../../../components/PageHeader';
@@ -31,16 +34,89 @@ const KEY = ['admin', 'settings', 'updates'] as const;
 const POLL_MS = 2000;
 const RELOAD_AFTER_MS = 1500;
 
+const STEP: Record<Schemas['UpdateStepOut']['state'], CheckState> = {
+  done: 'ok',
+  running: 'running',
+  failed: 'failed',
+  pending: 'pending',
+};
+
+function Steps({ steps, label }: { steps: Schemas['UpdateStepOut'][]; label: string }) {
+  if (!steps.length) return null;
+  return (
+    <Checklist
+      label={label}
+      items={steps.map((step, index) => ({
+        key: `${String(index)}:${step.label}`,
+        label: step.label,
+        state: STEP[step.state],
+        detail: step.detail,
+      }))}
+    />
+  );
+}
+
 function Log({ text }: { text: string }) {
   const node = useRef<HTMLPreElement>(null);
+  // Following the newest output -- unless somebody scrolled up to read.
+  const following = useRef(true);
   useEffect(() => {
-    // Keep the newest output in view.
-    if (node.current) node.current.scrollTop = node.current.scrollHeight;
+    if (node.current && following.current) node.current.scrollTop = node.current.scrollHeight;
   }, [text]);
   return (
-    <Code block ref={node} className={classes.log}>
+    <Code
+      block
+      ref={node}
+      className={classes.log}
+      onScroll={(event) => {
+        const box = event.currentTarget;
+        following.current = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+      }}
+    >
       {text}
     </Code>
+  );
+}
+
+/** Everything the update printed, folded away; fetched when opened, and again while one runs. */
+function Output({ running, fallback }: { running: boolean; fallback: string | null }) {
+  const [open, setOpen] = useState(false);
+  const output = useQuery({
+    queryKey: [...KEY, 'log'],
+    queryFn: () => call(api.GET('/api/v1/admin/settings/updates/log')),
+    enabled: open,
+    refetchInterval: running ? POLL_MS : false,
+    refetchIntervalInBackground: true,
+  });
+  // While the site restarts the output cannot be fetched: what came last stays.
+  const text = output.data?.text ?? fallback;
+  return (
+    <div>
+      <Button
+        size="xs"
+        variant="subtle"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen(!open);
+        }}
+      >
+        {open ? 'Hide the terminal output' : 'Show the terminal output'}
+      </Button>
+      <Collapse expanded={open}>
+        <Stack gap={4}>
+          {output.data?.cut ? (
+            <Text size="xs" c="dimmed">
+              The output is very long; this is its end.
+            </Text>
+          ) : null}
+          {open && output.isPending ? (
+            <LoadingState />
+          ) : (
+            <Log text={text ?? (running ? 'Waiting for output…' : 'No output.')} />
+          )}
+        </Stack>
+      </Collapse>
+    </div>
   );
 }
 
@@ -100,9 +176,9 @@ function Version({ state, onCheck, checking }: { state: State; onCheck: () => vo
 }
 
 function Running({ state, phase }: { state: State; phase: 'running' | 'restarting' | 'finished' }) {
-  const { percent, current_step: step } = state.progress;
+  const { percent, steps, steps_done: done, steps_expected: expected } = state.progress;
   return (
-    <Stack gap="sm">
+    <Stack gap="md">
       <Group justify="space-between" gap="sm">
         <Text fw={600} role="status" aria-live="polite">
           {phase === 'finished'
@@ -111,9 +187,9 @@ function Running({ state, phase }: { state: State; phase: 'running' | 'restartin
               ? 'The site is restarting…'
               : 'Update running'}
         </Text>
-        {step ? (
+        {expected && phase !== 'finished' ? (
           <Text size="sm" c="dimmed">
-            {step}
+            {`${String(Math.min(done, expected))} of ${String(expected)} steps`}
           </Text>
         ) : null}
       </Group>
@@ -124,11 +200,12 @@ function Running({ state, phase }: { state: State; phase: 'running' | 'restartin
         animated={percent === null && phase !== 'finished'}
         aria-label="Update progress"
       />
+      <Steps steps={steps} label="Update steps" />
       <Alert color="brand" variant="light">
         The site restarts while the update finishes, so this page may be briefly unavailable. It loads the new
         version by itself when the update is done.
       </Alert>
-      <Log text={state.last_run.log_tail ?? 'Waiting for output…'} />
+      <Output running={phase !== 'finished'} fallback={state.last_run.log_tail} />
     </Stack>
   );
 }
@@ -238,8 +315,7 @@ function Rollback({
   );
 }
 
-function LastRun({ run }: { run: State['last_run'] }) {
-  const [showLog, setShowLog] = useState(false);
+function LastRun({ run, steps }: { run: State['last_run']; steps: Schemas['UpdateStepOut'][] }) {
   const result =
     run.state === 'completed' ? (
       <Pill tone="active">Completed</Pill>
@@ -272,23 +348,8 @@ function LastRun({ run }: { run: State['last_run'] }) {
               : []),
           ]}
         />
-        {run.log_tail ? (
-          <div>
-            <Button
-              size="xs"
-              variant="subtle"
-              aria-expanded={showLog}
-              onClick={() => {
-                setShowLog(!showLog);
-              }}
-            >
-              {showLog ? 'Hide the end of the update log' : 'Show the end of the update log'}
-            </Button>
-            <Collapse expanded={showLog}>
-              <Log text={run.log_tail} />
-            </Collapse>
-          </div>
-        ) : null}
+        <Steps steps={steps} label="Steps of the last update" />
+        <Output running={false} fallback={run.log_tail} />
       </Stack>
     </Panel>
   );
@@ -372,7 +433,7 @@ export function Updates() {
                 busy={start.isPending && start.variables === 'rollback'}
                 onStart={start.mutate}
               />
-              {state.last_run.state ? <LastRun run={state.last_run} /> : null}
+              {state.last_run.state ? <LastRun run={state.last_run} steps={state.progress.steps} /> : null}
             </>
           )}
         </Stack>

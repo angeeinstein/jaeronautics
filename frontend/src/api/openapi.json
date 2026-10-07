@@ -7824,6 +7824,13 @@
             ],
             "title": "Percent"
           },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/UpdateStepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
           "steps_done": {
             "title": "Steps Done",
             "type": "integer"
@@ -7844,7 +7851,8 @@
           "steps_done",
           "steps_expected",
           "percent",
-          "current_step"
+          "current_step",
+          "steps"
         ],
         "title": "ProgressOut",
         "type": "object"
@@ -10908,6 +10916,69 @@
           "action"
         ],
         "title": "UpdateIn",
+        "type": "object"
+      },
+      "UpdateLogOut": {
+        "additionalProperties": false,
+        "properties": {
+          "cut": {
+            "title": "Cut",
+            "type": "boolean"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "text",
+          "cut"
+        ],
+        "title": "UpdateLogOut",
+        "type": "object"
+      },
+      "UpdateStepOut": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "done",
+              "running",
+              "failed",
+              "pending"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "state",
+          "detail"
+        ],
+        "title": "UpdateStepOut",
         "type": "object"
       },
       "UpdatesOut": {
@@ -16302,6 +16373,50 @@
           }
         },
         "summary": "Ask the server to install the update (or roll back). It starts within moments and restarts the site.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.update"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/updates/log": {
+      "get": {
+        "operationId": "admin_update_log",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateLogOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Everything the latest update printed. The page asks again while one runs.",
         "tags": [
           "Admin"
         ],

@@ -1,12 +1,17 @@
 /* Shared by Updates and Backup and restore. */
 
-/* The end of a log: newest at the bottom, kept in view. */
+/* A log as a terminal shows it: newest at the bottom, kept in view. */
 .log {
-  max-height: 20rem;
+  max-height: 28rem;
   overflow: auto;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: var(--mantine-font-size-xs);
+  line-height: 1.6;
+  color: var(--ja-text);
+  background: var(--ja-navbar-bg);
+  border: 1px solid var(--ja-border);
 }
 
 /* A file name, which has no spaces to break at. */
