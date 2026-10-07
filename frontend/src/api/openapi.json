@@ -5653,6 +5653,10 @@
             ],
             "title": "First Name"
           },
+          "forum_area": {
+            "title": "Forum Area",
+            "type": "boolean"
+          },
           "forum_username": {
             "anyOf": [
               {
@@ -5706,6 +5710,17 @@
             "title": "Permissions",
             "type": "array"
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
           "roles": {
             "items": {
               "type": "string"
@@ -5727,9 +5742,11 @@
           "first_name",
           "last_name",
           "forum_username",
+          "picture_url",
           "roles",
           "permissions",
           "admin_area",
+          "forum_area",
           "teams_area",
           "team_labels",
           "counts",

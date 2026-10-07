@@ -1,8 +1,9 @@
 /**
- * The top bar on every page while signed in: the logo, the areas (My
- * Account, Teams while teams are on, Admin with access to it), the person's
- * menu. On a phone the logo shrinks to the mark and, where the area has a
- * sidebar, a menu button opens it as a drawer.
+ * The top bar on every page while signed in: the logo, the areas (the Forum
+ * for a member, Teams while teams are on, Admin with access to it), the
+ * person's menu -- their picture and name, the way to their account. On a
+ * phone the logo shrinks to the mark and, where the area has a sidebar, a
+ * menu button opens it as a drawer.
  */
 import { Box, Burger, Group } from '@mantine/core';
 import { useLocation } from 'react-router';
@@ -14,13 +15,14 @@ import mark from '../assets/mark.svg';
 import classes from './Frame.module.css';
 import { UserMenu } from './UserMenu';
 
-export type Area = 'account' | 'teams' | 'admin';
+export type Area = 'account' | 'forum' | 'teams' | 'admin';
 
 /** Which area an address belongs to, for marking it in the bar. */
 export function areaOf(pathname: string): Area | null {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return 'admin';
   if (pathname === '/teams' || pathname.startsWith('/teams/')) return 'teams';
-  if (/^\/(account|forum|change-password)(\/|$)/.test(pathname)) return 'account';
+  if (pathname === '/forum' || pathname.startsWith('/forum/')) return 'forum';
+  if (/^\/(account|change-password)(\/|$)/.test(pathname)) return 'account';
   return null;
 }
 
@@ -32,8 +34,10 @@ interface TopBarProps {
 
 export function TopBar({ me, menu }: TopBarProps) {
   const current = areaOf(useLocation().pathname);
-  const areas: { area: Area; label: string; to: string; shown: boolean }[] = [
-    { area: 'account', label: 'My Account', to: '/account', shown: true },
+  // My Account is the menu at the right, and the logo: not an area of its own here.
+  const areas: { area: Area; label: string; to: string; shown: boolean; server?: boolean }[] = [
+    // The server's own address: it signs a member into the forum, or says what is still missing.
+    { area: 'forum', label: 'Forum', to: '/forum', shown: me.forum_area, server: true },
     { area: 'teams', label: me.team_labels.plural, to: '/teams', shown: me.teams_area },
     { area: 'admin', label: 'Admin', to: '/admin', shown: me.admin_area },
   ];
@@ -65,16 +69,27 @@ export function TopBar({ me, menu }: TopBarProps) {
         <Group component="nav" aria-label="Areas" gap={0} h="100%" wrap="nowrap" ml={{ base: 0, sm: 'lg' }}>
           {areas
             .filter((entry) => entry.shown)
-            .map((entry) => (
-              <AppLink
-                key={entry.area}
-                to={entry.to}
-                className={classes.area}
-                aria-current={current === entry.area ? 'page' : undefined}
-              >
-                {entry.label}
-              </AppLink>
-            ))}
+            .map((entry) =>
+              entry.server ? (
+                <a
+                  key={entry.area}
+                  href={entry.to}
+                  className={classes.area}
+                  aria-current={current === entry.area ? 'page' : undefined}
+                >
+                  {entry.label}
+                </a>
+              ) : (
+                <AppLink
+                  key={entry.area}
+                  to={entry.to}
+                  className={classes.area}
+                  aria-current={current === entry.area ? 'page' : undefined}
+                >
+                  {entry.label}
+                </AppLink>
+              ),
+            )}
         </Group>
       </Group>
       <UserMenu me={me} />

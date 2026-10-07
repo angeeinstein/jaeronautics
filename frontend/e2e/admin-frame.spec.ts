@@ -22,9 +22,10 @@ test.describe('the admin frame', () => {
 
     await expect(page).toHaveURL(/\/account$/);
     await expect(page.getByRole('heading', { name: 'My Account', level: 1 })).toBeVisible();
+    // No area of its own in the bar: the account is the menu at the right.
     await expect(
       page.getByRole('navigation', { name: 'Areas' }).getByRole('link', { name: 'My Account' }),
-    ).toHaveAttribute('aria-current', 'page');
+    ).toHaveCount(0);
   });
 
   test('on a phone the sidebar is a drawer', async ({ page, isMobile }) => {

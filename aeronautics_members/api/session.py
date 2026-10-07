@@ -9,7 +9,7 @@ entry is only a convenience; every endpoint checks the permission again.
 
 from typing import Literal
 
-from flask import get_flashed_messages
+from flask import get_flashed_messages, url_for
 from flask_login import current_user
 from flask_wtf.csrf import generate_csrf
 
@@ -17,7 +17,7 @@ from ..permissions import Permission
 from ..services.background_jobs import is_paused
 from ..services.membership import free_period_start_test_override
 from ..services.reviews import waiting_for_review_count
-from ..services.teams import team_labels, teams_enabled
+from ..services.teams import avatar_token_for, team_labels, teams_enabled
 from ._core import Model, endpoint
 
 
@@ -88,9 +88,13 @@ class MeOut(Model):
     first_name: str | None
     last_name: str | None
     forum_username: str | None
+    #: Their approved forum picture, for the top bar; None shows their initials.
+    picture_url: str | None
     roles: list[str]
     permissions: list[PermissionName]
     admin_area: bool
+    #: A member's way into the forum (/forum): everybody with a membership.
+    forum_area: bool
     teams_area: bool
     team_labels: TeamLabels
     counts: Counts
@@ -118,6 +122,11 @@ def _admin_notices():
     return notices
 
 
+def _picture_url(user):
+    token = avatar_token_for(user)
+    return url_for("forum.forum_avatar_public_file", token=token) if token else None
+
+
 @endpoint("GET", "/me", response=MeOut, tag="Session")
 def me():
     """The signed-in person, what they may see, and the counts for their menus."""
@@ -130,9 +139,11 @@ def me():
         first_name=member.first_name if member is not None else None,
         last_name=member.last_name if member is not None else None,
         forum_username=current_user.forum_username,
+        picture_url=_picture_url(current_user),
         roles=sorted(role.slug for role in current_user.roles),
         permissions=sorted(current_user.permissions),
         admin_area=admin_area,
+        forum_area=member is not None,
         teams_area=teams_enabled(),
         team_labels=TeamLabels(singular=singular, plural=plural),
         counts=Counts(reviews_waiting=waiting_for_review_count(current_user)),

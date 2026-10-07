@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { makeMe } from '../test/fixtures';
@@ -29,11 +30,13 @@ describe('the frame', () => {
       within(areas)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['My Account', 'Teams', 'Admin']);
+    ).toEqual(['Forum', 'Teams', 'Admin']);
     expect(within(areas).getByRole('link', { name: 'Admin' })).toHaveAttribute('aria-current', 'page');
+    // The forum is the server's address: it signs a member in there.
+    expect(within(areas).getByRole('link', { name: 'Forum' })).toHaveAttribute('href', '/forum');
   });
 
-  it('leaves out Teams while teams are off, and Admin without access', async () => {
+  it('leaves out Teams while teams are off, Admin without access, the Forum without a membership', async () => {
     admin(makeMe({ teams_area: false, admin_area: false }));
     const areas = await screen.findByRole('navigation', { name: 'Areas' });
 
@@ -41,7 +44,23 @@ describe('the frame', () => {
       within(areas)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['My Account']);
+    ).toEqual(['Forum']);
+  });
+
+  it('without a membership, no forum; the account is the menu at the right', async () => {
+    admin(makeMe({ forum_area: false }));
+    const areas = await screen.findByRole('navigation', { name: 'Areas' });
+
+    expect(within(areas).queryByRole('link', { name: 'Forum' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu for Anna Berger' }));
+    expect(await screen.findByRole('menuitem', { name: 'My account' })).toHaveAttribute('href', '/account');
+  });
+
+  it('the person by their picture, where there is one', async () => {
+    admin(makeMe({ picture_url: '/forum/avatar/public/abc' }));
+
+    const button = await screen.findByRole('button', { name: 'Account menu for Anna Berger' });
+    expect(button.querySelector('img')).toHaveAttribute('src', '/forum/avatar/public/abc');
   });
 
   it('marks the current page in the sidebar', async () => {

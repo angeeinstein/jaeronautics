@@ -6,9 +6,14 @@ test.describe('my account', () => {
     await page.goto('/account');
 
     await expect(page.getByRole('heading', { name: 'My Account', level: 1 })).toBeVisible();
-    for (const name of ['Membership', 'Forum', 'Email addresses', 'Contact details', 'Your data']) {
+    for (const name of ['Membership', 'Forum', 'Contact details', 'Your data']) {
       await expect(page.getByRole('region', { name, exact: true })).toBeVisible();
     }
+    // The addresses once: in the contact details, each with whether it is confirmed.
+    await expect(page.getByRole('region', { name: 'Email addresses' })).toHaveCount(0);
+    await expect(
+      page.getByRole('region', { name: 'Contact details' }).getByText('Confirmed', { exact: true }),
+    ).toHaveCount(2);
     await expect(page.getByRole('contentinfo').getByRole('link', { name: 'Impressum' })).toBeVisible();
   });
 
@@ -79,7 +84,9 @@ test.describe('my account', () => {
   test('the password: the new one twice', async ({ page }) => {
     await signIn(page, 'returning@example.org');
     await page.goto('/account');
-    await page.getByRole('link', { name: 'Change password' }).click();
+    // From the menu at the top right: the one place for it.
+    await page.getByRole('button', { name: /^Account menu for/ }).click();
+    await page.getByRole('menuitem', { name: 'Change password' }).click();
 
     await expect(page).toHaveURL(/\/change-password$/);
     await page.getByLabel(/^Current password/).fill('snapshot-password');

@@ -8,6 +8,7 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
     first_name: 'Anna',
     last_name: 'Berger',
     forum_username: 'anna',
+    picture_url: null,
     roles: ['admin'],
     permissions: [
       'accounts.view',
@@ -24,6 +25,7 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
       'teams.money',
     ],
     admin_area: true,
+    forum_area: true,
     teams_area: true,
     team_labels: { singular: 'Team', plural: 'Teams' },
     counts: { reviews_waiting: 0 },

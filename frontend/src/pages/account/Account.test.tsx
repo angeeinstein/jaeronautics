@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -129,9 +129,25 @@ describe('my account', () => {
     expect(within(membership).getByText('Ended')).toBeInTheDocument();
     expect(within(membership).getByText(/You can rejoin at any time/)).toBeInTheDocument();
     expect(within(membership).getByRole('radio', { name: 'Invoice' })).toBeInTheDocument();
-    const emails = screen.getByRole('region', { name: 'Email addresses' });
-    expect(within(emails).getByText('Not confirmed')).toBeInTheDocument();
-    expect(within(emails).getAllByRole('button', { name: 'Send the link again' })).toHaveLength(1);
+    // The addresses once, in the contact details, each with whether it is confirmed.
+    expect(screen.queryByRole('region', { name: 'Email addresses' })).not.toBeInTheDocument();
+    const contact = await screen.findByRole('region', { name: 'Contact details' });
+    expect(within(contact).getByText('Confirmed')).toBeInTheDocument();
+    expect(within(contact).getByText('Not confirmed')).toBeInTheDocument();
+    expect(within(contact).getAllByRole('button', { name: 'Send the link again' })).toHaveLength(1);
+    // The password is changed from the menu at the top right.
+    expect(screen.queryByRole('link', { name: 'Change password' })).not.toBeInTheDocument();
+  });
+
+  it('an address being changed is not said to be confirmed', async () => {
+    show({});
+
+    const contact = await screen.findByRole('region', { name: 'Contact details' });
+    const field = within(contact).getByRole('textbox', { name: /University or company email/ });
+    fireEvent.change(field, { target: { value: 'anna@elsewhere.example' } });
+
+    expect(within(contact).queryByText('Not confirmed')).not.toBeInTheDocument();
+    expect(within(contact).getByText('Confirmed')).toBeInTheDocument();
   });
 
   it('rejoining by invoice goes where the server says', async () => {

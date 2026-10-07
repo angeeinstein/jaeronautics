@@ -1,7 +1,8 @@
 /**
- * The person's menu, right in the top bar: who is signed in, their account,
- * password, their data -- and logging out, which is no longer a link of its
- * own in the bar (docs/frontend-structure.md, section 3).
+ * The person's menu, right in the top bar -- their picture (or initials) and
+ * name: who is signed in, their account, password, their data, and signing
+ * out (docs/frontend-structure.md, section 3). The one place to change the
+ * password from.
  */
 import { Avatar, Menu, Text, UnstyledButton } from '@mantine/core';
 import { IconDownload, IconKey, IconLogout, IconUser } from '@tabler/icons-react';
@@ -16,7 +17,7 @@ export function UserMenu({ me }: { me: Me }) {
     <Menu position="bottom-end" width={260} withinPortal>
       <Menu.Target>
         <UnstyledButton className={classes.userButton} aria-label={`Account menu for ${name}`}>
-          <Avatar color="brand" variant="filled" size={32} radius="xl">
+          <Avatar src={me.picture_url} alt="" color="brand" variant="filled" size={32} radius="xl">
             {initials(me)}
           </Avatar>
           <Text size="sm" fw={500} visibleFrom="sm" truncate maw={180}>

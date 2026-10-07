@@ -3838,6 +3838,8 @@ export interface components {
             email: string;
             /** First Name */
             first_name: string | null;
+            /** Forum Area */
+            forum_area: boolean;
             /** Forum Username */
             forum_username: string | null;
             /** Id */
@@ -3846,6 +3848,8 @@ export interface components {
             last_name: string | null;
             /** Permissions */
             permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "approvals.review" | "forum.admin" | "forum.moderate" | "forum.moderator" | "logs.view" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
+            /** Picture Url */
+            picture_url: string | null;
             /** Roles */
             roles: string[];
             team_labels: components["schemas"]["TeamLabels"];

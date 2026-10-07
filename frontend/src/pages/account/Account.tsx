@@ -1,10 +1,11 @@
 /**
  * My Account (docs/frontend-structure.md, 6): what is to be done first --
- * addresses waiting to be confirmed -- then the membership and the forum,
- * the email addresses and one's teams, side by side on a wide screen; then
- * the contact details, the name and kind of membership, and one's data.
- * An account without a membership -- one used only to run the portal --
- * has the parts there are, and the way to start one.
+ * addresses waiting to be confirmed -- then the membership, the forum and
+ * one's teams, side by side on a wide screen; then the contact details, with
+ * both email addresses and whether each is confirmed, the name and kind of
+ * membership, and one's data. The password is changed from the menu at the
+ * top right. An account without a membership -- one used only to run the
+ * portal -- has the parts there are, and the way to start one.
  *
  * Data: GET /api/v1/account (aeronautics_members/api/account.py), asked again
  * every few seconds while a payment just made is being confirmed.
@@ -59,8 +60,12 @@ function Body({ account }: { account: AccountData }) {
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
             <MembershipCard membership={member.membership} />
             <ForumCard forum={member.forum} />
-            <EmailsCard email={account.email} workEmail={member.work_email} />
-            {teams && (teams.mine.length || teams.invite) ? <TeamsCard teams={teams} /> : null}
+            {/* Across both columns: it would stand alone in the second row. */}
+            {teams && (teams.mine.length || teams.invite) ? (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <TeamsCard teams={teams} />
+              </div>
+            ) : null}
           </SimpleGrid>
           {options.data ? (
             <>
@@ -68,6 +73,8 @@ function Body({ account }: { account: AccountData }) {
                 key={JSON.stringify(member.contact)}
                 contact={member.contact}
                 options={options.data}
+                email={account.email}
+                workEmail={member.work_email}
               />
               <IdentityCard
                 key={member.change_request?.id ?? 'form'}
@@ -85,7 +92,7 @@ function Body({ account }: { account: AccountData }) {
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
           <NoMembership />
-          <EmailsCard email={account.email} workEmail={null} />
+          <EmailsCard email={account.email} />
         </SimpleGrid>
       )}
       <YourDataCard
@@ -105,15 +112,7 @@ export function Account() {
   });
   return (
     <>
-      <PageHeader
-        title="My Account"
-        description={account.data?.email.address}
-        actions={
-          <Button component={AppLink} to="/change-password" variant="default">
-            Change password
-          </Button>
-        }
-      />
+      <PageHeader title="My Account" description={account.data?.email.address} />
       {account.isPending ? (
         <LoadingState />
       ) : account.isError ? (

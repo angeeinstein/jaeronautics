@@ -16,7 +16,7 @@ from aeronautics_members.api import openapi
 from aeronautics_members.permissions import Permission
 from aeronautics_members.services import ConflictError
 from api_helpers import send, signed_in
-from test_admin_reviews import _staff
+from test_admin_reviews import _picture, _staff
 
 trial_bp = Blueprint("api_trial", __name__, url_prefix="/api/v1/_test")
 trial = Api(trial_bp)
@@ -198,6 +198,18 @@ class TestMe:
 
         assert (me["first_name"], me["last_name"], me["email"]) == ("Anna", "Berger", "member@example.com")
         assert me["roles"] == [] and me["admin_area"] is False and me["counts"] == {"reviews_waiting": 0}
+        assert me["forum_area"] is True and me["picture_url"] is None
+
+    def test_their_picture_once_it_is_approved(self, app, client):
+        member = make_member()
+        waiting = _picture(member, token="waiting")
+        signed_in(client, member.user)
+        assert client.get("/api/v1/me").get_json()["picture_url"] is None
+
+        waiting.status = "approved"
+        app_module.db.session.commit()
+
+        assert client.get("/api/v1/me").get_json()["picture_url"] == "/forum/avatar/public/waiting"
 
     def test_an_admin_without_a_membership(self, app, client):
         signed_in(client, _staff("boss@example.org", "admin"))
@@ -205,6 +217,7 @@ class TestMe:
         me = client.get("/api/v1/me").get_json()
 
         assert me["first_name"] is None and me["roles"] == ["admin"] and me["admin_area"] is True
+        assert me["forum_area"] is False  # the forum is for members
         assert Permission.ACCOUNTS_VIEW in me["permissions"] and me["permissions"] == sorted(me["permissions"])
 
     def test_an_erased_account_is_signed_out(self, app, client):

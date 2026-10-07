@@ -39,8 +39,8 @@ that appears when entering the admin area.
 
 1. **At most two levels of navigation on screen**: the top bar, and either a
    sidebar *or* tabs on a detail page -- never a sidebar, tabs and a list.
-2. **The top bar says which area; the sidebar says where in it.** Areas: My
-   Account, Teams, Admin. Each sidebar belongs to one area and replaces the
+2. **The top bar says which area; the sidebar says where in it.** Areas:
+   Forum, Teams, Admin -- My Account is the user menu and the logo. Each sidebar belongs to one area and replaces the
    previous one rather than nesting inside it.
 3. **Every page in a sidebar area has a breadcrumb** whose first entry is the
    area (Admin › Accounts › Anna Berger). It replaces "Back" buttons.
@@ -62,10 +62,13 @@ that appears when entering the admin area.
 
 - Left: logo mark, "Aeronautics" and a small "Members" label (the portal is
   not the association's website).
-- Links: **My Account**, **Teams** (while teams are switched on), **Admin**
-  (only with access to the admin area). The current area is underlined in the
-  accent colour.
-- Right: **the user menu** -- a round avatar with initials and the name. Opens a
+- Links: **Forum** (for a member: `/forum`, which signs them into the forum or
+  says what is still missing), **Teams** (while teams are switched on),
+  **Admin** (only with access to the admin area). The current area is
+  underlined in the accent colour. My Account has no link here since October
+  2026: it is the user menu, and the logo.
+- Right: **the user menu** -- the approved forum picture (or the initials) and
+  the name. The one place to change the password from. Opens a
   small menu: name and email, *My account*, *Change password*, *Download my
   data*, *Log out*. Closes on a click elsewhere or Escape. "Log out" is no
   longer a link of its own in the bar.
@@ -192,13 +195,14 @@ on this page as cards that appear when they apply, at the top when something
 is to be done.
 
 As built: what is to be done first (addresses waiting to be confirmed), then
-**Membership**, **Forum**, **Email addresses** and **Teams** two by two;
-then **Contact details** (saved at once), **Name and membership type** (a
-request an admin decides; while one waits it is shown instead of the form)
-and **Your data** (download, deletion by emailed link -- with cancelling
-offered instead while a paid membership runs). *Change password* is in the
-page header. An account without a membership shows the parts there are and
-*Become a member*.
+**Membership** and **Forum** side by side, **Teams** across both; then
+**Contact details** (both email addresses first, each with whether it is
+confirmed and its link sent again, then phones and address; saved at once),
+**Name and membership type** (a request an admin decides; while one waits it
+is shown instead of the form) and **Your data** (download, deletion by emailed
+link -- with cancelling offered instead while a paid membership runs).
+*Change password* is in the user menu. An account without a membership shows
+its login address, *Become a member* and its data.
 
 ## 7. Page patterns
 

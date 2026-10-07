@@ -1,8 +1,9 @@
 /**
- * My Account › Contact details: address, phones and both email addresses,
- * saved at once without review. A new private address is the login and waits
- * to be confirmed; so does a new university address. The rules are the
- * server's (forms.py): a student's university address, for one, stays one.
+ * My Account › Contact details: both email addresses -- each with whether it
+ * is confirmed, and its link sent again -- the phones and the address, saved
+ * at once without review. A new private address is the login and waits to be
+ * confirmed; so does a new university address. The rules are the server's
+ * (forms.py): a student's university address, for one, stays one.
  */
 import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
@@ -12,10 +13,17 @@ import { api, ApiError, call, type Schemas } from '../../api/client';
 import { Panel } from '../../components/Panel';
 import { emptyToNull } from '../../lib/forms';
 import { notifyFailed } from '../../lib/notify';
+import { AddressState } from './Emails';
 import { type FormOptions, useTakeSaved } from './shared';
 
 type Contact = Schemas['ContactOut'];
 type ContactIn = Schemas['ContactIn'];
+type Address = Schemas['EmailAddressOut'];
+
+/** Whether the field still holds the saved address -- what its state is about. */
+function same(value: string, saved: Address | null): saved is Address {
+  return saved !== null && value.trim().toLowerCase() === saved.address.toLowerCase();
+}
 
 function initial(contact: Contact): ContactIn {
   return {
@@ -31,7 +39,18 @@ function initial(contact: Contact): ContactIn {
   };
 }
 
-export function ContactCard({ contact, options }: { contact: Contact; options: FormOptions }) {
+export function ContactCard({
+  contact,
+  options,
+  email,
+  workEmail,
+}: {
+  contact: Contact;
+  options: FormOptions;
+  /** The saved addresses, with whether each is confirmed. */
+  email: Address;
+  workEmail: Address | null;
+}) {
   const [value, setValue] = useState(() => initial(contact));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const take = useTakeSaved();
@@ -73,6 +92,39 @@ export function ContactCard({ contact, options }: { contact: Contact; options: F
         }}
       >
         <Stack gap="md">
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Stack gap={6}>
+              <TextInput
+                label="Private email"
+                description="Your login. A new one waits to be confirmed."
+                type="email"
+                autoComplete="email"
+                maxLength={255}
+                {...field('email_private')}
+              />
+              {same(value.email_private, email) ? <AddressState address={email} which="private" /> : null}
+            </Stack>
+            <Stack gap={6}>
+              <TextInput
+                label="University or company email"
+                description="A new one waits to be confirmed."
+                type="email"
+                maxLength={255}
+                {...field('email_work')}
+              />
+              {same(value.email_work ?? '', workEmail) ? (
+                <AddressState address={workEmail} which="work" />
+              ) : null}
+            </Stack>
+            <TextInput
+              label="Private phone"
+              type="tel"
+              autoComplete="tel"
+              maxLength={50}
+              {...field('phone_private')}
+            />
+            <TextInput label="Work phone" type="tel" maxLength={50} {...field('phone_work')} />
+          </SimpleGrid>
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
             <TextInput label="Street" autoComplete="address-line1" maxLength={255} {...field('street')} />
             <TextInput label="House number" maxLength={20} {...field('house_number')} />
@@ -93,30 +145,6 @@ export function ContactCard({ contact, options }: { contact: Contact; options: F
                 setValue({ ...value, country: country ?? '' });
               }}
             />
-          </SimpleGrid>
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-            <TextInput
-              label="Private email"
-              description="Your login. A new one waits to be confirmed."
-              type="email"
-              autoComplete="email"
-              maxLength={255}
-              {...field('email_private')}
-            />
-            <TextInput
-              label="Private phone"
-              type="tel"
-              autoComplete="tel"
-              maxLength={50}
-              {...field('phone_private')}
-            />
-            <TextInput
-              label="University or company email"
-              type="email"
-              maxLength={255}
-              {...field('email_work')}
-            />
-            <TextInput label="Work phone" type="tel" maxLength={50} {...field('phone_work')} />
           </SimpleGrid>
           <Group justify="flex-end">
             <Button type="submit" loading={save.isPending}>
