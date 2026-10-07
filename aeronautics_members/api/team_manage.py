@@ -11,11 +11,12 @@ The members' export stays a download from Flask (/teams/<slug>/manage/export.csv
 from datetime import date, datetime
 from typing import Literal
 
-from flask import url_for
+from flask import abort, url_for
 from flask_login import current_user
 from pydantic import Field
 
 from ..db_models import TeamMembership, User, db
+from ..permissions import Permission
 from ..services import NotFoundError, PermissionError_, ServiceError, team_payments
 from ..services import teams as teams_service
 from ..services.notifications import flush_marked_notification_channels
@@ -73,14 +74,32 @@ class ManageOut(Model):
 WAITING = {teams_service.APPLIED, teams_service.INVITED, teams_service.APPROVED}
 
 
+def _frame_team(slug):
+    """The team for its frame: whoever manages its people, or sees its money -- the
+    association's treasurer for every team, also archived or with teams off."""
+    if current_user.can(Permission.TEAMS_MONEY):
+        try:
+            team = teams_service.get_team(slug)
+        except ServiceError:
+            abort(404)
+    else:
+        team = _team(slug)
+    held = teams_service.team_permissions(current_user, team)
+    if P.VIEW_MEMBERS not in held and P.VIEW_MONEY not in held:
+        raise PermissionError_("You may not do that in this team.", code="team_permission")
+    return team
+
+
 @endpoint("GET", "/teams/<slug>/manage", response=ManageOut, tag=TAG)
 def team_manage(slug):
-    """The team's management: what this person may do in it, and how many applications wait."""
-    team = _managed(slug)
+    """The frame of the team's management and money: what this person may do in it,
+    and how many applications wait."""
+    team = _frame_team(slug)
     return ManageOut(
         slug=team.slug, name=team.name, logo_url=_logo_url(team), labels=_labels(),
         permissions=sorted(teams_service.team_permissions(current_user, team)),
-        applications=len(teams_service.team_memberships(team, WAITING)),
+        applications=len(teams_service.team_memberships(team, WAITING))
+        if teams_service.can_in_team(current_user, team, P.VIEW_MEMBERS) else 0,
         has_lead_in_force=teams_service.has_lead_in_force(team),
         access_list_enabled=bool(team.access_list_enabled),
     )

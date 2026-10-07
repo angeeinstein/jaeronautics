@@ -1,7 +1,0 @@
-{# A team's logo, if it has one. Decorative beside the name, so no alt text.
-   (Used by teams/money.html until it moves to the new front end.) #}
-{% macro team_logo(team, size='') -%}
-{%- if team.logo_token -%}
-<img class="team-logo{% if size %} team-logo-{{ size }}{% endif %}" src="{{ url_for('teams.team_logo', token=team.logo_token) }}" alt="">
-{%- endif -%}
-{%- endmacro %}

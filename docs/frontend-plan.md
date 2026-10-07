@@ -250,7 +250,11 @@ server can update to it.
    text has one answer (`api/legal.py`) and one view (`components/legal/`), which step 7
    reuses for the association's texts. The leads' management done: a page per section with
    the team's own sidebar (`frame/TeamManageLayout.tsx`, `api/team_manage.py`); each team's
-   permissions are checked per team.)*
+   permissions are checked per team. The team's money done (`api/teams_money.py`): its
+   leads and its treasurer see it with the team's sidebar -- the treasurer only the money,
+   not the people -- and the association's treasurer and admins see any team's, with the
+   way to its transfers. Only who may change the bank details sees the whole IBAN. The last
+   templates of the teams area are gone.)*
 6. **My Account:** the overview, membership and payment status, forum card
    with the photo upload and cropper, change requests, password, data export
    and deletion.

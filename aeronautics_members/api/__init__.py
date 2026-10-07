@@ -22,6 +22,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     session,
     team_manage,
     teams,
+    teams_money,
 )
 from ._core import ENDPOINTS, api_bp, error, is_api_request
 

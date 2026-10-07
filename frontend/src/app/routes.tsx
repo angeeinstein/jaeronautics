@@ -21,6 +21,16 @@ export const routes: RouteObject[] = [
     hydrateFallbackElement: <LoadingState />,
     children: [
       {
+        path: '/teams/:slug/money',
+        element: <TeamManageLayout optional />,
+        children: [
+          {
+            index: true,
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Money')).Money }),
+          },
+        ],
+      },
+      {
         path: '/teams/:slug/manage',
         element: <TeamManageLayout />,
         children: [

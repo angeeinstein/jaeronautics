@@ -33,10 +33,18 @@ test.describe("a team's management", () => {
     await expect(page.getByRole('region', { name: 'Treasurer' })).toBeVisible();
   });
 
+  test('money: the balance, the bank details and the payments', async ({ page }) => {
+    await page.goto('/teams/rocket-team/money');
+
+    await expect(page.getByRole('heading', { name: 'Money', level: 1 })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Bank details' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Export payments' })).toBeVisible();
+  });
+
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
-    for (const section of ['', '/members', '/former', '/page', '/applying', '/roles']) {
-      const path = `/teams/rocket-team/manage${section}`;
+    for (const section of ['', '/members', '/former', '/page', '/applying', '/roles', '/money']) {
+      const path = section === '/money' ? '/teams/rocket-team/money' : `/teams/rocket-team/manage${section}`;
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       const overflow = await page.evaluate(
@@ -44,5 +52,15 @@ test.describe("a team's management", () => {
       );
       expect(overflow, path).toBeLessThanOrEqual(0);
     }
+  });
+});
+
+test.describe("a team's money for the association's treasurer", () => {
+  test('every team, with the way to its transfers', async ({ page }) => {
+    await signIn(page, 'treasurer@example.org');
+    await page.goto('/teams/rocket-team/money');
+
+    await expect(page.getByRole('heading', { name: 'Money', level: 1 })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Transfers (Admin)' })).toBeVisible();
   });
 });

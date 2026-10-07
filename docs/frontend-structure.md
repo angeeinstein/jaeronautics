@@ -77,8 +77,8 @@ that appears when entering the admin area.
 | Area | Sidebar | Content width |
 |---|---|---|
 | My Account | none | narrow, centred (about 860 px) |
-| Teams -- overview, a team's page, About, Money | none | narrow, centred |
-| Teams -- a team's management | the team's sidebar | full |
+| Teams -- overview, a team's page, About | none | narrow, centred |
+| Teams -- a team's management, its Money | the team's sidebar | full |
 | Admin | the admin sidebar | full |
 
 The member side needs no sidebar: it is a handful of pages, reached from the
@@ -158,6 +158,10 @@ then *Applying* -- fee, the question, the rules with the tick box, *Apply*.
 - *Settings* -- **Team page**, **Applying**, **Access list** (only when switched
   on), **Roles**
 - *Elsewhere* -- **Team page**, **Money**
+
+The team's treasurer sees only *Money* and the team page; the association's
+treasurer, who has no part in the team, opens a team's Money page without the
+team's sidebar.
 
 Breadcrumb: Teams › Rocket Team › Members. Each settings section is one card
 with *Save* at the bottom right and saves only its own fields (as built).

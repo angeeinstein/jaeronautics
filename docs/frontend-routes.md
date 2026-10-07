@@ -123,8 +123,8 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `POST /teams/<slug>/manage/people/<user>/notes` (action) → `POST /api/v1/teams/<slug>/manage/people/<user>/notes`
 - [x] `POST /teams/<slug>/manage/treasurer`, `/treasurer/remove` (action) → `POST /api/v1/teams/<slug>/manage/treasurer`, `DELETE .../treasurer/<user>`
 - [x] `GET /teams/<slug>/manage/access-list` (page), `POST .../send` (action) → the Access list page, with its settings; `POST /api/v1/teams/<slug>/manage/access-list/send`
-- [ ] `GET /teams/<slug>/money` (page)
-- [ ] `POST /teams/<slug>/money/bank` (action); `/money/payouts` is gone: transfers are recorded at 4.5
+- [x] `GET /teams/<slug>/money` (page) → `GET /api/v1/teams/<slug>/money` (`api/teams_money.py`); with the team's sidebar for its leads and treasurer, without it for the association's treasurer
+- [x] `POST /teams/<slug>/money/bank` (action) → `PUT /api/v1/teams/<slug>/money/bank`; `/money/payouts` is gone: transfers are recorded at 4.5
 - `GET /teams/<slug>/manage/export.csv`, `/teams/<slug>/money.csv` (download) -- stay
 
 ## Step 6 -- My Account

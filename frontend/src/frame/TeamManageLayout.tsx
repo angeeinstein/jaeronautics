@@ -26,6 +26,8 @@ import { compact, type SidebarContent } from './navigation';
 export function teamSidebar(team: Manage): SidebarContent {
   const base = `/teams/${team.slug}`;
   const settings = may(team, 'team.edit_settings');
+  // The team's treasurer sees its money, nothing about its people.
+  const people = may(team, 'team.view_members');
   return {
     back: { label: `All ${team.labels.plural.toLowerCase()}`, to: '/teams' },
     header: { label: team.name, logoUrl: team.logo_url },
@@ -33,15 +35,17 @@ export function teamSidebar(team: Manage): SidebarContent {
       {
         label: 'People',
         items: [
-          {
-            label: 'Applications',
-            to: `${base}/manage`,
-            icon: IconInbox,
-            exact: true,
-            count: team.applications,
-          },
-          { label: 'Members', to: `${base}/manage/members`, icon: IconUsers },
-          { label: 'Former members', to: `${base}/manage/former`, icon: IconHistory },
+          people
+            ? {
+                label: 'Applications',
+                to: `${base}/manage`,
+                icon: IconInbox,
+                exact: true,
+                count: team.applications,
+              }
+            : null,
+          people ? { label: 'Members', to: `${base}/manage/members`, icon: IconUsers } : null,
+          people ? { label: 'Former members', to: `${base}/manage/former`, icon: IconHistory } : null,
         ],
       },
       {
@@ -52,7 +56,7 @@ export function teamSidebar(team: Manage): SidebarContent {
           team.access_list_enabled && may(team, 'team.send_access_list')
             ? { label: 'Access list', to: `${base}/manage/access-list`, icon: IconListCheck }
             : null,
-          { label: 'Roles', to: `${base}/manage/roles`, icon: IconUserShield },
+          people ? { label: 'Roles', to: `${base}/manage/roles`, icon: IconUserShield } : null,
         ],
       },
       {
@@ -66,9 +70,20 @@ export function teamSidebar(team: Manage): SidebarContent {
   };
 }
 
-export function TeamManageLayout() {
+/**
+ * ``optional``: the page works without the team's frame too -- a team's money
+ * for the association's treasurer, who has no other part in the team.
+ */
+export function TeamManageLayout({ optional = false }: { optional?: boolean }) {
   const { slug = '' } = useParams();
-  const team = useQuery(manageQuery(slug));
+  const team = useQuery({ ...manageQuery(slug), retry: false });
+  if (optional && team.isError) {
+    return (
+      <Frame>
+        <Outlet />
+      </Frame>
+    );
+  }
   if (!team.data) {
     return (
       <Frame>

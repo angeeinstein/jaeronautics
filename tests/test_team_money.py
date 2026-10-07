@@ -216,13 +216,14 @@ class TestWhoSeesWhat:
         _paid(team, lead)
         _login(client, lead.id)
 
-        page = client.get("/teams/rocket/money").get_data(as_text=True)
-        assert "€25.00" in page and 'name="iban"' in page and "Mark as transferred" not in page
+        funds = client.get("/api/v1/teams/rocket/money").get_json()
+        assert funds["earned"] == 2500 and funds["may_edit_bank"] is True and funds["records_transfers"] is False
         assert "team.view_money" in client.get("/api/v1/teams/rocket/manage").get_json()["permissions"]
         assert send(client, "POST", "/api/v1/admin/money/rocket/transfers", {"amount": "5"}).status_code == 403
         assert db.session.query(TeamPayout).count() == 0
-        client.post("/teams/rocket/money/bank", data={"account_holder": "Rocket Team", "iban": IBAN})
-        assert team.bank_iban == IBAN
+        saved = send(client, "PUT", "/api/v1/teams/rocket/money/bank", {"account_holder": "Rocket Team", "iban": IBAN})
+        assert saved.get_json()["changed"] is True and team.bank_iban == IBAN
+        assert saved.get_json()["funds"]["bank"]["iban"] == IBAN, "whoever may change it sees it whole"
 
     def test_a_team_treasurer_sees_the_money_not_the_management(self, app, client):
         team, _lead = _led()
@@ -231,9 +232,12 @@ class TestWhoSeesWhat:
 
         assert client.get("/teams/rocket/money").status_code == 200
         assert client.get("/teams/rocket/manage").status_code == 403
+        assert client.get("/api/v1/teams/rocket/manage/members").status_code == 403
+        # The frame of the money page: the team's sidebar, without its people.
+        assert client.get("/api/v1/teams/rocket/manage").get_json()["applications"] == 0
         [card] = client.get("/api/v1/teams").get_json()["mine"]
         assert "money" in card["membership"]["actions"] and "manage" not in card["membership"]["actions"]
-        client.post("/teams/rocket/money/bank", data={"account_holder": "Rocket Team", "iban": IBAN})
+        send(client, "PUT", "/api/v1/teams/rocket/money/bank", {"account_holder": "Rocket Team", "iban": IBAN})
         assert team.bank_iban == IBAN
 
     def test_a_member_sees_none_of_it(self, app, client):
@@ -243,7 +247,8 @@ class TestWhoSeesWhat:
         _login(client, anna.id)
 
         assert client.get("/teams/rocket/money").status_code == 403
-        assert client.post("/teams/rocket/money/bank", data={"iban": IBAN}).status_code == 403
+        assert client.get("/api/v1/teams/rocket/money").status_code == 403
+        assert send(client, "PUT", "/api/v1/teams/rocket/money/bank", {"iban": IBAN}).status_code == 403
         assert client.get("/admin/money").status_code in (302, 403)
         assert team.bank_iban is None
 
@@ -258,7 +263,8 @@ class TestWhoSeesWhat:
         assert row["team"]["name"] == "Rocket" and row["open"] == 2500
         code = client.get("/admin/money/rocket/transfer-code.svg?amount=2500")
         assert code.mimetype == "image/svg+xml" and b"<svg" in code.data
-        assert "Mark as transferred" not in client.get("/teams/rocket/money").get_data(as_text=True)
+        funds = client.get("/api/v1/teams/rocket/money").get_json()
+        assert funds["records_transfers"] is True and funds["may_edit_bank"] is True
         assert client.get("/teams/rocket/manage").status_code == 403
         assert client.get("/api/v1/teams/rocket").get_json()["sees_team_page"] is False
         assert client.get("/admin/teams").status_code in (302, 403)

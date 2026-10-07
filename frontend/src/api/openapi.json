@@ -6951,6 +6951,115 @@
         "title": "SyncProblem",
         "type": "object"
       },
+      "TeamBankIn": {
+        "additionalProperties": false,
+        "properties": {
+          "account_holder": {
+            "anyOf": [
+              {
+                "maxLength": 70,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account Holder"
+          },
+          "bic": {
+            "anyOf": [
+              {
+                "maxLength": 11,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bic"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "maxLength": 42,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Iban"
+          }
+        },
+        "title": "TeamBankIn",
+        "type": "object"
+      },
+      "TeamBankOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_holder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Holder"
+          },
+          "bic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bic"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          }
+        },
+        "required": [
+          "account_holder",
+          "iban",
+          "bic"
+        ],
+        "title": "TeamBankOut",
+        "type": "object"
+      },
+      "TeamBankSavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "funds": {
+            "$ref": "#/components/schemas/TeamFundsOut"
+          }
+        },
+        "required": [
+          "changed",
+          "funds"
+        ],
+        "title": "TeamBankSavedOut",
+        "type": "object"
+      },
       "TeamCardOut": {
         "additionalProperties": false,
         "properties": {
@@ -7065,6 +7174,96 @@
           "admission_mode"
         ],
         "title": "TeamDetailsIn",
+        "type": "object"
+      },
+      "TeamFundsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "bank": {
+            "$ref": "#/components/schemas/TeamBankOut"
+          },
+          "by_period": {
+            "items": {
+              "$ref": "#/components/schemas/Period"
+            },
+            "title": "By Period",
+            "type": "array"
+          },
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          },
+          "export_url": {
+            "title": "Export Url",
+            "type": "string"
+          },
+          "last_transfer_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Transfer On"
+          },
+          "may_edit_bank": {
+            "title": "May Edit Bank",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "paid_out": {
+            "title": "Paid Out",
+            "type": "integer"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/TeamPayment"
+            },
+            "title": "Payments",
+            "type": "array"
+          },
+          "records_transfers": {
+            "title": "Records Transfers",
+            "type": "boolean"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "transfers": {
+            "items": {
+              "$ref": "#/components/schemas/Transfer"
+            },
+            "title": "Transfers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "earned",
+          "paid_out",
+          "open",
+          "last_transfer_on",
+          "bank",
+          "may_edit_bank",
+          "records_transfers",
+          "by_period",
+          "transfers",
+          "payments",
+          "export_url"
+        ],
+        "title": "TeamFundsOut",
         "type": "object"
       },
       "TeamHistoryOut": {
@@ -14399,7 +14598,7 @@
             "description": "Not found."
           }
         },
-        "summary": "The team's management: what this person may do in it, and how many applications wait.",
+        "summary": "The frame of the team's management and money: what this person may do in it,",
         "tags": [
           "Teams"
         ]
@@ -15967,6 +16166,138 @@
           }
         },
         "summary": "No longer the team's treasurer.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/money": {
+      "get": {
+        "operationId": "team_funds",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamFundsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "The team's money: the balance, where it is paid, and every payment and transfer.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/money/bank": {
+      "put": {
+        "operationId": "team_funds_bank",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamBankIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamBankSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Where the association transfers the team's money. Checked, logged, and the association's treasurer is told.",
         "tags": [
           "Teams"
         ]

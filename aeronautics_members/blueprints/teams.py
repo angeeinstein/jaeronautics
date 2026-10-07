@@ -10,9 +10,8 @@ import csv
 import io
 
 from flask import (
-    Blueprint, Response, abort, flash, redirect, render_template, request, send_file, url_for,
+    Blueprint, Response, abort, request, send_file, url_for,
 )
-from flask_babel import gettext as _
 from flask_login import current_user, login_required
 
 from ..app import requires
@@ -206,24 +205,9 @@ def _money_team_or_404(slug):
 @teams_bp.route("/teams/<slug>/money", methods=["GET"])
 @login_required
 def team_money(slug):
-    from ..services import team_money as money
-
-    team = _money_team_or_404(slug)
-    permissions = teams_service.team_permissions(current_user, team)
-    return render_template(
-        "teams/money.html",
-        team=team,
-        summary=money.summary(team),
-        permissions=permissions,
-        TeamPermission=teams_service.TeamPermission,
-        manages_people=_manages_people(team),
-        # Transfers are recorded on the association's side of it.
-        pays_out=current_user.can(Permission.TEAMS_MONEY),
-        euros=money.euros,
-        counts=money.counts,
-        payer_name=money.payer_name,
-        masked_iban=money.masked_iban,
-    )
+    """A team's money, the team's side: drawn by the new front end (frontend/src/pages/teams/manage/Money.tsx)."""
+    _money_team_or_404(slug)
+    return app_shell()
 
 
 @teams_bp.route("/teams/<slug>/money.csv", methods=["GET"])
@@ -243,41 +227,6 @@ def team_money_export(slug):
         "﻿" + buffer.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-def _money_action(slug, permission, action, success_message):
-    team = _money_team_or_404(slug)
-    _may(team, permission)
-    try:
-        changed = action(team)
-    except ServiceError as error:
-        db.session.rollback()
-        flash(error.message, "danger")
-    else:
-        db.session.commit()
-        from ..services.notifications import flush_marked_notification_channels
-
-        flush_marked_notification_channels()
-        flash(success_message if changed is not False else _("Nothing changed."),
-              "success" if changed is not False else "info")
-    return redirect(url_for("teams.team_money", slug=team.slug))
-
-
-@teams_bp.route("/teams/<slug>/money/bank", methods=["POST"])
-@login_required
-def team_money_bank(slug):
-    from ..services.team_money import update_bank_details
-
-    return _money_action(
-        slug, teams_service.TeamPermission.EDIT_BANK_DETAILS,
-        lambda team: update_bank_details(
-            current_user, team,
-            account_holder=request.form.get("account_holder"),
-            iban=request.form.get("iban"),
-            bic=request.form.get("bic"),
-        ),
-        _("Bank details saved."),
     )
 
 

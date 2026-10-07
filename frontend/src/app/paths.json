@@ -7,6 +7,7 @@
     "/teams/:slug/rules",
     "/teams/:slug/rules/:language",
     "/teams/:slug/rules/:language/:version",
+    "/teams/:slug/money",
     "/teams/:slug/manage",
     "/teams/:slug/manage/members",
     "/teams/:slug/manage/former",
