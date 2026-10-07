@@ -29,6 +29,32 @@ export const routes: RouteObject[] = [
             index: true,
             lazy: async () => ({ Component: (await import('../pages/account/Account')).Account }),
           },
+          {
+            path: 'delete/:token',
+            lazy: async () => ({
+              Component: (await import('../pages/account/DeleteAccount')).DeleteAccount,
+            }),
+          },
+        ],
+      },
+      {
+        path: '/change-password',
+        element: <AccountLayout />,
+        children: [
+          {
+            index: true,
+            lazy: async () => ({ Component: (await import('../pages/account/Password')).Password }),
+          },
+        ],
+      },
+      {
+        path: '/forum',
+        element: <AccountLayout />,
+        children: [
+          {
+            index: true,
+            lazy: async () => ({ Component: (await import('../pages/account/Forum')).Forum }),
+          },
         ],
       },
       {

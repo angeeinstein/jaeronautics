@@ -17,7 +17,7 @@ from sqlalchemy.dialects import mysql
 
 from api_helpers import send
 from conftest import db, make_member
-from aeronautics_members.blueprints import account as account_module
+from aeronautics_members.services import account as account_module
 from aeronautics_members.db_models import ForumAvatarSubmission, MemberProfileChangeRequest, NotificationEvent
 from aeronautics_members.services import account_admin, locking
 from test_admin_reviews import _login, _name_change, _picture, _staff, quiet_forum  # noqa: F401

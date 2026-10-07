@@ -10,12 +10,14 @@ export const ADMIN = 'admin@example.org';
 
 interface Watched {
   problems: string[];
+  /** What a test expects the console to say -- an error answer it is about. */
+  expected: RegExp[];
 }
 
 export const test = base.extend<{ watched: Watched }>({
   watched: [
     async ({ page }, use) => {
-      const watched: Watched = { problems: [] };
+      const watched: Watched = { problems: [], expected: [] };
       await page.addInitScript(() => {
         document.addEventListener('securitypolicyviolation', (event) => {
           console.error(`CSP violation: ${event.violatedDirective} ${event.blockedURI}`);
@@ -26,7 +28,10 @@ export const test = base.extend<{ watched: Watched }>({
       });
       page.on('pageerror', (error) => watched.problems.push(error.message));
       await use(watched);
-      expect(watched.problems, 'console errors or blocked content').toEqual([]);
+      const unexpected = watched.problems.filter(
+        (problem) => !watched.expected.some((pattern) => pattern.test(problem)),
+      );
+      expect(unexpected, 'console errors or blocked content').toEqual([]);
     },
     { auto: true },
   ],

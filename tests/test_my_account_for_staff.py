@@ -47,18 +47,17 @@ class TestMyAccountWithoutAMembership:
         assert account["email"]["address"] == "staff2@example.org"
         assert account["member"] is None
 
-    def test_a_password_change_comes_back_to_my_account(self, client, app):
+    def test_a_staff_account_changes_its_password_too(self, client, app):
         staff = _staff("staff3@example.org", "admin")
         _login(client, staff.id)
 
-        response = client.post("/change-password", data={
-            "current_password": "old-password-1",
-            "new_password": "new-password-22",
-            "confirm_new_password": "new-password-22",
+        assert client.get("/change-password").status_code == 200
+        response = client.put("/api/v1/account/password", json={
+            "current_password": "old-password-1", "new_password": "new-password-22",
         })
 
-        assert response.status_code == 302
-        assert response.headers["Location"].startswith("/account")
+        assert response.status_code == 200
+        assert db.session.get(User, staff.id).check_password("new-password-22")
 
     def test_members_still_get_their_full_page(self, client, app):
         member = make_member(email="member@example.org")

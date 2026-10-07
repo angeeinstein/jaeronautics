@@ -1,0 +1,40 @@
+/* The cropper: a square stage with the photo, darkened outside the circle the
+   forum shows. Dragged with a finger, so the page does not scroll with it. */
+.editor {
+  max-width: 20rem;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: var(--ja-surface);
+  border: 1px solid var(--ja-border);
+  cursor: grab;
+  touch-action: none;
+}
+
+.stage:active {
+  cursor: grabbing;
+}
+
+.stage:focus-visible {
+  outline: 2px solid var(--ja-accent);
+  outline-offset: 2px;
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mask {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgba(10, 15, 18, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}

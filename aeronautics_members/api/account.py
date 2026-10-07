@@ -11,14 +11,14 @@ forms.py, checked through api/_forms.py. Drawn by frontend/src/pages/account/.
 from datetime import date
 from typing import Literal
 
-from flask import current_app, url_for
-from flask_login import current_user
+from flask import current_app, flash, request, url_for
+from flask_login import current_user, logout_user
 from pydantic import Field
 
-from ..config import RATELIMIT_ACCOUNT_DELETION, RATELIMIT_EMAIL_RESEND
+from ..config import RATELIMIT_ACCOUNT_DELETION, RATELIMIT_EMAIL_RESEND, RATELIMIT_PASSWORD_CHANGE
 from ..forms import IdentityChangeRequestForm, MemberProfileForm
 from ..member_categories import category_label
-from ..services import ConflictError
+from ..services import ConflictError, ValidationError
 from ..services import account as account_service
 from ..services import teams as teams_service
 from ..services import workflows
@@ -35,7 +35,7 @@ from ..services.membership import (
     sync_member_active_state,
 )
 from ..services.signup import invoice_payments_allowed
-from ..app import limiter
+from ..app import format_bytes_human, limiter
 from ..blueprints._email_cooldown import remember_sent, sent_just_now
 from ..db_models import db
 from ._core import Model, endpoint
@@ -540,3 +540,102 @@ def account_deletion():
     return MessageOut(tone="info", text=f"We sent a confirmation link to {current_user.email}. Your account is "
                                         "deleted once you open it. The link is valid for one hour.")
 
+
+
+# --- The forum, and its picture -----------------------------------------------------------
+
+
+@endpoint("GET", "/account/forum", response=ForumCardOut, tag=TAG)
+def account_forum():
+    """The forum: where things stand, the username, the picture. For the forum's own page."""
+    return forum_card(_member())
+
+
+class CropQuery(Model):
+    """The square chosen, as fractions of the picture (lib/crop.ts on the page)."""
+
+    zoom: float = Field(1.0, ge=1.0, le=4.0)
+    x: float = Field(0.5, ge=0.0, le=1.0)
+    y: float = Field(0.5, ge=0.0, le=1.0)
+
+
+@endpoint("POST", "/account/picture", response=ForumCardOut, query=CropQuery, uploads={"image": True},
+          status=201, tag=TAG)
+def account_picture(query, files):
+    """Upload a profile picture for the forum, cropped to the square chosen. An admin reviews it."""
+    member = _member()
+    limit = account_service.forum.get_forum_service().get_upload_request_limit()
+    if request.content_length and request.content_length > limit:
+        raise ValidationError(f"The picture is too large. Please keep it below {format_bytes_human(limit)}.",
+                              details={"fields": {"image": f"Please keep it below {format_bytes_human(limit)}."}})
+    account_service.upload_picture(current_user, member, files["image"], zoom=query.zoom, x=query.x, y=query.y)
+    return forum_card(member)
+
+
+# --- Password -------------------------------------------------------------------------------
+
+
+class PasswordIn(Model):
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(max_length=128)
+
+
+@endpoint("PUT", "/account/password", response=MessageOut, body=PasswordIn, tag=TAG)
+@limiter.limit(RATELIMIT_PASSWORD_CHANGE)
+def account_password(body):
+    """Change the password; the current one is asked for first."""
+    if len(body.new_password) < 8:
+        raise ValidationError("Please check the form.",
+                              details={"fields": {"new_password": "At least 8 characters, please."}})
+    account_service.change_password(current_user, body.current_password, body.new_password)
+    return MessageOut(tone="success", text="Your password has been changed.")
+
+
+# --- Deleting the account, from the emailed link ---------------------------------------------
+
+
+class DeletionOut(Model):
+    """What deleting does to this account, said before the button."""
+
+    has_forum_account: bool
+    has_stripe_customer: bool
+    #: Running and not cancelled: deleting ends it now, without a refund.
+    subscription_active: bool
+    #: Paid until then; the rest is lost.
+    paid_until: date | None
+    #: Nobody else could run the portal: it cannot be deleted.
+    is_last_admin: bool
+    export_url: str
+
+
+def _deletion_out(impact):
+    return DeletionOut(
+        has_forum_account=impact["has_forum_account"], has_stripe_customer=impact["has_stripe_customer"],
+        subscription_active=impact["subscription_active"], paid_until=impact["coverage_end"],
+        is_last_admin=impact["is_last_admin"], export_url=url_for("account.export_my_data"),
+    )
+
+
+@endpoint("GET", "/account/deletion/<token>", response=DeletionOut, tag=TAG)
+def account_deletion_impact(token):
+    """What deleting would do. Opening the link changes nothing: mail clients and scanners open links."""
+    return _deletion_out(account_service.deletion_impact(current_user, token))
+
+
+class DeleteIn(Model):
+    #: Sent by the button that says what it does.
+    confirm: bool
+
+
+@endpoint("POST", "/account/deletion/<token>", response=MessageOut, body=DeleteIn, tag=TAG)
+@limiter.limit(RATELIMIT_ACCOUNT_DELETION)
+def account_delete(token, body):
+    """Delete the account now, and sign out. The start page then says it is done."""
+    if not body.confirm:
+        raise ValidationError("Please confirm.", code="not_confirmed")
+    account_service.delete_account(current_user, token)
+    text = "Your account and personal data have been deleted. Thank you for having been a member."
+    logout_user()
+    # Said again on the start page, which is Flask's.
+    flash(text, "success")
+    return MessageOut(tone="success", text=text)

@@ -59,7 +59,6 @@ from ..db_models import (
     db,
 )
 from ..forms import (
-    ChangePasswordForm,
     EmailRequestForm,
     LoginForm,
     SetPasswordForm,
@@ -73,6 +72,7 @@ from ..app import (
     rate_limit_network_and_path,
     urlsplit,
 )
+from .app_shell import app_shell
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -442,17 +442,8 @@ def logout():
     return redirect(next_url)
 
 
-@auth_bp.route("/change-password", methods=["GET", "POST"])
+@auth_bp.route("/change-password", methods=["GET"])
 @login_required
-@limiter.limit(RATELIMIT_PASSWORD_CHANGE, methods=["POST"])
 def change_password():
-    form = ChangePasswordForm()
-    if form.validate_on_submit():
-        if current_user.check_password(form.current_password.data):
-            current_user.set_password(form.new_password.data)
-            db.session.commit()
-            flash(_("Your password has been updated!"), "success")
-            # Back where the button is: My Account, for staff too.
-            return redirect(url_for("account.account"))
-        flash(_("Invalid current password"), "danger")
-    return render_template("change_password.html", form=form)
+    """Changing the password: the app's page (PUT /api/v1/account/password)."""
+    return app_shell()

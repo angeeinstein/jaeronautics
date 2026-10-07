@@ -68,7 +68,6 @@ try:
         db,
     )
     from .forms import (
-        ChangePasswordForm,
         CreateMembershipProfileForm,
         EmailRequestForm,
         IdentityChangeRequestForm,
@@ -129,7 +128,6 @@ except ImportError:
         db,
     )
     from forms import (
-        ChangePasswordForm,
         CreateMembershipProfileForm,
         EmailRequestForm,
         IdentityChangeRequestForm,

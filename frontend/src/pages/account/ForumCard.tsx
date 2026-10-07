@@ -1,12 +1,15 @@
 /**
- * My Account › Forum: where things stand, the forum username, the profile
- * picture the forum needs -- and the way in, once it is open.
+ * The forum, on My Account and on its own page (/forum): where things
+ * stand, the forum username, the profile picture the forum needs -- with the
+ * one waiting for review, or why the last was turned down -- and the way in,
+ * once it is open.
  */
-import { Alert, Button, Group, Image, Stack, Text } from '@mantine/core';
+import { Alert, Button, Image, Stack, Text } from '@mantine/core';
 
 import type { Schemas } from '../../api/client';
 import { Details } from '../../components/Details';
 import { Panel } from '../../components/Panel';
+import { PictureUpload } from './Picture';
 
 type Forum = Schemas['ForumCardOut'];
 
@@ -44,15 +47,14 @@ export function ForumCard({ forum }: { forum: Forum }) {
               </Alert>
             ) : null}
             {picture.pending_url ? (
-              <Image src={picture.pending_url} alt="Your picture, waiting for review" w={120} h={120} />
+              <Stack gap={4}>
+                <Text size="xs" c="dimmed">
+                  Waiting for review
+                </Text>
+                <Image src={picture.pending_url} alt="Your picture, waiting for review" w={120} h={120} />
+              </Stack>
             ) : null}
-            {picture.upload ? (
-              <Group>
-                <Button component="a" href="/forum" variant={picture.pending_url ? 'default' : 'filled'}>
-                  {picture.pending_url ? 'Upload another picture' : 'Upload a picture'}
-                </Button>
-              </Group>
-            ) : null}
+            {picture.upload ? <PictureUpload picture={picture} /> : null}
           </Stack>
         ) : null}
       </Stack>

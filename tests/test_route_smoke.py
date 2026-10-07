@@ -159,7 +159,7 @@ def test_all_routes_no_server_error(client, seeded):
     hit("POST", "/register", data={"email": "new2@t.co", "password": "password123", "confirm_password": "password123"})
     hit("POST", "/reset-password/bad", data={"password": "password123", "confirm_password": "password123"})
     hit("GET", "/change-password", uid=mu)
-    hit("POST", "/change-password", uid=mu, data={"current_password": "password123", "new_password": "password124", "confirm_new_password": "password124"})
+    hit("PUT", "/api/v1/account/password", uid=mu, json={"current_password": "password123", "new_password": "password124"})
     hit("POST", "/logout", uid=mu)
     # account
     hit("GET", "/account", uid=mu)
@@ -181,7 +181,10 @@ def test_all_routes_no_server_error(client, seeded):
     hit("GET", "/forum/discourse/connect", uid=mu)
     hit("GET", "/forum/logout", uid=mu)
     hit("GET", "/forum/avatar/public/bad")
-    hit("POST", "/forum/avatar", uid=mu, data={})
+    hit("GET", "/api/v1/account/forum", uid=mu)
+    hit("POST", "/api/v1/account/picture", uid=mu, data={})
+    hit("GET", "/account/delete/bad", uid=mu)
+    hit("GET", "/api/v1/account/deletion/bad", uid=mu)
     # admin
     for p in ["/admin", "/admin/accounts", f"/admin/accounts/{mu}", "/admin/reviews", "/admin/logs", "/admin/settings",
               f"/api/v1/admin/accounts/{mu}", f"/api/v1/admin/accounts/{mu}/erasure",

@@ -1,6 +1,9 @@
 {
   "paths": [
     "/account",
+    "/account/delete/:token",
+    "/change-password",
+    "/forum",
     "/teams",
     "/teams/:slug",
     "/teams/:slug/about",

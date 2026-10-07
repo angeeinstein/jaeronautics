@@ -39,10 +39,11 @@ class TestTheMembersSide:
     def test_a_direct_upload_without_permission_is_refused(self, app, client, monkeypatch):
         member = _paid_member(client, verified=True)
 
-        client.post("/forum/avatar", data={"avatar": (_png(), "new.png")}, content_type="multipart/form-data")
+        response = client.post("/api/v1/account/picture", data={"image": (_png(), "new.png")},
+                               content_type="multipart/form-data")
 
-        (said,) = client.get("/api/v1/messages").get_json()["messages"]
-        assert "please ask an admin" in said["text"]
+        assert (response.status_code, response.get_json()["error"]["code"]) == (409, "picture_kept")
+        assert "please ask an admin" in response.get_json()["error"]["message"]
         assert db.session.query(ForumAvatarSubmission).filter_by(member_id=member.id).count() == 0
 
     def test_once_allowed_the_upload_is_offered(self, app, client):

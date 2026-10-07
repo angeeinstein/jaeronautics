@@ -137,10 +137,10 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `POST /account/resume-payment`, `/account/rejoin` (out: Stripe Checkout) → `POST /api/v1/account/payment`, `/account/rejoin` answer where to pay
 - [ ] `GET|POST /account/create-membership` (page + out: membership for an account without one) -- with the signup in step 7: the same form
 - [x] `POST /account/delete` (action: asks for confirmation by email) → `POST /api/v1/account/deletion`
-- [ ] `GET|POST /account/delete/<token>` (page + action; link in emails)
-- [ ] `GET|POST /change-password` (page + action) → part of My Account
-- [ ] `GET /forum` (page; link in emails) → the forum card's page; *Open forum* stays a link out
-- [ ] `POST /forum/avatar` (action, upload) → API upload, with the cropper
+- [x] `GET|POST /account/delete/<token>` (page + action; link in emails) → the page says what deleting does; `GET|POST /api/v1/account/deletion/<token>` (the POST asks for `confirm`, signs out, and the start page says it is done)
+- [x] `GET|POST /change-password` (page + action) → the app's page; `PUT /api/v1/account/password`
+- [x] `GET /forum` (page; link in emails) → the forum card's page, `GET /api/v1/account/forum`; Flask still reads the link's token and sends an open forum's members straight in
+- [x] `POST /forum/avatar` (action, upload) → `POST /api/v1/account/picture?zoom=&x=&y=` (upload `image`), with the cropper (`pages/account/Picture.tsx`, `lib/crop.ts`)
 - `GET /account/data-export` (download) -- stays
 
 ## Step 7 -- Public pages and signing in

@@ -106,6 +106,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/deletion/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What deleting would do. Opening the link changes nothing: mail clients and scanners open links. */
+        get: operations["account_deletion_impact"];
+        put?: never;
+        /** Delete the account now, and sign out. The start page then says it is done. */
+        post: operations["account_delete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/emails/private/confirmation": {
         parameters: {
             query?: never;
@@ -140,6 +158,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/forum": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The forum: where things stand, the username, the picture. For the forum's own page. */
+        get: operations["account_forum"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change the password; the current one is asked for first. */
+        put: operations["account_password"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/payment": {
         parameters: {
             query?: never;
@@ -151,6 +203,23 @@ export interface paths {
         put?: never;
         /** Stripe's payment page again, for a payment not finished. */
         post: operations["account_payment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/picture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload a profile picture for the forum, cropped to the square chosen. An admin reviews it. */
+        post: operations["account_picture"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2549,6 +2618,27 @@ export interface components {
             /** Reviews Waiting */
             reviews_waiting: number;
         };
+        /**
+         * CropQuery
+         * @description The square chosen, as fractions of the picture (lib/crop.ts on the page).
+         */
+        CropQuery: {
+            /**
+             * X
+             * @default 0.5
+             */
+            x?: number;
+            /**
+             * Y
+             * @default 0.5
+             */
+            y?: number;
+            /**
+             * Zoom
+             * @default 1
+             */
+            zoom?: number;
+        };
         /** DashboardOut */
         DashboardOut: {
             attention: components["schemas"]["Attention"];
@@ -2557,10 +2647,33 @@ export interface components {
             /** Recent Activity */
             recent_activity: components["schemas"]["Activity"][] | null;
         };
+        /** DeleteIn */
+        DeleteIn: {
+            /** Confirm */
+            confirm: boolean;
+        };
         /** DeletedOut */
         DeletedOut: {
             /** Removed Welcome Sender */
             removed_welcome_sender: boolean;
+        };
+        /**
+         * DeletionOut
+         * @description What deleting does to this account, said before the button.
+         */
+        DeletionOut: {
+            /** Export Url */
+            export_url: string;
+            /** Has Forum Account */
+            has_forum_account: boolean;
+            /** Has Stripe Customer */
+            has_stripe_customer: boolean;
+            /** Is Last Admin */
+            is_last_admin: boolean;
+            /** Paid Until */
+            paid_until: string | null;
+            /** Subscription Active */
+            subscription_active: boolean;
         };
         /** DetailsOut */
         DetailsOut: {
@@ -3988,6 +4101,13 @@ export interface components {
             /** Picture Url */
             picture_url: string | null;
         };
+        /** PasswordIn */
+        PasswordIn: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+        };
         /** PausedOut */
         PausedOut: {
             /** Backup Created At */
@@ -5266,6 +5386,108 @@ export interface operations {
             };
         };
     };
+    account_deletion_impact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     account_private_email_confirmation: {
         parameters: {
             query?: never;
@@ -5342,6 +5564,86 @@ export interface operations {
             };
         };
     };
+    account_forum: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForumCardOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     account_payment: {
         parameters: {
             query?: never;
@@ -5358,6 +5660,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoToOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    account_picture: {
+        parameters: {
+            query?: {
+                zoom?: number;
+                x?: number;
+                y?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    image: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForumCardOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Not signed in. */

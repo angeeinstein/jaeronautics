@@ -324,13 +324,6 @@ class LoginForm(FlaskForm):
     submit = SubmitField(_("Login"))
 
 
-class ChangePasswordForm(FlaskForm):
-    current_password = PasswordField(_("Current Password"), validators=[DataRequired()])
-    new_password = PasswordField(_("New Password"), validators=[DataRequired(), Length(min=8)])
-    confirm_new_password = PasswordField(_("Confirm New Password"), validators=[DataRequired(), EqualTo("new_password")])
-    submit = SubmitField(_("Change Password"))
-
-
 class EmailRequestForm(FlaskForm):
     email = StringField(_("Email"), validators=[DataRequired(), Email()])
     submit = SubmitField(_("Send Link"))

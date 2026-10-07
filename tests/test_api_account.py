@@ -255,3 +255,159 @@ class TestPaying:
         response = send(signed_in(client, member.user), "POST", "/api/v1/account/payment")
 
         assert (response.status_code, response.get_json()["error"]["code"]) == (409, "nothing_to_resume")
+
+
+class TestThePassword:
+    def test_changed_after_the_current_one(self, app, client):
+        member = _anna()
+
+        response = send(signed_in(client, member.user), "PUT", "/api/v1/account/password",
+                        {"current_password": "initial-password", "new_password": "a-new-password"})
+
+        assert response.get_json() == {"tone": "success", "text": "Your password has been changed."}
+        assert db.session.get(User, member.user_id).check_password("a-new-password")
+
+    def test_not_without_it(self, app, client):
+        member = _anna()
+
+        response = send(signed_in(client, member.user), "PUT", "/api/v1/account/password",
+                        {"current_password": "a-guess", "new_password": "a-new-password"})
+
+        assert response.get_json()["error"]["fields"] == {"current_password": "This is not your current password."}
+        assert db.session.get(User, member.user_id).check_password("initial-password")
+
+    def test_not_too_short(self, app, client):
+        member = _anna()
+
+        response = send(signed_in(client, member.user), "PUT", "/api/v1/account/password",
+                        {"current_password": "initial-password", "new_password": "short"})
+
+        assert "new_password" in response.get_json()["error"]["fields"]
+
+
+def _half_red_half_blue():
+    from io import BytesIO
+
+    from PIL import Image
+
+    image = Image.new("RGB", (400, 300), (0, 0, 255))
+    image.paste((255, 0, 0), (0, 0, 200, 300))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+    return buffer
+
+
+class TestTheForumPicture:
+    @pytest.fixture
+    def forum_on(self, app, tmp_path, monkeypatch):
+        import aeronautics_members.forum_service as forum_service
+        from aeronautics_members.db_models import Setting
+
+        db.session.merge(Setting(key="forum_integration_enabled", value="True"))
+        db.session.commit()
+        monkeypatch.setattr(forum_service, "get_forum_storage_dir", lambda: tmp_path)
+
+    def _paid(self):
+        return _anna(payment_status="paid", is_active=True, membership_starts_on=date(2026, 1, 1),
+                     membership_ends_on=date(2099, 12, 31))
+
+    def test_uploaded_cropped_to_the_square_chosen(self, app, client, forum_on):
+        from PIL import Image
+
+        from aeronautics_members.db_models import ForumAvatarSubmission
+
+        member = self._paid()
+        signed_in(client, member.user)
+
+        response = client.post("/api/v1/account/picture?zoom=2&x=0&y=0.5",
+                               data={"image": (_half_red_half_blue(), "me.png")},
+                               content_type="multipart/form-data")
+
+        assert response.status_code == 201, response.get_json()
+        assert response.get_json()["status"] == "pending_avatar"
+        submission = db.session.execute(db.select(ForumAvatarSubmission)).scalar_one()
+        with Image.open(submission.storage_path) as stored:
+            assert stored.width == stored.height
+            # The right edge of the square is still the red left half: the square was cut on the left.
+            red, _green, blue = stored.convert("RGB").getpixel((stored.width - 2, stored.height // 2))
+            assert red > 200 and blue < 60
+        assert db.session.execute(db.select(AuditLog).filter_by(event_type="avatar_uploaded")).scalar_one()
+
+    def test_not_a_picture_is_said_at_the_field(self, app, client, forum_on):
+        from io import BytesIO
+
+        member = self._paid()
+        signed_in(client, member.user)
+
+        response = client.post("/api/v1/account/picture", data={"image": (BytesIO(b"not a picture"), "me.png")},
+                               content_type="multipart/form-data")
+
+        assert response.status_code == 400
+        assert "image" in response.get_json()["error"]["fields"]
+
+    def test_a_crop_out_of_range_is_refused(self, app, client, forum_on):
+        member = self._paid()
+        signed_in(client, member.user)
+
+        response = client.post("/api/v1/account/picture?zoom=9",
+                               data={"image": (_half_red_half_blue(), "me.png")},
+                               content_type="multipart/form-data")
+
+        assert response.status_code == 400
+
+    def test_not_before_the_membership_is_active(self, app, client, forum_on):
+        member = _anna()
+        signed_in(client, member.user)
+
+        response = client.post("/api/v1/account/picture", data={"image": (_half_red_half_blue(), "me.png")},
+                               content_type="multipart/form-data")
+
+        assert (response.status_code, response.get_json()["error"]["code"]) == (409, "not_active")
+
+    def test_the_forum_page_has_the_card(self, app, client, forum_on):
+        member = self._paid()
+
+        card = signed_in(client, member.user).get("/api/v1/account/forum").get_json()
+
+        assert card["status"] == "needs_avatar"
+        assert card["picture"]["upload"] is True
+
+
+class TestTheDeletionLink:
+    def test_what_it_would_do(self, app, client):
+        from aeronautics_members.services import privacy
+
+        member = _anna(payment_status="paid", is_active=True, stripe_customer_id="cus_a",
+                       stripe_subscription_id="sub_a", membership_ends_on=date(2099, 12, 31))
+        token = privacy.build_account_deletion_token(member.user)
+
+        impact = signed_in(client, member.user).get(f"/api/v1/account/deletion/{token}").get_json()
+
+        assert (impact["subscription_active"], impact["has_stripe_customer"], impact["is_last_admin"]) == (
+            True, True, False)
+        assert impact["export_url"] == "/account/data-export"
+
+    def test_only_with_a_yes(self, app, client):
+        from aeronautics_members.services import privacy
+
+        member = _anna()
+        token = privacy.build_account_deletion_token(member.user)
+
+        response = send(signed_in(client, member.user), "POST", f"/api/v1/account/deletion/{token}",
+                        {"confirm": False})
+
+        assert response.status_code == 400
+        assert member.deleted_at is None
+
+    def test_done_it_says_so_on_the_start_page(self, app, client):
+        from aeronautics_members.services import privacy
+
+        member = _anna()
+        token = privacy.build_account_deletion_token(member.user)
+
+        send(signed_in(client, member.user), "POST", f"/api/v1/account/deletion/{token}", {"confirm": True})
+
+        assert member.deleted_at is not None
+        with client.session_transaction() as session:
+            assert any("have been deleted" in text for _tone, text in session["_flashes"])

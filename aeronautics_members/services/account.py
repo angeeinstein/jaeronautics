@@ -11,6 +11,7 @@ import stripe
 from flask import current_app
 
 from ..db_models import MemberProfileChangeRequest, User, db
+from ..forum_service import ForumProviderError
 from ..notification_service import ADMIN_GENERAL_CHANNEL
 from . import (
     ConflictError,
@@ -20,7 +21,12 @@ from . import (
     ServiceError,
     ValidationError,
 )
-from .audit import log_audit_event, snapshot_member_for_audit, snapshot_user_for_audit
+from .audit import (
+    log_audit_event,
+    snapshot_forum_avatar_submission_for_audit,
+    snapshot_member_for_audit,
+    snapshot_user_for_audit,
+)
 from .billing import (
     backfill_member_stripe_references,
     billing_portal_session,
@@ -31,7 +37,8 @@ from .billing import (
     sync_member_subscription_state_from_subscription,
 )
 from .clock import get_now_utc
-from .forum import get_forum_service, sync_member_forum_state
+from . import forum
+from .forum import sync_member_forum_state
 from .identity import (
     read_token,
     send_email_verification_email,
@@ -80,7 +87,7 @@ def save_contact_details(user, member, values):
         # portal on the new address and the forum on the old one. Not knowing
         # (forum unreachable) lets the change through; the sync then reports
         # its problem where admins see it.
-        if get_forum_service().address_taken_by_another_forum_account(user, new_email):
+        if forum.get_forum_service().address_taken_by_another_forum_account(user, new_email):
             raise ValidationError(
                 "Please check the form.",
                 details={"fields": {"email_private": (
@@ -361,6 +368,54 @@ def rejoin(user, member, payment_method, *, sent=None):
     )
     db.session.commit()
     return begin_membership(member, payment_method, what="rejoin", sent=sent), None
+
+
+# --- The forum's profile picture -------------------------------------------------------
+
+
+def upload_picture(user, member, upload, *, zoom, x, y):
+    """A profile picture for the forum, cropped to the square chosen, waiting
+    for review. An approved picture stays unless an admin allowed a new one."""
+    service = forum.get_forum_service()
+    if not service.is_enabled():
+        raise ConflictError("The forum is not switched on yet.", code="forum_off")
+    if not member_has_active_access(member):
+        raise ConflictError("Your membership must be active before you can upload a profile picture.",
+                            code="not_active")
+    has_picture = (service.get_current_approved_submission(member) is not None
+                   or service.get_reclaimed_avatar(member) is not None)
+    if has_picture and member.avatar_replacement_allowed_at is None:
+        raise ConflictError("To change your picture, please ask an admin.", code="picture_kept")
+    try:
+        submission = service.create_avatar_submission(upload, user, member, crop_options={
+            "crop_mode": "square", "crop_zoom": zoom, "crop_center_x": x, "crop_center_y": y})
+        result = service.sync_member(member)
+    except ForumProviderError as exc:
+        db.session.rollback()
+        raise ValidationError(str(exc), details={"fields": {"image": str(exc)}}) from None
+    log_audit_event(
+        category="forum",
+        event_type="avatar_uploaded",
+        actor_user=user,
+        target_user=user,
+        target_member=member,
+        before=None,
+        after=snapshot_forum_avatar_submission_for_audit(submission),
+        metadata={"forum_state": result.desired_state if result else None},
+    )
+    queue_curated_admin_notification(
+        ADMIN_GENERAL_CHANNEL,
+        "forum_avatar_uploaded",
+        f"{member.email_private} uploaded a profile picture for approval.",
+        payload={"member_email": member.email_private, "forum_username": user.forum_username,
+                 "submission_id": submission.id},
+        target_user=user,
+        target_member=member,
+        object_type="forum_avatar_submission",
+        object_id=submission.id,
+    )
+    db.session.commit()
+    flush_marked_notification_channels()
 
 
 # --- Password --------------------------------------------------------------------------

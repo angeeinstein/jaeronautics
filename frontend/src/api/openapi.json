@@ -2583,6 +2583,35 @@
         "title": "Counts",
         "type": "object"
       },
+      "CropQuery": {
+        "additionalProperties": false,
+        "description": "The square chosen, as fractions of the picture (lib/crop.ts on the page).",
+        "properties": {
+          "x": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          },
+          "zoom": {
+            "default": 1.0,
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Zoom",
+            "type": "number"
+          }
+        },
+        "title": "CropQuery",
+        "type": "object"
+      },
       "DashboardOut": {
         "additionalProperties": false,
         "properties": {
@@ -2619,6 +2648,20 @@
         "title": "DashboardOut",
         "type": "object"
       },
+      "DeleteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "title": "Confirm",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm"
+        ],
+        "title": "DeleteIn",
+        "type": "object"
+      },
       "DeletedOut": {
         "additionalProperties": false,
         "properties": {
@@ -2631,6 +2674,54 @@
           "removed_welcome_sender"
         ],
         "title": "DeletedOut",
+        "type": "object"
+      },
+      "DeletionOut": {
+        "additionalProperties": false,
+        "description": "What deleting does to this account, said before the button.",
+        "properties": {
+          "export_url": {
+            "title": "Export Url",
+            "type": "string"
+          },
+          "has_forum_account": {
+            "title": "Has Forum Account",
+            "type": "boolean"
+          },
+          "has_stripe_customer": {
+            "title": "Has Stripe Customer",
+            "type": "boolean"
+          },
+          "is_last_admin": {
+            "title": "Is Last Admin",
+            "type": "boolean"
+          },
+          "paid_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Until"
+          },
+          "subscription_active": {
+            "title": "Subscription Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "has_forum_account",
+          "has_stripe_customer",
+          "subscription_active",
+          "paid_until",
+          "is_last_admin",
+          "export_url"
+        ],
+        "title": "DeletionOut",
         "type": "object"
       },
       "DetailsOut": {
@@ -7030,6 +7121,27 @@
         "title": "PageOut",
         "type": "object"
       },
+      "PasswordIn": {
+        "additionalProperties": false,
+        "properties": {
+          "current_password": {
+            "maxLength": 128,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 128,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordIn",
+        "type": "object"
+      },
       "PausedOut": {
         "additionalProperties": false,
         "properties": {
@@ -10620,6 +10732,136 @@
         ]
       }
     },
+    "/api/v1/account/deletion/{token}": {
+      "get": {
+        "operationId": "account_deletion_impact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "What deleting would do. Opening the link changes nothing: mail clients and scanners open links.",
+        "tags": [
+          "Account"
+        ]
+      },
+      "post": {
+        "operationId": "account_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Delete the account now, and sign out. The start page then says it is done.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
     "/api/v1/account/emails/private/confirmation": {
       "post": {
         "operationId": "account_private_email_confirmation",
@@ -10702,6 +10944,98 @@
         ]
       }
     },
+    "/api/v1/account/forum": {
+      "get": {
+        "operationId": "account_forum",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForumCardOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          }
+        },
+        "summary": "The forum: where things stand, the username, the picture. For the forum's own page.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/password": {
+      "put": {
+        "operationId": "account_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Change the password; the current one is asked for first.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
     "/api/v1/account/payment": {
       "post": {
         "operationId": "account_payment",
@@ -10738,6 +11072,114 @@
           }
         },
         "summary": "Stripe's payment page again, for a payment not finished.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/picture": {
+      "post": {
+        "operationId": "account_picture",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "zoom",
+            "required": false,
+            "schema": {
+              "default": 1.0,
+              "maximum": 4.0,
+              "minimum": 1.0,
+              "title": "Zoom",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "x",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "X",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "y",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Y",
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "image": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "image"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForumCardOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Upload a profile picture for the forum, cropped to the square chosen. An admin reviews it.",
         "tags": [
           "Account"
         ]

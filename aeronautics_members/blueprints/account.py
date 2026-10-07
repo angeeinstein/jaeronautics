@@ -3,13 +3,13 @@ remain the data download, the deletion link's page from the email, and the
 membership form for an account without one (until the signup moves, step 7).
 """
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_babel import _
-from flask_login import current_user, login_required, logout_user
+from flask_login import current_user, login_required
 
 from ..app import limiter
-from ..config import RATELIMIT_ACCOUNT_DELETION, RATELIMIT_DATA_EXPORT
-from ..db_models import Member, User, db
+from ..config import RATELIMIT_DATA_EXPORT
+from ..db_models import Member, db
 from ..forms import CreateMembershipProfileForm
 from ..services import ServiceError
 from ..services.account import resume_payment_url
@@ -17,15 +17,8 @@ from ..services.audit import log_audit_event, snapshot_member_for_audit, snapsho
 from ..services.billing import can_resume_payment
 from ..services.clock import get_now_utc
 from ..services.forum import generate_unique_forum_username
-from ..services.identity import read_token
-from ..services.locking import lock_administration, locked
 from ..services.members import apply_member_profile
 from ..services.privacy import (
-    INITIATED_BY_MEMBER,
-    TOKEN_MAX_AGE_ACCOUNT_DELETION,
-    account_deletion_claims_match,
-    describe_deletion_impact,
-    erase_account,
     export_account_data,
     export_filename_for,
 )
@@ -150,64 +143,10 @@ def export_my_data():
     return json_download_response(payload, export_filename_for(current_user))
 
 
-@account_bp.route("/account/delete/<token>", methods=["GET", "POST"])
+@account_bp.route("/account/delete/<token>", methods=["GET"])
 @login_required
-@limiter.limit(RATELIMIT_ACCOUNT_DELETION, methods=["POST"])
 def confirm_account_deletion(token):
-    """Show what deletion will do, then -- on POST -- do it.
-
-    The GET deliberately changes nothing. Mail clients, link scanners and
-    chat previews fetch URLs in emails without being asked, and an account that
-    erased itself because a spam filter opened the link would be unrecoverable.
-    """
-    try:
-        token_data = read_token(token, "delete-account", TOKEN_MAX_AGE_ACCOUNT_DELETION)
-    except Exception:
-        flash(_("This deletion link is invalid or has expired. Please start again."), "warning")
-        return redirect(url_for("account.account"))
-
-    if not account_deletion_claims_match(token_data, current_user):
-        flash(_("This deletion link does not belong to the account you are signed in to."), "warning")
-        return redirect(url_for("account.account"))
-
-    if request.method == "POST":
-        # Read afresh under the lock: an admin may be erasing this account, or
-        # taking away the other admin, in the same moment.
-        lock_administration()
-        db.session.execute(locked(db.select(User).filter_by(id=current_user.id))).scalar_one()
-    impact = describe_deletion_impact(current_user, actor_user=current_user)
-
-    if request.method == "GET":
-        return render_template(
-            "account_delete_confirm.html",
-            token=token,
-            impact=impact,
-            member=current_user.member,
-        )
-
-    if "last_admin" in impact["blockers"]:
-        flash(
-            _("You are the only administrator. Give someone else admin access "
-              "before deleting your account."),
-            "warning",
-        )
-        return redirect(url_for("account.account"))
-
-    email_for_message = current_user.email
-    try:
-        erase_account(current_user, actor_user=current_user, initiated_by=INITIATED_BY_MEMBER)
-    except ServiceError as exc:
-        db.session.rollback()
-        flash(exc.message, "warning" if exc.http_status < 500 else "danger")
-        return redirect(url_for("account.account"))
-
-    db.session.commit()
-    current_app.logger.info("Account erased on member request (previously %s).", email_for_message)
-
-    # Sign out last: the session belongs to an account that no longer exists.
-    logout_user()
-    flash(
-        _("Your account and personal data have been deleted. Thank you for having been a member."),
-        "success",
-    )
-    return redirect(url_for("public.index"))
+    """The link in the deletion email: the app's page says what deleting does,
+    and its button does it (api/account.py). Opening it changes nothing --
+    mail clients and link scanners open links without being asked."""
+    return app_shell()

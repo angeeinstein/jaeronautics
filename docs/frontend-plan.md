@@ -268,9 +268,12 @@ server can update to it.
    service for every door (`services/signup.py`, `begin_membership`). New for every
    app page: the footer (`GET /api/v1/site`), and a message Flask flashes before
    sending the browser to an app page is shown there (`GET /api/v1/messages`).
-   The forum page with the picture upload, the password and the deletion link's
-   page follow; the membership form for an account without one moves with the
-   signup.)*
+   The forum page with the picture upload done: the photo is framed in the page --
+   dragged, zoomed, or moved with the arrow keys -- under a round mask, drawn as the
+   server will cut it (`lib/crop.ts`), and sent whole with the square to be checked
+   and cut there. The password and the deletion link's page done; the deletion link
+   still changes nothing when opened. The membership form for an account without
+   one moves with the signup.)*
 7. **Public pages and signing in:** the new home page (association
    information), signup on its own page with the legal texts in a dialog,
    login, password reset, email confirmation, thank-you and cancel pages,

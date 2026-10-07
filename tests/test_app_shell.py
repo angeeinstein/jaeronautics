@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import make_member
+from conftest import app_module, db, make_member
 from test_admin_reviews import _login, _staff
 from test_teams_foundation import _team
 
@@ -47,7 +47,11 @@ def test_every_app_address_gets_the_app(app, client, built, pattern):
 
     teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
     teams.set_access_list_enabled(None, _team(slug="rocket-team"), True)
-    _login(client, _staff("boss@example.org", "superadmin").id)
+    # A member too: /forum sends an account without a membership to the membership form.
+    boss = make_member(email="boss@example.org").user
+    boss.grant_role(app_module.get_role("superadmin"))
+    db.session.commit()
+    _login(client, boss.id)
 
     response = client.get(_concrete(pattern))
 

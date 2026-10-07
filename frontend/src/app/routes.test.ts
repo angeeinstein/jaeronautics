@@ -47,6 +47,11 @@ describe('the pages the app draws', () => {
     ['/account?rt=123', true],
     ['/account/data-export', false],
     ['/account/create-membership', false],
+    ['/account/delete/abc.def', true],
+    ['/change-password', true],
+    ['/forum?token=abc', true],
+    ['/forum/discourse/connect', false],
+    ['/forum/avatar/public/abc', false],
     ['https://example.org/admin', false],
     ['//example.org/admin', false],
   ])('%s is drawn by the app: %s', (href, expected) => {
