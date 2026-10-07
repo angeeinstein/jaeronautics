@@ -10,7 +10,7 @@ def _login(client, user_id):
         session["_user_id"] = str(user_id)
 
 
-@pytest.mark.parametrize("path", ["/", "/legal"])
+@pytest.mark.parametrize("path", ["/"])
 def test_every_public_page_has_it(client, path):
     body = client.get(path).get_data(as_text=True)
 

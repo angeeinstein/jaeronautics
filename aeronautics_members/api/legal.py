@@ -2,17 +2,20 @@
 pages show it: the version in force or an earlier one, the German text or
 its English translation, with its contents and the other versions.
 
-Not an endpoint of its own: each kind of text has its address (a team's
-rules: api/teams.py) and passes in where its pages and PDFs are. The texts
-are services/legal_texts.py; Markdown with HTML switched off, so the
-rendered text is safe to show as it is.
+The association's texts are here (GET /legal, GET /legal/<slug>, public: the
+signup links to them); a team's rules are in api/teams.py. Each passes in
+where its pages and PDFs are. The texts are services/legal_texts.py; Markdown
+with HTML switched off, so the rendered text is safe to show as it is.
 """
 
 from datetime import date
+from typing import Literal
+
+from flask import url_for
 
 from ..services import NotFoundError
 from ..services import legal_texts as legal
-from ._core import Model
+from ._core import Model, endpoint
 
 
 class SectionOut(Model):
@@ -87,3 +90,50 @@ def legal_text(slug, language, version, *, page, pdf, team=None):
         pdf_url=pdf(None if german.version == in_force.version else german.version.isoformat()),
         pdf_has_english=english is not None,
     )
+
+
+class TextQuery(Model):
+    #: de or en; without it the English translation where there is one.
+    language: Literal["de", "en"] | None = None
+    #: The day of an earlier version; without it the version in force.
+    version: date | None = None
+
+
+class LegalTextLinkOut(Model):
+    slug: str
+    #: As the text calls itself, in German.
+    title: str
+    #: What the portal calls it in English.
+    name: str
+    in_force_since: date
+    #: Accepted when joining.
+    accepted_at_signup: bool
+    url: str
+    pdf_url: str
+
+
+class LegalTextsOut(Model):
+    texts: list[LegalTextLinkOut]
+
+
+@endpoint("GET", "/legal", response=LegalTextsOut, public=True, tag="Legal")
+def legal_texts():
+    """Every legal text in force, with the day its version took effect."""
+    return LegalTextsOut(texts=[
+        LegalTextLinkOut(slug=text.slug, title=text.title, name=text.english,
+                         in_force_since=version.effective_from, accepted_at_signup=text.accepted_at_signup,
+                         url=url_for("public.legal_text", slug=text.slug),
+                         pdf_url=url_for("public.legal_text_pdf", slug=text.slug))
+        for text, version in legal.available()
+    ])
+
+
+@endpoint("GET", "/legal/<slug>", response=LegalTextOut, query=TextQuery, public=True, tag="Legal")
+def legal_text_page(slug, query):
+    """One of the association's texts: the version in force or an earlier one, in German or English."""
+    if slug not in legal.BY_SLUG:
+        raise NotFoundError("There is no such text.", code="no_text")
+    return legal_text(slug, query.language, query.version,
+                      page=lambda language, version: url_for("public.legal_text", slug=slug, language=language,
+                                                             version=version),
+                      pdf=lambda version: url_for("public.legal_text_pdf", slug=slug, version=version))

@@ -1273,6 +1273,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/legal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every legal text in force, with the day its version took effect. */
+        get: operations["legal_texts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/legal/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of the association's texts: the version in force or an earlier one, in German or English. */
+        get: operations["legal_text_page"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -3467,6 +3501,26 @@ export interface components {
             /** Waiting */
             waiting: components["schemas"]["aeronautics_members__api__admin_legal__Waiting"][];
         };
+        /** LegalTextLinkOut */
+        LegalTextLinkOut: {
+            /** Accepted At Signup */
+            accepted_at_signup: boolean;
+            /**
+             * In Force Since
+             * Format: date
+             */
+            in_force_since: string;
+            /** Name */
+            name: string;
+            /** Pdf Url */
+            pdf_url: string;
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
         /** LegalTextOut */
         LegalTextOut: {
             /** Contents */
@@ -3508,6 +3562,11 @@ export interface components {
              * Format: date
              */
             version: string;
+        };
+        /** LegalTextsOut */
+        LegalTextsOut: {
+            /** Texts */
+            texts: components["schemas"]["LegalTextLinkOut"][];
         };
         /** LinkOut */
         LinkOut: {
@@ -9750,6 +9809,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FormOptionsOut"];
+                };
+            };
+        };
+    };
+    legal_texts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalTextsOut"];
+                };
+            };
+        };
+    };
+    legal_text_page: {
+        parameters: {
+            query?: {
+                language?: ("de" | "en") | null;
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalTextOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };

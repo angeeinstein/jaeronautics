@@ -49,10 +49,10 @@ function Facts({ text }: { text: LegalTextData }) {
   );
 }
 
-/** The text itself, with what version it is. */
-export function LegalTextBody({ text }: { text: LegalTextData }) {
+/** What the text is: a translation says first that the German text applies; the title; which version. */
+function Head({ text, order }: { text: LegalTextData; order: 1 | 2 }) {
   return (
-    <Stack gap="sm" lang={text.language}>
+    <Stack gap="sm">
       {text.is_translation ? (
         <Alert color="brand" variant="light" lang="en">
           This is an English translation for convenience. It may contain mistakes. Where it differs from the
@@ -62,10 +62,27 @@ export function LegalTextBody({ text }: { text: LegalTextData }) {
           </Anchor>
         </Alert>
       ) : null}
-      <Title order={2}>{text.title}</Title>
+      <Title order={order} lang={text.language}>
+        {text.title}
+      </Title>
       <Facts text={text} />
-      {/* Markdown rendered on the server with HTML switched off: nothing in it can run. */}
-      <div className={classes.text} dangerouslySetInnerHTML={{ __html: text.html }} />
+    </Stack>
+  );
+}
+
+function Html({ text }: { text: LegalTextData }) {
+  // Markdown rendered on the server with HTML switched off: nothing in it can run.
+  return (
+    <div className={classes.text} lang={text.language} dangerouslySetInnerHTML={{ __html: text.html }} />
+  );
+}
+
+/** The text itself, with what version it is: in a dialog over a form. */
+export function LegalTextBody({ text }: { text: LegalTextData }) {
+  return (
+    <Stack gap="sm">
+      <Head text={text} order={2} />
+      <Html text={text} />
     </Stack>
   );
 }
@@ -73,41 +90,57 @@ export function LegalTextBody({ text }: { text: LegalTextData }) {
 /** The text on a page of its own: beside it its contents and the other versions. */
 export function LegalTextPage({ text }: { text: LegalTextData }) {
   return (
-    <div className={classes.layout}>
-      <Panel title={text.is_translation ? 'English translation' : 'Text'}>
-        <LegalTextBody text={text} />
-      </Panel>
-      {text.contents.length || text.others.length ? (
-        <Stack gap="lg" className={classes.aside}>
-          {text.contents.length ? (
-            <Panel title="Contents">
-              <List listStyleType="none" spacing={4} size="sm">
-                {text.contents.map((section) => (
-                  <List.Item key={section.anchor} className={section.level === 1 ? classes.part : undefined}>
-                    <Anchor href={`#${section.anchor}`} size="sm">
-                      {section.label}
-                    </Anchor>
-                  </List.Item>
-                ))}
-              </List>
-            </Panel>
-          ) : null}
-          {text.others.length ? (
-            <Panel title="Other versions">
-              <List listStyleType="none" spacing={4} size="sm">
-                {text.others.map((other) => (
-                  <List.Item key={other.version}>
-                    <Anchor component={AppLink} to={other.url} size="sm">
-                      {formatDate(other.version)}
-                      {other.in_force ? ' (in force)' : ''}
-                    </Anchor>
-                  </List.Item>
-                ))}
-              </List>
-            </Panel>
-          ) : null}
-        </Stack>
-      ) : null}
-    </div>
+    <Stack gap="lg">
+      <Head text={text} order={1} />
+      <div className={classes.layout}>
+        <Panel title={text.is_translation ? 'English translation' : 'Text'}>
+          <Html text={text} />
+        </Panel>
+        {text.contents.length || text.others.length ? (
+          <Stack gap="lg" className={classes.aside}>
+            {text.contents.length ? (
+              <Panel title="Contents">
+                <List listStyleType="none" spacing={4} size="sm">
+                  {text.contents.map((section) => (
+                    <List.Item
+                      key={section.anchor}
+                      className={section.level === 1 ? classes.part : undefined}
+                    >
+                      <Anchor href={`#${section.anchor}`} size="sm">
+                        {section.label}
+                      </Anchor>
+                    </List.Item>
+                  ))}
+                </List>
+              </Panel>
+            ) : null}
+            {text.others.length ? (
+              <Panel title="Other versions">
+                <List listStyleType="none" spacing={4} size="sm">
+                  {text.others.map((other) => (
+                    <List.Item key={other.version}>
+                      <Anchor component={AppLink} to={other.url} size="sm">
+                        {formatDate(other.version)}
+                        {other.in_force ? ' (in force)' : ''}
+                      </Anchor>
+                    </List.Item>
+                  ))}
+                </List>
+              </Panel>
+            ) : null}
+          </Stack>
+        ) : null}
+      </div>
+    </Stack>
   );
+}
+
+/**
+ * The language asked for in a legal text's address (…/de or …/en, maybe
+ * followed by a version's day); none for the version in force's default.
+ * The two languages are named in the routes, as …/pdf is the PDF, Flask's.
+ */
+export function languageOf(pathname: string): 'de' | 'en' | undefined {
+  const found = /\/(de|en)(?:\/[^/]+)?\/?$/.exec(pathname);
+  return found?.[1] === 'de' || found?.[1] === 'en' ? found[1] : undefined;
 }

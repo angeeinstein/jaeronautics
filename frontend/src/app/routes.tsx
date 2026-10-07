@@ -23,6 +23,26 @@ export const routes: RouteObject[] = [
     hydrateFallbackElement: <LoadingState />,
     children: [
       {
+        element: <PublicLayout wide />,
+        children: [
+          {
+            path: '/legal',
+            lazy: async () => ({ Component: (await import('../pages/public/Legal')).LegalTexts }),
+          },
+          // The two languages by name: /legal/<slug>/pdf is the PDF, Flask's.
+          ...[
+            '/legal/:slug',
+            '/legal/:slug/de',
+            '/legal/:slug/en',
+            '/legal/:slug/de/:version',
+            '/legal/:slug/en/:version',
+          ].map((path) => ({
+            path,
+            lazy: async () => ({ Component: (await import('../pages/public/Legal')).LegalText }),
+          })),
+        ],
+      },
+      {
         element: <PublicLayout />,
         children: [
           {
@@ -144,7 +164,14 @@ export const routes: RouteObject[] = [
             path: ':slug/leave',
             lazy: async () => ({ Component: (await import('../pages/teams/Leave')).Leave }),
           },
-          ...[':slug/rules', ':slug/rules/:language', ':slug/rules/:language/:version'].map((path) => ({
+          // The two languages by name: /rules/pdf is the PDF, Flask's.
+          ...[
+            ':slug/rules',
+            ':slug/rules/de',
+            ':slug/rules/en',
+            ':slug/rules/de/:version',
+            ':slug/rules/en/:version',
+          ].map((path) => ({
             path,
             lazy: async () => ({ Component: (await import('../pages/teams/Rules')).Rules }),
           })),

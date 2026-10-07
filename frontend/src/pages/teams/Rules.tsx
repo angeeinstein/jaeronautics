@@ -6,11 +6,11 @@
  */
 import { Anchor, Box, Modal, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 
 import { api, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
-import { LegalTextBody, LegalTextPage } from '../../components/legal/LegalText';
+import { languageOf, LegalTextBody, LegalTextPage } from '../../components/legal/LegalText';
 import { Breadcrumbs, useDocumentTitle } from '../../components/PageHeader';
 import { PdfLink } from '../../components/PdfLink';
 import { ErrorState, LoadingState } from '../../components/States';
@@ -35,9 +35,10 @@ function useRules(slug: string, language?: Language, version?: string) {
 }
 
 export function Rules() {
-  const { slug = '', language, version } = useParams();
+  const { slug = '', version } = useParams();
+  const language = languageOf(useLocation().pathname);
   const team = useTeam(slug);
-  const rules = useRules(slug, language === 'de' || language === 'en' ? language : undefined, version);
+  const rules = useRules(slug, language, version);
 
   useDocumentTitle(rules.data?.title ?? 'Rules');
   if (rules.isPending) return <LoadingState />;

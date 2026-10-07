@@ -283,7 +283,9 @@ server can update to it.
    (`frame/PublicLayout.tsx`: the logo, Sign in and Join or My Account, the footer).
    Signing in answers where to go on -- the page that asked, kept on this site, such
    as the forum's sign-in -- and the old form's rate limits apply to it unchanged.
-   The email confirmation links stay Flask's and say how it went on the sign-in page.)*
+   The email confirmation links stay Flask's and say how it went on the sign-in page.
+   The legal texts' pages done (`GET /api/v1/legal`, `/legal/<slug>`), with the title as
+   the page's heading -- a team's rules too.)*
 8. **Clean-up:** remove Bootstrap, `base.html`, the page templates, WTForms
    where nothing uses it any more, and their CSS and scripts; update the
    docs; a full review of the branch; then the merge to `main` and the live

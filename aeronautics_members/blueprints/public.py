@@ -16,6 +16,7 @@ from ..config import (
 )
 from ..services import legal_texts as legal
 from . import _legal_pages as legal_pages
+from .app_shell import app_shell
 from ..services.audit import (
     log_audit_event,
     snapshot_member_for_audit,
@@ -256,17 +257,20 @@ def inject_legal_texts():
 
 @public_bp.route("/legal")
 def legal_texts():
-    """Every legal text in force, with the day its version took effect."""
-    return render_template("legal/index.html", texts=legal.available())
+    """Every legal text in force: the app's page (GET /api/v1/legal)."""
+    return app_shell()
 
 
 @public_bp.route("/legal/<slug>")
 @public_bp.route("/legal/<slug>/<language>")
 @public_bp.route("/legal/<slug>/<language>/<version>")
 def legal_text(slug, language=None, version=None):
-    """One legal text: the version in force, or an earlier one by its day."""
-    if slug not in legal.BY_SLUG:
+    """One legal text: the app's page (GET /api/v1/legal/<slug>). The bare text
+    (``?part=body``) is still the signup form's window until the signup moves."""
+    if slug not in legal.BY_SLUG or language not in (None, *legal.LANGUAGES):
         abort(404)
+    if request.args.get("part") != "body":
+        return app_shell()
     return legal_pages.text_page(
         slug, language, version,
         url=lambda language, version: url_for("public.legal_text", slug=slug, language=language, version=version),

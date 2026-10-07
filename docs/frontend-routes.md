@@ -155,5 +155,5 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `GET|POST /forgot-password` (page + action) → `POST /api/v1/password-reset`
 - [x] `GET|POST /reset-password/<token>` (page + action; link in emails) → `GET|PUT /api/v1/password-reset/<token>`
 - [ ] `GET /verify-email/<token>`, `/verify-work-email/<token>` (link in emails) → Flask confirms and redirects to a page, as today
-- [ ] `GET /legal` (page) → list of legal texts
-- [ ] `GET /legal/<slug>[/<language>[/<version>]]` (page) → a legal text, also shown in the dialog over the signup form
+- [x] `GET /legal` (page) → list of legal texts; `GET /api/v1/legal`
+- [x] `GET /legal/<slug>[/<language>[/<version>]]` (page) → a legal text, `GET /api/v1/legal/<slug>`; the two languages are named in the app's routes, as `/legal/<slug>/pdf` is the PDF (the same for a team's rules). The bare text (`?part=body`) stays for the old signup form's window until the signup moves

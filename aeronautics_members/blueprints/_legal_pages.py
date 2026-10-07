@@ -62,9 +62,9 @@ def text_page(slug, language, version, *, url, pdf_url, crumbs, label, team=None
             return None
         return url(of.language, None if of.version == in_force.version else of.version.isoformat())
 
-    template = "legal/_body.html" if request.args.get("part") == "body" else "legal/text.html"
+    # Only the text itself, for the old signup form's window; the page is the app's.
     return render_template(
-        template,
+        "legal/_body.html",
         label=label,
         crumbs=crumbs,
         shown=shown,

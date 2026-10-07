@@ -37,7 +37,10 @@ EXAMPLES = {"slug": "rocket-team", "language": "de", "version": "2026-01-01"}
 
 
 def _concrete(pattern):
-    """/admin/accounts/:userId -> /admin/accounts/1, /teams/:slug -> /teams/rocket-team"""
+    """/admin/accounts/:userId -> /admin/accounts/1, /teams/:slug -> /teams/rocket-team,
+    /legal/:slug -> /legal/statutes"""
+    if pattern.startswith("/legal/"):
+        pattern = pattern.replace(":slug", "statutes")
     return re.sub(r":(\w+)", lambda part: EXAMPLES.get(part.group(1), "1"), pattern)
 
 

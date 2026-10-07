@@ -134,20 +134,20 @@ class TestThePages:
         assert response.status_code == 302 and response.headers["Location"].endswith("/legal/membership-terms/de")
 
     def test_linked_from_the_text_and_the_list(self, client, with_translation):
-        page = client.get("/legal/membership-terms").get_data(as_text=True)
-        listing = client.get("/legal").get_data(as_text=True)
+        text = client.get("/api/v1/legal/membership-terms").get_json()
+        listing = client.get("/api/v1/legal").get_json()["texts"]
 
-        assert 'href="/legal/membership-terms/pdf"' in page and "PDF, German and English" in page
-        assert "data-legal-file" in page  # opens in a tab of its own from the window over the signup form
-        assert 'href="/legal/membership-terms/pdf"' in listing
+        # "PDF, German and English" on the page (components/legal/LegalText.tsx).
+        assert (text["pdf_url"], text["pdf_has_english"]) == ("/legal/membership-terms/pdf", True)
+        assert {entry["pdf_url"] for entry in listing} >= {"/legal/membership-terms/pdf"}
 
     def test_an_earlier_version_links_its_own(self, client, texts):  # noqa: F811
         texts("statutes", "2019-03-17", title="Statuten")
         texts("statutes", "2026-01-01", title="Statuten")
 
-        page = client.get("/legal/statutes/de/2019-03-17").get_data(as_text=True)
+        text = client.get("/api/v1/legal/statutes", query_string={"language": "de", "version": "2019-03-17"})
 
-        assert 'href="/legal/statutes/pdf/2019-03-17"' in page
+        assert text.get_json()["pdf_url"] == "/legal/statutes/pdf/2019-03-17"
 
 
 class TestMadeBeforeItIsOpened:
@@ -185,10 +185,10 @@ class TestMadeBeforeItIsOpened:
         assert answer.status_code == 500 and answer.get_json()["error"]
 
     def test_every_pdf_link_is_made_first(self, client, with_translation):
-        page = client.get("/legal").get_data(as_text=True)
+        """The app's PDF links ask for the PDF to be made first (components/PdfLink.tsx)."""
+        response = client.get("/legal/membership-terms/pdf?prepare=1")
 
-        assert 'href="/legal/membership-terms/pdf" target="_blank" rel="noopener" data-legal-file' in page
-        assert "legal-pdf-open.js" in page
+        assert response.get_json()["url"].startswith("/legal/membership-terms/pdf?v=")
 
 
 class TestMadeAgain:

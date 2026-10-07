@@ -4994,6 +4994,51 @@
         "title": "LegalOut",
         "type": "object"
       },
+      "LegalTextLinkOut": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_at_signup": {
+            "title": "Accepted At Signup",
+            "type": "boolean"
+          },
+          "in_force_since": {
+            "format": "date",
+            "title": "In Force Since",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pdf_url": {
+            "title": "Pdf Url",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "title",
+          "name",
+          "in_force_since",
+          "accepted_at_signup",
+          "url",
+          "pdf_url"
+        ],
+        "title": "LegalTextLinkOut",
+        "type": "object"
+      },
       "LegalTextOut": {
         "additionalProperties": false,
         "properties": {
@@ -5099,6 +5144,23 @@
           "pdf_has_english"
         ],
         "title": "LegalTextOut",
+        "type": "object"
+      },
+      "LegalTextsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "texts": {
+            "items": {
+              "$ref": "#/components/schemas/LegalTextLinkOut"
+            },
+            "title": "Texts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "texts"
+        ],
+        "title": "LegalTextsOut",
         "type": "object"
       },
       "LinkOut": {
@@ -16431,6 +16493,117 @@
         "summary": "The choices of the member forms, and what each kind of member is asked.",
         "tags": [
           "Account"
+        ]
+      }
+    },
+    "/api/v1/legal": {
+      "get": {
+        "operationId": "legal_texts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalTextsOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Every legal text in force, with the day its version took effect.",
+        "tags": [
+          "Legal"
+        ]
+      }
+    },
+    "/api/v1/legal/{slug}": {
+      "get": {
+        "operationId": "legal_text_page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "de",
+                    "en"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Language"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegalTextOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One of the association's texts: the version in force or an earlier one, in German or English.",
+        "tags": [
+          "Legal"
         ]
       }
     },

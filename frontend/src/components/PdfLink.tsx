@@ -51,7 +51,8 @@ export function PdfLink({ href, children }: { href: string; children: string }) 
   }
 
   return (
-    <Group gap={6} wrap="nowrap" component="span">
+    // Inline, so it sits in a line of text ("Version of … · PDF").
+    <Group gap={6} wrap="nowrap" component="span" display="inline-flex">
       <Anchor href={href} target="_blank" rel="noopener" onClick={open} aria-busy={busy || undefined}>
         {busy ? (
           <Group gap={6} wrap="nowrap" component="span">

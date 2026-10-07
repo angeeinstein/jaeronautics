@@ -1,8 +1,8 @@
 /**
  * The frame of the pages anybody may open -- signing in, a new password, the
  * legal texts, joining: the top bar with the logo and the way in (Sign in and
- * Join, or My Account for somebody signed in), a narrow centred column, and
- * the footer. Needs nobody signed in, so it asks only GET /api/v1/session.
+ * Join, or My Account for somebody signed in), a narrow centred column (or the
+ * full one), and the footer. Needs nobody signed in, so it asks only GET /api/v1/session.
  */
 import { AppShell, Box, Button, Group } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
@@ -46,7 +46,9 @@ function WayIn() {
   );
 }
 
-export function PublicLayout() {
+/** ``wide``: the full column, for a legal text with its contents beside it. */
+export function PublicLayout({ wide = false }: { wide?: boolean }) {
+  const column = wide ? classes.content : classes.contentNarrow;
   return (
     <AppShell header={{ height: 'var(--ja-topbar-height)' }} padding={0}>
       <AppShell.Header withBorder={false}>
@@ -60,13 +62,13 @@ export function PublicLayout() {
       </AppShell.Header>
       <AppShell.Main>
         <div className={classes.main} id="content">
-          <div className={classes.contentNarrow}>
+          <div className={column}>
             <Outlet />
           </div>
         </div>
       </AppShell.Main>
       <div className={classes.footerShell}>
-        <div className={classes.contentNarrow}>
+        <div className={column}>
           <Footer />
         </div>
       </div>

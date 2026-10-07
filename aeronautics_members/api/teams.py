@@ -22,7 +22,7 @@ from ..services.clock import get_membership_today
 from ..services.membership import format_membership_date_display as day_text
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, endpoint
-from .legal import LegalTextOut, legal_text
+from .legal import LegalTextOut, TextQuery, legal_text
 
 TAG = "Teams"
 
@@ -527,13 +527,6 @@ def team_leave(slug, body):
 
 
 # --- The rules --------------------------------------------------------------------------
-
-
-class TextQuery(Model):
-    #: de or en; without it the English translation where there is one.
-    language: Literal["de", "en"] | None = None
-    #: The day of an earlier version; without it the version in force.
-    version: date | None = None
 
 
 @endpoint("GET", "/teams/<slug>/rules", response=LegalTextOut, query=TextQuery, tag=TAG)
