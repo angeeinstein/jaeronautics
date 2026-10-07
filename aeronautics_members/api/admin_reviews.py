@@ -25,7 +25,7 @@ def _may_review():
         raise PermissionError_("You do not review anything.")
 
 
-class Person(Model):
+class ReviewPersonOut(Model):
     """The member the item is about."""
 
     user_id: int | None
@@ -66,12 +66,12 @@ class QueueItem(Model):
     id: int
     #: When it was asked for or uploaded.
     at: UtcDateTime
-    person: Person
+    person: ReviewPersonOut
     change: ChangeRequest | None
     picture: Picture | None
 
 
-class Waiting(Model):
+class ReviewCountsOut(Model):
     """How much waits of each kind; ``None`` for a kind this person does not decide."""
 
     name_changes: int | None
@@ -87,7 +87,7 @@ class SyncProblem(Model):
 
 
 class ReviewsOut(Model):
-    waiting: Waiting
+    waiting: ReviewCountsOut
     #: The oldest of what waits; the rest follow as these are decided.
     queue: list[QueueItem]
     #: ``None`` for somebody who does not moderate the forum.
@@ -96,9 +96,9 @@ class ReviewsOut(Model):
 
 def _person(member, user):
     if member is not None:
-        return Person(user_id=member.user_id, name=f"{member.first_name} {member.last_name}".strip(),
+        return ReviewPersonOut(user_id=member.user_id, name=f"{member.first_name} {member.last_name}".strip(),
                       email=member.email_private)
-    return Person(user_id=user.id if user else None, name=user.email if user else "Unknown",
+    return ReviewPersonOut(user_id=user.id if user else None, name=user.email if user else "Unknown",
                   email=user.email if user else None)
 
 
@@ -138,7 +138,7 @@ def admin_reviews():
     names = reviews.can_review_name_changes(current_user)
     pictures = reviews.can_review_pictures(current_user)
     return ReviewsOut(
-        waiting=Waiting(
+        waiting=ReviewCountsOut(
             name_changes=counts[reviews.KIND_NAME_CHANGE] if names else None,
             pictures=counts[reviews.KIND_PICTURE] if pictures else None,
             sync_problems=counts["sync_problems"] if pictures else None,

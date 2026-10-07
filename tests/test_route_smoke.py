@@ -161,7 +161,7 @@ def test_all_routes_no_server_error(client, seeded):
     hit("PUT", "/api/v1/password-reset/bad", json={"password": "password123"})
     hit("GET", "/change-password", uid=mu)
     hit("PUT", "/api/v1/account/password", uid=mu, json={"current_password": "password123", "new_password": "password124"})
-    hit("POST", "/logout", uid=mu)
+    hit("DELETE", "/api/v1/session", uid=mu)
     # account
     hit("GET", "/account", uid=mu)
     hit("GET", "/api/v1/account", uid=mu)

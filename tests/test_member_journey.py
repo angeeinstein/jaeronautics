@@ -3,6 +3,7 @@
 Each of these was found by walking the path as a member would, and each left
 somebody stuck with nothing on screen saying why.
 """
+import re
 import types
 from datetime import date
 from pathlib import Path
@@ -319,25 +320,29 @@ def test_the_forum_card_says_its_status_once(app, client, forum, monkeypatch):
     assert forum_card["message"] == "Upload a profile picture to complete your forum access."
 
 
+APP_PAGE = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+ERROR_PAGE = Path(__file__).resolve().parent.parent / "aeronautics_members" / "templates" / "error.html"
+
+
 def test_the_portal_is_english_whatever_the_browser_asks(app, client):
-    """The German translation lags the portal; a German browser picked it up
-    on its own and showed a half-translated site. (The pages still drawn by
-    Flask: the error pages.)"""
-    body = client.get("/no-such-page?lang=de", headers={"Accept-Language": "de-AT,de;q=0.9"}).get_data(as_text=True)
+    """The German translation lagged the portal; a German browser picked it up
+    on its own and showed a half-translated site. The app and the error page
+    are English only."""
+    assert '<html lang="en"' in APP_PAGE.read_text()
+    assert '<html lang="en">' in ERROR_PAGE.read_text()
+    assert app.config["BABEL_SUPPORTED_LOCALES"] == ["en"]
 
-    assert '<html lang="en"' in body
-    assert "language-selector" not in body
 
-
-def test_the_portal_is_dark_whatever_the_device_prefers(app, client):
+def test_the_portal_is_dark_whatever_the_device_prefers(app):
     """The site has one look, dark. It must not follow a device set to light
     mode into a half-styled light page."""
-    body = client.get("/no-such-page").get_data(as_text=True)
-    stylesheet = (Path(app.static_folder) / "style.css").read_text()
+    page = APP_PAGE.read_text()
+    styles = Path(__file__).resolve().parent.parent / "frontend" / "src" / "styles" / "global.css"
 
-    assert 'data-bs-theme="dark"' in body
-    assert '<meta name="color-scheme" content="dark">' in body
-    assert "prefers-color-scheme" not in stylesheet
+    assert 'data-mantine-color-scheme="dark"' in page
+    assert '<meta name="color-scheme" content="dark"' in page
+    assert "prefers-color-scheme" not in styles.read_text()
+    assert "color-scheme: dark" in (Path(app.static_folder) / "maintenance.css").read_text()
 
 
 class TestTheSignupSentTwice:
@@ -528,48 +533,24 @@ class TestDatesLookTheSameEverywhere:
         assert not offenders, "use |date_display or |datetime_display: " + ", ".join(offenders)
 
 
-def test_everything_the_stylesheet_loads_is_there(app):
+def test_every_font_the_pdfs_load_is_there(app):
     """A font file left out of a deploy falls back silently to another face."""
-    import re
-
-    static = Path(app.static_folder)
-    stylesheet = (static / "style.css").read_text()
-    referenced = re.findall(r'url\("(fonts/[^"]+)"\)', stylesheet)
+    pdf = (Path(app.root_path) / "templates" / "legal" / "pdf.html").read_text()
+    referenced = re.findall(r'url\("(fonts/[^"]+)"\)', pdf)
 
     assert referenced, "the fonts are expected to come from static/fonts"
-    assert [name for name in referenced if not (static / name).is_file()] == []
+    assert [name for name in referenced if not (Path(app.static_folder) / name).is_file()] == []
 
 
-def test_a_success_message_carries_the_tick(app, client):
-    with client.session_transaction() as session:
-        session["_flashes"] = [("success", "Saved."), ("warning", "Careful.")]
-
-    body = client.get("/no-such-page").get_data(as_text=True)
-
-    assert body.count('class="success-check"') == 1
-    assert '<div class="alert alert-warning">Careful.</div>' in body
-
-
-def test_states_are_shown_as_status_labels_not_bootstrap_badges():
-    templates = Path(__file__).resolve().parent.parent / "aeronautics_members" / "templates"
-    offenders = [
-        str(path.relative_to(templates))
-        for path in templates.rglob("*.html")
-        if "emails" not in path.parts and 'class="badge' in path.read_text()
-    ]
-    assert not offenders, "use status-label with a status-* tone: " + ", ".join(offenders)
-
-
-def test_the_tab_icon_is_the_square_mark(app, client):
-    """The full logo was unreadable at tab size. On the app's pages and Flask's alike."""
-    body = client.get("/no-such-page").get_data(as_text=True)
-    app_page = (Path(__file__).resolve().parent.parent / "frontend" / "index.html").read_text()
+def test_the_tab_icon_is_the_square_mark(app):
+    """The full logo was unreadable at tab size. On the app's pages and the error page alike."""
     static = Path(app.static_folder)
 
+    for page in (APP_PAGE.read_text(), ERROR_PAGE.read_text()):
+        for name in ("favicon.svg", "favicon-32.png"):
+            assert f"/static/{name}" in page
     for name in ("favicon.svg", "favicon-32.png", "apple-touch-icon.png"):
-        assert f"/static/{name}" in body and f"/static/{name}" in app_page
         assert (static / name).is_file()
-    assert "logo_joanneum_aeronautics_negativ.svg\" type=\"image/svg+xml\"" not in body
 
 
 class TestTheConfirmationReminder:

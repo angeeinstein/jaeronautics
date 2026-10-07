@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{#- The portal's own error page, for what the app cannot draw: too many
+    requests, an error on our side, a form that could not be sent. On its own,
+    like the maintenance page (maintenance.css): rendered without the site's
+    context, so it still works when the database is what failed. -#}
+<title>{{ title }} · Joanneum Aeronautics</title>
+<link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/maintenance.css">
+</head>
+<body>
+{% if test_server %}<div class="test-server-bar" role="note">Test server <span>· not the real membership portal</span></div>{% endif %}
+<main>
+    <img class="logo" src="/static/logo_joanneum_aeronautics_negativ.svg" alt="Joanneum Aeronautics">
+    <h1>{{ title }}</h1>
+    {% for line in lines %}<p>{{ line }}</p>
+    {% endfor %}
+    <p><a class="button" href="/">Back to the start page</a></p>
+</main>
+</body>
+</html>

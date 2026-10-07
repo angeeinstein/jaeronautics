@@ -93,17 +93,17 @@ class TeamSettingsIn(Model):
     label_plural: str = Field(max_length=50)
 
 
-class SavedOut(Model):
+class TeamSettingsSavedOut(Model):
     changed: bool
 
 
-@endpoint("PUT", "/admin/team-settings", response=SavedOut, body=TeamSettingsIn, permissions=PERMISSIONS, tag=TAG)
+@endpoint("PUT", "/admin/team-settings", response=TeamSettingsSavedOut, body=TeamSettingsIn, permissions=PERMISSIONS, tag=TAG)
 def admin_teams_settings(body):
     """Switch teams on or off for members, and say what they are called."""
     changed = teams_service.save_team_settings(current_user, enabled=body.enabled,
                                                label_singular=body.label_singular, label_plural=body.label_plural)
     db.session.commit()
-    return SavedOut(changed=bool(changed))
+    return TeamSettingsSavedOut(changed=bool(changed))
 
 
 # --- One team --------------------------------------------------------------------------

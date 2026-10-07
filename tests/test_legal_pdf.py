@@ -207,8 +207,14 @@ class TestMadeAgain:
 
 
 def test_every_text_in_the_repository_makes_a_pdf(app):
-    """So a text that cannot be laid out fails the build, not the download."""
+    """So a text that cannot be laid out fails the build, not the download.
+    With a team for each team folder, as on a server whose teams have rules."""
+    from test_teams_foundation import _team
+
     app.config["LEGAL_TEXTS_DIR"] = str(REPO_TEXTS)
+    for folder in sorted((REPO_TEXTS / legal.TEAMS_FOLDER).iterdir()):
+        if folder.is_dir():
+            _team(name=folder.name.upper(), slug=folder.name)
 
     made = legal_pdf.build_all()
 

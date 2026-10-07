@@ -1095,7 +1095,7 @@
           "name_changes": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/aeronautics_members__api__admin_dashboard__Waiting"
+                "$ref": "#/components/schemas/WaitingCountOut"
               },
               {
                 "type": "null"
@@ -1105,7 +1105,7 @@
           "pictures": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/aeronautics_members__api__admin_dashboard__Waiting"
+                "$ref": "#/components/schemas/WaitingCountOut"
               },
               {
                 "type": "null"
@@ -1115,7 +1115,7 @@
           "sync_problems": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/aeronautics_members__api__admin_dashboard__Waiting"
+                "$ref": "#/components/schemas/WaitingCountOut"
               },
               {
                 "type": "null"
@@ -4976,7 +4976,7 @@
           },
           "waiting": {
             "items": {
-              "$ref": "#/components/schemas/aeronautics_members__api__admin_legal__Waiting"
+              "$ref": "#/components/schemas/UpcomingVersionOut"
             },
             "title": "Waiting",
             "type": "array"
@@ -5183,7 +5183,7 @@
           "actor": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/aeronautics_members__api__admin_logs__Person"
+                "$ref": "#/components/schemas/LogPersonOut"
               },
               {
                 "type": "null"
@@ -5218,7 +5218,7 @@
           "target": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/aeronautics_members__api__admin_logs__Person"
+                "$ref": "#/components/schemas/LogPersonOut"
               },
               {
                 "type": "null"
@@ -5240,13 +5240,39 @@
         "title": "LogEntry",
         "type": "object"
       },
+      "LogPersonOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "user_id",
+          "email"
+        ],
+        "title": "LogPersonOut",
+        "type": "object"
+      },
       "LogsOut": {
         "additionalProperties": false,
         "properties": {
           "about": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/aeronautics_members__api__admin_logs__Person"
+                "$ref": "#/components/schemas/LogPersonOut"
               },
               {
                 "type": "null"
@@ -7693,7 +7719,7 @@
             "type": "string"
           },
           "person": {
-            "$ref": "#/components/schemas/aeronautics_members__api__admin_reviews__Person"
+            "$ref": "#/components/schemas/ReviewPersonOut"
           },
           "picture": {
             "anyOf": [
@@ -7959,6 +7985,91 @@
         "title": "RetriedOut",
         "type": "object"
       },
+      "ReviewCountsOut": {
+        "additionalProperties": false,
+        "description": "How much waits of each kind; ``None`` for a kind this person does not decide.",
+        "properties": {
+          "name_changes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Changes"
+          },
+          "pictures": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pictures"
+          },
+          "sync_problems": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Problems"
+          }
+        },
+        "required": [
+          "name_changes",
+          "pictures",
+          "sync_problems"
+        ],
+        "title": "ReviewCountsOut",
+        "type": "object"
+      },
+      "ReviewPersonOut": {
+        "additionalProperties": false,
+        "description": "The member the item is about.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email"
+        ],
+        "title": "ReviewPersonOut",
+        "type": "object"
+      },
       "ReviewsOut": {
         "additionalProperties": false,
         "properties": {
@@ -7984,7 +8095,7 @@
             "title": "Sync Problems"
           },
           "waiting": {
-            "$ref": "#/components/schemas/aeronautics_members__api__admin_reviews__Waiting"
+            "$ref": "#/components/schemas/ReviewCountsOut"
           }
         },
         "required": [
@@ -8427,6 +8538,23 @@
           "csrf_token"
         ],
         "title": "SessionOut",
+        "type": "object"
+      },
+      "SettingsSavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "SettingsSavedOut",
         "type": "object"
       },
       "SignInIn": {
@@ -10060,6 +10188,20 @@
         "title": "TeamSettingsIn",
         "type": "object"
       },
+      "TeamSettingsSavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "TeamSettingsSavedOut",
+        "type": "object"
+      },
       "Teams": {
         "additionalProperties": false,
         "properties": {
@@ -10478,6 +10620,76 @@
         "title": "UndeliveredOut",
         "type": "object"
       },
+      "UpcomingVersionOut": {
+        "additionalProperties": false,
+        "description": "A version not shown yet: a draft, or one whose day has not come.",
+        "properties": {
+          "effective_from": {
+            "format": "date",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "has_english": {
+            "title": "Has English",
+            "type": "boolean"
+          },
+          "pdf_url": {
+            "title": "Pdf Url",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "scheduled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "format": "date",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "team_name",
+          "version",
+          "revision",
+          "status",
+          "effective_from",
+          "has_english",
+          "pdf_url"
+        ],
+        "title": "UpcomingVersionOut",
+        "type": "object"
+      },
       "UpdateIn": {
         "additionalProperties": false,
         "properties": {
@@ -10639,7 +10851,7 @@
         "title": "VersionOut",
         "type": "object"
       },
-      "aeronautics_members__api__admin_dashboard__Waiting": {
+      "WaitingCountOut": {
         "additionalProperties": false,
         "description": "How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words.",
         "properties": {
@@ -10675,219 +10887,7 @@
           "summary",
           "at"
         ],
-        "title": "Waiting",
-        "type": "object"
-      },
-      "aeronautics_members__api__admin_legal__Waiting": {
-        "additionalProperties": false,
-        "description": "A version not shown yet: a draft, or one whose day has not come.",
-        "properties": {
-          "effective_from": {
-            "format": "date",
-            "title": "Effective From",
-            "type": "string"
-          },
-          "has_english": {
-            "title": "Has English",
-            "type": "boolean"
-          },
-          "pdf_url": {
-            "title": "Pdf Url",
-            "type": "string"
-          },
-          "revision": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Revision"
-          },
-          "status": {
-            "enum": [
-              "draft",
-              "scheduled"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "team_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Team Name"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "version": {
-            "format": "date",
-            "title": "Version",
-            "type": "string"
-          }
-        },
-        "required": [
-          "title",
-          "team_name",
-          "version",
-          "revision",
-          "status",
-          "effective_from",
-          "has_english",
-          "pdf_url"
-        ],
-        "title": "Waiting",
-        "type": "object"
-      },
-      "aeronautics_members__api__admin_logs__Person": {
-        "additionalProperties": false,
-        "properties": {
-          "email": {
-            "title": "Email",
-            "type": "string"
-          },
-          "user_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          }
-        },
-        "required": [
-          "user_id",
-          "email"
-        ],
-        "title": "Person",
-        "type": "object"
-      },
-      "aeronautics_members__api__admin_reviews__Person": {
-        "additionalProperties": false,
-        "description": "The member the item is about.",
-        "properties": {
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "user_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Id"
-          }
-        },
-        "required": [
-          "user_id",
-          "name",
-          "email"
-        ],
-        "title": "Person",
-        "type": "object"
-      },
-      "aeronautics_members__api__admin_reviews__Waiting": {
-        "additionalProperties": false,
-        "description": "How much waits of each kind; ``None`` for a kind this person does not decide.",
-        "properties": {
-          "name_changes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name Changes"
-          },
-          "pictures": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pictures"
-          },
-          "sync_problems": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sync Problems"
-          }
-        },
-        "required": [
-          "name_changes",
-          "pictures",
-          "sync_problems"
-        ],
-        "title": "Waiting",
-        "type": "object"
-      },
-      "aeronautics_members__api__admin_settings__SavedOut": {
-        "additionalProperties": false,
-        "properties": {
-          "changed": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Changed",
-            "type": "array"
-          }
-        },
-        "required": [
-          "changed"
-        ],
-        "title": "SavedOut",
-        "type": "object"
-      },
-      "aeronautics_members__api__admin_teams__SavedOut": {
-        "additionalProperties": false,
-        "properties": {
-          "changed": {
-            "title": "Changed",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "changed"
-        ],
-        "title": "SavedOut",
+        "title": "WaitingCountOut",
         "type": "object"
       }
     }
@@ -14738,7 +14738,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/aeronautics_members__api__admin_settings__SavedOut"
+                  "$ref": "#/components/schemas/SettingsSavedOut"
                 }
               }
             },
@@ -14908,7 +14908,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/aeronautics_members__api__admin_settings__SavedOut"
+                  "$ref": "#/components/schemas/SettingsSavedOut"
                 }
               }
             },
@@ -15798,7 +15798,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/aeronautics_members__api__admin_settings__SavedOut"
+                  "$ref": "#/components/schemas/SettingsSavedOut"
                 }
               }
             },
@@ -16126,7 +16126,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/aeronautics_members__api__admin_teams__SavedOut"
+                  "$ref": "#/components/schemas/TeamSettingsSavedOut"
                 }
               }
             },

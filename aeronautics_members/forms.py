@@ -1,3 +1,8 @@
+"""The rules the member forms are checked by: kinds of member, the university
+address, the year group, phone numbers, the tick for the legal texts. The API
+checks what the front end sends against them (api/_forms.py, ``checked``), so
+each rule is written down once, here.
+"""
 from flask_babel import _, lazy_gettext as _l
 from flask_wtf import FlaskForm
 from wtforms import (
@@ -6,7 +11,6 @@ from wtforms import (
     RadioField,
     SelectField,
     StringField,
-    SubmitField,
     TextAreaField,
 )
 from wtforms.validators import (
@@ -271,7 +275,6 @@ class MembershipForm(FlaskForm):
         _l("I accept the legal texts."),
         validators=[InputRequired(message=_l("Please accept the legal texts to continue."))],
     )
-    submit = SubmitField(_("Proceed to Payment"))
 
 
 class CreateMembershipProfileForm(FlaskForm):
@@ -308,7 +311,6 @@ class CreateMembershipProfileForm(FlaskForm):
         _l("I accept the legal texts."),
         validators=[InputRequired(message=_l("Please accept the legal texts to continue."))],
     )
-    submit = SubmitField(_("Create Membership and Proceed to Payment"))
 
 
 class MemberProfileForm(FlaskForm):
@@ -325,7 +327,6 @@ class MemberProfileForm(FlaskForm):
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
-    submit = SubmitField(_("Save Profile Changes"))
 
 
 class IdentityChangeRequestForm(FlaskForm):
@@ -339,4 +340,3 @@ class IdentityChangeRequestForm(FlaskForm):
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     member_note = TextAreaField(_l("Why should this be changed?"), validators=[Optional(), Length(max=1000)])
-    submit = SubmitField(_("Submit Change Request"))

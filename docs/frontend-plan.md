@@ -227,7 +227,7 @@ server can update to it.
    7. Legal Texts *(done: `api/admin_legal.py`; `frontend/src/pages/admin/LegalTexts.tsx`.
       The API core takes uploaded files (`uploads=`) and answers files (`produces=`), both
       in the OpenAPI description. PDF links make the PDF first, then open it
-      (`components/PdfLink.tsx`, as legal-pdf-open.js does on Flask's pages).)*
+      (`components/PdfLink.tsx`).)*
    8. Settings, section by section (general, billing, mail, forum,
       notifications, maintenance with update, backup and restore)
       *(General, Notifications, Membership fee and Forum done: `api/admin_settings.py`; the one
@@ -298,6 +298,10 @@ server can update to it.
    where nothing uses it any more, and their CSS and scripts; update the
    docs; a full review of the branch; then the merge to `main` and the live
    site's update.
+   *(Done: the error pages -- 404 is the app's, the others one plain page that
+   works without the database -- and `base.html`, Bootstrap, `style.css`, the old
+   scripts and the Flask `/logout` removed. WTForms stays: the API checks the
+   member forms by its rules. The API's models each have a name of their own.)*
 
 ## 5. Open, to decide on the way
 

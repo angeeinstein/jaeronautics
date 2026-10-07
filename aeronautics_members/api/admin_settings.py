@@ -26,6 +26,7 @@ from ..services.audit import log_audit_event
 from ..services.forum import get_forum_service, get_forum_settings_map
 from ..services.institutional_email import get_institutional_domains
 from ..services.notifications import get_notification_settings_map
+from .admin_mail import ConnectionOut
 from ._core import Model, UtcDateTime, endpoint
 
 TAG = "Admin"
@@ -33,7 +34,7 @@ GENERAL = [Permission.SETTINGS_GENERAL]
 CREDENTIALS = [Permission.SETTINGS_CREDENTIALS]
 
 
-class SavedOut(Model):
+class SettingsSavedOut(Model):
     #: The settings that changed; empty when nothing did.
     changed: list[str]
 
@@ -83,7 +84,7 @@ def admin_settings_general():
     )
 
 
-@endpoint("PUT", "/admin/settings/general", response=SavedOut, body=GeneralIn, permissions=GENERAL, tag=TAG)
+@endpoint("PUT", "/admin/settings/general", response=SettingsSavedOut, body=GeneralIn, permissions=GENERAL, tag=TAG)
 def admin_settings_general_save(body):
     """Save the general settings: only these, whatever else there is."""
     changed = sections.save_general(
@@ -92,7 +93,7 @@ def admin_settings_general_save(body):
         welcome_email_sender=body.welcome_email_sender, automatic_email_template=body.automatic_email_template,
         institutional_email_domains=body.institutional_email_domains)
     db.session.commit()
-    return SavedOut(changed=changed)
+    return SettingsSavedOut(changed=changed)
 
 
 # --- Notifications ----------------------------------------------------------------------
@@ -157,7 +158,7 @@ def admin_settings_notifications():
     )
 
 
-@endpoint("PUT", "/admin/settings/notifications", response=SavedOut, body=NotificationsIn, permissions=GENERAL,
+@endpoint("PUT", "/admin/settings/notifications", response=SettingsSavedOut, body=NotificationsIn, permissions=GENERAL,
           tag=TAG)
 def admin_settings_notifications_save(body):
     """Save which notifications go out, and from which account."""
@@ -165,7 +166,7 @@ def admin_settings_notifications_save(body):
                                                   admin_error=body.admin_error, user_status=body.user_status,
                                                   sender=body.sender)
     db.session.commit()
-    return SavedOut(changed=changed)
+    return SettingsSavedOut(changed=changed)
 
 
 # --- Membership fee (Stripe) -------------------------------------------------------------
@@ -188,7 +189,7 @@ class BillingOut(Model):
     webhook_secret_set: bool
 
 
-class BillingSavedOut(SavedOut):
+class BillingSavedOut(SettingsSavedOut):
     #: Running subscriptions moving to a new price from their next renewal.
     moving: int
 
@@ -306,7 +307,7 @@ def admin_settings_forum():
     )
 
 
-@endpoint("PUT", "/admin/settings/forum", response=SavedOut, body=ForumIn, permissions=CREDENTIALS, tag=TAG)
+@endpoint("PUT", "/admin/settings/forum", response=SettingsSavedOut, body=ForumIn, permissions=CREDENTIALS, tag=TAG)
 def admin_settings_forum_save(body):
     """Save the forum's settings. A secret left empty stays as it is."""
     changed = sections.save_forum(
@@ -318,12 +319,7 @@ def admin_settings_forum_save(body):
         onboarding_path=body.onboarding_path, avatar_max_bytes=body.avatar_max_bytes,
         avatar_allowed_types=body.avatar_allowed_types)
     db.session.commit()
-    return SavedOut(changed=changed)
-
-
-class ConnectionOut(Model):
-    ok: bool
-    message: str
+    return SettingsSavedOut(changed=changed)
 
 
 @endpoint("POST", "/admin/settings/forum/test", response=ConnectionOut, permissions=CREDENTIALS, tag=TAG)

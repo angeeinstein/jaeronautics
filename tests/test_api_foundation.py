@@ -262,6 +262,13 @@ class TestTheDescription:
         assert [e.name for e in ENDPOINTS if e.response is None and e.method == "GET"] == []
         assert [e.name for e in ENDPOINTS if not e.summary] == []
 
+    def test_every_model_has_a_name_of_its_own(self, app):
+        """Two models of one name come out as "aeronautics_members__api__..__Person":
+        the front end's types would carry the module path."""
+        names = openapi.build()["components"]["schemas"]
+
+        assert [name for name in names if "__" in name] == []
+
     def test_the_command(self, app, tmp_path):
         result = app.test_cli_runner().invoke(args=["api-schema", "--out", str(tmp_path / "openapi.json")])
 

@@ -2293,9 +2293,9 @@ export interface components {
         Attention: {
             /** Health Problems */
             health_problems: string[] | null;
-            name_changes: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
-            pictures: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
-            sync_problems: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
+            name_changes: components["schemas"]["WaitingCountOut"] | null;
+            pictures: components["schemas"]["WaitingCountOut"] | null;
+            sync_problems: components["schemas"]["WaitingCountOut"] | null;
             transfers: components["schemas"]["Transfers"] | null;
         };
         /** BackupDeletedOut */
@@ -3533,7 +3533,7 @@ export interface components {
             /** Template Url */
             template_url: string;
             /** Waiting */
-            waiting: components["schemas"]["aeronautics_members__api__admin_legal__Waiting"][];
+            waiting: components["schemas"]["UpcomingVersionOut"][];
         };
         /** LegalTextLinkOut */
         LegalTextLinkOut: {
@@ -3609,7 +3609,7 @@ export interface components {
         };
         /** LogEntry */
         LogEntry: {
-            actor: components["schemas"]["aeronautics_members__api__admin_logs__Person"] | null;
+            actor: components["schemas"]["LogPersonOut"] | null;
             /** After */
             after: unknown;
             /** At */
@@ -3624,11 +3624,18 @@ export interface components {
             event_type: string;
             /** Id */
             id: number;
-            target: components["schemas"]["aeronautics_members__api__admin_logs__Person"] | null;
+            target: components["schemas"]["LogPersonOut"] | null;
+        };
+        /** LogPersonOut */
+        LogPersonOut: {
+            /** Email */
+            email: string;
+            /** User Id */
+            user_id: number | null;
         };
         /** LogsOut */
         LogsOut: {
-            about: components["schemas"]["aeronautics_members__api__admin_logs__Person"] | null;
+            about: components["schemas"]["LogPersonOut"] | null;
             /** Accounts Linked */
             accounts_linked: boolean;
             /** Categories */
@@ -4395,7 +4402,7 @@ export interface components {
              * @enum {string}
              */
             kind: "name_change" | "picture";
-            person: components["schemas"]["aeronautics_members__api__admin_reviews__Person"];
+            person: components["schemas"]["ReviewPersonOut"];
             picture: components["schemas"]["Picture"] | null;
         };
         /** QueuesOut */
@@ -4483,13 +4490,37 @@ export interface components {
             /** Count */
             count: number;
         };
+        /**
+         * ReviewCountsOut
+         * @description How much waits of each kind; ``None`` for a kind this person does not decide.
+         */
+        ReviewCountsOut: {
+            /** Name Changes */
+            name_changes: number | null;
+            /** Pictures */
+            pictures: number | null;
+            /** Sync Problems */
+            sync_problems: number | null;
+        };
+        /**
+         * ReviewPersonOut
+         * @description The member the item is about.
+         */
+        ReviewPersonOut: {
+            /** Email */
+            email: string | null;
+            /** Name */
+            name: string;
+            /** User Id */
+            user_id: number | null;
+        };
         /** ReviewsOut */
         ReviewsOut: {
             /** Queue */
             queue: components["schemas"]["QueueItem"][];
             /** Sync Problems */
             sync_problems: components["schemas"]["SyncProblem"][] | null;
-            waiting: components["schemas"]["aeronautics_members__api__admin_reviews__Waiting"];
+            waiting: components["schemas"]["ReviewCountsOut"];
         };
         /** RevokeRoleIn */
         RevokeRoleIn: {
@@ -4636,6 +4667,11 @@ export interface components {
             csrf_token: string;
             /** Signed In */
             signed_in: boolean;
+        };
+        /** SettingsSavedOut */
+        SettingsSavedOut: {
+            /** Changed */
+            changed: string[];
         };
         /** SignInIn */
         SignInIn: {
@@ -5127,6 +5163,11 @@ export interface components {
             /** Label Singular */
             label_singular: string;
         };
+        /** TeamSettingsSavedOut */
+        TeamSettingsSavedOut: {
+            /** Changed */
+            changed: boolean;
+        };
         /** Teams */
         Teams: {
             /** Memberships */
@@ -5264,6 +5305,37 @@ export interface components {
             /** Recipient */
             recipient: string | null;
         };
+        /**
+         * UpcomingVersionOut
+         * @description A version not shown yet: a draft, or one whose day has not come.
+         */
+        UpcomingVersionOut: {
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Has English */
+            has_english: boolean;
+            /** Pdf Url */
+            pdf_url: string;
+            /** Revision */
+            revision: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "scheduled";
+            /** Team Name */
+            team_name: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
+        };
         /** UpdateIn */
         UpdateIn: {
             /**
@@ -5313,88 +5385,16 @@ export interface components {
             subject: string | null;
         };
         /**
-         * Waiting
+         * WaitingCountOut
          * @description How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words.
          */
-        aeronautics_members__api__admin_dashboard__Waiting: {
+        WaitingCountOut: {
             /** At */
             at: string | null;
             /** Count */
             count: number;
             /** Summary */
             summary: string | null;
-        };
-        /**
-         * Waiting
-         * @description A version not shown yet: a draft, or one whose day has not come.
-         */
-        aeronautics_members__api__admin_legal__Waiting: {
-            /**
-             * Effective From
-             * Format: date
-             */
-            effective_from: string;
-            /** Has English */
-            has_english: boolean;
-            /** Pdf Url */
-            pdf_url: string;
-            /** Revision */
-            revision: string | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "draft" | "scheduled";
-            /** Team Name */
-            team_name: string | null;
-            /** Title */
-            title: string;
-            /**
-             * Version
-             * Format: date
-             */
-            version: string;
-        };
-        /** Person */
-        aeronautics_members__api__admin_logs__Person: {
-            /** Email */
-            email: string;
-            /** User Id */
-            user_id: number | null;
-        };
-        /**
-         * Person
-         * @description The member the item is about.
-         */
-        aeronautics_members__api__admin_reviews__Person: {
-            /** Email */
-            email: string | null;
-            /** Name */
-            name: string;
-            /** User Id */
-            user_id: number | null;
-        };
-        /**
-         * Waiting
-         * @description How much waits of each kind; ``None`` for a kind this person does not decide.
-         */
-        aeronautics_members__api__admin_reviews__Waiting: {
-            /** Name Changes */
-            name_changes: number | null;
-            /** Pictures */
-            pictures: number | null;
-            /** Sync Problems */
-            sync_problems: number | null;
-        };
-        /** SavedOut */
-        aeronautics_members__api__admin_settings__SavedOut: {
-            /** Changed */
-            changed: string[];
-        };
-        /** SavedOut */
-        aeronautics_members__api__admin_teams__SavedOut: {
-            /** Changed */
-            changed: boolean;
         };
     };
     responses: never;
@@ -8322,7 +8322,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_settings__SavedOut"];
+                    "application/json": components["schemas"]["SettingsSavedOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */
@@ -8467,7 +8467,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_settings__SavedOut"];
+                    "application/json": components["schemas"]["SettingsSavedOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */
@@ -9176,7 +9176,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_settings__SavedOut"];
+                    "application/json": components["schemas"]["SettingsSavedOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */
@@ -9443,7 +9443,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_teams__SavedOut"];
+                    "application/json": components["schemas"]["TeamSettingsSavedOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

@@ -1067,22 +1067,6 @@ def build_forum_context(member):
 def create_app(config_overrides=None):
     app = Flask(__name__)
 
-    @app.context_processor
-    def inject_language_switcher():
-        def switch_lang_url(lang):
-            endpoint = request.endpoint or "public.index"
-            values = dict(request.view_args or {})
-            values.update(request.args.to_dict(flat=True))
-            values["lang"] = lang
-            try:
-                return url_for(endpoint, **values)
-            except BuildError:
-                fallback_values = request.args.to_dict(flat=True)
-                fallback_values["lang"] = lang
-                return url_for("public.index", **fallback_values)
-
-        return dict(switch_lang_url=switch_lang_url)
-
     app.config["SECRET_KEY"] = SECRET_KEY
     # A DATABASE_URL override lets tests (and alternative deployments) point at a
     # different backend such as SQLite without touching the MySQL defaults.
@@ -1172,48 +1156,10 @@ def create_app(config_overrides=None):
 
     register_purpose(PURPOSE_TEAM, handle_team_payment_event)
 
+    # The emails say when they come from the test server (emails/_layout.html).
     @app.context_processor
-    def inject_babel_globals():
-        cleaned_args = {}
-        try:
-            if request.args is not None:
-                cleaned_args = {key: value for key, value in request.args.items() if key != "lang"}
-        except Exception:
-            pass
-
-        return dict(
-            babel=babel,
-            get_locale=get_locale,
-            cleaned_args=cleaned_args,
-        )
-
-    @app.context_processor
-    def inject_footer():
-        from .config import ASSOCIATION_WEBSITE_URL, CONTACT_EMAIL, IMPRESSUM_URL, PRIVACY_URL, STATUTES_URL
-        from .services.clock import get_membership_today
-
-        return dict(footer={
-            "year": get_membership_today().year,
-            "website_url": ASSOCIATION_WEBSITE_URL,
-            "impressum_url": IMPRESSUM_URL,
-            "privacy_url": PRIVACY_URL,
-            "statutes_url": STATUTES_URL,
-            "contact_email": CONTACT_EMAIL,
-        }, test_server=bool(app.config.get("TEST_SERVER")))
-
-    # What teams are called here, as (singular, plural) -- "Teams" unless an
-    # admin chose another word.
-    @app.template_global("teams_switched_on")
-    def teams_switched_on_global():
-        from .services.teams import teams_enabled
-
-        return teams_enabled()
-
-    @app.template_global("team_labels")
-    def team_labels_global():
-        from .services.teams import team_labels
-
-        return team_labels()
+    def inject_test_server():
+        return dict(test_server=bool(app.config.get("TEST_SERVER")))
 
     # Dates and times on every page and email in one format and in Vienna
     # time: 31.12.2026, 31.12.2026 14:05.
@@ -1224,10 +1170,6 @@ def create_app(config_overrides=None):
     @app.template_filter("datetime_display")
     def datetime_display_filter(value):
         return format_datetime_display(value) if value else ""
-
-    @app.template_filter("redact_audit_payload")
-    def redact_audit_payload_filter(value):
-        return redact_sensitive_audit_value(value)
 
     @app.url_defaults
     def add_static_file_version(endpoint, values):
@@ -4450,37 +4392,49 @@ def create_app(config_overrides=None):
     # The API answers its errors as JSON (api/_core.py); these handlers serve
     # the pages and pass the API's requests on.
     from .api import error as api_error, is_api_request
+    from .blueprints.app_shell import app_shell
+
+    def error_page(status, title, *lines):
+        """The plain error page (templates/error.html), rendered without the
+        site's context processors: it must still work when the database failed."""
+        html = app.jinja_env.get_template("error.html").render(
+            title=title, lines=lines, test_server=bool(app.config.get("TEST_SERVER")))
+        return html, status
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         if is_api_request():
             return api_error(400, "csrf_failed", "The session has expired. Reload the page and try again.")
-        flash(_("Your session has expired or the form is invalid. Please try submitting again."), "warning")
-        return redirect(request.referrer or url_for("public.index"))
+        return error_page(400, "This page was open too long",
+                          "Your session has expired. Go back, reload the page and try again.")
 
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
         if is_api_request():
             return api_error(429, "rate_limited", "Too many requests. Please wait a moment and try again.")
-        # Rendered, not redirected. Browsers do not follow a Location header on
-        # a 429, so returning a redirect left the member on an unstyled
-        # "Redirecting..." page that never went anywhere and explained nothing.
-        return render_template("429.html"), 429
+        # A page, not a redirect: browsers do not follow a Location header on a
+        # 429, so a redirect left the member on an unstyled "Redirecting..." page.
+        return error_page(
+            429, "Too many attempts",
+            "We have had a lot of requests from your network in a short time, so this one was held back.",
+            "Please wait a few minutes and try again. On university WiFi, someone else on the same "
+            "network may have caused this.")
 
     @app.errorhandler(413)
     def request_entity_too_large(e):
         if is_api_request():
             return api_error(413, "too_large", "The upload is too large.")
-        flash(_("The submitted data is too large to process. Please reduce the file size and try again."), "danger")
-        if request.path == url_for("forum.upload_forum_avatar"):
-            return redirect(url_for("forum.forum_entry"))
-        return redirect(request.referrer or url_for("public.index"))
+        return error_page(413, "Too large", "What was sent is too large. Please send a smaller file.")
 
     @app.errorhandler(404)
     def page_not_found(e):
         if is_api_request():
             return api_error(404, "not_found", "Not found.")
-        return render_template("404.html"), 404
+        # The app says so, in its own frame (pages/NotFound.tsx).
+        response = app_shell()
+        if response.status_code == 200:
+            response.status_code = 404
+        return response
 
     @app.errorhandler(405)
     def method_not_allowed(e):
@@ -4509,7 +4463,8 @@ def create_app(config_overrides=None):
         )
         if is_api_request():
             return api_error(500, "server_error", "Something went wrong on our side. Please try again later.")
-        return render_template("500.html"), 500
+        return error_page(500, "Something went wrong",
+                          "Sorry, something went wrong on our side. We have been told and are looking into it.")
 
     @app.cli.command("send-welcome-email")
     @with_appcontext

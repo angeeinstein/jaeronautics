@@ -9,7 +9,6 @@ from flask import Blueprint, current_app
 
 from ..services.forum_import import claim_archived_account
 from ..services.forum import (
-    log_out_forum_session_if_possible,
     sync_member_forum_state,
 )
 from ..services.identity import (
@@ -25,7 +24,6 @@ from flask import (
     flash,
     redirect,
     request,
-    session,
     url_for,
 )
 from flask_babel import (
@@ -35,7 +33,6 @@ from flask_login import (
     current_user,
     login_required,
     login_user,
-    logout_user,
 )
 from itsdangerous import (
     BadSignature,
@@ -287,28 +284,6 @@ def _stay_signed_in(claimed, was_signed_in_as_the_retired_row):
 def register():
     """An old address: the account is made when joining."""
     return redirect(url_for("public.join"))
-
-
-@auth_bp.route("/logout", methods=["POST"])
-@login_required
-def logout():
-    user = current_user._get_current_object()
-    forum_logout_attempted, forum_logout_error = log_out_forum_session_if_possible(user)
-    logout_user()
-    session.pop("login_next", None)
-    session.pop("login_source", None)
-
-    next_url = request.form.get("next") or url_for("public.index")
-    if not is_safe_next_url(next_url):
-        next_url = url_for("public.index")
-
-    if forum_logout_error:
-        flash(_("You have been logged out here, but the forum session could not be ended automatically."), "warning")
-    elif forum_logout_attempted:
-        flash(_("You have been logged out from both the website and the forum."), "info")
-    else:
-        flash(_("You have been logged out."), "info")
-    return redirect(next_url)
 
 
 @auth_bp.route("/change-password", methods=["GET"])

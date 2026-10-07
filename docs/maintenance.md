@@ -304,7 +304,7 @@ text points at elsewhere is left out. PDFs go without the pages'
 Content-Security-Policy (`content_security.py`), whose `object-src 'none'`
 would stop Chrome's PDF viewer from showing them.
 
-**Opening one:** a PDF link (`data-legal-file`, `static/legal-pdf-open.js`)
+**Opening one:** a PDF link (`frontend/src/components/PdfLink.tsx`)
 first asks for the PDF to be made (`?prepare=1`), shows *Making the PDF…*
 with a spinner meanwhile, and opens it once it is there -- in a new tab where
 the browser still allows one after the wait, else in the same tab. The address

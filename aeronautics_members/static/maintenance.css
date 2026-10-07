@@ -1,4 +1,5 @@
-/* The page nginx shows while the portal is not answering (maintenance.html).
+/* The page nginx shows while the portal is not answering (maintenance.html),
+   and the portal's own error page (templates/error.html).
    On its own, without the site's stylesheet: nginx serves both from disk. */
 :root { color-scheme: dark; }
 html, body { margin: 0; min-height: 100%; background: #161718; color: #e6e8ea;
@@ -9,3 +10,11 @@ h1 { font-size: 1.8rem; margin: 0 0 1rem; color: #ffffff; }
 p { margin: 0 0 1rem; }
 .note { color: #a9b0b5; font-size: 0.95rem; }
 hr { border: 0; border-top: 1px solid #34383b; margin: 2rem 0; }
+/* The portal's own error page (templates/error.html) uses this too. */
+a { color: #66ecff; }
+.button { display: inline-block; margin-top: 1rem; padding: 0.6rem 1.1rem; background: #00dfff;
+    color: #081114; font-weight: 600; text-decoration: none; }
+.button:hover { background: #33e7ff; }
+.test-server-bar { background: #c62828; color: #ffffff; font-weight: 700; font-size: 0.8rem;
+    letter-spacing: 0.12em; text-align: center; text-transform: uppercase; padding: 0.3rem 1rem; }
+.test-server-bar span { font-weight: 500; letter-spacing: 0.04em; text-transform: none; }

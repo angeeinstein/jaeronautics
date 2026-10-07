@@ -39,7 +39,7 @@ class InForce(Model):
     pdf_url: str
 
 
-class Waiting(Model):
+class UpcomingVersionOut(Model):
     """A version not shown yet: a draft, or one whose day has not come."""
 
     title: str
@@ -66,7 +66,7 @@ class LegalOut(Model):
     in_force: list[InForce]
     #: Teams with no rules in force.
     teams_without_rules: list[str]
-    waiting: list[Waiting]
+    waiting: list[UpcomingVersionOut]
     pdf_jobs: list[PdfJob]
     #: What is wrong with the files in legal/ on this server.
     problems: list[str]
@@ -106,7 +106,7 @@ def admin_legal():
         (text.slug, team_slug) for team_slug in legal.teams_with_texts() for text in legal.TEAM_TEXTS
     ]:
         for version in legal.waiting(slug, team=team):
-            waiting.append(Waiting(
+            waiting.append(UpcomingVersionOut(
                 title=version.title, team_name=names.get(team, team) if team else None,
                 version=version.version, revision=version.revision,
                 status="draft" if version.status == "draft" else "scheduled",

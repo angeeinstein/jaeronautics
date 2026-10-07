@@ -18,7 +18,7 @@ from ..services.membership import format_membership_date_display
 from ._core import Model, UtcDateTime, endpoint
 
 
-class Waiting(Model):
+class WaitingCountOut(Model):
     """How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words."""
 
     count: int
@@ -38,9 +38,9 @@ class Transfers(Model):
 class Attention(Model):
     """``None`` for a kind the person may not act on, so the page does not offer it."""
 
-    name_changes: Waiting | None
-    pictures: Waiting | None
-    sync_problems: Waiting | None
+    name_changes: WaitingCountOut | None
+    pictures: WaitingCountOut | None
+    sync_problems: WaitingCountOut | None
     health_problems: list[str] | None
     transfers: Transfers | None
 
@@ -84,15 +84,15 @@ def _attention():
         if record is not None:
             summary = (f"{_name(record.member)} → {record.requested_full_name}" if record.is_name_change
                        else f"{_name(record.member)}: {', '.join(label for _f, label, *_ in record.changes)}")
-        name_changes = Waiting(count=counts[reviews.KIND_NAME_CHANGE], summary=summary,
+        name_changes = WaitingCountOut(count=counts[reviews.KIND_NAME_CHANGE], summary=summary,
                                at=record.created_at if record is not None else None)
     if reviews.can_review_pictures(current_user):
         picture = oldest[reviews.KIND_PICTURE]
-        pictures = Waiting(count=counts[reviews.KIND_PICTURE],
+        pictures = WaitingCountOut(count=counts[reviews.KIND_PICTURE],
                            summary=_name(picture.member) if picture is not None else None,
                            at=picture.uploaded_at if picture is not None else None)
         problem = oldest["sync_problems"]
-        sync_problems = Waiting(
+        sync_problems = WaitingCountOut(
             count=counts["sync_problems"],
             summary=(problem.user.email if problem is not None and problem.user is not None
                      else ("An account" if problem is not None else None)),

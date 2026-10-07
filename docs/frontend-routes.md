@@ -151,9 +151,14 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `GET|POST /register` (an old address) → sends to `/join`
 - [x] `GET /thank-you`, `GET /cancel` (page; Stripe's return addresses) → pages; what teams are called comes with `GET /api/v1/site`
 - [x] `GET|POST /login` (page + action; also the forum's sign-in return) → login page, `POST /api/v1/session` to sign in; it answers where to go on (`?next=`, kept on this site)
-- [ ] `POST /logout` (action) → `DELETE /api/v1/session` (the app's menu uses it; the Flask route goes with the last Flask page)
+- [x] `POST /logout` (action) → `DELETE /api/v1/session` (the app's menu); the Flask route is gone
 - [x] `GET|POST /forgot-password` (page + action) → `POST /api/v1/password-reset`
 - [x] `GET|POST /reset-password/<token>` (page + action; link in emails) → `GET|PUT /api/v1/password-reset/<token>`
-- [ ] `GET /verify-email/<token>`, `/verify-work-email/<token>` (link in emails) → Flask confirms and redirects to a page, as today
+- [x] `GET /verify-email/<token>`, `/verify-work-email/<token>` (link in emails) → Flask confirms and redirects to an app page, which shows what it said (`GET /api/v1/messages`)
 - [x] `GET /legal` (page) → list of legal texts; `GET /api/v1/legal`
 - [x] `GET /legal/<slug>[/<language>[/<version>]]` (page) → a legal text, `GET /api/v1/legal/<slug>`; the two languages are named in the app's routes, as `/legal/<slug>/pdf` is the PDF (the same for a team's rules). The bare text (`?part=body`) went with the old signup form
+
+## Step 8 -- Clean-up
+
+- [x] Error pages: an address that is no page is the app's, answered 404 (`pages/NotFound.tsx`, in the public frame); too many requests, an error on our side, a form too large or too old: the plain error page (`templates/error.html`, styled like nginx's maintenance page and rendered without the site's context, so it works with the database down); the API answers all of them as JSON
+- [x] `base.html`, the old error templates, Bootstrap, `style.css` and the old scripts removed; WTForms stays for the form rules the API checks against (`forms.py`, `api/_forms.py`)

@@ -75,6 +75,8 @@ export const routes: RouteObject[] = [
             path: '/reset-password/:token',
             lazy: async () => ({ Component: (await import('../pages/public/ResetPassword')).ResetPassword }),
           },
+          // Any address that is no page: in the public frame, signed in or not.
+          { path: '*', element: <NotFound /> },
         ],
       },
       {
@@ -295,7 +297,6 @@ export const routes: RouteObject[] = [
           },
         ],
       },
-      { path: '*', element: <NotFound /> },
     ],
   },
 ];

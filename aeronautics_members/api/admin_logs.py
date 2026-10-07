@@ -17,7 +17,7 @@ from ..services import audit
 from ._core import Model, UtcDateTime, endpoint
 
 
-class Person(Model):
+class LogPersonOut(Model):
     #: ``None`` for a membership without an account.
     user_id: int | None
     email: str
@@ -29,8 +29,8 @@ class LogEntry(Model):
     category: str
     event_type: str
     #: ``None``: the system did it.
-    actor: Person | None
-    target: Person | None
+    actor: LogPersonOut | None
+    target: LogPersonOut | None
     before: Any
     after: Any
     details: Any
@@ -44,7 +44,7 @@ class LogsOut(Model):
     #: Every category there is, for the filter.
     categories: list[str]
     #: The person the log is narrowed to, when it is.
-    about: Person | None
+    about: LogPersonOut | None
     #: Whether the people link to their accounts (the person looking may see accounts).
     accounts_linked: bool
 
@@ -59,9 +59,9 @@ class LogsQuery(Model):
 
 def _person(user=None, member=None):
     if user is not None:
-        return Person(user_id=user.id, email=user.email)
+        return LogPersonOut(user_id=user.id, email=user.email)
     if member is not None:
-        return Person(user_id=member.user.id if member.user is not None else None, email=member.email_private)
+        return LogPersonOut(user_id=member.user.id if member.user is not None else None, email=member.email_private)
     return None
 
 
