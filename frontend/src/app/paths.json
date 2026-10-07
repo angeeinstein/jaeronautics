@@ -1,5 +1,12 @@
 {
   "paths": [
+    "/teams",
+    "/teams/:slug",
+    "/teams/:slug/about",
+    "/teams/:slug/leave",
+    "/teams/:slug/rules",
+    "/teams/:slug/rules/:language",
+    "/teams/:slug/rules/:language/:version",
     "/admin",
     "/admin/accounts",
     "/admin/accounts/:userId",

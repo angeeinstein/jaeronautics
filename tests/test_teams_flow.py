@@ -10,6 +10,8 @@ from datetime import timedelta
 
 import pytest
 
+from api_helpers import send
+
 from conftest import db
 from aeronautics_members.db_models import AuditLog, NotificationEvent, TeamMembership, TeamNote, TeamRole
 from aeronautics_members.services import ConflictError, ValidationError, privacy, teams
@@ -30,6 +32,9 @@ def _login(client, user_id):
 
     g.pop("_login_user", None)
     _set_session_user(client, user_id)
+
+
+API = "/api/v1/teams"
 
 
 @pytest.fixture
@@ -98,8 +103,9 @@ class TestJoining:
         anna = _person()
         _login(client, anna.id)
 
-        client.post("/teams/glider/join")
+        done = send(client, "POST", f"{API}/glider/join", {}).get_json()
 
+        assert done["message"] == "Welcome to Glider." and done["team"]["sees_team_page"] is True
         assert teams.active_team_membership(anna, team) is not None
         [event] = _events("team_member_joined", lead.email)
         assert "Anna Berger joined Glider." in event.summary
@@ -109,8 +115,9 @@ class TestJoining:
         anna = _person()
         _login(client, anna.id)
 
-        assert "Why do you want to join?" in client.get("/teams/rocket/about").get_data(as_text=True)
-        client.post("/teams/rocket/join", data={"application_text": "I like rockets."})
+        assert client.get(f"{API}/rocket").get_json()["joining"]["prompt"] == "Why do you want to join?"
+        done = send(client, "POST", f"{API}/rocket/join", {"application_text": "I like rockets."}).get_json()
+        assert done["message"] == "Application sent. The leads will be in touch."
 
         membership = teams.ongoing_membership(anna, team)
         assert (membership.status, membership.application_text) == (teams.APPLIED, "I like rockets.")
@@ -135,10 +142,9 @@ class TestJoining:
         lapsed = _association_member("old@example.com", active=False)
         _login(client, lapsed.id)
 
-        body = client.get("/teams").get_data(as_text=True)
-        assert "Teams are for members of the association." in body
+        assert client.get(API).get_json()["is_member"] is False
 
-        client.post("/teams/rocket/join")
+        assert send(client, "POST", f"{API}/rocket/join", {}).status_code in (400, 403, 409)
         assert db.session.query(TeamMembership).filter_by(user_id=lapsed.id).count() == 0
 
     def test_not_while_closed_or_full(self, app):
@@ -157,7 +163,7 @@ class TestJoining:
         db.session.commit()
         _login(client, anna.id)
 
-        client.post("/teams/rocket/withdraw")
+        send(client, "POST", f"{API}/rocket/withdraw")
 
         assert teams.ongoing_membership(anna, team) is None
         assert db.session.query(TeamMembership).filter_by(user_id=anna.id).one().status == teams.WITHDRAWN
@@ -168,7 +174,7 @@ class TestJoining:
         _in_team(anna, team)
         _login(client, anna.id)
 
-        client.post("/teams/rocket/leave", data={"confirm": "on"})
+        send(client, "POST", f"{API}/rocket/leave", {"confirm": True})
 
         membership = db.session.query(TeamMembership).filter_by(user_id=anna.id).one()
         assert (membership.status, membership.end_reason) == (teams.ENDED, teams.END_LEFT)
@@ -187,17 +193,17 @@ class TestJoining:
         anna = _person()
         _in_team(anna, team)
         _login(client, anna.id)
-        client.post("/teams/rocket/leave", data={"confirm": "on"})
-        client.post("/teams/rocket/join", data={"application_text": "Back again."})
+        send(client, "POST", f"{API}/rocket/leave", {"confirm": True})
+        send(client, "POST", f"{API}/rocket/join", {"application_text": "Back again."})
 
-        body = client.get("/teams").get_data(as_text=True)
-        assert "Application received" in body and "Withdraw application" in body
-        assert "already in this team" not in body
+        [card] = client.get(API).get_json()["mine"]
+        assert card["membership"]["status_label"] == "Application received"
+        assert "withdraw" in card["membership"]["actions"] and card["membership"]["why_not"] is None
 
         teams.approve(lead, team, teams.ongoing_membership(anna, team).id)
         db.session.commit()
-        body = client.get("/teams").get_data(as_text=True)
-        assert "Leave" in body and ">Ended<" not in body
+        [card] = client.get(API).get_json()["mine"]
+        assert card["membership"]["status"] == "active" and "leave" in card["membership"]["actions"]
 
     def test_leaving_is_a_page_of_its_own_and_a_deliberate_yes(self, app, client):
         team, lead = _led()
@@ -205,23 +211,25 @@ class TestJoining:
         _in_team(anna, team)
         _login(client, anna.id)
 
-        assert 'href="/teams/rocket/leave"' in client.get("/teams").get_data(as_text=True)
-        page = client.get("/teams/rocket/leave").get_data(as_text=True)
-        assert "Yes, I want to leave Rocket." in page and "apply again" in page
+        leaving = client.get(f"{API}/rocket/leave").get_json()
+        assert leaving["team"]["name"] == "Rocket" and leaving["stays_until"] is None
 
-        client.post("/teams/rocket/leave", data={"message": "Exams."})
+        assert send(client, "POST", f"{API}/rocket/leave", {"message": "Exams."}).status_code == 400
         assert teams.ongoing_membership(anna, team).status == teams.ACTIVE
 
-        client.post("/teams/rocket/leave", data={"confirm": "on", "message": "Exams."})
+        left = send(client, "POST", f"{API}/rocket/leave", {"confirm": True, "message": "Exams."}).get_json()
+        assert left == {"message": "You have left Rocket."}
         membership = db.session.query(TeamMembership).filter_by(user_id=anna.id).one()
         assert (membership.status, membership.end_note) == (teams.ENDED, "Exams.")
         [email] = _events("team_member_left", lead.email)
         assert "Their message: Exams." in email.summary
 
-    def test_the_confirmation_script_is_loaded_once(self, app, client):
+    def test_the_pages_are_the_apps(self, app, client):
+        _led()
         _login(client, _person().id)
 
-        assert client.get("/teams").get_data(as_text=True).count("confirm-submit.js") == 1
+        for path in ("/teams", "/teams/rocket", "/teams/rocket/about", "/teams/rocket/rules"):
+            assert '<div id="root">' in client.get(path).get_data(as_text=True), path
 
 @pytest.mark.usefixtures("switched_on")
 class TestTheTeamPage:
@@ -231,7 +239,7 @@ class TestTheTeamPage:
         _in_team(anna, team)
         _login(client, anna.id)
 
-        body = client.get("/teams/rocket").get_data(as_text=True)
+        body = client.get(f"{API}/rocket").get_data(as_text=True)
 
         assert "Anna Berger" in body and "anna.berger@edu.example" in body
         assert "Lena Lead" in body
@@ -241,10 +249,9 @@ class TestTheTeamPage:
         _led()
         _login(client, _person().id)
 
-        assert client.get("/teams/rocket").headers["Location"].endswith("/teams/rocket/about")
-        body = client.get("/teams/rocket/about").get_data(as_text=True)
-        assert "Rocket" in body and 'id="join"' in body
-        assert "Lena Lead" not in body
+        body = client.get(f"{API}/rocket").get_json()
+        assert body["sees_team_page"] is False and body["joining"]["submit_label"] == "Apply"
+        assert body["members"] is None and "Lena Lead" not in str(body)
 
 
 @pytest.mark.usefixtures("switched_on")

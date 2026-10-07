@@ -122,8 +122,9 @@ class TestCancellingTheAssociation:
         with pytest.raises(ConflictError):
             teams.stay(anna, team)
         _login(client, anna.id)
-        body = client.get("/teams").get_data(as_text=True)
-        assert "Ends with your association membership on" in body and "Stay after all" not in body
+        [card] = client.get("/api/v1/teams").get_json()["mine"]
+        assert card["membership"]["notes"][0]["text"].startswith("Ends with your association membership on")
+        assert "stay" not in card["membership"]["actions"] and "leave" not in card["membership"]["actions"]
 
     def test_when_the_day_comes_it_ends_as_the_associations_end(self, paying, client, monkeypatch, stripe_record):
         from test_team_payments import _subscription_event

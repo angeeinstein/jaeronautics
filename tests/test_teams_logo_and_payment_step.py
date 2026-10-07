@@ -165,7 +165,8 @@ class TestTheLogo:
         db.session.commit()
         _login(client, _person().id)
 
-        assert f"/teams/logo/{team.logo_token}" in client.get("/teams").get_data(as_text=True)
+        [card] = client.get("/api/v1/teams").get_json()["others"]
+        assert card["logo_url"] == f"/teams/logo/{team.logo_token}"
 
     @pytest.mark.usefixtures("outbox")
     def test_in_its_emails_below_the_associations_header(self, app):

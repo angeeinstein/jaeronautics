@@ -108,14 +108,14 @@ Status: `[ ]` to do, `[x]` done.
 
 ## Step 5 -- Teams area
 
-- [ ] `GET /teams` (page) → overview
-- [ ] `GET /teams/<slug>` (page) → the team's page for its members
-- [ ] `GET /teams/<slug>/about` (page) → join page, with the rules dialog
-- [ ] `GET /teams/<slug>/rules[/<language>[/<version>]]` (page; link in emails) → rules page, also shown in the dialog
-- [ ] `POST /teams/<slug>/join` (action)
-- [ ] `POST /teams/<slug>/pay` (out: Stripe Checkout)
-- [ ] `GET|POST /teams/<slug>/leave` (page + action)
-- [ ] `POST /teams/<slug>/stay`, `/withdraw` (action)
+- [x] `GET /teams` (page) → overview; `GET /api/v1/teams`
+- [x] `GET /teams/<slug>` (page) → the team's page for its members; `GET /api/v1/teams/<slug>` (also for About)
+- [x] `GET /teams/<slug>/about` (page) → join page, with the rules dialog
+- [x] `GET /teams/<slug>/rules[/<language>[/<version>]]` (page; link in emails) → rules page, also shown in the dialog; `GET /api/v1/teams/<slug>/rules` (one answer for a legal text: `api/legal.py`, for step 7 too)
+- [x] `POST /teams/<slug>/join` (action) → `POST /api/v1/teams/<slug>/join`
+- [x] `POST /teams/<slug>/pay` (out: Stripe Checkout) → `POST /api/v1/teams/<slug>/pay` answers Stripe's address
+- [x] `GET|POST /teams/<slug>/leave` (page + action) → `GET|POST /api/v1/teams/<slug>/leave`
+- [x] `POST /teams/<slug>/stay`, `/withdraw` (action) → `POST /api/v1/teams/<slug>/stay`, `/withdraw`
 - [ ] `GET /teams/<slug>/manage` (page) → management, its sections
 - [ ] `POST /teams/<slug>/manage/settings` (action: each section's save)
 - [ ] `POST /teams/<slug>/manage/memberships/<id>/approve|invite|reject|remove` (action)

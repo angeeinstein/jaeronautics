@@ -13,6 +13,7 @@ import pytest
 
 from conftest import make_member
 from test_admin_reviews import _login, _staff
+from test_teams_foundation import _team
 
 PATHS = json.loads((Path(__file__).resolve().parent.parent / "frontend/src/app/paths.json").read_text())["paths"]
 
@@ -31,13 +32,21 @@ def built(app, tmp_path):
     return folder
 
 
+#: An example for each part of an address that changes; anything else is 1.
+EXAMPLES = {"slug": "rocket-team", "language": "de", "version": "2026-01-01"}
+
+
 def _concrete(pattern):
-    """/admin/accounts/:userId -> /admin/accounts/1"""
-    return re.sub(r":\w+", "1", pattern)
+    """/admin/accounts/:userId -> /admin/accounts/1, /teams/:slug -> /teams/rocket-team"""
+    return re.sub(r":(\w+)", lambda part: EXAMPLES.get(part.group(1), "1"), pattern)
 
 
 @pytest.mark.parametrize("pattern", PATHS)
 def test_every_app_address_gets_the_app(app, client, built, pattern):
+    from aeronautics_members.services import teams
+
+    teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
+    _team(slug="rocket-team")
     _login(client, _staff("boss@example.org", "superadmin").id)
 
     response = client.get(_concrete(pattern))

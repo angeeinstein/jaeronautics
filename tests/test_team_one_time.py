@@ -207,13 +207,13 @@ class TestRenewing:
         team_payments.end_finished_team_memberships(membership.paid_until + timedelta(days=1))
         _login(client, anna.id)
 
-        about = client.get(f"/teams/{team.slug}/about").get_data(as_text=True)
-        overview = client.get("/teams").get_data(as_text=True)
+        joining = client.get(f"/api/v1/teams/{team.slug}").get_json()["joining"]
+        overview = client.get("/api/v1/teams").get_json()
 
-        until = (membership.ended_at.date() + timedelta(days=teams.REJOIN_DAYS)).strftime("%d.%m.%Y")
-        assert f"Until {until} you can come back by paying again" in about
-        assert "Rejoin and pay" in about and "Why do you want to join?" not in about
-        assert "About &amp; rejoin" in overview or "About & rejoin" in overview
+        until = membership.ended_at.date() + timedelta(days=teams.REJOIN_DAYS)
+        assert joining["rejoin_until"] == until.isoformat()
+        assert joining["submit_label"] == "Rejoin and pay" and joining["prompt"] is None
+        assert [card["about_label"] for card in overview["others"]] == ["About & rejoin"]
 
     def test_leaving_runs_to_the_end_of_what_is_paid(self, app, client, monkeypatch, stripe_fake):
         team, _lead, anna, membership = _member_paid_once(client, monkeypatch, stripe_fake)

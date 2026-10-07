@@ -8,10 +8,9 @@ docs/teams-plan.md.
 
 import csv
 import io
-from datetime import timedelta
 
 from flask import (
-    Blueprint, Response, abort, current_app, flash, redirect, render_template, request, send_file, url_for,
+    Blueprint, Response, abort, flash, redirect, render_template, request, send_file, url_for,
 )
 from flask_babel import gettext as _
 from flask_login import current_user, login_required
@@ -120,108 +119,34 @@ def _manages_people(team):
     return teams_service.can_in_team(current_user, team, teams_service.TeamPermission.VIEW_MEMBERS)
 
 
-def _sees_team_page(team):
-    return _manages_people(team) or (
-        teams_service.is_active_association_member(current_user)
-        and teams_service.active_team_membership(current_user, team) is not None
-    )
-
-
-def _membership_context():
-    """What the status and buttons of a person's team membership need --
-    on the overview and on each team's page alike."""
-    singular, plural = teams_service.team_labels()
-    mine = {}
-    for membership in teams_service.memberships_of(current_user):  # newest first
-        # The latest attempt per team: somebody who left and applied again is
-        # an applicant, not a former member.
-        mine.setdefault(membership.team_id, membership)
-    led = teams_service.teams_led_by(current_user)
-    return dict(
-        label_singular=singular,
-        label_plural=plural,
-        latest=mine,
-        ongoing={team_id: membership for team_id, membership in mine.items()
-                 if membership.status in teams_service.ONGOING},
-        is_member=teams_service.is_active_association_member(current_user),
-        why_not_joinable=lambda team: teams_service.why_not_joinable(current_user, team),
-        # Ended unpaid not long ago: back by paying, no application.
-        rejoin_until=lambda team: teams_service.rejoin_by_paying_until(current_user, team),
-        status_labels=teams_service.STATUS_LABELS,
-        manageable={team.id for team in led if _manages_people(team)},
-        money_of={team.id for team in led
-                  if teams_service.can_in_team(current_user, team, teams_service.TeamPermission.VIEW_MONEY)},
-        charges=team_payments.charges,
-        needs_to_pay=team_payments.needs_to_pay,
-        team_rules=teams_service.team_rules,
-        accepted_rules_in_force=teams_service.accepted_rules_in_force,
-        renewal_open=team_payments.renewal_open,
-        next_period_until=team_payments.next_period_until,
-        timedelta_one_day=timedelta(days=1),
-        joining_period=team_payments.joining_period,
-        just_paid=request.args.get("paid"),
-    )
-
-
 @teams_bp.route("/teams", methods=["GET"])
 @login_required
 def teams_home():
+    """The overview: drawn by the new front end (frontend/src/pages/teams/Teams.tsx)."""
     _teams_or_404()
-    return render_template(
-        "teams/home.html",
-        teams=teams_service.all_teams(include_archived=False),
-        **_membership_context(),
-    )
+    return app_shell()
 
 
-def _member_action(slug, action):
-    team = _team_or_404(slug)
-    try:
-        action(team)
-    except ServiceError as error:
-        db.session.rollback()
-        flash(error.message, "danger")
-    else:
-        db.session.commit()
-        from ..services.notifications import flush_marked_notification_channels
-
-        flush_marked_notification_channels()
-        return team, True
-    return team, False
-
-
+@teams_bp.route("/teams/<slug>", methods=["GET"])
 @teams_bp.route("/teams/<slug>/about", methods=["GET"])
+@teams_bp.route("/teams/<slug>/leave", methods=["GET"])
 @login_required
-def team_about(slug):
-    """What a team does, its rules, and applying or joining -- for everyone
-    signed in. Its members' own page is team_page."""
-    team = _team_or_404(slug)
-    return render_template(
-        "teams/about.html",
-        team=team,
-        sees_members=_sees_team_page(team),
-        **_membership_context(),
-    )
+def team_page(slug):
+    """A team's own page, what it is about (with joining), and leaving it:
+    drawn by the new front end (frontend/src/pages/teams/)."""
+    _team_or_404(slug)
+    return app_shell()
 
 
 @teams_bp.route("/teams/<slug>/rules", methods=["GET"])
-@teams_bp.route("/teams/<slug>/rules/<language>", methods=["GET"])
-@teams_bp.route("/teams/<slug>/rules/<language>/<version>", methods=["GET"])
+@teams_bp.route("/teams/<slug>/rules/<any(de, en):language>", methods=["GET"])
+@teams_bp.route("/teams/<slug>/rules/<any(de, en):language>/<version>", methods=["GET"])
 @login_required
 def team_rules_text(slug, language=None, version=None):
-    """A team's rules, as the association's texts are shown: the version in
-    force or an earlier one, German or the English translation. ``?part=body``
-    for the window over the join form."""
-    team = _team_or_404(slug)
-    return legal_pages.text_page(
-        legal.TEAM_RULES, language, version, team=team.slug,
-        url=lambda language, version: url_for("teams.team_rules_text", slug=team.slug,
-                                              language=language, version=version),
-        pdf_url=lambda version: url_for("teams.team_rules_pdf", slug=team.slug, version=version),
-        crumbs=[(teams_service.team_labels()[1], url_for("teams.teams_home")),
-                (team.name, url_for("teams.team_about", slug=team.slug))],
-        label="Rules",
-    )
+    """A team's rules -- the version in force or an earlier one, German or the
+    English translation: drawn by the new front end (link in emails)."""
+    _team_or_404(slug)
+    return app_shell()
 
 
 @teams_bp.route("/teams/<slug>/rules/pdf", methods=["GET"])
@@ -233,128 +158,6 @@ def team_rules_pdf(slug, version=None):
     return legal_pages.pdf(
         legal.TEAM_RULES, version, team=team.slug, owner=team,
         back=url_for("teams.team_rules_text", slug=team.slug, language=legal.AUTHORITATIVE, version=version),
-    )
-
-
-@teams_bp.route("/teams/<slug>/join", methods=["POST"])
-@login_required
-def team_join(slug):
-    team, done = _member_action(
-        slug, lambda team: teams_service.join_or_apply(
-            current_user, team, request.form.get("application_text"),
-            accepted_terms=request.form.get("accept_terms") == "on",
-        )
-    )
-    if not done:
-        return redirect(url_for("teams.team_about", slug=team.slug) + "#join")
-    current = teams_service.ongoing_membership(current_user, team)
-    if current is not None and current.status == teams_service.APPROVED:
-        flash(_("One step left: pay the team fee."), "success")
-    elif team.admission_mode == teams_service.ADMISSION_OPEN:
-        flash(_("Welcome to %(team)s.", team=team.name), "success")
-        return redirect(url_for("teams.team_page", slug=team.slug))
-    else:
-        flash(_("Application sent. The leads will be in touch."), "success")
-    return redirect(url_for("teams.team_about", slug=team.slug))
-
-
-@teams_bp.route("/teams/<slug>/pay", methods=["POST"])
-@login_required
-def team_pay(slug):
-    """Off to Stripe Checkout, to pay the team fee."""
-    from ..services.team_payments import start_checkout
-
-    team = _team_or_404(slug)
-    try:
-        checkout_url = start_checkout(current_user, team)
-    except ServiceError as error:
-        db.session.rollback()
-        flash(error.message, "danger")
-        return redirect(url_for("teams.teams_home"))
-    except Exception:  # noqa: BLE001 -- Stripe unreachable or refusing; logged
-        db.session.rollback()
-        current_app.logger.exception("Could not open a team Checkout for %s.", slug)
-        flash(_("The payment page could not be opened. Please try again in a few minutes."), "danger")
-        return redirect(url_for("teams.teams_home"))
-    db.session.commit()
-    return redirect(checkout_url, code=303)
-
-
-@teams_bp.route("/teams/<slug>/stay", methods=["POST"])
-@login_required
-def team_stay(slug):
-    _team, done = _member_action(slug, lambda team: teams_service.stay(current_user, team))
-    if done:
-        flash(_("You stay. Nothing changes."), "success")
-    return redirect(url_for("teams.teams_home"))
-
-
-@teams_bp.route("/teams/<slug>/withdraw", methods=["POST"])
-@login_required
-def team_withdraw(slug):
-    _team, done = _member_action(slug, lambda team: teams_service.withdraw(current_user, team))
-    if done:
-        flash(_("Application withdrawn."), "success")
-    return redirect(url_for("teams.teams_home"))
-
-
-@teams_bp.route("/teams/<slug>/leave", methods=["GET", "POST"])
-@login_required
-def team_leave(slug):
-    """Leaving is a page of its own: what it means, then a deliberate yes."""
-    team = _team_or_404(slug)
-    current = teams_service.ongoing_membership(current_user, team)
-    if current is None or current.status != teams_service.ACTIVE:
-        flash(_("You are not a member of this team."), "info")
-        return redirect(url_for("teams.teams_home"))
-    if request.method == "GET" or request.form.get("confirm") != "on":
-        if request.method == "POST":
-            flash(_("Tick the box to confirm that you want to leave."), "warning")
-        return render_template(
-            "teams/leave.html",
-            team=team,
-            membership=current,
-            is_lead=any(team_role.role == teams_service.ROLE_LEAD
-                        for team_role in teams_service.roles_of(current_user) if team_role.team_id == team.id),
-            runs_to_end=bool(current.stripe_subscription_id and current.payment_mode == "subscription"),
-            paid_once_until=(current.paid_until if current.payment_mode == "one_time" and current.paid_until
-                             and current.paid_until >= get_membership_today() else None),
-            message=request.form.get("message", ""),
-        )
-    team, done = _member_action(
-        slug, lambda team: teams_service.leave(current_user, team, request.form.get("message"))
-    )
-    if done:
-        current = teams_service.ongoing_membership(current_user, team)
-        if current is not None and current.ends_on is not None:
-            from ..services.membership import format_membership_date_display
-
-            flash(_("You leave %(team)s on %(day)s. Until then nothing changes.",
-                    team=team.name, day=format_membership_date_display(current.ends_on)), "success")
-        else:
-            flash(_("You have left %(team)s.", team=team.name), "success")
-    return redirect(url_for("teams.teams_home"))
-
-
-@teams_bp.route("/teams/<slug>", methods=["GET"])
-@login_required
-def team_page(slug):
-    """The team's own page, for its members: their membership and who is in
-    the team. Anybody else is shown what the team does and how to join.
-
-    Built as sections so that more can be added -- documents, dates, a drinks
-    balance -- without reworking it.
-    """
-    team = _team_or_404(slug)
-    if not _sees_team_page(team):
-        return redirect(url_for("teams.team_about", slug=team.slug))
-    return render_template(
-        "teams/team.html",
-        team=team,
-        roster=teams_service.roster(team),
-        my_membership=teams_service.active_team_membership(current_user, team),
-        can_manage=_manages_people(team),
-        **_membership_context(),
     )
 
 

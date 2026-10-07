@@ -41,10 +41,15 @@ interface PageHeaderProps {
   actions?: ReactNode;
 }
 
-export function PageHeader({ title, description, crumbs, actions }: PageHeaderProps) {
+/** The browser tab's title, for a page that draws its own heading. */
+export function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = `${title} · Joanneum Aeronautics`;
   }, [title]);
+}
+
+export function PageHeader({ title, description, crumbs, actions }: PageHeaderProps) {
+  useDocumentTitle(title);
 
   return (
     <Stack gap="xs" mb="lg">

@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from api_helpers import send
+
 from conftest import db
 from aeronautics_members import legal_pdf
 from aeronautics_members.services import legal_texts as legal
@@ -19,6 +21,7 @@ from test_team_page import _png
 from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
 from test_teams_foundation import _in_team
 
+API = "/api/v1/teams"
 TODAY = get_membership_today()
 
 
@@ -46,12 +49,12 @@ class TestApplying:
         rules_file()
         _login(client, _person().id)
 
-        body = client.get("/teams/rocket/about").get_data(as_text=True)
+        body = client.get(f"{API}/rocket").get_json()
+        dialog = client.get(f"{API}/rocket/rules").get_json()
 
-        tick = body.split('name="accept_terms"')[1].split("</div>")[0]
-        assert 'href="/teams/rocket/rules"' in tick and "data-legal-dialog" in tick
-        assert f"version of {TODAY.strftime('%d.%m.%Y')}" in tick
-        assert 'href="/teams/rocket/rules/pdf"' in body and "legal-dialog.js" in body
+        # The form ticks the version in force; the dialog over it shows that text, and its PDF.
+        assert body["rules"]["version"] == TODAY.isoformat() and body["joining"] is not None
+        assert dialog["version"] == TODAY.isoformat() and dialog["pdf_url"] == "/teams/rocket/rules/pdf"
 
     def test_the_version_ticked_is_kept_with_the_membership(self, app, client, rules_file):
         team, _lead = _led()
@@ -59,9 +62,9 @@ class TestApplying:
         anna = _person()
         _login(client, anna.id)
 
-        client.post("/teams/rocket/join", data={})
+        send(client, "POST", f"{API}/rocket/join", {})
         assert teams.ongoing_membership(anna, team) is None
-        client.post("/teams/rocket/join", data={"accept_terms": "on"})
+        send(client, "POST", f"{API}/rocket/join", {"accept_rules": True})
 
         membership = teams.ongoing_membership(anna, team)
         assert membership.terms_version == datetime.combine(TODAY, datetime.min.time())
@@ -82,21 +85,30 @@ class TestReading:
         rules_file(language="en", body="## § 1 Safety\n\nBriefing before every flight.")
         _login(client, _person().id)
 
-        english = client.get("/teams/rocket/rules").get_data(as_text=True)
-        german = client.get("/teams/rocket/rules/de").get_data(as_text=True)
+        english = client.get(f"{API}/rocket/rules").get_json()
+        german = client.get(f"{API}/rocket/rules?language=de").get_json()
 
-        assert "Briefing before every flight." in english and "the German version applies" in english
-        assert "Einweisung vor jedem Flug." in german
-        assert 'href="/teams/rocket/about"' in german and "PDF, German and English" in german
+        assert "Briefing before every flight." in english["html"] and english["is_translation"] is True
+        assert english["german_url"] == "/teams/rocket/rules/de"
+        assert "Einweisung vor jedem Flug." in german["html"] and german["is_translation"] is False
+        assert german["english_url"] == "/teams/rocket/rules/en" and german["pdf_has_english"] is True
 
-    def test_alone_for_the_window(self, app, client, rules_file):
+    def test_its_page_is_the_apps(self, app, client, rules_file):
         _led()
         rules_file()
         _login(client, _person().id)
 
-        body = client.get("/teams/rocket/rules?part=body").get_data(as_text=True)
+        for path in ("/teams/rocket/rules", "/teams/rocket/rules/de", f"/teams/rocket/rules/de/{TODAY}"):
+            assert client.get(path).status_code == 200, path
 
-        assert "Einweisung vor jedem Flug." in body and "<html" not in body
+    def test_no_html_of_its_own_gets_through(self, app, client, rules_file):
+        _led()
+        rules_file(body="<script>alert(1)</script>\n\nEinweisung vor jedem Flug.")
+        _login(client, _person().id)
+
+        html = client.get(f"{API}/rocket/rules").get_json()["html"]
+
+        assert "<script>" not in html and "Einweisung vor jedem Flug." in html
 
     def test_an_earlier_version_and_a_team_without_rules(self, app, client, rules_file):
         _led()
@@ -106,9 +118,10 @@ class TestReading:
         rules_file()
         _login(client, _person().id)
 
-        assert "Alt." in client.get(f"/teams/rocket/rules/de/{earlier}").get_data(as_text=True)
-        assert client.get("/teams/glider/rules").status_code == 404
-        assert client.get("/teams/rocket/rules/de/2001-01-01").status_code == 404
+        older = client.get(f"{API}/rocket/rules?language=de&version={earlier}").get_json()
+        assert "Alt." in older["html"] and older["in_force"] == TODAY.isoformat()
+        assert client.get(f"{API}/glider/rules").status_code == 404
+        assert client.get(f"{API}/rocket/rules?language=de&version=2001-01-01").status_code == 404
 
     def test_the_pdf_with_the_teams_logo(self, app, client, rules_file, tmp_path):
         team, _lead = _led()
@@ -151,13 +164,12 @@ class TestMembers:
         db.session.commit()
         _login(client, anna.id)
 
-        assert "The rules have changed" not in client.get("/teams/rocket").get_data(as_text=True)
+        assert client.get(f"{API}/rocket").get_json()["rules"]["changed_since"] is False
 
         rules_file()
-        body = client.get("/teams/rocket").get_data(as_text=True)
+        rules = client.get(f"{API}/rocket").get_json()["rules"]
 
-        assert f"You accepted the version of {earlier.strftime('%d.%m.%Y')}" in body
-        assert "The rules have changed" in body
+        assert rules == {"version": TODAY.isoformat(), "accepted": earlier.isoformat(), "changed_since": True}
 
 
 class TestTheFiles:

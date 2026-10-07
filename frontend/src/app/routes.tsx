@@ -8,6 +8,7 @@
 import type { RouteObject } from 'react-router';
 
 import { AdminLayout } from '../frame/AdminLayout';
+import { TeamsLayout } from '../frame/TeamsLayout';
 import { LoadingState } from '../components/States';
 import { NotFound } from '../pages/NotFound';
 import { RouteError } from '../pages/RouteError';
@@ -18,6 +19,29 @@ export const routes: RouteObject[] = [
     // While the first page's own code is still on its way.
     hydrateFallbackElement: <LoadingState />,
     children: [
+      {
+        path: '/teams',
+        element: <TeamsLayout />,
+        children: [
+          { index: true, lazy: async () => ({ Component: (await import('../pages/teams/Teams')).Teams }) },
+          {
+            path: ':slug',
+            lazy: async () => ({ Component: (await import('../pages/teams/TeamPage')).TeamPage }),
+          },
+          {
+            path: ':slug/about',
+            lazy: async () => ({ Component: (await import('../pages/teams/About')).About }),
+          },
+          {
+            path: ':slug/leave',
+            lazy: async () => ({ Component: (await import('../pages/teams/Leave')).Leave }),
+          },
+          ...[':slug/rules', ':slug/rules/:language', ':slug/rules/:language/:version'].map((path) => ({
+            path,
+            lazy: async () => ({ Component: (await import('../pages/teams/Rules')).Rules }),
+          })),
+        ],
+      },
       {
         path: '/admin',
         element: <AdminLayout />,

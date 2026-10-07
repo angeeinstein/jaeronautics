@@ -244,6 +244,11 @@ server can update to it.
       the app's; the old settings template, its layout and scripts are gone.)*
 5. **Teams area:** overview, a team's page and join page with the rules
    dialog, the leads' management sections, the team's money.
+   *(Overview, a team's page, About with joining and the rules dialog, the rules page and
+   leaving done: `api/teams.py` works out once what somebody sees of their membership --
+   its state, what is owed or coming, the buttons -- for every page that shows it; a legal
+   text has one answer (`api/legal.py`) and one view (`components/legal/`), which step 7
+   reuses for the association's texts.)*
 6. **My Account:** the overview, membership and payment status, forum card
    with the photo upload and cropper, change requests, password, data export
    and deletion.

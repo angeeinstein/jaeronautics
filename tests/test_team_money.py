@@ -231,8 +231,8 @@ class TestWhoSeesWhat:
 
         assert client.get("/teams/rocket/money").status_code == 200
         assert client.get("/teams/rocket/manage").status_code == 403
-        home = client.get("/teams").get_data(as_text=True)
-        assert 'href="/teams/rocket/money"' in home and 'href="/teams/rocket/manage"' not in home
+        [card] = client.get("/api/v1/teams").get_json()["mine"]
+        assert "money" in card["membership"]["actions"] and "manage" not in card["membership"]["actions"]
         client.post("/teams/rocket/money/bank", data={"account_holder": "Rocket Team", "iban": IBAN})
         assert team.bank_iban == IBAN
 
@@ -260,7 +260,7 @@ class TestWhoSeesWhat:
         assert code.mimetype == "image/svg+xml" and b"<svg" in code.data
         assert "Mark as transferred" not in client.get("/teams/rocket/money").get_data(as_text=True)
         assert client.get("/teams/rocket/manage").status_code == 403
-        assert client.get("/teams/rocket").headers["Location"].endswith("/teams/rocket/about")
+        assert client.get("/api/v1/teams/rocket").get_json()["sees_team_page"] is False
         assert client.get("/admin/teams").status_code in (302, 403)
         assert client.get("/admin/accounts").status_code in (302, 403)
 

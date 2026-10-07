@@ -252,10 +252,11 @@ class TestPaying:
         anna, _membership = _approved(team, lead)
         _login(client, anna.id)
 
-        assert "Pay and join" in client.get("/teams").get_data(as_text=True)
-        response = client.post(f"/teams/{team.slug}/pay")
+        [card] = client.get("/api/v1/teams").get_json()["mine"]
+        assert card["membership"]["actions"][0] == "pay_join"
+        response = send(client, "POST", f"/api/v1/teams/{team.slug}/pay")
 
-        assert response.status_code == 303 and response.location.startswith("https://checkout.example/")
+        assert response.status_code == 200 and response.get_json()["url"].startswith("https://checkout.example/")
 
     def test_a_free_team_has_nothing_to_pay(self, app, fake_stripe):
         team, lead = _led()

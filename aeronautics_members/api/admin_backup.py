@@ -153,16 +153,16 @@ def admin_backup_start(body):
     return _page()
 
 
-class DeletedOut(Model):
+class BackupDeletedOut(Model):
     name: str
 
 
-@endpoint("DELETE", "/admin/settings/backup/files/<name>", response=DeletedOut, permissions=BACKUP, tag=TAG)
+@endpoint("DELETE", "/admin/settings/backup/files/<name>", response=BackupDeletedOut, permissions=BACKUP, tag=TAG)
 def admin_backup_delete(name):
     """Delete a backup from the server."""
     maintenance.delete_backup(current_user, name)
     db.session.commit()
-    return DeletedOut(name=name)
+    return BackupDeletedOut(name=name)
 
 
 class ResumeIn(Model):

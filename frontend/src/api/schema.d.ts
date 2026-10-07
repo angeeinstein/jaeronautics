@@ -1051,6 +1051,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every running team: first those somebody is in, applying to or helps run -- with what to do */
+        get: operations["teams_home"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A team: what it is about, somebody's membership of it -- and, for its members, who is in it. */
+        get: operations["team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join, apply -- or come back by paying, after a membership that ended unpaid. */
+        post: operations["team_join"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What leaving would mean. */
+        get: operations["team_leaving"];
+        put?: never;
+        /** Leave -- at once, or at the end of what is paid. */
+        post: operations["team_leave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Where to pay the team fee: Stripe's payment page, which comes back to the overview. */
+        post: operations["team_pay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A team's rules: the version in force or an earlier one, in German or the English translation. */
+        get: operations["team_rules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/stay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take back leaving, before the day it takes effect. */
+        post: operations["team_stay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraw an application. */
+        post: operations["team_withdraw"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1284,6 +1421,11 @@ export interface components {
             pictures: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
             sync_problems: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
             transfers: components["schemas"]["Transfers"] | null;
+        };
+        /** BackupDeletedOut */
+        BackupDeletedOut: {
+            /** Name */
+            name: string;
         };
         /** BackupFileOut */
         BackupFileOut: {
@@ -1574,6 +1716,11 @@ export interface components {
             /** Paused */
             paused: boolean;
         };
+        /** CheckoutOut */
+        CheckoutOut: {
+            /** Url */
+            url: string;
+        };
         /** ConnectionOut */
         ConnectionOut: {
             /** Message */
@@ -1597,6 +1744,11 @@ export interface components {
             /** Recent Activity */
             recent_activity: components["schemas"]["Activity"][] | null;
         };
+        /** DeletedOut */
+        DeletedOut: {
+            /** Removed Welcome Sender */
+            removed_welcome_sender: boolean;
+        };
         /** DisabledIn */
         DisabledIn: {
             /** Disabled */
@@ -1611,6 +1763,12 @@ export interface components {
         DismissedOut: {
             /** Ok */
             ok: boolean;
+        };
+        /** DoneOut */
+        DoneOut: {
+            /** Message */
+            message: string;
+            team: components["schemas"]["TeamPageOut"];
         };
         /** EmailIn */
         EmailIn: {
@@ -2054,6 +2212,14 @@ export interface components {
              */
             page?: number;
         };
+        /** HomeQuery */
+        HomeQuery: {
+            /**
+             * Paid
+             * @default null
+             */
+            paid?: string | null;
+        };
         /** ImportOut */
         ImportOut: {
             /** Created */
@@ -2101,6 +2267,45 @@ export interface components {
             /** Pending */
             pending: number;
         };
+        /** JoinIn */
+        JoinIn: {
+            /**
+             * Accept Rules
+             * @default false
+             */
+            accept_rules?: boolean;
+            /**
+             * Application Text
+             * @default null
+             */
+            application_text?: string | null;
+        };
+        /**
+         * JoiningOut
+         * @description The form for somebody not in the team, or why there is none.
+         */
+        JoiningOut: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "open" | "approval";
+            /** Prompt */
+            prompt: string | null;
+            /** Rejoin Until */
+            rejoin_until: string | null;
+            /** Submit Label */
+            submit_label: string;
+            /** Why Not */
+            why_not: string | null;
+        };
+        /** LabelsOut */
+        LabelsOut: {
+            /** Plural */
+            plural: string;
+            /** Singular */
+            singular: string;
+        };
         /** LastRunOut */
         LastRunOut: {
             /** Exit Code */
@@ -2115,6 +2320,40 @@ export interface components {
             revision_after: string | null;
             /** State */
             state: string | null;
+        };
+        /** LeaveIn */
+        LeaveIn: {
+            /**
+             * Confirm
+             * @constant
+             */
+            confirm: true;
+            /**
+             * Message
+             * @default null
+             */
+            message?: string | null;
+        };
+        /**
+         * LeavingOut
+         * @description What leaving means for this person, before they decide.
+         */
+        LeavingOut: {
+            /** Access List */
+            access_list: boolean;
+            /** Is Lead */
+            is_lead: boolean;
+            labels: components["schemas"]["LabelsOut"];
+            /** Stays Until */
+            stays_until: string | null;
+            /** Subscription */
+            subscription: boolean;
+            team: components["schemas"]["TeamCardOut"];
+        };
+        /** LeftOut */
+        LeftOut: {
+            /** Message */
+            message: string;
         };
         /** LegalOut */
         LegalOut: {
@@ -2132,6 +2371,48 @@ export interface components {
             template_url: string;
             /** Waiting */
             waiting: components["schemas"]["aeronautics_members__api__admin_legal__Waiting"][];
+        };
+        /** LegalTextOut */
+        LegalTextOut: {
+            /** Contents */
+            contents: components["schemas"]["SectionOut"][];
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** English Elsewhere */
+            english_elsewhere: boolean;
+            /** English Url */
+            english_url: string | null;
+            /** German Url */
+            german_url: string;
+            /** Html */
+            html: string;
+            /**
+             * In Force
+             * Format: date
+             */
+            in_force: string;
+            /** Is Translation */
+            is_translation: boolean;
+            /** Language */
+            language: string;
+            /** Others */
+            others: components["schemas"]["OtherVersionOut"][];
+            /** Pdf Has English */
+            pdf_has_english: boolean;
+            /** Pdf Url */
+            pdf_url: string;
+            /** Revision */
+            revision: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
         };
         /** LogEntry */
         LogEntry: {
@@ -2437,6 +2718,16 @@ export interface components {
              */
             note?: string | null;
         };
+        /** NoteOut */
+        NoteOut: {
+            /** Text */
+            text: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "plain" | "info" | "warning";
+        };
         /**
          * Notice
          * @description A banner over every page of an area, for something that is off on purpose or by accident.
@@ -2517,6 +2808,18 @@ export interface components {
             /** Year Group */
             year_group: string | null;
         };
+        /** OtherVersionOut */
+        OtherVersionOut: {
+            /** In Force */
+            in_force: boolean;
+            /** Url */
+            url: string;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
+        };
         /** OverviewOut */
         OverviewOut: {
             /** Association Own */
@@ -2582,6 +2885,17 @@ export interface components {
             earned: number;
             /** Paid Until */
             paid_until: string | null;
+        };
+        /** PersonOut */
+        PersonOut: {
+            /** Is Lead */
+            is_lead: boolean;
+            /** Name */
+            name: string;
+            /** Picture Url */
+            picture_url: string | null;
+            /** University Email */
+            university_email: string | null;
         };
         /** Picture */
         Picture: {
@@ -2769,6 +3083,18 @@ export interface components {
             /** Short Revision */
             short_revision: string;
         };
+        /** RulesOut */
+        RulesOut: {
+            /** Accepted */
+            accepted: string | null;
+            /** Changed Since */
+            changed_since: boolean;
+            /**
+             * Version
+             * Format: date
+             */
+            version: string;
+        };
         /** SchemaOut */
         SchemaOut: {
             /** Applied */
@@ -2777,6 +3103,15 @@ export interface components {
             expected: string | null;
             /** Up To Date */
             up_to_date: boolean;
+        };
+        /** SectionOut */
+        SectionOut: {
+            /** Anchor */
+            anchor: string;
+            /** Label */
+            label: string;
+            /** Level */
+            level: number;
         };
         /** SentOut */
         SentOut: {
@@ -2812,6 +3147,25 @@ export interface components {
             last_synced_at: string | null;
             /** User Id */
             user_id: number | null;
+        };
+        /** TeamCardOut */
+        TeamCardOut: {
+            /** About Label */
+            about_label: string;
+            /** Description */
+            description: string | null;
+            /** Logo Url */
+            logo_url: string | null;
+            membership: components["schemas"]["TeamMembershipOut"];
+            /** Name */
+            name: string;
+            /**
+             * Opens
+             * @enum {string}
+             */
+            opens: "team" | "about";
+            /** Slug */
+            slug: string;
         };
         /** TeamDetailsIn */
         TeamDetailsIn: {
@@ -2862,6 +3216,30 @@ export interface components {
             team: string;
             /** Until */
             until: string | null;
+        };
+        /**
+         * TeamMembershipOut
+         * @description Somebody's membership of one team, as they see it.
+         */
+        TeamMembershipOut: {
+            /** Actions */
+            actions: ("open" | "pay_join" | "pay_next" | "pay_stay" | "stay" | "leave" | "withdraw" | "join" | "manage" | "money")[];
+            /** Fee */
+            fee: string | null;
+            /** Join Label */
+            join_label: string | null;
+            /** Meeting */
+            meeting: string | null;
+            /** Notes */
+            notes: components["schemas"]["NoteOut"][];
+            /** Ongoing */
+            ongoing: boolean;
+            /** Status */
+            status: ("applied" | "invited" | "approved" | "active" | "ended" | "rejected" | "withdrawn") | null;
+            /** Status Label */
+            status_label: string | null;
+            /** Why Not */
+            why_not: string | null;
         };
         /** TeamMoneyOut */
         TeamMoneyOut: {
@@ -2924,6 +3302,35 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "archived";
+        };
+        /** TeamPageOut */
+        TeamPageOut: {
+            /** About */
+            about: string | null;
+            /** Can Manage */
+            can_manage: boolean;
+            /** Can See Money */
+            can_see_money: boolean;
+            /** Description */
+            description: string | null;
+            /** Is Member */
+            is_member: boolean;
+            joining: components["schemas"]["JoiningOut"] | null;
+            labels: components["schemas"]["LabelsOut"];
+            /** Logo Url */
+            logo_url: string | null;
+            /** Members */
+            members: components["schemas"]["PersonOut"][] | null;
+            membership: components["schemas"]["TeamMembershipOut"];
+            /** Name */
+            name: string;
+            /** Picture Url */
+            picture_url: string | null;
+            rules: components["schemas"]["RulesOut"] | null;
+            /** Sees Team Page */
+            sees_team_page: boolean;
+            /** Slug */
+            slug: string;
         };
         /** TeamPayment */
         TeamPayment: {
@@ -3019,6 +3426,16 @@ export interface components {
             /** Roles */
             roles: components["schemas"]["TeamRole"][];
         };
+        /** TeamsHomeOut */
+        TeamsHomeOut: {
+            /** Is Member */
+            is_member: boolean;
+            labels: components["schemas"]["LabelsOut"];
+            /** Mine */
+            mine: components["schemas"]["TeamCardOut"][];
+            /** Others */
+            others: components["schemas"]["TeamCardOut"][];
+        };
         /** TeamsOut */
         TeamsOut: {
             settings: components["schemas"]["TeamSettings"];
@@ -3040,6 +3457,19 @@ export interface components {
             senders: string[];
             /** Templates */
             templates: string[];
+        };
+        /** TextQuery */
+        TextQuery: {
+            /**
+             * Language
+             * @default null
+             */
+            language?: ("de" | "en") | null;
+            /**
+             * Version
+             * @default null
+             */
+            version?: string | null;
         };
         /** Totals */
         Totals: {
@@ -3160,11 +3590,6 @@ export interface components {
             /** Subject */
             subject: string | null;
         };
-        /** DeletedOut */
-        aeronautics_members__api__admin_backup__DeletedOut: {
-            /** Name */
-            name: string;
-        };
         /**
          * Waiting
          * @description How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words.
@@ -3214,11 +3639,6 @@ export interface components {
             email: string;
             /** User Id */
             user_id: number | null;
-        };
-        /** DeletedOut */
-        aeronautics_members__api__admin_mail__DeletedOut: {
-            /** Removed Welcome Sender */
-            removed_welcome_sender: boolean;
         };
         /**
          * Person
@@ -5212,7 +5632,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_backup__DeletedOut"];
+                    "application/json": components["schemas"]["BackupDeletedOut"];
                 };
             };
             /** @description Not signed in. */
@@ -6041,7 +6461,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_mail__DeletedOut"];
+                    "application/json": components["schemas"]["DeletedOut"];
                 };
             };
             /** @description Not signed in. */
@@ -7177,6 +7597,460 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionOut"];
+                };
+            };
+        };
+    };
+    teams_home: {
+        parameters: {
+            query?: {
+                paid?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamsHomeOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team: {
+        parameters: {
+            query?: {
+                paid?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_join: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoneOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_leaving: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeavingOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_leave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeaveIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeftOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_pay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_rules: {
+        parameters: {
+            query?: {
+                language?: ("de" | "en") | null;
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalTextOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_stay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoneOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_withdraw: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoneOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
         };

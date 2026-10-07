@@ -108,7 +108,8 @@ class TestChargingFromNowOn:
         [email] = _emails("team_now_charges", anna.email)
         assert email.payload["fee"] == "€10.00 every 6 months"
         _login(client, anna.id)
-        assert "Pay to stay" in client.get("/teams").get_data(as_text=True)
+        [card] = client.get("/api/v1/teams").get_json()["mine"]
+        assert "pay_stay" in card["membership"]["actions"]
 
     def test_paying_early_charges_nothing_today(self, app, stripe_calls):
         team, _lead, anna, membership = self._free_member()
