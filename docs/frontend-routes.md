@@ -83,14 +83,14 @@ Status: `[ ]` to do, `[x]` done.
 - `GET /admin/legal/template`, `/admin/legal/waiting.pdf` (download) -- stay
 
 ### 4.8 Settings
-- [ ] `GET|POST /admin/settings` (page + action: every section's save) -- the save is gone: each section has a page of its own, `/admin/settings/<section>`; the page keeps Backup and restore until it moves
+- [x] `GET|POST /admin/settings` (page + action: every section's save) -- the save is gone: each section has a page of its own, `/admin/settings/<section>`; `/admin/settings` opens the first, and an old link to a tab (`#settings-forum`, `#backup-restore`) that part's page
   - [x] General → `GET|PUT /api/v1/admin/settings/general`
   - [x] Notifications → `GET|PUT /api/v1/admin/settings/notifications`
   - [x] Membership fee → `GET|PUT /api/v1/admin/settings/billing`
   - [x] Forum → `GET|PUT /api/v1/admin/settings/forum`
   - [x] Mail accounts → `GET /api/v1/admin/settings/mail`
   - [x] Test email → `GET /api/v1/admin/settings/test-email`
-  - [x] Maintenance, split in three: System health → `GET /api/v1/admin/settings/health`; Updates → `GET /api/v1/admin/settings/updates`; Backup and restore (still on the page)
+  - [x] Maintenance, split in three: System health → `GET /api/v1/admin/settings/health`; Updates → `GET /api/v1/admin/settings/updates`; Backup and restore → `GET /api/v1/admin/settings/backup`
 - [x] `POST /admin/settings/mail-accounts` (action: add or change) → `POST /api/v1/admin/settings/mail/accounts`, `PUT .../accounts/<id>`
 - [x] `POST /admin/settings/mail-accounts/<id>/delete` (action) → `DELETE /api/v1/admin/settings/mail/accounts/<id>`
 - [x] `POST /admin/settings/mail-accounts/<id>/test-connection` (action) → `POST /api/v1/admin/settings/mail/accounts/<id>/test`
@@ -99,11 +99,11 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `POST /admin/settings/send-test-email` (action) → `POST /api/v1/admin/settings/test-email`
 - [x] `POST /admin/settings/test-forum-connection` (action) → `POST /api/v1/admin/settings/forum/test`
 - [x] `POST /admin/system-update` (action) → `POST /api/v1/admin/settings/updates`; `GET /admin/system-update/status` (already JSON) stays for a Maintenance page opened before the update that brings the new front end, which asks there until the update is done
-- [ ] `POST /admin/backup`, `GET /admin/backup/status` (action, already JSON) → API
-- [ ] `POST /admin/backup/files/<name>/delete` (action)
+- [x] `POST /admin/backup`, `GET /admin/backup/status` (action, already JSON) → `POST /api/v1/admin/settings/backup`; the status is part of the page's answer
+- [x] `POST /admin/backup/files/<name>/delete` (action) → `DELETE /api/v1/admin/settings/backup/files/<name>`
 - [x] `POST /admin/forum-tasks/retry` (action; from the health report) → `POST /api/v1/admin/settings/health/forum-tasks/retry`
 - [x] `POST /admin/undelivered-emails/<job>/<retry|dismiss>` (action; from the health report) → `POST /api/v1/admin/settings/health/undelivered/<job>/retry|dismiss`
-- [ ] `GET /admin/background-jobs/checklist`, `POST .../again`, `.../dismiss`, `POST /admin/background-jobs/resume` (already JSON / action) → API
+- [x] `GET /admin/background-jobs/checklist`, `POST .../again`, `.../dismiss`, `POST /admin/background-jobs/resume` (already JSON / action) → `GET /api/v1/admin/settings/backup/checklist`, `POST .../checklist/again`, `.../checklist/dismiss`, `POST /api/v1/admin/settings/backup/resume`
 - `GET /admin/backup/files/<name>` (download) -- stays
 
 ## Step 5 -- Teams area

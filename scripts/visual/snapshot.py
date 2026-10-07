@@ -66,6 +66,9 @@ def build_app(db_path):
         "PUBLIC_BASE_URL": BASE,
         # Beside the throwaway database, never the repository's storage.
         "TEAM_LOGO_DIR": str(Path(db_path).parent / "team_logos"),
+        "BACKUP_STORAGE_DIR": str(Path(db_path).parent / "storage"),
+        # In this process, against the throwaway database -- not a second one.
+        "BACKUP_RUN_INLINE": True,
     })
     return app, app_module
 

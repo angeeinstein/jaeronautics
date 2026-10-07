@@ -74,7 +74,7 @@ describe('the admin sidebar', () => {
       '/admin/settings/test-email',
       '/admin/settings/health',
       '/admin/settings/updates',
-      '/admin/settings#backup-restore',
+      '/admin/settings/backup',
     ]);
   });
 

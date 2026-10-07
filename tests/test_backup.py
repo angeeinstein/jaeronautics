@@ -9,8 +9,9 @@ import json
 
 import pytest
 
+from api_helpers import send
 from conftest import db, make_member
-from aeronautics_members.db_models import ForumAvatarSubmission, MailAccount, Member, Setting, User
+from aeronautics_members.db_models import AuditLog, ForumAvatarSubmission, MailAccount, Member, Setting, User
 from aeronautics_members.services import backup as backup_service
 from aeronautics_members.services import background_jobs
 from aeronautics_members.services.backup import BackupError
@@ -306,27 +307,37 @@ def _sign_in(client, *roles):
     return user
 
 
+API = "/api/v1/admin/settings/backup"
+
+
+def _start(client, passphrase=PASSPHRASE, again=PASSPHRASE):
+    return send(client, "POST", API, {"passphrase": passphrase, "passphrase_again": again})
+
+
 class TestThePage:
+    """Settings -> Backup and restore (api/admin_backup.py)."""
+
     def test_only_superadmins_see_or_use_it(self, portal, client):
         portal.config["BACKUP_RUN_INLINE"] = True
         _sign_in(client, "admin")
-        refused = client.post("/admin/backup", data={"passphrase": PASSPHRASE, "passphrase_confirm": PASSPHRASE})
-        assert refused.status_code == 302 and backup_service.read_status() is None
-        assert client.get("/admin/backup/status").status_code == 302
-        assert 'id="backup-restore"' not in client.get("/admin/settings").get_data(as_text=True)
+        refused = _start(client)
+        assert refused.status_code == 403 and backup_service.read_status() is None
+        assert client.get(API).status_code == 403
+        assert client.get("/admin/settings/backup").headers["Location"].endswith("/admin/settings/general")
 
     def test_a_backup_made_from_the_page_can_be_downloaded(self, portal, client, tmp_path):
         portal.config["BACKUP_RUN_INLINE"] = True
         _fill(tmp_path)
         _sign_in(client, "admin", "superadmin")
 
-        client.post("/admin/backup", data={"passphrase": PASSPHRASE, "passphrase_confirm": PASSPHRASE})
+        started = _start(client)
 
-        status = client.get("/admin/backup/status").get_json()
-        assert status["state"] == "completed", status
+        assert started.status_code == 202
+        page = client.get(API).get_json()
+        assert page["run"]["state"] == "completed", page["run"]
+        assert [step["state"] for step in page["run"]["steps"]] == ["done"] * 4
         [kept] = backup_service.list_backups()
-        page = client.get("/admin/settings").get_data(as_text=True)
-        assert kept["name"] in page and 'id="backup-restore"' in page
+        assert page["backups"][0]["name"] == kept["name"] and page["run"]["result"]["file"] == kept["name"]
         download = client.get(f"/admin/backup/files/{kept['name']}")
         assert download.status_code == 200
         assert download.data.startswith(backup_service.MAGIC)
@@ -334,8 +345,32 @@ class TestThePage:
     def test_mismatched_passphrases_start_nothing(self, portal, client):
         portal.config["BACKUP_RUN_INLINE"] = True
         _sign_in(client, "admin", "superadmin")
-        client.post("/admin/backup", data={"passphrase": PASSPHRASE, "passphrase_confirm": PASSPHRASE + "!"})
+        response = _start(client, again=PASSPHRASE + "!")
+        assert response.status_code == 400 and "passphrase_again" in response.get_json()["error"]["fields"]
         assert backup_service.read_status() is None
+
+    def test_a_short_passphrase_is_said_at_its_field(self, portal, client):
+        _sign_in(client, "admin", "superadmin")
+        response = _start(client, "short", "short")
+        assert response.status_code == 400 and "passphrase" in response.get_json()["error"]["fields"]
+
+    def test_one_at_a_time(self, portal, client):
+        _sign_in(client, "admin", "superadmin")
+        backup_service.start_status("someone@example.org")
+        response = _start(client)
+        assert response.status_code == 409 and response.get_json()["error"]["code"] == "backup_running"
+
+    def test_a_backup_deleted_from_the_server_and_logged(self, portal, client, tmp_path):
+        portal.config["BACKUP_RUN_INLINE"] = True
+        _fill(tmp_path)
+        _sign_in(client, "admin", "superadmin")
+        _start(client)
+        [kept] = backup_service.list_backups()
+
+        assert send(client, "DELETE", f"{API}/files/{kept['name']}").get_json() == {"name": kept["name"]}
+        assert backup_service.list_backups() == []
+        assert send(client, "DELETE", f"{API}/files/{kept['name']}").status_code == 404
+        assert db.session.query(AuditLog).filter_by(event_type="backup_deleted").count() == 1
 
     def test_a_download_cannot_leave_the_backups_folder(self, portal, client):
         _sign_in(client, "admin", "superadmin")
@@ -365,11 +400,16 @@ class TestResuming:
         db.session.commit()
         assert "restored from a backup" in str(client.get("/api/v1/me").get_json()["admin_notices"])
 
-        client.post("/admin/background-jobs/resume", data={})
+        page = client.get(API).get_json()
+        assert page["paused"]["backup_created_at"] == "2026-09-01T10:00:00Z"
+        assert {job["key"] for job in page["jobs"]} >= {"external-work", "notifications"}
+
+        assert send(client, "POST", f"{API}/resume", {"confirm": False}).status_code == 400
         assert background_jobs.is_paused()
 
-        client.post("/admin/background-jobs/resume", data={"confirm": "resume"})
+        resumed = send(client, "POST", f"{API}/resume", {"confirm": True}).get_json()
         assert not background_jobs.is_paused()
+        assert resumed["paused"] is None and resumed["checklist"] is not None
         assert client.get("/api/v1/me").get_json()["admin_notices"] == []
 
     def test_the_checklist_runs_one_check_per_look(self, portal, client, checks):
@@ -377,16 +417,21 @@ class TestResuming:
         background_jobs.resume("someone@example.org")
         db.session.commit()
 
-        first = client.get("/admin/background-jobs/checklist").get_json()
+        first = client.get(f"{API}/checklist").get_json()
         states = {item["key"]: item["state"] for item in first["items"]}
         assert checks == ["stripe"]
         assert states["stripe"] == "ok" and states["forum"] == "running" and states["mail"] == "running"
         assert states["job-external-work"] == "waiting"
         assert not first["done"]
 
-        client.get("/admin/background-jobs/checklist")
-        client.get("/admin/background-jobs/checklist")
+        client.get(f"{API}/checklist")
+        client.get(f"{API}/checklist")
         assert checks == ["stripe", "forum", "mail"]
+
+        again = send(client, "POST", f"{API}/checklist/again").get_json()
+        assert {item["key"]: item["state"] for item in again["items"]}["stripe"] == "running"
+        assert send(client, "POST", f"{API}/checklist/dismiss").get_json() == {"ok": True}
+        assert client.get(API).get_json()["checklist"] is None
 
     def test_a_timer_counts_once_it_has_run_since_resuming(self, portal, client, checks):
         _sign_in(client, "admin", "superadmin")
@@ -394,7 +439,7 @@ class TestResuming:
         db.session.commit()
         portal.test_cli_runner().invoke(args=["process-external-work"])
 
-        items = client.get("/admin/background-jobs/checklist").get_json()["items"]
+        items = client.get(f"{API}/checklist").get_json()["items"]
         assert {i["key"]: i["state"] for i in items}["job-external-work"] == "ok"
 
 

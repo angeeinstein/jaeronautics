@@ -22,7 +22,7 @@ import { ErrorState, LoadingState } from '../../../components/States';
 import { formatDateTime } from '../../../lib/format';
 import { notifyFailed } from '../../../lib/notify';
 import { reloadPage } from '../../../lib/reload';
-import classes from './Updates.module.css';
+import classes from './Maintenance.module.css';
 
 type State = Schemas['UpdatesOut'];
 type Action = Schemas['UpdateIn']['action'];

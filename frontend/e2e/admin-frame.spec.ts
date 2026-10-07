@@ -18,10 +18,9 @@ test.describe('the admin frame', () => {
     if (isMobile) await page.getByRole('button', { name: 'Open the menu' }).click();
     const sections = page.getByRole('navigation', { name: 'Sections' }).last();
 
-    await sections.getByRole('link', { name: 'Settings' }).click();
-    await sections.getByRole('link', { name: 'Backup and restore' }).click();
+    await sections.getByRole('link', { name: 'Back to the portal' }).click();
 
-    await expect(page).toHaveURL(/\/admin\/settings#backup-restore$/);
+    await expect(page).toHaveURL(/\/account(\?.*)?$/);
     await expect(page.locator('#root')).toHaveCount(0); // Flask's own page, not the app
   });
 

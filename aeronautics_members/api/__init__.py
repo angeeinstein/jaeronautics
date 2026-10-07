@@ -8,6 +8,7 @@ endpoints on ``api_bp``.
 
 from . import (  # noqa: F401 -- registers their endpoints
     admin_account,
+    admin_backup,
     admin_accounts,
     admin_dashboard,
     admin_legal,

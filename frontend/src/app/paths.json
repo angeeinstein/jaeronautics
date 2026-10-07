@@ -11,6 +11,7 @@
     "/admin/money/:slug",
     "/admin/logs",
     "/admin/legal",
+    "/admin/settings",
     "/admin/settings/general",
     "/admin/settings/notifications",
     "/admin/settings/billing",
@@ -18,6 +19,7 @@
     "/admin/settings/mail",
     "/admin/settings/test-email",
     "/admin/settings/health",
-    "/admin/settings/updates"
+    "/admin/settings/updates",
+    "/admin/settings/backup"
   ]
 }

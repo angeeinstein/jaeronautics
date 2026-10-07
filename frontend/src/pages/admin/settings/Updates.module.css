@@ -1,8 +1,0 @@
-/* The end of an update's log: newest at the bottom, kept in view. */
-.log {
-  max-height: 20rem;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-size: var(--mantine-font-size-xs);
-}

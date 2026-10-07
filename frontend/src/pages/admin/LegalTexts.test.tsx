@@ -158,8 +158,9 @@ describe('making every PDF again', () => {
 
     const steps = await screen.findByRole('list', { name: 'Making the PDFs' });
     await waitFor(() => {
-      expect(steps).toHaveTextContent('Remove the kept PDFs: 3 removed');
-      expect(steps).toHaveTextContent('Statuten · Version of 17.03.2019: division by zero');
+      const [stored, statutes] = within(steps).getAllByRole('listitem');
+      expect(stored).toHaveTextContent('Remove the kept PDFs: Done3 removed');
+      expect(statutes).toHaveTextContent('Statuten · Version of 17.03.2019: Faileddivision by zero');
     });
     const made = calls.find((call) => new URL(call.url).pathname === `${API}/pdfs/make`);
     expect(await made?.clone().json()).toEqual({ key: '/statutes/2019-03-17' });

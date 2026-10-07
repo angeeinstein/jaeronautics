@@ -766,6 +766,235 @@
         "title": "Attention",
         "type": "object"
       },
+      "BackupFileOut": {
+        "additionalProperties": false,
+        "properties": {
+          "made_at": {
+            "title": "Made At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "size_display": {
+            "title": "Size Display",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "size",
+          "size_display",
+          "made_at"
+        ],
+        "title": "BackupFileOut",
+        "type": "object"
+      },
+      "BackupIn": {
+        "additionalProperties": false,
+        "properties": {
+          "passphrase": {
+            "maxLength": 1024,
+            "title": "Passphrase",
+            "type": "string"
+          },
+          "passphrase_again": {
+            "maxLength": 1024,
+            "title": "Passphrase Again",
+            "type": "string"
+          }
+        },
+        "required": [
+          "passphrase",
+          "passphrase_again"
+        ],
+        "title": "BackupIn",
+        "type": "object"
+      },
+      "BackupOut": {
+        "additionalProperties": false,
+        "properties": {
+          "backups": {
+            "items": {
+              "$ref": "#/components/schemas/BackupFileOut"
+            },
+            "title": "Backups",
+            "type": "array"
+          },
+          "checklist": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CheckOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checklist"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/CheckOut"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "kept": {
+            "title": "Kept",
+            "type": "integer"
+          },
+          "min_passphrase_length": {
+            "title": "Min Passphrase Length",
+            "type": "integer"
+          },
+          "paused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PausedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "paused",
+          "jobs",
+          "checklist",
+          "run",
+          "backups",
+          "min_passphrase_length",
+          "kept"
+        ],
+        "title": "BackupOut",
+        "type": "object"
+      },
+      "BackupResultOut": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "files": {
+            "title": "Files",
+            "type": "integer"
+          },
+          "rows": {
+            "title": "Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file",
+          "rows",
+          "files"
+        ],
+        "title": "BackupResultOut",
+        "type": "object"
+      },
+      "BackupRunOut": {
+        "additionalProperties": false,
+        "description": "The last backup made, or the one being made.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "log": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Log",
+            "type": "array"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupResultOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "steps",
+          "log",
+          "error",
+          "result",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "BackupRunOut",
+        "type": "object"
+      },
       "Bank": {
         "additionalProperties": false,
         "properties": {
@@ -1432,6 +1661,70 @@
         "title": "ChannelHealth",
         "type": "object"
       },
+      "CheckOut": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "failed",
+              "running",
+              "waiting",
+              "scheduled",
+              "skipped"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "state",
+          "detail"
+        ],
+        "title": "CheckOut",
+        "type": "object"
+      },
+      "ChecklistOut": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CheckOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "done",
+          "paused"
+        ],
+        "title": "ChecklistOut",
+        "type": "object"
+      },
       "ConnectionOut": {
         "additionalProperties": false,
         "properties": {
@@ -1502,20 +1795,6 @@
         "title": "DashboardOut",
         "type": "object"
       },
-      "DeletedOut": {
-        "additionalProperties": false,
-        "properties": {
-          "removed_welcome_sender": {
-            "title": "Removed Welcome Sender",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "removed_welcome_sender"
-        ],
-        "title": "DeletedOut",
-        "type": "object"
-      },
       "DisabledIn": {
         "additionalProperties": false,
         "properties": {
@@ -1541,6 +1820,20 @@
           "disabled"
         ],
         "title": "DisabledIn",
+        "type": "object"
+      },
+      "DismissedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "DismissedOut",
         "type": "object"
       },
       "EmailIn": {
@@ -4355,6 +4648,39 @@
         "title": "OverviewQuery",
         "type": "object"
       },
+      "PausedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "backup_created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Created At"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "since",
+          "backup_created_at"
+        ],
+        "title": "PausedOut",
+        "type": "object"
+      },
       "PdfJob": {
         "additionalProperties": false,
         "description": "One PDF that \"Make all PDFs again\" makes.",
@@ -4732,6 +5058,21 @@
         "title": "ResolvedOut",
         "type": "object"
       },
+      "ResumeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "const": true,
+            "title": "Confirm",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm"
+        ],
+        "title": "ResumeIn",
+        "type": "object"
+      },
       "RetriedOut": {
         "additionalProperties": false,
         "properties": {
@@ -5075,6 +5416,36 @@
           "csrf_token"
         ],
         "title": "SessionOut",
+        "type": "object"
+      },
+      "StepOut": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "running",
+              "done",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "state"
+        ],
+        "title": "StepOut",
         "type": "object"
       },
       "SyncProblem": {
@@ -6197,6 +6568,20 @@
         "title": "VersionOut",
         "type": "object"
       },
+      "aeronautics_members__api__admin_backup__DeletedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DeletedOut",
+        "type": "object"
+      },
       "aeronautics_members__api__admin_dashboard__Waiting": {
         "additionalProperties": false,
         "description": "How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words.",
@@ -6330,6 +6715,20 @@
           "email"
         ],
         "title": "Person",
+        "type": "object"
+      },
+      "aeronautics_members__api__admin_mail__DeletedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "removed_welcome_sender": {
+            "title": "Removed Welcome Sender",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "removed_welcome_sender"
+        ],
+        "title": "DeletedOut",
         "type": "object"
       },
       "aeronautics_members__api__admin_reviews__Person": {
@@ -8833,6 +9232,422 @@
         ]
       }
     },
+    "/api/v1/admin/settings/backup": {
+      "get": {
+        "operationId": "admin_backup",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Backups, the one being made, and -- on a restored portal -- its background jobs.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.backup"
+        ]
+      },
+      "post": {
+        "operationId": "admin_backup_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Start a backup. It is made in the background; the page follows along.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.backup"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/backup/checklist": {
+      "get": {
+        "operationId": "admin_background_jobs_checklist",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The checklist after resuming -- running the next service check not done yet, one per call,",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.backup"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/backup/checklist/again": {
+      "post": {
+        "operationId": "admin_background_jobs_check_again",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Forget the answers, so every check runs again.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.backup"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/backup/checklist/dismiss": {
+      "post": {
+        "operationId": "admin_background_jobs_dismiss_checklist",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DismissedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Put the checklist away.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.backup"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/backup/files/{name}": {
+      "delete": {
+        "operationId": "admin_backup_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/aeronautics_members__api__admin_backup__DeletedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Delete a backup from the server.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.backup"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/backup/resume": {
+      "post": {
+        "operationId": "admin_background_jobs_resume",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Let every background job run again: emails, forum sync, payment checks.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.backup"
+        ]
+      }
+    },
     "/api/v1/admin/settings/billing": {
       "get": {
         "operationId": "admin_settings_billing",
@@ -9617,7 +10432,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeletedOut"
+                  "$ref": "#/components/schemas/aeronautics_members__api__admin_mail__DeletedOut"
                 }
               }
             },

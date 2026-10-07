@@ -313,8 +313,7 @@ class TestTheUiHidesWhatItDoesNotOffer:
         admin = _user("hidden@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        # Backups are the old page's only part left: without them, General.
-        assert client.get("/admin/settings").headers["Location"].endswith("/admin/settings/general")
+        assert client.get("/admin/settings/backup").headers["Location"].endswith("/admin/settings/general")
         assert client.get("/admin/settings/updates").headers["Location"].endswith("/admin/settings/general")
         assert client.get("/admin/settings/mail").headers["Location"].endswith("/admin/settings/general")
         assert client.get("/api/v1/admin/settings/mail").status_code == 403
@@ -328,9 +327,8 @@ class TestTheUiHidesWhatItDoesNotOffer:
         boss = _user("visible@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
         _login(client, boss.id)
 
-        body = client.get("/admin/settings").get_data(as_text=True)
-
-        assert 'id="backup-restore"' in body
+        assert client.get("/admin/settings/backup").status_code == 200
+        assert client.get("/api/v1/admin/settings/backup").status_code == 200
         assert client.get("/admin/settings/updates").status_code == 200
         assert client.get("/api/v1/admin/settings/billing").status_code == 200
         assert client.get("/api/v1/admin/settings/mail").status_code == 200

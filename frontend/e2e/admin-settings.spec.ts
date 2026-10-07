@@ -78,6 +78,23 @@ test.describe('settings', () => {
     await expect(page.getByRole('button', { name: 'Install update now' })).toBeDisabled();
   });
 
+  test('backup and restore: the steps of a backup, made in the background', async ({ page }) => {
+    await page.goto('/admin/settings/backup');
+
+    await expect(page.getByRole('region', { name: 'Restore' })).toContainText('install.sh --restore');
+    await page.getByLabel('Passphrase', { exact: true }).fill('a long enough passphrase');
+    await page.getByLabel('Passphrase again').fill('a long enough passphrase');
+    await page.getByRole('button', { name: 'Back up' }).click();
+
+    await expect(page.getByRole('list', { name: 'Making the backup' })).toBeVisible();
+  });
+
+  test('an old link to backups opens their page', async ({ page }) => {
+    await page.goto('/admin/settings#backup-restore');
+
+    await expect(page).toHaveURL(/\/admin\/settings\/backup$/);
+  });
+
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
     for (const path of [
@@ -88,6 +105,7 @@ test.describe('settings', () => {
       '/admin/settings/test-email',
       '/admin/settings/health',
       '/admin/settings/updates',
+      '/admin/settings/backup',
     ]) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

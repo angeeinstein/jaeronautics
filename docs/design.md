@@ -142,6 +142,13 @@ tick is simply there.
 then be empty, one card with the still tick, a bold sentence and a muted one
 takes its place. Never a card per thing that is not happening.
 
+**Checklists** -- lines that each come to an answer (a backup being made,
+the checks after resuming a restored portal, PDFs made again): a green tick,
+a red cross, a small spinner while it is being worked out, a clock for what
+runs later on its own, a muted dot for what has not started. What the line
+found goes under it, muted (red when it failed); the state is also said in
+words for screen readers (`components/Checklist.tsx`).
+
 **Attention list** -- the dashboard's first card: one row per kind of open
 task, the count in the mono face, a line naming the oldest one, and a button
 straight to it. Only kinds with something open appear; with none, the

@@ -51,6 +51,12 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/admin/teams/Team')).Team }),
           },
           {
+            path: 'settings',
+            lazy: async () => ({
+              Component: (await import('../pages/admin/settings/SettingsIndex')).SettingsIndex,
+            }),
+          },
+          {
             path: 'settings/general',
             lazy: async () => ({ Component: (await import('../pages/admin/settings/General')).General }),
           },
@@ -85,6 +91,10 @@ export const routes: RouteObject[] = [
           {
             path: 'settings/updates',
             lazy: async () => ({ Component: (await import('../pages/admin/settings/Updates')).Updates }),
+          },
+          {
+            path: 'settings/backup',
+            lazy: async () => ({ Component: (await import('../pages/admin/settings/Backup')).Backup }),
           },
           {
             path: 'legal',

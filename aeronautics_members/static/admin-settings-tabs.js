@@ -1,6 +1,6 @@
-/* Keeps a side list's active tab -- the admin settings, a team's management
- * page -- in sync with the URL fragment, so a reload, a shared link or the
- * page after saving reopens the same tab.
+/* Keeps a side list's active tab -- a team's management page -- in sync
+ * with the URL fragment, so a reload, a shared link or the page after
+ * saving reopens the same tab.
  *
  * Kept in a static file rather than an inline <script> because the deployed
  * Content-Security-Policy allows script-src 'self' only: an inline block is
@@ -8,24 +8,8 @@
  * template-render tests.
  */
 document.addEventListener('DOMContentLoaded', function () {
-    // Sections that moved to pages of their own in the new front end: an old
-    // link to one of them goes there.
-    var moved = {
-        '#settings-general': '/admin/settings/general',
-        '#settings-notifications': '/admin/settings/notifications',
-        '#settings-billing': '/admin/settings/billing',
-        '#settings-forum': '/admin/settings/forum',
-        '#settings-mail': '/admin/settings/mail',
-        '#settings-test': '/admin/settings/test-email',
-        '#settings-maintenance': '/admin/settings/health'
-    };
-    if (window.location.pathname === '/admin/settings' && moved[window.location.hash]) {
-        window.location.replace(moved[window.location.hash]);
-        return;
-    }
-    // The admin settings (#settings-tab) and any other side list that asks
-    // for it (data-remember-tab), such as a team's management page.
-    var nav = document.querySelector('#settings-tab, [data-remember-tab]');
+    // A side list that asks for it (data-remember-tab), such as a team's management page.
+    var nav = document.querySelector('[data-remember-tab]');
     if (!nav) {
         return;
     }

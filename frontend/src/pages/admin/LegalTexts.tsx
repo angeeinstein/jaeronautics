@@ -6,23 +6,12 @@
  * files in legal/ in the repository; nothing here changes them. Data:
  * GET /api/v1/admin/legal (aeronautics_members/api/admin_legal.py).
  */
-import {
-  Alert,
-  Anchor,
-  Button,
-  FileInput,
-  Group,
-  List,
-  Loader,
-  SimpleGrid,
-  Stack,
-  Text,
-} from '@mantine/core';
-import { IconCheck, IconPoint, IconX } from '@tabler/icons-react';
+import { Alert, Anchor, Button, FileInput, Group, List, SimpleGrid, Stack, Text } from '@mantine/core';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
+import { Checklist } from '../../components/Checklist';
 import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { PdfLink } from '../../components/PdfLink';
@@ -222,13 +211,6 @@ function NotInForce({ data }: { data: LegalOut }) {
 
 type Step = { state: 'waiting' } | { state: 'running' } | { state: 'ok' | 'failed'; detail: string };
 
-function StepIcon({ step }: { step: Step }) {
-  if (step.state === 'running') return <Loader size={16} aria-label="Being made" />;
-  if (step.state === 'ok') return <IconCheck size={18} color="var(--ja-success-text)" aria-label="Done" />;
-  if (step.state === 'failed') return <IconX size={18} color="var(--ja-danger)" aria-label="Failed" />;
-  return <IconPoint size={18} color="var(--ja-muted)" aria-label="Waiting" />;
-}
-
 /** "Make all PDFs again": the kept ones removed, then one request per PDF, each ticked off. */
 function Remake({ data }: { data: LegalOut }) {
   const lines = [
@@ -286,26 +268,19 @@ function Remake({ data }: { data: LegalOut }) {
           </Button>
         </Group>
         {steps ? (
-          <ul className={classes.steps} aria-label="Making the PDFs">
-            {lines.map((line) => {
+          <Checklist
+            label="Making the PDFs"
+            items={lines.map((line) => {
               const step = steps[line.key] ?? { state: 'waiting' };
-              return (
-                <li key={line.key} className={classes.step}>
-                  <span className={classes.stepIcon}>
-                    <StepIcon step={step} />
-                  </span>
-                  <Text size="sm">
-                    {line.label}
-                    {'detail' in step && step.detail ? (
-                      <Text span size="sm" c={step.state === 'failed' ? 'var(--ja-danger)' : 'dimmed'}>
-                        {`: ${step.detail}`}
-                      </Text>
-                    ) : null}
-                  </Text>
-                </li>
-              );
+              return {
+                key: line.key,
+                label: line.label,
+                // Not started yet, as against waiting for an answer.
+                state: step.state === 'waiting' ? 'pending' : step.state,
+                detail: 'detail' in step ? step.detail : null,
+              };
             })}
-          </ul>
+          />
         ) : null}
       </Stack>
     </Panel>

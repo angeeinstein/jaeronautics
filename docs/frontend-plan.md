@@ -238,7 +238,10 @@ server can update to it.
       for the current password. Maintenance became three pages: System health and Updates done
       (`api/admin_system.py`, `services/maintenance.py`); the Updates page follows an update
       through the restart and then loads itself again, and the app loads itself again when a
-      part of an older build is gone (`src/app/staleBuild.ts`).)*
+      part of an older build is gone (`src/app/staleBuild.ts`). Backup and restore done
+      (`api/admin_backup.py`), with the paused background jobs of a restored portal and the
+      checklist after resuming them (`components/Checklist.tsx`). Every settings page is now
+      the app's; the old settings template, its layout and scripts are gone.)*
 5. **Teams area:** overview, a team's page and join page with the rules
    dialog, the leads' management sections, the team's money.
 6. **My Account:** the overview, membership and payment status, forum card

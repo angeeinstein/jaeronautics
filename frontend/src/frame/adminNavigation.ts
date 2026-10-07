@@ -17,12 +17,8 @@ import {
 import { can, canAny, type Me } from '../api/session';
 import { compact, type NavItem, type SidebarContent } from './navigation';
 
-/**
- * Settings' sections: pages of their own as they move to the new front end
- * (step 4.8), anchors on the old page until then.
- */
+/** Settings' sections, each a page of its own. */
 function settingsChildren(me: Me): NavItem[] {
-  const section = (label: string, anchor: string): NavItem => ({ label, to: `/admin/settings#${anchor}` });
   const page = (label: string, slug: string): NavItem => ({ label, to: `/admin/settings/${slug}` });
   // The parts holding secrets only with settings.credentials; health and
   // updates with system.update, backups with system.backup.
@@ -32,7 +28,7 @@ function settingsChildren(me: Me): NavItem[] {
   }
   if (can(me, 'notifications.manage')) children.push(page('Test email', 'test-email'));
   if (can(me, 'system.update')) children.push(page('System health', 'health'), page('Updates', 'updates'));
-  if (can(me, 'system.backup')) children.push(section('Backup and restore', 'backup-restore'));
+  if (can(me, 'system.backup')) children.push(page('Backup and restore', 'backup'));
   return children;
 }
 

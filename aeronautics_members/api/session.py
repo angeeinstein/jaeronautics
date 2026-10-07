@@ -90,7 +90,7 @@ def _admin_notices():
                      "forum sync or payment checks run on their own."),
         )
         if current_user.can(Permission.SYSTEM_BACKUP):
-            notice.link_url, notice.link_label = "/admin/settings#backup-restore", "Review and resume"
+            notice.link_url, notice.link_label = "/admin/settings/backup", "Review and resume"
         notices.append(notice)
     return notices
 

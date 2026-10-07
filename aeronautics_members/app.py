@@ -189,7 +189,6 @@ from .permissions import (  # noqa: E402
 )
 from .services.diagnostics import collect_system_health  # noqa: E402
 from .services.system_update import describe_update_state  # noqa: E402
-from .services.backup import describe_backup_page  # noqa: E402
 from .services.outbox import (  # noqa: E402
     failed_items,
     pending_count,
@@ -1108,12 +1107,6 @@ def _invite_to_teams(member):
     return invite_to_teams(member.user) if member is not None else False
 
 
-def build_settings_page_context():
-    """What is left on the old settings page: Backup and restore."""
-    return {"backup_page": describe_backup_page()}
-
-
-
 def build_forum_context(member):
     service = get_forum_service()
     forum_account = member.user.forum_account if member and member.user else None
@@ -1376,27 +1369,6 @@ def create_app(config_overrides=None):
             ),
             member_category_label=category_label,
         )
-
-    @app.template_global("test_free_period_start")
-    def test_free_period_start_global():
-        from .services.membership import free_period_start_test_override
-
-        override = free_period_start_test_override()
-        return f"{override[1]:02d}.{override[0]:02d}." if override else None
-
-    @app.template_global("background_jobs_paused")
-    def background_jobs_paused_global():
-        from .services.background_jobs import is_paused
-
-        return is_paused()
-
-    # The number on the Reviews tab, on every admin page: what is waiting for
-    # this user's decision, so it is noticed without opening the dashboard.
-    @app.template_global("waiting_for_review_count")
-    def waiting_for_review_count_global():
-        from .services.reviews import waiting_for_review_count
-
-        return waiting_for_review_count(current_user)
 
     # What teams are called here, as (singular, plural) -- "Teams" unless an
     # admin chose another word.

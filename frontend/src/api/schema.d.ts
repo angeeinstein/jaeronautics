@@ -497,6 +497,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Backups, the one being made, and -- on a restored portal -- its background jobs. */
+        get: operations["admin_backup"];
+        put?: never;
+        /** Start a backup. It is made in the background; the page follows along. */
+        post: operations["admin_backup_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/backup/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The checklist after resuming -- running the next service check not done yet, one per call, */
+        get: operations["admin_background_jobs_checklist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/backup/checklist/again": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forget the answers, so every check runs again. */
+        post: operations["admin_background_jobs_check_again"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/backup/checklist/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put the checklist away. */
+        post: operations["admin_background_jobs_dismiss_checklist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/backup/files/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a backup from the server. */
+        delete: operations["admin_backup_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/backup/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Let every background job run again: emails, forum sync, payment checks. */
+        post: operations["admin_background_jobs_resume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/billing": {
         parameters: {
             query?: never;
@@ -1182,6 +1285,70 @@ export interface components {
             sync_problems: components["schemas"]["aeronautics_members__api__admin_dashboard__Waiting"] | null;
             transfers: components["schemas"]["Transfers"] | null;
         };
+        /** BackupFileOut */
+        BackupFileOut: {
+            /** Made At */
+            made_at: string;
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
+            /** Size Display */
+            size_display: string;
+        };
+        /** BackupIn */
+        BackupIn: {
+            /** Passphrase */
+            passphrase: string;
+            /** Passphrase Again */
+            passphrase_again: string;
+        };
+        /** BackupOut */
+        BackupOut: {
+            /** Backups */
+            backups: components["schemas"]["BackupFileOut"][];
+            /** Checklist */
+            checklist: components["schemas"]["CheckOut"][] | null;
+            /** Jobs */
+            jobs: components["schemas"]["CheckOut"][];
+            /** Kept */
+            kept: number;
+            /** Min Passphrase Length */
+            min_passphrase_length: number;
+            paused: components["schemas"]["PausedOut"] | null;
+            run: components["schemas"]["BackupRunOut"] | null;
+        };
+        /** BackupResultOut */
+        BackupResultOut: {
+            /** File */
+            file: string;
+            /** Files */
+            files: number;
+            /** Rows */
+            rows: number;
+        };
+        /**
+         * BackupRunOut
+         * @description The last backup made, or the one being made.
+         */
+        BackupRunOut: {
+            /** Error */
+            error: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Log */
+            log: string[];
+            result: components["schemas"]["BackupResultOut"] | null;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "completed" | "failed";
+            /** Steps */
+            steps: components["schemas"]["StepOut"][];
+        };
         /** Bank */
         Bank: {
             /** Account Holder */
@@ -1384,6 +1551,29 @@ export interface components {
             /** Pending */
             pending: number;
         };
+        /** CheckOut */
+        CheckOut: {
+            /** Detail */
+            detail: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ok" | "failed" | "running" | "waiting" | "scheduled" | "skipped";
+        };
+        /** ChecklistOut */
+        ChecklistOut: {
+            /** Done */
+            done: boolean;
+            /** Items */
+            items: components["schemas"]["CheckOut"][];
+            /** Paused */
+            paused: boolean;
+        };
         /** ConnectionOut */
         ConnectionOut: {
             /** Message */
@@ -1407,11 +1597,6 @@ export interface components {
             /** Recent Activity */
             recent_activity: components["schemas"]["Activity"][] | null;
         };
-        /** DeletedOut */
-        DeletedOut: {
-            /** Removed Welcome Sender */
-            removed_welcome_sender: boolean;
-        };
         /** DisabledIn */
         DisabledIn: {
             /** Disabled */
@@ -1421,6 +1606,11 @@ export interface components {
              * @default null
              */
             reason?: string | null;
+        };
+        /** DismissedOut */
+        DismissedOut: {
+            /** Ok */
+            ok: boolean;
         };
         /** EmailIn */
         EmailIn: {
@@ -2362,6 +2552,13 @@ export interface components {
              */
             until?: string | null;
         };
+        /** PausedOut */
+        PausedOut: {
+            /** Backup Created At */
+            backup_created_at: string | null;
+            /** Since */
+            since: string | null;
+        };
         /**
          * PdfJob
          * @description One PDF that "Make all PDFs again" makes.
@@ -2475,6 +2672,14 @@ export interface components {
             /** Recipient */
             recipient: string | null;
         };
+        /** ResumeIn */
+        ResumeIn: {
+            /**
+             * Confirm
+             * @constant
+             */
+            confirm: true;
+        };
         /** RetriedOut */
         RetriedOut: {
             /** Count */
@@ -2584,6 +2789,18 @@ export interface components {
             csrf_token: string;
             /** Signed In */
             signed_in: boolean;
+        };
+        /** StepOut */
+        StepOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "done" | "failed";
         };
         /** SyncProblem */
         SyncProblem: {
@@ -2943,6 +3160,11 @@ export interface components {
             /** Subject */
             subject: string | null;
         };
+        /** DeletedOut */
+        aeronautics_members__api__admin_backup__DeletedOut: {
+            /** Name */
+            name: string;
+        };
         /**
          * Waiting
          * @description How many of one kind wait, and the oldest of them (for sync problems: the latest) in a few words.
@@ -2992,6 +3214,11 @@ export interface components {
             email: string;
             /** User Id */
             user_id: number | null;
+        };
+        /** DeletedOut */
+        aeronautics_members__api__admin_mail__DeletedOut: {
+            /** Removed Welcome Sender */
+            removed_welcome_sender: boolean;
         };
         /**
          * Person
@@ -4738,6 +4965,354 @@ export interface operations {
             };
         };
     };
+    admin_backup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_backup_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_background_jobs_checklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChecklistOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_background_jobs_check_again: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChecklistOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_background_jobs_dismiss_checklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DismissedOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_backup_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["aeronautics_members__api__admin_backup__DeletedOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_background_jobs_resume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_settings_billing: {
         parameters: {
             query?: never;
@@ -5466,7 +6041,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeletedOut"];
+                    "application/json": components["schemas"]["aeronautics_members__api__admin_mail__DeletedOut"];
                 };
             };
             /** @description Not signed in. */
