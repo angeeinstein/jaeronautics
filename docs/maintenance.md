@@ -892,14 +892,19 @@ this is how to use them.
    holder is a member of the association *and* of the team, so the lead joins
    the team like anybody else and an admin approves them.
 
-**A team's About page** (`/teams/<short name>/about`): every signed-in visitor
-sees the logo, name, an "About the team" text, one optional picture, the fee,
-the team's rules (see "Legal Texts") and the form to apply or join. The overview shows each team's
+**A team's About page** (`/teams/<short name>/about`) presents the team to
+every signed-in visitor: a cover picture across the top with the logo, name,
+short description and a few facts (how many are in it, whether it takes
+applications, the fee); below it the "About the team" text -- with light
+formatting: headings, bold, lists, links (Markdown, no HTML, no pictures from
+elsewhere) -- and up to 8 photos, each opening large with its caption; beside
+it the team's rules (see "Legal Texts") and the form to apply or join. The overview shows each team's
 short description and leads there. **The team's own page**
 (`/teams/<short name>`) is for its members: their membership and who is in the
-team, without the texts; anybody else is sent to the About page. The texts
-and picture are edited by the team's leads (Manage → Settings) and by site
-admins. Rules are optional and kept by the association as files (see "Legal
+team, without the texts; anybody else is sent to the About page. The texts,
+cover and photos are edited by the team's leads (Manage → Team page, with a
+preview of the text) and by site admins; uploads are made anew as JPEG on the
+server, like members' pictures, and go into backups. Rules are optional and kept by the association as files (see "Legal
 Texts"); a team with rules needs them ticked to apply or join, and each
 membership keeps when they were accepted and which version. A new version
 applies to whoever applies next; members already in are not asked again, and
@@ -907,7 +912,7 @@ their team page says the rules have changed.
 
 **Running a team** (its leads, Teams → Manage), in sections down the side:
 *Applications* (invite with the meeting details, approve, not accept),
-*Members*, *Former members*, *Team page* (descriptions, picture, logo),
+*Members*, *Former members*, *Team page* (descriptions, cover, logo, photos),
 *Applying* (open or closed, the question; the rules in force, read-only), *Access list* (only for
 teams that have one) and *Roles*. Each settings section is saved on its own.
 Also: notes about a person (not shown to them, but in their data export,

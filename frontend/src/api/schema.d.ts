@@ -1740,6 +1740,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/page/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** The gallery's order and captions. */
+        put: operations["team_photos_arrange"];
+        /** A photo for the gallery: PNG, JPG or WebP, after the ones there. */
+        post: operations["team_photo_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/page/photos/{photo_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Take a photo out of the gallery. */
+        delete: operations["team_photo_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/page/picture": {
         parameters: {
             query?: never;
@@ -1753,6 +1788,23 @@ export interface paths {
         post: operations["team_picture_upload"];
         /** No picture. */
         delete: operations["team_picture_remove"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/page/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The longer text as the About page will show it, before it is saved. */
+        post: operations["team_page_preview"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4296,6 +4348,10 @@ export interface components {
             description: string | null;
             /** Logo Url */
             logo_url: string | null;
+            /** Photos */
+            photos: components["schemas"]["PhotoOut"][];
+            /** Photos Max */
+            photos_max: number;
             /** Picture Url */
             picture_url: string | null;
         };
@@ -4336,6 +4392,42 @@ export interface components {
             earned: number;
             /** Paid Until */
             paid_until: string | null;
+        };
+        /** PhotoOut */
+        PhotoOut: {
+            /** Caption */
+            caption: string | null;
+            /** Height */
+            height: number;
+            /** Id */
+            id: number;
+            /** Url */
+            url: string;
+            /** Width */
+            width: number;
+        };
+        /** PhotoPlaceIn */
+        PhotoPlaceIn: {
+            /**
+             * Caption
+             * @default null
+             */
+            caption?: string | null;
+            /** Id */
+            id: number;
+        };
+        /** PhotoQuery */
+        PhotoQuery: {
+            /**
+             * Caption
+             * @default null
+             */
+            caption?: string | null;
+        };
+        /** PhotosIn */
+        PhotosIn: {
+            /** Photos */
+            photos: components["schemas"]["PhotoPlaceIn"][];
         };
         /** Picture */
         Picture: {
@@ -4378,6 +4470,19 @@ export interface components {
         PictureReplacementOut: {
             /** Allowed Since */
             allowed_since: string | null;
+        };
+        /** PreviewIn */
+        PreviewIn: {
+            /**
+             * About
+             * @default null
+             */
+            about?: string | null;
+        };
+        /** PreviewOut */
+        PreviewOut: {
+            /** Html */
+            html: string | null;
         };
         /** ProgressOut */
         ProgressOut: {
@@ -5021,23 +5126,33 @@ export interface components {
         TeamPageOut: {
             /** About */
             about: string | null;
+            /** About Html */
+            about_html: string | null;
+            /** Can Edit Page */
+            can_edit_page: boolean;
             /** Can Manage */
             can_manage: boolean;
             /** Can See Money */
             can_see_money: boolean;
             /** Description */
             description: string | null;
+            /** Fee */
+            fee: string | null;
             /** Is Member */
             is_member: boolean;
             joining: components["schemas"]["JoiningOut"] | null;
             labels: components["schemas"]["LabelsOut"];
             /** Logo Url */
             logo_url: string | null;
+            /** Member Count */
+            member_count: number;
             /** Members */
             members: components["schemas"]["RosterPersonOut"][] | null;
             membership: components["schemas"]["TeamMembershipOut"];
             /** Name */
             name: string;
+            /** Photos */
+            photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
             picture_url: string | null;
             rules: components["schemas"]["RulesOut"] | null;
@@ -11516,6 +11631,185 @@ export interface operations {
             };
         };
     };
+    team_photos_arrange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhotosIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_photo_add: {
+        parameters: {
+            query?: {
+                caption?: string | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    image: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_photo_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                photo_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     team_picture_upload: {
         parameters: {
             query?: never;
@@ -11599,6 +11893,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PageOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_page_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Not signed in. */

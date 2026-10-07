@@ -306,7 +306,10 @@ server can update to it.
    dashboard and the reviews every 30 seconds, the accounts, a team's people and
    the money pages every minute, only while in view and not while somebody types
    (`lib/live.ts`); what arrives in a list, and a figure that changes, light up
-   for a moment.)*
+   for a moment. A team's About page presents the team: a cover with its name
+   and facts, its story formatted from Markdown, and a gallery of up to 8 photos
+   with a viewer; the leads add, caption, order and remove photos and preview
+   the text.)*
 
 ## 5. Open, to decide on the way
 

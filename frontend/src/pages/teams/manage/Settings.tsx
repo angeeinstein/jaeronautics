@@ -1,12 +1,14 @@
 /**
  * A team's settings, for its leads, each a page of its own saved on its own:
- * its page (description, longer text, picture, logo), applying (open or not,
+ * its page (description, longer text -- formatted, with a preview -- cover,
+ * logo and photos), applying (open or not,
  * the question; the rules are the association's), the access list (who gets
  * it, when, and the email as it would go out) and its roles (the treasurer is
  * the team's to appoint). Data: /api/v1/teams/<slug>/manage/page, /applying,
  * /access-list, /roles.
  */
 import {
+  ActionIcon,
   Alert,
   Anchor,
   Button,
@@ -18,11 +20,13 @@ import {
   SimpleGrid,
   Stack,
   Table,
+  Tabs,
   Text,
   Textarea,
   TextInput,
 } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
+import { IconArrowDown, IconArrowUp } from '@tabler/icons-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, call, type Schemas } from '../../../api/client';
@@ -34,6 +38,7 @@ import { PdfLink } from '../../../components/PdfLink';
 import { Pill } from '../../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
 import { formatDate } from '../../../lib/format';
+import about from '../About.module.css';
 import classes from '../Teams.module.css';
 import { ManageHeader, useManageChange, useSlug } from './shared';
 
@@ -108,7 +113,7 @@ function ImageField({
         <img className={kind === 'logo' ? classes.logo : classes.picture} src={current} alt="" />
       ) : (
         <Text size="sm" c="dimmed">
-          {kind === 'logo' ? 'No logo' : 'No picture'}
+          {kind === 'logo' ? 'No logo' : 'No cover'}
         </Text>
       )}
       <Group align="flex-end" gap="sm">
@@ -155,68 +160,313 @@ function ImageField({
   );
 }
 
-function PageForm({ page, pageKey }: { page: Page; pageKey: readonly unknown[] }) {
+/** The longer text as the About page will show it, from the server that formats it. */
+function Preview({ text, pageKey }: { text: string; pageKey: readonly unknown[] }) {
+  const slug = useSlug();
+  const preview = useQuery({
+    queryKey: [...pageKey, 'preview', text],
+    queryFn: () =>
+      call(
+        api.POST('/api/v1/teams/{slug}/manage/page/preview', {
+          params: { path: { slug } },
+          body: { about: text || null },
+        }),
+      ),
+  });
+  if (preview.isPending) return <LoadingState />;
+  if (preview.isError) return <ErrorState error={preview.error} onRetry={() => void preview.refetch()} />;
+  if (!preview.data.html)
+    return (
+      <Text size="sm" c="dimmed">
+        Nothing written yet.
+      </Text>
+    );
+  // Formatted on the server from Markdown without HTML (services/teams.py, render_about).
+  return <div className={about.story} dangerouslySetInnerHTML={{ __html: preview.data.html }} />;
+}
+
+function TextPanel({ page, pageKey }: { page: Page; pageKey: readonly unknown[] }) {
   const slug = useSlug();
   const [description, setDescription] = useState(page.description ?? '');
-  const [about, setAbout] = useState(page.about ?? '');
+  const [text, setText] = useState(page.about ?? '');
+  const [tab, setTab] = useState<string | null>('write');
   const save = useManageChange(
     pageKey,
     () =>
       call(
         api.PUT('/api/v1/teams/{slug}/manage/page', {
           params: { path: { slug } },
-          body: { description: description || null, about: about || null },
+          body: { description: description || null, about: text || null },
         }),
       ),
     'Saved.',
   );
   return (
-    <Stack gap="lg">
-      <Panel title="Text">
-        <Stack gap="md">
-          <Textarea
-            label="Short description"
-            description="One or two sentences, on the overview of all teams."
-            autosize
-            minRows={2}
-            maxLength={500}
-            value={description}
-            error={save.errors.description ?? null}
-            onChange={(event) => {
-              setDescription(event.currentTarget.value);
+    <Panel title="Text">
+      <Stack gap="md">
+        <Textarea
+          label="Short description"
+          description="One or two sentences: on the overview of all teams, and on the cover of the About page."
+          autosize
+          minRows={2}
+          maxLength={500}
+          value={description}
+          error={save.errors.description ?? null}
+          onChange={(event) => {
+            setDescription(event.currentTarget.value);
+          }}
+        />
+        <Stack gap={6}>
+          <Text fw={500} size="sm">
+            About the team
+          </Text>
+          <Text size="xs" c="dimmed">
+            What the team does, what members do, when it meets. Formatting: # Heading, **bold**, *italic*, -
+            list, [link](https://…).
+          </Text>
+          <Tabs value={tab} onChange={setTab} keepMounted={false}>
+            <Tabs.List>
+              <Tabs.Tab value="write">Write</Tabs.Tab>
+              <Tabs.Tab value="preview">Preview</Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="write" pt="sm">
+              <Textarea
+                aria-label="About the team"
+                autosize
+                minRows={8}
+                maxLength={10000}
+                value={text}
+                error={save.errors.about ?? null}
+                onChange={(event) => {
+                  setText(event.currentTarget.value);
+                }}
+              />
+            </Tabs.Panel>
+            <Tabs.Panel value="preview" pt="md">
+              <Preview text={text} pageKey={pageKey} />
+            </Tabs.Panel>
+          </Tabs>
+        </Stack>
+        <Group justify="flex-end">
+          <Button
+            loading={save.mutation.isPending}
+            onClick={() => {
+              save.mutation.mutate(undefined);
             }}
-          />
-          <Textarea
-            label="About the team"
-            description="What the team does, what members do, when it meets. Plain text; blank lines start a new paragraph."
-            autosize
-            minRows={6}
-            maxLength={10000}
-            value={about}
-            error={save.errors.about ?? null}
-            onChange={(event) => {
-              setAbout(event.currentTarget.value);
-            }}
-          />
-          <Group justify="flex-end">
+          >
+            Save
+          </Button>
+        </Group>
+      </Stack>
+    </Panel>
+  );
+}
+
+interface Place {
+  id: number;
+  caption: string;
+}
+
+/** The photos there, in their order with their captions -- changed here, then saved together. */
+function PhotoList({ page, pageKey }: { page: Page; pageKey: readonly unknown[] }) {
+  const slug = useSlug();
+  const saved: Place[] = page.photos.map((photo) => ({ id: photo.id, caption: photo.caption ?? '' }));
+  const [places, setPlaces] = useState(saved);
+  const changed = JSON.stringify(places) !== JSON.stringify(saved);
+  const arrange = useManageChange(
+    pageKey,
+    () =>
+      call(
+        api.PUT('/api/v1/teams/{slug}/manage/page/photos', {
+          params: { path: { slug } },
+          body: { photos: places.map((place) => ({ id: place.id, caption: place.caption || null })) },
+        }),
+      ),
+    'Saved.',
+  );
+  const remove = useManageChange(
+    pageKey,
+    (id: number) =>
+      call(
+        api.DELETE('/api/v1/teams/{slug}/manage/page/photos/{photo_id}', {
+          params: { path: { slug, photo_id: id } },
+        }),
+      ),
+    'Removed.',
+  );
+  const move = (from: number, to: number) => {
+    setPlaces((now) => {
+      const next = [...now];
+      const [place] = next.splice(from, 1);
+      if (place) next.splice(to, 0, place);
+      return next;
+    });
+  };
+  if (!places.length)
+    return (
+      <Text size="sm" c="dimmed">
+        No photos
+      </Text>
+    );
+  const urls = new Map(page.photos.map((photo) => [photo.id, photo.url]));
+  return (
+    <Stack gap="sm">
+      <Stack component="ol" gap="xs" m={0} p={0} aria-label="Photos" style={{ listStyle: 'none' }}>
+        {places.map((place, index) => (
+          <Group component="li" key={place.id} gap="sm" align="center">
+            <img className={classes.thumb} src={urls.get(place.id)} alt="" />
+            <TextInput
+              aria-label={`Caption of photo ${String(index + 1)}`}
+              placeholder="Caption (optional)"
+              maxLength={200}
+              value={place.caption}
+              onChange={(event) => {
+                const caption = event.currentTarget.value;
+                setPlaces((now) => now.map((one) => (one.id === place.id ? { ...one, caption } : one)));
+              }}
+              flex="1 1 10rem"
+              miw={0}
+            />
+            <Group gap={4} wrap="nowrap">
+              <ActionIcon
+                variant="default"
+                size="lg"
+                aria-label={`Move photo ${String(index + 1)} up`}
+                disabled={index === 0}
+                onClick={() => {
+                  move(index, index - 1);
+                }}
+              >
+                <IconArrowUp size={16} />
+              </ActionIcon>
+              <ActionIcon
+                variant="default"
+                size="lg"
+                aria-label={`Move photo ${String(index + 1)} down`}
+                disabled={index === places.length - 1}
+                onClick={() => {
+                  move(index, index + 1);
+                }}
+              >
+                <IconArrowDown size={16} />
+              </ActionIcon>
+              <ConfirmButton
+                confirmLabel="Yes, remove"
+                loading={remove.mutation.isPending && remove.mutation.variables === place.id}
+                onConfirm={() => {
+                  remove.mutation.mutate(place.id);
+                }}
+              >
+                Remove
+              </ConfirmButton>
+            </Group>
+          </Group>
+        ))}
+      </Stack>
+      <Group justify="flex-end">
+        <Button
+          disabled={!changed}
+          loading={arrange.mutation.isPending}
+          onClick={() => {
+            arrange.mutation.mutate(undefined);
+          }}
+        >
+          Save order and captions
+        </Button>
+      </Group>
+    </Stack>
+  );
+}
+
+function PhotosPanel({ page, pageKey }: { page: Page; pageKey: readonly unknown[] }) {
+  const slug = useSlug();
+  const client = useQueryClient();
+  const [files, setFiles] = useState<File[]>([]);
+  const room = page.photos_max - page.photos.length;
+  const upload = useManageChange(
+    pageKey,
+    async () => {
+      let out: Page | undefined;
+      try {
+        // One after the other, so they keep the order they were chosen in.
+        for (const file of files) {
+          const form = new FormData();
+          form.append('image', file);
+          out = await call(
+            api.POST('/api/v1/teams/{slug}/manage/page/photos', {
+              params: { path: { slug }, query: {} },
+              body: form as unknown as { image: string },
+            }),
+          );
+        }
+      } catch (error) {
+        // The ones before the refused one are there: show them.
+        if (out) client.setQueryData(pageKey, out);
+        throw error;
+      }
+      if (!out) throw new Error('Choose a file.');
+      return out;
+    },
+    () => (files.length === 1 ? 'Added.' : `Added ${String(files.length)} photos.`),
+  );
+  const tooMany = files.length > room;
+  return (
+    <Panel title="Photos">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          {`Below the text on the About page, each opening large. ${String(page.photos.length)} of ${String(page.photos_max)}.`}
+        </Text>
+        {/* Again from the server's order after each change. */}
+        <PhotoList
+          key={page.photos.map((photo) => `${String(photo.id)}:${photo.caption ?? ''}`).join('|')}
+          page={page}
+          pageKey={pageKey}
+        />
+        {room > 0 ? (
+          <Group align="flex-start" gap="sm">
+            <FileInput
+              aria-label="Photos to add"
+              placeholder="PNG, JPG or WebP"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              clearable
+              value={files}
+              error={tooMany ? `Room for ${String(room)} more.` : (upload.errors.image ?? null)}
+              onChange={setFiles}
+              flex="1 1 14rem"
+            />
             <Button
-              loading={save.mutation.isPending}
+              variant="default"
+              disabled={!files.length || tooMany}
+              loading={upload.mutation.isPending}
               onClick={() => {
-                save.mutation.mutate(undefined);
+                upload.mutation.mutate(undefined, {
+                  onSettled: () => {
+                    setFiles([]);
+                  },
+                });
               }}
             >
-              Save
+              Add
             </Button>
           </Group>
-        </Stack>
-      </Panel>
+        ) : null}
+      </Stack>
+    </Panel>
+  );
+}
+
+function PageForm({ page, pageKey }: { page: Page; pageKey: readonly unknown[] }) {
+  return (
+    <Stack gap="lg">
+      <TextPanel page={page} pageKey={pageKey} />
       <Panel title="Pictures">
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
           <ImageField
             kind="picture"
-            label="Picture"
+            label="Cover"
             current={page.picture_url}
-            help="Optional. One picture on the team's About page, for example the team with its aircraft."
+            help="Optional. Across the top of the About page, with the team's name on its lower part: a wide picture, for example the team with its aircraft."
             pageKey={pageKey}
           />
           <ImageField
@@ -228,6 +478,7 @@ function PageForm({ page, pageKey }: { page: Page; pageKey: readonly unknown[] }
           />
         </SimpleGrid>
       </Panel>
+      <PhotosPanel page={page} pageKey={pageKey} />
     </Stack>
   );
 }

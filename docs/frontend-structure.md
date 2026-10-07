@@ -154,8 +154,15 @@ as cards (mark, name, short description, fee, *About & apply*).
 description, *About the team* and *Manage* at the top right; *Your membership*
 (paid until, Leave); *Members*.
 
-**About** (Teams › Glider Team) for everybody: the longer text and picture,
-then *Applying* -- fee, the question, the rules with the tick box, *Apply*.
+**About** (Teams › Glider Team) for everybody, the team presenting itself: a
+cover (its picture, or the brand's backdrop) with logo, name, tagline, facts
+(members, applications open, fee) and *Apply* / *Team page* / *Edit page*;
+below, the formatted story and the photo grid (one large when they fill rows of
+three; each opens in a viewer, arrow keys for the next), with *Applying* --
+the question, the rules with the tick box, *Apply* -- beside them on a wide
+screen, below them on a phone. The leads' *Team page* settings: the text with
+*Write* / *Preview*, cover and logo, the photos (add several at once, caption,
+order, remove).
 
 **Management** -- entering it swaps in **the team's sidebar**:
 

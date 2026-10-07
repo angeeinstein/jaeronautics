@@ -1,26 +1,30 @@
 /**
- * What a team is about, for everybody signed in: its longer text and
- * picture, then joining -- or applying, with the leads' question -- with its
- * rules to accept, read in a dialog without leaving the form. For a member,
- * their membership instead. Data: GET /api/v1/teams/<slug>,
- * POST .../join.
+ * A team presenting itself to everybody signed in: a cover with its name, what
+ * it is in a line and a few facts (how many are in it, how to get in, what it
+ * costs); then its story, formatted, and its photos, with joining -- or
+ * applying, with the leads' question and the rules to accept, read in a dialog
+ * without leaving the form -- beside them. For a member, their membership
+ * instead. Data: GET /api/v1/teams/<slug>, POST .../join.
  */
-import { Alert, Anchor, Button, Checkbox, Group, Stack, Text, Textarea } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, Group, Stack, Text, Textarea, Title } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { IconCoin, IconDoorEnter, IconPencil, IconUsers } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type SyntheticEvent, useEffect, useState } from 'react';
+import { type SyntheticEvent, useEffect, useId, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { api, ApiError, call } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
+import { Breadcrumbs, useDocumentTitle } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { PdfLink } from '../../components/PdfLink';
 import { ErrorState, LoadingState } from '../../components/States';
 import { formatDate } from '../../lib/format';
 import { notifyDone } from '../../lib/notify';
+import classes from './About.module.css';
+import { Gallery } from './Gallery';
 import { RulesDialog, RulesLine } from './Rules';
-import { MembershipBlock, type Team, TeamTitle, teamsKey, useTeam } from './shared';
-import classes from './Teams.module.css';
+import { MembershipBlock, StatusPill, type Team, teamsKey, useTeam } from './shared';
 
 function JoinForm({ team }: { team: Team }) {
   const joining = team.joining;
@@ -118,10 +122,125 @@ function JoinForm({ team }: { team: Team }) {
   );
 }
 
+/** Whether somebody could get in from here: the form is there and nothing stands in the way. */
+function canJoin(team: Team) {
+  return team.is_member && team.joining !== null && !team.joining.why_not;
+}
+
+function Hero({ team }: { team: Team }) {
+  const joining = team.joining;
+  const named = useId();
+  return (
+    <section className={classes.hero} aria-labelledby={named}>
+      {team.picture_url ? (
+        <img className={classes.cover} src={team.picture_url} alt="" data-backdrop />
+      ) : (
+        <div className={classes.backdrop} />
+      )}
+      <div className={classes.shade} />
+      <Stack className={classes.heroBody} gap="md">
+        <Group gap="lg" wrap="nowrap" align="flex-end">
+          {team.logo_url ? (
+            <div className={classes.logoTile}>
+              <img src={team.logo_url} alt="" />
+            </div>
+          ) : null}
+          <Stack gap={6}>
+            <Title order={1} className={classes.name} id={named}>
+              {team.name}
+            </Title>
+            {team.description ? <Text className={classes.tagline}>{team.description}</Text> : null}
+          </Stack>
+        </Group>
+        <Group gap="xs">
+          <span className={classes.fact}>
+            <IconUsers size={16} aria-hidden />
+            {team.member_count === 1 ? '1 member' : `${String(team.member_count)} members`}
+          </span>
+          {joining && canJoin(team) ? (
+            <span className={classes.fact}>
+              <IconDoorEnter size={16} aria-hidden />
+              {joining.mode === 'approval' ? 'Applications open' : 'Open to join'}
+            </span>
+          ) : null}
+          <span className={classes.fact}>
+            <IconCoin size={16} aria-hidden />
+            {team.fee ?? 'No team fee'}
+          </span>
+          <StatusPill membership={team.membership} />
+        </Group>
+        <Group gap="xs">
+          {joining && canJoin(team) ? (
+            <Button component="a" href="#join">
+              {joining.submit_label}
+            </Button>
+          ) : null}
+          {team.sees_team_page ? (
+            <Button
+              component={AppLink}
+              to={`/teams/${team.slug}`}
+              variant={canJoin(team) ? 'default' : 'filled'}
+            >
+              Team page
+            </Button>
+          ) : null}
+          {team.can_edit_page ? (
+            <Button
+              component={AppLink}
+              to={`/teams/${team.slug}/manage/page`}
+              variant="default"
+              leftSection={<IconPencil size={16} />}
+            >
+              Edit page
+            </Button>
+          ) : null}
+        </Group>
+      </Stack>
+    </section>
+  );
+}
+
+function Joining({ team }: { team: Team }) {
+  const active = team.membership.status === 'active' && team.membership.ongoing;
+  const joining = team.joining;
+  return (
+    <Panel
+      title={
+        active
+          ? 'Membership'
+          : team.membership.ongoing
+            ? 'Your application'
+            : joining?.mode === 'approval'
+              ? 'Applying'
+              : 'Joining'
+      }
+    >
+      <Stack gap="md">
+        {joining?.rejoin_until ? (
+          <Text size="sm">
+            {`Your membership ended because it was not paid. Until ${formatDate(joining.rejoin_until)} you can come back by paying again — no new application needed.`}
+          </Text>
+        ) : joining?.mode === 'approval' ? (
+          <Text size="sm" c="dimmed">
+            You apply here; the leads get in touch, may invite you to meet, and decide.
+          </Text>
+        ) : null}
+        <MembershipBlock slug={team.slug} membership={team.membership} onTeamPage />
+        {joining ? (
+          <JoinForm team={team} />
+        ) : team.rules ? (
+          <RulesLine slug={team.slug} name={team.name} rules={team.rules} />
+        ) : null}
+      </Stack>
+    </Panel>
+  );
+}
+
 export function About() {
   const { slug = '' } = useParams();
   const { hash } = useLocation();
   const team = useTeam(slug);
+  useDocumentTitle(team.data ? `${team.data.name}: About` : 'About');
   // A link to #join (Join, Apply on the overview) lands on the form once it is there.
   useEffect(() => {
     if (hash === '#join' && team.data) document.getElementById('join')?.scrollIntoView();
@@ -129,61 +248,27 @@ export function About() {
   if (team.isPending) return <LoadingState />;
   if (team.isError) return <ErrorState error={team.error} onRetry={() => void team.refetch()} />;
   const data = team.data;
-  const active = data.membership.status === 'active' && data.membership.ongoing;
-  const joining = data.joining;
+  const told = Boolean(data.about_html) || data.photos.length > 0;
   return (
     <>
-      <TeamTitle team={data} page="About">
-        {data.sees_team_page ? (
-          <Button component={AppLink} to={`/teams/${slug}`}>
-            Team page
-          </Button>
-        ) : null}
-        <Button component={AppLink} to="/teams" variant="default">
-          {`All ${data.labels.plural}`}
-        </Button>
-      </TeamTitle>
-      <Stack gap="lg">
-        {data.about || data.picture_url ? (
-          <Panel title="About the team">
-            {data.picture_url ? (
-              <img className={classes.picture} src={data.picture_url} alt={`Picture of ${data.name}`} />
-            ) : null}
-            {data.about ? <Text className={classes.preLine}>{data.about}</Text> : null}
-          </Panel>
-        ) : null}
-        <div id="join">
-          <Panel
-            title={
-              active
-                ? 'Membership'
-                : data.membership.ongoing
-                  ? 'Your application'
-                  : joining?.mode === 'approval'
-                    ? 'Applying'
-                    : 'Joining'
-            }
-          >
-            <Stack gap="md">
-              {joining?.rejoin_until ? (
-                <Text size="sm">
-                  {`Your membership ended because it was not paid. Until ${formatDate(joining.rejoin_until)} you can come back by paying again — no new application needed.`}
-                </Text>
-              ) : joining?.mode === 'approval' ? (
-                <Text size="sm" c="dimmed">
-                  You apply here; the leads get in touch, may invite you to meet, and decide.
-                </Text>
-              ) : null}
-              <MembershipBlock slug={slug} membership={data.membership} onTeamPage />
-              {joining ? (
-                <JoinForm team={data} />
-              ) : data.rules ? (
-                <RulesLine slug={slug} name={data.name} rules={data.rules} />
-              ) : null}
-            </Stack>
-          </Panel>
-        </div>
+      <Stack gap="xs" mb="md">
+        <Breadcrumbs crumbs={[{ label: data.labels.plural, to: '/teams' }, { label: data.name }]} />
       </Stack>
+      <Hero team={data} />
+      <div className={classes.layout} data-aside={told || undefined}>
+        {told ? (
+          <Stack gap="xl">
+            {data.about_html ? (
+              // Formatted on the server from Markdown without HTML (services/teams.py, render_about).
+              <div className={classes.story} dangerouslySetInnerHTML={{ __html: data.about_html }} />
+            ) : null}
+            <Gallery photos={data.photos} teamName={data.name} />
+          </Stack>
+        ) : null}
+        <div id="join" className={classes.aside}>
+          <Joining team={data} />
+        </div>
+      </div>
     </>
   );
 }

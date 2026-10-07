@@ -21,7 +21,7 @@ from ..services import NotFoundError, PermissionError_, ServiceError, team_payme
 from ..services import teams as teams_service
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
-from .teams import LabelsOut, _labels, _logo_url, _picture_url, _team
+from .teams import LabelsOut, PhotoOut, _labels, _logo_url, _picture_url, _team, photos_out
 
 TAG = "Teams"
 P = teams_service.TeamPermission
@@ -388,8 +388,13 @@ class PageOut(Model):
     description: str | None
     #: The longer text on the About page.
     about: str | None
+    #: The cover of the About page.
     picture_url: str | None
     logo_url: str | None
+    #: The gallery on the About page, in its order.
+    photos: list[PhotoOut]
+    #: How many photos the gallery holds.
+    photos_max: int
 
 
 class PageIn(Model):
@@ -399,7 +404,8 @@ class PageIn(Model):
 
 def _page_out(team):
     return PageOut(description=team.description, about=team.about, logo_url=_logo_url(team),
-                   picture_url=url_for("teams.team_picture", token=team.picture_token) if team.picture_token else None)
+                   picture_url=url_for("teams.team_picture", token=team.picture_token) if team.picture_token else None,
+                   photos=photos_out(team), photos_max=teams_service.PHOTOS_MAX)
 
 
 @endpoint("GET", "/teams/<slug>/manage/page", response=PageOut, tag=TAG)
@@ -445,6 +451,63 @@ def team_logo_remove(slug):
 def team_picture_upload(slug, files):
     """A new picture for the About page: PNG, JPG or WebP."""
     return _image(slug, "picture", files)
+
+
+class PreviewIn(Model):
+    about: str | None = Field(None, max_length=teams_service.ABOUT_MAX_LENGTH)
+
+
+class PreviewOut(Model):
+    html: str | None
+
+
+@endpoint("POST", "/teams/<slug>/manage/page/preview", response=PreviewOut, body=PreviewIn, tag=TAG)
+def team_page_preview(slug, body):
+    """The longer text as the About page will show it, before it is saved."""
+    _managed(slug, P.EDIT_SETTINGS)
+    return PreviewOut(html=teams_service.render_about(body.about))
+
+
+class PhotoQuery(Model):
+    caption: str | None = Field(None, max_length=teams_service.CAPTION_MAX_LENGTH)
+
+
+@endpoint("POST", "/teams/<slug>/manage/page/photos", response=PageOut, query=PhotoQuery, uploads={"image": True},
+          status=201, tag=TAG)
+def team_photo_add(slug, query, files):
+    """A photo for the gallery: PNG, JPG or WebP, after the ones there."""
+    team = _managed(slug, P.EDIT_SETTINGS)
+    teams_service.add_team_photo(current_user, team, files["image"].read(), query.caption)
+    _commit()
+    return _page_out(team)
+
+
+class PhotoPlaceIn(Model):
+    id: int
+    caption: str | None = Field(None, max_length=teams_service.CAPTION_MAX_LENGTH)
+
+
+class PhotosIn(Model):
+    #: Every photo of the gallery once, in the order to show them.
+    photos: list[PhotoPlaceIn] = Field(max_length=teams_service.PHOTOS_MAX)
+
+
+@endpoint("PUT", "/teams/<slug>/manage/page/photos", response=PageOut, body=PhotosIn, tag=TAG)
+def team_photos_arrange(slug, body):
+    """The gallery's order and captions."""
+    team = _managed(slug, P.EDIT_SETTINGS)
+    teams_service.arrange_team_photos(current_user, team, [(photo.id, photo.caption) for photo in body.photos])
+    _commit()
+    return _page_out(team)
+
+
+@endpoint("DELETE", "/teams/<slug>/manage/page/photos/<int:photo_id>", response=PageOut, tag=TAG)
+def team_photo_remove(slug, photo_id):
+    """Take a photo out of the gallery."""
+    team = _managed(slug, P.EDIT_SETTINGS)
+    teams_service.remove_team_photo(current_user, team, photo_id)
+    _commit()
+    return _page_out(team)
 
 
 @endpoint("DELETE", "/teams/<slug>/manage/page/picture", response=PageOut, tag=TAG)

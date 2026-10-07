@@ -115,6 +115,14 @@ class RosterPersonOut(Model):
     university_email: str | None
 
 
+class PhotoOut(Model):
+    id: int
+    url: str
+    caption: str | None
+    width: int
+    height: int
+
+
 class TeamPageOut(Model):
     slug: str
     name: str
@@ -122,13 +130,24 @@ class TeamPageOut(Model):
     logo_url: str | None
     #: The longer text, for everybody.
     about: str | None
+    #: The same, formatted (Markdown, without HTML): safe to show as it is.
+    about_html: str | None
+    #: The cover of the About page.
     picture_url: str | None
+    #: The gallery, in its order.
+    photos: list[PhotoOut]
+    #: How many are in the team now.
+    member_count: int
+    #: What being in it costs, when it charges ("€10.00 every 6 months").
+    fee: str | None
     labels: LabelsOut
     is_member: bool
     membership: TeamMembershipOut
     #: A member (or somebody who manages it) sees the team's own page and who is in it.
     sees_team_page: bool
     can_manage: bool
+    #: May change this page: its text, cover and photos.
+    can_edit_page: bool
     can_see_money: bool
     #: None when the team has no rules.
     rules: RulesOut | None
@@ -354,6 +373,12 @@ def _picture_url(token):
     return url_for("forum.forum_avatar_public_file", token=token) if token else None
 
 
+def photos_out(team):
+    """A team's gallery, for its About page and its settings."""
+    return [PhotoOut(id=photo.id, url=url_for("teams.team_photo", token=photo.token), caption=photo.caption,
+                     width=photo.width, height=photo.height) for photo in team.photos]
+
+
 def _team_out(team, just_paid=None):
     latest = _latest()
     is_member = teams_service.is_active_association_member(current_user)
@@ -363,11 +388,14 @@ def _team_out(team, just_paid=None):
     sees = _manages_people(team) or (is_member and active is not None)
     return TeamPageOut(
         slug=team.slug, name=team.name, description=team.description, logo_url=_logo_url(team),
-        about=team.about, picture_url=url_for("teams.team_picture", token=team.picture_token)
-        if team.picture_token else None,
+        about=team.about, about_html=teams_service.render_about(team.about),
+        picture_url=url_for("teams.team_picture", token=team.picture_token) if team.picture_token else None,
+        photos=photos_out(team), member_count=teams_service.member_count(team),
+        fee=team.fee_display if team_payments.charges(team) and team.fee_display else None,
         labels=_labels(), is_member=is_member, membership=membership, sees_team_page=sees,
-        can_manage=_manages_people(team), can_see_money=_sees_money(team),
-        rules=_rules(team, current), joining=_joining(team) if current is None else None,
+        can_manage=_manages_people(team),
+        can_edit_page=teams_service.can_in_team(current_user, team, teams_service.TeamPermission.EDIT_SETTINGS),
+        can_see_money=_sees_money(team), rules=_rules(team, current), joining=_joining(team) if current is None else None,
         members=[RosterPersonOut(name=row["name"], picture_url=_picture_url(row["avatar_token"]), is_lead=row["is_lead"],
                            university_email=row["university_email"])
                  for row in teams_service.roster(team)] if sees else None,

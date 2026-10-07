@@ -39,12 +39,17 @@ function team(overrides: Partial<Schemas['TeamPageOut']> = {}): Schemas['TeamPag
     description: 'We build rockets.',
     logo_url: null,
     about: null,
+    about_html: null,
     picture_url: null,
+    photos: [],
+    member_count: 3,
+    fee: null,
     labels,
     is_member: true,
     membership: membership(),
     sees_team_page: false,
     can_manage: false,
+    can_edit_page: false,
     can_see_money: false,
     rules: null,
     joining: { mode: 'approval', rejoin_until: null, prompt: 'Why?', why_not: null, submit_label: 'Apply' },
@@ -199,6 +204,85 @@ describe('a team', () => {
     expect(await screen.findByText('Application sent. The leads will be in touch.')).toBeInTheDocument();
     const sent = calls.find((call) => call.method === 'POST');
     expect(await sent?.clone().json()).toEqual({ application_text: 'I like rockets.', accept_rules: true });
+  });
+});
+
+describe('the about page', () => {
+  const photo = (id: number, caption: string | null): Schemas['PhotoOut'] => ({
+    id,
+    url: `/teams/photo/p${String(id)}`,
+    caption,
+    width: 1200,
+    height: 900,
+  });
+
+  it('the team presented: cover, facts, its story and photos, joining beside', async () => {
+    show(
+      <About />,
+      {
+        [`${API}/rocket`]: {
+          body: team({
+            picture_url: '/teams/picture/cover',
+            about_html: '<h2>What we do</h2>\n<p>We <strong>build</strong> rockets.</p>\n',
+            fee: '€10.00 every 6 months',
+            photos: [photo(1, 'Launch day'), photo(2, null), photo(3, 'Workshop')],
+          }),
+        },
+      },
+      '/teams/rocket/about',
+      '/teams/:slug/about',
+    );
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Rocket' })).toBeInTheDocument();
+    const cover = screen.getByRole('region', { name: 'Rocket' });
+    expect(cover).toHaveTextContent('3 members');
+    expect(cover).toHaveTextContent('Applications open');
+    expect(cover).toHaveTextContent('€10.00 every 6 months');
+    expect(within(cover).getByRole('link', { name: 'Apply' })).toHaveAttribute('href', '#join');
+    expect(within(cover).queryByRole('link', { name: 'Edit page' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'What we do' })).toBeInTheDocument();
+    expect(screen.getByText('build').tagName).toBe('STRONG');
+
+    const photos = within(screen.getByRole('region', { name: 'Photos' })).getAllByRole('button');
+    expect(photos).toHaveLength(3);
+    await userEvent.click(screen.getByRole('button', { name: 'Open the photo: Launch day' }));
+    const viewer = await screen.findByRole('dialog', { name: '1 / 3' });
+    expect(within(viewer).getByRole('img', { name: 'Launch day' })).toBeInTheDocument();
+    await userEvent.click(within(viewer).getByRole('button', { name: 'Previous photo' }));
+    expect(await screen.findByRole('dialog', { name: '3 / 3' })).toBeInTheDocument();
+    await userEvent.keyboard('{ArrowRight}{ArrowRight}');
+    expect(await screen.findByRole('dialog', { name: '2 / 3' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Photo of Rocket' })).toBeInTheDocument();
+  });
+
+  it('for a lead in it: the team page and editing this one, no form', async () => {
+    show(
+      <About />,
+      {
+        [`${API}/rocket`]: {
+          body: team({
+            sees_team_page: true,
+            can_manage: true,
+            can_edit_page: true,
+            joining: null,
+            membership: membership({ status: 'active', status_label: 'Member', ongoing: true }),
+          }),
+        },
+      },
+      '/teams/rocket/about',
+      '/teams/:slug/about',
+    );
+
+    const cover = await screen.findByRole('region', { name: 'Rocket' });
+    expect(within(cover).getByRole('link', { name: 'Edit page' })).toHaveAttribute(
+      'href',
+      '/teams/rocket/manage/page',
+    );
+    expect(within(cover).getByRole('link', { name: 'Team page' })).toHaveAttribute('href', '/teams/rocket');
+    expect(cover).toHaveTextContent('No team fee');
+    expect(cover).not.toHaveTextContent('Applications open');
+    expect(screen.queryByRole('region', { name: 'Photos' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Membership' })).toBeInTheDocument();
   });
 });
 

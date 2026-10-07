@@ -53,8 +53,9 @@ function inspect() {
   const dialog = [...document.querySelectorAll('[role=dialog]')].find(visible);
   const targets = [...(dialog ?? document).querySelectorAll(
     'a, button, input:not([type=hidden]), select, textarea, label, h1, h2, h3, h4, h5, p, dt, dd, img, .badge, .alert, .card')]
-    // The short messages after an action float over the page by design.
-    .filter((el) => visible(el) && !el.closest('.mantine-Notifications-root'));
+    // The short messages after an action float over the page by design, and
+    // so does what stands on a picture marked as a backdrop (a team's cover).
+    .filter((el) => visible(el) && !el.closest('.mantine-Notifications-root') && !el.hasAttribute('data-backdrop'));
   // A link wrapping onto a second line is two boxes, not the one around both.
   const boxes = (el) => (getComputedStyle(el).display === 'inline' ? [...el.getClientRects()] : [el.getBoundingClientRect()]);
   // A field and what sits inside its box by design (the eye of a password field).

@@ -849,6 +849,8 @@ class Team(db.Model):
     roles = db.relationship("TeamRole", back_populates="team", cascade="all, delete-orphan")
     memberships = db.relationship("TeamMembership", back_populates="team", cascade="all, delete-orphan")
     notes = db.relationship("TeamNote", back_populates="team", cascade="all, delete-orphan")
+    photos = db.relationship("TeamPhoto", back_populates="team", cascade="all, delete-orphan",
+                             order_by="TeamPhoto.position")
 
 
 class TeamRole(db.Model):
@@ -1013,6 +1015,26 @@ class TeamAccessListSend(db.Model):
     entries = db.Column(db.JSON, nullable=False)
 
     team = db.relationship("Team")
+
+
+class TeamPhoto(db.Model):
+    """A photo in a team's gallery on its About page. Re-encoded on upload
+    (services/teams.py), kept in storage/team_pictures with the team's picture,
+    shown in ``position`` order, with an optional caption."""
+
+    __tablename__ = "team_photos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    path = db.Column(db.String(500), nullable=False)
+    token = db.Column(db.String(64), unique=True, nullable=False)
+    caption = db.Column(db.String(200), nullable=True)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    width = db.Column(db.Integer, nullable=False)
+    height = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    team = db.relationship("Team", back_populates="photos")
 
 
 class TeamNote(db.Model):

@@ -42,6 +42,15 @@ def team_picture(token):
     return send_file(path, mimetype="image/jpeg", conditional=True, max_age=86400)
 
 
+@teams_bp.route("/teams/photo/<token>", methods=["GET"])
+def team_photo(token):
+    """A photo in a team's gallery; like its picture, not secret."""
+    path = teams_service.photo_file(teams_service.team_photo_by_token(token))
+    if path is None:
+        abort(404)
+    return send_file(path, mimetype="image/jpeg", conditional=True, max_age=86400)
+
+
 @teams_bp.route("/teams/logo/<token>", methods=["GET"])
 def team_logo(token):
     """A team's logo. Not secret, so not behind a login: the token only keeps

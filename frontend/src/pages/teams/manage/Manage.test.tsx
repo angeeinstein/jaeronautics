@@ -11,7 +11,7 @@ import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { QueryClient } from '@tanstack/react-query';
 import { Applications } from './People';
 import { Person } from './Person';
-import { RolesPage } from './Settings';
+import { PageSettings, RolesPage } from './Settings';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -204,5 +204,115 @@ describe('roles', () => {
       const sent = calls.find((call) => call.method === 'POST');
       expect(await sent?.clone().json()).toEqual({ user_id: 7 });
     });
+  });
+});
+
+describe('the team page', () => {
+  const photo = (id: number, caption: string | null): Schemas['PhotoOut'] => ({
+    id,
+    url: `/teams/photo/p${String(id)}`,
+    caption,
+    width: 1200,
+    height: 900,
+  });
+  const page = (photos: Schemas['PhotoOut'][]): Schemas['PageOut'] => ({
+    description: 'We build rockets.',
+    about: '# Who we are',
+    picture_url: null,
+    logo_url: null,
+    photos,
+    photos_max: 8,
+  });
+
+  it('the text seen as it will be shown, before it is saved', async () => {
+    const { calls } = show(
+      <PageSettings />,
+      {
+        [`${API}/page`]: { body: page([]) },
+        [`POST ${API}/page/preview`]: { body: { html: '<h2>Who we are</h2>\n' } },
+      },
+      '/teams/rocket/manage/page',
+      '/teams/:slug/manage/page',
+    );
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Preview' }));
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Who we are' })).toBeInTheDocument();
+    const sent = calls.find((call) => call.method === 'POST');
+    expect(await sent?.clone().json()).toEqual({ about: '# Who we are' });
+  });
+
+  it('photos put in order and captioned, then saved together', async () => {
+    const { calls } = show(
+      <PageSettings />,
+      {
+        [`${API}/page`]: { body: page([photo(1, 'Launch day'), photo(2, null)]) },
+        [`PUT ${API}/page/photos`]: { body: page([photo(2, 'Workshop'), photo(1, 'Launch day')]) },
+      },
+      '/teams/rocket/manage/page',
+      '/teams/:slug/manage/page',
+    );
+
+    const save = await screen.findByRole('button', { name: 'Save order and captions' });
+    expect(save).toBeDisabled();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Caption of photo 2' }), 'Workshop');
+    await userEvent.click(screen.getByRole('button', { name: 'Move photo 2 up' }));
+    await userEvent.click(save);
+
+    expect(await screen.findByText('Saved.')).toBeInTheDocument();
+    const sent = calls.find((call) => call.method === 'PUT');
+    expect(await sent?.clone().json()).toEqual({
+      photos: [
+        { id: 2, caption: 'Workshop' },
+        { id: 1, caption: 'Launch day' },
+      ],
+    });
+    expect(screen.getByRole('textbox', { name: 'Caption of photo 1' })).toHaveValue('Workshop');
+  });
+
+  it('several photos added at once, one after the other', async () => {
+    const { calls } = show(
+      <PageSettings />,
+      {
+        [`${API}/page`]: { body: page([]) },
+        [`POST ${API}/page/photos`]: { status: 201, body: page([photo(1, null), photo(2, null)]) },
+      },
+      '/teams/rocket/manage/page',
+      '/teams/:slug/manage/page',
+    );
+
+    await screen.findByText('No photos');
+    const input = document.querySelector<HTMLInputElement>('input[type="file"][multiple]');
+    if (!input) throw new Error('No file input');
+    await userEvent.upload(input, [
+      new File(['a'], 'one.png', { type: 'image/png' }),
+      new File(['b'], 'two.png', { type: 'image/png' }),
+    ]);
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(await screen.findByText('Added 2 photos.')).toBeInTheDocument();
+    expect(calls.filter((call) => call.method === 'POST')).toHaveLength(2);
+    expect(screen.getAllByRole('textbox', { name: /^Caption of photo/ })).toHaveLength(2);
+  });
+
+  it('a photo removed after a second click', async () => {
+    const { calls } = show(
+      <PageSettings />,
+      {
+        [`${API}/page`]: { body: page([photo(1, 'Launch day'), photo(2, null)]) },
+        [`DELETE ${API}/page/photos/1`]: { body: page([photo(2, null)]) },
+      },
+      '/teams/rocket/manage/page',
+      '/teams/:slug/manage/page',
+    );
+
+    const [first] = await screen.findAllByRole('listitem');
+    if (!first) throw new Error('No photo');
+    await userEvent.click(within(first).getByRole('button', { name: 'Remove' }));
+    await userEvent.click(within(first).getByRole('button', { name: 'Yes, remove' }));
+
+    expect(await screen.findByText('Removed.')).toBeInTheDocument();
+    expect(calls.some((call) => call.method === 'DELETE')).toBe(true);
+    expect(screen.getAllByRole('textbox', { name: /^Caption of photo/ })).toHaveLength(1);
   });
 });

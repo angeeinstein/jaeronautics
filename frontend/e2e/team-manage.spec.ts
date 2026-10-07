@@ -1,5 +1,9 @@
 import { expect, signIn, test } from './fixtures';
 
+/** A picture of one pixel, to upload. */
+const PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
 test.describe("a team's management", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page, 'active@example.org');
@@ -39,6 +43,34 @@ test.describe("a team's management", () => {
     await expect(page.getByRole('heading', { name: 'Money', level: 1 })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Bank details' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Export payments' })).toBeVisible();
+  });
+
+  test('the team page: a photo added, seen on the about page, and removed again', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'changes the sample data: once is enough');
+    await page.goto('/teams/rocket-team/manage/page');
+    const photos = page.getByRole('list', { name: 'Photos' }).getByRole('listitem');
+    await expect(photos).toHaveCount(6);
+
+    await page.locator('input[type="file"][multiple]').setInputFiles({
+      name: 'new.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(PNG, 'base64'),
+    });
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByText('Added.')).toBeVisible();
+    await expect(photos).toHaveCount(7);
+
+    await page.goto('/teams/rocket-team/about');
+    await expect(page.getByRole('region', { name: 'Photos' }).getByRole('button')).toHaveCount(7);
+
+    await page.goto('/teams/rocket-team/manage/page');
+    const added = photos.last();
+    await added.getByRole('button', { name: 'Remove' }).click();
+    await added.getByRole('button', { name: 'Yes, remove' }).click();
+    await expect(photos).toHaveCount(6);
   });
 
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {

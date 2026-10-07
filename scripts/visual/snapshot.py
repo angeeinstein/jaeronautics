@@ -240,17 +240,50 @@ def seed(app, app_module, subscriptions):
     buffer = BytesIO()
     logo.save(buffer, format="PNG")
     teams.set_team_logo(None, rocket, buffer.getvalue())
-    # The team's page: a longer text, a picture and rules to accept.
-    photo = Image.new("RGB", (1600, 1000), (40, 60, 80))
-    ImageDraw.Draw(photo).polygon([(200, 900), (800, 100), (1400, 900)], fill=(0, 223, 255))
-    photo_buffer = BytesIO()
-    photo.save(photo_buffer, format="JPEG")
-    teams.set_team_picture(None, rocket, photo_buffer.getvalue())
+    # The team's page: a cover, a formatted text, photos and rules to accept. The
+    # pictures are drawn: a sky and a rocket on it, each in other light.
+    def scene(size, sky, ground, rocket_at):
+        width, height = size
+        picture = Image.new("RGB", size)
+        paint = ImageDraw.Draw(picture)
+        for y in range(height):
+            mix = y / height
+            paint.line([(0, y), (width, y)], fill=tuple(int(a + (b - a) * mix) for a, b in zip(sky, ground)))
+        paint.rectangle([(0, int(height * 0.82)), (width, height)], fill=tuple(int(c * 0.45) for c in ground))
+        x, top = int(width * rocket_at), int(height * 0.18)
+        body = width // 28
+        paint.polygon([(x, top), (x - body, top + body * 2), (x + body, top + body * 2)], fill=(235, 240, 245))
+        paint.rectangle([(x - body, top + body * 2), (x + body, int(height * 0.82))], fill=(225, 230, 238))
+        paint.polygon([(x - body, int(height * 0.7)), (x - body * 2, int(height * 0.82)), (x - body, int(height * 0.82))],
+                      fill=(0, 223, 255))
+        paint.polygon([(x + body, int(height * 0.7)), (x + body * 2, int(height * 0.82)), (x + body, int(height * 0.82))],
+                      fill=(0, 223, 255))
+        out = BytesIO()
+        picture.save(out, format="JPEG", quality=88)
+        return out.getvalue()
+
+    teams.set_team_picture(None, rocket, scene((1800, 900), (18, 32, 58), (64, 96, 128), 0.72))
+    for size, sky, ground, at, caption in [
+        ((1600, 1200), (30, 50, 90), (210, 140, 90), 0.5, "Launch day at the European Rocketry Challenge"),
+        ((1200, 900), (70, 110, 160), (160, 190, 210), 0.35, "Integration in the workshop"),
+        ((1200, 900), (12, 18, 36), (40, 60, 110), 0.6, None),
+        ((1200, 900), (120, 80, 120), (230, 170, 120), 0.45, "Recovery test"),
+        ((1200, 900), (20, 70, 80), (90, 160, 150), 0.55, "Avionics bench"),
+        ((1200, 900), (50, 50, 60), (150, 150, 160), 0.4, "Static fire"),
+    ]:
+        teams.add_team_photo(None, rocket, scene(size, sky, ground, at), caption)
     teams.update_team_page(
         None, rocket,
-        about="We design, build and fly sounding rockets, and take part in the European Rocketry Challenge.\n\n"
-              "We meet every Tuesday at 18:00 in the workshop. New members start in one of the sub-teams: "
-              "structures, propulsion, avionics or recovery.",
+        about="We design, build and fly **sounding rockets**, and take part in the "
+              "[European Rocketry Challenge](https://euroc.pt).\n\n"
+              "# What members do\n\n"
+              "New members start in one of the sub-teams:\n\n"
+              "- **Structures**: airframe, fins and the nose cone\n"
+              "- **Propulsion**: the motor and its tests\n"
+              "- **Avionics**: flight computer and telemetry\n"
+              "- **Recovery**: parachutes, and finding the rocket again\n\n"
+              "# When we meet\n\n"
+              "Every Tuesday at 18:00 in the workshop. Come along before you apply.",
     )
     db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now,
                                   payment_mode="subscription", stripe_subscription_id="sub_example_1",

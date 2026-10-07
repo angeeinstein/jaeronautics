@@ -12,7 +12,16 @@
   overflow-wrap: anywhere;
 }
 
-/* The picture on a team's About page. */
+/* The cover of a team's About page, in its settings. */
+/* A photo of a team's gallery, in its settings. */
+.thumb {
+  flex: none;
+  width: 5rem;
+  height: 3.75rem;
+  object-fit: cover;
+  background: var(--ja-surface);
+}
+
 .picture {
   width: 100%;
   max-height: 24rem;
