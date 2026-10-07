@@ -25,18 +25,10 @@ from ..services.privacy import (
 from . import _legal_pages as legal_pages
 from .app_shell import app_shell
 from ._responses import json_download_response
-from ..services.notifications import (
-    dismiss_email_delivery_job,
-    requeue_email_delivery_job,
-)
-from ..services import (
-    ServiceError,
-)
 from ..services import backup as backup_service
-from ..services import background_jobs, outbox, resume_checks, reviews
+from ..services import background_jobs, resume_checks, reviews
 from ..services.system_update import (
     describe_update_state,
-    request_update,
 )
 import os
 from flask import (
@@ -50,7 +42,6 @@ from flask import (
 )
 from flask_babel import (
     _,
-    ngettext,
 )
 from flask_login import (
     current_user,
@@ -60,7 +51,6 @@ from sqlalchemy.orm import (
     selectinload,
 )
 from ..db_models import (
-    EmailDeliveryJob,
     ImportedForumProfile,
     User,
     db,
@@ -138,9 +128,9 @@ def admin_reviews():
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
 def admin_settings():
-    """Maintenance, the one part of the settings not moved to the new front end yet
-    (docs/frontend-routes.md, 4.8). Whoever may not install updates goes to General."""
-    if not current_user.can(Permission.SYSTEM_UPDATE):
+    """Backup and restore, the one part of the settings not moved to the new front end yet
+    (docs/frontend-routes.md, 4.8). Whoever may not make backups goes to General."""
+    if not current_user.can(Permission.SYSTEM_BACKUP):
         return redirect(url_for("admin.admin_settings_section", section="general"))
     return render_template("admin_settings.html", active_admin_section="settings", **build_settings_page_context())
 
@@ -150,11 +140,12 @@ SETTINGS_SECTIONS = {
     "general": None, "notifications": None, "billing": Permission.SETTINGS_CREDENTIALS,
     "forum": Permission.SETTINGS_CREDENTIALS, "mail": Permission.SETTINGS_CREDENTIALS,
     "test-email": Permission.NOTIFICATIONS_MANAGE,
+    "health": Permission.SYSTEM_UPDATE, "updates": Permission.SYSTEM_UPDATE,
 }
 
 
-@admin_bp.route("/admin/settings/<any(general, notifications, billing, forum, mail, 'test-email'):section>",
-                methods=["GET"])
+@admin_bp.route("/admin/settings/<any(general, notifications, billing, forum, mail, 'test-email', health, updates)"
+                ":section>", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
 def admin_settings_section(section):
@@ -241,136 +232,16 @@ def admin_logs():
     return app_shell()
 
 
-@admin_bp.route("/admin/undelivered-emails/<int:job_id>/<any(retry, dismiss):action>", methods=["POST"])
-@login_required
-@requires(Permission.NOTIFICATIONS_MANAGE)
-def admin_resolve_undelivered_email(job_id, action):
-    """Retry or dismiss an email that gave up.
-
-    Without this the health report is a dead end: it says an email could not be
-    delivered and there is no way to see which, fix it, or make it stop saying
-    so. Nothing prunes these rows, so one mistyped address would leave the panel
-    permanently red.
-    """
-    job = db.session.get(EmailDeliveryJob, job_id)
-    if job is None:
-        flash(_("That queued email no longer exists."), "warning")
-        return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")
-
-    recipient = job.recipient_email
-    if action == "retry":
-        changed = requeue_email_delivery_job(job)
-        message = (
-            _("Queued for another delivery attempt to %(email)s.", email=recipient)
-            if changed
-            else _("That email is no longer waiting to be resolved.")
-        )
-    else:
-        changed = dismiss_email_delivery_job(job)
-        message = (
-            _("Dismissed the undelivered email to %(email)s.", email=recipient)
-            if changed
-            else _("That email is no longer waiting to be resolved.")
-        )
-
-    if changed:
-        log_audit_event(
-            category="notification",
-            event_type=f"undelivered_email_{action}",
-            actor_user=current_user,
-            target_user=job.target_user,
-            target_member=job.target_member,
-            metadata={"job_id": job.id, "email_type": job.email_type, "recipient": recipient},
-        )
-    db.session.commit()
-    flash(message, "success" if changed else "warning")
-    return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")
-
-
-@admin_bp.route("/admin/forum-tasks/retry", methods=["POST"])
-@login_required
-@requires(Permission.SYSTEM_UPDATE)
-def admin_retry_failed_forum_tasks():
-    """Put background tasks that gave up retrying back in the queue.
-
-    They give up after about seven hours of failing -- in practice a forum that
-    was down that long. Once it is back, this sends them again rather than
-    leaving each member's forum out of date until something else changes.
-    """
-    count = outbox.retry_failed()
-    if count:
-        log_audit_event(
-            category="system",
-            event_type="forum_tasks_retried",
-            actor_user=current_user,
-            metadata={"count": count},
-        )
-    db.session.commit()
-    flash(
-        ngettext("%(num)s background task will be tried again within a few minutes.",
-                 "%(num)s background tasks will be tried again within a few minutes.", count)
-        if count else _("No background tasks are waiting to be retried."),
-        "success" if count else "info",
-    )
-    return redirect(f"{url_for('admin.admin_settings')}#settings-maintenance")
-
-
 @admin_bp.route("/admin/system-update/status", methods=["GET"])
 @login_required
 @requires(Permission.SYSTEM_UPDATE)
 def admin_system_update_status():
-    """Current and available version, as JSON.
-
-    The page polls this while an update runs. It returns exactly what the HTML
-    panel renders, from the same service call, so the two cannot drift.
-    """
+    """Current and available version, as JSON -- for a Maintenance page opened
+    before the update that brought the new front end: it asks here until the
+    update is done, then loads itself again. The new page asks
+    /api/v1/admin/settings/updates."""
     force = request.args.get("refresh") == "1"
     return jsonify(describe_update_state(force_remote_check=force))
-
-
-@admin_bp.route("/admin/system-update", methods=["POST"])
-@login_required
-@requires(Permission.SYSTEM_UPDATE)
-@limiter.limit(RATELIMIT_ADMIN_EMAIL, methods=["POST"])
-def admin_request_system_update():
-    """Ask the privileged runner to install the available update.
-
-    This deliberately does not run the update: the web process is unprivileged
-    and must stay that way. It records a request that the root-side watcher
-    picks up, which is also why there is nothing to wait for here.
-    """
-    action = "rollback" if request.form.get("action") == "rollback" else "update"
-    before = describe_update_state()
-    try:
-        request_update(requested_by_user_id=current_user.id, action=action)
-    except ServiceError as exc:
-        flash(exc.message, "warning" if exc.http_status < 500 else "danger")
-        return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
-
-    log_audit_event(
-        category="system",
-        event_type="rollback_requested" if action == "rollback" else "update_requested",
-        actor_user=current_user,
-        target_user=current_user,
-        before={"revision": (before.get("local") or {}).get("revision")},
-        after={"revision": before.get("remote_revision")},
-        metadata={"branch": (before.get("local") or {}).get("branch")},
-    )
-    db.session.commit()
-
-    if action == "rollback":
-        flash(
-            _("The rollback has started. The site restarts while it runs, so this "
-              "page may be briefly unavailable; it reloads by itself when it is done."),
-            "info",
-        )
-    else:
-        flash(
-            _("The update has started. The site restarts while it runs, so this page "
-              "may be briefly unavailable; it reloads by itself when the update is done."),
-            "info",
-        )
-    return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
 
 
 @admin_bp.route("/admin/accounts/<int:user_id>/data-export", methods=["GET"])
@@ -453,7 +324,7 @@ def _start_backup_process(passphrase, requested_by):
 @requires(Permission.SYSTEM_BACKUP)
 @limiter.limit(RATELIMIT_ADMIN_EMAIL, methods=["POST"])
 def admin_start_backup():
-    back = redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
+    back = redirect(url_for("admin.admin_settings", _anchor="backup-restore"))
     passphrase = request.form.get("passphrase", "")
     if len(passphrase) < backup_service.MIN_PASSPHRASE_LENGTH:
         flash(_("The passphrase must be at least %(count)s characters long.",
@@ -513,7 +384,7 @@ def admin_delete_backup(name):
                         target_user=current_user, metadata={"file": name})
         db.session.commit()
         flash(_("Deleted %(name)s.", name=name), "success")
-    return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
+    return redirect(url_for("admin.admin_settings", _anchor="backup-restore"))
 
 
 @admin_bp.route("/admin/background-jobs/resume", methods=["POST"])
@@ -523,14 +394,14 @@ def admin_resume_background_jobs():
     """Say "this is the real portal": let every background job run again."""
     if request.form.get("confirm") != "resume":
         flash(_("Tick the box to confirm this is the server members use."), "warning")
-        return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
+        return redirect(url_for("admin.admin_settings", _anchor="backup-restore"))
     paused = background_jobs.pause_state()
     background_jobs.resume(current_user.email)
     resume_checks.reset()
     log_audit_event(category="system", event_type="background_jobs_resumed", actor_user=current_user,
                     target_user=current_user, metadata={"paused": paused})
     db.session.commit()
-    return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
+    return redirect(url_for("admin.admin_settings", _anchor="backup-restore"))
 
 
 @admin_bp.route("/admin/background-jobs/checklist", methods=["GET"])
@@ -550,7 +421,7 @@ def admin_background_jobs_checklist():
 def admin_background_jobs_check_again():
     resume_checks.reset()
     db.session.commit()
-    return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
+    return redirect(url_for("admin.admin_settings", _anchor="backup-restore"))
 
 
 @admin_bp.route("/admin/background-jobs/checklist/dismiss", methods=["POST"])
@@ -560,4 +431,4 @@ def admin_background_jobs_dismiss_checklist():
     background_jobs.clear_resumed()
     resume_checks.reset()
     db.session.commit()
-    return redirect(url_for("admin.admin_settings", _anchor="settings-maintenance"))
+    return redirect(url_for("admin.admin_settings", _anchor="backup-restore"))

@@ -161,7 +161,8 @@ def read_status():
     return status
 
 
-def _parse_time(value):
+def parse_time(value):
+    """An ISO time written by the runner or the installer, as an aware datetime; None if it is none."""
     try:
         parsed = datetime.fromisoformat(value)
     except (TypeError, ValueError):
@@ -183,7 +184,7 @@ def _why_it_cannot_still_be_running(status):
     if recorded_boot and current_boot and recorded_boot != current_boot:
         return ("The server restarted while this update was running, so it did not finish. "
                 "Start it again, or run \"update\" from a shell.")
-    started_at = _parse_time(status.get("started_at"))
+    started_at = parse_time(status.get("started_at"))
     if started_at and get_now_utc() - started_at > RUNNING_TOO_LONG:
         return ("This update stopped without finishing: it was still marked as running after more "
                 "than an hour. Start it again, or run \"update\" from a shell to see where it stops.")
@@ -206,7 +207,7 @@ def request_is_waiting():
     pending = read_pending_request()
     if pending is None:
         return False
-    requested_at = _parse_time(pending.get("requested_at"))
+    requested_at = parse_time(pending.get("requested_at"))
     return not (requested_at and get_now_utc() - requested_at > UNCLAIMED_TOO_LONG)
 
 

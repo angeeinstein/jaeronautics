@@ -16,6 +16,8 @@
     "/admin/settings/billing",
     "/admin/settings/forum",
     "/admin/settings/mail",
-    "/admin/settings/test-email"
+    "/admin/settings/test-email",
+    "/admin/settings/health",
+    "/admin/settings/updates"
   ]
 }

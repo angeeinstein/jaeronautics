@@ -513,8 +513,10 @@ class TestAnItemThatGaveUp:
         with client.session_transaction() as session:
             session["_user_id"] = str(boss.id)
 
-        assert "admin/forum-tasks/retry" in client.get("/admin/settings").get_data(as_text=True)
-        client.post("/admin/forum-tasks/retry")
+        from api_helpers import send
+
+        assert client.get("/api/v1/admin/settings/health").get_json()["queues"]["external_work_failed"] == 1
+        assert send(client, "POST", "/api/v1/admin/settings/health/forum-tasks/retry").get_json() == {"count": 1}
         outbox.process_pending()
 
         assert handler_calls == [item.id]

@@ -16,7 +16,8 @@ document.addEventListener('DOMContentLoaded', function () {
         '#settings-billing': '/admin/settings/billing',
         '#settings-forum': '/admin/settings/forum',
         '#settings-mail': '/admin/settings/mail',
-        '#settings-test': '/admin/settings/test-email'
+        '#settings-test': '/admin/settings/test-email',
+        '#settings-maintenance': '/admin/settings/health'
     };
     if (window.location.pathname === '/admin/settings' && moved[window.location.hash]) {
         window.location.replace(moved[window.location.hash]);

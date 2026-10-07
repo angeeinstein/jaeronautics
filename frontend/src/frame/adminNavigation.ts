@@ -24,14 +24,15 @@ import { compact, type NavItem, type SidebarContent } from './navigation';
 function settingsChildren(me: Me): NavItem[] {
   const section = (label: string, anchor: string): NavItem => ({ label, to: `/admin/settings#${anchor}` });
   const page = (label: string, slug: string): NavItem => ({ label, to: `/admin/settings/${slug}` });
-  // As today's page shows them: the parts holding secrets only with
-  // settings.credentials, Maintenance only with system.update.
+  // The parts holding secrets only with settings.credentials; health and
+  // updates with system.update, backups with system.backup.
   const children = [page('General', 'general'), page('Notifications', 'notifications')];
   if (can(me, 'settings.credentials')) {
     children.push(page('Membership fee', 'billing'), page('Forum', 'forum'), page('Mail accounts', 'mail'));
   }
   if (can(me, 'notifications.manage')) children.push(page('Test email', 'test-email'));
-  if (can(me, 'system.update')) children.push(section('Maintenance', 'settings-maintenance'));
+  if (can(me, 'system.update')) children.push(page('System health', 'health'), page('Updates', 'updates'));
+  if (can(me, 'system.backup')) children.push(section('Backup and restore', 'backup-restore'));
   return children;
 }
 

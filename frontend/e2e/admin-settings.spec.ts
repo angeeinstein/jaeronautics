@@ -60,6 +60,24 @@ test.describe('settings', () => {
     await expect(row).toHaveCount(0);
   });
 
+  test('system health: the report, and the figures behind it', async ({ page }) => {
+    await page.goto('/admin/settings/health');
+
+    const report = page.getByRole('region', { name: 'Report' });
+    await expect(report.getByText(/^(Healthy|Needs attention)$/)).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Membership' })).toContainText('Members');
+    await expect(page.getByRole('region', { name: 'Background work' })).toContainText('Emails queued');
+  });
+
+  test('updates: the version running; nothing can start without the runner', async ({ page }) => {
+    await page.goto('/admin/settings/updates');
+
+    await expect(page.getByRole('region', { name: 'Version', exact: true })).toContainText('Installed');
+    // The sample server has no update runner: said, and the button stays off.
+    await expect(page.getByText(/the update runner is not installed/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Install update now' })).toBeDisabled();
+  });
+
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
     for (const path of [
@@ -68,6 +86,8 @@ test.describe('settings', () => {
       '/admin/settings/forum',
       '/admin/settings/mail',
       '/admin/settings/test-email',
+      '/admin/settings/health',
+      '/admin/settings/updates',
     ]) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

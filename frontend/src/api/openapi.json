@@ -2634,6 +2634,56 @@
         "title": "GrantRoleIn",
         "type": "object"
       },
+      "HealthOut": {
+        "additionalProperties": false,
+        "properties": {
+          "database_schema": {
+            "$ref": "#/components/schemas/SchemaOut"
+          },
+          "healthy": {
+            "title": "Healthy",
+            "type": "boolean"
+          },
+          "membership": {
+            "$ref": "#/components/schemas/MembershipOut"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "queues": {
+            "$ref": "#/components/schemas/QueuesOut"
+          },
+          "undelivered": {
+            "items": {
+              "$ref": "#/components/schemas/UndeliveredOut"
+            },
+            "title": "Undelivered",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "healthy",
+          "problems",
+          "warnings",
+          "database_schema",
+          "membership",
+          "queues",
+          "undelivered"
+        ],
+        "title": "HealthOut",
+        "type": "object"
+      },
       "HistoryItem": {
         "additionalProperties": false,
         "properties": {
@@ -2874,6 +2924,87 @@
           "pending"
         ],
         "title": "InStripeNow",
+        "type": "object"
+      },
+      "LastRunOut": {
+        "additionalProperties": false,
+        "properties": {
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "interrupted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interrupted"
+          },
+          "log_tail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Tail"
+          },
+          "revision_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision After"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          }
+        },
+        "required": [
+          "state",
+          "finished_at",
+          "exit_code",
+          "revision_after",
+          "log_tail",
+          "interrupted"
+        ],
+        "title": "LastRunOut",
         "type": "object"
       },
       "LegalOut": {
@@ -3571,6 +3702,40 @@
           "none"
         ],
         "title": "MembershipCounts",
+        "type": "object"
+      },
+      "MembershipOut": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage_periods": {
+            "title": "Coverage Periods",
+            "type": "integer"
+          },
+          "currently_covered": {
+            "title": "Currently Covered",
+            "type": "integer"
+          },
+          "erased_members": {
+            "title": "Erased Members",
+            "type": "integer"
+          },
+          "members": {
+            "title": "Members",
+            "type": "integer"
+          },
+          "revoked_periods": {
+            "title": "Revoked Periods",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "members",
+          "currently_covered",
+          "coverage_periods",
+          "revoked_periods",
+          "erased_members"
+        ],
+        "title": "MembershipOut",
         "type": "object"
       },
       "Mismatch": {
@@ -4344,6 +4509,56 @@
         "title": "PictureReplacementOut",
         "type": "object"
       },
+      "ProgressOut": {
+        "additionalProperties": false,
+        "properties": {
+          "current_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Step"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent"
+          },
+          "steps_done": {
+            "title": "Steps Done",
+            "type": "integer"
+          },
+          "steps_expected": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps Expected"
+          }
+        },
+        "required": [
+          "steps_done",
+          "steps_expected",
+          "percent",
+          "current_step"
+        ],
+        "title": "ProgressOut",
+        "type": "object"
+      },
       "QueueItem": {
         "additionalProperties": false,
         "properties": {
@@ -4398,6 +4613,50 @@
         "title": "QueueItem",
         "type": "object"
       },
+      "QueuesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "emails_exhausted": {
+            "title": "Emails Exhausted",
+            "type": "integer"
+          },
+          "emails_overdue": {
+            "title": "Emails Overdue",
+            "type": "integer"
+          },
+          "emails_pending": {
+            "title": "Emails Pending",
+            "type": "integer"
+          },
+          "external_work_failed": {
+            "title": "External Work Failed",
+            "type": "integer"
+          },
+          "external_work_pending": {
+            "title": "External Work Pending",
+            "type": "integer"
+          },
+          "webhook_events_completed": {
+            "title": "Webhook Events Completed",
+            "type": "integer"
+          },
+          "webhook_events_failed": {
+            "title": "Webhook Events Failed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "external_work_pending",
+          "external_work_failed",
+          "webhook_events_completed",
+          "webhook_events_failed",
+          "emails_pending",
+          "emails_overdue",
+          "emails_exhausted"
+        ],
+        "title": "QueuesOut",
+        "type": "object"
+      },
       "ReconnectIn": {
         "additionalProperties": false,
         "properties": {
@@ -4450,6 +4709,41 @@
           "forum_error"
         ],
         "title": "ReconnectOut",
+        "type": "object"
+      },
+      "ResolvedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "recipient": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient"
+          }
+        },
+        "required": [
+          "recipient"
+        ],
+        "title": "ResolvedOut",
+        "type": "object"
+      },
+      "RetriedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "RetriedOut",
         "type": "object"
       },
       "ReviewsOut": {
@@ -4672,6 +4966,82 @@
           "redundant"
         ],
         "title": "RolesOut",
+        "type": "object"
+      },
+      "RollbackPointOut": {
+        "additionalProperties": false,
+        "properties": {
+          "database_backup": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Backup"
+          },
+          "recorded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded At"
+          },
+          "short_revision": {
+            "title": "Short Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "short_revision",
+          "recorded_at",
+          "database_backup"
+        ],
+        "title": "RollbackPointOut",
+        "type": "object"
+      },
+      "SchemaOut": {
+        "additionalProperties": false,
+        "properties": {
+          "applied": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "up_to_date": {
+            "title": "Up To Date",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "applied",
+          "expected",
+          "up_to_date"
+        ],
+        "title": "SchemaOut",
         "type": "object"
       },
       "SentOut": {
@@ -5609,6 +5979,222 @@
           "without_account"
         ],
         "title": "Transfers",
+        "type": "object"
+      },
+      "UndeliveredOut": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_tried_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tried At"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient"
+          }
+        },
+        "required": [
+          "id",
+          "recipient",
+          "kind",
+          "last_tried_at",
+          "error"
+        ],
+        "title": "UndeliveredOut",
+        "type": "object"
+      },
+      "UpdateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "update",
+              "rollback"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "UpdateIn",
+        "type": "object"
+      },
+      "UpdatesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "in_progress": {
+            "title": "In Progress",
+            "type": "boolean"
+          },
+          "installed": {
+            "$ref": "#/components/schemas/VersionOut"
+          },
+          "last_run": {
+            "$ref": "#/components/schemas/LastRunOut"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest"
+          },
+          "latest_check_failed": {
+            "title": "Latest Check Failed",
+            "type": "boolean"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/ProgressOut"
+          },
+          "request_never_picked_up": {
+            "title": "Request Never Picked Up",
+            "type": "boolean"
+          },
+          "rollback_point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RollbackPointOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runner_installed": {
+            "title": "Runner Installed",
+            "type": "boolean"
+          },
+          "update_available": {
+            "title": "Update Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "installed",
+          "latest",
+          "latest_check_failed",
+          "update_available",
+          "runner_installed",
+          "in_progress",
+          "request_never_picked_up",
+          "progress",
+          "rollback_point",
+          "last_run"
+        ],
+        "title": "UpdatesOut",
+        "type": "object"
+      },
+      "UpdatesQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "refresh": {
+            "default": false,
+            "title": "Refresh",
+            "type": "boolean"
+          }
+        },
+        "title": "UpdatesQuery",
+        "type": "object"
+      },
+      "VersionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "committed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Committed At"
+          },
+          "rolled_back": {
+            "title": "Rolled Back",
+            "type": "boolean"
+          },
+          "short_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Revision"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "required": [
+          "short_revision",
+          "branch",
+          "rolled_back",
+          "committed_at",
+          "subject"
+        ],
+        "title": "VersionOut",
         "type": "object"
       },
       "aeronautics_members__api__admin_dashboard__Waiting": {
@@ -8649,6 +9235,252 @@
         ]
       }
     },
+    "/api/v1/admin/settings/health": {
+      "get": {
+        "operationId": "admin_system_health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "How the installation is: problems first, then the figures behind them.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.update"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/health/forum-tasks/retry": {
+      "post": {
+        "operationId": "admin_retry_forum_tasks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetriedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Send the background tasks that gave up once more -- once the forum is reachable again.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.update"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/health/undelivered/{job_id}/dismiss": {
+      "post": {
+        "operationId": "admin_undelivered_dismiss",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Stop reporting an email that gave up. It is kept in the account's record, not sent.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "notifications.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/health/undelivered/{job_id}/retry": {
+      "post": {
+        "operationId": "admin_undelivered_retry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolvedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Try an email that gave up again -- to the address on the profile now, so a typo fixed there counts.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "notifications.manage"
+        ]
+      }
+    },
     "/api/v1/admin/settings/mail": {
       "get": {
         "operationId": "admin_mail_accounts",
@@ -9406,6 +10238,144 @@
         ],
         "x-permissions": [
           "notifications.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/updates": {
+      "get": {
+        "operationId": "admin_updates",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The version running and the newest; while an update runs, how far it is. The page asks again and again.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.update"
+        ]
+      },
+      "post": {
+        "operationId": "admin_update_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Ask the server to install the update (or roll back). It starts within moments and restarts the site.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.update"
         ]
       }
     },

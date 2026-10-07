@@ -87,7 +87,7 @@ export function tasksOf(attention: Attention): Task[] {
       count: health.length,
       title: plural(health.length, 'System health problem', 'System health problems'),
       detail: `${health[0] ?? ''}${health.length > 1 ? ` And ${health.length - 1} more.` : ''}`,
-      to: '/admin/settings#settings-maintenance',
+      to: '/admin/settings/health',
       action: 'Open health',
       primary: false,
     });

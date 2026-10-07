@@ -158,7 +158,7 @@ def collect_system_health():
     if not schema["up_to_date"]:
         problems.append(
             "The database schema is not at the expected revision "
-            f"(applied {schema['applied']}, expected {schema['expected']}). "
+            f"(applied {schema['applied'] or 'unknown'}, expected {schema['expected'] or 'unknown'}). "
             "Install the pending update."
         )
     if queues["external_work_failed"]:

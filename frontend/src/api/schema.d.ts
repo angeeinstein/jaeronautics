@@ -568,6 +568,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/settings/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How the installation is: problems first, then the figures behind them. */
+        get: operations["admin_system_health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/health/forum-tasks/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send the background tasks that gave up once more -- once the forum is reachable again. */
+        post: operations["admin_retry_forum_tasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/health/undelivered/{job_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop reporting an email that gave up. It is kept in the account's record, not sent. */
+        post: operations["admin_undelivered_dismiss"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/health/undelivered/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Try an email that gave up again -- to the address on the profile now, so a typo fixed there counts. */
+        post: operations["admin_undelivered_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/mail": {
         parameters: {
             query?: never;
@@ -701,6 +769,24 @@ export interface paths {
         put?: never;
         /** Send one email from a template, filled in as a member's would be. Whether the server took it. */
         post: operations["admin_test_email_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The version running and the newest; while an update runs, how far it is. The page asks again and again. */
+        get: operations["admin_updates"];
+        put?: never;
+        /** Ask the server to install the update (or roll back). It starts within moments and restarts the site. */
+        post: operations["admin_update_start"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1720,6 +1806,20 @@ export interface components {
              */
             role?: "lead" | "treasurer";
         };
+        /** HealthOut */
+        HealthOut: {
+            database_schema: components["schemas"]["SchemaOut"];
+            /** Healthy */
+            healthy: boolean;
+            membership: components["schemas"]["MembershipOut"];
+            /** Problems */
+            problems: string[];
+            queues: components["schemas"]["QueuesOut"];
+            /** Undelivered */
+            undelivered: components["schemas"]["UndeliveredOut"][];
+            /** Warnings */
+            warnings: string[];
+        };
         /** HistoryItem */
         HistoryItem: {
             /** At */
@@ -1810,6 +1910,21 @@ export interface components {
             available: number;
             /** Pending */
             pending: number;
+        };
+        /** LastRunOut */
+        LastRunOut: {
+            /** Exit Code */
+            exit_code: number | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Interrupted */
+            interrupted: string | null;
+            /** Log Tail */
+            log_tail: string | null;
+            /** Revision After */
+            revision_after: string | null;
+            /** State */
+            state: string | null;
         };
         /** LegalOut */
         LegalOut: {
@@ -2031,6 +2146,19 @@ export interface components {
             none: number;
             /** Pending */
             pending: number;
+        };
+        /** MembershipOut */
+        MembershipOut: {
+            /** Coverage Periods */
+            coverage_periods: number;
+            /** Currently Covered */
+            currently_covered: number;
+            /** Erased Members */
+            erased_members: number;
+            /** Members */
+            members: number;
+            /** Revoked Periods */
+            revoked_periods: number;
         };
         /**
          * Mismatch
@@ -2280,6 +2408,17 @@ export interface components {
             /** Allowed Since */
             allowed_since: string | null;
         };
+        /** ProgressOut */
+        ProgressOut: {
+            /** Current Step */
+            current_step: string | null;
+            /** Percent */
+            percent: number | null;
+            /** Steps Done */
+            steps_done: number;
+            /** Steps Expected */
+            steps_expected: number | null;
+        };
         /** QueueItem */
         QueueItem: {
             /** At */
@@ -2294,6 +2433,23 @@ export interface components {
             kind: "name_change" | "picture";
             person: components["schemas"]["aeronautics_members__api__admin_reviews__Person"];
             picture: components["schemas"]["Picture"] | null;
+        };
+        /** QueuesOut */
+        QueuesOut: {
+            /** Emails Exhausted */
+            emails_exhausted: number;
+            /** Emails Overdue */
+            emails_overdue: number;
+            /** Emails Pending */
+            emails_pending: number;
+            /** External Work Failed */
+            external_work_failed: number;
+            /** External Work Pending */
+            external_work_pending: number;
+            /** Webhook Events Completed */
+            webhook_events_completed: number;
+            /** Webhook Events Failed */
+            webhook_events_failed: number;
         };
         /** ReconnectIn */
         ReconnectIn: {
@@ -2313,6 +2469,16 @@ export interface components {
             forum_error: string | null;
             /** Old Username */
             old_username: string;
+        };
+        /** ResolvedOut */
+        ResolvedOut: {
+            /** Recipient */
+            recipient: string | null;
+        };
+        /** RetriedOut */
+        RetriedOut: {
+            /** Count */
+            count: number;
         };
         /** ReviewsOut */
         ReviewsOut: {
@@ -2388,6 +2554,24 @@ export interface components {
             changed: boolean;
             /** Redundant */
             redundant: string[];
+        };
+        /** RollbackPointOut */
+        RollbackPointOut: {
+            /** Database Backup */
+            database_backup: string | null;
+            /** Recorded At */
+            recorded_at: string | null;
+            /** Short Revision */
+            short_revision: string;
+        };
+        /** SchemaOut */
+        SchemaOut: {
+            /** Applied */
+            applied: string | null;
+            /** Expected */
+            expected: string | null;
+            /** Up To Date */
+            up_to_date: boolean;
         };
         /** SentOut */
         SentOut: {
@@ -2697,6 +2881,67 @@ export interface components {
             teams: number;
             /** Without Account */
             without_account: number;
+        };
+        /** UndeliveredOut */
+        UndeliveredOut: {
+            /** Error */
+            error: string | null;
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Last Tried At */
+            last_tried_at: string | null;
+            /** Recipient */
+            recipient: string | null;
+        };
+        /** UpdateIn */
+        UpdateIn: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "update" | "rollback";
+        };
+        /** UpdatesOut */
+        UpdatesOut: {
+            /** In Progress */
+            in_progress: boolean;
+            installed: components["schemas"]["VersionOut"];
+            last_run: components["schemas"]["LastRunOut"];
+            /** Latest */
+            latest: string | null;
+            /** Latest Check Failed */
+            latest_check_failed: boolean;
+            progress: components["schemas"]["ProgressOut"];
+            /** Request Never Picked Up */
+            request_never_picked_up: boolean;
+            rollback_point: components["schemas"]["RollbackPointOut"] | null;
+            /** Runner Installed */
+            runner_installed: boolean;
+            /** Update Available */
+            update_available: boolean;
+        };
+        /** UpdatesQuery */
+        UpdatesQuery: {
+            /**
+             * Refresh
+             * @default false
+             */
+            refresh?: boolean;
+        };
+        /** VersionOut */
+        VersionOut: {
+            /** Branch */
+            branch: string | null;
+            /** Committed At */
+            committed_at: string | null;
+            /** Rolled Back */
+            rolled_back: boolean;
+            /** Short Revision */
+            short_revision: string | null;
+            /** Subject */
+            subject: string | null;
         };
         /**
          * Waiting
@@ -4834,6 +5079,207 @@ export interface operations {
             };
         };
     };
+    admin_system_health: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_retry_forum_tasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetriedOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_undelivered_dismiss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_undelivered_retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_mail_accounts: {
         parameters: {
             query?: never;
@@ -5400,6 +5846,115 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SentOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_updates: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_update_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatesOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

@@ -235,7 +235,10 @@ server can update to it.
       `/admin/settings/<section>`, `frontend/src/pages/admin/settings/`; an old link to a
       section's tab opens its page. Mail accounts and Test email done: `api/admin_mail.py`,
       `services/mail_accounts.py`; the export of the accounts with their passwords now asks
-      for the current password.)*
+      for the current password. Maintenance became three pages: System health and Updates done
+      (`api/admin_system.py`, `services/maintenance.py`); the Updates page follows an update
+      through the restart and then loads itself again, and the app loads itself again when a
+      part of an older build is gone (`src/app/staleBuild.ts`).)*
 5. **Teams area:** overview, a team's page and join page with the rules
    dialog, the leads' management sections, the team's money.
 6. **My Account:** the overview, membership and payment status, forum card

@@ -10,13 +10,14 @@ from datetime import timedelta
 
 import pytest
 
+from api_helpers import send
 from conftest import app_module, clock, db, make_member, workflows
 from aeronautics_members.db_models import AuditLog, EmailDeliveryJob, Setting, User
 from aeronautics_members.services import notifications
 
 
 def _admin(client, email="mailadmin@example.com"):
-    """A super admin: the queue lives on the Maintenance tab."""
+    """A super admin: the queue is on System health."""
     user = User(email=email)
     user.set_password("x")
     db.session.add(user)
@@ -172,21 +173,26 @@ class TestTheDeliveryPassHasNoRequestBehindIt:
         assert gettext("Retry") == "Retry"
 
 
-class TestTheAdminRoute:
-    def test_retry_is_reachable_from_the_maintenance_tab(self, client):
+HEALTH = "/api/v1/admin/settings/health"
+
+
+class TestFromSystemHealth:
+    """Settings -> System health (api/admin_system.py)."""
+
+    def test_retry(self, client):
         _admin(client)
         job = _exhausted()
 
-        response = client.post(f"/admin/undelivered-emails/{job.id}/retry", follow_redirects=False)
+        response = send(client, "POST", f"{HEALTH}/undelivered/{job.id}/retry")
 
-        assert response.status_code == 302
+        assert response.status_code == 200 and response.get_json() == {"recipient": "typo@exmaple.com"}
         assert job.status == "pending"
 
-    def test_dismiss_is_reachable(self, client):
+    def test_dismiss(self, client):
         _admin(client)
         job = _exhausted()
 
-        client.post(f"/admin/undelivered-emails/{job.id}/dismiss")
+        send(client, "POST", f"{HEALTH}/undelivered/{job.id}/dismiss")
 
         assert job.status == "canceled"
 
@@ -194,25 +200,26 @@ class TestTheAdminRoute:
         _admin(client)
         job = _exhausted()
 
-        client.post(f"/admin/undelivered-emails/{job.id}/dismiss")
+        send(client, "POST", f"{HEALTH}/undelivered/{job.id}/dismiss")
 
         entry = db.session.execute(
             db.select(AuditLog).filter_by(event_type="undelivered_email_dismiss")
         ).scalar_one()
         assert entry.event_metadata["job_id"] == job.id
 
-    def test_a_missing_job_does_not_break_the_page(self, client):
+    def test_a_missing_one_is_said(self, client):
         _admin(client)
 
-        response = client.post("/admin/undelivered-emails/9999/dismiss", follow_redirects=True)
+        assert send(client, "POST", f"{HEALTH}/undelivered/9999/dismiss").status_code == 404
 
-        assert response.status_code == 200
-
-    def test_an_unknown_action_is_not_routed(self, client):
+    def test_one_resolved_already_is_said(self, client):
         _admin(client)
         job = _exhausted()
+        send(client, "POST", f"{HEALTH}/undelivered/{job.id}/dismiss")
 
-        assert client.post(f"/admin/undelivered-emails/{job.id}/delete").status_code == 404
+        response = send(client, "POST", f"{HEALTH}/undelivered/{job.id}/retry")
+
+        assert response.status_code == 409 and response.get_json()["error"]["code"] == "email_not_waiting"
 
     @pytest.mark.parametrize("action", ["retry", "dismiss"])
     def test_a_member_cannot_resolve_emails(self, client, action):
@@ -221,16 +228,17 @@ class TestTheAdminRoute:
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user_id)
 
-        response = client.post(f"/admin/undelivered-emails/{job.id}/{action}")
+        response = send(client, "POST", f"{HEALTH}/undelivered/{job.id}/{action}")
 
-        assert response.status_code in (302, 403)
+        assert response.status_code in (401, 403)
         assert job.status == "exhausted"
 
-    def test_the_panel_lists_the_recipient_and_the_error(self, client):
+    def test_the_report_lists_the_recipient_and_the_error(self, client):
         _admin(client)
         _exhausted(recipient="typo@exmaple.com")
 
-        body = client.get("/admin/settings").get_data(as_text=True)
+        undelivered = client.get(HEALTH).get_json()["undelivered"]
 
-        assert "typo@exmaple.com" in body
-        assert "Name or service not known" in body
+        assert undelivered[0]["recipient"] == "typo@exmaple.com"
+        assert undelivered[0]["kind"] == "welcome email"
+        assert "Name or service not known" in undelivered[0]["error"]

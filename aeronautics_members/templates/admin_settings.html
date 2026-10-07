@@ -1,6 +1,6 @@
 {% extends "admin_layout.html" %}
 {% set page_title = _('Settings') %}
-{% set page_description = _('Maintenance: health, updates, backups.') %}
+{% set page_description = _('Backup and restore.') %}
 {% block admin_content %}
 <div class="row g-4">
     <div class="col-xl-3">
@@ -8,14 +8,11 @@
             <div class="card-body p-0">
                 <div class="nav settings-nav flex-column nav-pills" id="settings-tab" role="tablist" aria-orientation="vertical">
                     {#
-                      Hidden, not disabled, and keyed on the same capability the
-                      route behind each one requires. Whoever may change the
-                      credentials sees the credential tabs; whoever may install
-                      an update sees Maintenance. The routes check for
-                      themselves -- this only keeps the secrets out of the HTML.
+                      What is left of the old settings page until it moves to the
+                      new front end (docs/frontend-routes.md, 4.8).
                     #}
-                    {% if current_user.can('system.update') %}
-                    <button class="nav-link active" id="settings-maintenance-tab" data-bs-toggle="pill" data-bs-target="#settings-maintenance" type="button" role="tab" aria-controls="settings-maintenance" aria-selected="true">{{ _('Maintenance') }}</button>
+                    {% if current_user.can('system.backup') %}
+                    <button class="nav-link active" id="settings-backup-tab" data-bs-toggle="pill" data-bs-target="#settings-backup" type="button" role="tab" aria-controls="settings-backup" aria-selected="true">{{ _('Backup and restore') }}</button>
                     {% endif %}
                 </div>
             </div>
@@ -24,297 +21,9 @@
 
     <div class="col-xl-9">
         <div class="tab-content settings-tab-content" id="settings-tabContent">
-            {% if current_user.can('system.update') %}
-            <div class="tab-pane fade show active" id="settings-maintenance" role="tabpanel" aria-labelledby="settings-maintenance-tab" tabindex="0">
-                <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h4 class="mb-0">{{ _('System Health') }}</h4>
-                        {% if system_health.healthy %}
-                            <span class="status-label status-active">{{ _('Healthy') }}</span>
-                        {% else %}
-                            <span class="status-label status-failed">{{ _('Needs attention') }}</span>
-                        {% endif %}
-                    </div>
-                    <div class="card-body">
-                        {% for problem in system_health.problems %}
-                            <div class="alert alert-danger" role="alert">{{ problem }}</div>
-                        {% endfor %}
-                        {% for warning in system_health.warnings %}
-                            <div class="alert alert-warning" role="alert">{{ warning }}</div>
-                        {% endfor %}
-                        {% if system_health.healthy and not system_health.warnings %}
-                            <div class="alert alert-success" role="alert">{{ _('Nothing needs attention right now.') }}</div>
-                        {% endif %}
-
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <h6 class="text-muted text-uppercase small">{{ _('Membership') }}</h6>
-                                <dl class="row mb-0 small">
-                                    <dt class="col-7">{{ _('Members') }}</dt><dd class="col-5">{{ system_health.membership.members }}</dd>
-                                    <dt class="col-7">{{ _('Currently covered') }}</dt><dd class="col-5">{{ system_health.membership.currently_covered }}</dd>
-                                    <dt class="col-7">{{ _('Coverage records') }}</dt><dd class="col-5">{{ system_health.membership.coverage_periods }}</dd>
-                                    {% if system_health.membership.revoked_periods %}
-                                    <dt class="col-7">{{ _('Revoked records') }}</dt><dd class="col-5">{{ system_health.membership.revoked_periods }}</dd>
-                                    {% endif %}
-                                    {% if system_health.membership.erased_members %}
-                                    {# Not a problem: their payment records are kept on purpose. #}
-                                    <dt class="col-7">{{ _('Erased accounts') }}</dt><dd class="col-5">{{ system_health.membership.erased_members }}</dd>
-                                    {% endif %}
-                                </dl>
-                            </div>
-                            <div class="col-md-6">
-                                <h6 class="text-muted text-uppercase small">{{ _('Background work') }}</h6>
-                                <dl class="row mb-0 small">
-                                    <dt class="col-7">{{ _('Background tasks queued') }}</dt><dd class="col-5">{{ system_health.queues.external_work_pending }}</dd>
-                                    <dt class="col-7">{{ _('Background tasks failed') }}</dt>
-                                    <dd class="col-5">
-                                        {{ system_health.queues.external_work_failed }}
-                                        {% if system_health.queues.external_work_failed %}
-                                            {# They gave up after hours of failing; once the forum is
-                                               reachable again, this sends them again. #}
-                                            <form method="POST" action="{{ url_for('admin.admin_retry_failed_forum_tasks') }}" class="d-inline ms-2" data-busy-text="{{ _('Queuing…') }}">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-primary">{{ _('Retry') }}</button>
-                                            </form>
-                                        {% endif %}
-                                    </dd>
-                                    <dt class="col-7">{{ _('Stripe events handled') }}</dt><dd class="col-5">{{ system_health.queues.webhook_events_completed }}</dd>
-                                    <dt class="col-7">{{ _('Emails queued') }}</dt>
-                                    <dd class="col-5">
-                                        {{ system_health.queues.emails_pending }}
-                                        {% if system_health.queues.emails_overdue %}
-                                            {# A count alone cannot distinguish an email backing off
-                                               from one nobody is delivering. This says which. #}
-                                            <span class="status-label status-failed">{{ _('%(count)s overdue', count=system_health.queues.emails_overdue) }}</span>
-                                        {% endif %}
-                                    </dd>
-                                </dl>
-                            </div>
-                        </div>
-                        {% if undelivered_emails %}
-                            {#
-                              Nothing prunes these rows, so without a way to act on
-                              them one mistyped address would leave the health report
-                              permanently red with no explanation of what to do.
-                            #}
-                            <hr>
-                            <h6 class="text-muted text-uppercase small">{{ _('Emails that could not be delivered') }}</h6>
-                            <p class="small text-muted">
-                                {{ _('Retrying sends to the address currently on the member’s profile, so correct a typo there first. Dismissing keeps the record and stops reporting it.') }}
-                            </p>
-                            <div class="table-responsive">
-                                <table class="table table-sm align-middle small mb-0">
-                                    <thead>
-                                        <tr>
-                                            <th>{{ _('Recipient') }}</th>
-                                            <th>{{ _('Type') }}</th>
-                                            <th>{{ _('Last tried') }}</th>
-                                            <th>{{ _('Error') }}</th>
-                                            <th class="text-end">{{ _('Action') }}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for job in undelivered_emails %}
-                                            <tr>
-                                                <td>{{ job.recipient_email or '-' }}</td>
-                                                <td>{{ job.email_type|replace('_', ' ') }}</td>
-                                                <td>{{ job.last_attempted_at|datetime_display if job.last_attempted_at else '-' }}</td>
-                                                <td class="text-muted">{{ (job.last_error or '-')|truncate(90) }}</td>
-                                                <td class="text-end text-nowrap">
-                                                    <form method="POST" action="{{ url_for('admin.admin_resolve_undelivered_email', job_id=job.id, action='retry') }}" class="d-inline">
-                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                        <button type="submit" class="btn btn-sm btn-outline-primary">{{ _('Retry') }}</button>
-                                                    </form>
-                                                    <form method="POST" action="{{ url_for('admin.admin_resolve_undelivered_email', job_id=job.id, action='dismiss') }}" class="d-inline"
-                                                          data-confirm-label="{{ _('Yes, dismiss') }}" data-confirm="{{ _('Dismiss this email? It will not be sent.') }}">
-                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                        <button type="submit" class="btn btn-sm btn-outline-secondary">{{ _('Dismiss') }}</button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% endif %}
-                        <hr>
-                        <div class="small text-muted">
-                            {{ _('Database schema') }}:
-                            <code>{{ system_health.schema.applied or _('unknown') }}</code>
-                            {% if system_health.schema.up_to_date %}
-                                &mdash; {{ _('up to date') }}
-                            {% else %}
-                                &mdash; {{ _('expected') }} <code>{{ system_health.schema.expected or _('unknown') }}</code>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header"><h4 class="mb-0">{{ _('Software Version') }}</h4></div>
-                    <div class="card-body">
-                        {% if not update_state.runner_installed %}
-                            <div class="alert alert-warning" role="alert">
-                                {{ _('Updates cannot be started from this page because the update runner is not installed on this server. Run the installer once from a shell to set it up.') }}
-                            </div>
-                        {% endif %}
-
-                        <dl class="row mb-3">
-                            <dt class="col-sm-4">{{ _('Installed version') }}</dt>
-                            <dd class="col-sm-8">
-                                <code>{{ update_state.local.short_revision or _('unknown') }}</code>
-                                {# After a rollback the checkout is detached, so git reports the
-                                   branch as the literal "HEAD". Saying that to an administrator is
-                                   worse than useless; say what actually happened. #}
-                                {% if update_state.local.branch == 'HEAD' %}
-                                    <span class="status-label status-pending">{{ _('rolled back') }}</span>
-                                {% elif update_state.local.branch %}
-                                    <span class="text-muted">({{ update_state.local.branch }})</span>
-                                {% endif %}
-                                {% if update_state.local.committed_at %}<br><small class="text-muted">{{ update_state.local.committed_at|datetime_display }}</small>{% endif %}
-                                {% if update_state.local.subject %}<br><small class="text-muted">{{ update_state.local.subject }}</small>{% endif %}
-                            </dd>
-                            <dt class="col-sm-4">{{ _('Latest available') }}</dt>
-                            <dd class="col-sm-8">
-                                {% if update_state.remote_check_failed %}
-                                    <span class="text-muted">{{ _('Could not be checked right now.') }}</span>
-                                {% else %}
-                                    <code>{{ update_state.remote_short_revision or _('unknown') }}</code>
-                                {% endif %}
-                            </dd>
-                        </dl>
-
-                        {% if update_state.in_progress %}
-                            <div id="update-progress"
-                                 data-status-url="{{ url_for('admin.admin_system_update_status') }}"
-                                 data-label-running="{{ _('Update running') }}"
-                                 data-label-finished="{{ _('Finished. Reloading the page...') }}"
-                                 data-label-restarting="{{ _('The site is restarting...') }}">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <strong id="update-progress-state">{{ _('Update running') }}</strong>
-                                    <span class="text-muted small" id="update-progress-step">
-                                        {%- if update_state.progress.current_step %}{{ update_state.progress.current_step }}{% endif -%}
-                                    </span>
-                                </div>
-                                {# The bar starts indeterminate (full-width stripes) and the
-                                   poller narrows it to a real percentage once it has one. The
-                                   width is set through the CSSOM rather than a style attribute,
-                                   which the CSP blocks. #}
-                                <div class="progress mb-3" role="progressbar"
-                                     aria-label="{{ _('Update progress') }}"
-                                     aria-valuemin="0" aria-valuemax="100">
-                                    <div id="update-progress-bar"
-                                         class="progress-bar progress-bar-striped progress-bar-animated w-100"
-                                         data-percent="{{ update_state.progress.percent if update_state.progress.percent is not none else '' }}">
-                                    </div>
-                                </div>
-                                <div class="alert alert-info mb-3" role="alert">
-                                    {{ _('The site restarts while the update finishes, so this page may be briefly unavailable. It reloads by itself when the update is done.') }}
-                                </div>
-                                <pre id="update-progress-log" class="p-3 border rounded small text-break update-log">{{ update_state.last_run.log_tail or _('Waiting for output...') }}</pre>
-                            </div>
-                        {% elif update_state.request_never_picked_up %}
-                            <div class="alert alert-warning" role="alert">{{ _('An update was requested but never started: the update runner on the server is not picking up requests. Run "update" from a shell, or run the installer once to set the runner up again.') }}</div>
-                        {% elif update_state.update_available %}
-                            <div class="alert alert-warning" role="alert">{{ _('A newer version is available.') }}</div>
-                        {% elif not update_state.remote_check_failed %}
-                            <div class="alert alert-success" role="alert">{{ _('This installation is up to date.') }}</div>
-                        {% endif %}
-
-                        <form method="POST" action="{{ url_for('admin.admin_request_system_update') }}"
-                              data-confirm-label="{{ _('Yes, install') }}" data-confirm="{{ _('Install the update now? The site will restart and be briefly unavailable.') }}" data-busy-text="{{ _('Starting…') }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-primary"
-                                    {% if not update_state.runner_installed or update_state.in_progress %}disabled{% endif %}>
-                                {{ _('Install update now') }}
-                            </button>
-                            <span class="text-muted ms-2">{{ _('Starts immediately. Takes a few minutes to finish, and the page follows along.') }}</span>
-                        </form>
-
-                        {% if update_state.rollback_point %}
-                        <hr class="my-4">
-                        <h5>{{ _('Go back to the previous version') }}</h5>
-                        <p class="text-muted small mb-2">
-                            {{ _('If an update caused a problem, this returns the site to the version that was running before it.') }}
-                            {{ _('It restores the program only: data added since the update stays, and the database structure is left as it is.') }}
-                        </p>
-                        <dl class="row small mb-3">
-                            <dt class="col-sm-4">{{ _('Would return to') }}</dt>
-                            <dd class="col-sm-8"><code>{{ update_state.rollback_point.short_revision }}</code></dd>
-                            {% if update_state.rollback_point.recorded_at %}
-                            <dt class="col-sm-4">{{ _('Recorded') }}</dt>
-                            <dd class="col-sm-8"><span class="text-muted">{{ update_state.rollback_point.recorded_at|datetime_display }}</span></dd>
-                            {% endif %}
-                            {% if update_state.rollback_point.database_backup %}
-                            <dt class="col-sm-4">{{ _('Database backup') }}</dt>
-                            <dd class="col-sm-8"><code class="small">{{ update_state.rollback_point.database_backup }}</code></dd>
-                            {% endif %}
-                        </dl>
-                        <form method="POST" action="{{ url_for('admin.admin_request_system_update') }}"
-                              data-confirm-label="{{ _('Yes, go back') }}" data-confirm="{{ _('Go back to the previous version? The site will restart and be briefly unavailable.') }}" data-busy-text="{{ _('Starting…') }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <input type="hidden" name="action" value="rollback">
-                            <button type="submit" class="btn btn-outline-secondary"
-                                    {% if not update_state.runner_installed or update_state.in_progress %}disabled{% endif %}>
-                                {{ _('Roll back to %(revision)s', revision=update_state.rollback_point.short_revision) }}
-                            </button>
-                        </form>
-                        {% else %}
-                        {#
-                          Say why there is nothing here. Silence looks identical
-                          whether no update has run yet or the file cannot be
-                          read -- which is how a rollback panel that could never
-                          appear stayed unnoticed.
-                        #}
-                        <hr class="my-4">
-                        <h5 class="text-muted">{{ _('Go back to the previous version') }}</h5>
-                        <p class="text-muted small mb-0">
-                            {{ _('No rollback point has been recorded yet. One is written automatically just before each update, so this appears after the next one.') }}
-                        </p>
-                        {% endif %}
-                    </div>
-                </div>
-
-                {% if update_state.last_run.state %}
-                <div class="card mt-4">
-                    <div class="card-header"><h4 class="mb-0">{{ _('Last Update') }}</h4></div>
-                    <div class="card-body">
-                        <dl class="row mb-3">
-                            <dt class="col-sm-4">{{ _('Result') }}</dt>
-                            <dd class="col-sm-8">
-                                {% if update_state.last_run.state == 'completed' %}
-                                    <span class="status-label status-active">{{ _('Completed') }}</span>
-                                {% elif update_state.last_run.state == 'failed' and update_state.last_run.interrupted %}
-                                    <span class="status-label status-failed">{{ _('Did not finish') }}</span>
-                                    <div class="small text-muted mt-1">{{ update_state.last_run.interrupted }}</div>
-                                {% elif update_state.last_run.state == 'failed' %}
-                                    <span class="status-label status-failed">{{ _('Failed') }}</span>
-                                    <span class="text-muted ms-2">{{ _('exit code') }} {{ update_state.last_run.exit_code }}</span>
-                                {% else %}
-                                    <span class="status-label status-info">{{ update_state.last_run.state }}</span>
-                                {% endif %}
-                            </dd>
-                            {% if update_state.last_run.finished_at %}
-                            <dt class="col-sm-4">{{ _('Finished') }}</dt>
-                            <dd class="col-sm-8"><small class="text-muted">{{ update_state.last_run.finished_at|datetime_display }}</small></dd>
-                            {% endif %}
-                            {% if update_state.last_run.revision_after %}
-                            <dt class="col-sm-4">{{ _('Version after') }}</dt>
-                            <dd class="col-sm-8"><code>{{ update_state.last_run.revision_after[:8] }}</code></dd>
-                            {% endif %}
-                        </dl>
-                        {% if update_state.last_run.log_tail %}
-                            <details>
-                                <summary class="text-muted">{{ _('Show the end of the update log') }}</summary>
-                                <pre class="mt-2 p-3 border rounded small text-break update-log">{{ update_state.last_run.log_tail }}</pre>
-                            </details>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if current_user.can('system.backup') %}
-                    {% include "_backup_restore.html" %}
-                {% endif %}
+            {% if current_user.can('system.backup') %}
+            <div class="tab-pane fade show active" id="settings-backup" role="tabpanel" aria-labelledby="settings-backup-tab" tabindex="0">
+                {% include "_backup_restore.html" %}
             </div>
             {% endif %}
         </div>
@@ -322,7 +31,6 @@
 </div>
 
 <script src="{{ url_for('static', filename='admin-settings-tabs.js') }}"></script>
-<script src="{{ url_for('static', filename='update-progress.js') }}"></script>
 <script src="{{ url_for('static', filename='backup-restore.js') }}"></script>
 {% endblock %}
 

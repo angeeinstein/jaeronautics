@@ -105,17 +105,20 @@ class TestTheUpdateSurfaceIsRestricted:
     @pytest.mark.parametrize(
         "path,method",
         [
-            ("/admin/system-update", "POST"),
             ("/admin/system-update/status", "GET"),
+            ("/api/v1/admin/settings/updates", "GET"),
+            ("/api/v1/admin/settings/updates", "POST"),
+            ("/api/v1/admin/settings/health", "GET"),
+            ("/api/v1/admin/settings/health/forum-tasks/retry", "POST"),
         ],
     )
     def test_an_admin_is_refused(self, client, path, method):
         admin = _user("noupdate@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        response = client.open(path, method=method)
+        response = client.open(path, method=method, json={"action": "update"} if method == "POST" else None)
 
-        assert response.status_code == 302
+        assert response.status_code in (302, 403)
 
     def test_a_superadmin_is_allowed_to_read_the_status(self, client):
         boss = _user("canupdate@example.com", ROLE_ADMIN, ROLE_SUPERADMIN)
@@ -310,8 +313,9 @@ class TestTheUiHidesWhatItDoesNotOffer:
         admin = _user("hidden@example.com", ROLE_ADMIN)
         _login(client, admin.id)
 
-        # Maintenance is the old page's only part left: without it, General.
+        # Backups are the old page's only part left: without them, General.
         assert client.get("/admin/settings").headers["Location"].endswith("/admin/settings/general")
+        assert client.get("/admin/settings/updates").headers["Location"].endswith("/admin/settings/general")
         assert client.get("/admin/settings/mail").headers["Location"].endswith("/admin/settings/general")
         assert client.get("/api/v1/admin/settings/mail").status_code == 403
         # Ordinary administration is untouched.
@@ -326,7 +330,8 @@ class TestTheUiHidesWhatItDoesNotOffer:
 
         body = client.get("/admin/settings").get_data(as_text=True)
 
-        assert "settings-maintenance-tab" in body
+        assert 'id="backup-restore"' in body
+        assert client.get("/admin/settings/updates").status_code == 200
         assert client.get("/api/v1/admin/settings/billing").status_code == 200
         assert client.get("/api/v1/admin/settings/mail").status_code == 200
 
@@ -468,7 +473,7 @@ class TestAddingARoleNeedsNoOtherChange:
 
         assert client.get("/admin/settings").status_code == 302
         assert client.get("/admin/logs").status_code == 302
-        assert client.post("/admin/system-update").status_code == 302
+        assert client.post("/api/v1/admin/settings/updates", json={"action": "update"}).status_code == 403
 
     def test_it_counts_towards_the_capabilities_it_carries(self, app, reviewer_role):
         """So the last-admin guard sees a moderator as somebody still in charge."""

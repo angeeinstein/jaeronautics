@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from api_helpers import send
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import AuditLog, User
 from aeronautics_members.services import ConflictError, ServiceError, system_update
@@ -52,6 +53,13 @@ def _login(client, user_id):
         session["_user_id"] = str(user_id)
 
 
+API = "/api/v1/admin/settings/updates"
+
+
+def _ask(client, action="update"):
+    return send(client, "POST", API, {"action": action})
+
+
 def _request_file(state_dir):
     return state_dir / system_update.REQUEST_FILENAME
 
@@ -60,17 +68,17 @@ class TestAuthorisation:
     """Requesting an update is a privileged action and must be gated."""
 
     def test_anonymous_cannot_request_an_update(self, client, state_dir):
-        response = client.post("/admin/system-update")
-        assert response.status_code in (302, 401, 403)
+        response = _ask(client)
+        assert response.status_code in (401, 403)
         assert not _request_file(state_dir).exists()
 
     def test_ordinary_member_cannot_request_an_update(self, client, state_dir):
         member = make_member(email="plain@example.com")
         _login(client, member.user_id)
 
-        response = client.post("/admin/system-update")
+        response = _ask(client)
 
-        assert response.status_code in (302, 403)
+        assert response.status_code == 403
         assert not _request_file(state_dir).exists()
 
     def test_ordinary_member_cannot_read_the_status_endpoint(self, client, state_dir):
@@ -81,35 +89,43 @@ class TestAuthorisation:
     def test_superadmin_may_request_an_update(self, client, state_dir, admin_user):
         _login(client, admin_user.id)
 
-        response = client.post("/admin/system-update", follow_redirects=False)
+        response = _ask(client)
 
-        assert response.status_code == 302
+        assert response.status_code == 202 and response.get_json()["in_progress"] is True
         assert _request_file(state_dir).exists()
 
     def test_an_ordinary_admin_cannot_request_an_update(self, client, state_dir, plain_admin_user):
         """Installing a version is the one thing the admin role no longer carries."""
         _login(client, plain_admin_user.id)
 
-        response = client.post("/admin/system-update", follow_redirects=False)
+        response = _ask(client)
 
-        assert response.status_code == 302
+        assert response.status_code == 403
         assert not _request_file(state_dir).exists()
 
     def test_an_ordinary_admin_cannot_roll_back(self, client, state_dir, plain_admin_user):
         _login(client, plain_admin_user.id)
 
-        client.post("/admin/system-update", data={"action": "rollback"})
+        _ask(client, "rollback")
 
         assert not _request_file(state_dir).exists()
 
     def test_an_ordinary_admin_cannot_read_the_status_endpoint(self, client, state_dir, plain_admin_user):
         _login(client, plain_admin_user.id)
         assert client.get("/admin/system-update/status").status_code == 302
+        assert client.get(API).status_code == 403
 
-    def test_get_is_not_accepted(self, client, state_dir, admin_user):
+    def test_reading_requests_nothing(self, client, state_dir, admin_user):
         # A state-changing action must not be reachable by navigation.
         _login(client, admin_user.id)
-        assert client.get("/admin/system-update").status_code == 405
+        assert client.get(API).status_code == 200
+        assert client.get("/admin/system-update").status_code == 404
+        assert not _request_file(state_dir).exists()
+
+    def test_only_the_two_actions(self, client, state_dir, admin_user):
+        _login(client, admin_user.id)
+        assert _ask(client, "rm -rf /").status_code == 400
+        assert not _request_file(state_dir).exists()
 
 
 class TestRequestContents:
@@ -190,8 +206,9 @@ class TestStateReporting:
         assert system_update.describe_update_state()["last_run"]["state"] is None
 
 
-def test_status_endpoint_returns_the_same_data_as_the_page(client, state_dir, admin_user):
-    """One service call behind both, so the API and the HTML cannot drift."""
+def test_the_old_status_endpoint_still_answers(client, state_dir, admin_user):
+    """A Maintenance page opened before the update that brought the new front
+    end asks here until the update is done; without it, it would wait for ever."""
     _login(client, admin_user.id)
 
     response = client.get("/admin/system-update/status")
@@ -204,7 +221,7 @@ def test_status_endpoint_returns_the_same_data_as_the_page(client, state_dir, ad
 def test_requesting_an_update_is_audited(client, state_dir, admin_user):
     _login(client, admin_user.id)
 
-    client.post("/admin/system-update")
+    _ask(client)
 
     entry = db.session.execute(
         db.select(AuditLog).filter_by(event_type="update_requested")
@@ -212,15 +229,32 @@ def test_requesting_an_update_is_audited(client, state_dir, admin_user):
     assert entry.actor_user_id == admin_user.id
 
 
-def test_settings_page_renders_the_maintenance_panel(client, state_dir, admin_user):
+def test_the_pages_are_the_apps(client, state_dir, admin_user):
     _login(client, admin_user.id)
 
-    response = client.get("/admin/settings")
+    assert client.get("/admin/settings/updates").status_code == 200
+    assert client.get("/admin/settings/health").status_code == 200
 
-    assert response.status_code == 200
-    body = response.get_data(as_text=True)
-    assert "settings-maintenance" in body
-    assert "Install update now" in body
+
+def test_only_for_whoever_may_update(client, state_dir, plain_admin_user):
+    _login(client, plain_admin_user.id)
+
+    assert client.get("/admin/settings/updates").headers["Location"].endswith("/admin/settings/general")
+    assert client.get("/admin/settings/health").headers["Location"].endswith("/admin/settings/general")
+
+
+def test_what_the_page_is_told(client, state_dir, admin_user, monkeypatch):
+    monkeypatch.setattr(system_update, "get_local_version", lambda: {
+        "revision": "a" * 40, "short_revision": "aaaaaaaa", "branch": "main",
+        "committed_at": "2026-10-01T12:00:00+02:00", "subject": "Fix a thing"})
+    monkeypatch.setattr(system_update, "get_remote_version", lambda force=False: "b" * 40)
+    _login(client, admin_user.id)
+
+    body = client.get(API).get_json()
+
+    assert body["installed"] == {"short_revision": "aaaaaaaa", "branch": "main", "rolled_back": False,
+                                 "committed_at": "2026-10-01T10:00:00Z", "subject": "Fix a thing"}
+    assert body["latest"] == "bbbbbbbb" and body["update_available"] is True
 
 
 class TestRunnerScript:
@@ -304,16 +338,16 @@ class TestRollback:
         member = make_member(email="notadmin@example.com")
         _login(client, member.user_id)
 
-        response = client.post("/admin/system-update", data={"action": "rollback"})
+        response = _ask(client, "rollback")
 
-        assert response.status_code in (302, 403)
+        assert response.status_code == 403
         assert not (state_dir / system_update.REQUEST_FILENAME).exists()
 
     def test_admin_rollback_is_audited_distinctly(self, client, state_dir, tmp_path, monkeypatch, admin_user):
         self._record_point(tmp_path, monkeypatch)
         _login(client, admin_user.id)
 
-        client.post("/admin/system-update", data={"action": "rollback"})
+        _ask(client, "rollback")
 
         entry = db.session.execute(
             db.select(AuditLog).filter_by(event_type="rollback_requested")
@@ -432,11 +466,15 @@ class TestTheRemoteCheckSurvivesARollback:
         with app.test_request_context("/"):
             assert system_update.read_rollback_point()["branch"] == "release"
 
-    def test_the_page_does_not_call_a_detached_head_a_branch(self):
-        template = (Path(__file__).resolve().parent.parent / "aeronautics_members"
-                    / "templates" / "admin_settings.html").read_text()
-        assert "rolled back" in template
-        assert "update_state.local.branch == 'HEAD'" in template
+    def test_the_page_does_not_call_a_detached_head_a_branch(self, client, admin_user, monkeypatch):
+        monkeypatch.setattr(system_update, "get_local_version", lambda: {
+            "revision": "a" * 40, "short_revision": "aaaaaaaa", "branch": "HEAD",
+            "committed_at": None, "subject": None})
+        _login(client, admin_user.id)
+
+        installed = client.get(API).get_json()["installed"]
+
+        assert installed["branch"] is None and installed["rolled_back"] is True
 
 
 class TestAnUpdateThatNeverFinishes:

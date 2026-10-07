@@ -72,7 +72,9 @@ describe('the admin sidebar', () => {
       '/admin/settings/forum',
       '/admin/settings/mail',
       '/admin/settings/test-email',
-      '/admin/settings#settings-maintenance',
+      '/admin/settings/health',
+      '/admin/settings/updates',
+      '/admin/settings#backup-restore',
     ]);
   });
 

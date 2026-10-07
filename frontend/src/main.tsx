@@ -14,6 +14,9 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 
 import { cspNonce, Providers } from './app/Providers';
 import { routes } from './app/routes';
+import { reloadOnStaleBuild } from './app/staleBuild';
+
+reloadOnStaleBuild();
 
 // Dialogs and drawers lock the page's scrolling with a <style> tag of their
 // own (react-remove-scroll); it takes the page's nonce from here.

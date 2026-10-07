@@ -98,7 +98,8 @@ Entered with **Admin** in the top bar; opens on the Dashboard.
 - *System* -- **Logs**, **Settings** ▸
   - Settings folds open in place (chevron) to its parts: **General**,
     **Notifications**, **Membership fee**, **Forum**, **Mail accounts**,
-    **Test email**, **Maintenance**. Clicking *Settings* opens it on General.
+    **Test email**, **System health**, **Updates**, **Backup and restore**.
+    Clicking *Settings* opens it on General.
     (The forum's connection test is on the Forum page, beside what it tests.)
     While one is on a settings page it stays open.
 
@@ -131,8 +132,9 @@ Treasurer, for example, sees only what touches the money they transfer
   team's Money page.
 - **Logs** -- table (when, who, what) with filters.
 - **Settings pages** -- each one card of fields with *Save* at the bottom right.
-  Maintenance keeps its own parts (updates, backups, background jobs) as
-  separate cards on that one page.
+  What used to be one Maintenance tab is three pages: System health (the
+  report and what to do about it), Updates (version, install, roll back,
+  the last run) and Backup and restore (with the background jobs).
 
 ## 5. The teams area
 
@@ -232,7 +234,7 @@ headed. Motion is minimal and off when the device asks for reduced motion.
 | Top menu: My Account, Teams, Admin, Logout | Top bar: My Account, Teams, Admin; Logout moves into the user menu |
 | Admin tab row (Dashboard … Settings) | Admin sidebar |
 | Admin → Settings with its vertical list | Admin sidebar → Settings, folded open |
-| Settings → Backup & Restore, updates, background jobs | Settings → Maintenance |
+| Settings → Maintenance: health, updates, backups, background jobs | Settings → System health, Updates, Backup and restore |
 | Admin → Accounts → account page (long single page) | Account page with tabs: Profile, Membership, Forum, Teams, Roles, Danger zone |
 | Admin → Teams → team form | Admin › Teams › team (cards) + *Team page and settings* |
 | Admin → Money | Admin sidebar → Money |

@@ -1109,17 +1109,8 @@ def _invite_to_teams(member):
 
 
 def build_settings_page_context():
-    """What Settings -> Maintenance shows: the version and its updates, the
-    system's health with the undelivered emails behind it, and the backups."""
-    return {
-        # The same service call the JSON status endpoint uses, so the page and it cannot disagree.
-        "update_state": describe_update_state(),
-        "system_health": collect_system_health(),
-        "backup_page": describe_backup_page(),
-        # The health report counts undelivered emails; this is what an admin
-        # needs to resolve one -- who it was for, and why it failed.
-        "undelivered_emails": list_undelivered_emails(),
-    }
+    """What is left on the old settings page: Backup and restore."""
+    return {"backup_page": describe_backup_page()}
 
 
 

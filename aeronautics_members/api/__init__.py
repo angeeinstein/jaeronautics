@@ -16,6 +16,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     admin_money,
     admin_reviews,
     admin_settings,
+    admin_system,
     admin_teams,
     session,
 )
