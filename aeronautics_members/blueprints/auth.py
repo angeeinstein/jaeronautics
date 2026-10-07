@@ -1,8 +1,7 @@
-"""Auth blueprint.
-
-Route handlers moved verbatim out of app.py (dedented; @app.route ->
-@auth_bp.route; app.logger -> current_app.logger). Helpers are imported
-from the app module, which is fully initialized before this is imported.
+"""Signing in and the links in emails. The pages are the app's (api/sign_in.py,
+api/account.py); Flask answers the confirmation links for the private and the
+university address itself -- it confirms, then sends the browser on to an app
+page, which shows what it said.
 """
 
 from flask import Blueprint, current_app

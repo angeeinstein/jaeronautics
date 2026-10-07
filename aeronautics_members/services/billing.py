@@ -60,8 +60,6 @@ from .payments import (  # noqa: F401 -- shared with the teams; imported from he
 )
 
 
-
-
 def subscription_collects_payment_automatically(subscription):
     """True when Stripe itself collects payment for this subscription.
 
@@ -822,17 +820,6 @@ def cancel_member_subscription(member, *, reason=None):
     member.stripe_subscription_id = None
     member.cancel_at_period_end = False
     return True
-
-
-def sync_member_subscription_state_from_stripe(member):
-    if member is None or not (member.stripe_customer_id or member.stripe_subscription_id):
-        return False
-
-    subscription = get_latest_stripe_subscription_for_member(member)
-    if not subscription:
-        return False
-
-    return sync_member_subscription_state_from_subscription(member, subscription)
 
 
 # --- A new membership fee -----------------------------------------------------------

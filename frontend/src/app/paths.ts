@@ -1,6 +1,7 @@
 /**
  * Which addresses the app draws itself (paths.json). Everything else is
- * still one of Flask's pages, so a link there loads the whole page.
+ * Flask's -- a download, a PDF, the forum's sign-in -- so a link there loads
+ * it from the server.
  */
 import { matchPath } from 'react-router';
 

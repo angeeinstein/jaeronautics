@@ -125,15 +125,6 @@ def requires_year_group(category):
     return YEAR_GROUP_RULES.get(category, {}).get("required", False)
 
 
-def categories_showing_year_group():
-    """The categories whose forms include the year group, for the browser.
-
-    Handed to the page so the show/hide rule is not written down a second time
-    in JavaScript, where it would quietly disagree with this module.
-    """
-    return tuple(category for category in CATEGORY_ORDER if shows_year_group(category))
-
-
 def category_choices():
     """(value, label) pairs in display order, for a form's radio field."""
     return [(category, CATEGORY_LABELS[category]) for category in CATEGORY_ORDER]

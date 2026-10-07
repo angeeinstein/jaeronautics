@@ -783,7 +783,6 @@ def find_account(address):
     return user
 
 
-
 # --- The forum ---------------------------------------------------------------
 #
 # A team may name a forum group; its active members are in it, everybody else
@@ -1660,11 +1659,6 @@ def update_access_list(actor, team, *, recipients, dates, auto_send):
         log_audit_event("teams", "team_access_list_settings_changed", actor_user=actor,
                         before=before, after=after, metadata={"team": team.slug})
     return team
-
-
-def access_list_rows(team):
-    """(name, university email) of every current member, by surname."""
-    return [(row["name"], row["university_email"] or "") for row in roster(team)]
 
 
 def last_access_list(team):

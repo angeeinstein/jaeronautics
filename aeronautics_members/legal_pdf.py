@@ -419,11 +419,3 @@ def waiting_ready(german, team=None):
     versions, watermark = _waiting_parts(german)
     path, digest = ready(german, team, versions=versions, watermark=watermark)
     return path, digest, f"{watermark}_{filename(german, team)}"
-
-
-def waiting_pdf(german, team=None):
-    """A version not shown yet -- a draft, or one whose day has not come -- with
-    its English file of the same version, if any, marked across every page.
-    Kept like the others: a changed draft has another hash, so a new file."""
-    path, _digest, name = waiting_ready(german, team)
-    return path.read_bytes(), name

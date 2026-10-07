@@ -1,8 +1,8 @@
-"""Admin blueprint.
-
-Route handlers moved verbatim out of app.py (dedented; @app.route ->
-@admin_bp.route; app.logger -> current_app.logger). Helpers are imported
-from the app module, which is fully initialized before this is imported.
+"""The admin area's addresses. The pages are the app's (api/admin_*.py): these
+routes keep their permission checks and hand out the app (blueprints/app_shell.py).
+Flask still serves the files: an account's data export, an archived forum
+picture, the legal texts' waiting-versions PDF and Markdown template, backup
+files, and the update's progress for the admin page.
 """
 
 from pathlib import Path

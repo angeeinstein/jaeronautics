@@ -1,8 +1,6 @@
-"""Forum blueprint.
-
-Route handlers moved verbatim out of app.py (dedented; @app.route ->
-@forum_bp.route; app.logger -> current_app.logger). Helpers are imported
-from the app module, which is fully initialized before this is imported.
+"""The forum: the page (the app's, api/account.py), Discourse's sign-in through
+the portal (DiscourseConnect), the sign-out Discourse sends back, and the
+profile pictures Discourse fetches.
 """
 
 from flask import Blueprint, current_app

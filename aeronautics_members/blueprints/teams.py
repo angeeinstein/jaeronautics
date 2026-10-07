@@ -1,4 +1,9 @@
-"""Teams: the pages for site admins, for members, and for team leads.
+"""Teams: the addresses of the pages for site admins, members and team leads,
+and of the association's money for teams. The pages are the app's
+(api/teams.py, api/team_manage.py, api/teams_money.py, api/admin_teams.py,
+api/admin_money.py); these routes keep their checks and hand out the app. Flask
+still serves the files: team pictures and logos, the rules' PDFs, the CSV
+exports and the transfer's QR code.
 
 The admin pages are reachable whether or not teams are switched on -- they are
 where they get switched on. Everything else exists only while the switch is

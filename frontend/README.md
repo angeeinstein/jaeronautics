@@ -15,9 +15,9 @@ npm run dev                # http://127.0.0.1:5173, with Flask on :5000 behind i
 ```
 
 `npm run dev` serves the app with hot reloading and passes everything else --
-the API, the pages not moved yet, static files -- to Flask on port 5000
-(`flask --app aeronautics_members.app:create_app run`). Sign in through Flask's
-login page as usual; the session cookie is shared.
+the API, downloads, static files -- to Flask on port 5000
+(`flask --app aeronautics_members.app:create_app run`). Sign in on the app's
+sign-in page as usual; the session cookie is shared.
 
 Before committing:
 
@@ -73,5 +73,5 @@ records -- the server sorts and pages, the page keeps filters, sort and page
 in its address (see `src/pages/admin/Accounts.tsx` and `accountFilters.ts`).
 
 Links: use `AppLink` (`src/app/AppLink.tsx`) for every internal link -- it
-moves within the app where the page is the app's, and loads the page where it
-is still Flask's.
+moves within the app where the page is the app's, and loads it from the server
+where it is Flask's (a download, a PDF, the forum's sign-in).

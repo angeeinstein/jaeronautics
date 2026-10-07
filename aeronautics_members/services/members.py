@@ -74,12 +74,6 @@ def apply_member_profile(member, form_data, fields=MEMBER_PROFILE_FIELDS):
             member.email_work_verification_nonce = None
 
 
-def build_member_payload(member):
-    payload = {field_name: getattr(member, field_name) for field_name in MEMBER_PROFILE_FIELDS}
-    payload["terms_accepted"] = True
-    return payload
-
-
 def get_member_by_email(email):
     if not email:
         return None

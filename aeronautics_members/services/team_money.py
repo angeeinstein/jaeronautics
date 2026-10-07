@@ -183,7 +183,6 @@ def open_transfers():
     }
 
 
-
 # --- The team's bank account -------------------------------------------------------
 
 
@@ -200,11 +199,6 @@ def iban_problem(iban):
     if int(digits) % 97 != 1:
         return "That IBAN is mistyped: its check digits do not match."
     return None
-
-
-def grouped_iban(iban):
-    """AT61 1904 3002 3457 3201, as it is read out and typed."""
-    return " ".join(iban[i:i + 4] for i in range(0, len(iban), 4)) if iban else ""
 
 
 def masked_iban(iban):

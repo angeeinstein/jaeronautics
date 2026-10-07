@@ -44,7 +44,7 @@ describe('the frame', () => {
     ).toEqual(['My Account']);
   });
 
-  it('marks the current page in the sidebar and links pages not moved yet as plain links', async () => {
+  it('marks the current page in the sidebar', async () => {
     admin();
     const sections = (await screen.findAllByRole('navigation', { name: 'Sections' }))[0];
     if (!sections) throw new Error('no sidebar');
