@@ -151,11 +151,13 @@ phone, every test of `e2e/`.
 
 ## 3. Build and deployment
 
-- **`install.sh`** installs Node.js (current LTS, from NodeSource's package
-  repository -- Ubuntu's own is too old for Vite) with the other packages,
-  and on every install and update runs `npm ci` and `npm run build` in
-  `frontend/` before the portal restarts. A build that fails stops the update
-  like a failed migration does, and the rollback applies.
+- **`install.sh`** downloads the front end CI built for the revision it installs
+  (the `publish-frontend` job, on the Front-end builds pre-release), waiting for
+  CI if it is still running and stopping if it failed -- a server with 1 GB of
+  RAM cannot build it beside the portal. With `--build-locally`, or nothing to
+  download, it builds it itself: Node.js from NodeSource, `npm ci` and
+  `npm run build`, with temporary swap and at the lowest priority
+  (`docs/maintenance.md`, The Front End).
   The build goes into a folder beside the live one and is swapped in whole;
   the previous build's files stay one more update, so a page opened before
   the update still loads its scripts.

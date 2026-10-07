@@ -240,9 +240,18 @@ on_error() {
     exit "$(( failed_status == 0 ? 1 : failed_status ))"
 }
 trap 'on_error "${LINENO}" "${BASH_COMMAND}"' ERR
-# The database credential files live only as long as the run that needs them,
-# however that run ends.
-trap 'cleanup_migration_temp_files' EXIT
+# However the run ends: the database credential files and the build's
+# temporary swap go, and background jobs paused for an update that stopped
+# (die() exits without passing on_error) start again.
+on_exit() {
+    local status=$?
+    cleanup_migration_temp_files
+    remove_build_swap || true
+    if (( status != 0 )); then
+        resume_background_jobs_after_failure || true
+    fi
+}
+trap 'on_exit' EXIT
 
 # The jobs the timers run, each a oneshot service of its own.
 BACKGROUND_JOBS=(billing-reconcile notifications cleanup-logs forum-drift external-work)
@@ -315,6 +324,9 @@ Options:
   --restore FILE            Restore a backup (from the Backup & Restore page).
                             Installs first if this server has no installation.
   --passphrase-file FILE    Read the backup's passphrase from FILE instead of asking.
+  --build-locally           Build the front end on this server instead of
+                            using CI's build (needs about 2 GB of RAM and swap;
+                            temporary swap is added if there is less).
   --yes, --non-interactive
   -h, --help
 EOF
@@ -505,6 +517,10 @@ parse_args() {
                 ;;
             --yes|--non-interactive)
                 NONINTERACTIVE="1"
+                shift
+                ;;
+            --build-locally)
+                BUILD_LOCALLY="1"
                 shift
                 ;;
             -h|--help)
@@ -1271,8 +1287,7 @@ roll_back_installation() {
     # nginx configuration all match the code that is about to run.
     ensure_writable_directories
     ensure_virtualenv
-    ensure_nodejs
-    build_frontend
+    install_frontend
     render_service_file
     render_billing_reconcile_timer_files
     render_notifications_timer_files
@@ -1500,9 +1515,37 @@ ensure_virtualenv() {
     fi
 }
 
-# The front end (frontend/) is built with Node.js on every install and update:
-# the current long-term-support release, from NodeSource's package repository,
-# because Ubuntu's own Node.js is too old for its build tools.
+# The front end (frontend/) is built by CI, not here: each step of the build
+# needs 650-870 MB of memory, more than a server with 1 GB has free beside
+# the portal and MariaDB -- and when memory runs out, the kernel may stop the
+# database instead of the build. So CI builds it once its tests have passed
+# (the publish-frontend job in .github/workflows/ci.yml) and attaches it to
+# the "frontend-builds" pre-release on GitHub, one file per version of
+# frontend/: named by the folder's git tree hash, so a commit that changes
+# only Python reuses the build before it. The installer downloads the one
+# for the revision it installs, waiting for CI if it is still running.
+#
+# Built here instead with --build-locally, or when there is nothing to
+# download (not a GitHub repository, GitHub out of reach, an old build
+# cleaned up): with temporary swap if memory is short, and at the lowest
+# priority, the first thing stopped if memory runs out.
+FRONTEND_RELEASE="frontend-builds"
+FRONTEND_CI_WORKFLOW=".github/workflows/ci.yml"
+FRONTEND_CI_WAIT_MINUTES="${FRONTEND_CI_WAIT_MINUTES:-25}"
+FRONTEND_CACHE_DIR="/var/cache/${APP_NAME}/frontend"
+# Earlier builds kept here, so a rollback finds its own.
+FRONTEND_CACHE_KEEP=3
+BUILD_LOCALLY="${BUILD_LOCALLY:-0}"
+FRONTEND_PREPARED=0
+FRONTEND_TREE=""
+FRONTEND_ARCHIVE=""
+# Memory (RAM and swap) the build is given room for; measured peak 865 MB.
+BUILD_MEMORY_NEEDED_MB=2048
+BUILD_SWAP_FILE="/${APP_NAME}-build.swap"
+BUILD_SWAP_ACTIVE=0
+
+# Node.js, only to build here: the current long-term-support release, from
+# NodeSource's package repository, as Ubuntu's own is too old for the build tools.
 NODE_MAJOR=24
 
 node_major() {
@@ -1549,34 +1592,267 @@ ensure_nodejs() {
     success "Node.js $(node --version) installed."
 }
 
-# Built into a folder beside the one being served and swapped in at the end,
-# so the portal never serves a half-written build. The previous build's files
-# stay one more update: a page opened before it still loads the scripts it
-# was built with. A build that fails stops the run like a failed Python
-# install does, before the portal is restarted.
-build_frontend() {
-    local frontend="${INSTALL_DIR}/frontend"
-    if [[ ! -f "${frontend}/package.json" ]]; then
+# owner/repo of a repository on GitHub, or nothing.
+github_repo_slug() {
+    local url
+    url="$(normalize_repo_url "${REPO_URL:-$(detect_repo_url)}")"
+    case "${url}" in
+        https://github.com/*) url="${url#https://github.com/}" ;;
+        git@github.com:*) url="${url#git@github.com:}" ;;
+        *) return 0 ;;
+    esac
+    if [[ "${url}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+        printf '%s\n' "${url}"
+    fi
+}
+
+# Whether CI passed for a commit: success, failure:<why>, running, none (no
+# run yet) or unknown (GitHub could not be asked). Unauthenticated: the
+# repository is public, and GitHub allows 60 such questions an hour.
+ci_state() {
+    local slug="$1" sha="$2" answer
+    if ! answer="$(curl -fsS --max-time 20 -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/repos/${slug}/actions/runs?head_sha=${sha}&event=push&per_page=50" 2>/dev/null)"; then
+        printf 'unknown\n'
+        return 0
+    fi
+    printf '%s' "${answer}" | python3 -c '
+import json, sys
+try:
+    runs = json.load(sys.stdin).get("workflow_runs") or []
+except ValueError:
+    print("unknown")
+    raise SystemExit
+runs = [run for run in runs if (run.get("path") or "").split("@")[0] == sys.argv[1]]
+if not runs:
+    print("none")
+else:
+    run = max(runs, key=lambda run: (run.get("run_number") or 0, run.get("run_attempt") or 0))
+    if run.get("status") != "completed":
+        print("running")
+    elif run.get("conclusion") == "success":
+        print("success")
+    else:
+        print("failure:" + str(run.get("conclusion")))
+' "${FRONTEND_CI_WORKFLOW}" 2>/dev/null || printf 'unknown\n'
+}
+
+# Returns once CI has passed for the commit, or cannot be asked; stops the
+# run if it failed or does not finish in time. Nothing is stopped yet when
+# this runs for an update (prepare_frontend), so the portal is untouched.
+wait_for_ci() {
+    local slug="$1" sha="$2" state waited=0
+    local limit=$(( FRONTEND_CI_WAIT_MINUTES * 60 ))
+    local runs="https://github.com/${slug}/actions"
+    while :; do
+        state="$(ci_state "${slug}" "${sha}")"
+        case "${state}" in
+            success)
+                info "CI passed for ${sha:0:8}."
+                return 0
+                ;;
+            failure:*)
+                die "CI did not pass for ${sha:0:8} (${state#failure:}; ${runs}), so this version is not installed. Fix it and update again -- or, to install it anyway, run the update with --build-locally."
+                ;;
+            unknown)
+                warn "Could not ask GitHub whether CI passed for ${sha:0:8}; going on."
+                return 0
+                ;;
+            none)
+                # A push only just made has no run for a moment.
+                if (( waited >= 180 )); then
+                    warn "CI has not run for ${sha:0:8} (${runs}); going on without its result."
+                    return 0
+                fi
+                ;;
+            running)
+                if (( waited >= limit )); then
+                    die "CI has not finished for ${sha:0:8} after ${FRONTEND_CI_WAIT_MINUTES} minutes (${runs}). Run the update again once it has -- or with --build-locally to build here."
+                fi
+                ;;
+        esac
+        if (( waited == 0 )); then
+            info "CI is still at work on ${sha:0:8} (${runs}); waiting for it, up to ${FRONTEND_CI_WAIT_MINUTES} minutes."
+        elif (( waited % 300 == 0 )); then
+            info "Still waiting for CI ($(( waited / 60 )) minutes so far)."
+        fi
+        # Once a minute: GitHub answers 60 questions an hour without an account.
+        sleep 60
+        waited=$(( waited + 60 ))
+    done
+}
+
+# Gets the front end for the revision checked out in INSTALL_DIR ready:
+# FRONTEND_ARCHIVE is CI's build, downloaded -- or empty, and it is built
+# here. Run for an update before anything is stopped, so waiting for CI, or
+# CI having failed, costs the running portal nothing.
+prepare_frontend() {
+    FRONTEND_PREPARED=1
+    FRONTEND_ARCHIVE=""
+    FRONTEND_TREE="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD:frontend 2>/dev/null || true)"
+    [[ -f "${INSTALL_DIR}/frontend/package.json" && -n "${FRONTEND_TREE}" ]] || return 0
+    if [[ "${BUILD_LOCALLY}" == "1" ]]; then
+        info "The front end is built on this server, as asked (--build-locally)."
+        return 0
+    fi
+
+    local slug sha
+    slug="$(github_repo_slug)"
+    sha="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || true)"
+    if [[ -z "${slug}" || -z "${sha}" ]]; then
+        warn "This repository is not on GitHub, so there is no build from CI to fetch; the front end is built on this server."
+        return 0
+    fi
+
+    step "Fetching the front end built by CI for ${sha:0:8}"
+    wait_for_ci "${slug}" "${sha}"
+
+    local name="frontend-${FRONTEND_TREE}.tar.gz"
+    install -d -m 0755 "${FRONTEND_CACHE_DIR}"
+    if [[ -s "${FRONTEND_CACHE_DIR}/${name}" ]]; then
+        info "This version of the front end is here already, from an earlier update."
+        FRONTEND_ARCHIVE="${FRONTEND_CACHE_DIR}/${name}"
+        return 0
+    fi
+    local url="https://github.com/${slug}/releases/download/${FRONTEND_RELEASE}/${name}"
+    local part="${FRONTEND_CACHE_DIR}/${name}.part"
+    if retry 3 curl -fsSL --max-time 300 -o "${part}" "${url}" && tar -tzf "${part}" >/dev/null 2>&1; then
+        mv -f "${part}" "${FRONTEND_CACHE_DIR}/${name}"
+        FRONTEND_ARCHIVE="${FRONTEND_CACHE_DIR}/${name}"
+        success "Downloaded the front end ($(du -h "${FRONTEND_ARCHIVE}" | cut -f1))."
+    else
+        rm -f "${part}"
+        warn "CI's build of this front end could not be downloaded (${url}); it is built on this server instead."
+    fi
+}
+
+# Puts the front end of the revision in INSTALL_DIR in place: CI's build,
+# or one made here.
+install_frontend() {
+    if [[ ! -f "${INSTALL_DIR}/frontend/package.json" ]]; then
         info "This revision has no front end to build."
         return 0
     fi
-    local static="${INSTALL_DIR}/aeronautics_members/static"
-    local live="${static}/app"
-    local next="${static}/app.next"
+    # Prepared before the update began -- unless the checkout has moved on since.
+    if [[ "${FRONTEND_PREPARED}" != "1" \
+        || "$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD:frontend 2>/dev/null || true)" != "${FRONTEND_TREE}" ]]; then
+        prepare_frontend
+    fi
+    local next="${INSTALL_DIR}/aeronautics_members/static/app.next"
+    if [[ -n "${FRONTEND_ARCHIVE}" ]]; then
+        step "Putting the front end in place"
+        rm -rf "${next}"
+        install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${next}"
+        # Unpacked as the portal's user: nothing in it is owned by root.
+        run_as_app_user tar -xzf "${FRONTEND_ARCHIVE}" -C "${next}" --no-same-owner \
+            || die "Unpacking the front end (${FRONTEND_ARCHIVE}) failed."
+        [[ -f "${next}/index.html" ]] || die "The front end from CI has no index.html."
+        [[ "$(cat "${next}/.build-tree" 2>/dev/null || true)" == "${FRONTEND_TREE}" ]] \
+            || die "The front end from CI was built from other sources than this revision's."
+    else
+        build_frontend_here "${next}"
+    fi
+    swap_in_frontend "${next}"
+    # The newest few, for a rollback.
+    if [[ -d "${FRONTEND_CACHE_DIR}" ]]; then
+        find "${FRONTEND_CACHE_DIR}" -maxdepth 1 -name 'frontend-*.tar.gz' -printf '%T@ %p\n' \
+            | sort -rn | tail -n +$(( FRONTEND_CACHE_KEEP + 1 )) | cut -d' ' -f2- | xargs -r rm -f
+    fi
+}
+
+# The build gives way to the portal: the lowest CPU and disk priority, and
+# the first thing the kernel stops if memory runs out -- not MariaDB or
+# gunicorn.
+run_build_step() {
+    local priority=(nice -n 19)
+    if command_exists ionice; then
+        priority+=(ionice -c 2 -n 7)
+    fi
+    run_as_app_user env HOME="${INSTALL_DIR}" "${priority[@]}" \
+        bash -c 'echo 1000 > /proc/self/oom_score_adj 2>/dev/null || true; exec "$@"' build-step "$@"
+}
+
+# Temporary swap, when RAM and swap together leave less free than the build
+# needs. Taken away again by remove_build_swap, also when the run fails.
+add_build_swap() {
+    local available size disk_free
+    available="$(awk '/^(MemAvailable|SwapFree):/ { sum += $2 } END { print int(sum / 1024) }' /proc/meminfo)"
+    if (( available >= BUILD_MEMORY_NEEDED_MB )); then
+        info "${available} MB of memory free (RAM and swap): enough for the build."
+        return 0
+    fi
+    # What is missing, rounded up to 512 MB, and 512 MB to spare.
+    size=$(( (BUILD_MEMORY_NEEDED_MB - available + 511) / 512 * 512 + 512 ))
+    disk_free="$(df --output=avail -m / | tail -n 1 | tr -d ' ')"
+    if (( disk_free < size + 1024 )); then
+        warn "Only ${available} MB of memory free, and too little disk space (${disk_free} MB) for temporary swap; building anyway."
+        return 0
+    fi
+    info "Only ${available} MB of memory free (RAM and swap): adding ${size} MB of temporary swap for the build."
+    rm -f "${BUILD_SWAP_FILE}"
+    local made=0
+    # fallocate is instant; a file system that will not swap to one gets a written-out file instead.
+    if fallocate -l "${size}M" "${BUILD_SWAP_FILE}" 2>/dev/null; then
+        chmod 600 "${BUILD_SWAP_FILE}"
+        mkswap "${BUILD_SWAP_FILE}" >/dev/null 2>&1 && swapon "${BUILD_SWAP_FILE}" 2>/dev/null && made=1
+    fi
+    if (( ! made )); then
+        rm -f "${BUILD_SWAP_FILE}"
+        if dd if=/dev/zero of="${BUILD_SWAP_FILE}" bs=1M count="${size}" status=none 2>/dev/null; then
+            chmod 600 "${BUILD_SWAP_FILE}"
+            mkswap "${BUILD_SWAP_FILE}" >/dev/null 2>&1 && swapon "${BUILD_SWAP_FILE}" 2>/dev/null && made=1
+        fi
+    fi
+    if (( made )); then
+        BUILD_SWAP_ACTIVE=1
+    else
+        rm -f "${BUILD_SWAP_FILE}"
+        warn "Could not add temporary swap; building anyway."
+    fi
+}
+
+remove_build_swap() {
+    (( ${BUILD_SWAP_ACTIVE:-0} )) || return 0
+    if swapoff "${BUILD_SWAP_FILE}" 2>/dev/null; then
+        rm -f "${BUILD_SWAP_FILE}"
+        BUILD_SWAP_ACTIVE=0
+        info "Temporary swap removed."
+    else
+        warn "Could not remove the temporary swap ${BUILD_SWAP_FILE}; remove it later with: swapoff ${BUILD_SWAP_FILE} && rm ${BUILD_SWAP_FILE}"
+    fi
+}
+
+# The fallback: the build made here, into NEXT.
+build_frontend_here() {
+    local next="$1"
+    local frontend="${INSTALL_DIR}/frontend"
     local cache="/var/cache/${APP_NAME}/npm"
 
-    step "Building the front end"
+    ensure_nodejs
+    step "Building the front end on this server"
+    add_build_swap
     install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0750 "${cache}"
     rm -rf "${next}"
-    if ! run_as_app_user env HOME="${INSTALL_DIR}" npm --prefix "${frontend}" ci \
-        --no-audit --no-fund --cache "${cache}"; then
+    if ! run_build_step npm --prefix "${frontend}" ci --no-audit --no-fund --cache "${cache}"; then
+        remove_build_swap
         die "Installing the front end's packages failed."
     fi
-    if ! run_as_app_user env HOME="${INSTALL_DIR}" npm --prefix "${frontend}" run build -- \
-        --outDir "${next}" --emptyOutDir; then
+    if ! run_build_step npm --prefix "${frontend}" run build -- --outDir "${next}" --emptyOutDir; then
+        remove_build_swap
         die "Building the front end failed."
     fi
+    remove_build_swap
     [[ -f "${next}/index.html" ]] || die "The front-end build produced no index.html."
+    success "Front end built."
+}
+
+# Swapped in at the end, so the portal never serves a half-written front end.
+# The previous one's files stay one more update: a page opened before it
+# still loads the scripts it was built with.
+swap_in_frontend() {
+    local next="$1"
+    local static="${INSTALL_DIR}/aeronautics_members/static"
+    local live="${static}/app"
 
     # This build's own files, so the next one carries over these and not
     # everything ever built.
@@ -1597,7 +1873,7 @@ build_frontend() {
     fi
     mv "${next}" "${live}"
     rm -rf "${static}/app.previous"
-    success "Front end built."
+    success "Front end in place."
 }
 
 collect_configuration() {
@@ -3131,6 +3407,9 @@ install_or_update() {
 
     source_existing_env
     if [[ "${INSTALLATION_EXISTS}" == "1" ]]; then
+        # Before anything is backed up or stopped: waiting for CI's build of the
+        # front end, or CI having failed, leaves the running portal untouched.
+        prepare_frontend
         backup_runtime_state
         # Must run before ensure_repo_present moves the checkout, or it would
         # record the revision being installed rather than the one being replaced.
@@ -3168,8 +3447,7 @@ install_or_update() {
 
     write_env_file
     ensure_virtualenv
-    ensure_nodejs
-    build_frontend
+    install_frontend
     ensure_database
     if [[ "${MIGRATE_DB_DATA}" == "1" ]]; then
         import_migrated_database

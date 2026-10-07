@@ -210,15 +210,21 @@ def test_the_pdf_libraries_are_installed_with_the_rest(installer):
 # --- The front end, built on every install and update --------------------------
 
 
-def test_the_front_end_is_built_before_the_portal_restarts(installer):
+def test_the_front_end_is_in_place_before_the_portal_restarts(installer):
     for function in ("install_or_update", "roll_back_installation"):
         calls = [line.strip() for line in _function(installer, function).splitlines()]
-        assert calls.index("ensure_virtualenv") < calls.index("ensure_nodejs") < calls.index("build_frontend")
-        assert calls.index("build_frontend") < calls.index("reload_services"), function
+        assert calls.index("ensure_virtualenv") < calls.index("install_frontend") < calls.index("reload_services"), function
+
+
+def test_ci_is_waited_for_before_anything_is_stopped(installer):
+    """Waiting for CI's build, or CI having failed, must leave the running portal as it was."""
+    calls = [line.strip() for line in _function(installer, "install_or_update").splitlines()]
+    assert calls.index("prepare_frontend") < calls.index("backup_runtime_state") < calls.index("pause_background_jobs")
 
 
 def _build(installer, tmp_path, *, fail=False, build_id):
-    """build_frontend with a fake npm that writes a build named ``build_id``."""
+    """The build made here (build_frontend_here, then swap_in_frontend) with a
+    fake npm that writes a build named ``build_id``."""
     import subprocess
 
     bin_dir = tmp_path / "bin"
@@ -240,9 +246,12 @@ def _build(installer, tmp_path, *, fail=False, build_id):
         "set -Eeuo pipefail\n"
         "step(){ :; }; info(){ :; }; success(){ :; }; die(){ echo \"DIED: $*\"; exit 3; }\n"
         "run_as_app_user(){ \"$@\"; }; chown(){ :; }; install(){ mkdir -p \"${@: -1}\"; }\n"
+        "ensure_nodejs(){ :; }; add_build_swap(){ :; }; remove_build_swap(){ :; }; run_build_step(){ \"$@\"; }\n"
         f"INSTALL_DIR={install_dir}; APP_NAME=portal; APP_USER=u; APP_GROUP=g\n"
-        + _function(installer, "build_frontend").replace("/var/cache/", f"{tmp_path}/cache/")
-        + "\nbuild_frontend\n"
+        + _function(installer, "build_frontend_here").replace("/var/cache/", f"{tmp_path}/cache/")
+        + "\n" + _function(installer, "swap_in_frontend")
+        + '\nnext="$INSTALL_DIR/aeronautics_members/static/app.next"\n'
+        + 'build_frontend_here "$next"\nswap_in_frontend "$next"\n'
     )
     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30,
                             env={"PATH": f"{bin_dir}:/usr/bin:/bin"})

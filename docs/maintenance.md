@@ -1860,13 +1860,41 @@ way to get unstuck, not as a setting to leave in place.
 ## The Front End
 
 The new front end (`frontend/`, React and TypeScript; `docs/frontend-plan.md`)
-is built on the server: `install.sh` installs Node.js 24 from NodeSource's
-package repository (Ubuntu's own is too old) and runs `npm ci` and
-`npm run build` on every install, update and rollback, before the portal
-restarts. The build goes into `aeronautics_members/static/app.next/` and is
-swapped in whole; the previous build's files stay one more update, so a page
-opened before it still loads its scripts. A build that fails stops the update
-like a failed Python install. npm's download cache is `/var/cache/jaeronautics/npm`.
+is built by CI, not on the server. Each step of the build needs 650–870 MB of
+memory, more than a server with 1 GB has free beside the portal and MariaDB —
+and when memory runs out, the kernel may stop the database rather than the
+build. So once a commit's tests have passed, CI's `publish-frontend` job
+attaches the build to the **Front-end builds** pre-release on GitHub
+(tag `frontend-builds`), one file per version of `frontend/`:
+`frontend-<tree>.tar.gz`, named by the folder's git tree hash, so a commit that
+changes only Python reuses the build before it. The newest 200 are kept.
+
+On every install, update and rollback, `install.sh` downloads the build for the
+revision it installs — before anything is stopped:
+
+- **CI still running** (an update straight after a push): it waits, up to 25
+  minutes (`FRONTEND_CI_WAIT_MINUTES`), and says so.
+- **CI failed** for that commit: the update stops, and the running portal is
+  left as it was.
+- **Downloaded:** checked to be built from this revision's `frontend/`,
+  swapped in whole. The last three downloads stay in
+  `/var/cache/jaeronautics/frontend/`, so a rollback finds its own. No
+  Node.js and no npm packages are needed on the server.
+
+**Built on the server instead** with `update --build-locally` (or
+`install.sh --build-locally`), and when there is nothing to download — the
+repository not on GitHub, GitHub out of reach, a build cleaned up long ago.
+Then `install.sh` installs Node.js 24 from NodeSource's package repository
+(Ubuntu's own is too old) and runs `npm ci` and `npm run build`: with
+temporary swap (`/jaeronautics-build.swap`, removed again however the run
+ends) when RAM and swap together have less than 2 GB free, at the lowest CPU
+and disk priority, and marked as the first process to stop if memory runs
+out — not MariaDB or the portal. Slow on a 1 GB server, but safe.
+
+Either way the new build goes into `aeronautics_members/static/app.next/` and
+is swapped in whole; the previous build's files stay one more update, so a page
+opened before it still loads its scripts. An update that stops on the way
+starts the paused background jobs again.
 
 Its JavaScript dependencies are pinned in `frontend/package-lock.json`, with
 their hashes, as the Python ones are in the lock files. Working on it,
@@ -1896,6 +1924,10 @@ versions the servers run (Python 3.12, Node.js 24):
   Prettier, the component tests (Vitest) and the build (`frontend/README.md`).
 - **e2e** -- the built front end in Chromium against the real Flask app with
   sample data (Playwright); traces of failed tests are kept for a week.
+- **publish-frontend** -- after the three above pass, on a push: the built
+  front end for the servers, on the Front-end builds pre-release (see The Front
+  End). The only job that may write to the repository; one that fails does not
+  fail the commit — the installer then builds it itself.
 
 ## Send a Welcome Email Manually
 

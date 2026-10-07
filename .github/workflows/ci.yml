@@ -11,6 +11,10 @@ env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "24"
 
+# Read-only, except where a job asks for more (publish-frontend).
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -136,3 +140,81 @@ jobs:
           name: playwright-traces
           path: frontend/test-results/
           retention-days: 7
+
+  publish-frontend:
+    # The built front end for the servers: install.sh downloads it instead of
+    # building on a server with 1 GB of RAM. Published once the tests have
+    # passed, to the "frontend-builds" pre-release, as one file per version of
+    # frontend/ -- named by its git tree hash, so a commit that changes only
+    # Python reuses the build before it.
+    if: github.event_name == 'push'
+    needs: [test, frontend, e2e]
+    runs-on: ubuntu-latest
+    # A build that could not be published is not a failed commit: the
+    # installer then builds it itself.
+    continue-on-error: true
+    permissions:
+      contents: write
+    # One at a time: they all add to the same release.
+    concurrency:
+      group: publish-frontend
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE: frontend-builds
+      KEEP: 200
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Which build this is
+        id: build
+        run: |
+          tree="$(git rev-parse HEAD:frontend)"
+          echo "tree=${tree}" >> "$GITHUB_OUTPUT"
+          echo "name=frontend-${tree}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Published already?
+        id: published
+        run: |
+          if curl -fsIL -o /dev/null \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE}/${{ steps.build.outputs.name }}"; then
+            echo "yes=1" >> "$GITHUB_OUTPUT"
+            echo "This version of frontend/ is published already."
+          fi
+
+      - name: Set up Node.js
+        if: steps.published.outputs.yes != '1'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build
+        if: steps.published.outputs.yes != '1'
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build -- --outDir "$RUNNER_TEMP/app" --emptyOutDir
+          # What the installer checks it was built from.
+          echo "${{ steps.build.outputs.tree }}" > "$RUNNER_TEMP/app/.build-tree"
+          tar -czf "$RUNNER_TEMP/${{ steps.build.outputs.name }}" -C "$RUNNER_TEMP/app" .
+
+      - name: Publish
+        if: steps.published.outputs.yes != '1'
+        run: |
+          if ! gh release view "$RELEASE" >/dev/null 2>&1; then
+            gh release create "$RELEASE" --prerelease --target "$GITHUB_SHA" --title "Front-end builds" \
+              --notes "The built front end, one file per version of frontend/, for install.sh to download. Made by CI; not a release of the portal."
+          fi
+          gh release upload "$RELEASE" "$RUNNER_TEMP/${{ steps.build.outputs.name }}" --clobber
+
+      - name: Keep the newest builds
+        # And this commit's, however old: reused by every commit that left frontend/ alone.
+        run: |
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE}" --jq .id)"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets?per_page=100" \
+            --jq '.[] | "\(.created_at) \(.id) \(.name)"' \
+            | grep -v " ${{ steps.build.outputs.name }}$" \
+            | sort -r | tail -n +"${KEEP}" | cut -d' ' -f2 \
+            | while read -r asset; do gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${asset}"; done
