@@ -361,20 +361,18 @@ class TestWhatTheScreensShow:
 
         assert (membership["category_label"], membership["year_group"]) == ("Alumni", "LAV11")
 
-    def test_the_signup_page_offers_every_category(self, app, client):
-        body = client.get("/join").get_data(as_text=True)
+    def test_the_signup_offers_every_category(self, app, client):
+        categories = client.get("/api/v1/forms/options").get_json()["member_categories"]
 
-        assert 'name="member_category"' in body
-        for category in CATEGORY_ORDER:
-            assert f'value="{category}"' in body
+        assert [category["value"] for category in categories] == list(CATEGORY_ORDER)
 
-    def test_the_page_carries_the_rules_for_the_browser(self, app, client):
-        """So the show/hide rule is not written down a second time in JavaScript."""
-        body = client.get("/join").get_data(as_text=True)
+    def test_the_rules_come_with_them_for_the_browser(self, app, client):
+        """So the show/hide rule is not written down a second time in the front end."""
+        categories = client.get("/api/v1/forms/options").get_json()["member_categories"]
+        year_group = {category["value"]: category["year_group"] for category in categories}
 
-        assert 'data-year-group-categories="student alumni"' in body
-        assert 'data-year-group-required="student"' in body
-        assert "member-kind-toggle.js" in body
+        assert {value for value, rule in year_group.items() if rule != "hidden"} == {"student", "alumni"}
+        assert {value for value, rule in year_group.items() if rule == "required"} == {"student"}
 
 
 class TestChangingCategory:

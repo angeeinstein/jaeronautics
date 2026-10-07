@@ -285,8 +285,8 @@ def _stay_signed_in(claimed, was_signed_in_as_the_retired_row):
 
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
-    flash(_("Accounts are created automatically when you sign up for a membership."), "info")
-    return redirect(url_for("public.index"))
+    """An old address: the account is made when joining."""
+    return redirect(url_for("public.join"))
 
 
 @auth_bp.route("/logout", methods=["POST"])

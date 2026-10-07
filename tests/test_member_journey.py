@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from flask import g
 
 from conftest import db, make_member
 from aeronautics_members import app as app_module
@@ -241,14 +242,15 @@ class TestAFailedRenewal:
 
 
 class TestErrorsSayWhatIsWrong:
-    def test_the_signup_form_names_fields_as_the_form_does(self, app, client):
-        body = client.post("/process-membership", data={
-            "email_private": "someone@example.com", "member_category": "student",
-            "email_work": "someone@gmail.com",
-        }).get_data(as_text=True)
+    def test_the_signup_says_which_field_and_why(self, app, client):
+        response = client.post("/api/v1/signup", json={
+            **TestTheSignupSentTwice.FORM, "email_work": "someone@gmail.com",
+        })
 
-        assert "University or Company Email:" in body
-        assert "Email Work" not in body
+        assert response.status_code == 400
+        fields = response.get_json()["error"]["fields"]
+        assert list(fields) == ["email_work"]
+        assert "university address" in fields["email_work"]
 
     def test_a_rejected_profile_change_says_why(self, app, client, monkeypatch):
         """The page said "please correct the profile form" and showed nothing."""
@@ -319,8 +321,9 @@ def test_the_forum_card_says_its_status_once(app, client, forum, monkeypatch):
 
 def test_the_portal_is_english_whatever_the_browser_asks(app, client):
     """The German translation lags the portal; a German browser picked it up
-    on its own and showed a half-translated site."""
-    body = client.get("/?lang=de", headers={"Accept-Language": "de-AT,de;q=0.9"}).get_data(as_text=True)
+    on its own and showed a half-translated site. (The pages still drawn by
+    Flask: the error pages.)"""
+    body = client.get("/no-such-page?lang=de", headers={"Accept-Language": "de-AT,de;q=0.9"}).get_data(as_text=True)
 
     assert '<html lang="en"' in body
     assert "language-selector" not in body
@@ -329,7 +332,7 @@ def test_the_portal_is_english_whatever_the_browser_asks(app, client):
 def test_the_portal_is_dark_whatever_the_device_prefers(app, client):
     """The site has one look, dark. It must not follow a device set to light
     mode into a half-styled light page."""
-    body = client.get("/").get_data(as_text=True)
+    body = client.get("/no-such-page").get_data(as_text=True)
     stylesheet = (Path(app.static_folder) / "style.css").read_text()
 
     assert 'data-bs-theme="dark"' in body
@@ -346,13 +349,12 @@ class TestTheSignupSentTwice:
         "house_number": "1", "postal_code": "8010", "city": "Graz", "country": "Austria",
         "phone_private": "+43123", "email_private": "dora@example.com",
         "email_work": "dora.double@edu.fh-joanneum.at", "member_category": "student",
-        "year_group": "LAV25", "password": "right-password", "confirm_password": "right-password",
-        "payment_method": "checkout", "terms_accepted": "y",
+        "year_group": "LAV25", "password": "right-password",
+        "payment_method": "checkout", "terms_accepted": True,
     }
 
     @pytest.fixture
     def checkouts(self, monkeypatch):
-        from aeronautics_members.blueprints import public
         from aeronautics_members.services import signup as _signup
 
         opened = []
@@ -362,51 +364,46 @@ class TestTheSignupSentTwice:
             return types.SimpleNamespace(url=f"https://checkout.stripe.test/{member.id}"), {}
 
         monkeypatch.setattr(_signup, "create_checkout_session_for_member", open_checkout)
-        monkeypatch.setattr(public, "create_checkout_session_for_member", open_checkout)
         monkeypatch.setattr(_signup, "send_email_verification_email", lambda *a, **k: True)
         monkeypatch.setattr(_signup, "send_work_email_verification_email", lambda *a, **k: True)
         return opened
 
+    @staticmethod
+    def _sign_out(client):
+        client.delete("/api/v1/session")
+        g.pop("_login_user", None)
+
     def test_the_second_one_goes_on_to_payment(self, app, client, checkouts):
-        first = client.post("/process-membership", data=self.FORM)
-        client.post("/logout")
+        first = client.post("/api/v1/signup", json=self.FORM)
+        self._sign_out(client)
 
-        second = client.post("/process-membership", data=self.FORM)
+        second = client.post("/api/v1/signup", json=self.FORM)
 
-        assert first.headers["Location"].startswith("https://checkout.stripe.test/")
-        assert second.headers["Location"] == first.headers["Location"]
+        assert first.get_json()["go_to"].startswith("https://checkout.stripe.test/")
+        assert second.get_json()["go_to"] == first.get_json()["go_to"]
         from aeronautics_members.db_models import User
         assert len(db.session.execute(db.select(User).filter_by(email="dora@example.com")).scalars().all()) == 1
 
     def test_not_with_a_different_password(self, app, client, checkouts):
-        client.post("/process-membership", data=self.FORM)
-        client.post("/logout")
+        client.post("/api/v1/signup", json=self.FORM)
+        self._sign_out(client)
 
-        second = client.post("/process-membership", data={
-            **self.FORM, "password": "wrong-password", "confirm_password": "wrong-password",
-        })
+        second = client.post("/api/v1/signup", json={**self.FORM, "password": "wrong-password"})
 
-        assert second.headers["Location"].endswith("/login")
+        assert second.status_code == 409 and second.get_json()["error"]["code"] == "account_exists"
         assert len(checkouts) == 1
 
     def test_not_once_payment_has_started_at_stripe(self, app, client, checkouts):
-        client.post("/process-membership", data=self.FORM)
-        client.post("/logout")
+        client.post("/api/v1/signup", json=self.FORM)
+        self._sign_out(client)
         from aeronautics_members.db_models import Member
         member = db.session.execute(db.select(Member).filter_by(email_private="dora@example.com")).scalar_one()
         member.stripe_customer_id = "cus_started"
         db.session.commit()
 
-        second = client.post("/process-membership", data=self.FORM)
+        second = client.post("/api/v1/signup", json=self.FORM)
 
-        assert second.headers["Location"].endswith("/login")
-
-
-def test_payment_buttons_show_they_are_working(app, client):
-    body = client.get("/join").get_data(as_text=True)
-
-    assert 'data-busy-text="Taking you to payment…"' in body
-    assert "submit-once.js" in body
+        assert second.status_code == 409 and second.get_json()["error"]["code"] == "account_exists"
 
 
 class TestAnEmailPerClickNoMore:
@@ -480,9 +477,11 @@ def test_creating_a_profile_twice_goes_on_to_payment(app, client, monkeypatch):
         lambda m: (types.SimpleNamespace(url="https://checkout.stripe.test/again"), {}),
     )
 
-    response = client.post("/account/create-membership", data={"payment_method": "checkout"})
+    response = client.post("/api/v1/account/membership", json={
+        **{key: value for key, value in TestTheSignupSentTwice.FORM.items() if key not in ("email_private", "password")},
+    })
 
-    assert response.headers["Location"] == "https://checkout.stripe.test/again"
+    assert response.get_json() == {"go_to": "https://checkout.stripe.test/again"}
 
 
 class TestDatesLookTheSameEverywhere:
@@ -545,7 +544,7 @@ def test_a_success_message_carries_the_tick(app, client):
     with client.session_transaction() as session:
         session["_flashes"] = [("success", "Saved."), ("warning", "Careful.")]
 
-    body = client.get("/").get_data(as_text=True)
+    body = client.get("/no-such-page").get_data(as_text=True)
 
     assert body.count('class="success-check"') == 1
     assert '<div class="alert alert-warning">Careful.</div>' in body
@@ -562,12 +561,13 @@ def test_states_are_shown_as_status_labels_not_bootstrap_badges():
 
 
 def test_the_tab_icon_is_the_square_mark(app, client):
-    """The full logo was unreadable at tab size."""
-    body = client.get("/").get_data(as_text=True)
+    """The full logo was unreadable at tab size. On the app's pages and Flask's alike."""
+    body = client.get("/no-such-page").get_data(as_text=True)
+    app_page = (Path(__file__).resolve().parent.parent / "frontend" / "index.html").read_text()
     static = Path(app.static_folder)
 
     for name in ("favicon.svg", "favicon-32.png", "apple-touch-icon.png"):
-        assert f"/static/{name}" in body
+        assert f"/static/{name}" in body and f"/static/{name}" in app_page
         assert (static / name).is_file()
     assert "logo_joanneum_aeronautics_negativ.svg\" type=\"image/svg+xml\"" not in body
 

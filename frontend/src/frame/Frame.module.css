@@ -1,5 +1,26 @@
 /* The frame: top bar, sidebar, main column (docs/frontend-structure.md, 3 and 9). */
 
+/* The test server's bar (TestServerBar.tsx): red, above the top bar. */
+.testServerBar {
+  height: var(--ja-test-bar-height);
+  line-height: var(--ja-test-bar-height);
+  overflow: hidden;
+  background: var(--ja-test-bar);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.testServerBar span {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
 /* Top bar: black, with the 3px cyan line along the bottom (docs/design.md). */
 .topBar {
   height: 100%;

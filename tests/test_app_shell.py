@@ -45,7 +45,9 @@ def _concrete(pattern):
 
 
 #: Pages for somebody not signed in: a signed-in visitor is sent on (below).
-SIGNED_OUT = {"/login", "/forgot-password"}
+SIGNED_OUT = {"/", "/join", "/login", "/forgot-password"}
+#: For a login without a membership: one with a membership is sent to My Account.
+NO_MEMBERSHIP = {"/account/create-membership"}
 
 
 @pytest.mark.parametrize("pattern", PATHS)
@@ -58,7 +60,9 @@ def test_every_app_address_gets_the_app(app, client, built, pattern):
     boss = make_member(email="boss@example.org").user
     boss.grant_role(app_module.get_role("superadmin"))
     db.session.commit()
-    if pattern not in SIGNED_OUT:
+    if pattern in NO_MEMBERSHIP:
+        _login(client, _staff("staff@example.org", "admin").id)
+    elif pattern not in SIGNED_OUT:
         _login(client, boss.id)
 
     response = client.get(_concrete(pattern))

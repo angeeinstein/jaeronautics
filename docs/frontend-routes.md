@@ -135,7 +135,7 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `POST /account/resend-verification`, `/resend-work-verification` (action) → `POST /api/v1/account/emails/private/confirmation`, `.../work/confirmation`
 - [x] `POST /account/billing` (out: Stripe billing portal) → `POST /api/v1/account/billing` answers Stripe's address
 - [x] `POST /account/resume-payment`, `/account/rejoin` (out: Stripe Checkout) → `POST /api/v1/account/payment`, `/account/rejoin` answer where to pay
-- [ ] `GET|POST /account/create-membership` (page + out: membership for an account without one) -- with the signup in step 7: the same form
+- [x] `GET|POST /account/create-membership` (page + out: membership for an account without one) → the signup's form with the login's address; `POST /api/v1/account/membership` answers where to pay (`api/signup.py`)
 - [x] `POST /account/delete` (action: asks for confirmation by email) → `POST /api/v1/account/deletion`
 - [x] `GET|POST /account/delete/<token>` (page + action; link in emails) → the page says what deleting does; `GET|POST /api/v1/account/deletion/<token>` (the POST asks for `confirm`, signs out, and the start page says it is done)
 - [x] `GET|POST /change-password` (page + action) → the app's page; `PUT /api/v1/account/password`
@@ -145,15 +145,15 @@ Status: `[ ]` to do, `[x]` done.
 
 ## Step 7 -- Public pages and signing in
 
-- [ ] `GET /` (page) → the new home page (association information)
-- [ ] `GET /join` (page) → signup on its own page
-- [ ] `POST /process-membership` (out: signup, then Stripe Checkout)
-- [ ] `GET|POST /register` (action today)
-- [ ] `GET /thank-you`, `GET /cancel` (page; Stripe's return addresses) → pages
+- [x] `GET /` (page) → the start page: what the portal is for, and the two ways in (signed in, on to one's start page)
+- [x] `GET /join` (page) → signup on its own page; the choices `GET /api/v1/forms/options`, the texts to accept `GET /api/v1/legal`, each opening over the form
+- [x] `POST /process-membership` (out: signup, then Stripe Checkout) → `POST /api/v1/signup` (`api/signup.py`): checked by the same form rules, signs in, answers where to pay -- Stripe, the thank-you page for an invoice, or My Account when paying could not start
+- [x] `GET|POST /register` (an old address) → sends to `/join`
+- [x] `GET /thank-you`, `GET /cancel` (page; Stripe's return addresses) → pages; what teams are called comes with `GET /api/v1/site`
 - [x] `GET|POST /login` (page + action; also the forum's sign-in return) → login page, `POST /api/v1/session` to sign in; it answers where to go on (`?next=`, kept on this site)
 - [ ] `POST /logout` (action) → `DELETE /api/v1/session` (the app's menu uses it; the Flask route goes with the last Flask page)
 - [x] `GET|POST /forgot-password` (page + action) → `POST /api/v1/password-reset`
 - [x] `GET|POST /reset-password/<token>` (page + action; link in emails) → `GET|PUT /api/v1/password-reset/<token>`
 - [ ] `GET /verify-email/<token>`, `/verify-work-email/<token>` (link in emails) → Flask confirms and redirects to a page, as today
 - [x] `GET /legal` (page) → list of legal texts; `GET /api/v1/legal`
-- [x] `GET /legal/<slug>[/<language>[/<version>]]` (page) → a legal text, `GET /api/v1/legal/<slug>`; the two languages are named in the app's routes, as `/legal/<slug>/pdf` is the PDF (the same for a team's rules). The bare text (`?part=body`) stays for the old signup form's window until the signup moves
+- [x] `GET /legal/<slug>[/<language>[/<version>]]` (page) → a legal text, `GET /api/v1/legal/<slug>`; the two languages are named in the app's routes, as `/legal/<slug>/pdf` is the PDF (the same for a team's rules). The bare text (`?part=body`) went with the old signup form

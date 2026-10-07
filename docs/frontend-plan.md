@@ -273,7 +273,7 @@ server can update to it.
    server will cut it (`lib/crop.ts`), and sent whole with the square to be checked
    and cut there. The password and the deletion link's page done; the deletion link
    still changes nothing when opened. The membership form for an account without
-   one moves with the signup.)*
+   one moved with the signup.)*
 7. **Public pages and signing in:** the new home page (association
    information), signup on its own page with the legal texts in a dialog,
    login, password reset, email confirmation, thank-you and cancel pages,
@@ -285,7 +285,13 @@ server can update to it.
    as the forum's sign-in -- and the old form's rate limits apply to it unchanged.
    The email confirmation links stay Flask's and say how it went on the sign-in page.
    The legal texts' pages done (`GET /api/v1/legal`, `/legal/<slug>`), with the title as
-   the page's heading -- a team's rules too.)*
+   the page's heading -- a team's rules too. The start page, joining and the pages
+   Stripe comes back to done (`api/signup.py`): one form for both doors
+   (`pages/public/MembershipForm.tsx`), the public signup and a membership for a
+   login without one, checked by the same form rules and ending in the same
+   `services/signup.py`; each text to accept opens over the form. The password is
+   asked once, with a button to show it, instead of twice. The test server's red bar
+   and [TEST] title are on the app's pages too (`frame/TestServerBar.tsx`).)*
 8. **Clean-up:** remove Bootstrap, `base.html`, the page templates, WTForms
    where nothing uses it any more, and their CSS and scripts; update the
    docs; a full review of the branch; then the merge to `main` and the live
@@ -293,4 +299,5 @@ server can update to it.
 
 ## 5. Open, to decide on the way
 
-- **The new home page's content** -- needed at step 7.
+- **The new home page's content** -- for now the old start page's: what the portal is
+  for and the two ways in; the association's own information stays on its website.

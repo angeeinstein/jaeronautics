@@ -129,7 +129,8 @@ def test_a_real_signup_goes_without_a_trace_with_foreign_keys_enforced(app, clie
     account is refused there, though SQLite lets it pass unless asked."""
     from test_member_journey import TestTheSignupSentTwice
 
-    from aeronautics_members.blueprints import public
+    from flask import g
+
     from aeronautics_members.services import signup as _signup
     from aeronautics_members.services.clock import get_now_utc
 
@@ -138,11 +139,11 @@ def test_a_real_signup_goes_without_a_trace_with_foreign_keys_enforced(app, clie
         return types.SimpleNamespace(url=f"https://checkout.stripe.test/{member.id}"), {}
 
     monkeypatch.setattr(_signup, "create_checkout_session_for_member", open_checkout)
-    monkeypatch.setattr(public, "create_checkout_session_for_member", open_checkout)
     monkeypatch.setattr(_signup, "send_email_verification_email", lambda *a, **k: True)
     monkeypatch.setattr(_signup, "send_work_email_verification_email", lambda *a, **k: True)
-    client.post("/process-membership", data=TestTheSignupSentTwice.FORM)
-    client.post("/logout")
+    client.post("/api/v1/signup", json=TestTheSignupSentTwice.FORM)
+    client.delete("/api/v1/session")
+    g.pop("_login_user", None)
     member = db.session.execute(db.select(Member).filter_by(email_private="dora@example.com")).scalar_one()
     user_id, member_id = member.user_id, member.id
     db.session.commit()

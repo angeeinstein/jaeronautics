@@ -164,12 +164,6 @@ from .services.institutional_email import (  # noqa: E402
     SETTING_KEY as INSTITUTIONAL_EMAIL_SETTING_KEY,
     get_institutional_domains,
 )
-from .member_categories import (  # noqa: E402
-    CATEGORY_ORDER,
-    categories_showing_year_group,
-    category_label,
-    requires_year_group,
-)
 from .permissions import (  # noqa: E402
     Permission,
     ROLE_PERMISSIONS,
@@ -1206,22 +1200,6 @@ def create_app(config_overrides=None):
             "statutes_url": STATUTES_URL,
             "contact_email": CONTACT_EMAIL,
         }, test_server=bool(app.config.get("TEST_SERVER")))
-
-    @app.context_processor
-    def inject_member_category_rules():
-        """Hands the year group rules to the page so JavaScript need not know them.
-
-        Rendered into data attributes and read back by member-kind-toggle.js,
-        which keeps member_categories.py the only place the rule is written
-        down.
-        """
-        return dict(
-            year_group_categories=" ".join(categories_showing_year_group()),
-            year_group_required_categories=" ".join(
-                category for category in CATEGORY_ORDER if requires_year_group(category)
-            ),
-            member_category_label=category_label,
-        )
 
     # What teams are called here, as (singular, plural) -- "Teams" unless an
     # admin chose another word.

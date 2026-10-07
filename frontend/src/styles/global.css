@@ -29,11 +29,19 @@
 
   /* The frame (docs/frontend-structure.md, section 3). */
   --ja-topbar-height: 3.75rem;
+  /* The test server's red bar above the top bar (frame/TestServerBar.tsx); none on the live site. */
+  --ja-test-bar: #c62828;
+  --ja-test-bar-height: 0px;
+  --ja-header-height: calc(var(--ja-topbar-height) + var(--ja-test-bar-height));
   --ja-sidebar-width: 15.5rem;
   --ja-content-narrow: 54rem;
   --ja-content-wide: 80rem;
 
   color-scheme: dark;
+}
+
+html[data-test-server] {
+  --ja-test-bar-height: 1.75rem;
 }
 
 body {

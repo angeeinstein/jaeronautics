@@ -46,6 +46,22 @@ export const routes: RouteObject[] = [
         element: <PublicLayout />,
         children: [
           {
+            path: '/',
+            lazy: async () => ({ Component: (await import('../pages/public/Landing')).Landing }),
+          },
+          {
+            path: '/join',
+            lazy: async () => ({ Component: (await import('../pages/public/Join')).Join }),
+          },
+          {
+            path: '/thank-you',
+            lazy: async () => ({ Component: (await import('../pages/public/Payment')).ThankYou }),
+          },
+          {
+            path: '/cancel',
+            lazy: async () => ({ Component: (await import('../pages/public/Payment')).Cancel }),
+          },
+          {
             path: '/login',
             lazy: async () => ({ Component: (await import('../pages/public/SignIn')).SignIn }),
           },
@@ -68,6 +84,12 @@ export const routes: RouteObject[] = [
           {
             index: true,
             lazy: async () => ({ Component: (await import('../pages/account/Account')).Account }),
+          },
+          {
+            path: 'create-membership',
+            lazy: async () => ({
+              Component: (await import('../pages/account/CreateMembership')).CreateMembership,
+            }),
           },
           {
             path: 'delete/:token',

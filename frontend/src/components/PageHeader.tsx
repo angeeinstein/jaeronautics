@@ -7,6 +7,7 @@ import { Anchor, Breadcrumbs as MantineBreadcrumbs, Group, Stack, Text, Title } 
 import { type ReactNode, useEffect } from 'react';
 
 import { AppLink } from '../app/AppLink';
+import { onTestServer } from '../lib/testServer';
 
 export interface Crumb {
   label: string;
@@ -44,7 +45,7 @@ interface PageHeaderProps {
 /** The browser tab's title, for a page that draws its own heading. */
 export function useDocumentTitle(title: string) {
   useEffect(() => {
-    document.title = `${title} · Joanneum Aeronautics`;
+    document.title = `${onTestServer() ? '[TEST] ' : ''}${title} · Joanneum Aeronautics`;
   }, [title]);
 }
 

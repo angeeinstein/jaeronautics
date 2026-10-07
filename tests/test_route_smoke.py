@@ -149,8 +149,8 @@ def test_all_routes_no_server_error(client, seeded):
     # public
     for p in ["/", "/join", "/__health", "/legal", "/thank-you", "/cancel"]:
         hit("GET", p)
-    hit("POST", "/process-membership", data={**MEMBERSHIP, "email_private": "brand@new.co",
-        "password": "password123", "confirm_password": "password123", "payment_method": "checkout", "terms_accepted": "y"})
+    hit("POST", "/api/v1/signup", json={**MEMBERSHIP, "email_private": "brand@new.co",
+        "password": "password123", "payment_method": "checkout", "terms_accepted": True})
     # auth
     for p in ["/login", "/register", "/forgot-password", "/verify-email/bad", "/reset-password/bad"]:
         hit("GET", p)
@@ -168,6 +168,8 @@ def test_all_routes_no_server_error(client, seeded):
     hit("GET", "/api/v1/account", uid=nm)
     hit("GET", "/api/v1/forms/options")
     hit("GET", "/account/create-membership", uid=nm)
+    hit("POST", "/api/v1/account/membership", uid=nm, json={
+        **{key: value for key, value in MEMBERSHIP.items() if key != "email_private"}, "terms_accepted": True})
     hit("PUT", "/api/v1/account/contact", uid=mu, json={**PROFILE, "city": "Vienna"})
     hit("POST", "/api/v1/account/change-request", uid=mu, json={"salutation": "Mr", "first_name": "X", "last_name": "Y", "member_category": "student", "year_group": "LAV25", "note": "n"})
     hit("DELETE", f"/api/v1/account/change-request/{ids['pcr_id']}", uid=mu)
@@ -216,9 +218,9 @@ def test_all_routes_no_server_error(client, seeded):
     assert len(calls) >= 45
 
 
-def test_signup_creates_user_and_member(client, seeded):
-    client.post("/process-membership", data={**MEMBERSHIP, "email_private": "brand@new.co",
-        "password": "password123", "confirm_password": "password123", "payment_method": "checkout", "terms_accepted": "y"})
+def test_signup_creates_user_and_member(client, seeded, mocked):
+    client.post("/api/v1/signup", json={**MEMBERSHIP, "email_private": "brand@new.co",
+        "password": "password123", "payment_method": "checkout", "terms_accepted": True})
     user = db.session.execute(db.select(User).filter_by(email="brand@new.co")).scalar_one_or_none()
     assert user is not None and user.member is not None
 

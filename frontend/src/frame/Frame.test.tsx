@@ -82,3 +82,23 @@ describe('the frame', () => {
     expect(screen.queryByText('Page')).toBeNull();
   });
 });
+
+describe('on the test server', () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-test-server');
+  });
+
+  it('every page says so', async () => {
+    document.documentElement.setAttribute('data-test-server', '');
+    admin();
+
+    expect(await screen.findByRole('note')).toHaveTextContent('Test server · not the real membership portal');
+  });
+
+  it('the live site says nothing of it', async () => {
+    admin();
+
+    await screen.findByRole('navigation', { name: 'Areas' });
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+});

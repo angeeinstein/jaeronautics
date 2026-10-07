@@ -175,6 +175,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/membership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A membership for this login, then on to paying. */
+        post: operations["become_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/password": {
         parameters: {
             query?: never;
@@ -1395,6 +1412,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join: the login and the membership, then on to paying. Signed in afterwards. */
+        post: operations["sign_up"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/site": {
         parameters: {
             query?: never;
@@ -1402,7 +1436,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The footer: the legal texts, contact and the association's website. */
+        /** The footer: the legal texts, contact and the association's website; what teams are called. */
         get: operations["site"];
         put?: never;
         post?: never;
@@ -3892,6 +3926,57 @@ export interface components {
             /** Pending */
             pending: number;
         };
+        /** MembershipIn */
+        MembershipIn: {
+            /** City */
+            city: string;
+            /** Country */
+            country: string;
+            /**
+             * Email Work
+             * @default null
+             */
+            email_work?: string | null;
+            /** First Name */
+            first_name: string;
+            /** House Number */
+            house_number: string;
+            /** Last Name */
+            last_name: string;
+            /** Member Category */
+            member_category: string;
+            /**
+             * Payment Method
+             * @default checkout
+             * @enum {string}
+             */
+            payment_method?: "checkout" | "invoice";
+            /** Phone Private */
+            phone_private: string;
+            /**
+             * Phone Work
+             * @default null
+             */
+            phone_work?: string | null;
+            /** Postal Code */
+            postal_code: string;
+            /** Salutation */
+            salutation: string;
+            /** Street */
+            street: string;
+            /** Terms Accepted */
+            terms_accepted: boolean;
+            /**
+             * Title
+             * @default null
+             */
+            title?: string | null;
+            /**
+             * Year Group
+             * @default null
+             */
+            year_group?: string | null;
+        };
         /** MembershipNoteOut */
         MembershipNoteOut: {
             /** Text */
@@ -4564,12 +4649,69 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** SignupIn */
+        SignupIn: {
+            /** City */
+            city: string;
+            /** Country */
+            country: string;
+            /** Email Private */
+            email_private: string;
+            /**
+             * Email Work
+             * @default null
+             */
+            email_work?: string | null;
+            /** First Name */
+            first_name: string;
+            /** House Number */
+            house_number: string;
+            /** Last Name */
+            last_name: string;
+            /** Member Category */
+            member_category: string;
+            /** Password */
+            password: string;
+            /**
+             * Payment Method
+             * @default checkout
+             * @enum {string}
+             */
+            payment_method?: "checkout" | "invoice";
+            /** Phone Private */
+            phone_private: string;
+            /**
+             * Phone Work
+             * @default null
+             */
+            phone_work?: string | null;
+            /** Postal Code */
+            postal_code: string;
+            /** Salutation */
+            salutation: string;
+            /** Street */
+            street: string;
+            /** Terms Accepted */
+            terms_accepted: boolean;
+            /**
+             * Title
+             * @default null
+             */
+            title?: string | null;
+            /**
+             * Year Group
+             * @default null
+             */
+            year_group?: string | null;
+        };
         /** SiteOut */
         SiteOut: {
             /** Copyright */
             copyright: string;
             /** Footer */
             footer: components["schemas"]["FooterLinkOut"][];
+            /** Teams Label */
+            teams_label: string | null;
         };
         /** StepOut */
         StepOut: {
@@ -5717,6 +5859,57 @@ export interface operations {
             };
             /** @description Not signed in. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    become_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembershipIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoOnOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10133,6 +10326,48 @@ export interface operations {
             };
             /** @description Not signed in. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    sign_up: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoOnOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,6 +1,11 @@
 {
   "paths": [
+    "/",
+    "/join",
+    "/thank-you",
+    "/cancel",
     "/account",
+    "/account/create-membership",
     "/account/delete/:token",
     "/change-password",
     "/forum",

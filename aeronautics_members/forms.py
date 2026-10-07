@@ -266,7 +266,7 @@ class MembershipForm(FlaskForm):
         validators=[Optional()],
         default="checkout",
     )
-    # The label is rendered by templates/legal/_accept.html, with the texts linked.
+    # The front end writes the label, with the texts linked (pages/public/MembershipForm.tsx).
     terms_accepted = BooleanField(
         _l("I accept the legal texts."),
         validators=[InputRequired(message=_l("Please accept the legal texts to continue."))],
@@ -303,7 +303,7 @@ class CreateMembershipProfileForm(FlaskForm):
         validators=[Optional()],
         default="checkout",
     )
-    # The label is rendered by templates/legal/_accept.html, with the texts linked.
+    # The front end writes the label, with the texts linked (pages/public/MembershipForm.tsx).
     terms_accepted = BooleanField(
         _l("I accept the legal texts."),
         validators=[InputRequired(message=_l("Please accept the legal texts to continue."))],

@@ -6247,6 +6247,141 @@
         "title": "MembershipCounts",
         "type": "object"
       },
+      "MembershipIn": {
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "maxLength": 100,
+            "title": "City",
+            "type": "string"
+          },
+          "country": {
+            "maxLength": 100,
+            "title": "Country",
+            "type": "string"
+          },
+          "email_work": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Email Work"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "title": "First Name",
+            "type": "string"
+          },
+          "house_number": {
+            "maxLength": 20,
+            "title": "House Number",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "member_category": {
+            "maxLength": 20,
+            "title": "Member Category",
+            "type": "string"
+          },
+          "payment_method": {
+            "default": "checkout",
+            "enum": [
+              "checkout",
+              "invoice"
+            ],
+            "title": "Payment Method",
+            "type": "string"
+          },
+          "phone_private": {
+            "maxLength": 50,
+            "title": "Phone Private",
+            "type": "string"
+          },
+          "phone_work": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Phone Work"
+          },
+          "postal_code": {
+            "maxLength": 20,
+            "title": "Postal Code",
+            "type": "string"
+          },
+          "salutation": {
+            "maxLength": 20,
+            "title": "Salutation",
+            "type": "string"
+          },
+          "street": {
+            "maxLength": 255,
+            "title": "Street",
+            "type": "string"
+          },
+          "terms_accepted": {
+            "title": "Terms Accepted",
+            "type": "boolean"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "salutation",
+          "first_name",
+          "last_name",
+          "street",
+          "house_number",
+          "postal_code",
+          "city",
+          "country",
+          "phone_private",
+          "member_category",
+          "terms_accepted"
+        ],
+        "title": "MembershipIn",
+        "type": "object"
+      },
       "MembershipNoteOut": {
         "additionalProperties": false,
         "properties": {
@@ -8328,6 +8463,153 @@
         "title": "SignInIn",
         "type": "object"
       },
+      "SignupIn": {
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "maxLength": 100,
+            "title": "City",
+            "type": "string"
+          },
+          "country": {
+            "maxLength": 100,
+            "title": "Country",
+            "type": "string"
+          },
+          "email_private": {
+            "maxLength": 255,
+            "title": "Email Private",
+            "type": "string"
+          },
+          "email_work": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Email Work"
+          },
+          "first_name": {
+            "maxLength": 100,
+            "title": "First Name",
+            "type": "string"
+          },
+          "house_number": {
+            "maxLength": 20,
+            "title": "House Number",
+            "type": "string"
+          },
+          "last_name": {
+            "maxLength": 100,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "member_category": {
+            "maxLength": 20,
+            "title": "Member Category",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "title": "Password",
+            "type": "string"
+          },
+          "payment_method": {
+            "default": "checkout",
+            "enum": [
+              "checkout",
+              "invoice"
+            ],
+            "title": "Payment Method",
+            "type": "string"
+          },
+          "phone_private": {
+            "maxLength": 50,
+            "title": "Phone Private",
+            "type": "string"
+          },
+          "phone_work": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Phone Work"
+          },
+          "postal_code": {
+            "maxLength": 20,
+            "title": "Postal Code",
+            "type": "string"
+          },
+          "salutation": {
+            "maxLength": 20,
+            "title": "Salutation",
+            "type": "string"
+          },
+          "street": {
+            "maxLength": 255,
+            "title": "Street",
+            "type": "string"
+          },
+          "terms_accepted": {
+            "title": "Terms Accepted",
+            "type": "boolean"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "year_group": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Year Group"
+          }
+        },
+        "required": [
+          "salutation",
+          "first_name",
+          "last_name",
+          "street",
+          "house_number",
+          "postal_code",
+          "city",
+          "country",
+          "phone_private",
+          "member_category",
+          "terms_accepted",
+          "email_private",
+          "password"
+        ],
+        "title": "SignupIn",
+        "type": "object"
+      },
       "SiteOut": {
         "additionalProperties": false,
         "properties": {
@@ -8341,11 +8623,23 @@
             },
             "title": "Footer",
             "type": "array"
+          },
+          "teams_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teams Label"
           }
         },
         "required": [
           "footer",
-          "copyright"
+          "copyright",
+          "teams_label"
         ],
         "title": "SiteOut",
         "type": "object"
@@ -11138,6 +11432,67 @@
           }
         },
         "summary": "The forum: where things stand, the username, the picture. For the forum's own page.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/membership": {
+      "post": {
+        "operationId": "become_member",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoOnOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "A membership for this login, then on to paying.",
         "tags": [
           "Account"
         ]
@@ -16929,6 +17284,57 @@
         ]
       }
     },
+    "/api/v1/signup": {
+      "post": {
+        "operationId": "sign_up",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoOnOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Join: the login and the membership, then on to paying. Signed in afterwards.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
     "/api/v1/site": {
       "get": {
         "operationId": "site",
@@ -16944,7 +17350,7 @@
             "description": "OK"
           }
         },
-        "summary": "The footer: the legal texts, contact and the association's website.",
+        "summary": "The footer: the legal texts, contact and the association's website; what teams are called.",
         "tags": [
           "Session"
         ]

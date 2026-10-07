@@ -101,15 +101,26 @@ def test_the_same_account_from_another_network_is_counted_separately(limited_app
 
 def test_many_signups_from_one_address_are_let_through(limited_app, monkeypatch):
     """The signup form's own limit is per address too; 30 students is fine."""
+    from test_member_journey import TestTheSignupSentTwice
+
     client = limited_app.test_client()
+    # Refused by the form (no tick), so nothing is made -- but counted all the same.
+    form = {**TestTheSignupSentTwice.FORM, "terms_accepted": False}
 
     statuses = [
-        client.post("/process-membership", data={"email_private": f"new{n}@example.com"},
+        client.post("/api/v1/signup", json={**form, "email_private": f"new{n}@example.com"},
                     environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
         for n in range(30)
     ]
 
-    assert 429 not in statuses
+    assert set(statuses) == {400}
+    # The same address over and over is held back.
+    again = [
+        client.post("/api/v1/signup", json={**form, "email_private": "same@example.com"},
+                    environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
+        for _ in range(30)
+    ]
+    assert 429 in again
 
 
 def test_signed_in_limits_count_per_account(limited_app):

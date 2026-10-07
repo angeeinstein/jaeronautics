@@ -16,6 +16,7 @@ import { Footer } from './Footer';
 import classes from './Frame.module.css';
 import type { SidebarContent } from './navigation';
 import { Sidebar } from './Sidebar';
+import { TestServerBar } from './TestServerBar';
 import { TopBar } from './TopBar';
 
 const NOTICE_COLOURS = { info: 'brand', warning: 'amber', danger: 'red' } as const;
@@ -72,7 +73,7 @@ export function Frame({ sidebar, notices, narrow = false, children }: FrameProps
   const content = sidebar?.(me.data);
   return (
     <AppShell
-      header={{ height: 'var(--ja-topbar-height)' }}
+      header={{ height: 'var(--ja-header-height)' }}
       navbar={
         content
           ? { width: 'var(--ja-sidebar-width)', breakpoint: 'sm', collapsed: { mobile: true } }
@@ -81,6 +82,7 @@ export function Frame({ sidebar, notices, narrow = false, children }: FrameProps
       padding={0}
     >
       <AppShell.Header withBorder={false}>
+        <TestServerBar />
         <TopBar me={me.data} menu={content ? { opened: drawerOpened, toggle: drawer.toggle } : undefined} />
       </AppShell.Header>
       {content ? (

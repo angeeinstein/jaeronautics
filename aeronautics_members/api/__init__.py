@@ -24,6 +24,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     legal,
     session,
     sign_in,
+    signup,
     site,
     team_manage,
     teams,

@@ -10,9 +10,12 @@ with their checks (signed in, permissions) and their endpoint names, so
 answer changes, to ``app_shell()``.
 
 The page's nonce for the security policy (content_security.py) goes into
-``<meta name="csp-nonce">``, where the app's style tags read it.
+``<meta name="csp-nonce">``, where the app's style tags read it. On the test
+server (TEST_SERVER) the page is marked ``<html data-test-server>`` and its
+title starts with [TEST]; the app shows the red bar (frame/TestServerBar.tsx).
 """
 
+import re
 from pathlib import Path
 
 from flask import current_app, make_response
@@ -52,6 +55,9 @@ def app_shell():
         )
         response.headers["Retry-After"] = "60"
         return response
-    response = make_response(html.replace(_PLACEHOLDER, nonce()))
+    html = html.replace(_PLACEHOLDER, nonce())
+    if current_app.config.get("TEST_SERVER"):
+        html = re.sub(r"<html(?=[\s>])", "<html data-test-server", html, count=1).replace("<title>", "<title>[TEST] ", 1)
+    response = make_response(html)
     response.headers["Content-Type"] = "text/html; charset=utf-8"
     return response

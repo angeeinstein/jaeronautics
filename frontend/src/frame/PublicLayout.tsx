@@ -13,6 +13,7 @@ import { AppLink } from '../app/AppLink';
 import logo from '../assets/logo.svg';
 import mark from '../assets/mark.svg';
 import { Footer } from './Footer';
+import { TestServerBar } from './TestServerBar';
 import classes from './Frame.module.css';
 
 export const sessionQuery = {
@@ -50,9 +51,17 @@ function WayIn() {
 export function PublicLayout({ wide = false }: { wide?: boolean }) {
   const column = wide ? classes.content : classes.contentNarrow;
   return (
-    <AppShell header={{ height: 'var(--ja-topbar-height)' }} padding={0}>
+    <AppShell header={{ height: 'var(--ja-header-height)' }} padding={0}>
       <AppShell.Header withBorder={false}>
-        <Group className={classes.topBar} h="100%" px="md" gap="sm" wrap="nowrap" justify="space-between">
+        <TestServerBar />
+        <Group
+          className={classes.topBar}
+          h="var(--ja-topbar-height)"
+          px="md"
+          gap="sm"
+          wrap="nowrap"
+          justify="space-between"
+        >
           <AppLink to="/" aria-label="Joanneum Aeronautics, start page">
             <Box component="img" src={logo} alt="" className={classes.logo} visibleFrom="sm" />
             <Box component="img" src={mark} alt="" className={classes.mark} hiddenFrom="sm" />

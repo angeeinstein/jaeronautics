@@ -292,32 +292,21 @@ class TestThePages:
 
         assert _text(client, slug, language, version).status_code == status
 
-    def test_the_text_alone_for_the_window_over_the_form(self, client, texts):
-        texts("privacy-policy", "2026-10-04", "Text.")
-        texts("privacy-policy", "2026-10-04", "English.", language="en")
-
-        body = client.get("/legal/privacy-policy?part=body").get_data(as_text=True)
-
-        assert "English." in body and TRANSLATION_NOTICE in body
-        assert "<html" not in body and "site-footer" not in body
-
 
 class TestAtSignup:
-    def test_each_text_is_linked_to_open_over_the_form(self, client, texts):
+    def test_the_form_is_told_which_texts_to_accept(self, client, texts):
+        """Each opens over the form (frontend/src/pages/public/MembershipForm.tsx)."""
         texts("statutes", "2019-03-17")
         texts("privacy-policy", "2026-10-04")
         texts("legal-notice", "2026-10-04")
 
-        body = client.get("/join").get_data(as_text=True)
-        tick = body.split('name="terms_accepted"')[1].split("</label>")[0]
+        listed = client.get("/api/v1/legal").get_json()["texts"]
 
-        for slug in ("statutes", "privacy-policy"):
-            assert f'<a href="/legal/{slug}" target="_blank" rel="noopener" data-legal-dialog' in tick
-        assert "/legal/legal-notice" not in tick
-        assert "legal-dialog.js" in body
+        assert [(text["slug"], text["accepted_at_signup"]) for text in listed] == [
+            ("statutes", True), ("privacy-policy", True), ("legal-notice", False)]
+        assert client.get("/api/v1/legal/privacy-policy").get_json()["title"]
 
     def test_the_versions_ticked_are_kept(self, app, client, texts, monkeypatch):
-        from aeronautics_members.blueprints import public
         from aeronautics_members.services import signup as _signup
 
         texts("statutes", "2019-03-17")
@@ -325,17 +314,16 @@ class TestAtSignup:
         texts("privacy-policy", "2026-10-04", language="en")
         checkout = lambda member: (types.SimpleNamespace(url="https://checkout.stripe.test/s"), {})  # noqa: E731
         monkeypatch.setattr(_signup, "create_checkout_session_for_member", checkout)
-        monkeypatch.setattr(public, "create_checkout_session_for_member", checkout)
         monkeypatch.setattr(_signup, "send_email_verification_email", lambda *a, **k: True)
         monkeypatch.setattr(_signup, "send_work_email_verification_email", lambda *a, **k: True)
 
-        client.post("/process-membership", data={
+        client.post("/api/v1/signup", json={
             "salutation": "Ms", "first_name": "Lea", "last_name": "Legal", "street": "Main",
             "house_number": "1", "postal_code": "8010", "city": "Graz", "country": "Austria",
             "phone_private": "+43123", "email_private": "lea@example.com",
             "email_work": "lea.legal@edu.fh-joanneum.at", "member_category": "student",
-            "year_group": "LAV25", "password": "right-password", "confirm_password": "right-password",
-            "payment_method": "checkout", "terms_accepted": "y",
+            "year_group": "LAV25", "password": "right-password",
+            "payment_method": "checkout", "terms_accepted": True,
         })
 
         member = db.session.query(Member).filter_by(email_private="lea@example.com").one()

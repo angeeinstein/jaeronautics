@@ -25,15 +25,28 @@ def _html(message):
     raise AssertionError("no HTML part")
 
 
-def test_the_live_site_shows_no_bar(client):
-    page = client.get("/").get_data(as_text=True)
+@pytest.mark.parametrize("path", ["/", "/no-such-page"])
+def test_the_live_site_shows_no_bar(client, path):
+    page = client.get(path).get_data(as_text=True)
 
-    assert "test-server-bar" not in page
+    assert "test-server-bar" not in page and "data-test-server" not in page
     assert "[TEST]" not in page
 
 
-def test_a_page_on_the_test_server_says_so(client, test_server):
+def test_an_app_page_on_the_test_server_says_so(app, client, test_server, tmp_path):
+    """The app draws the bar where the page is marked (frontend/src/frame/TestServerBar.tsx)."""
+    (tmp_path / "index.html").write_text('<!doctype html><html lang="en"><head><title>Joanneum Aeronautics</title>'
+                                         '</head><body><div id="root"></div></body></html>')
+    app.config["FRONTEND_DIST_DIR"] = str(tmp_path)
+
     page = client.get("/").get_data(as_text=True)
+
+    assert '<html data-test-server lang="en">' in page
+    assert "<title>[TEST] Joanneum Aeronautics</title>" in page
+
+
+def test_a_flask_page_on_the_test_server_says_so(client, test_server):
+    page = client.get("/no-such-page").get_data(as_text=True)
 
     assert 'class="test-server-bar"' in page
     assert "<title>[TEST] " in page

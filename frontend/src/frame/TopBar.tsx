@@ -39,7 +39,14 @@ export function TopBar({ me, menu }: TopBarProps) {
   ];
 
   return (
-    <Group className={classes.topBar} h="100%" px="md" gap="sm" wrap="nowrap" justify="space-between">
+    <Group
+      className={classes.topBar}
+      h="var(--ja-topbar-height)"
+      px="md"
+      gap="sm"
+      wrap="nowrap"
+      justify="space-between"
+    >
       <Group gap="sm" wrap="nowrap" h="100%">
         {menu ? (
           <Burger

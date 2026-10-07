@@ -9,17 +9,25 @@ the one that gives a returning student their old forum account back. Nobody
 coming in through that door could ever be reconnected.
 
 So what happens after the profile is saved lives in one place, and every door
-calls it: begin_membership, here. The pages turn its answer into a redirect
-(blueprints/_signup.py), the API into an address for the browser.
+calls it: begin_membership, here. The API (api/signup.py, api/account.py)
+turns its answer into an address for the browser to go to.
 """
 
 import stripe
 from flask import current_app, url_for
 
-from ..db_models import db
-from . import ExternalServiceError
-from .billing import create_checkout_session_for_member, create_invoice_membership_for_member
-from .forum import sync_member_forum_state
+from ..db_models import Member, User, db
+from . import ConflictError, ExternalServiceError
+from .audit import log_audit_event, snapshot_member_for_audit, snapshot_user_for_audit
+from .billing import (
+    can_resume_payment,
+    create_checkout_session_for_member,
+    create_invoice_membership_for_member,
+)
+from .clock import get_now_utc
+from .forum import generate_unique_forum_username, sync_member_forum_state
+from .members import apply_member_profile
+from .membership import sync_member_active_state
 from .identity import send_email_verification_email, send_work_email_verification_email
 from .settings import get_settings_map
 from .workflows import send_member_welcome_email
@@ -126,3 +134,121 @@ def begin_membership(member, payment_method, *, what, sent=None):
             payment_method, member.id,
         )
     raise ExternalServiceError(_NOT_STARTED[what], code="payment_not_started")
+
+
+# --- Signing up ----------------------------------------------------------------------------
+#
+# Two doors: the public signup, which makes the login and the membership together,
+# and "become a member" for somebody signed in without a membership. Both take
+# values already checked against the form rules (forms.py, through api/_forms.py)
+# and end in begin_membership above.
+
+
+class SignupConflict(ConflictError):
+    """The address already has an account: sign in instead."""
+
+
+def sign_up(values, password, payment_method):
+    """A new login and membership from the public signup. Returns (user, member,
+    continuing): ``continuing`` is True when the same form was sent again for a
+    signup whose payment never started -- then nothing new is made and the user
+    is the one made the first time. The caller signs the user in.
+
+    The same form sent twice -- a double click while Stripe is asked for the
+    payment page, or filling it in again after cancelling the payment -- would
+    otherwise answer "already exists". With the right password that is
+    somebody signing in would let in anyway.
+    """
+    address = values["email_private"].strip().lower()
+    existing_member = db.session.execute(db.select(Member).filter_by(email_private=address)).scalar_one_or_none()
+    existing_user = db.session.execute(db.select(User).filter_by(email=address)).scalar_one_or_none()
+    if existing_member is not None and sync_member_active_state(existing_member):
+        db.session.commit()
+
+    if existing_member is not None:
+        user = existing_member.user
+        if user is None:
+            raise ConflictError("A membership profile with this email address already exists without a login. "
+                                "Please contact us so we can sort it out.", code="profile_without_login")
+        if (not user.is_disabled and user.check_password(password) and can_resume_payment(existing_member)
+                and chosen_payment_method(payment_method) == "checkout"):
+            return user, existing_member, True
+        raise SignupConflict("An account with this email address already exists. Please sign in to manage or "
+                             "resume your membership.", code="account_exists")
+    if existing_user is not None:
+        raise SignupConflict("An account with this email address already exists. Please sign in instead.",
+                             code="account_exists")
+
+    member = Member(created_at=get_now_utc(), payment_status="pending_checkout", is_active=False,
+                    pending_checkout_started_at=get_now_utc())
+    apply_member_profile(member, {**values, "email_private": address, "terms_accepted": True})
+    user = User(email=address, forum_username=generate_unique_forum_username(
+        member.first_name, member.last_name, member.year_group))
+    user.set_password(password)
+    member.user = user
+    db.session.add(user)
+    db.session.add(member)
+    db.session.flush()
+    log_audit_event(
+        category="membership",
+        event_type="public_membership_signup_started",
+        actor_user=user,
+        target_user=user,
+        target_member=member,
+        before=None,
+        after={"user": snapshot_user_for_audit(user), "member": snapshot_member_for_audit(member)},
+        metadata={"payment_method": chosen_payment_method(payment_method)},
+    )
+    db.session.commit()
+    return user, member, False
+
+
+def continue_signup(member):
+    """Stripe's payment page again, for a signup sent a second time."""
+    try:
+        checkout, _cycle = create_checkout_session_for_member(member)
+        db.session.commit()
+        return checkout.url
+    except stripe.StripeError as exc:
+        db.session.rollback()
+        current_app.logger.error("Could not continue an unfinished signup to Checkout for member_id=%s: %s",
+                                 member.id, exc)
+        raise ExternalServiceError("The payment page could not be opened right now. You can continue from your "
+                                   "account.", code="payment_not_started") from None
+
+
+def become_member(user, values, payment_method):
+    """A membership for a login without one. Returns the new member, or None when
+    the login has one already (a form sent twice: the caller goes on from there)."""
+    if user.member is not None:
+        return None
+    address = (user.email or "").strip().lower()
+    taken = db.session.execute(db.select(Member).filter_by(email_private=address)).scalar_one_or_none()
+    if taken is not None:
+        raise ConflictError("A membership profile with this email address already exists. Please contact us so "
+                            "we can sort it out.", code="profile_exists")
+    member = Member(created_at=get_now_utc(), payment_status="pending_checkout", is_active=False,
+                    pending_checkout_started_at=get_now_utc())
+    apply_member_profile(member, {**values, "email_private": address, "terms_accepted": True})
+    # Added before anything queries: the username check below would otherwise
+    # autoflush a membership the session does not hold yet.
+    db.session.add(member)
+    member.user = user
+    user.email = address
+    if not user.forum_username:
+        user.forum_username = generate_unique_forum_username(
+            member.first_name, member.last_name, member.year_group, exclude_user_id=user.id)
+    before_user = snapshot_user_for_audit(user)
+    db.session.flush()
+    log_audit_event(
+        category="membership",
+        event_type="linked_membership_created",
+        actor_user=user,
+        target_user=user,
+        target_member=member,
+        before={"user": before_user, "member": None},
+        after={"user": snapshot_user_for_audit(user), "member": snapshot_member_for_audit(member)},
+        metadata={"payment_method": chosen_payment_method(payment_method)},
+    )
+    db.session.commit()
+    return member

@@ -365,11 +365,9 @@ build-legal-pdfs`. A team without a file in force has no rules: joining it
 asks for none.
 
 **At signup** the one checkbox names every text accepted then, each a link.
-A click opens the text in a window over the form (`static/legal-dialog.js`
-fetches `/legal/<text>?part=body`); links inside it (to the German version,
-to another text) load in the same window, anything else in a new tab.
-Without JavaScript the link opens in a new tab. Either way nothing typed
-into the form is lost. The member keeps which version of each text was
+A click opens the text in a window over the form (`GET /api/v1/legal/<text>`,
+drawn by `frontend/src/pages/public/MembershipForm.tsx`); a click with Ctrl or
+Cmd opens its page in a new tab. Either way nothing typed into the form is lost. The member keeps which version of each text was
 accepted -- the version day, the same in both languages -- and when
 (`legal_versions_accepted`, `legal_accepted_at`; in the member's data
 export). Members who signed up before October 2026 have neither; for them
@@ -1380,9 +1378,9 @@ membership over a label nobody needs would be absurd.
 
 **Adding a category** is an edit to `member_categories.py` plus a migration
 only if existing rows need re-pointing. The forms, the show/hide behaviour and
-the admin screens all read from that module — the browser gets the rule through
-`data-year-group-categories`, rendered from Python, so `member-kind-toggle.js`
-never restates it. `tests/test_member_categories.py` fails if a new category is
+the admin screens all read from that module — the browser gets the rule from
+`GET /api/v1/forms/options` (`api/form_options.py`), so the front end never
+restates it. `tests/test_member_categories.py` fails if a new category is
 added without a label, a description or a year group rule.
 
 **Nothing about money is in there.** Every category pays the same annual fee

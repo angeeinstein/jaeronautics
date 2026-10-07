@@ -55,14 +55,14 @@ class TestTheWelcomeEmail:
 
 
 class TestThePageAfterPaying:
+    """It points to the teams by what they are called here (frontend/src/pages/public/Payment.tsx)."""
+
     @pytest.mark.usefixtures("switched_on")
     def test_points_to_the_teams(self, app, client):
-        body = client.get("/thank-you?method=checkout&phase=prorated").get_data(as_text=True)
-
-        assert 'href="/teams"' in body and "once the debit has cleared" in body
+        assert client.get("/api/v1/site").get_json()["teams_label"] == "Teams"
 
     def test_not_while_switched_off(self, app, client):
-        assert 'href="/teams"' not in client.get("/thank-you").get_data(as_text=True)
+        assert client.get("/api/v1/site").get_json()["teams_label"] is None
 
 
 def _teams_card(client):
