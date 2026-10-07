@@ -16,7 +16,9 @@ import { PageHeader } from '../../../components/PageHeader';
 import { Panel } from '../../../components/Panel';
 import { StatTile } from '../../../components/StatTile';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
+import { arrivedClass, useArrivals } from '../../../lib/arrivals';
 import { formatDate, formatDayOf, formatEuros } from '../../../lib/format';
+import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import { useSlug } from './shared';
 
@@ -119,6 +121,10 @@ function Bank({ funds }: { funds: Funds }) {
 }
 
 function Body({ funds }: { funds: Funds }) {
+  const arrived = useArrivals(
+    funds.slug,
+    funds.payments.map((payment) => String(payment.id)),
+  );
   return (
     <Stack gap="lg">
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
@@ -234,7 +240,7 @@ function Body({ funds }: { funds: Funds }) {
               </Table.Thead>
               <Table.Tbody>
                 {funds.payments.map((payment) => (
-                  <Table.Tr key={payment.id}>
+                  <Table.Tr key={payment.id} className={arrivedClass(arrived, payment.id)}>
                     <Table.Td>{payment.paid_at ? formatDayOf(payment.paid_at) : '–'}</Table.Td>
                     <Table.Td>{payment.name ?? '–'}</Table.Td>
                     <Table.Td>{payment.paid_until ? formatDate(payment.paid_until) : '–'}</Table.Td>
@@ -272,6 +278,7 @@ export function Money() {
     queryKey: fundsKey(slug),
     queryFn: () => call(api.GET('/api/v1/teams/{slug}/money', { params: { path: { slug } } })),
   });
+  useLiveRefresh(fundsKey(slug), EVERY_MINUTE);
   const name = funds.data?.name ?? slug;
   return (
     <>

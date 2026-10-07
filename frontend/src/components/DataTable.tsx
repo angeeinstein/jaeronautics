@@ -11,6 +11,9 @@
  *
  * A row with ``rowHref`` opens on a click anywhere in it; its first link is
  * the same address, for the keyboard, a screen reader and a middle click.
+ *
+ * With ``scope`` -- what the rows are: the filters, sort and page -- a row that
+ * arrives while the list is open (lib/live.ts) is marked for a moment.
  */
 import { Group, Table, UnstyledButton } from '@mantine/core';
 import { IconArrowDown, IconArrowUp, IconArrowsSort } from '@tabler/icons-react';
@@ -25,6 +28,7 @@ import {
 import type { MouseEvent } from 'react';
 
 import { useGo } from '../app/useGo';
+import { arrivedClass, useArrivals } from '../lib/arrivals';
 import { EmptyState } from './States';
 import classes from './DataTable.module.css';
 
@@ -58,6 +62,8 @@ interface DataTableProps<Row extends RowData, Key extends string> {
   empty: string;
   /** Below this width the table scrolls sideways rather than squeezing its columns. */
   minWidth?: number;
+  /** What the rows are (filters, sort, page): rows arriving within it are marked. */
+  scope?: string;
 }
 
 const ARIA_SORT = { asc: 'ascending', desc: 'descending', none: 'none' } as const;
@@ -84,8 +90,10 @@ export function DataTable<Row extends RowData, Key extends string>({
   busy = false,
   empty,
   minWidth = 720,
+  scope,
 }: DataTableProps<Row, Key>) {
   const go = useGo();
+  const arrived = useArrivals(scope ?? null, busy ? undefined : data.map(rowId));
   const table = useTable({
     features: dataTableFeatures,
     columns,
@@ -153,7 +161,10 @@ export function DataTable<Row extends RowData, Key extends string>({
             return (
               <Table.Tr
                 key={row.id}
-                className={href ? classes.linkRow : undefined}
+                className={
+                  [href ? classes.linkRow : null, arrivedClass(arrived, row.id)].filter(Boolean).join(' ') ||
+                  undefined
+                }
                 onClick={
                   href
                     ? (event: MouseEvent) => {

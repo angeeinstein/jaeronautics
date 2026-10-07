@@ -1,5 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderPage } from '../test/render';
@@ -107,4 +108,44 @@ it('an empty list is one sentence, not an empty table', () => {
 
   expect(screen.getByText('Nobody yet.')).toBeInTheDocument();
   expect(screen.queryByRole('table')).toBeNull();
+});
+
+describe('a row that arrives while the list is open', () => {
+  function Live() {
+    const [data, setData] = useState(people);
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            setData([{ id: 3, name: 'Clara', team: 'Rocket' }, ...people]);
+          }}
+        >
+          Someone joins
+        </button>
+        <DataTable
+          label="People"
+          columns={columns}
+          data={data}
+          rowId={(row) => String(row.id)}
+          sort={{ by: 'name', desc: false }}
+          onSortChange={vi.fn()}
+          empty="Nobody yet."
+          scope="all"
+        />
+      </>
+    );
+  }
+
+  it('is marked for a moment; the rows already there are not', async () => {
+    renderPage(<Live />);
+    const table = screen.getByRole('table', { name: 'People' });
+    expect(table.querySelectorAll('.ja-arrived')).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Someone joins' }));
+
+    const clara = within(table).getByRole('row', { name: /Clara/ });
+    expect(clara).toHaveClass('ja-arrived');
+    expect(within(table).getByRole('row', { name: /Anna/ })).not.toHaveClass('ja-arrived');
+  });
 });

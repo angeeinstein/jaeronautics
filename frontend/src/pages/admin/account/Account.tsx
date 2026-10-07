@@ -22,6 +22,7 @@ import { ProfileTab } from './ProfileTab';
 import { RolesTab } from './RolesTab';
 import { type Account as AccountData, accountQuery } from './shared';
 import { TeamsTab } from './TeamsTab';
+import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 
 const TABS = ['profile', 'membership', 'forum', 'teams', 'roles', 'danger', 'activity'] as const;
 type Tab = (typeof TABS)[number];
@@ -47,6 +48,7 @@ export function Account() {
   const { userId } = useParams();
   const id = Number(userId);
   const account = useQuery({ ...accountQuery(id), enabled: Number.isInteger(id) });
+  useLiveRefresh(accountQuery(id).queryKey, EVERY_MINUTE, Number.isInteger(id));
   const me = useMe();
   const { hash } = useLocation();
   const navigate = useNavigate();

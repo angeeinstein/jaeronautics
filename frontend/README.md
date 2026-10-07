@@ -72,6 +72,14 @@ Lists: `DataTable` (`src/components/DataTable.tsx`) for every table of
 records -- the server sorts and pages, the page keeps filters, sort and page
 in its address (see `src/pages/admin/Accounts.tsx` and `accountFilters.ts`).
 
+Data that changes while a page is open (the dashboard, the accounts, the
+reviews, a team's people, money): `useLiveRefresh(queryKey, EVERY_MINUTE)`
+(`src/lib/live.ts`) asks again every so often -- only while the tab is in view,
+and not while somebody types into a form on the page. What arrives in a list is
+marked for a moment (`useArrivals` and `arrivedClass` in `src/lib/arrivals.ts`,
+or `scope` on `DataTable`); a `StatTile` whose figure changes lights up. No
+sound, and no motion for whoever asked their device for less.
+
 Links: use `AppLink` (`src/app/AppLink.tsx`) for every internal link -- it
 moves within the app where the page is the app's, and loads it from the server
 where it is Flask's (a download, a PDF, the forum's sign-in).

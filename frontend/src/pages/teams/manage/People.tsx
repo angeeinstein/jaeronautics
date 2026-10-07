@@ -12,7 +12,9 @@ import { AppLink } from '../../../app/AppLink';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
+import { arrivedClass, useArrivals } from '../../../lib/arrivals';
 import { formatDate, formatDayOf } from '../../../lib/format';
+import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import { ManageHeader, useSlug } from './shared';
 
 /** Old links to a tab of the management page (#manage-applying) open that section's page. */
@@ -40,6 +42,11 @@ export function Applications() {
     queryFn: () => call(api.GET('/api/v1/teams/{slug}/manage/applications', { params: { path: { slug } } })),
     enabled: !moved,
   });
+  useLiveRefresh(['teams', slug, 'manage', 'applications'], EVERY_MINUTE, !moved);
+  const arrived = useArrivals(
+    slug,
+    applications.data?.applications.map((row) => String(row.user_id)),
+  );
   if (moved) return <Navigate to={`/teams/${slug}/manage/${moved}`} replace />;
   return (
     <>
@@ -61,7 +68,7 @@ export function Applications() {
               </Table.Thead>
               <Table.Tbody>
                 {applications.data.applications.map((row) => (
-                  <Table.Tr key={row.user_id}>
+                  <Table.Tr key={row.user_id} className={arrivedClass(arrived, row.user_id)}>
                     <Table.Td>
                       <Anchor component={AppLink} to={personLink(slug, row.user_id)}>
                         {row.name}
@@ -101,6 +108,11 @@ export function Members() {
     queryKey: ['teams', slug, 'manage', 'members'] as const,
     queryFn: () => call(api.GET('/api/v1/teams/{slug}/manage/members', { params: { path: { slug } } })),
   });
+  useLiveRefresh(['teams', slug, 'manage', 'members'], EVERY_MINUTE);
+  const arrived = useArrivals(
+    slug,
+    members.data?.members.map((row) => String(row.user_id)),
+  );
   const data = members.data;
   return (
     <>
@@ -147,7 +159,7 @@ export function Members() {
               </Table.Thead>
               <Table.Tbody>
                 {members.data.members.map((row) => (
-                  <Table.Tr key={row.user_id}>
+                  <Table.Tr key={row.user_id} className={arrivedClass(arrived, row.user_id)}>
                     <Table.Td>
                       <Group gap="sm" wrap="nowrap">
                         <Avatar src={row.picture_url} alt="" radius={0} size={32} aria-hidden>

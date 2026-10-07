@@ -301,7 +301,12 @@ server can update to it.
    *(Done: the error pages -- 404 is the app's, the others one plain page that
    works without the database -- and `base.html`, Bootstrap, `style.css`, the old
    scripts and the Flask `/logout` removed. WTForms stays: the API checks the
-   member forms by its rules. The API's models each have a name of their own.)*
+   member forms by its rules. The API's models each have a name of their own.
+   The pages whose data changes while they are open refresh themselves -- the
+   dashboard and the reviews every 30 seconds, the accounts, a team's people and
+   the money pages every minute, only while in view and not while somebody types
+   (`lib/live.ts`); what arrives in a list, and a figure that changes, light up
+   for a moment.)*
 
 ## 5. Open, to decide on the way
 

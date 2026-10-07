@@ -81,3 +81,60 @@ body {
   background: transparent;
   color: var(--ja-placeholder);
 }
+
+/* Something that arrived or changed while the page was open (lib/arrivals.ts,
+   components/StatTile.tsx): a cyan glow that fades out. Not for whoever has
+   asked their device for less motion -- the change is there all the same. */
+@keyframes ja-arrive {
+  from {
+    background-color: rgb(0 223 255 / 0.2);
+    box-shadow: inset 3px 0 0 var(--ja-accent);
+  }
+  to {
+    background-color: transparent;
+    box-shadow: inset 3px 0 0 transparent;
+  }
+}
+
+@keyframes ja-change {
+  from {
+    color: var(--ja-accent);
+  }
+  to {
+    color: inherit;
+  }
+}
+
+@keyframes ja-arrive-card {
+  from {
+    box-shadow:
+      0 0 0 1px var(--ja-accent),
+      inset 3px 0 0 var(--ja-accent);
+  }
+  to {
+    box-shadow:
+      0 0 0 1px transparent,
+      inset 3px 0 0 transparent;
+  }
+}
+
+.ja-arrived {
+  animation: ja-arrive 3.5s ease-out;
+}
+
+/* A card has its own background: only its outline lights up. */
+.ja-arrived-card {
+  animation: ja-arrive-card 3.5s ease-out;
+}
+
+.ja-changed {
+  animation: ja-change 2.5s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ja-arrived,
+  .ja-arrived-card,
+  .ja-changed {
+    animation: none;
+  }
+}

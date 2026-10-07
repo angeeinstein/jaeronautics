@@ -17,6 +17,7 @@ import { StatTile } from '../../components/StatTile';
 import { EmptyState, ErrorState, LoadingState } from '../../components/States';
 import { formatDateTime, formatEuros, plural, titleFromCode } from '../../lib/format';
 import classes from './AdminDashboard.module.css';
+import { EVERY_30_SECONDS, useLiveRefresh } from '../../lib/live';
 
 type Dashboard = Schemas['DashboardOut'];
 type Attention = Dashboard['attention'];
@@ -188,6 +189,7 @@ function RecentActivity({ entries }: { entries: Dashboard['recent_activity'] }) 
 
 export function AdminDashboard() {
   const dashboard = useQuery(dashboardQuery);
+  useLiveRefresh(dashboardQuery.queryKey, EVERY_30_SECONDS);
 
   return (
     <>

@@ -19,6 +19,7 @@ import { Pill } from '../../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
 import { TeamMark } from '../../../components/TeamMark';
 import { formatDate, formatEuros } from '../../../lib/format';
+import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import classes from './Money.module.css';
 import { type MoneyOut, moneyQuery } from './shared';
 import { Overview } from './Overview';
@@ -145,6 +146,8 @@ function PeriodForm({
 
 export function Money() {
   const money = useQuery(moneyQuery);
+  // Not the check against Stripe (Overview.tsx): that one is asked for.
+  useLiveRefresh(moneyQuery.queryKey, EVERY_MINUTE);
   const [params, setParams] = useSearchParams();
   const checking = params.get('check') === '1';
   const since = params.get('since') ?? '';

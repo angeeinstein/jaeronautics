@@ -21,12 +21,17 @@ import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { ErrorState, LoadingState } from '../../../components/States';
 import { formatDateTime } from '../../../lib/format';
+import { useArrivals } from '../../../lib/arrivals';
+import { EVERY_30_SECONDS, useLiveRefresh } from '../../../lib/live';
 import { ReviewCard } from './ReviewCard';
 import { historyQuery, type Reviews as ReviewsData, reviewsQuery } from './shared';
 import classes from './Reviews.module.css';
 
+const itemKey = (item: ReviewsData['queue'][number]) => `${item.kind}-${String(item.id)}`;
+
 function Queue({ data, canOpenAccounts }: { data: ReviewsData; canOpenAccounts: boolean }) {
   const waiting = (data.waiting.name_changes ?? 0) + (data.waiting.pictures ?? 0);
+  const arrived = useArrivals('queue', data.queue.map(itemKey));
   if (!data.queue.length) {
     return (
       <div id="review-queue">
@@ -46,7 +51,12 @@ function Queue({ data, canOpenAccounts }: { data: ReviewsData; canOpenAccounts: 
         </Text>
       </Group>
       {data.queue.map((item) => (
-        <ReviewCard key={`${item.kind}-${String(item.id)}`} item={item} canOpenAccount={canOpenAccounts} />
+        <ReviewCard
+          key={itemKey(item)}
+          item={item}
+          canOpenAccount={canOpenAccounts}
+          arrived={arrived.has(itemKey(item))}
+        />
       ))}
       {waiting > data.queue.length ? (
         <Text size="sm" c="dimmed">
@@ -188,6 +198,7 @@ function History() {
 
 export function Reviews() {
   const reviews = useQuery(reviewsQuery);
+  useLiveRefresh(reviewsQuery.queryKey, EVERY_30_SECONDS);
   const me = useMe();
   const { hash } = useLocation();
   const canOpenAccounts = can(me.data, 'accounts.view');

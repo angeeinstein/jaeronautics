@@ -57,7 +57,16 @@ function Changes({ item }: { item: QueueItem }) {
   );
 }
 
-export function ReviewCard({ item, canOpenAccount }: { item: QueueItem; canOpenAccount: boolean }) {
+export function ReviewCard({
+  item,
+  canOpenAccount,
+  arrived = false,
+}: {
+  item: QueueItem;
+  canOpenAccount: boolean;
+  /** Came in while the page was open (lib/arrivals.ts): marked for a moment. */
+  arrived?: boolean;
+}) {
   const [note, setNote] = useState('');
   const username = item.change?.forum_username ?? null;
   const [rename, setRename] = useState(false);
@@ -114,7 +123,7 @@ export function ReviewCard({ item, canOpenAccount }: { item: QueueItem; canOpenA
 
   return (
     <section
-      className={classes.card}
+      className={arrived ? `${classes.card} ja-arrived-card` : classes.card}
       aria-label={`${headline(item)}: ${item.person.name}`}
       id={`${base}-${String(item.id)}`}
     >

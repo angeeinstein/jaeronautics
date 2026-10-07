@@ -18,7 +18,9 @@ import { Details } from '../../../components/Details';
 import { PageHeader } from '../../../components/PageHeader';
 import { Panel } from '../../../components/Panel';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
+import { arrivedClass, useArrivals } from '../../../lib/arrivals';
 import { formatDate, formatDayOf, formatEuros } from '../../../lib/format';
+import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import classes from './Money.module.css';
 import { amountText, centsOf, type TeamMoneyOut, teamMoneyQuery } from './shared';
@@ -346,6 +348,10 @@ function Transfers({ money }: { money: TeamMoneyOut }) {
 }
 
 function Payments({ money }: { money: TeamMoneyOut }) {
+  const arrived = useArrivals(
+    money.team.slug,
+    money.payments.map((payment) => String(payment.id)),
+  );
   return (
     <Panel
       title="Payments"
@@ -374,7 +380,7 @@ function Payments({ money }: { money: TeamMoneyOut }) {
             </Table.Thead>
             <Table.Tbody>
               {money.payments.map((payment) => (
-                <Table.Tr key={payment.id}>
+                <Table.Tr key={payment.id} className={arrivedClass(arrived, payment.id)}>
                   <Table.Td>{payment.paid_at ? formatDayOf(payment.paid_at) : '–'}</Table.Td>
                   <Table.Td>{payment.name ?? '–'}</Table.Td>
                   <Table.Td>{payment.paid_until ? formatDate(payment.paid_until) : '–'}</Table.Td>
@@ -410,6 +416,7 @@ function Payments({ money }: { money: TeamMoneyOut }) {
 export function TeamMoney() {
   const { slug = '' } = useParams();
   const money = useQuery(teamMoneyQuery(slug));
+  useLiveRefresh(teamMoneyQuery(slug).queryKey, EVERY_MINUTE);
   const title = money.data?.team.name ?? slug;
 
   return (

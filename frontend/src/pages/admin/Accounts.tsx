@@ -31,6 +31,7 @@ import {
 } from './accountFilters';
 import { ACCOUNT_STATE_PILL, MEMBERSHIP_PILL } from './accountLabels';
 import classes from './Accounts.module.css';
+import { EVERY_MINUTE, useLiveRefresh } from '../../lib/live';
 
 type AccountList = Schemas['AccountListOut'];
 type Row = Schemas['AccountRow'];
@@ -185,6 +186,7 @@ export function Accounts() {
   const [params, setParams] = useSearchParams();
   const filters = useMemo(() => filtersFromParams(params), [params]);
   const list = useQuery({ ...accountsQuery(filters), placeholderData: keepPreviousData });
+  useLiveRefresh(accountsQuery(filters).queryKey, EVERY_MINUTE);
 
   const update = (change: Partial<AccountFilters>, { replace = false } = {}) => {
     // Any change but turning the page starts again at the first.
@@ -304,6 +306,7 @@ export function Accounts() {
                   update({ sort: next.by, desc: next.desc });
                 }}
                 busy={list.isPlaceholderData}
+                scope={JSON.stringify(filters)}
                 empty={isFiltered(filters) ? 'No accounts match these filters.' : 'No accounts yet.'}
                 minWidth={860}
               />
