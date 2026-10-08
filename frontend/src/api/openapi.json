@@ -2382,6 +2382,19 @@
             "title": "City",
             "type": "string"
           },
+          "company_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Company Name"
+          },
           "country": {
             "maxLength": 100,
             "title": "Country",
@@ -2464,6 +2477,17 @@
               }
             ],
             "title": "City"
+          },
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
           },
           "country": {
             "anyOf": [
@@ -2563,7 +2587,8 @@
           "phone_private",
           "email_private",
           "phone_work",
-          "email_work"
+          "email_work",
+          "company_name"
         ],
         "title": "ContactOut",
         "type": "object"
@@ -3345,13 +3370,21 @@
             },
             "title": "Salutations",
             "type": "array"
+          },
+          "university_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "University Domains",
+            "type": "array"
           }
         },
         "required": [
           "countries",
           "salutations",
           "member_categories",
-          "invoice_payments"
+          "invoice_payments",
+          "university_domains"
         ],
         "title": "FormOptionsOut",
         "type": "object"
@@ -5832,9 +5865,17 @@
       "MemberCategoryOut": {
         "additionalProperties": false,
         "properties": {
+          "company_name": {
+            "title": "Company Name",
+            "type": "boolean"
+          },
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "joinable": {
+            "title": "Joinable",
+            "type": "boolean"
           },
           "label": {
             "title": "Label",
@@ -5863,7 +5904,9 @@
           "label",
           "description",
           "year_group",
-          "university_email_required"
+          "university_email_required",
+          "company_name",
+          "joinable"
         ],
         "title": "MemberCategoryOut",
         "type": "object"
@@ -6012,6 +6055,17 @@
             "title": "Category Label",
             "type": "string"
           },
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
           "email_private": {
             "title": "Email Private",
             "type": "string"
@@ -6118,6 +6172,7 @@
           "category",
           "category_label",
           "year_group",
+          "company_name",
           "state",
           "payment_status",
           "payment_status_label",
@@ -6297,6 +6352,19 @@
             "maxLength": 100,
             "title": "City",
             "type": "string"
+          },
+          "company_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Company Name"
           },
           "country": {
             "maxLength": 100,
@@ -7816,6 +7884,44 @@
         "title": "PreviewOut",
         "type": "object"
       },
+      "PriceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "annual_fee": {
+            "title": "Annual Fee",
+            "type": "string"
+          },
+          "due_today": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Today"
+          },
+          "paid_until": {
+            "format": "date",
+            "title": "Paid Until",
+            "type": "string"
+          },
+          "renews_on": {
+            "format": "date",
+            "title": "Renews On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "annual_fee",
+          "due_today",
+          "paid_until",
+          "renews_on"
+        ],
+        "title": "PriceOut",
+        "type": "object"
+      },
       "ProgressOut": {
         "additionalProperties": false,
         "properties": {
@@ -8784,6 +8890,19 @@
             "title": "City",
             "type": "string"
           },
+          "company_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Company Name"
+          },
           "country": {
             "maxLength": 100,
             "title": "Country",
@@ -8921,6 +9040,26 @@
           "password"
         ],
         "title": "SignupIn",
+        "type": "object"
+      },
+      "SignupPriceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "price"
+        ],
+        "title": "SignupPriceOut",
         "type": "object"
       },
       "SiteOut": {
@@ -17775,6 +17914,27 @@
           }
         },
         "summary": "Join: the login and the membership, then on to paying. Signed in afterwards.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/signup/price": {
+      "get": {
+        "operationId": "signup_price",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupPriceOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "What joining today costs and how it renews, for the signup's last step (Stripe's price,",
         "tags": [
           "Account"
         ]

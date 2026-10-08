@@ -34,7 +34,8 @@ from aeronautics_members.services.members import normalize_optional_member_value
 
 NEEDS_A_YEAR_GROUP = [MemberCategory.STUDENT]
 OFFERED_A_YEAR_GROUP = [MemberCategory.STUDENT, MemberCategory.ALUMNI]
-NOT_ASKED = [MemberCategory.STAFF, MemberCategory.PARTNER, MemberCategory.HONORARY]
+# Of those who may join: an honorary member is appointed, never signs up.
+NOT_ASKED = [MemberCategory.STAFF, MemberCategory.PARTNER]
 
 
 def _signup_data(**overrides):
@@ -52,6 +53,8 @@ def _signup_data(**overrides):
         "email_work": "jonas.huber@edu.fh-joanneum.at",
         "member_category": MemberCategory.STUDENT,
         "year_group": "LAV25",
+        # Asked of partners only; dropped for everybody else.
+        "company_name": "Example Aero GmbH",
         "password": "a-long-enough-password",
         "confirm_password": "a-long-enough-password",
         "terms_accepted": "y",
@@ -181,6 +184,27 @@ class TestTheForm:
 
         assert form.validate() is True, form.errors
         assert form.year_group.data is None
+
+    def test_nobody_signs_up_as_an_honorary_member(self, app):
+        form = MembershipForm(formdata=_signup_data(member_category=MemberCategory.HONORARY, year_group=""),
+                              meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "member_category" in form.errors
+
+    def test_a_partner_names_their_company(self, app):
+        form = MembershipForm(formdata=_signup_data(member_category=MemberCategory.PARTNER, year_group="",
+                                                    company_name=""), meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "company_name" in form.errors
+
+    @pytest.mark.parametrize("category", [MemberCategory.STUDENT, MemberCategory.ALUMNI, MemberCategory.STAFF])
+    def test_a_leftover_company_is_dropped(self, app, category):
+        form = MembershipForm(formdata=_signup_data(member_category=category), meta={"csrf": False})
+
+        assert form.validate() is True, form.errors
+        assert form.company_name.data is None
 
     def test_whitespace_does_not_count_as_a_year_group(self, app):
         form = MembershipForm(formdata=_signup_data(year_group="   "), meta={"csrf": False})

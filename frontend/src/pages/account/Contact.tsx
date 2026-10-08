@@ -11,7 +11,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
-import { Details } from '../../components/Details';
+import { type Detail, Details } from '../../components/Details';
 import { Panel } from '../../components/Panel';
 import { emptyToNull } from '../../lib/forms';
 import { notifyFailed } from '../../lib/notify';
@@ -38,6 +38,7 @@ function initial(contact: Contact): ContactIn {
     email_private: contact.email_private ?? '',
     phone_work: contact.phone_work ?? '',
     email_work: contact.email_work ?? '',
+    company_name: contact.company_name ?? '',
   };
 }
 
@@ -64,14 +65,18 @@ export function ContactCard({
   options,
   email,
   workEmail,
+  asksCompany = false,
 }: {
   contact: Contact;
   options: FormOptions;
+  /** A partner member, asked for the company they join for. */
+  asksCompany?: boolean;
   /** The saved addresses, with whether each is confirmed. */
   email: Address;
   workEmail: Address | null;
 }) {
   const [editing, setEditing] = useState(false);
+  const showsCompany = asksCompany || Boolean(contact.company_name);
   const [value, setValue] = useState(() => initial(contact));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const take = useTakeSaved();
@@ -83,6 +88,7 @@ export function ContactCard({
             ...value,
             phone_work: emptyToNull(value.phone_work),
             email_work: emptyToNull(value.email_work),
+            company_name: emptyToNull(value.company_name),
           },
         }),
       ),
@@ -129,6 +135,7 @@ export function ContactCard({
               'University or company email',
               workEmail ? <Saved key="work" address={workEmail} which="work" /> : null,
             ],
+            ...(showsCompany ? [['Company', contact.company_name] satisfies Detail] : []),
             ['Private phone', contact.phone_private],
             ['Work phone', contact.phone_work],
             ['Address', address(contact)],
@@ -178,6 +185,14 @@ export function ContactCard({
               {...field('phone_private')}
             />
             <TextInput label="Work phone" type="tel" maxLength={50} {...field('phone_work')} />
+            {showsCompany ? (
+              <TextInput
+                label="Company"
+                autoComplete="organization"
+                maxLength={255}
+                {...field('company_name')}
+              />
+            ) : null}
           </SimpleGrid>
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
             <TextInput label="Street" autoComplete="address-line1" maxLength={255} {...field('street')} />

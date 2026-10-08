@@ -88,6 +88,25 @@ INSTITUTIONAL_EMAIL_RULES = {
 }
 
 
+# Who is asked for the company they join for: partners, and they must say.
+COMPANY_NAME_RULES = {
+    MemberCategory.STUDENT: {"shown": False, "required": False},
+    MemberCategory.ALUMNI: {"shown": False, "required": False},
+    MemberCategory.STAFF: {"shown": False, "required": False},
+    MemberCategory.PARTNER: {"shown": True, "required": True},
+    MemberCategory.HONORARY: {"shown": False, "required": False},
+}
+
+# Who may sign up as what. An honorary member is appointed by the association,
+# never self-declared: an admin sets the category on an existing membership.
+JOINABLE_CATEGORIES = (
+    MemberCategory.STUDENT,
+    MemberCategory.ALUMNI,
+    MemberCategory.STAFF,
+    MemberCategory.PARTNER,
+)
+
+
 def is_valid(category):
     return category in CATEGORY_LABELS
 
@@ -123,6 +142,26 @@ def shows_year_group(category):
 def requires_year_group(category):
     """Whether this category cannot be saved without a year group."""
     return YEAR_GROUP_RULES.get(category, {}).get("required", False)
+
+
+def asks_company_name(category):
+    """Whether the company field is offered to this category at all."""
+    return COMPANY_NAME_RULES.get(category, {}).get("shown", False)
+
+
+def requires_company_name(category):
+    """Whether this category cannot join without naming its company."""
+    return COMPANY_NAME_RULES.get(category, {}).get("required", False)
+
+
+def is_joinable(category):
+    """Whether somebody may choose this category when joining."""
+    return category in JOINABLE_CATEGORIES
+
+
+def joinable_category_choices():
+    """The choices of the signup forms: every category but the appointed ones."""
+    return [(category, CATEGORY_LABELS[category]) for category in CATEGORY_ORDER if is_joinable(category)]
 
 
 def category_choices():

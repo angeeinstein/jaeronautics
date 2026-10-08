@@ -42,6 +42,8 @@ def _signup(**overrides):
         "email_private": "anna.private@gmail.com",
         "email_work": UNI,
         "member_category": MemberCategory.STUDENT, "year_group": "LAV23",
+        # Asked of partners only; dropped for everybody else.
+        "company_name": "Some Airline",
         "password": "a-long-enough-password",
         "confirm_password": "a-long-enough-password",
         "terms_accepted": "y",
@@ -123,9 +125,8 @@ class TestTheSignupForm:
         assert form.validate() is True, form.errors
         assert form.email_work.data == UNI
 
-    @pytest.mark.parametrize("category", [
-        MemberCategory.PARTNER, MemberCategory.HONORARY, MemberCategory.STAFF,
-    ])
+    # Of those who may join: an honorary member is appointed, never signs up.
+    @pytest.mark.parametrize("category", [MemberCategory.PARTNER, MemberCategory.STAFF])
     def test_other_categories_are_not_required_to_give_one(self, app, category):
         form = MembershipForm(
             formdata=_signup(member_category=category, email_work="", year_group=""),

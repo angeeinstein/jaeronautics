@@ -27,8 +27,11 @@ from wtforms.validators import (
 
 from .member_categories import (
     DEFAULT_CATEGORY,
+    asks_company_name,
     category_choices,
     checks_institutional_domain,
+    joinable_category_choices,
+    requires_company_name,
     requires_institutional_email,
     requires_year_group,
     shows_year_group,
@@ -173,6 +176,28 @@ class YearGroupRequirement:
 YEAR_GROUP_FIELD_VALIDATORS = [YearGroupRequirement(), Length(max=50), YEAR_GROUP_VALIDATOR]
 
 
+class CompanyNameRequirement:
+    """The company a partner joins for: asked of partners, who must give it, and dropped for
+    everybody else -- a leftover from before the kind of member was switched, not a claim.
+    Which categories are asked is member_categories.py's to say."""
+
+    def __call__(self, form, field):
+        category = resolve_member_category(form)
+        value = (field.data or "").strip()
+        if not asks_company_name(category):
+            field.data = None
+            raise StopValidation()
+        if not value:
+            if requires_company_name(category):
+                raise ValidationError(_("Please enter the company you join for."))
+            field.data = None
+            raise StopValidation()
+        field.data = value
+
+
+COMPANY_NAME_FIELD_VALIDATORS = [CompanyNameRequirement(), Length(max=255)]
+
+
 class InstitutionalEmailRequirement:
     """The university or company address, per member category.
 
@@ -257,8 +282,10 @@ class MembershipForm(FlaskForm):
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
+    company_name = StringField(_l("Company"), validators=COMPANY_NAME_FIELD_VALIDATORS)
+    # Not the appointed kinds: an honorary member is made one by an admin.
     member_category = SelectField(
-        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        _l("Membership Type"), choices=joinable_category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
@@ -295,8 +322,10 @@ class CreateMembershipProfileForm(FlaskForm):
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
+    company_name = StringField(_l("Company"), validators=COMPANY_NAME_FIELD_VALIDATORS)
+    # Not the appointed kinds: an honorary member is made one by an admin.
     member_category = SelectField(
-        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        _l("Membership Type"), choices=joinable_category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
@@ -324,6 +353,7 @@ class MemberProfileForm(FlaskForm):
         _l("Private Email"), validators=PRIVATE_EMAIL_FIELD_VALIDATORS
     )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
+    company_name = StringField(_l("Company"), validators=[Optional(), Length(max=255)])
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )

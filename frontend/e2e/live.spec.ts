@@ -30,10 +30,10 @@ test.describe('pages that refresh themselves', () => {
         phone_work: null,
         email_private: `live-${stamp}@example.org`,
         email_work: null,
+        company_name: 'Example Aero GmbH',
         member_category: 'partner',
         year_group: null,
         password: 'a-good-password',
-        payment_method: 'checkout',
         terms_accepted: true,
       },
     });

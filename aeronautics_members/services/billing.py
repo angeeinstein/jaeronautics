@@ -15,6 +15,8 @@ invoice, never from the status.
 """
 
 
+import time
+
 import stripe
 from flask import current_app
 from flask_babel import _
@@ -101,6 +103,55 @@ def get_stripe_membership_price():
         "unit_amount": int(unit_amount),
         "interval": interval,
         "interval_count": int(interval_count),
+    }
+
+
+#: How long the membership's price, asked of Stripe for the signup's last step,
+#: is kept: a page anyone may open must not be a way to send Stripe requests.
+#: A new price in the settings is a new price id, asked at once.
+PRICE_SHOWN_TTL_SECONDS = 600
+#: After Stripe could not be asked, not again for this long.
+PRICE_SHOWN_RETRY_SECONDS = 60
+
+_price_shown = {"price_id": None, "at": 0.0, "value": None}
+
+
+def _price_shown_cached():
+    """The membership's price as get_stripe_membership_price gives it, kept a while; None when
+    Stripe cannot be asked or no price is set up."""
+    stripe_settings = get_stripe_settings_map()
+    price_id = stripe_settings.get("stripe_price_id") or STRIPE_PRICE_ID
+    if not price_id:
+        return None
+    now = time.monotonic()
+    kept = _price_shown
+    if kept["price_id"] == price_id:
+        age = now - kept["at"]
+        if age < (PRICE_SHOWN_TTL_SECONDS if kept["value"] else PRICE_SHOWN_RETRY_SECONDS):
+            return kept["value"]
+    try:
+        value = get_stripe_membership_price()
+    except (stripe.StripeError, ValueError) as exc:
+        current_app.logger.warning("The membership price could not be read from Stripe: %s", exc)
+        value = None
+    _price_shown.update(price_id=price_id, at=now, value=value)
+    return value
+
+
+def membership_offer(join_date=None):
+    """What joining costs, said before paying: the annual fee, what is due today -- the rest of
+    the year, or nothing from the free period on -- until when that covers, and when the fee
+    is next charged. None when the price cannot be read; the payment page says it then."""
+    price = _price_shown_cached()
+    if price is None:
+        return None
+    cycle = build_membership_cycle(join_date or get_membership_today(), price["unit_amount"])
+    return {
+        "annual_fee": format_checkout_amount(price["unit_amount"], price["currency"]),
+        "due_today": (None if cycle["free_period"]
+                      else format_checkout_amount(cycle["prorated_amount_cents"], price["currency"])),
+        "paid_until": cycle["coverage_end"],
+        "renews_on": cycle["renewal_due_on"],
     }
 
 

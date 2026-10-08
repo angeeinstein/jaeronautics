@@ -65,6 +65,8 @@ class Membership(Model):
     category: str
     category_label: str
     year_group: str | None
+    #: The company a partner member joins for.
+    company_name: str | None
     state: MembershipState
     payment_status: str
     payment_status_label: str
@@ -230,6 +232,7 @@ def _membership(user):
         category=member.member_category,
         category_label=str(CATEGORY_LABELS.get(member.member_category, member.member_category)),
         year_group=member.year_group,
+        company_name=member.company_name,
         state=directory.membership_state_of(user),
         payment_status=member.payment_status,
         payment_status_label=PAYMENT_STATUS_LABELS.get(member.payment_status,

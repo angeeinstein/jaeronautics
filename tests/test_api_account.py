@@ -12,7 +12,7 @@ import pytest
 
 from api_helpers import send, signed_in
 from conftest import db, make_member
-from aeronautics_members.db_models import AuditLog, MemberProfileChangeRequest, User
+from aeronautics_members.db_models import AuditLog, Member, MemberProfileChangeRequest, User
 from aeronautics_members.services import workflows
 
 CONTACT = {"street": "Main Street", "house_number": "1", "postal_code": "8010", "city": "Graz",
@@ -95,7 +95,7 @@ class TestThePage:
         account = signed_in(client, member.user).get("/api/v1/account").get_json()
 
         assert account["export_url"] == "/account/data-export"
-        assert account["member"]["contact"] == {**CONTACT, "phone_work": None}
+        assert account["member"]["contact"] == {**CONTACT, "phone_work": None, "company_name": None}
         assert account["member"]["identity"] == {**IDENTITY, "title": None, "member_category_label": "Student"}
         membership = account["member"]["membership"]
         assert (membership["status_label"], membership["tone"], membership["active"]) == ("Paid", "active", True)
@@ -151,6 +151,17 @@ class TestContactDetails:
 
         assert response.status_code == 400
         assert db.session.get(User, member.user_id).member.first_name == "Anna"
+
+    def test_the_company_is_saved_and_kept_when_left_out(self, app, client):
+        member = _anna()
+
+        send(signed_in(client, member.user), "PUT", "/api/v1/account/contact",
+             {**CONTACT, "company_name": "Example Aero GmbH"})
+        assert db.session.get(Member, member.id).company_name == "Example Aero GmbH"
+
+        # An older page that does not know the field leaves it as it is.
+        response = send(client, "PUT", "/api/v1/account/contact", {**CONTACT, "city": "Vienna"})
+        assert response.get_json()["account"]["member"]["contact"]["company_name"] == "Example Aero GmbH"
 
     def test_an_account_without_a_membership_has_none(self, app, client):
         staff = User(email="staff@example.org")

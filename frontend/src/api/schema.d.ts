@@ -1446,6 +1446,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/signup/price": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What joining today costs and how it renews, for the signup's last step (Stripe's price, */
+        get: operations["signup_price"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/site": {
         parameters: {
             query?: never;
@@ -2740,6 +2757,11 @@ export interface components {
         ContactIn: {
             /** City */
             city: string;
+            /**
+             * Company Name
+             * @default null
+             */
+            company_name?: string | null;
             /** Country */
             country: string;
             /** Email Private */
@@ -2767,6 +2789,8 @@ export interface components {
         ContactOut: {
             /** City */
             city: string | null;
+            /** Company Name */
+            company_name: string | null;
             /** Country */
             country: string | null;
             /** Email Private */
@@ -3063,6 +3087,8 @@ export interface components {
             member_categories: components["schemas"]["MemberCategoryOut"][];
             /** Salutations */
             salutations: components["schemas"]["ChoiceOut"][];
+            /** University Domains */
+            university_domains: string[];
         };
         /** FormerMembersOut */
         FormerMembersOut: {
@@ -3871,8 +3897,12 @@ export interface components {
         };
         /** MemberCategoryOut */
         MemberCategoryOut: {
+            /** Company Name */
+            company_name: boolean;
             /** Description */
             description: string;
+            /** Joinable */
+            joinable: boolean;
             /** Label */
             label: string;
             /** University Email Required */
@@ -3923,6 +3953,8 @@ export interface components {
             category: string;
             /** Category Label */
             category_label: string;
+            /** Company Name */
+            company_name: string | null;
             /** Email Private */
             email_private: string;
             /** Ends On */
@@ -4010,6 +4042,11 @@ export interface components {
         MembershipIn: {
             /** City */
             city: string;
+            /**
+             * Company Name
+             * @default null
+             */
+            company_name?: string | null;
             /** Country */
             country: string;
             /**
@@ -4505,6 +4542,23 @@ export interface components {
             /** Html */
             html: string | null;
         };
+        /** PriceOut */
+        PriceOut: {
+            /** Annual Fee */
+            annual_fee: string;
+            /** Due Today */
+            due_today: string | null;
+            /**
+             * Paid Until
+             * Format: date
+             */
+            paid_until: string;
+            /**
+             * Renews On
+             * Format: date
+             */
+            renews_on: string;
+        };
         /** ProgressOut */
         ProgressOut: {
             /** Current Step */
@@ -4817,6 +4871,11 @@ export interface components {
         SignupIn: {
             /** City */
             city: string;
+            /**
+             * Company Name
+             * @default null
+             */
+            company_name?: string | null;
             /** Country */
             country: string;
             /** Email Private */
@@ -4867,6 +4926,10 @@ export interface components {
              * @default null
              */
             year_group?: string | null;
+        };
+        /** SignupPriceOut */
+        SignupPriceOut: {
+            price: components["schemas"]["PriceOut"] | null;
         };
         /** SiteOut */
         SiteOut: {
@@ -10597,6 +10660,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    signup_price: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupPriceOut"];
                 };
             };
         };

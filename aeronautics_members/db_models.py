@@ -226,6 +226,8 @@ class Member(db.Model):
     phone_private = db.Column(db.String(50), nullable=False)
     email_private = db.Column(db.String(255), nullable=False, unique=True)
     phone_work = db.Column(db.String(50), nullable=True)
+    # The company a partner member joins for (member_categories.asks_company_name).
+    company_name = db.Column(db.String(255), nullable=True)
     # The university or company address. Not a login and never mail from the
     # portal's own workflows: it proves current affiliation, and for a student
     # that is what says they are one. It outlives nothing -- when they graduate

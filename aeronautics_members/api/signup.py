@@ -7,9 +7,10 @@ answer where the browser goes next: Stripe's payment page, the thank-you page
 for an invoice, or My Account when paying could not start (it says why).
 
 The choices the form offers are GET /api/v1/forms/options; the texts to accept,
-GET /api/v1/legal (``accepted_at_signup``). Drawn by frontend/src/pages/public/Join.tsx.
+GET /api/v1/legal (``accepted_at_signup``); what it costs, GET /api/v1/signup/price. Drawn by frontend/src/pages/public/Join.tsx.
 """
 
+from datetime import date
 from typing import Literal
 
 from flask import flash, url_for
@@ -23,7 +24,7 @@ from ..forms import CreateMembershipProfileForm, MembershipForm
 from ..services import ExternalServiceError
 from ..services import signup as signup_service
 from ..services.account import resume_payment_url
-from ..services.billing import can_resume_payment
+from ..services.billing import can_resume_payment, membership_offer
 from ._core import Model, endpoint
 from ._forms import checked
 from .sign_in import GoOnOut
@@ -32,8 +33,8 @@ TAG = "Account"
 
 #: What a membership profile is made of; the rest of a form is about the login and paying.
 PROFILE_FIELDS = ("salutation", "title", "first_name", "last_name", "street", "house_number", "postal_code",
-                  "city", "country", "phone_private", "phone_work", "email_work", "member_category",
-                  "year_group")
+                  "city", "country", "phone_private", "phone_work", "email_work", "company_name",
+                  "member_category", "year_group")
 
 
 class MembershipIn(Model):
@@ -49,6 +50,8 @@ class MembershipIn(Model):
     phone_private: str = Field(max_length=50)
     phone_work: str | None = Field(None, max_length=50)
     email_work: str | None = Field(None, max_length=255)
+    #: The company a partner member joins for; asked of partners only.
+    company_name: str | None = Field(None, max_length=255)
     member_category: str = Field(max_length=20)
     year_group: str | None = Field(None, max_length=50)
     payment_method: Literal["checkout", "invoice"] = "checkout"
@@ -60,6 +63,31 @@ class SignupIn(MembershipIn):
     #: The login, and where the association writes.
     email_private: str = Field(max_length=255)
     password: str = Field(max_length=128)
+
+
+class PriceOut(Model):
+    #: "€40.00", charged every year.
+    annual_fee: str
+    #: What paying today costs: the rest of this year. None from the free period on, when
+    #: nothing is due until the fee is charged.
+    due_today: str | None
+    #: The last day today's payment (or the free period) covers.
+    paid_until: date
+    #: When the annual fee is next charged.
+    renews_on: date
+
+
+class SignupPriceOut(Model):
+    #: None when Stripe cannot be asked just now: the payment page says it then.
+    price: PriceOut | None
+
+
+@endpoint("GET", "/signup/price", response=SignupPriceOut, public=True, tag=TAG)
+def signup_price():
+    """What joining today costs and how it renews, for the signup's last step (Stripe's price,
+    kept a few minutes)."""
+    offer = membership_offer()
+    return SignupPriceOut(price=PriceOut(**offer) if offer else None)
 
 
 def _form_data(body, **more):

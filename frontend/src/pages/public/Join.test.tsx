@@ -12,6 +12,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function kind(
+  value: string,
+  label: string,
+  more: Partial<Schemas['MemberCategoryOut']> = {},
+): Schemas['MemberCategoryOut'] {
+  return {
+    value,
+    label,
+    description: `${label}, as the server says it.`,
+    year_group: 'hidden',
+    university_email_required: false,
+    company_name: false,
+    joinable: true,
+    ...more,
+  };
+}
+
 const options: Schemas['FormOptionsOut'] = {
   countries: [
     { value: 'Austria', label: 'Austria' },
@@ -22,22 +39,17 @@ const options: Schemas['FormOptionsOut'] = {
     { value: 'Ms', label: 'Ms' },
   ],
   member_categories: [
-    {
-      value: 'student',
-      label: 'Student',
-      description: 'Currently studying.',
-      year_group: 'required',
-      university_email_required: true,
-    },
-    {
-      value: 'partner',
-      label: 'Company or partner',
-      description: 'Joined on behalf of a company.',
-      year_group: 'hidden',
-      university_email_required: false,
-    },
+    kind('student', 'Student', { year_group: 'required', university_email_required: true }),
+    kind('alumni', 'Alumni', { year_group: 'optional' }),
+    kind('partner', 'Company or partner', { company_name: true }),
+    kind('honorary', 'Honorary member', { joinable: false }),
   ],
   invoice_payments: false,
+  university_domains: ['edu.fh-joanneum.at', 'fh-joanneum.at'],
+};
+
+const price: Schemas['SignupPriceOut'] = {
+  price: { annual_fee: '€40.00', due_today: '€20.05', paid_until: '2026-12-31', renews_on: '2027-01-01' },
 };
 
 function link(slug: string, name: string, atSignup: boolean): Schemas['LegalTextLinkOut'] {
@@ -83,6 +95,7 @@ const base: Answers = {
     },
   },
   '/api/v1/legal/statutes': { body: statutes },
+  '/api/v1/signup/price': { body: price },
 };
 
 async function sentBody(calls: Request[], method: string, path: string) {
@@ -90,35 +103,65 @@ async function sentBody(calls: Request[], method: string, path: string) {
   return sent ? ((await sent.clone().json()) as unknown) : undefined;
 }
 
-async function choose(label: string, option: string) {
-  await userEvent.click(screen.getByRole('combobox', { name: new RegExp(`^${label}`) }));
-  await userEvent.click(await screen.findByRole('option', { name: option }));
-}
-
-async function fillIn() {
-  await choose('Salutation', 'Ms');
-  const fields: [RegExp, string][] = [
-    [/^First name/, 'Nora'],
-    [/^Last name/, 'New'],
-    [/^Year group/, 'LAV25'],
-    [/^Street/, 'Main'],
-    [/^House number/, '1'],
-    [/^Postal code/, '8010'],
-    [/^City/, 'Graz'],
-    [/^Private email/, 'nora@example.com'],
-    [/^Private phone/, '+43123'],
-    [/^University or company email/, 'nora.new@edu.fh-joanneum.at'],
-  ];
+function type(name: RegExp, value: string) {
   // Typed whole: key by key, a long form is slow on a busy machine.
-  for (const [name, value] of fields) {
-    fireEvent.change(screen.getByRole('textbox', { name }), { target: { value } });
-  }
-  fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'a-good-password' } });
-  await userEvent.click(screen.getByRole('checkbox'));
+  fireEvent.change(screen.getByRole('textbox', { name }), { target: { value } });
 }
 
-describe('joining', () => {
-  it('sends the form and goes where the server says', async () => {
+async function next(heading: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  return screen.findByRole('heading', { name: heading });
+}
+
+/** Which kind of member, then on by itself to the next step. */
+async function pick(name: RegExp) {
+  await userEvent.click(await screen.findByRole('radio', { name }));
+  return screen.findByRole('heading', { name: 'About you' });
+}
+
+async function aboutAStudent() {
+  await pick(/^Student/);
+  await userEvent.click(screen.getByRole('radio', { name: 'Ms' }));
+  type(/^First name/, 'Nora');
+  type(/^Last name/, 'New');
+  type(/^Year group/, 'lav25');
+  type(/^University email/, 'nora.new@edu.fh-joanneum.at');
+}
+
+async function contact({ signup = true } = {}) {
+  await next('How we reach you');
+  if (signup) type(/^Private email/, 'nora@example.com');
+  type(/^Phone/, '+43123');
+  type(/^Street/, 'Main');
+  type(/^House number/, '1');
+  type(/^Postal code/, '8010');
+  type(/^City/, 'Graz');
+}
+
+async function toTheLastStep() {
+  await aboutAStudent();
+  await contact();
+  await next('Your password');
+  fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'a-good-password' } });
+  return next('Check and join');
+}
+
+describe('joining, step by step', () => {
+  it('first which kind of member: the appointed kinds are not offered', async () => {
+    mockFetch(base);
+    renderPage(<Join />);
+
+    // On arriving the page is read from the top; the focus moves with the steps only.
+    expect(await screen.findByRole('heading', { name: 'Which describes you?' })).not.toHaveFocus();
+    expect(screen.getAllByRole('radio').map((radio) => radio.textContent)).toEqual([
+      expect.stringMatching(/^Student/),
+      expect.stringMatching(/^Alumni/),
+      expect.stringMatching(/^Company or partner/),
+    ]);
+    expect(screen.getByRole('navigation', { name: 'Steps' })).toHaveTextContent(/Password/);
+  });
+
+  it('goes through the steps, then where the server says', async () => {
     const assign = vi.fn();
     vi.stubGlobal('location', { origin: window.location.origin, href: window.location.href, assign });
     const { calls } = mockFetch({
@@ -127,8 +170,17 @@ describe('joining', () => {
     });
     renderPage(<Join />);
 
-    await screen.findByRole('textbox', { name: /^First name/ });
-    await fillIn();
+    await toTheLastStep();
+    expect(screen.getByRole('heading', { name: 'Check and join' })).toHaveFocus();
+    const summary = screen.getByText('You are').closest('dl');
+    expect(summary).toHaveTextContent('Student · LAV25');
+    expect(summary).toHaveTextContent('Ms Nora New');
+    expect(summary).toHaveTextContent('NewN_L25');
+    const cost = screen.getByRole('region', { name: 'What it costs' });
+    expect(cost).toHaveTextContent('€20.05');
+    expect(cost).toHaveTextContent('€40.00');
+    expect(cost).toHaveTextContent('31.12.2026');
+    await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
     await vi.waitFor(() => {
@@ -148,27 +200,77 @@ describe('joining', () => {
       phone_work: null,
       email_private: 'nora@example.com',
       email_work: 'nora.new@edu.fh-joanneum.at',
+      company_name: null,
       member_category: 'student',
       year_group: 'LAV25',
       password: 'a-good-password',
-      payment_method: 'checkout',
       terms_accepted: true,
     });
   });
 
-  it('the year group and the university address are asked only of those who need them', async () => {
+  it('the forum name appears as it is typed', async () => {
     mockFetch(base);
     renderPage(<Join />);
 
-    const universityEmail = await screen.findByRole('textbox', { name: /^University or company email/ });
-    expect(universityEmail).toBeRequired();
-    await choose('Membership type', 'Company or partner');
+    await aboutAStudent();
 
-    expect(screen.queryByRole('textbox', { name: /^Year group/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: /^University or company email/ })).not.toBeRequired();
+    expect(screen.getByText('NewN_L25')).toBeInTheDocument();
   });
 
-  it('the server’s word on each field is shown at the field', async () => {
+  it('a step goes on only with what it needs, said at each field', async () => {
+    mockFetch(base);
+    renderPage(<Join />);
+    await pick(/^Student/);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(screen.getByRole('heading', { name: 'About you' })).toBeInTheDocument();
+    expect(screen.getByText('Please enter your first name.')).toBeInTheDocument();
+    expect(screen.getByText('Please enter your year group.')).toBeInTheDocument();
+    expect(screen.getByText('Please enter your university address.')).toBeInTheDocument();
+    type(/^University email/, 'nora@gmail.com');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText('Please use your @edu.fh-joanneum.at address.')).toBeInTheDocument();
+  });
+
+  it('a company member is asked for the company, not a year group', async () => {
+    mockFetch(base);
+    renderPage(<Join />);
+
+    await pick(/^Company or partner/);
+
+    expect(screen.getByRole('textbox', { name: /^Company$|^Company \*/ })).toBeRequired();
+    expect(screen.getByRole('textbox', { name: /^Company email/ })).not.toBeRequired();
+    expect(screen.queryByRole('textbox', { name: /^Year group/ })).not.toBeInTheDocument();
+  });
+
+  it('an alumnus: the year group if remembered, the university address only if it still works', async () => {
+    mockFetch(base);
+    renderPage(<Join />);
+
+    await pick(/^Alumni/);
+
+    expect(screen.getByRole('textbox', { name: /^Year group/ })).not.toBeRequired();
+    expect(screen.queryByRole('textbox', { name: /^University email/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'My university address still works' }));
+    expect(screen.getByRole('textbox', { name: /^University email/ })).not.toBeRequired();
+  });
+
+  it('back keeps what was typed, and a line of the last step leads to its step', async () => {
+    mockFetch(base);
+    renderPage(<Join />);
+
+    await toTheLastStep();
+    await userEvent.click(screen.getByRole('button', { name: 'Change phone' }));
+
+    expect(await screen.findByRole('heading', { name: 'How we reach you' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /^Phone/ })).toHaveValue('+43123');
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('heading', { name: 'About you' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /^First name/ })).toHaveValue('Nora');
+  });
+
+  it('the server’s word on a field takes the form back to its step', async () => {
     mockFetch({
       ...base,
       'POST /api/v1/signup': {
@@ -177,17 +279,19 @@ describe('joining', () => {
           error: {
             code: 'invalid',
             message: 'Please correct the marked fields.',
-            fields: { phone_private: 'Invalid phone number format', terms_accepted: 'Please accept.' },
+            fields: { phone_private: 'Invalid phone number format' },
           },
         },
       },
     });
     renderPage(<Join />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Join and continue to payment' }));
+    await toTheLastStep();
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
-    expect(await screen.findByText('Invalid phone number format')).toBeInTheDocument();
-    expect(screen.getByText('Please accept.')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'How we reach you' })).toBeInTheDocument();
+    expect(screen.getByText('Invalid phone number format')).toBeInTheDocument();
     expect(screen.queryByText('Please correct the marked fields.')).not.toBeInTheDocument();
   });
 
@@ -203,7 +307,9 @@ describe('joining', () => {
     });
     renderPage(<Join />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Join and continue to payment' }));
+    await toTheLastStep();
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
     const alert = await screen.findByRole('alert');
     expect(within(alert).getByText(/already exists/)).toBeInTheDocument();
@@ -214,6 +320,7 @@ describe('joining', () => {
     mockFetch(base);
     renderPage(<Join />);
 
+    await toTheLastStep();
     const statutesLink = await screen.findByRole('link', { name: 'Statutes' });
     expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
       'href',
@@ -226,14 +333,23 @@ describe('joining', () => {
     expect(screen.getByRole('checkbox')).not.toBeChecked();
   });
 
-  it('paying by invoice, when it is offered, says so', async () => {
-    mockFetch({ ...base, '/api/v1/forms/options': { body: { ...options, invoice_payments: true } } });
+  it('in the free months nothing is due today; without Stripe the payment page says it', async () => {
+    mockFetch({
+      ...base,
+      '/api/v1/signup/price': { body: { price: { ...price.price, due_today: null } } },
+    });
+    const { unmount } = renderPage(<Join />);
+
+    await toTheLastStep();
+    expect(screen.getByRole('region', { name: 'What it costs' })).toHaveTextContent(
+      /NothingFree until 31\.12\.2026/,
+    );
+    unmount();
+
+    mockFetch({ ...base, '/api/v1/signup/price': { body: { price: null } } });
     renderPage(<Join />);
-
-    await userEvent.click(await screen.findByRole('radio', { name: 'Invoice' }));
-
-    expect(screen.getByRole('button', { name: 'Join' })).toBeInTheDocument();
-    expect(screen.getByText('We email you the invoice.')).toBeInTheDocument();
+    await toTheLastStep();
+    expect(await screen.findByText('The payment page shows what it costs.')).toBeInTheDocument();
   });
 });
 
@@ -251,18 +367,22 @@ describe('a membership for a login without one', () => {
     const { calls } = mockFetch({
       ...base,
       '/api/v1/account': { body: account },
-      'POST /api/v1/account/membership': { body: { go_to: '/thank-you?method=invoice&phase=prorated' } },
+      'POST /api/v1/account/membership': { body: { go_to: 'https://checkout.stripe.test/2' } },
     });
     renderPage(<CreateMembership />);
 
-    const address = await screen.findByRole('textbox', { name: /^Private email/ });
+    expect(await screen.findByRole('navigation', { name: 'Steps' })).not.toHaveTextContent(/Password/);
+    await aboutAStudent();
+    await contact({ signup: false });
+    const address = screen.getByRole('textbox', { name: /^Private email/ });
     expect(address).toHaveValue('staff@example.org');
     expect(address).toHaveAttribute('readonly');
-    expect(screen.queryByLabelText(/^Password/)).not.toBeInTheDocument();
+    await next('Check and join');
+    await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Start membership and continue to payment' }));
 
     await vi.waitFor(() => {
-      expect(assign).toHaveBeenCalledWith('/thank-you?method=invoice&phase=prorated');
+      expect(assign).toHaveBeenCalledWith('https://checkout.stripe.test/2');
     });
     const sent = (await sentBody(calls, 'POST', '/api/v1/account/membership')) as Record<string, unknown>;
     expect(sent).not.toHaveProperty('email_private');

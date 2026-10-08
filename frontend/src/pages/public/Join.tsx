@@ -1,7 +1,7 @@
 /**
- * Joining (/join): the login and the membership together, then on to paying
- * (POST /api/v1/signup). The form is MembershipForm, shared with a membership
- * for somebody signed in without one (pages/account/CreateMembership.tsx).
+ * Joining (/join): the login and the membership together, step by step, then
+ * on to paying (POST /api/v1/signup). The form is MembershipForm, shared with a
+ * membership for somebody signed in without one (pages/account/CreateMembership.tsx).
  */
 import { Anchor } from '@mantine/core';
 
@@ -16,7 +16,7 @@ export function Join() {
         title="Become a member"
         description={
           <>
-            Your account here and in the forum is made from this. Already have one?{' '}
+            A few short steps: your account here and in the forum is made from them. Already have one?{' '}
             <Anchor component={AppLink} to="/login">
               Sign in
             </Anchor>

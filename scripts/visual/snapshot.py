@@ -117,12 +117,15 @@ def _an_update_that_ran(system_update):
 def go_offline(app_module):
     """Stripe, the forum and the git remote answer without a network."""
     from aeronautics_members.forum_service import DiscourseConnectProvider, ForumProviderError
-    from aeronautics_members.services import system_update, workflows
+    from aeronautics_members.services import billing, system_update, workflows
 
     def offline(self, *args, **kwargs):
         raise ForumProviderError("Offline for screenshots.")
 
     DiscourseConnectProvider._request = offline
+    # What joining costs, as Stripe would say it; paying itself stays offline.
+    billing._price_shown_cached = lambda: {"id": "price_example", "currency": "eur", "unit_amount": 4000,
+                                           "interval": "year", "interval_count": 1}
     system_update.get_remote_version = lambda force=False: None
     _an_update_that_ran(system_update)
 
@@ -392,12 +395,17 @@ def seed(app, app_module, subscriptions):
         {"name": "public--landing", "path": "/"},
         {"name": "public--signup", "path": "/join"},
         {"name": "public--signup-errors", "path": "/join", "submit": "button[type=submit]"},
+        # The steps after the first, as each kind of member gets them.
+        {"name": "public--signup-student", "path": "/join", "open": "[role=radio]:has-text('Student')"},
+        {"name": "public--signup-student-errors", "path": "/join", "open": "[role=radio]:has-text('Student')",
+         "submit": "button[type=submit]"},
+        {"name": "public--signup-alumni", "path": "/join", "open": "[role=radio]:has-text('Alumni')"},
+        {"name": "public--signup-company", "path": "/join", "open": "[role=radio]:has-text('Company')"},
         {"name": "public--login", "path": "/login"},
         {"name": "public--forgot-password", "path": "/forgot-password"},
         {"name": "public--reset-password", "path": f"/reset-password/{reset_token}"},
         {"name": "public--legal", "path": "/legal"},
         {"name": "public--legal-statutes", "path": "/legal/statutes"},
-        {"name": "public--signup-legal-dialog", "path": "/join", "click": "label a[href='/legal/statutes']"},
         {"name": "public--thank-you", "path": "/thank-you?method=checkout&phase=prorated"},
         {"name": "public--thank-you-free", "path": "/thank-you?method=checkout&phase=free_period"},
         {"name": "public--cancel", "path": "/cancel"},

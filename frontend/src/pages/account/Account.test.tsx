@@ -29,6 +29,8 @@ const options: Schemas['FormOptionsOut'] = {
       description: 'Currently studying.',
       year_group: 'required',
       university_email_required: true,
+      company_name: false,
+      joinable: true,
     },
     {
       value: 'partner',
@@ -36,9 +38,12 @@ const options: Schemas['FormOptionsOut'] = {
       description: 'Joined on behalf of a company.',
       year_group: 'hidden',
       university_email_required: false,
+      company_name: true,
+      joinable: true,
     },
   ],
   invoice_payments: false,
+  university_domains: ['edu.fh-joanneum.at', 'fh-joanneum.at'],
 };
 
 const member: Schemas['MemberAccountOut'] = {
@@ -80,6 +85,7 @@ const member: Schemas['MemberAccountOut'] = {
     email_private: 'anna@example.org',
     phone_work: null,
     email_work: 'anna@edu.fh-joanneum.at',
+    company_name: null,
   },
   identity: {
     salutation: 'Ms',

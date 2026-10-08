@@ -72,6 +72,7 @@ class TestWhatItSays:
         assert body["membership"] == {
             "title": "Ing.", "first_name": "Anna", "last_name": "Berger", "email_private": "anna@example.com",
             "category": "student", "category_label": "Student", "year_group": "2020",
+            "company_name": None,
             "state": "active", "payment_status": "paid", "payment_status_label": "Paid", "is_active": True,
             "ends_on": THIS_YEAR_END.isoformat(), "renews_on": date(date.today().year + 1, 1, 1).isoformat(),
             "has_billing": False, "picture_replacement_allowed_since": None,

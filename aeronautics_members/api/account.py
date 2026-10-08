@@ -134,6 +134,8 @@ class ContactOut(Model):
     email_private: str | None
     phone_work: str | None
     email_work: str | None
+    #: The company a partner member joins for.
+    company_name: str | None
 
 
 class IdentityOut(Model):
@@ -433,6 +435,8 @@ class ContactIn(Model):
     email_private: str = Field(max_length=255)
     phone_work: str | None = Field(None, max_length=50)
     email_work: str | None = Field(None, max_length=255)
+    #: Left out, the one saved stays.
+    company_name: str | None = Field(None, max_length=255)
 
 
 @endpoint("PUT", "/account/contact", response=AccountSavedOut, body=ContactIn, tag=TAG)
@@ -440,6 +444,8 @@ def account_contact(body):
     """Address, phones and both email addresses: saved at once. A new address waits to be confirmed."""
     member = _member()
     values = checked(MemberProfileForm, body.model_dump(), member_category_value=member.member_category)
+    if "company_name" not in body.model_fields_set:
+        values["company_name"] = member.company_name
     return _saved(*account_service.save_contact_details(current_user, member, values))
 
 

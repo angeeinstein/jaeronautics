@@ -70,6 +70,7 @@ export function MembershipTab({ account }: { account: Account }) {
             ['Private address', membership.email_private],
             ['Kind', membership.category_label],
             ['Year group', membership.year_group],
+            ['Company', membership.company_name],
             ['Payment', membership.payment_status_label],
             [
               'Paid until',

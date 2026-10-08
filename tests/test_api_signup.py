@@ -122,13 +122,100 @@ class TestTheFormIsChecked:
 
     def test_a_partner_needs_no_year_group_or_university_address(self, app, client, stripe_ok):
         response = client.post("/api/v1/signup", json={
-            **FORM, "member_category": "partner", "year_group": "LAV25", "email_work": None})
+            **FORM, "member_category": "partner", "year_group": "LAV25", "email_work": None,
+            "company_name": "Example Aero GmbH"})
 
         assert response.status_code == 200
         assert _member().year_group is None  # a leftover from before the choice was switched
 
+    def test_a_partner_names_the_company_they_join_for(self, app, client, stripe_ok):
+        response = client.post("/api/v1/signup", json={
+            **FORM, "member_category": "partner", "year_group": None, "email_work": None})
+
+        assert response.status_code == 400
+        assert list(response.get_json()["error"]["fields"]) == ["company_name"]
+
+        client.post("/api/v1/signup", json={
+            **FORM, "member_category": "partner", "year_group": None, "email_work": None,
+            "company_name": "  Example Aero GmbH  "})
+        assert _member().company_name == "Example Aero GmbH"
+
+    def test_nobody_else_is_asked_for_a_company(self, app, client, stripe_ok):
+        client.post("/api/v1/signup", json={**FORM, "company_name": "Left over"})
+
+        assert _member().company_name is None
+
+    def test_nobody_joins_as_an_honorary_member(self, app, client, stripe_ok):
+        # Appointed by the association: an admin makes somebody one.
+        response = client.post("/api/v1/signup", json={**FORM, "member_category": "honorary"})
+
+        assert response.status_code == 400
+        assert "member_category" in response.get_json()["error"]["fields"]
+        assert _member() is None
+
     def test_nothing_unknown_is_taken(self, app, client, stripe_ok):
         assert client.post("/api/v1/signup", json={**FORM, "is_active": True}).status_code == 400
+
+
+class TestWhatJoiningCosts:
+    @pytest.fixture
+    def price(self, monkeypatch):
+        from aeronautics_members.services import billing
+
+        asked = []
+
+        def from_stripe():
+            asked.append(1)
+            return {"id": "price_test", "currency": "eur", "unit_amount": 4000, "interval": "year",
+                    "interval_count": 1}
+
+        billing._price_shown.update(price_id=None, at=0.0, value=None)
+        monkeypatch.setattr(billing, "get_stripe_settings_map", lambda: {"stripe_price_id": "price_test"})
+        monkeypatch.setattr(billing, "get_stripe_membership_price", from_stripe)
+        yield asked
+        billing._price_shown.update(price_id=None, at=0.0, value=None)
+
+    def test_the_rest_of_the_year_now_then_every_year(self, app, client, price, monkeypatch):
+        from datetime import date
+
+        from aeronautics_members.services import billing
+
+        monkeypatch.setattr(billing, "get_membership_today", lambda: date(2026, 7, 2))
+
+        body = client.get("/api/v1/signup/price").get_json()
+
+        assert body == {"price": {"annual_fee": "€40.00", "due_today": "€20.05",
+                                  "paid_until": "2026-12-31", "renews_on": "2027-01-01"}}
+
+    def test_nothing_due_in_the_free_period(self, app, client, price, monkeypatch):
+        from datetime import date
+
+        from aeronautics_members.services import billing
+
+        monkeypatch.setattr(billing, "get_membership_today", lambda: date(2026, 11, 20))
+
+        body = client.get("/api/v1/signup/price").get_json()
+
+        assert body["price"]["due_today"] is None and body["price"]["annual_fee"] == "€40.00"
+
+    def test_stripe_is_asked_once_in_a_while_not_on_every_visit(self, app, client, price):
+        for _ in range(5):
+            client.get("/api/v1/signup/price")
+
+        assert len(price) == 1
+
+    def test_without_stripe_the_payment_page_says_it(self, app, client, monkeypatch):
+        from aeronautics_members.services import billing
+
+        def down():
+            raise stripe.APIConnectionError("down")
+
+        billing._price_shown.update(price_id=None, at=0.0, value=None)
+        monkeypatch.setattr(billing, "get_stripe_settings_map", lambda: {"stripe_price_id": "price_test"})
+        monkeypatch.setattr(billing, "get_stripe_membership_price", down)
+
+        assert client.get("/api/v1/signup/price").get_json() == {"price": None}
+        billing._price_shown.update(price_id=None, at=0.0, value=None)
 
 
 class TestAnAccountThereAlready:

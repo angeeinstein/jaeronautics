@@ -84,7 +84,7 @@ INITIATED_BY_MEMBER = "member"
 ERASABLE_MEMBER_FIELDS = MEMBER_PROFILE_FIELDS
 
 # Nullable among those, so the rest need a placeholder rather than None.
-NULLABLE_MEMBER_FIELDS = {"title", "phone_work", "email_work"}
+NULLABLE_MEMBER_FIELDS = {"title", "phone_work", "email_work", "company_name"}
 
 
 def erased_email_for(prefix, row_id):

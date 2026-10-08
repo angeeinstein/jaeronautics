@@ -35,6 +35,7 @@ function account(overrides: Partial<AccountOut> = {}): AccountOut {
       category: 'student',
       category_label: 'Student',
       year_group: 'LAV25',
+      company_name: null,
       state: 'active',
       payment_status: 'paid',
       payment_status_label: 'Paid',

@@ -241,6 +241,34 @@ forum card with the picture upload. **Privacy and data** -- the download and
 deleting the account by emailed link, with cancelling offered instead while a
 paid membership runs.
 
+### Joining
+
+**Become a member** (/join) is a few short steps (since October 2026), the
+steps on top with a line that fills, each done one a way back to it:
+
+1. **Who you are** -- a card for each kind of member who may join (Student,
+   Alumni, Staff or lecturer, Company or partner; an honorary member is
+   appointed, never signs up). Choosing one moves on by itself.
+2. **About you** -- salutation, title, name, then what that kind is asked,
+   under its own heading: a student's year group and university address
+   (ticked once it is on the university's domain), an alumnus's year group if
+   remembered and the university address only if it still works, the
+   institute's address and phone, the company and its address and phone. The
+   forum name it makes appears as it is typed.
+3. **Contact** -- the private address (the login; for somebody signed in,
+   theirs, read only), phone, address.
+4. **Password** -- signup only, with how strong it is.
+5. **Check and join** -- everything once more, each line back to its step;
+   what it costs today and every year, read from Stripe's price (or nothing
+   today in the free months); the texts to accept, each opening over the form.
+   How to pay is chosen on Stripe's page.
+
+*After joining* (pay, confirm the address or both, add a picture for the
+forum) stands beside the steps on a wide screen and in the last step on a
+narrow one. Each step is checked before the next; a field the server refuses
+takes the form back to its step. Steps slide in, fields that become relevant
+fade in -- all of it still for whoever asks their device for less motion.
+
 ## 7. Page patterns
 
 - **Page head**: title (display face), one-line description in muted text,

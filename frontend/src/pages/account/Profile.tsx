@@ -57,6 +57,11 @@ export function Profile() {
           options={options.data}
           email={account.data.email}
           workEmail={member.work_email}
+          asksCompany={
+            options.data.member_categories.find(
+              (category) => category.value === member.identity.member_category,
+            )?.company_name ?? false
+          }
         />
         <IdentityCard
           key={member.change_request?.id ?? 'form'}
