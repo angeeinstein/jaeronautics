@@ -100,6 +100,23 @@ One thing waits for the maintainer; the rest came from testing that batch.
     keep the search across the association in the same picker.
 - **Open:** none, unless the maintainer wants it otherwise when he sees it.
 
+### The Forum link in the top bar opens a new tab
+
+- **Added:** 2026-10-08
+- **Where:** the top bar's areas -- the Forum entry in `TopBar`
+  (`frontend/src/frame/TopBar.tsx`, the `<a href="/forum">` for the entry
+  marked `server: true`).
+- **Why:** the maintainer: "When I click on the forum button in the tab in
+  the top bar, I would like the forum to open in a new tab rather than in
+  this current tab."
+- **What:** `target="_blank"` with `rel="noopener"`, and a small "opens in a
+  new tab" icon or label for screen readers. `/forum` signs a member in and
+  sends them into the forum -- or, while something is still missing (a
+  picture, a payment), to My Account's forum page; that case would then also
+  open in a new tab. Decide when building: open a new tab only when the
+  forum is ready for them (`/me` would need to say so), else stay in this tab.
+- **Open:** none (the case above is a detail of building it).
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
