@@ -1,0 +1,187 @@
+/* My Account's overview (Account.tsx): who this is, then a tile for each part
+   -- the whole of it the way to that part's page. Square, flat, dark, like
+   the teams' tiles (docs/design.md). */
+
+.hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-lg);
+  padding: var(--mantine-spacing-lg);
+  background:
+    radial-gradient(
+      ellipse at 90% 0%,
+      color-mix(in srgb, var(--ja-accent) 18%, transparent),
+      transparent 55%
+    ),
+    var(--ja-surface);
+  border: 1px solid var(--ja-border);
+}
+
+.who {
+  display: flex;
+  flex: 1 1 16rem;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-family: var(--mantine-font-family-headings);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.line {
+  color: var(--ja-muted);
+  overflow-wrap: anywhere;
+}
+
+.todo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-md);
+  padding: 0.85rem 1.1rem;
+  background: color-mix(in srgb, var(--ja-warning) 10%, var(--ja-surface));
+  border: 1px solid color-mix(in srgb, var(--ja-warning) 40%, transparent);
+}
+
+.grid {
+  display: grid;
+  gap: var(--mantine-spacing-lg);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+}
+
+.tile[data-wide] {
+  grid-column: 1 / -1;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.25rem;
+  color: var(--ja-text);
+  text-decoration: none;
+  background: var(--ja-surface);
+  border: 1px solid var(--ja-border);
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.tile:hover,
+.tile:focus-visible {
+  color: var(--ja-text);
+  border-color: var(--ja-accent);
+  transform: translateY(-2px);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--ja-accent);
+  outline-offset: 3px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.title {
+  font-family: var(--mantine-font-family-headings);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.date {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.muted {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-muted);
+}
+
+.bar {
+  height: 6px;
+  background: var(--ja-surface-alt);
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ja-accent);
+}
+
+.dates {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-muted);
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.username {
+  font-family: var(--mantine-font-family-monospace);
+  overflow-wrap: anywhere;
+}
+
+.teams {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teams > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.team {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.go {
+  margin-top: auto;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  color: var(--ja-accent);
+}
+
+@media (max-width: $mantine-breakpoint-sm) {
+  .name {
+    font-size: 1.6rem;
+  }
+}

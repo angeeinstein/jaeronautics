@@ -88,6 +88,24 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/account/Account')).Account }),
           },
           {
+            path: 'profile',
+            lazy: async () => ({ Component: (await import('../pages/account/Profile')).Profile }),
+          },
+          {
+            path: 'membership',
+            lazy: async () => ({
+              Component: (await import('../pages/account/MembershipPage')).MembershipPage,
+            }),
+          },
+          {
+            path: 'forum',
+            lazy: async () => ({ Component: (await import('../pages/account/Forum')).Forum }),
+          },
+          {
+            path: 'data',
+            lazy: async () => ({ Component: (await import('../pages/account/Data')).Data }),
+          },
+          {
             path: 'create-membership',
             lazy: async () => ({
               Component: (await import('../pages/account/CreateMembership')).CreateMembership,

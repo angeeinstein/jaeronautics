@@ -73,7 +73,7 @@ test.describe('joining', () => {
     // Stripe is offline here: the membership stands, and My Account says paying can be resumed.
     await expect(page).toHaveURL(/\/account$/);
     await expect(page.getByText(/payment could not be started/)).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Membership', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Membership', exact: true })).toBeVisible();
   });
 });
 

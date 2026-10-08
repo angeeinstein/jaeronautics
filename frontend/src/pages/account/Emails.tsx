@@ -15,8 +15,16 @@ import { notifyFailed, notifyMessage } from '../../lib/notify';
 
 type Address = Schemas['EmailAddressOut'];
 
-/** Confirmed or not, and for one that is not, its link sent again. */
-export function AddressState({ address, which }: { address: Address; which: 'private' | 'work' }) {
+/** An address's confirmation link, sent again. */
+export function ResendButton({
+  which,
+  children = 'Send the link again',
+  size = 'compact-xs',
+}: {
+  which: 'private' | 'work';
+  children?: string;
+  size?: 'compact-xs' | 'xs';
+}) {
   const resend = useMutation({
     mutationFn: () =>
       call(
@@ -28,22 +36,27 @@ export function AddressState({ address, which }: { address: Address; which: 'pri
     onError: notifyFailed,
   });
   return (
+    <Button
+      size={size}
+      variant="default"
+      loading={resend.isPending}
+      onClick={() => {
+        resend.mutate();
+      }}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/** Confirmed or not, and for one that is not, its link sent again. */
+export function AddressState({ address, which }: { address: Address; which: 'private' | 'work' }) {
+  return (
     <Group gap="xs">
       <Pill tone={address.confirmed ? 'active' : 'pending'}>
         {address.confirmed ? 'Confirmed' : 'Not confirmed'}
       </Pill>
-      {address.confirmed ? null : (
-        <Button
-          size="compact-xs"
-          variant="default"
-          loading={resend.isPending}
-          onClick={() => {
-            resend.mutate();
-          }}
-        >
-          Send the link again
-        </Button>
-      )}
+      {address.confirmed ? null : <ResendButton which={which} />}
     </Group>
   );
 }

@@ -26,6 +26,16 @@ def account():
     return app_shell()
 
 
+@account_bp.route("/account/profile", methods=["GET"])
+@account_bp.route("/account/membership", methods=["GET"])
+@account_bp.route("/account/forum", methods=["GET"])
+@account_bp.route("/account/data", methods=["GET"])
+@login_required
+def account_section():
+    """A part of My Account, in its side menu: drawn by the app (api/account.py)."""
+    return app_shell()
+
+
 @account_bp.route("/account/create-membership", methods=["GET"])
 @login_required
 def create_membership_profile():

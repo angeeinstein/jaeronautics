@@ -29,7 +29,7 @@ test.describe('the admin frame', () => {
     await sections.getByRole('link', { name: 'Back to the portal' }).click();
 
     await expect(page).toHaveURL(/\/account$/);
-    await expect(page.getByRole('heading', { name: 'My Account', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'AdminA', level: 1 })).toBeVisible();
     // No area of its own in the bar: the account is the menu at the right.
     await expect(
       page.getByRole('navigation', { name: 'Areas' }).getByRole('link', { name: 'My Account' }),

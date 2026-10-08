@@ -1,11 +1,14 @@
 /**
- * The forum's own page (/forum, the link in the welcome email): what is still
- * to be done before the forum opens -- usually the profile picture. Once the
- * forum is open, Flask sends the browser straight in instead of here.
+ * My Account › Forum and picture (/account/forum): one's forum account, the
+ * profile picture it shows -- the one waiting for review, a new one -- and the
+ * way in. Also the forum's own address (/forum, the link in the welcome
+ * email) while something is still to be done before the forum opens; once it
+ * is open, Flask sends the browser straight in instead of here.
  * Data: GET /api/v1/account/forum.
  */
 import { Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'react-router';
 
 import { api, call } from '../../api/client';
 import { PageHeader } from '../../components/PageHeader';
@@ -14,6 +17,8 @@ import { ForumCard } from './ForumCard';
 import { accountKey } from './shared';
 
 export function Forum() {
+  // Sent here by /forum: the forum would have opened by itself, were it ready.
+  const viaForum = useLocation().pathname === '/forum';
   const forum = useQuery({
     queryKey: [...accountKey, 'forum'] as const,
     queryFn: () => call(api.GET('/api/v1/account/forum')),
@@ -21,9 +26,9 @@ export function Forum() {
   return (
     <>
       <PageHeader
-        title="Forum"
-        description="What is still to be done before member content opens up in the forum."
-        crumbs={[{ label: 'My Account', to: '/account' }, { label: 'Forum' }]}
+        title="Forum and picture"
+        description="Your forum account, and the picture it shows of you."
+        crumbs={[{ label: 'My Account', to: '/account' }, { label: 'Forum and picture' }]}
       />
       {forum.isPending ? (
         <LoadingState />
@@ -32,7 +37,7 @@ export function Forum() {
       ) : (
         <Stack gap="lg">
           <ForumCard forum={forum.data} />
-          {forum.data.may_open ? (
+          {viaForum && forum.data.may_open ? (
             <Text size="sm" c="dimmed">
               If you were not taken to the forum by yourself, use Open forum above.
             </Text>

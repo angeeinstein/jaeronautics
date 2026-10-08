@@ -65,10 +65,12 @@ export function Sidebar({ content, onNavigate }: { content: SidebarContent; onNa
     <nav className={classes.sidebar} aria-label="Sections">
       <ScrollArea h="100%" type="auto">
         <Stack gap={0} p="xs">
-          <AppLink to={content.back.to} className={classes.back} onClick={onNavigate}>
-            <IconChevronLeft size={16} stroke={1.6} aria-hidden />
-            {content.back.label}
-          </AppLink>
+          {content.back ? (
+            <AppLink to={content.back.to} className={classes.back} onClick={onNavigate}>
+              <IconChevronLeft size={16} stroke={1.6} aria-hidden />
+              {content.back.label}
+            </AppLink>
+          ) : null}
           {content.header ? (
             <Group gap="sm" wrap="nowrap" className={classes.header}>
               <TeamMark name={content.header.label} logoUrl={content.header.logoUrl} />

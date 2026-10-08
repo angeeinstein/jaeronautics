@@ -88,14 +88,14 @@ that appears when entering the admin area.
 
 | Area | Sidebar | Content width |
 |---|---|---|
-| My Account | none | narrow, centred (about 860 px) |
+| My Account | its own side menu | narrow, centred (about 860 px) |
 | Teams -- overview, a team's page, About | none | narrow, centred |
 | Teams -- a team's management, its Money | the team's sidebar | full |
 | Admin | the admin sidebar | full |
 
-The member side needs no sidebar: it is a handful of pages, reached from the
-top bar and from links on the pages themselves. Sidebars are for the places
-where people *work*: running a team, running the association.
+Sidebars are for the places where people *work* -- running a team, running
+the association -- and for My Account, which grows (a credit balance is
+planned) and so gets one place to add a page.
 
 ### The footer
 
@@ -206,24 +206,40 @@ built).
 
 ## 6. My Account
 
-One narrow column of cards, two side by side on wide screens:
-**Membership** (status pill; paid until, next renewal and amount, paid by;
-*Manage billing*), **Forum** (forum name and picture state; *Open forum*),
-**Profile** (name, university email, cohort; *Edit*), **Teams** (one's teams;
-*All teams*). The flows that exist today -- verifying emails, paying,
-uploading the picture, profile change requests, deleting the account -- stay
-on this page as cards that appear when they apply, at the top when something
-is to be done.
+Its own **side menu** (since October 2026), under *My account*: **Overview**,
+**Profile**, **Membership and billing**, **Forum and picture**, **Privacy and
+data**. An account without a membership has only *Overview* and *Privacy and
+data*. A new part of the account is a new item there. The ☰ folds it away
+on a wide screen and opens it as a drawer on a phone, as elsewhere. *Change
+password* and the forum's own address (/forum) are in the same frame.
 
-As built: what is to be done first (addresses waiting to be confirmed), then
-**Membership** and **Forum** side by side, **Teams** across both; then
-**Contact details** (both email addresses first, each with whether it is
-confirmed and its link sent again, then phones and address; saved at once),
-**Name and membership type** (a request an admin decides; while one waits it
-is shown instead of the form) and **Your data** (download, deletion by emailed
-link -- with cancelling offered instead while a paid membership runs).
-*Change password* is in the user menu. An account without a membership shows
-its login address, *Become a member* and its data.
+**Overview** (My Account): who this is -- the picture (or initials), the name,
+the kind of membership, year group and login address -- then what is to be
+done first (addresses waiting to be confirmed, with the link sent again right
+there), then a **tile** for each part, the whole tile the way to its page:
+
+- **Membership** -- its state, the day it is paid until, a bar of how much of
+  the paid year has run, since when and when it renews; while a payment just
+  made is confirmed, it says so and the page asks again every few seconds.
+- **Forum and picture** -- its state (*Ready*, *Picture needed*, *In review*,
+  …), the picture, the forum username and one line on where things stand.
+- **Teams** -- across the row: one's teams with one's place in each, or what
+  teams are; it opens the teams overview.
+
+An account without a membership shows its login address and *Become a
+member* instead of the tiles.
+
+**Profile** -- **Contact details** read first (both email addresses, each with
+whether it is confirmed and its link sent again, the phones, the address);
+*Edit* turns the card into the form, saved at once, *Cancel* back. **Name and
+membership type** likewise read first; *Request a change* opens the request an
+admin decides, and while one waits it is shown instead.
+
+**Membership and billing** -- the membership card: dates, what to do about it
+(*Manage billing*, *Resume payment*, *Rejoin*). **Forum and picture** -- the
+forum card with the picture upload. **Privacy and data** -- the download and
+deleting the account by emailed link, with cancelling offered instead while a
+paid membership runs.
 
 ## 7. Page patterns
 
@@ -295,7 +311,7 @@ headed. Motion is minimal and off when the device asks for reduced motion.
 | A team's Money page | Teams area (from the team's sidebar or the overview) |
 | Change password (page) | User menu → Change password |
 | Download my data (button on My Account) | User menu → Download my data (and stays on My Account) |
-| `/forum` (forum status and picture upload) | My Account → Forum card; *Open forum* goes to the forum |
+| `/forum` (forum status and picture upload) | My Account › Forum and picture; *Open forum* goes to the forum |
 
 ## 12. For the new front end
 

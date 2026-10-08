@@ -131,6 +131,11 @@ function inspect() {
       });
       const page = await context.newPage();
       await page.goto(`${base}${entry.path}`, { waitUntil: 'networkidle' });
+      if (entry.open) {
+        // Something on the page opened first (a card's *Edit*): shown as it then is.
+        await page.click(entry.open);
+        await page.waitForTimeout(200);
+      }
       if (entry.submit) {
         // A form sent as it is (its button): shown with the server's answer.
         await page.click(entry.submit);

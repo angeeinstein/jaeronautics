@@ -1,15 +1,17 @@
 /**
- * My Account › Contact details: both email addresses -- each with whether it
- * is confirmed, and its link sent again -- the phones and the address, saved
- * at once without review. A new private address is the login and waits to be
- * confirmed; so does a new university address. The rules are the server's
- * (forms.py): a student's university address, for one, stays one.
+ * My Account › Profile › Contact details: both email addresses -- each with
+ * whether it is confirmed, and its link sent again -- the phones and the
+ * address. Read first; *Edit* turns the same card into the form, saved at
+ * once without review, and back. A new private address is the login and waits
+ * to be confirmed; so does a new university address. The rules are the
+ * server's (forms.py): a student's university address, for one, stays one.
  */
-import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core';
+import { Button, Group, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, ApiError, call, type Schemas } from '../../api/client';
+import { Details } from '../../components/Details';
 import { Panel } from '../../components/Panel';
 import { emptyToNull } from '../../lib/forms';
 import { notifyFailed } from '../../lib/notify';
@@ -39,6 +41,24 @@ function initial(contact: Contact): ContactIn {
   };
 }
 
+function address(contact: Contact) {
+  const street = [contact.street, contact.house_number].filter(Boolean).join(' ');
+  const town = [contact.postal_code, contact.city].filter(Boolean).join(' ');
+  return [street, town, contact.country].filter(Boolean).join(', ') || null;
+}
+
+/** An address as it is saved, with whether it is confirmed and its link sent again. */
+function Saved({ address: saved, which }: { address: Address; which: 'private' | 'work' }) {
+  return (
+    <Stack gap={6}>
+      <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
+        {saved.address}
+      </Text>
+      <AddressState address={saved} which={which} />
+    </Stack>
+  );
+}
+
 export function ContactCard({
   contact,
   options,
@@ -51,6 +71,7 @@ export function ContactCard({
   email: Address;
   workEmail: Address | null;
 }) {
+  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(() => initial(contact));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const take = useTakeSaved();
@@ -67,6 +88,7 @@ export function ContactCard({
       ),
     onSuccess: (saved) => {
       setErrors({});
+      setEditing(false);
       take(saved);
     },
     onError: (error) => {
@@ -82,6 +104,38 @@ export function ContactCard({
       if (errors[key]) setErrors({ ...errors, [key]: '' });
     },
   });
+
+  if (!editing)
+    return (
+      <Panel
+        title="Contact details"
+        actions={
+          <Button
+            size="xs"
+            variant="default"
+            onClick={() => {
+              setValue(initial(contact));
+              setEditing(true);
+            }}
+          >
+            Edit
+          </Button>
+        }
+      >
+        <Details
+          items={[
+            ['Private email', <Saved key="private" address={email} which="private" />],
+            [
+              'University or company email',
+              workEmail ? <Saved key="work" address={workEmail} which="work" /> : null,
+            ],
+            ['Private phone', contact.phone_private],
+            ['Work phone', contact.phone_work],
+            ['Address', address(contact)],
+          ]}
+        />
+      </Panel>
+    );
 
   return (
     <Panel title="Contact details">
@@ -147,6 +201,15 @@ export function ContactCard({
             />
           </SimpleGrid>
           <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setErrors({});
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
             <Button type="submit" loading={save.isPending}>
               Save
             </Button>

@@ -1,8 +1,9 @@
 /**
- * My Account › Name and kind of membership: changed only on request, which
- * an admin decides. While one waits it is shown, and can be withdrawn; else
- * the form, which asks for a year group only of those who have one
- * (member_categories.py, through GET /api/v1/forms/options).
+ * My Account › Profile › Name and kind of membership: changed only on
+ * request, which an admin decides. Read first; *Request a change* opens the
+ * form, which asks for a year group only of those who have one
+ * (member_categories.py, through GET /api/v1/forms/options). While a request
+ * waits it is shown, and can be withdrawn.
  */
 import { Button, Group, Select, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
@@ -68,7 +69,15 @@ function Waiting({ request, options }: { request: Request; options: FormOptions 
   );
 }
 
-function RequestForm({ identity, options }: { identity: Identity; options: FormOptions }) {
+function RequestForm({
+  identity,
+  options,
+  onCancel,
+}: {
+  identity: Identity;
+  options: FormOptions;
+  onCancel: () => void;
+}) {
   const [value, setValue] = useState<RequestIn>({
     salutation: identity.salutation ?? '',
     title: identity.title ?? '',
@@ -165,6 +174,9 @@ function RequestForm({ identity, options }: { identity: Identity; options: FormO
           {...text('note')}
         />
         <Group justify="flex-end">
+          <Button variant="default" onClick={onCancel}>
+            Cancel
+          </Button>
           <Button type="submit" loading={send.isPending}>
             Send for review
           </Button>
@@ -183,17 +195,48 @@ export function IdentityCard({
   request: Request | null;
   options: FormOptions;
 }) {
+  const [asking, setAsking] = useState(false);
+  const salutation = options.salutations.find((choice) => choice.value === identity.salutation)?.label;
   return (
-    <Panel title="Name and membership type">
+    <Panel
+      title="Name and membership type"
+      actions={
+        request || asking ? null : (
+          <Button
+            size="xs"
+            variant="default"
+            onClick={() => {
+              setAsking(true);
+            }}
+          >
+            Request a change
+          </Button>
+        )
+      }
+    >
       <Stack gap="md">
-        <Text size="sm" c="dimmed">
-          Changes here are checked by an admin before they take effect.
-        </Text>
         {request ? (
           <Waiting request={request} options={options} />
+        ) : asking ? (
+          <RequestForm
+            identity={identity}
+            options={options}
+            onCancel={() => {
+              setAsking(false);
+            }}
+          />
         ) : (
-          <RequestForm identity={identity} options={options} />
+          <Details
+            items={[
+              ['Name', [salutation, fullName(identity)].filter(Boolean).join(' ')],
+              ['Membership type', identity.member_category_label],
+              ...(identity.year_group ? ([['Year group', identity.year_group]] as [string, string][]) : []),
+            ]}
+          />
         )}
+        <Text size="xs" c="dimmed">
+          Changes here are checked by an admin before they take effect.
+        </Text>
       </Stack>
     </Panel>
   );

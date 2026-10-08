@@ -27,6 +27,20 @@ export const formOptionsQuery = {
   staleTime: Infinity,
 };
 
+/**
+ * The account, kept current: asked again every few seconds while a payment
+ * just made is being confirmed, and every half minute while an address waits
+ * to be confirmed -- confirmed in another tab or on the phone, the page says
+ * so by itself.
+ */
+export function useAccount() {
+  return useQuery({
+    ...accountQuery,
+    refetchInterval: (query) =>
+      query.state.data?.member?.membership.activating ? 3000 : query.state.data?.to_confirm ? 30_000 : false,
+  });
+}
+
 export function useFormOptions() {
   return useQuery(formOptionsQuery);
 }
