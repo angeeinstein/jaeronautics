@@ -100,6 +100,10 @@ class MeOut(Model):
     #: missing): the top bar then opens it in a new tab.
     forum_ready: bool = False
     teams_area: bool
+    #: Credit is on, and this person a member or somebody who has credit: My Account › Credit.
+    credit_area: bool = False
+    #: Admin › Credit, for whoever may manage it while credit is on or somebody still has some.
+    credit_admin: bool = False
     team_labels: TeamLabels
     counts: Counts
     admin_notices: list[Notice]
@@ -135,6 +139,22 @@ def _forum_ready(member):
     return bool(build_forum_context(member)["can_enter_forum"])
 
 
+def _credit_area():
+    from ..services import credit
+    from ..services.teams import is_active_association_member
+
+    return credit.enabled() and (is_active_association_member(current_user) or credit.has_credit(current_user))
+
+
+def _credit_admin():
+    from ..db_models import CreditAccount, db
+    from ..services import credit
+
+    if not current_user.can(Permission.CREDIT_MANAGE):
+        return False
+    return credit.enabled() or db.session.execute(db.select(CreditAccount.user_id).limit(1)).first() is not None
+
+
 @endpoint("GET", "/me", response=MeOut, tag="Session")
 def me():
     """The signed-in person, what they may see, and the counts for their menus."""
@@ -154,6 +174,8 @@ def me():
         forum_area=member is not None,
         forum_ready=_forum_ready(member),
         teams_area=teams_enabled(),
+        credit_area=_credit_area(),
+        credit_admin=_credit_admin(),
         team_labels=TeamLabels(singular=singular, plural=plural),
         counts=Counts(reviews_waiting=waiting_for_review_count(current_user)),
         admin_notices=_admin_notices() if admin_area else [],

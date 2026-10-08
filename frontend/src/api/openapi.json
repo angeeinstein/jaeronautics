@@ -943,6 +943,105 @@
         "title": "Activity",
         "type": "object"
       },
+      "AdminCreditEntryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "balance_after_cents": {
+            "title": "Balance After Cents",
+            "type": "integer"
+          },
+          "booked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Booked By"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "top_up",
+              "cash_in",
+              "cash_out",
+              "purchase",
+              "refund",
+              "reversal",
+              "correction"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_label": {
+            "title": "Kind Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "receipt_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Url"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "kind_label",
+          "description",
+          "amount_cents",
+          "balance_after_cents",
+          "at",
+          "receipt_url",
+          "team_name",
+          "user_id",
+          "name",
+          "booked_by"
+        ],
+        "title": "AdminCreditEntryOut",
+        "type": "object"
+      },
       "ApplicationOut": {
         "additionalProperties": false,
         "properties": {
@@ -1902,6 +2001,39 @@
         "title": "CandidatesQuery",
         "type": "object"
       },
+      "CashIn": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_cents": {
+            "minimum": 1,
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 140,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Note"
+          },
+          "paid_out": {
+            "default": false,
+            "title": "Paid Out",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "amount_cents"
+        ],
+        "title": "CashIn",
+        "type": "object"
+      },
       "CategoryGroup": {
         "additionalProperties": false,
         "properties": {
@@ -2692,6 +2824,26 @@
         "title": "ContactOut",
         "type": "object"
       },
+      "CorrectionIn": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "note": {
+            "maxLength": 140,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount_cents",
+          "note"
+        ],
+        "title": "CorrectionIn",
+        "type": "object"
+      },
       "Counts": {
         "additionalProperties": false,
         "description": "Numbers shown beside menu entries; 0 when there is nothing, or nothing the person may see.",
@@ -2705,6 +2857,390 @@
           "reviews_waiting"
         ],
         "title": "Counts",
+        "type": "object"
+      },
+      "CreditEntryOut": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "balance_after_cents": {
+            "title": "Balance After Cents",
+            "type": "integer"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "top_up",
+              "cash_in",
+              "cash_out",
+              "purchase",
+              "refund",
+              "reversal",
+              "correction"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_label": {
+            "title": "Kind Label",
+            "type": "string"
+          },
+          "receipt_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Url"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "kind_label",
+          "description",
+          "amount_cents",
+          "balance_after_cents",
+          "at",
+          "receipt_url",
+          "team_name"
+        ],
+        "title": "CreditEntryOut",
+        "type": "object"
+      },
+      "CreditHolderOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Url"
+          },
+          "balance_cents": {
+            "title": "Balance Cents",
+            "type": "integer"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCreditEntryOut"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "erased": {
+            "title": "Erased",
+            "type": "boolean"
+          },
+          "max_balance_cents": {
+            "title": "Max Balance Cents",
+            "type": "integer"
+          },
+          "member": {
+            "title": "Member",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "refundable_cents": {
+            "title": "Refundable Cents",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "picture_url",
+          "erased",
+          "member",
+          "balance_cents",
+          "refundable_cents",
+          "max_balance_cents",
+          "entries",
+          "account_url"
+        ],
+        "title": "CreditHolderOut",
+        "type": "object"
+      },
+      "CreditOverviewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "mismatched": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Mismatched",
+            "type": "array"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/CreditPersonOut"
+            },
+            "title": "People",
+            "type": "array"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCreditEntryOut"
+            },
+            "title": "Recent",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/CreditTotalsOut"
+          }
+        },
+        "required": [
+          "enabled",
+          "totals",
+          "people",
+          "recent",
+          "mismatched"
+        ],
+        "title": "CreditOverviewOut",
+        "type": "object"
+      },
+      "CreditPersonOut": {
+        "additionalProperties": false,
+        "properties": {
+          "balance_cents": {
+            "title": "Balance Cents",
+            "type": "integer"
+          },
+          "erased": {
+            "title": "Erased",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "picture_url",
+          "balance_cents",
+          "erased"
+        ],
+        "title": "CreditPersonOut",
+        "type": "object"
+      },
+      "CreditSettingsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "eps": {
+            "title": "Eps",
+            "type": "boolean"
+          },
+          "max_balance_cents": {
+            "title": "Max Balance Cents",
+            "type": "integer"
+          },
+          "min_top_up_cents": {
+            "title": "Min Top Up Cents",
+            "type": "integer"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Product Id"
+          },
+          "suggested_cents": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 8,
+            "title": "Suggested Cents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "min_top_up_cents",
+          "max_balance_cents",
+          "suggested_cents",
+          "eps"
+        ],
+        "title": "CreditSettingsIn",
+        "type": "object"
+      },
+      "CreditSettingsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "eps": {
+            "title": "Eps",
+            "type": "boolean"
+          },
+          "max_balance_cents": {
+            "title": "Max Balance Cents",
+            "type": "integer"
+          },
+          "min_top_up_cents": {
+            "title": "Min Top Up Cents",
+            "type": "integer"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Product Id"
+          },
+          "stripe_ready": {
+            "title": "Stripe Ready",
+            "type": "boolean"
+          },
+          "suggested_cents": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 8,
+            "title": "Suggested Cents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "min_top_up_cents",
+          "max_balance_cents",
+          "suggested_cents",
+          "eps",
+          "stripe_ready"
+        ],
+        "title": "CreditSettingsOut",
+        "type": "object"
+      },
+      "CreditTotalsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "came_in_cents": {
+            "title": "Came In Cents",
+            "type": "integer"
+          },
+          "held_cents": {
+            "title": "Held Cents",
+            "type": "integer"
+          },
+          "people": {
+            "title": "People",
+            "type": "integer"
+          },
+          "spent_cents": {
+            "title": "Spent Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "held_cents",
+          "came_in_cents",
+          "spent_cents",
+          "people"
+        ],
+        "title": "CreditTotalsOut",
         "type": "object"
       },
       "CropQuery": {
@@ -5970,6 +6506,16 @@
           "counts": {
             "$ref": "#/components/schemas/Counts"
           },
+          "credit_admin": {
+            "default": false,
+            "title": "Credit Admin",
+            "type": "boolean"
+          },
+          "credit_area": {
+            "default": false,
+            "title": "Credit Area",
+            "type": "boolean"
+          },
           "email": {
             "title": "Email",
             "type": "string"
@@ -6028,6 +6574,7 @@
                 "accounts.view",
                 "admin.access",
                 "approvals.review",
+                "credit.manage",
                 "forum.admin",
                 "forum.moderate",
                 "forum.moderator",
@@ -7131,6 +7678,37 @@
           "export_url"
         ],
         "title": "MyAccountOut",
+        "type": "object"
+      },
+      "MyCreditOut": {
+        "additionalProperties": false,
+        "properties": {
+          "balance_cents": {
+            "title": "Balance Cents",
+            "type": "integer"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/CreditEntryOut"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "export_url": {
+            "title": "Export Url",
+            "type": "string"
+          },
+          "top_up": {
+            "$ref": "#/components/schemas/TopUpOut"
+          }
+        },
+        "required": [
+          "balance_cents",
+          "top_up",
+          "entries",
+          "export_url"
+        ],
+        "title": "MyCreditOut",
         "type": "object"
       },
       "NewTeamIn": {
@@ -8538,6 +9116,104 @@
           "forum_error"
         ],
         "title": "ReconnectOut",
+        "type": "object"
+      },
+      "RefundOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Url"
+          },
+          "balance_cents": {
+            "title": "Balance Cents",
+            "type": "integer"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCreditEntryOut"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "erased": {
+            "title": "Erased",
+            "type": "boolean"
+          },
+          "left_cents": {
+            "title": "Left Cents",
+            "type": "integer"
+          },
+          "max_balance_cents": {
+            "title": "Max Balance Cents",
+            "type": "integer"
+          },
+          "member": {
+            "title": "Member",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "refundable_cents": {
+            "title": "Refundable Cents",
+            "type": "integer"
+          },
+          "refunded_cents": {
+            "title": "Refunded Cents",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "picture_url",
+          "erased",
+          "member",
+          "balance_cents",
+          "refundable_cents",
+          "max_balance_cents",
+          "entries",
+          "account_url",
+          "refunded_cents",
+          "left_cents"
+        ],
+        "title": "RefundOut",
         "type": "object"
       },
       "RejoinIn": {
@@ -11309,6 +11985,65 @@
         "title": "TextQuery",
         "type": "object"
       },
+      "TopUpIn": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_cents": {
+            "minimum": 1,
+            "title": "Amount Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "amount_cents"
+        ],
+        "title": "TopUpIn",
+        "type": "object"
+      },
+      "TopUpOut": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "least_cents": {
+            "title": "Least Cents",
+            "type": "integer"
+          },
+          "max_balance_cents": {
+            "title": "Max Balance Cents",
+            "type": "integer"
+          },
+          "most_cents": {
+            "title": "Most Cents",
+            "type": "integer"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refused"
+          }
+        },
+        "required": [
+          "refused",
+          "choices",
+          "least_cents",
+          "most_cents",
+          "max_balance_cents"
+        ],
+        "title": "TopUpOut",
+        "type": "object"
+      },
       "Totals": {
         "additionalProperties": false,
         "properties": {
@@ -12141,6 +12876,98 @@
         "summary": "Address, phones and both email addresses: saved at once. A new address waits to be confirmed.",
         "tags": [
           "Account"
+        ]
+      }
+    },
+    "/api/v1/account/credit": {
+      "get": {
+        "operationId": "my_credit",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyCreditOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          }
+        },
+        "summary": "The balance, whether and how much one may top up, and every entry, newest first.",
+        "tags": [
+          "Credit"
+        ]
+      }
+    },
+    "/api/v1/account/credit/top-up": {
+      "post": {
+        "operationId": "my_credit_top_up",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopUpIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Open Stripe Checkout for this amount. The credit grows once Stripe says the money is there.",
+        "tags": [
+          "Credit"
         ]
       }
     },
@@ -13856,6 +14683,376 @@
         ],
         "x-permissions": [
           "roles.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/credit": {
+      "get": {
+        "operationId": "admin_credit",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditOverviewOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Every balance, what came in, and the latest entries.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/credit/{user_id}": {
+      "get": {
+        "operationId": "admin_credit_holder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditHolderOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One person's credit, every entry, and what a refund would give back.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/credit/{user_id}/cash": {
+      "post": {
+        "operationId": "admin_credit_cash",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CashIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditHolderOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Cash handed over, added to the credit -- or credit paid out by hand.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/credit/{user_id}/correction": {
+      "post": {
+        "operationId": "admin_credit_correction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditHolderOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Put a mistake right, with the reason. Never below zero.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/credit/{user_id}/refund": {
+      "post": {
+        "operationId": "admin_credit_refund",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Give the credit back to the payments it came from, newest first.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
         ]
       }
     },
@@ -15666,6 +16863,122 @@
         ],
         "x-permissions": [
           "settings.credentials"
+        ]
+      }
+    },
+    "/api/v1/admin/settings/credit": {
+      "get": {
+        "operationId": "admin_settings_credit",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditSettingsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Credit: on or off, its Stripe product, and its limits.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      },
+      "put": {
+        "operationId": "admin_settings_credit_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreditSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Save them. A new product is checked with Stripe; switching on needs one.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
         ]
       }
     },

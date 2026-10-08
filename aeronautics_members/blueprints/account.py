@@ -2,7 +2,7 @@
 api/signup.py); the data download stays Flask's.
 """
 
-from flask import Blueprint, redirect, url_for
+from flask import Blueprint, Response, abort, redirect, url_for
 from flask_login import current_user, login_required
 
 from ..app import limiter
@@ -34,6 +34,50 @@ def account():
 def account_section():
     """A part of My Account, in its side menu: drawn by the app (api/account.py)."""
     return app_shell()
+
+
+@account_bp.route("/account/credit", methods=["GET"])
+@login_required
+def credit_page():
+    """Credit: the balance, topping up, the history (api/account_credit.py).
+    Stripe Checkout comes back here."""
+    return app_shell()
+
+
+@account_bp.route("/account/credit/receipt/<int:entry_id>", methods=["GET"])
+@login_required
+def credit_receipt(entry_id):
+    """Stripe's receipt for one of your top-ups."""
+    from ..services import NotFoundError, credit
+
+    try:
+        url = credit.receipt_url(credit.entry_of(current_user, entry_id))
+    except NotFoundError:
+        url = None
+    if not url:
+        abort(404)
+    return redirect(url)
+
+
+@account_bp.route("/account/credit/history.csv", methods=["GET"])
+@login_required
+def credit_history_csv():
+    """Your credit's history as a spreadsheet, oldest first."""
+    import csv
+    import io
+
+    from ..services import credit
+    from ..services.clock import get_membership_today
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(credit.EXPORT_COLUMNS)
+    writer.writerows(credit.export_rows(current_user))
+    return Response(
+        "\ufeff" + buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="credit-{get_membership_today().isoformat()}.csv"'},
+    )
 
 
 @account_bp.route("/account/create-membership", methods=["GET"])

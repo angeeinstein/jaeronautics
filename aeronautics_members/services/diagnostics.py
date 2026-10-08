@@ -200,6 +200,14 @@ def collect_system_health(check_pages=True):
         )
 
     warnings = []
+    from .credit import mismatched_balances
+
+    mismatched = mismatched_balances()
+    if mismatched:
+        problems.append(
+            f"{len(mismatched)} credit balance(s) are not the sum of their entries "
+            f"(accounts {', '.join(f'#{user_id}' for user_id in mismatched[:10])})."
+        )
     if queues["external_work_pending"] > 20:
         warnings.append(
             f"{queues['external_work_pending']} background tasks are queued; the worker may not be running."

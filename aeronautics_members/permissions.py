@@ -69,6 +69,9 @@ class Permission:
     # is in services/teams.py, because it holds for one team only.
     TEAMS_MANAGE = "teams.manage"
     TEAMS_MONEY = "teams.money"
+    # Everybody's credit: balances and history, cash booked by hand,
+    # corrections, refunds. Settings for credit are settings.general.
+    CREDIT_MANAGE = "credit.manage"
 
 
 # Roles, and what each one may do. This is the whole access model.
@@ -90,6 +93,7 @@ ROLE_PERMISSIONS = {
         Permission.SETTINGS_GENERAL,
         Permission.TEAMS_MANAGE,
         Permission.TEAMS_MONEY,
+        Permission.CREDIT_MANAGE,
         # Somebody trusted to administer the members here is trusted to keep
         # order on the forum -- decided 2026-09-26. Nobody is made an admin
         # here who would not be trusted with that.
@@ -112,6 +116,7 @@ ROLE_PERMISSIONS = {
         Permission.ROLES_MANAGE,
         Permission.TEAMS_MANAGE,
         Permission.TEAMS_MONEY,
+        Permission.CREDIT_MANAGE,
         Permission.FORUM_MODERATOR,
         # Everything on the forum as well. A Discourse admin can change any
         # site setting and make API keys, which is the forum's equivalent of
@@ -125,10 +130,12 @@ ROLE_PERMISSIONS = {
         Permission.FORUM_MODERATOR,
     }),
     # The association's treasurer: every team's money and bank account, and
-    # recording what was transferred -- no members, settings or anything else.
+    # recording what was transferred; members' credit and the cash they hand
+    # over -- no members, settings or anything else.
     "treasurer": frozenset({
         Permission.ADMIN_ACCESS,
         Permission.TEAMS_MONEY,
+        Permission.CREDIT_MANAGE,
     }),
 }
 
@@ -146,7 +153,7 @@ ROLE_LABELS = {
     "treasurer": (
         "Treasurer",
         "Sees what every team earned and was paid out, records transfers to the teams and keeps "
-        "their bank details. No other admin rights.",
+        "their bank details; sees members' credit and books cash. No other admin rights.",
     ),
     "forum_moderator": (
         "Forum moderator",
@@ -186,6 +193,7 @@ PERMISSION_LABELS = {
     Permission.ROLES_MANAGE: "Grant and revoke access for other people",
     Permission.TEAMS_MANAGE: "Create teams, appoint their leads, and open every team's page",
     Permission.TEAMS_MONEY: "See every team's money, record transfers to teams and change their bank details",
+    Permission.CREDIT_MANAGE: "See everybody's credit, book cash, corrections and refunds",
 }
 
 

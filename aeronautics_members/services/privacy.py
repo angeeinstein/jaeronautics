@@ -250,7 +250,23 @@ def export_account_data(user):
     ]
 
     payload["teams"] = _team_data(user)
+    payload["credit"] = _credit_data(user)
     return serialize_audit_value(payload)
+
+
+def _credit_data(user):
+    """The balance and every change of it, oldest first."""
+    from .credit import KIND_LABELS, balance_of, history
+
+    return {
+        "balance_cents": balance_of(user),
+        "entries": [
+            {"at": entry.created_at, "kind": KIND_LABELS.get(entry.kind, entry.kind),
+             "description": entry.description, "amount_cents": entry.amount_cents,
+             "balance_after_cents": entry.balance_after_cents}
+            for entry in reversed(history(user))
+        ],
+    }
 
 
 def _team_data(user):
@@ -364,6 +380,8 @@ def describe_deletion_impact(user, actor_user=None):
         "has_stripe_customer": bool(member.stripe_customer_id) if member else False,
         "coverage_end": None,
         "paid_periods": 0,
+        # Credit left, refunded at erasure to the payments it came from.
+        "credit_cents": _credit_of(user),
         "blockers": [],
         "warnings": [],
     }
@@ -399,8 +417,16 @@ def describe_deletion_impact(user, actor_user=None):
         impact["warnings"].append("payment_history_retained")
     if impact["has_forum_account"]:
         impact["warnings"].append("forum_account_anonymised")
+    if impact["credit_cents"] > 0:
+        impact["warnings"].append("credit_refunded")
 
     return impact
+
+
+def _credit_of(user):
+    from .credit import balance_of
+
+    return max(balance_of(user), 0)
 
 
 def _count_active_holders(permission):
@@ -488,6 +514,13 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
                 code="subscription_cancel_failed",
                 details={"reason": str(exc)},
             ) from exc
+
+    # 1b. Credit goes back to the payments it came from, while Stripe still
+    #     knows whose they are; cash the admins are told to pay out. Stripe
+    #     out of reach stops the erasure, as above.
+    from .credit import before_erasure
+
+    summary["credit_refunded_cents"], summary["credit_left_cents"] = before_erasure(user, actor_user)
 
     # 2. The forum is a separate system and may be down. Erasure must not depend
     #    on it, so a failure is queued for retry rather than aborting.
