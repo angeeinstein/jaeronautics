@@ -7,7 +7,7 @@
  * their picture and name, the way to their account. On a phone the logo
  * shrinks to the mark.
  */
-import { ActionIcon, Box, Burger, Group, Tooltip } from '@mantine/core';
+import { ActionIcon, Box, Burger, Group, Tooltip, VisuallyHidden } from '@mantine/core';
 import { IconSettings } from '@tabler/icons-react';
 import { useLocation } from 'react-router';
 
@@ -105,13 +105,22 @@ export function TopBar({ me, menu }: TopBarProps) {
           <Group component="nav" aria-label="Areas" gap={0} h="100%" wrap="nowrap" ml={{ base: 0, sm: 'lg' }}>
             {areas.map((entry) =>
               entry.server ? (
+                // The forum in a tab of its own, once /forum would open it; while
+                // something is still missing, the page saying what stays here.
                 <a
                   key={entry.area}
                   href={entry.to}
                   className={classes.area}
                   aria-current={current === entry.area ? 'page' : undefined}
+                  {...(me.forum_ready ? { target: '_blank', rel: 'noopener' } : {})}
                 >
                   {entry.label}
+                  {me.forum_ready ? (
+                    <>
+                      {' '}
+                      <VisuallyHidden>(opens in a new tab)</VisuallyHidden>
+                    </>
+                  ) : null}
                 </a>
               ) : (
                 <AppLink

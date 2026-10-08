@@ -3,9 +3,9 @@
 What is agreed but not built yet. How this list works -- when it is worked
 through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
-The last batch (2026-10-08) built everything that was on the list; what it
-was is in its pull request and in git history (`git log -- docs/todo.md`).
-One thing waits for the maintainer.
+The last batches (both 2026-10-08) built everything that was on the list;
+what it was is in their pull requests and in git history
+(`git log -- docs/todo.md`). One thing waits for the maintainer.
 
 ## Open
 

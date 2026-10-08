@@ -30,12 +30,23 @@ test.describe("a team's management", () => {
     await expect(page.getByRole('checkbox', { name: 'Accepting new members' })).toBeVisible();
   });
 
-  test('roles: the leads, and the treasurer', async ({ page }) => {
+  test('roles: who holds which, and one line to give one', async ({ page }) => {
     await page.goto('/teams/rocket-team/manage/roles');
 
-    await expect(page.getByRole('region', { name: 'Leads' })).toBeVisible();
-    await expect(page.getByRole('combobox', { name: 'Appoint a lead' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Treasurer' })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Roles' })).toContainText('Lead');
+    await expect(page.getByRole('combobox', { name: 'Give a role' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add' })).toBeVisible();
+  });
+
+  test('roles from the member list too', async ({ page }) => {
+    await page.goto('/teams/rocket-team/manage/members');
+
+    await page
+      .getByRole('button', { name: /^Roles of / })
+      .first()
+      .click();
+
+    await expect(page.getByRole('menuitem', { name: /lead/i })).toBeVisible();
   });
 
   test('money: the balance, the bank details and the payments', async ({ page }) => {

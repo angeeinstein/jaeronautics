@@ -214,6 +214,25 @@ def get_team(slug):
     return team
 
 
+def _clean_admission_mode(admission_mode):
+    if admission_mode not in ADMISSION_MODES:
+        raise ValidationError("Choose how people join.", code="team_admission_mode_invalid")
+    return admission_mode
+
+
+def _clean_max_members(max_members):
+    """Empty for no limit, else a number above zero."""
+    if max_members in (None, ""):
+        return None
+    try:
+        max_members = int(max_members)
+    except (TypeError, ValueError):
+        raise ValidationError("The maximum size must be a number.", code="team_max_members_invalid") from None
+    if max_members <= 0:
+        raise ValidationError("The maximum size must be above zero.", code="team_max_members_invalid")
+    return max_members
+
+
 def _clean_team_fields(*, name, admission_mode, max_members, forum_group,
                        description=KEEP, applications_open=KEEP, application_prompt=KEEP):
     name = (name or "").strip()
@@ -221,18 +240,8 @@ def _clean_team_fields(*, name, admission_mode, max_members, forum_group,
         raise ValidationError("A team needs a name.", code="team_name_missing")
     if len(name) > 120:
         raise ValidationError("That name is too long.", code="team_name_too_long")
-    if admission_mode not in ADMISSION_MODES:
-        raise ValidationError("Choose how people join.", code="team_admission_mode_invalid")
-
-    if max_members in (None, ""):
-        max_members = None
-    else:
-        try:
-            max_members = int(max_members)
-        except (TypeError, ValueError):
-            raise ValidationError("The maximum size must be a number.", code="team_max_members_invalid") from None
-        if max_members <= 0:
-            raise ValidationError("The maximum size must be above zero.", code="team_max_members_invalid")
+    admission_mode = _clean_admission_mode(admission_mode)
+    max_members = _clean_max_members(max_members)
 
     forum_group = (forum_group or "").strip()[:100] or None
     if forum_group and forum_group.lower() in reserved_forum_groups():
@@ -1562,10 +1571,16 @@ def add_note(actor, team, user, body):
     return note
 
 
-def update_team_by_lead(actor, team, *, description=KEEP, application_prompt=KEEP, applications_open=KEEP):
-    """The part of a team's settings that belongs to its leads; what is not
-    given stays as it is."""
+def update_team_by_lead(actor, team, *, description=KEEP, application_prompt=KEEP, applications_open=KEEP,
+                        admission_mode=KEEP, max_members=KEEP):
+    """The part of a team's settings that belongs to its leads -- everything
+    but its name, its fee, its forum group and archiving it, which are the
+    association's; what is not given stays as it is."""
     before = _snapshot(team)
+    if admission_mode is not KEEP:
+        team.admission_mode = _clean_admission_mode(admission_mode)
+    if max_members is not KEEP:
+        team.max_members = _clean_max_members(max_members)
     if description is not KEEP:
         team.description = (description or "").strip() or None
     if application_prompt is not KEEP:
@@ -1611,6 +1626,8 @@ def roster(team):
                 "picture_url": pictures.get(membership.user_id),
                 "is_lead": any(team_role.user_id == membership.user_id and team_role.role == ROLE_LEAD
                                for team_role in team.roles),
+                "is_treasurer": any(team_role.user_id == membership.user_id and team_role.role == ROLE_TREASURER
+                                    for team_role in team.roles),
                 **person_details(membership.user),
             }
             for membership in members
@@ -1815,8 +1832,9 @@ def format_dates(dates):
 
 
 def set_access_list_enabled(actor, team, enabled):
-    """Whether the team has an access list at all -- for site admins. Off,
-    nothing is sent; what was set up is kept for when it is switched on."""
+    """Whether the team has an access list at all. Every team has one now (the
+    admins' switch went in October 2026: a list nobody sends to is sent
+    nowhere); kept for the data and the tests that set a team up by hand."""
     enabled = bool(enabled)
     if team.access_list_enabled == enabled:
         return team

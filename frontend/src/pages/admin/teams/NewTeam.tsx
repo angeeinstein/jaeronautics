@@ -19,13 +19,8 @@ export function NewTeam() {
   const teams = useQuery(teamsQuery);
   const singular = teams.data?.settings.label_singular ?? 'Team';
   const plural = teams.data?.settings.label_plural ?? 'Teams';
-  const [details, setDetails] = useState<Details>({
-    name: '',
-    admission_mode: 'approval',
-    max_members: null,
-    forum_group: null,
-    access_list_enabled: false,
-  });
+  // How people join and how many: the leads set that once the team exists.
+  const [details, setDetails] = useState<Details>({ name: '', forum_group: null });
   const [slug, setSlug] = useState('');
   const [fee, setFee] = useState<FeeFields>({
     payment_mode: 'none',

@@ -1213,7 +1213,7 @@ export interface paths {
         };
         /** One team: its details, fee and roles. */
         get: operations["admin_team"];
-        /** Change a team's name, how people join, its size, forum group and access list. */
+        /** Change a team's name and forum group. */
         put: operations["admin_team_update"];
         post?: never;
         delete?: never;
@@ -1627,7 +1627,7 @@ export interface paths {
         };
         /** Whether the team takes new members, the question for applicants, and the rules they accept. */
         get: operations["team_applying"];
-        /** Save whether the team takes new members and the question for applicants. */
+        /** Save how people join, how many the team takes, whether it takes new members and the question. */
         put: operations["team_applying_save"];
         post?: never;
         delete?: never;
@@ -2277,6 +2277,11 @@ export interface components {
             /** Name */
             name: string | null;
             old_forum: components["schemas"]["OldForum"] | null;
+            /**
+             * Picture Url
+             * @default null
+             */
+            picture_url?: string | null;
             /** Recent Activity */
             recent_activity: components["schemas"]["AccountActivity"][];
             /** Roles */
@@ -2405,19 +2410,33 @@ export interface components {
         /** ApplyingIn */
         ApplyingIn: {
             /**
+             * Admission Mode
+             * @default null
+             */
+            admission_mode?: ("open" | "approval") | null;
+            /**
              * Application Prompt
              * @default null
              */
             application_prompt?: string | null;
             /** Applications Open */
             applications_open: boolean;
+            /**
+             * Max Members
+             * @default null
+             */
+            max_members?: number | null;
         };
         /** ApplyingOut */
         ApplyingOut: {
+            /** Admission Mode */
+            admission_mode: string;
             /** Application Prompt */
             application_prompt: string | null;
             /** Applications Open */
             applications_open: boolean;
+            /** Max Members */
+            max_members: number | null;
             rules: components["schemas"]["RulesInfoOut"] | null;
         };
         /** ArchivedIn */
@@ -3539,6 +3558,8 @@ export interface components {
             in_force: boolean;
             /** Name */
             name: string;
+            /** Picture Url */
+            picture_url: string | null;
             /** User Id */
             user_id: number;
         };
@@ -3998,6 +4019,11 @@ export interface components {
             first_name: string | null;
             /** Forum Area */
             forum_area: boolean;
+            /**
+             * Forum Ready
+             * @default false
+             */
+            forum_ready?: boolean;
             /** Forum Username */
             forum_username: string | null;
             /** Id */
@@ -4062,6 +4088,8 @@ export interface components {
             cohort: string | null;
             /** Is Lead */
             is_lead: boolean;
+            /** Is Treasurer */
+            is_treasurer: boolean;
             /** Name */
             name: string;
             /** Notes */
@@ -4081,8 +4109,14 @@ export interface components {
         MembersOut: {
             /** Charges */
             charges: boolean;
+            /** Leads */
+            leads: number;
             /** Max Members */
             max_members: number | null;
+            /** May Appoint Leads */
+            may_appoint_leads: boolean;
+            /** May Appoint Treasurer */
+            may_appoint_treasurer: boolean;
             /** May Export */
             may_export: boolean;
             /** Members */
@@ -4330,16 +4364,6 @@ export interface components {
         };
         /** NewTeamIn */
         NewTeamIn: {
-            /**
-             * Access List Enabled
-             * @default false
-             */
-            access_list_enabled?: boolean;
-            /**
-             * Admission Mode
-             * @enum {string}
-             */
-            admission_mode: "approval" | "open";
             /** @default null */
             fee?: components["schemas"]["FeeIn"] | null;
             /**
@@ -4347,11 +4371,6 @@ export interface components {
              * @default null
              */
             forum_group?: string | null;
-            /**
-             * Max Members
-             * @default null
-             */
-            max_members?: number | null;
             /** Name */
             name: string;
             /**
@@ -4545,6 +4564,8 @@ export interface components {
             about: string | null;
             /** Description */
             description: string | null;
+            /** Description Max */
+            description_max: number;
             /** Logo Url */
             logo_url: string | null;
             /** Photos */
@@ -5194,28 +5215,18 @@ export interface components {
             /** Slug */
             slug: string;
         };
-        /** TeamDetailsIn */
+        /**
+         * TeamDetailsIn
+         * @description The association's part of a team besides its fee. How people join and
+         *     how many it takes are its leads' (team_manage.py, applying); every team
+         *     has an access list.
+         */
         TeamDetailsIn: {
-            /**
-             * Access List Enabled
-             * @default false
-             */
-            access_list_enabled?: boolean;
-            /**
-             * Admission Mode
-             * @enum {string}
-             */
-            admission_mode: "approval" | "open";
             /**
              * Forum Group
              * @default null
              */
             forum_group?: string | null;
-            /**
-             * Max Members
-             * @default null
-             */
-            max_members?: number | null;
             /** Name */
             name: string;
         };

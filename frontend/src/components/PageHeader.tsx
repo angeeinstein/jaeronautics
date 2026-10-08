@@ -40,6 +40,8 @@ interface PageHeaderProps {
   description?: ReactNode;
   crumbs?: Crumb[];
   actions?: ReactNode;
+  /** Before the title: a person's picture, say. */
+  leading?: ReactNode;
 }
 
 /** The browser tab's title, for a page that draws its own heading. */
@@ -49,17 +51,20 @@ export function useDocumentTitle(title: string) {
   }, [title]);
 }
 
-export function PageHeader({ title, description, crumbs, actions }: PageHeaderProps) {
+export function PageHeader({ title, description, crumbs, actions, leading }: PageHeaderProps) {
   useDocumentTitle(title);
 
   return (
     <Stack gap="xs" mb="lg">
       {crumbs?.length ? <Breadcrumbs crumbs={crumbs} /> : null}
       <Group justify="space-between" align="flex-end" gap="md">
-        <Stack gap={4}>
-          <Title order={1}>{title}</Title>
-          {description ? <Text c="dimmed">{description}</Text> : null}
-        </Stack>
+        <Group gap="md" wrap="nowrap" align="center">
+          {leading}
+          <Stack gap={4} miw={0}>
+            <Title order={1}>{title}</Title>
+            {description ? <Text c="dimmed">{description}</Text> : null}
+          </Stack>
+        </Group>
         {actions ? <Group gap="sm">{actions}</Group> : null}
       </Group>
     </Stack>

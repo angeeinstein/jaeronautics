@@ -19,7 +19,7 @@ from ..db_models import TeamMembership, User, db
 from ..permissions import Permission
 from ..services import NotFoundError, PermissionError_, ServiceError, team_payments
 from ..services import teams as teams_service
-from ..services.pictures import picture_url
+from ..services.pictures import picture_url, picture_urls
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
 from .teams import (
@@ -140,6 +140,7 @@ class MemberOut(Model):
     name: str
     picture_url: str | None
     is_lead: bool
+    is_treasurer: bool
     university_email: str | None
     cohort: str | None
     since: date | None
@@ -154,6 +155,11 @@ class MembersOut(Model):
     charges: bool
     #: May download the list (/teams/<slug>/manage/export.csv).
     may_export: bool
+    #: May make a member a lead, or treasurer, from the list (its ⋯ menu).
+    may_appoint_leads: bool
+    may_appoint_treasurer: bool
+    #: How many leads there are: taking the last one away is asked twice.
+    leads: int
     members: list[MemberOut]
 
 
@@ -177,10 +183,14 @@ def team_members(slug):
     return MembersOut(
         max_members=team.max_members, charges=team_payments.charges(team),
         may_export=teams_service.can_in_team(current_user, team, P.EXPORT),
+        may_appoint_leads=teams_service.can_in_team(current_user, team, P.APPOINT_LEADS),
+        may_appoint_treasurer=teams_service.can_in_team(current_user, team, P.APPOINT_TREASURER),
+        leads=len(teams_service.role_holders(team, teams_service.ROLE_LEAD)),
         members=[
             MemberOut(
                 user_id=row["user"].id, name=row["name"], picture_url=row["picture_url"],
-                is_lead=row["is_lead"], university_email=row["university_email"], cohort=row["cohort"],
+                is_lead=row["is_lead"], is_treasurer=row["is_treasurer"],
+                university_email=row["university_email"], cohort=row["cohort"],
                 since=row["membership"].started_at.date() if row["membership"].started_at else None,
                 paid_until=row["membership"].paid_until, notes=_member_notes(row["membership"]),
             )
@@ -380,9 +390,14 @@ def team_add_note(slug, user_id, body):
 # --- The team's page and applying --------------------------------------------------------
 
 
+DESCRIPTION_MAX = 160
+
+
 class PageOut(Model):
-    #: One or two sentences, on the overview.
+    #: One line, on the overview's card and the About page's cover.
     description: str | None
+    #: How long it may be.
+    description_max: int
     #: The longer text on the About page.
     about: str | None
     #: The cover of the About page.
@@ -395,12 +410,15 @@ class PageOut(Model):
 
 
 class PageIn(Model):
-    description: str | None = Field(None, max_length=500)
+    #: One line, for the overview's card and the About page's cover; the longer
+    #: text is ``about``. Older descriptions may be longer and are shown whole
+    #: until somebody saves the page again.
+    description: str | None = Field(None, max_length=DESCRIPTION_MAX)
     about: str | None = Field(None, max_length=teams_service.ABOUT_MAX_LENGTH)
 
 
 def _page_out(team):
-    return PageOut(description=team.description, about=team.about, logo_url=_logo_url(team),
+    return PageOut(description=team.description, description_max=DESCRIPTION_MAX, about=team.about, logo_url=_logo_url(team),
                    picture_url=url_for("teams.team_picture", token=team.picture_token) if team.picture_token else None,
                    photos=photos_out(team), photos_max=teams_service.PHOTOS_MAX)
 
@@ -520,6 +538,10 @@ class RulesInfoOut(Model):
 
 
 class ApplyingOut(Model):
+    #: How people join: open to every member, or by the leads' approval.
+    admission_mode: str
+    #: The most members the team takes; none: no limit.
+    max_members: int | None
     applications_open: bool
     #: Asked of applicants; none: they are not asked to write anything.
     application_prompt: str | None
@@ -530,11 +552,16 @@ class ApplyingOut(Model):
 class ApplyingIn(Model):
     applications_open: bool
     application_prompt: str | None = Field(None, max_length=255)
+    #: Left out: as it is.
+    admission_mode: Literal["approval", "open"] | None = None
+    #: Left out: as it is; null: no limit.
+    max_members: int | None = Field(None, ge=1)
 
 
 def _applying_out(team):
     rules = teams_service.team_rules(team)
     return ApplyingOut(
+        admission_mode=team.admission_mode, max_members=team.max_members,
         applications_open=bool(team.applications_open), application_prompt=team.application_prompt,
         rules=RulesInfoOut(version=rules.day, page_url=url_for("teams.team_rules_text", slug=team.slug),
                            pdf_url=url_for("teams.team_rules_pdf", slug=team.slug)) if rules else None,
@@ -549,10 +576,14 @@ def team_applying(slug):
 
 @endpoint("PUT", "/teams/<slug>/manage/applying", response=ApplyingOut, body=ApplyingIn, tag=TAG)
 def team_applying_save(slug, body):
-    """Save whether the team takes new members and the question for applicants."""
+    """Save how people join, how many the team takes, whether it takes new members and the question."""
     team = _managed(slug, P.EDIT_SETTINGS)
-    teams_service.update_team_by_lead(current_user, team, applications_open=body.applications_open,
-                                      application_prompt=body.application_prompt)
+    given = body.model_fields_set
+    teams_service.update_team_by_lead(
+        current_user, team, applications_open=body.applications_open, application_prompt=body.application_prompt,
+        admission_mode=body.admission_mode if body.admission_mode is not None else teams_service.KEEP,
+        max_members=body.max_members if "max_members" in given else teams_service.KEEP,
+    )
     _commit()
     return _applying_out(team)
 
@@ -659,6 +690,7 @@ def team_access_list_send(slug):
 class HolderOut(Model):
     user_id: int
     name: str
+    picture_url: str | None
     #: A role counts only while its holder is a member of the team and of the association.
     in_force: bool
 
@@ -696,9 +728,13 @@ def _candidate(team, user, name):
 
 
 def _roles_out(team):
+    held_roles = teams_service.role_holders(team)
+    pictures = picture_urls([held.user for held in held_roles])
+
     def holders(role):
-        return [HolderOut(user_id=held.user_id, name=_name(held.user), in_force=teams_service.role_counts(held))
-                for held in teams_service.role_holders(team, role)]
+        return [HolderOut(user_id=held.user_id, name=_name(held.user), picture_url=pictures.get(held.user_id),
+                          in_force=teams_service.role_counts(held))
+                for held in held_roles if held.role == role]
 
     treasurers = holders(teams_service.ROLE_TREASURER)
     taken = {holder.user_id for holder in treasurers}

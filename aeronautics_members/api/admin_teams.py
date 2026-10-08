@@ -174,19 +174,20 @@ def admin_team(slug):
 
 
 class TeamDetailsIn(Model):
+    """The association's part of a team besides its fee. How people join and
+    how many it takes are its leads' (team_manage.py, applying); every team
+    has an access list."""
+
     name: str = Field(max_length=120)
-    admission_mode: AdmissionMode
-    #: Empty for no limit.
-    max_members: int | None = Field(None, ge=1)
     #: Its active members are put in this forum group, which has to exist there.
     forum_group: str | None = Field(None, max_length=100)
-    #: Whether the team has rooms that need an access list.
-    access_list_enabled: bool = False
 
 
-def _fields(body):
-    return {"name": body.name, "admission_mode": body.admission_mode, "max_members": body.max_members,
-            "forum_group": body.forum_group}
+def _fields(body, team=None):
+    # A new team starts by approval and without a limit; the leads change that.
+    return {"name": body.name, "forum_group": body.forum_group,
+            "admission_mode": team.admission_mode if team else teams_service.ADMISSION_APPROVAL,
+            "max_members": team.max_members if team else None}
 
 
 class FeeIn(Model):
@@ -234,7 +235,6 @@ class NewTeamIn(TeamDetailsIn):
 def admin_team_create(body):
     """Create a team. Its leads are given once it exists."""
     team = teams_service.create_team(current_user, slug=body.slug, **_fields(body))
-    teams_service.set_access_list_enabled(current_user, team, body.access_list_enabled)
     if body.fee is not None and body.fee.payment_mode != "none":
         _set_fee(team, body.fee)
     db.session.commit()
@@ -243,10 +243,9 @@ def admin_team_create(body):
 
 @endpoint("PUT", "/admin/teams/<slug>", response=TeamOut, body=TeamDetailsIn, permissions=PERMISSIONS, tag=TAG)
 def admin_team_update(slug, body):
-    """Change a team's name, how people join, its size, forum group and access list."""
+    """Change a team's name and forum group."""
     team = _team(slug)
-    teams_service.update_team(current_user, team, **_fields(body))
-    teams_service.set_access_list_enabled(current_user, team, body.access_list_enabled)
+    teams_service.update_team(current_user, team, **_fields(body, team))
     db.session.commit()
     return _team_out(team)
 

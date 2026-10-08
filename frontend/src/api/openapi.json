@@ -537,6 +537,18 @@
               }
             ]
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Picture Url"
+          },
           "recent_activity": {
             "items": {
               "$ref": "#/components/schemas/AccountActivity"
@@ -1010,6 +1022,22 @@
       "ApplyingIn": {
         "additionalProperties": false,
         "properties": {
+          "admission_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "open",
+                  "approval"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Admission Mode"
+          },
           "application_prompt": {
             "anyOf": [
               {
@@ -1026,6 +1054,19 @@
           "applications_open": {
             "title": "Applications Open",
             "type": "boolean"
+          },
+          "max_members": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Members"
           }
         },
         "required": [
@@ -1037,6 +1078,10 @@
       "ApplyingOut": {
         "additionalProperties": false,
         "properties": {
+          "admission_mode": {
+            "title": "Admission Mode",
+            "type": "string"
+          },
           "application_prompt": {
             "anyOf": [
               {
@@ -1052,6 +1097,17 @@
             "title": "Applications Open",
             "type": "boolean"
           },
+          "max_members": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Members"
+          },
           "rules": {
             "anyOf": [
               {
@@ -1064,6 +1120,8 @@
           }
         },
         "required": [
+          "admission_mode",
+          "max_members",
           "applications_open",
           "application_prompt",
           "rules"
@@ -4557,6 +4615,17 @@
             "title": "Name",
             "type": "string"
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
           "user_id": {
             "title": "User Id",
             "type": "integer"
@@ -4565,6 +4634,7 @@
         "required": [
           "user_id",
           "name",
+          "picture_url",
           "in_force"
         ],
         "title": "HolderOut",
@@ -5919,6 +5989,11 @@
             "title": "Forum Area",
             "type": "boolean"
           },
+          "forum_ready": {
+            "default": false,
+            "title": "Forum Ready",
+            "type": "boolean"
+          },
           "forum_username": {
             "anyOf": [
               {
@@ -6189,6 +6264,10 @@
             "title": "Is Lead",
             "type": "boolean"
           },
+          "is_treasurer": {
+            "title": "Is Treasurer",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -6256,6 +6335,7 @@
           "name",
           "picture_url",
           "is_lead",
+          "is_treasurer",
           "university_email",
           "cohort",
           "since",
@@ -6272,6 +6352,10 @@
             "title": "Charges",
             "type": "boolean"
           },
+          "leads": {
+            "title": "Leads",
+            "type": "integer"
+          },
           "max_members": {
             "anyOf": [
               {
@@ -6282,6 +6366,14 @@
               }
             ],
             "title": "Max Members"
+          },
+          "may_appoint_leads": {
+            "title": "May Appoint Leads",
+            "type": "boolean"
+          },
+          "may_appoint_treasurer": {
+            "title": "May Appoint Treasurer",
+            "type": "boolean"
           },
           "may_export": {
             "title": "May Export",
@@ -6299,6 +6391,9 @@
           "max_members",
           "charges",
           "may_export",
+          "may_appoint_leads",
+          "may_appoint_treasurer",
+          "leads",
           "members"
         ],
         "title": "MembersOut",
@@ -7041,19 +7136,6 @@
       "NewTeamIn": {
         "additionalProperties": false,
         "properties": {
-          "access_list_enabled": {
-            "default": false,
-            "title": "Access List Enabled",
-            "type": "boolean"
-          },
-          "admission_mode": {
-            "enum": [
-              "approval",
-              "open"
-            ],
-            "title": "Admission Mode",
-            "type": "string"
-          },
           "fee": {
             "anyOf": [
               {
@@ -7078,19 +7160,6 @@
             "default": null,
             "title": "Forum Group"
           },
-          "max_members": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Max Members"
-          },
           "name": {
             "maxLength": 120,
             "title": "Name",
@@ -7111,8 +7180,7 @@
           }
         },
         "required": [
-          "name",
-          "admission_mode"
+          "name"
         ],
         "title": "NewTeamIn",
         "type": "object"
@@ -7646,7 +7714,7 @@
           "description": {
             "anyOf": [
               {
-                "maxLength": 500,
+                "maxLength": 160,
                 "type": "string"
               },
               {
@@ -7685,6 +7753,10 @@
             ],
             "title": "Description"
           },
+          "description_max": {
+            "title": "Description Max",
+            "type": "integer"
+          },
           "logo_url": {
             "anyOf": [
               {
@@ -7721,6 +7793,7 @@
         },
         "required": [
           "description",
+          "description_max",
           "about",
           "picture_url",
           "logo_url",
@@ -9759,20 +9832,8 @@
       },
       "TeamDetailsIn": {
         "additionalProperties": false,
+        "description": "The association's part of a team besides its fee. How people join and\nhow many it takes are its leads' (team_manage.py, applying); every team\nhas an access list.",
         "properties": {
-          "access_list_enabled": {
-            "default": false,
-            "title": "Access List Enabled",
-            "type": "boolean"
-          },
-          "admission_mode": {
-            "enum": [
-              "approval",
-              "open"
-            ],
-            "title": "Admission Mode",
-            "type": "string"
-          },
           "forum_group": {
             "anyOf": [
               {
@@ -9786,19 +9847,6 @@
             "default": null,
             "title": "Forum Group"
           },
-          "max_members": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Max Members"
-          },
           "name": {
             "maxLength": 120,
             "title": "Name",
@@ -9806,8 +9854,7 @@
           }
         },
         "required": [
-          "name",
-          "admission_mode"
+          "name"
         ],
         "title": "TeamDetailsIn",
         "type": "object"
@@ -17433,7 +17480,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Change a team's name, how people join, its size, forum group and access list.",
+        "summary": "Change a team's name and forum group.",
         "tags": [
           "Admin"
         ],
@@ -19131,7 +19178,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Save whether the team takes new members and the question for applicants.",
+        "summary": "Save how people join, how many the team takes, whether it takes new members and the question.",
         "tags": [
           "Teams"
         ]

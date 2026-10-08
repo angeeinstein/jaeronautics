@@ -91,21 +91,13 @@
   }
 }
 
-/* The logo as it is, no box behind it; a shadow along its outline keeps a
-   dark logo off a dark picture. */
+/* The logo as it is, whole in this square, no box behind it; GlowLogo
+   keeps it off the picture. */
 .logoTile {
   flex: none;
-  display: grid;
-  place-items: center;
+  display: block;
   width: 5rem;
   height: 5rem;
-}
-
-.logoTile img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 10px color-mix(in srgb, var(--ja-bg) 75%, transparent));
 }
 
 @media (max-width: $mantine-breakpoint-sm) {

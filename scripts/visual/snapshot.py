@@ -274,7 +274,8 @@ def seed(app, app_module, subscriptions):
         charging.period_starts, charging.fee_display = "01.04, 01.10", "€10.00 every 6 months"
     teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
     # Made-up logos in the shapes real ones come in: one round with a line of
-    # text under it, one a shield -- neither quite square, both to be shown whole.
+    # text under it, one a tall narrow shield (like a real one that once ran
+    # over its team's name) -- neither square, both to be shown whole.
     from io import BytesIO
 
     from PIL import ImageDraw
@@ -290,11 +291,11 @@ def seed(app, app_module, subscriptions):
     draw.polygon([(120, 270), (200, 70), (280, 270)], fill=(0, 223, 255, 255))
     draw.rectangle([(70, 380), (330, 420)], fill=(235, 240, 245, 255))
     teams.set_team_logo(None, rocket, png(round_logo))
-    shield = Image.new("RGBA", (360, 420), (0, 0, 0, 0))
+    shield = Image.new("RGBA", (220, 460), (0, 0, 0, 0))
     draw = ImageDraw.Draw(shield)
-    draw.polygon([(20, 20), (340, 20), (340, 220), (180, 400), (20, 220)], fill=(30, 70, 140, 255),
+    draw.polygon([(10, 10), (210, 10), (210, 300), (110, 450), (10, 300)], fill=(30, 70, 140, 255),
                  outline=(235, 240, 245, 255))
-    draw.polygon([(110, 230), (180, 90), (250, 230)], fill=(235, 240, 245, 255))
+    draw.polygon([(60, 260), (110, 110), (160, 260)], fill=(235, 240, 245, 255))
     teams.set_team_logo(None, glider, png(shield))
     # The team's page: a cover, a formatted text, photos and rules to accept. The
     # pictures are drawn: a sky and a rocket on it, each in other light.

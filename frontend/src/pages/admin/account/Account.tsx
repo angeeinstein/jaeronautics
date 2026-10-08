@@ -5,7 +5,7 @@
  * person looking may see; actions only where they would not be refused --
  * the server says which (api/admin_account.py).
  */
-import { Group, Tabs, Text } from '@mantine/core';
+import { Avatar, Group, Tabs, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -42,6 +42,11 @@ function shownTabs(account: AccountData): Tab[] {
     if (tab === 'danger') return account.actions.manage_access || account.actions.erase;
     return true;
   });
+}
+
+function initialsOf(name: string) {
+  const words = name.split(/[\s@.]+/).filter(Boolean);
+  return (words.length > 1 ? [words[0]?.[0], words[1]?.[0]] : [words[0]?.[0]]).join('').toUpperCase();
 }
 
 export function Account() {
@@ -93,6 +98,19 @@ export function Account() {
       <PageHeader
         title={title}
         crumbs={crumbs}
+        leading={
+          <Avatar
+            src={data.picture_url}
+            alt=""
+            size={64}
+            radius="xl"
+            color="brand"
+            variant="light"
+            aria-hidden
+          >
+            {initialsOf(title)}
+          </Avatar>
+        }
         description={
           <Group gap="sm" component="span">
             <Status account={data} />

@@ -73,7 +73,7 @@ describe("a team's menu", () => {
       ['Team', 'Overview', 'About the team'],
       ['People', 'Applications', 'Members', 'Former members'],
       ['Money', 'Money'],
-      ['Settings', 'Team page', 'Applying', 'Access list', 'Roles'],
+      ['Settings', 'Team page', 'Joining', 'Access list', 'Roles'],
     ]);
     expect(content.groups[1]?.items[0]?.count).toBe(2);
   });

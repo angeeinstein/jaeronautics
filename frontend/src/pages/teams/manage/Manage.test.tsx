@@ -8,9 +8,9 @@ import { Providers } from '../../../app/Providers';
 import { makeMe } from '../../../test/fixtures';
 import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { QueryClient } from '@tanstack/react-query';
-import { Applications } from './People';
+import { Applications, Members } from './People';
 import { Person } from './Person';
-import { PageSettings, RolesPage } from './Settings';
+import { Applying, PageSettings, RolesPage } from './Settings';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -153,56 +153,13 @@ describe('a person', () => {
 });
 
 describe('roles', () => {
-  it('a member appointed treasurer', async () => {
-    const { calls } = show(
-      <RolesPage />,
-      {
-        [`${API}/roles`]: {
-          body: {
-            leads: [{ user_id: 1, name: 'Lena Lead', in_force: true }],
-            treasurers: [],
-            may_appoint: true,
-            candidates: [{ user_id: 7, name: 'Anna Berger' }],
-            may_appoint_leads: false,
-            lead_candidates: [],
-            searches_everyone: false,
-          },
-        },
-        [`POST ${API}/treasurer`]: {
-          body: {
-            leads: [{ user_id: 1, name: 'Lena Lead', in_force: true }],
-            treasurers: [{ user_id: 7, name: 'Anna Berger', in_force: true }],
-            may_appoint: true,
-            candidates: [],
-            may_appoint_leads: false,
-            lead_candidates: [],
-            searches_everyone: false,
-          },
-        },
-      },
-      '/teams/rocket/manage/roles',
-      '/teams/:slug/manage/roles',
-    );
-
-    await userEvent.click(await screen.findByRole('combobox', { name: 'Appoint a treasurer' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'Anna Berger' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Appoint' }));
-
-    expect(await screen.findByText('Treasurer appointed.')).toBeInTheDocument();
-    await waitFor(async () => {
-      const sent = calls.find((call) => call.method === 'POST');
-      expect(await sent?.clone().json()).toEqual({ user_id: 7 });
-    });
-  });
-});
-
-describe('leads', () => {
+  const lena = { user_id: 1, name: 'Lena Lead', picture_url: null, in_force: true };
   const anna = { user_id: 7, name: 'Anna Berger', detail: null, in_team: true };
   const roles = (overrides: Partial<Schemas['TeamRolesOut']> = {}): Schemas['TeamRolesOut'] => ({
-    leads: [{ user_id: 1, name: 'Lena Lead', in_force: true }],
+    leads: [lena],
     treasurers: [],
     may_appoint: true,
-    candidates: [],
+    candidates: [{ user_id: 7, name: 'Anna Berger' }],
     may_appoint_leads: true,
     lead_candidates: [anna],
     searches_everyone: false,
@@ -210,36 +167,54 @@ describe('leads', () => {
   });
   const at = ['/teams/rocket/manage/roles', '/teams/:slug/manage/roles'] as const;
 
-  it('a lead makes another member a lead, from a list', async () => {
+  it('who holds which role, in one table', async () => {
+    show(<RolesPage />, { [`${API}/roles`]: { body: roles() } }, ...at);
+
+    const table = await screen.findByRole('table', { name: 'Roles' });
+    expect(table).toHaveTextContent('Lena Lead');
+    expect(table).toHaveTextContent('Lead');
+  });
+
+  it('a lead makes another member a lead: who, as what, and the plus', async () => {
     const { calls } = show(
       <RolesPage />,
-      {
-        [`${API}/roles`]: { body: roles() },
-        [`POST ${API}/leads`]: {
-          body: roles({ leads: [...roles().leads, { user_id: 7, name: 'Anna Berger', in_force: true }] }),
-        },
-      },
+      { [`${API}/roles`]: { body: roles() }, [`POST ${API}/leads`]: { body: roles() } },
       ...at,
     );
 
-    await userEvent.click(await screen.findByRole('combobox', { name: 'Appoint a lead' }));
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Give a role' }));
     await userEvent.click(await screen.findByRole('option', { name: 'Anna Berger' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Appoint' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     expect(await screen.findByText('Lead appointed.')).toBeInTheDocument();
     await waitFor(async () => {
       const sent = calls.find((call) => call.method === 'POST');
+      expect(sent && new URL(sent.url).pathname).toBe(`${API}/leads`);
       expect(await sent?.clone().json()).toEqual({ user_id: 7 });
     });
+  });
+
+  it('or treasurer', async () => {
+    const { calls } = show(
+      <RolesPage />,
+      { [`${API}/roles`]: { body: roles() }, [`POST ${API}/treasurer`]: { body: roles() } },
+      ...at,
+    );
+
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Role' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Treasurer' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Give a role' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Anna Berger' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(await screen.findByText('Treasurer appointed.')).toBeInTheDocument();
+    expect(calls.some((call) => new URL(call.url).pathname === `${API}/treasurer`)).toBe(true);
   });
 
   it('removing the last lead is confirmed as that', async () => {
     const { calls } = show(
       <RolesPage />,
-      {
-        [`${API}/roles`]: { body: roles() },
-        [`DELETE ${API}/leads/1`]: { body: roles({ leads: [] }) },
-      },
+      { [`${API}/roles`]: { body: roles() }, [`DELETE ${API}/leads/1`]: { body: roles({ leads: [] }) } },
       ...at,
     );
 
@@ -264,22 +239,134 @@ describe('leads', () => {
       ...at,
     );
 
-    await userEvent.type(await screen.findByRole('combobox', { name: 'Appoint a lead' }), 'Tom');
+    await userEvent.type(await screen.findByRole('combobox', { name: 'Give a role' }), 'Tom');
 
     expect(await screen.findByRole('option', { name: 'Tom Neu · LAV24' })).toBeInTheDocument();
     expect(calls.some((call) => new URL(call.url).search === '?q=Tom')).toBe(true);
   });
 
-  it('nobody to appoint for somebody who may not', async () => {
+  it('nothing to change for somebody who may not', async () => {
     show(
       <RolesPage />,
-      { [`${API}/roles`]: { body: roles({ may_appoint_leads: false, lead_candidates: [] }) } },
+      { [`${API}/roles`]: { body: roles({ may_appoint: false, may_appoint_leads: false }) } },
       ...at,
     );
 
     expect(await screen.findByText('Lena Lead')).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Appoint a lead' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Give a role' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+});
+
+describe('roles from the member list', () => {
+  const members = (overrides: Partial<Schemas['MembersOut']> = {}): Schemas['MembersOut'] => ({
+    max_members: null,
+    charges: false,
+    may_export: true,
+    may_appoint_leads: true,
+    may_appoint_treasurer: true,
+    leads: 1,
+    members: [
+      {
+        user_id: 7,
+        name: 'Anna Berger',
+        picture_url: null,
+        is_lead: false,
+        is_treasurer: false,
+        university_email: null,
+        cohort: 'LAV25',
+        since: '2026-10-01',
+        paid_until: null,
+        notes: [],
+      },
+    ],
+    ...overrides,
+  });
+
+  it('a ⋯ beside each member makes them lead or treasurer', async () => {
+    const { calls } = show(
+      <Members />,
+      { [`${API}/members`]: { body: members() }, [`POST ${API}/treasurer`]: { body: {} } },
+      '/teams/rocket/manage/members',
+      '/teams/:slug/manage/members',
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Roles of Anna Berger' }));
+    expect(screen.getByRole('menuitem', { name: 'Make lead' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Make treasurer' }));
+
+    expect(await screen.findByText('Treasurer appointed.')).toBeInTheDocument();
+    await waitFor(async () => {
+      const sent = calls.find((call) => call.method === 'POST');
+      expect(await sent?.clone().json()).toEqual({ user_id: 7 });
+    });
+  });
+
+  it('none for somebody who may not give roles', async () => {
+    show(
+      <Members />,
+      { [`${API}/members`]: { body: members({ may_appoint_leads: false, may_appoint_treasurer: false }) } },
+      '/teams/rocket/manage/members',
+      '/teams/:slug/manage/members',
+    );
+
+    expect(await screen.findByText('Anna Berger')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Roles of Anna Berger' })).toBeNull();
+  });
+});
+
+describe('joining', () => {
+  it('the leads set how people join and how many', async () => {
+    const applying: Schemas['ApplyingOut'] = {
+      admission_mode: 'approval',
+      max_members: null,
+      applications_open: true,
+      application_prompt: null,
+      rules: null,
+    };
+    const { calls } = show(
+      <Applying />,
+      { [`${API}/applying`]: { body: applying }, [`PUT ${API}/applying`]: { body: applying } },
+      '/teams/rocket/manage/applying',
+      '/teams/:slug/manage/applying',
+    );
+
+    await userEvent.click(await screen.findByRole('combobox', { name: 'How people join' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Open to every member' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Most members' }), '12');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      const sent = calls.find((call) => call.method === 'PUT');
+      expect(await sent?.clone().json()).toMatchObject({ admission_mode: 'open', max_members: 12 });
+    });
+  });
+});
+
+describe('the short description', () => {
+  it('counts towards one line, and a longer one is said and not sent', async () => {
+    show(
+      <PageSettings />,
+      {
+        [`${API}/page`]: {
+          body: {
+            description: 'x'.repeat(170),
+            description_max: 160,
+            about: null,
+            picture_url: null,
+            logo_url: null,
+            photos: [],
+            photos_max: 8,
+          },
+        },
+      },
+      '/teams/rocket/manage/page',
+      '/teams/:slug/manage/page',
+    );
+
+    expect(await screen.findByText(/170 \/ 160/)).toBeInTheDocument();
+    expect(screen.getByText(/Too long by 10 characters/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Save' })[0]).toBeDisabled();
   });
 });
 
@@ -293,6 +380,7 @@ describe('the team page', () => {
   });
   const page = (photos: Schemas['PhotoOut'][]): Schemas['PageOut'] => ({
     description: 'We build rockets.',
+    description_max: 160,
     about: '# Who we are',
     picture_url: null,
     logo_url: null,

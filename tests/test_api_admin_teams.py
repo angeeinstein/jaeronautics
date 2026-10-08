@@ -64,21 +64,28 @@ def test_changing_the_details(client):
     _team("Rocket")
     signed_in(client, _staff("boss@example.org", "admin"))
 
-    body = send(client, "PUT", f"{API}/rocket", {
-        "name": "Rocket Team", "admission_mode": "open", "max_members": 20, "forum_group": "rocket",
-        "access_list_enabled": True,
-    }).get_json()
+    body = send(client, "PUT", f"{API}/rocket", {"name": "Rocket Team", "forum_group": "rocket"}).get_json()
 
-    assert (body["name"], body["admission_mode"], body["max_members"], body["forum_group"]) == (
-        "Rocket Team", "open", 20, "rocket")
-    assert body["access_list_enabled"] is True and body["slug"] == "rocket", "the short name stays"
+    assert (body["name"], body["forum_group"]) == ("Rocket Team", "rocket")
+    assert body["slug"] == "rocket", "the short name stays"
+    # How people join and how many: the leads' (test_team_settings_for_leads.py).
+    assert (body["admission_mode"], body["max_members"]) == ("approval", None)
+
+
+def test_how_people_join_is_not_the_admins_form_any_more(client):
+    _team("Rocket")
+    signed_in(client, _staff("boss@example.org", "admin"))
+
+    response = send(client, "PUT", f"{API}/rocket", {"name": "Rocket", "admission_mode": "open"})
+
+    assert response.status_code == 400
 
 
 def test_a_bad_detail_is_refused_with_the_reason(client):
     _team("Rocket")
     signed_in(client, _staff("boss@example.org", "admin"))
 
-    response = send(client, "PUT", f"{API}/rocket", {"name": "  ", "admission_mode": "open"})
+    response = send(client, "PUT", f"{API}/rocket", {"name": "  "})
 
     assert response.status_code == 400 and response.get_json()["error"]["message"] == "A team needs a name."
 
@@ -87,7 +94,7 @@ def test_the_short_name_new_is_taken_by_the_pages(client):
     """/admin/teams/new is the form; a team called that could never be opened."""
     signed_in(client, _staff("boss@example.org", "admin"))
 
-    response = send(client, "POST", API, {"name": "New", "admission_mode": "open"})
+    response = send(client, "POST", API, {"name": "New"})
 
     assert response.status_code == 400 and response.get_json()["error"]["code"] == "team_slug_reserved"
 
@@ -96,7 +103,7 @@ def test_creating_with_a_fee(client, fake_stripe):  # noqa: F811
     signed_in(client, _staff("boss@example.org", "admin"))
 
     response = send(client, "POST", API, {
-        "name": "Rocket", "admission_mode": "approval",
+        "name": "Rocket",
         "fee": {"payment_mode": "subscription", "stripe_price_id": PRICE_ID, "period_starts": "01.10, 01.04"},
     })
 

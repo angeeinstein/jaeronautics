@@ -3,11 +3,24 @@
  * page), who is in the team, and who was -- each a way to the person's page.
  * Data: GET /api/v1/teams/<slug>/manage/applications, /members, /former.
  */
-import { Anchor, Avatar, Button, Group, Stack, Table, Text } from '@mantine/core';
+import {
+  ActionIcon,
+  Anchor,
+  Avatar,
+  Button,
+  Group,
+  Menu,
+  Stack,
+  Table,
+  Text,
+  VisuallyHidden,
+} from '@mantine/core';
+import { IconCoin, IconDots, IconUserMinus, IconUserShield } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Navigate, useLocation } from 'react-router';
 
-import { api, call } from '../../../api/client';
+import { api, call, type Schemas } from '../../../api/client';
 import { AppLink } from '../../../app/AppLink';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
@@ -15,6 +28,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../../components/States
 import { arrivedClass, useArrivals } from '../../../lib/arrivals';
 import { formatDate, formatDayOf } from '../../../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
+import { useRoleChange } from './roles';
 import { ManageHeader, useSlug } from './shared';
 
 /** Old links to a tab of the management page (#manage-applying) open that section's page. */
@@ -102,6 +116,90 @@ export function Applications() {
   );
 }
 
+type MemberRow = Schemas['MemberOut'];
+
+/**
+ * A member's roles, from the list: Make lead / No longer lead, Make treasurer
+ * / No longer treasurer -- for whoever may give them. Taking away the team's
+ * last lead asks once more, in the menu itself.
+ */
+function RoleMenu({
+  slug,
+  row,
+  mayLeads,
+  mayTreasurer,
+  lastLead,
+}: {
+  slug: string;
+  row: MemberRow;
+  mayLeads: boolean;
+  mayTreasurer: boolean;
+  lastLead: boolean;
+}) {
+  const [sure, setSure] = useState(false);
+  const change = useRoleChange(slug);
+  const confirmLast = row.is_lead && lastLead;
+  return (
+    <Menu
+      position="bottom-end"
+      withinPortal
+      onClose={() => {
+        setSure(false);
+      }}
+    >
+      <Menu.Target>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          aria-label={`Roles of ${row.name}`}
+          loading={change.isPending}
+        >
+          <IconDots size={18} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        {mayLeads ? (
+          row.is_lead ? (
+            <Menu.Item
+              leftSection={<IconUserMinus size={16} />}
+              color={sure ? 'red' : undefined}
+              closeMenuOnClick={!confirmLast || sure}
+              onClick={() => {
+                if (confirmLast && !sure) {
+                  setSure(true);
+                  return;
+                }
+                change.mutate({ give: false, role: 'lead', userId: row.user_id, confirmed: confirmLast });
+              }}
+            >
+              {sure ? 'Yes, remove the last lead' : 'No longer lead'}
+            </Menu.Item>
+          ) : (
+            <Menu.Item
+              leftSection={<IconUserShield size={16} />}
+              onClick={() => {
+                change.mutate({ give: true, role: 'lead', userId: row.user_id });
+              }}
+            >
+              Make lead
+            </Menu.Item>
+          )
+        ) : null}
+        {mayTreasurer ? (
+          <Menu.Item
+            leftSection={row.is_treasurer ? <IconUserMinus size={16} /> : <IconCoin size={16} />}
+            onClick={() => {
+              change.mutate({ give: !row.is_treasurer, role: 'treasurer', userId: row.user_id });
+            }}
+          >
+            {row.is_treasurer ? 'No longer treasurer' : 'Make treasurer'}
+          </Menu.Item>
+        ) : null}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
 export function Members() {
   const slug = useSlug();
   const members = useQuery({
@@ -114,6 +212,7 @@ export function Members() {
     members.data?.members.map((row) => String(row.user_id)),
   );
   const data = members.data;
+  const appoints = Boolean(data && (data.may_appoint_leads || data.may_appoint_treasurer));
   return (
     <>
       <ManageHeader
@@ -155,6 +254,11 @@ export function Members() {
                   <Table.Th scope="col">Cohort</Table.Th>
                   <Table.Th scope="col">Since</Table.Th>
                   {members.data.charges ? <Table.Th scope="col">Paid until</Table.Th> : null}
+                  {appoints ? (
+                    <Table.Th scope="col">
+                      <VisuallyHidden>Roles</VisuallyHidden>
+                    </Table.Th>
+                  ) : null}
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -169,6 +273,7 @@ export function Members() {
                           {row.name}
                         </Anchor>
                         {row.is_lead ? <Pill tone="info">Lead</Pill> : null}
+                        {row.is_treasurer ? <Pill tone="neutral">Treasurer</Pill> : null}
                       </Group>
                     </Table.Td>
                     <Table.Td>{row.university_email ?? '–'}</Table.Td>
@@ -182,6 +287,17 @@ export function Members() {
                             {note}
                           </Text>
                         ))}
+                      </Table.Td>
+                    ) : null}
+                    {appoints ? (
+                      <Table.Td ta="right">
+                        <RoleMenu
+                          slug={slug}
+                          row={row}
+                          mayLeads={members.data.may_appoint_leads}
+                          mayTreasurer={members.data.may_appoint_treasurer}
+                          lastLead={members.data.leads <= 1}
+                        />
                       </Table.Td>
                     ) : null}
                   </Table.Tr>

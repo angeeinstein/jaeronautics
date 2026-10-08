@@ -54,13 +54,7 @@ function WithTeam({ children }: { children: (team: TeamOut) => React.ReactNode }
 const ADMIN_ONLY = 'Only site admins see this.';
 
 function DetailsForm({ team }: { team: TeamOut }) {
-  const [value, setValue] = useState<Details>({
-    name: team.name,
-    admission_mode: team.admission_mode,
-    max_members: team.max_members,
-    forum_group: team.forum_group,
-    access_list_enabled: team.access_list_enabled,
-  });
+  const [value, setValue] = useState<Details>({ name: team.name, forum_group: team.forum_group });
   const save = useAdminChange(
     (body: Details) =>
       call(api.PUT('/api/v1/admin/teams/{slug}', { params: { path: { slug: team.slug } }, body })),
@@ -95,7 +89,7 @@ function DetailsForm({ team }: { team: TeamOut }) {
 export function DetailsPage() {
   return (
     <>
-      <ManageHeader title="Details" description={`Name, joining, places, forum group. ${ADMIN_ONLY}`} />
+      <ManageHeader title="Details" description={`The team's name and its forum group. ${ADMIN_ONLY}`} />
       <WithTeam>{(team) => <DetailsForm team={team} />}</WithTeam>
     </>
   );

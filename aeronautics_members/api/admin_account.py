@@ -28,6 +28,7 @@ from ..services.access import assignable_roles, describe_account_disable, descri
 from ..services.audit import about_user, redact_sensitive_audit_value
 from ..services.membership import PAYMENT_STATUS_LABELS
 from ..services.privacy import describe_deletion_impact, refresh_subscription_state_before_deletion
+from ..services.pictures import picture_url
 from ._core import Model, UtcDateTime, endpoint
 from .admin_accounts import AccountState, MembershipState, Role
 
@@ -192,6 +193,8 @@ class AccountOut(Model):
     email_verified: bool
     #: The member's name, the old forum's, or ``None``.
     name: str | None
+    #: Their picture: approved here, else the old forum's (services/pictures.py).
+    picture_url: str | None = None
     forum_username: str | None
     roles: list[Role]
     account_state: AccountState
@@ -390,6 +393,7 @@ def _account(user):
         email=user.email,
         email_verified=user.email_verified_at is not None,
         name=_name(user),
+        picture_url=picture_url(user),
         forum_username=user.forum_username,
         roles=sorted((Role(slug=role.slug, label=role_label(role.slug)) for role in user.roles),
                      key=lambda role: role.label.lower()),
