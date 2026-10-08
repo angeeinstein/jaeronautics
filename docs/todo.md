@@ -104,6 +104,28 @@ or sooner by the rules there.
   pages then look broken") and where to look.
 - **Open:** none.
 
+### Pictures: the old forum's too, and in the Accounts list
+
+- **Added:** 2026-10-08
+- **Where:** `avatar_token_for` in `aeronautics_members/services/teams.py`
+  (used by the top bar's `/me` in `api/session.py`, My Account and the team
+  lists), `aeronautics_members/api/admin_accounts.py` and
+  `frontend/src/pages/admin/Accounts.tsx`.
+- **Why:** on the live site the maintainer saw no pictures: not their own in
+  the top bar, none in Admin › Accounts. "Is that supposed to be like that?"
+  -- No. (1) The portal only uses a picture uploaded and approved in the
+  portal (`ForumAvatarSubmission`); a member who reconnected their old forum
+  account has their picture on the `ImportedForumProfile` (`avatar_path`,
+  served by `forum.forum_imported_avatar_public_file`, see
+  `services/forum_profiles.py`), which the forum gets but the portal ignores.
+  Most live members came from the old forum. (2) The Accounts list draws
+  initials only; its API sends no picture.
+- **What:** one helper for "this person's picture as an address": the approved
+  portal picture, else the reconnected old forum profile's; used by every place
+  that shows a person. The Accounts list rows get it too (load the pictures
+  with the page's rows, not one query per row).
+- **Open:** none.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
