@@ -124,6 +124,27 @@ or sooner by the rules there.
   portal picture, else the reconnected old forum profile's; used by every place
   that shows a person. The Accounts list rows get it too (load the pictures
   with the page's rows, not one query per row).
+- **Privacy policy, decided 2026-10-08:** the maintainer wants the pictures in
+  the portal too ("everyone sees their own picture … helpful for teams and
+  team leaders and new team members so that they can get to know each other …
+  if they are looking for someone, they could find them more easily"). The
+  policy (`legal/privacy-policy/{en,de}/2026-10-04.md`) describes the picture
+  only under § 22, the forum: "Name and profile picture may be visible to
+  other forum members within the members' forum." It does not say "only on
+  the forum", but it does not mention the portal either -- and the portal
+  already shows approved pictures to a team's members in its list
+  (`RosterPersonOut` in `api/teams.py`) and to leads (`api/team_manage.py`).
+  So, in the same batch, a new version of the policy (a new dated file, both
+  languages) that says where the portal shows the picture: to the member
+  themselves, to the other members of their teams and to those teams' leads,
+  and to administrators; for reconnected old-forum members, the old forum's
+  picture as well. In § 22 (and "profile picture" in the list in § 27). Shown
+  to the maintainer before it is published. No re-acceptance: the policy is
+  information, not a contract (§ 46).
+- **Not part of this:** a list where any member can look anyone up. The
+  Accounts list is for admins only; "finding someone" here means the team
+  lists. A member directory would be its own feature, with its own policy
+  text.
 - **Open:** none.
 
 ## Ideas for later (not scheduled)
