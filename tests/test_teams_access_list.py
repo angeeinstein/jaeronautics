@@ -289,8 +289,23 @@ class TestComparedWithTheLastList:
 
 
 @pytest.mark.usefixtures("switched_on")
-def test_switched_off_the_leads_see_none_of_it(app, client):
+def test_every_new_team_has_one_and_sends_nothing_until_set_up(app, client):
+    """The admins' switch went: a list nobody sends to is sent nowhere."""
     team, lead = _led()
+    _login(client, lead.id)
+
+    assert team.access_list_enabled is True
+    assert client.get(f"{API}/rocket/manage/access-list").status_code == 200
+    assert team.access_list_recipients is None and not team.access_list_auto_send
+
+
+@pytest.mark.usefixtures("switched_on")
+def test_switched_off_the_leads_see_none_of_it(app, client):
+    """Teams switched off by hand before the switch went (none should be left
+    after migration e5b8d3f1a2c4) still behave as before."""
+    team, lead = _led()
+    teams.set_access_list_enabled(None, team, False)
+    db.session.commit()
     _login(client, lead.id)
 
     assert client.get(f"{API}/rocket/manage").get_json()["access_list_enabled"] is False

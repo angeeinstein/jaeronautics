@@ -96,7 +96,7 @@ export function teamSidebar(team: Team): SidebarContent {
           settings
             ? { label: `${team.labels.singular} page`, to: `${base}/manage/page`, icon: IconLayout }
             : null,
-          settings ? { label: 'Applying', to: `${base}/manage/applying`, icon: IconForms } : null,
+          settings ? { label: 'Joining', to: `${base}/manage/applying`, icon: IconForms } : null,
           team.access_list_enabled && may(team, 'team.send_access_list')
             ? { label: 'Access list', to: `${base}/manage/access-list`, icon: IconListCheck }
             : null,

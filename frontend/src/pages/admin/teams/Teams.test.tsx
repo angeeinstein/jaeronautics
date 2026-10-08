@@ -178,10 +178,7 @@ describe('a new team', () => {
 
     expect(await sent(calls, 'POST', API)).toEqual({
       name: 'Glider',
-      admission_mode: 'approval',
-      max_members: null,
       forum_group: null,
-      access_list_enabled: false,
       slug: null,
       fee: null,
     });
@@ -230,19 +227,15 @@ describe('one team, in its own pages (site admins only)', () => {
       [`PUT ${API}/rocket`]: { body: team() },
     });
 
-    expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('Rocket Team');
-    const size = screen.getByRole('textbox', { name: 'Maximum size' });
-    await userEvent.clear(size);
-    await userEvent.click(screen.getByRole('checkbox', { name: /Has rooms that need an access list/ }));
+    const name = await screen.findByRole('textbox', { name: 'Name' });
+    expect(name).toHaveValue('Rocket Team');
+    // How people join, how many: the leads' now; the access list: every team's.
+    expect(screen.queryByRole('textbox', { name: 'Maximum size' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /access list/ })).toBeNull();
+    await userEvent.type(screen.getByRole('textbox', { name: /Forum group/ }), 'rocket');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await sent(calls, 'PUT', `${API}/rocket`)).toEqual({
-      name: 'Rocket Team',
-      admission_mode: 'approval',
-      max_members: null,
-      forum_group: null,
-      access_list_enabled: true,
-    });
+    expect(await sent(calls, 'PUT', `${API}/rocket`)).toEqual({ name: 'Rocket Team', forum_group: 'rocket' });
   });
 
   it('changes the fee only after a second click, and says what it did to the members', async () => {

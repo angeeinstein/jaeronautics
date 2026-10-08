@@ -528,6 +528,10 @@ class RulesInfoOut(Model):
 
 
 class ApplyingOut(Model):
+    #: How people join: open to every member, or by the leads' approval.
+    admission_mode: str
+    #: The most members the team takes; none: no limit.
+    max_members: int | None
     applications_open: bool
     #: Asked of applicants; none: they are not asked to write anything.
     application_prompt: str | None
@@ -538,11 +542,16 @@ class ApplyingOut(Model):
 class ApplyingIn(Model):
     applications_open: bool
     application_prompt: str | None = Field(None, max_length=255)
+    #: Left out: as it is.
+    admission_mode: Literal["approval", "open"] | None = None
+    #: Left out: as it is; null: no limit.
+    max_members: int | None = Field(None, ge=1)
 
 
 def _applying_out(team):
     rules = teams_service.team_rules(team)
     return ApplyingOut(
+        admission_mode=team.admission_mode, max_members=team.max_members,
         applications_open=bool(team.applications_open), application_prompt=team.application_prompt,
         rules=RulesInfoOut(version=rules.day, page_url=url_for("teams.team_rules_text", slug=team.slug),
                            pdf_url=url_for("teams.team_rules_pdf", slug=team.slug)) if rules else None,
@@ -557,10 +566,14 @@ def team_applying(slug):
 
 @endpoint("PUT", "/teams/<slug>/manage/applying", response=ApplyingOut, body=ApplyingIn, tag=TAG)
 def team_applying_save(slug, body):
-    """Save whether the team takes new members and the question for applicants."""
+    """Save how people join, how many the team takes, whether it takes new members and the question."""
     team = _managed(slug, P.EDIT_SETTINGS)
-    teams_service.update_team_by_lead(current_user, team, applications_open=body.applications_open,
-                                      application_prompt=body.application_prompt)
+    given = body.model_fields_set
+    teams_service.update_team_by_lead(
+        current_user, team, applications_open=body.applications_open, application_prompt=body.application_prompt,
+        admission_mode=body.admission_mode if body.admission_mode is not None else teams_service.KEEP,
+        max_members=body.max_members if "max_members" in given else teams_service.KEEP,
+    )
     _commit()
     return _applying_out(team)
 

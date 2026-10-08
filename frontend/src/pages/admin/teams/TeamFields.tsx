@@ -1,15 +1,19 @@
 /**
- * The admins' details of a team, and its fee -- the same fields for a new
- * team and an existing one. What the team says about itself is not here: its
- * leads keep that on the team's own management page.
+ * The admins' part of a team: its name and forum group, and its fee -- the
+ * same fields for a new team and an existing one. How people join, how many
+ * it takes, its page and its access list are its leads' (the team's own
+ * settings); what needs Stripe or the forum's admin side is the admins'.
  */
-import { Checkbox, NumberInput, Select, SimpleGrid, Stack, TextInput } from '@mantine/core';
+import { Select, SimpleGrid, TextInput } from '@mantine/core';
 
 import type { Schemas } from '../../../api/client';
-import { ADMISSION_CHOICES, PAYMENT_CHOICES } from './shared';
+import { PAYMENT_CHOICES } from './shared';
 
 export type Details = Schemas['TeamDetailsIn'];
 export type FeeFields = Schemas['FeeIn'];
+
+/** The help text under the box, so boxes side by side line up whatever their help says. */
+const BELOW: ('label' | 'input' | 'description' | 'error')[] = ['label', 'input', 'description', 'error'];
 
 export function DetailsFields({
   value,
@@ -21,63 +25,32 @@ export function DetailsFields({
   errors?: Record<string, string>;
 }) {
   return (
-    <Stack gap="md">
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-        <TextInput
-          label="Name"
-          required
-          maxLength={120}
-          value={value.name}
-          error={errors.name}
-          onChange={(event) => {
-            onChange({ ...value, name: event.currentTarget.value });
-          }}
-        />
-        <Select
-          label="Joining"
-          data={ADMISSION_CHOICES}
-          allowDeselect={false}
-          value={value.admission_mode}
-          onChange={(mode) => {
-            onChange({ ...value, admission_mode: (mode ?? 'approval') as Details['admission_mode'] });
-          }}
-        />
-        <NumberInput
-          label="Maximum size"
-          description="Empty for no limit."
-          min={1}
-          allowDecimal={false}
-          value={value.max_members ?? ''}
-          error={errors.max_members}
-          onChange={(size) => {
-            onChange({ ...value, max_members: typeof size === 'number' ? size : null });
-          }}
-        />
-        <TextInput
-          label="Forum group"
-          description="Optional. Its active members are put in this forum group, which has to exist on the forum."
-          maxLength={100}
-          value={value.forum_group ?? ''}
-          error={errors.forum_group}
-          onChange={(event) => {
-            onChange({ ...value, forum_group: event.currentTarget.value || null });
-          }}
-        />
-      </SimpleGrid>
-      <Checkbox
-        label="Has rooms that need an access list"
-        description="The list of current members for whoever gives access to the team's rooms. Off, the leads do not see it and nothing is sent."
-        checked={value.access_list_enabled ?? false}
+    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+      <TextInput
+        label="Name"
+        required
+        maxLength={120}
+        inputWrapperOrder={BELOW}
+        value={value.name}
+        error={errors.name}
         onChange={(event) => {
-          onChange({ ...value, access_list_enabled: event.currentTarget.checked });
+          onChange({ ...value, name: event.currentTarget.value });
         }}
       />
-    </Stack>
+      <TextInput
+        label="Forum group"
+        description="Optional. Its active members are put in this forum group, which has to exist on the forum."
+        maxLength={100}
+        inputWrapperOrder={BELOW}
+        value={value.forum_group ?? ''}
+        error={errors.forum_group}
+        onChange={(event) => {
+          onChange({ ...value, forum_group: event.currentTarget.value || null });
+        }}
+      />
+    </SimpleGrid>
   );
 }
-
-/** The help text under the box, so boxes side by side line up whatever their help says. */
-const BELOW: ('label' | 'input' | 'description' | 'error')[] = ['label', 'input', 'description', 'error'];
 
 export function FeeFieldsEditor({
   value,

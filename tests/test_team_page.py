@@ -249,13 +249,10 @@ class TestEditingThePage:
         teams.update_team_by_lead(None, team, description="Rockets.", applications_open=False)
         _login(client, _admin().id)
 
-        send(client, "PUT", "/api/v1/admin/teams/rocket", {
-            "name": "Rocket Team", "admission_mode": "approval", "access_list_enabled": True,
-        })
+        send(client, "PUT", "/api/v1/admin/teams/rocket", {"name": "Rocket Team"})
 
         assert (team.name, team.description, team.application_prompt, team.applications_open) == (
             "Rocket Team", "Rockets.", "Why?", False)
-        assert team.access_list_enabled is True
 
 
 @pytest.mark.usefixtures("switched_on")

@@ -17,6 +17,7 @@ import {
   FileInput,
   Group,
   List,
+  NumberInput,
   Select,
   SimpleGrid,
   Stack,
@@ -44,6 +45,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../../components/States
 import { formatDate } from '../../../lib/format';
 import about from '../About.module.css';
 import classes from '../Teams.module.css';
+import { ADMISSION_CHOICES } from '../../admin/teams/shared';
 import { ManageHeader, useManageChange, useSlug } from './shared';
 
 function Loaded<T>({
@@ -522,21 +524,52 @@ function ApplyingForm({
   const slug = useSlug();
   const [open, setOpen] = useState(applying.applications_open);
   const [prompt, setPrompt] = useState(applying.application_prompt ?? '');
+  const [mode, setMode] = useState(applying.admission_mode);
+  const [max, setMax] = useState<number | null>(applying.max_members);
   const save = useManageChange(
     applyingKey,
     () =>
       call(
         api.PUT('/api/v1/teams/{slug}/manage/applying', {
           params: { path: { slug } },
-          body: { applications_open: open, application_prompt: prompt || null },
+          body: {
+            applications_open: open,
+            application_prompt: prompt || null,
+            admission_mode: mode === 'open' ? 'open' : 'approval',
+            max_members: max,
+          },
         }),
       ),
     'Saved.',
   );
   return (
     <Stack gap="lg">
-      <Panel title="Applying">
+      <Panel title="Joining">
         <Stack gap="md">
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Select
+              label="How people join"
+              data={ADMISSION_CHOICES}
+              allowDeselect={false}
+              value={mode}
+              error={save.errors.admission_mode ?? null}
+              onChange={(next) => {
+                setMode(next ?? 'approval');
+              }}
+            />
+            <NumberInput
+              label="Most members"
+              description="Empty for no limit."
+              inputWrapperOrder={['label', 'input', 'description', 'error']}
+              min={1}
+              allowDecimal={false}
+              value={max ?? ''}
+              error={save.errors.max_members ?? null}
+              onChange={(size) => {
+                setMax(typeof size === 'number' ? size : null);
+              }}
+            />
+          </SimpleGrid>
           <Checkbox
             label="Accepting new members"
             checked={open}
@@ -602,8 +635,8 @@ export function Applying() {
   return (
     <>
       <ManageHeader
-        title="Applying"
-        description="Whether the team takes new members, and what they are asked."
+        title="Joining"
+        description="How people join, how many the team takes, and what applicants are asked."
       />
       <Loaded query={applying}>{(data) => <ApplyingForm applying={data} applyingKey={applyingKey} />}</Loaded>
     </>

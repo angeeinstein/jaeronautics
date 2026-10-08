@@ -10,7 +10,7 @@ import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { QueryClient } from '@tanstack/react-query';
 import { Applications } from './People';
 import { Person } from './Person';
-import { PageSettings, RolesPage } from './Settings';
+import { Applying, PageSettings, RolesPage } from './Settings';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -280,6 +280,34 @@ describe('leads', () => {
     expect(await screen.findByText('Lena Lead')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Appoint a lead' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+});
+
+describe('joining', () => {
+  it('the leads set how people join and how many', async () => {
+    const applying: Schemas['ApplyingOut'] = {
+      admission_mode: 'approval',
+      max_members: null,
+      applications_open: true,
+      application_prompt: null,
+      rules: null,
+    };
+    const { calls } = show(
+      <Applying />,
+      { [`${API}/applying`]: { body: applying }, [`PUT ${API}/applying`]: { body: applying } },
+      '/teams/rocket/manage/applying',
+      '/teams/:slug/manage/applying',
+    );
+
+    await userEvent.click(await screen.findByRole('combobox', { name: 'How people join' }));
+    await userEvent.click(screen.getByRole('option', { name: 'Open to every member' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Most members' }), '12');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      const sent = calls.find((call) => call.method === 'PUT');
+      expect(await sent?.clone().json()).toMatchObject({ admission_mode: 'open', max_members: 12 });
+    });
   });
 });
 

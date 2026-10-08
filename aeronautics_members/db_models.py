@@ -839,7 +839,9 @@ class Team(db.Model):
     # went out.
     # Switched on by site admins for teams that have rooms of their own; off,
     # the access list is nowhere to be seen and never sent.
-    access_list_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # Every team has an access list (migration e5b8d3f1a2c4); nothing is sent
+    # until somebody sends it or sets the automatic sending up.
+    access_list_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     access_list_recipients = db.Column(db.Text, nullable=True)
     access_list_dates = db.Column(db.String(255), nullable=True)
     access_list_auto_send = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())

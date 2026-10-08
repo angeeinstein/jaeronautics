@@ -256,7 +256,7 @@ class TestTheAdminPages:
         lead = _association_member("lead@example.com")
         _login(client, admin.id)
 
-        response = send(client, "POST", API, {"name": "Rocket Team", "admission_mode": "approval"})
+        response = send(client, "POST", API, {"name": "Rocket Team"})
         assert response.status_code == 201 and response.get_json()["slug"] == "rocket-team"
 
         roles = send(client, "POST", f"{API}/rocket-team/roles",
@@ -298,7 +298,7 @@ class TestTheAdminPages:
     def test_every_change_is_in_the_audit_log(self, app, client):
         admin = _staff("admin@example.com", "admin")
         _login(client, admin.id)
-        send(client, "POST", API, {"name": "Rocket", "admission_mode": "open"})
+        send(client, "POST", API, {"name": "Rocket"})
         send(client, "PUT", f"{API}/rocket/archived", {"archived": True, "confirm_name": "Rocket"})
 
         events = {entry.event_type for entry in db.session.query(AuditLog).filter_by(category="teams")}

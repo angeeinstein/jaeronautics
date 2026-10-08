@@ -891,15 +891,15 @@ this is how to use them.
 
 1. Switch teams on. While off, members see nothing of them; site admins can
    already open each team's pages to set them up.
-2. **New Team**: a name, how people join (by approval of the leads, or open to
-   every member), optionally a maximum size and a forum group, whether it
-   **has rooms that need an access list**, and its fee. Everything the team
-   says about itself -- descriptions, picture, logo, question for applicants,
-   rules -- is on its management page (*Team page and settings*), kept by its
-   leads; admins can open it too.
-3. **Give the lead role** by email address. A role counts only while its
-   holder is a member of the association *and* of the team, so the lead joins
-   the team like anybody else and an admin approves them.
+2. **New Team**: a name, optionally a forum group, and its fee. It starts by
+   approval of the leads and without a size limit; how people join, how many
+   it takes and everything the team says about itself -- descriptions,
+   picture, logo, question for applicants -- are its leads' (the team's own
+   settings), and admins can do the same there.
+3. **Give it a lead** on the team's *Roles* page, chosen by name from the
+   association's members. A role counts only while its holder is a member of
+   the association *and* of the team, so the lead joins the team like anybody
+   else.
 
 **A team's About page** (`/teams/<short name>/about`) presents the team to
 every signed-in visitor: a cover picture across the top with the logo, name,
@@ -922,8 +922,8 @@ their team page says the rules have changed.
 **Running a team** (its leads, from the team's side menu: open the team's tile under Teams), in sections:
 *Applications* (invite with the meeting details, approve, not accept),
 *Members*, *Former members*, *Team page* (descriptions, cover, logo, photos),
-*Applying* (open or closed, the question; the rules in force, read-only), *Access list* (only for
-teams that have one) and *Roles*. Each settings section is saved on its own.
+*Joining* (by approval or open, the most members, open for applications or
+not, the question; the rules in force, read-only), *Access list* and *Roles*. Each settings section is saved on its own.
 Also: notes about a person (not shown to them, but in their data export,
 without the author), removing somebody (immediately, with a reason that stays
 in the record), and an export of the current members. Under *Roles* the leads
@@ -935,13 +935,13 @@ it yet; the role counts once they have joined.
 
 **Site admins in a team.** A site admin runs a team from the team's own pages
 like its leads, and sees one more group in its side menu, *Admin*: the team's
-*Details* (name, joining, places, forum group, access list switch), its *Fee*
-and *Archive*. Admin › Teams lists the teams and creates new ones; a row and a
+*Details* (name and forum group), its *Fee* and *Archive* -- what needs
+Stripe or the forum's admin side, and closing the team. Admin › Teams lists the teams and creates new ones; a row and a
 new team open the team's own pages. The old address `/admin/teams/<team>`
 forwards there.
 
-**Access list.** Only for teams with rooms: site admins switch it on in the
-team's admin form; off, the leads do not see it and nothing is sent. In the
+**Access list.** Every team has one (the admins' switch went in October
+2026). Nothing is sent until the leads set it up or send it by hand. In the
 leads' *Access list* section: who receives it, on which days of the
 year (`15.10, 15.03`), and whether it goes out by itself on those days. The
 leads' page has *Preview and send* for sending it by hand. It marks who is new

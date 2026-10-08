@@ -1213,7 +1213,7 @@ export interface paths {
         };
         /** One team: its details, fee and roles. */
         get: operations["admin_team"];
-        /** Change a team's name, how people join, its size, forum group and access list. */
+        /** Change a team's name and forum group. */
         put: operations["admin_team_update"];
         post?: never;
         delete?: never;
@@ -1627,7 +1627,7 @@ export interface paths {
         };
         /** Whether the team takes new members, the question for applicants, and the rules they accept. */
         get: operations["team_applying"];
-        /** Save whether the team takes new members and the question for applicants. */
+        /** Save how people join, how many the team takes, whether it takes new members and the question. */
         put: operations["team_applying_save"];
         post?: never;
         delete?: never;
@@ -2410,19 +2410,33 @@ export interface components {
         /** ApplyingIn */
         ApplyingIn: {
             /**
+             * Admission Mode
+             * @default null
+             */
+            admission_mode?: ("open" | "approval") | null;
+            /**
              * Application Prompt
              * @default null
              */
             application_prompt?: string | null;
             /** Applications Open */
             applications_open: boolean;
+            /**
+             * Max Members
+             * @default null
+             */
+            max_members?: number | null;
         };
         /** ApplyingOut */
         ApplyingOut: {
+            /** Admission Mode */
+            admission_mode: string;
             /** Application Prompt */
             application_prompt: string | null;
             /** Applications Open */
             applications_open: boolean;
+            /** Max Members */
+            max_members: number | null;
             rules: components["schemas"]["RulesInfoOut"] | null;
         };
         /** ArchivedIn */
@@ -4340,16 +4354,6 @@ export interface components {
         };
         /** NewTeamIn */
         NewTeamIn: {
-            /**
-             * Access List Enabled
-             * @default false
-             */
-            access_list_enabled?: boolean;
-            /**
-             * Admission Mode
-             * @enum {string}
-             */
-            admission_mode: "approval" | "open";
             /** @default null */
             fee?: components["schemas"]["FeeIn"] | null;
             /**
@@ -4357,11 +4361,6 @@ export interface components {
              * @default null
              */
             forum_group?: string | null;
-            /**
-             * Max Members
-             * @default null
-             */
-            max_members?: number | null;
             /** Name */
             name: string;
             /**
@@ -5206,28 +5205,18 @@ export interface components {
             /** Slug */
             slug: string;
         };
-        /** TeamDetailsIn */
+        /**
+         * TeamDetailsIn
+         * @description The association's part of a team besides its fee. How people join and
+         *     how many it takes are its leads' (team_manage.py, applying); every team
+         *     has an access list.
+         */
         TeamDetailsIn: {
-            /**
-             * Access List Enabled
-             * @default false
-             */
-            access_list_enabled?: boolean;
-            /**
-             * Admission Mode
-             * @enum {string}
-             */
-            admission_mode: "approval" | "open";
             /**
              * Forum Group
              * @default null
              */
             forum_group?: string | null;
-            /**
-             * Max Members
-             * @default null
-             */
-            max_members?: number | null;
             /** Name */
             name: string;
         };
