@@ -3,11 +3,10 @@
  * where it has one (a drawer on a phone), the area's notices, the page, and
  * the footer.
  *
- * The menu button at the far left: in the admin area it folds the sidebar
- * away and back; anywhere else it slides the admin menu in from the left, for
- * whoever may administer something -- the admin area has no link of its own
- * in the bar. On a phone it opens the page's own sidebar (admin, or a team's
- * management), else the admin menu.
+ * The menu button at the far left is there where a page has a sidebar (the
+ * admin area, a team's management): it folds it away and back, and on a
+ * phone opens it. The way into the admin area is the gear at the right of the
+ * top bar.
  * Waits for the person (``/me``) once; a page inside never shows without it.
  */
 import { Alert, AppShell, Button, Center, Drawer, Group, Loader, Stack, Text } from '@mantine/core';
@@ -24,7 +23,7 @@ import classes from './Frame.module.css';
 import type { SidebarContent } from './navigation';
 import { Sidebar } from './Sidebar';
 import { TestServerBar } from './TestServerBar';
-import { type MenuButton, TopBar } from './TopBar';
+import { TopBar } from './TopBar';
 
 const NOTICE_COLOURS = { info: 'brand', warning: 'amber', danger: 'red' } as const;
 
@@ -48,32 +47,20 @@ function Notices({ notices }: { notices: Schemas['Notice'][] }) {
   );
 }
 
-/** A sidebar in from the left, named for whoever cannot see it; a page chosen in it closes it. */
+/** On a phone, the sidebar in from the left, named for whoever cannot see it; a page chosen in it closes it. */
 function MenuDrawer({
-  label,
   content,
   opened,
   onClose,
-  hiddenFrom,
-  visibleFrom,
 }: {
-  label: string;
   content: SidebarContent;
   opened: boolean;
   onClose: () => void;
-  hiddenFrom?: 'sm';
-  visibleFrom?: 'sm';
 }) {
   return (
-    <Drawer.Root
-      opened={opened}
-      onClose={onClose}
-      size="var(--ja-sidebar-width)"
-      hiddenFrom={hiddenFrom}
-      visibleFrom={visibleFrom}
-    >
+    <Drawer.Root opened={opened} onClose={onClose} size="var(--ja-sidebar-width)" hiddenFrom="sm">
       <Drawer.Overlay />
-      <Drawer.Content aria-label={label}>
+      <Drawer.Content aria-label="Sections">
         <Drawer.Body p={0} className={classes.drawerBody}>
           <Sidebar content={content} onNavigate={onClose} />
         </Drawer.Body>
@@ -113,23 +100,17 @@ export function Frame({ sidebar, notices, narrow = false, children }: FrameProps
   }
 
   const content = sidebar?.(me.data);
-  // The admin area's own sidebar is the admin menu: the button folds it.
-  const inAdmin = sidebar === adminSidebar;
-  const adminMenu = me.data.admin_area && !inAdmin ? adminSidebar(me.data) : undefined;
-  const phoneMenu = content ?? adminMenu;
-  const drawerButton = (label: string): MenuButton => ({
-    opened: drawerOpened,
-    label: drawerOpened ? 'Close the menu' : label,
-    toggle: drawer.toggle,
-  });
-  const menu = {
-    phone: phoneMenu ? drawerButton('Open the menu') : undefined,
-    wide: inAdmin
-      ? { opened: false, label: folded ? 'Show the admin menu' : 'Hide the admin menu', toggle: fold.toggle }
-      : adminMenu
-        ? drawerButton('Open the admin menu')
-        : undefined,
-  };
+  const which = sidebar === adminSidebar ? 'the admin menu' : 'the menu';
+  const menu = content
+    ? {
+        phone: {
+          opened: drawerOpened,
+          label: drawerOpened ? 'Close the menu' : 'Open the menu',
+          toggle: drawer.toggle,
+        },
+        wide: { opened: false, label: `${folded ? 'Show' : 'Hide'} ${which}`, toggle: fold.toggle },
+      }
+    : undefined;
   return (
     <AppShell
       header={{ height: 'var(--ja-header-height)' }}
@@ -138,7 +119,7 @@ export function Frame({ sidebar, notices, narrow = false, children }: FrameProps
           ? {
               width: 'var(--ja-sidebar-width)',
               breakpoint: 'sm',
-              collapsed: { mobile: true, desktop: inAdmin && folded },
+              collapsed: { mobile: true, desktop: folded },
             }
           : undefined
       }
@@ -152,7 +133,7 @@ export function Frame({ sidebar, notices, narrow = false, children }: FrameProps
         // Gone on a phone, not only moved out of view: the drawer has it there.
         <AppShell.Navbar withBorder={false} visibleFrom="sm">
           {/* Folded away it is gone, not only out of view: nothing in it to tab to. */}
-          {inAdmin && folded ? null : <Sidebar content={content} />}
+          {folded ? null : <Sidebar content={content} />}
         </AppShell.Navbar>
       ) : null}
       <AppShell.Main>
@@ -169,25 +150,7 @@ export function Frame({ sidebar, notices, narrow = false, children }: FrameProps
           <Footer />
         </div>
       </div>
-      {phoneMenu ? (
-        <MenuDrawer
-          label="Sections"
-          content={phoneMenu}
-          opened={drawerOpened}
-          onClose={drawer.close}
-          hiddenFrom="sm"
-        />
-      ) : null}
-      {adminMenu ? (
-        // On a wider screen outside the admin area: the admin menu, in from the left.
-        <MenuDrawer
-          label="Admin menu"
-          content={adminMenu}
-          opened={drawerOpened}
-          onClose={drawer.close}
-          visibleFrom="sm"
-        />
-      ) : null}
+      {content ? <MenuDrawer content={content} opened={drawerOpened} onClose={drawer.close} /> : null}
     </AppShell>
   );
 }

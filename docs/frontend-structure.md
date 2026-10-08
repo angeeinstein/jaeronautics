@@ -41,7 +41,7 @@ that appears when entering the admin area.
    sidebar *or* tabs on a detail page -- never a sidebar, tabs and a list.
 2. **The top bar says which area; the sidebar says where in it.** Areas:
    Forum, Teams, Admin -- My Account is the user menu and the logo, the
-   admin area the ☰ button. Each sidebar belongs to one area and replaces the
+   admin area the gear beside it. Each sidebar belongs to one area and replaces the
    previous one rather than nesting inside it.
 3. **Every page in a sidebar area has a breadcrumb** whose first entry is the
    area (Admin › Accounts › Anna Berger). It replaces "Back" buttons.
@@ -61,17 +61,21 @@ that appears when entering the admin area.
 
 ### Top bar (every page while signed in)
 
-- Far left, for whoever may administer something: the **☰ button**, right
-  above where the admin menu is. In the admin area it folds the sidebar away
-  and back; anywhere else it slides the admin menu in from the left. The admin
-  area has no link of its own in the bar (since October 2026: a link at the
-  right that opened a menu at the left felt wrong).
+- Far left, where a page has a sidebar (the admin area, a team's
+  management): the **☰ button**, right above it. It folds the sidebar away
+  and back; on a phone it opens it as a drawer.
 - Then the logo mark, "Aeronautics" and a small "Members" label (the portal is
   not the association's website).
 - Links: **Forum** (for a member: `/forum`, which signs them into the forum or
   says what is still missing) and **Teams** (while teams are switched on).
   The current area is underlined in the accent colour. My Account has no link
   here since October 2026: it is the user menu, and the logo.
+- Right, for whoever may administer something: a **gear** (*Admin*) into the
+  admin area, beside the user menu -- as on many sites, the back office behind
+  an icon by the person, so the pages everybody uses stay as they are. It is
+  lit while one is in the admin area. (Before: a link among the areas, whose
+  menu then opened at the far left, which felt wrong; then a menu button that
+  slid the admin menu in over other pages, which did too.)
 - Right: **the user menu** -- the approved forum picture (or the initials) and
   the name. The one place to change the password from. Opens a
   small menu: name and email, *My account*, *Change password*, *Download my
@@ -102,8 +106,7 @@ own legal texts unless an address elsewhere is configured.
 
 ## 4. The admin area
 
-Entered with the **☰** button at the left of the top bar; opens on the page
-chosen there (the Dashboard first).
+Entered with the **gear** at the right of the top bar; opens on the Dashboard.
 
 **Sidebar**, top to bottom:
 
@@ -254,8 +257,7 @@ its login address, *Become a member* and its data.
   the avatar); it scrolls sideways if it ever has to.
 - A sidebar becomes a drawer: the **☰** button at the left of the top bar
   opens it over the page with a dimmed background; choosing an item or tapping
-  the background closes it. Where a page has no sidebar, the button opens the
-  admin menu, for whoever may administer something.
+  the background closes it.
 - Two-column card grids become one column; label/value lists stack.
 
 ## 10. Accessibility

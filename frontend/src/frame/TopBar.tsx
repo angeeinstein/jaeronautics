@@ -1,16 +1,14 @@
 /**
- * The top bar on every page while signed in: the menu button, the logo, the
- * areas (the Forum for a member, Teams while teams are on), the person's menu
- * -- their picture and name, the way to their account. On a phone the logo
+ * The top bar on every page while signed in: the menu button where a page
+ * has a sidebar (it sits right above it), the logo, the areas (the Forum for a
+ * member, Teams while teams are on), then at the right, for whoever may
+ * administer something, the gear into the admin area -- as on many sites, the
+ * "back office" behind an icon beside the person -- and the person's menu:
+ * their picture and name, the way to their account. On a phone the logo
  * shrinks to the mark.
- *
- * The menu button sits at the far left, above where the menu it opens comes
- * in. For whoever may administer something it is always there: the way into
- * the admin area, which has no area link of its own (Frame decides what the
- * button opens). Without that, it is there on a phone where a page has a
- * sidebar, to open it.
  */
-import { Box, Burger, Group } from '@mantine/core';
+import { ActionIcon, Box, Burger, Group, Tooltip } from '@mantine/core';
+import { IconSettings } from '@tabler/icons-react';
 import { useLocation } from 'react-router';
 
 import { AppLink } from '../app/AppLink';
@@ -57,9 +55,29 @@ function MenuBurger({ button, size }: { button: MenuButton; size: 'phone' | 'wid
   );
 }
 
+/** Into the admin area, marked while one is in it. */
+function AdminGear() {
+  const inAdmin = /^\/admin(\/|$)/.test(useLocation().pathname);
+  return (
+    <Tooltip label="Admin" openDelay={300}>
+      <ActionIcon
+        component={AppLink}
+        to="/admin"
+        variant="subtle"
+        size="lg"
+        className={classes.gear}
+        aria-label="Admin"
+        aria-current={inAdmin ? 'page' : undefined}
+      >
+        <IconSettings size={20} stroke={1.6} />
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
 export function TopBar({ me, menu }: TopBarProps) {
   const current = areaOf(useLocation().pathname);
-  // My Account is the menu at the right, and the logo; the admin area is the menu button.
+  // My Account is the menu at the right, and the logo; the admin area is the gear.
   const all: { area: Area; label: string; to: string; shown: boolean; server?: boolean }[] = [
     // The server's own address: it signs a member into the forum, or says what is still missing.
     { area: 'forum', label: 'Forum', to: '/forum', shown: me.forum_area, server: true },
@@ -109,7 +127,10 @@ export function TopBar({ me, menu }: TopBarProps) {
           </Group>
         ) : null}
       </Group>
-      <UserMenu me={me} />
+      <Group gap="xs" wrap="nowrap">
+        {me.admin_area ? <AdminGear /> : null}
+        <UserMenu me={me} />
+      </Group>
     </Group>
   );
 }

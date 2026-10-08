@@ -1,16 +1,17 @@
 import { expect, signIn, test } from './fixtures';
 
 test.describe('the admin frame', () => {
-  test('the menu button at the left leads in, and folds the menu away', async ({ page, isMobile }) => {
-    test.skip(isMobile, 'on a phone the button opens the drawer: below');
+  test('the gear at the right leads in; the menu button folds the menu away', async ({ page, isMobile }) => {
     await signIn(page);
     await page.goto('/account');
 
-    await page.getByRole('button', { name: 'Open the admin menu' }).click();
-    await page.getByRole('dialog', { name: 'Admin menu' }).getByRole('link', { name: 'Dashboard' }).click();
+    const gear = page.getByRole('banner').getByRole('link', { name: 'Admin' });
+    await gear.click();
 
     await expect(page.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
     await expect(page).toHaveTitle(/Dashboard/);
+    await expect(gear).toHaveAttribute('aria-current', 'page');
+    if (isMobile) return; // on a phone the menu is a drawer: below
     const sections = page.getByRole('navigation', { name: 'Sections' });
     await expect(sections.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
     await page.getByRole('button', { name: 'Hide the admin menu' }).click();

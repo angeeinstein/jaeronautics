@@ -75,6 +75,20 @@
   }
 }
 
+/* The way into the admin area, beside the person: the accent while in it. */
+.gear {
+  color: var(--ja-text);
+}
+
+.gear:hover {
+  color: var(--ja-accent);
+}
+
+.gear[aria-current='page'] {
+  color: var(--ja-accent);
+  background: color-mix(in srgb, var(--ja-accent) 14%, transparent);
+}
+
 .userButton {
   display: flex;
   align-items: center;

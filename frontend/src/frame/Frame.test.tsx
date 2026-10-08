@@ -121,20 +121,46 @@ describe('the menu button', () => {
     expect(screen.getByRole('button', { name: 'Show the admin menu' })).toBeInTheDocument();
   });
 
-  it('elsewhere brings the admin menu in, for whoever may administer', async () => {
+  it('on a page without a sidebar is not there; the gear at the right leads into the admin area', async () => {
     member();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Open the admin menu' }));
-
-    const menu = await screen.findByRole('dialog', { name: 'Admin menu' });
-    expect(within(menu).getByRole('link', { name: 'Accounts' })).toHaveAttribute('href', '/admin/accounts');
+    const gear = await screen.findByRole('link', { name: 'Admin' });
+    expect(gear).toHaveAttribute('href', '/admin');
+    expect(gear).not.toHaveAttribute('aria-current');
+    expect(screen.queryByRole('button', { name: /menu$/ })).not.toBeInTheDocument();
   });
 
-  it('is not there for a member who administers nothing', async () => {
+  it('the gear is marked while in the admin area', async () => {
+    admin();
+
+    expect(await screen.findByRole('link', { name: 'Admin' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('where a page has a menu of its own, folds that one, and nothing comes in over it', async () => {
+    mockFetch({ '/api/v1/me': { body: makeMe() } });
+    renderPage(
+      <Frame
+        sidebar={() => ({
+          back: { label: 'All teams', to: '/teams' },
+          groups: [{ label: 'People', items: [{ label: 'Members', to: '/teams/rocket/manage/members' }] }],
+        })}
+      >
+        <p>Page</p>
+      </Frame>,
+      { route: '/teams/rocket/manage/members' },
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Hide the menu' }));
+
+    expect(screen.getByRole('button', { name: 'Show the menu' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('a member who administers nothing has no gear', async () => {
     member(makeMe({ admin_area: false, roles: [], permissions: [] }));
 
     await screen.findByRole('navigation', { name: 'Areas' });
-    expect(screen.queryByRole('button', { name: /menu$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument();
   });
 });
 
