@@ -96,6 +96,9 @@ class MeOut(Model):
     admin_area: bool
     #: A member's way into the forum (/forum): everybody with a membership.
     forum_area: bool
+    #: /forum would open the forum itself (not the page saying what is still
+    #: missing): the top bar then opens it in a new tab.
+    forum_ready: bool = False
     teams_area: bool
     team_labels: TeamLabels
     counts: Counts
@@ -123,6 +126,15 @@ def _admin_notices():
     return notices
 
 
+def _forum_ready(member):
+    """What /forum decides (blueprints/forum.py, forum_entry): it lets them in."""
+    if member is None or not current_user.email_is_verified:
+        return False
+    from ..app import build_forum_context
+
+    return bool(build_forum_context(member)["can_enter_forum"])
+
+
 @endpoint("GET", "/me", response=MeOut, tag="Session")
 def me():
     """The signed-in person, what they may see, and the counts for their menus."""
@@ -140,6 +152,7 @@ def me():
         permissions=sorted(current_user.permissions),
         admin_area=admin_area,
         forum_area=member is not None,
+        forum_ready=_forum_ready(member),
         teams_area=teams_enabled(),
         team_labels=TeamLabels(singular=singular, plural=plural),
         counts=Counts(reviews_waiting=waiting_for_review_count(current_user)),

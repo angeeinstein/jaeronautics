@@ -76,6 +76,9 @@ export function DetailsFields({
   );
 }
 
+/** The help text under the box, so boxes side by side line up whatever their help says. */
+const BELOW: ('label' | 'input' | 'description' | 'error')[] = ['label', 'input', 'description', 'error'];
+
 export function FeeFieldsEditor({
   value,
   onChange,
@@ -85,6 +88,7 @@ export function FeeFieldsEditor({
 }) {
   const charging = value.payment_mode !== 'none';
   return (
+    // Help under the boxes, not between label and box: the three boxes line up.
     <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
       <Select
         label="Payment"
@@ -97,6 +101,7 @@ export function FeeFieldsEditor({
       />
       <TextInput
         label="Stripe price ID"
+        inputWrapperOrder={BELOW}
         placeholder="price_…"
         description="On a product of the team's own: a recurring price for a subscription, a one-time price for once per period."
         maxLength={100}
@@ -108,6 +113,7 @@ export function FeeFieldsEditor({
       />
       <TextInput
         label="Periods start on"
+        inputWrapperOrder={BELOW}
         placeholder="01.10, 01.04"
         description="Day and month. Joining pays the period under way; Stripe charges at each start."
         maxLength={100}

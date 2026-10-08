@@ -537,6 +537,18 @@
               }
             ]
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Picture Url"
+          },
           "recent_activity": {
             "items": {
               "$ref": "#/components/schemas/AccountActivity"
@@ -5917,6 +5929,11 @@
           },
           "forum_area": {
             "title": "Forum Area",
+            "type": "boolean"
+          },
+          "forum_ready": {
+            "default": false,
+            "title": "Forum Ready",
             "type": "boolean"
           },
           "forum_username": {

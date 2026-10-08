@@ -26,6 +26,7 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
     ],
     admin_area: true,
     forum_area: true,
+    forum_ready: false,
     teams_area: true,
     team_labels: { singular: 'Team', plural: 'Teams' },
     counts: { reviews_waiting: 0 },

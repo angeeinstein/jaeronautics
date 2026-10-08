@@ -2277,6 +2277,11 @@ export interface components {
             /** Name */
             name: string | null;
             old_forum: components["schemas"]["OldForum"] | null;
+            /**
+             * Picture Url
+             * @default null
+             */
+            picture_url?: string | null;
             /** Recent Activity */
             recent_activity: components["schemas"]["AccountActivity"][];
             /** Roles */
@@ -3998,6 +4003,11 @@ export interface components {
             first_name: string | null;
             /** Forum Area */
             forum_area: boolean;
+            /**
+             * Forum Ready
+             * @default false
+             */
+            forum_ready?: boolean;
             /** Forum Username */
             forum_username: string | null;
             /** Id */

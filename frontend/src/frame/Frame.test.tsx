@@ -35,6 +35,15 @@ describe('the frame', () => {
     expect(within(areas).getByRole('link', { name: 'Forum' })).toHaveAttribute('href', '/forum');
   });
 
+  it('opens the forum in a new tab once it would open, and says so', async () => {
+    admin(makeMe({ forum_ready: true }));
+    const areas = await screen.findByRole('navigation', { name: 'Areas' });
+
+    const forum = within(areas).getByRole('link', { name: 'Forum (opens in a new tab)' });
+    expect(forum).toHaveAttribute('target', '_blank');
+    expect(forum).toHaveAttribute('rel', 'noopener');
+  });
+
   it('leaves out Teams while teams are off, Admin without access, the Forum without a membership', async () => {
     admin(makeMe({ teams_area: false, admin_area: false }));
     const areas = await screen.findByRole('navigation', { name: 'Areas' });
