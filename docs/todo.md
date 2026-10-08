@@ -67,6 +67,43 @@ or sooner by the rules there.
   without a lead), anything that only works on the sample data. Fixes go in
   the same batch; anything bigger becomes its own item here.
 
+### Installer: no second nginx configuration for the portal
+
+- **Added:** 2026-10-08
+- **Where:** `install.sh` -- `render_nginx_config` and where `NGINX_CONF_PATH`
+  is chosen (`sites-available/` when it and `sites-enabled/` exist, else
+  `conf.d/`).
+- **Why:** after the update to the new front end the live site looked broken
+  (Mantine's default blue, rounded buttons; content under the top bar; both
+  logos at once). Cause: an old `/etc/nginx/conf.d/jaeronautics.conf` from an
+  earlier installation still set a fixed `Content-Security-Policy` with
+  `style-src 'self'`. nginx reads `conf.d/` first, so that file served the
+  domain, and every update wrote the real configuration to
+  `sites-available/jaeronautics.conf`, where nginx ignored it. Two policies
+  arrived, and the stricter one blocked the app's nonce'd `<style>` tags.
+  Fixed on the live server by hand (the old file moved to
+  `/root/jaeronautics.conf.old-nginx`).
+- **What:** when writing the configuration, a file for the same service in the
+  other place (`conf.d/<service>.conf` when writing to `sites-available/`, and
+  the reverse) is moved into the update's backup folder, with a warning in the
+  update's output; then `nginx -t` before the reload.
+- **Open:** none.
+
+### System health: warn when a page has two security policies
+
+- **Added:** 2026-10-08
+- **Where:** `aeronautics_members/services/diagnostics.py` (System health),
+  Admin › Settings › System health.
+- **Why:** the problem above showed only as a broken-looking site; nothing in
+  the portal said why.
+- **What:** System health fetches the portal's own start page through its
+  public address and looks at the answer's headers: more than one
+  `Content-Security-Policy`, or one without the page's nonce in `style-src`,
+  is a warning that says what it means ("something between the portal and the
+  browser -- an old nginx file, a Cloudflare rule -- adds a second policy;
+  pages then look broken") and where to look.
+- **Open:** none.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
