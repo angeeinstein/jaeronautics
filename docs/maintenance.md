@@ -1917,7 +1917,14 @@ the API's types and the tests: `frontend/README.md`.
 **Security policy.** The portal sets the Content-Security-Policy on every
 answer itself (`aeronautics_members/content_security.py`), with a fresh nonce
 each time, which the front end's `<style>` tags carry. nginx sets none: a
-second, fixed policy would apply as well and block what the first allows.
+second, fixed policy would apply as well and block what the first allows --
+the pages then look broken (Mantine's blue, rounded buttons, content under
+the top bar). It happened once, from an old `conf.d/` file of an earlier
+installation that nginx read before the real one. Since then the installer
+moves a file of its own from the other place (`conf.d/` or
+`sites-available/`) into the update's backups and warns about any other file
+naming the domain (`retire_other_nginx_configs`), and System health warns
+when a page arrives with two policies, or one without the nonce.
 
 ## Linting
 
