@@ -146,6 +146,14 @@ const upToDate: Schemas['UpdatesOut'] = {
   },
   latest: 'bbbb2222',
   latest_check_failed: false,
+  newer_version: true,
+  latest_check: {
+    state: 'passed',
+    url: null,
+    started_at: null,
+    minutes_running: null,
+    typical_minutes: null,
+  },
   update_available: true,
   runner_installed: true,
   in_progress: false,
@@ -192,6 +200,49 @@ describe('updates', () => {
     expect(calls.some((call) => call.method === 'POST')).toBe(false);
   });
 
+  it('a version CI is still checking is not offered yet', async () => {
+    const checking: Schemas['UpdatesOut'] = {
+      ...upToDate,
+      update_available: false,
+      latest_check: {
+        state: 'running',
+        url: null,
+        started_at: null,
+        minutes_running: null,
+        typical_minutes: 12,
+      },
+    };
+    show(<Updates />, { [UPDATES]: { body: checking } });
+
+    expect(
+      await screen.findByText(/A new version is being checked \(starting; usually about 12 minutes\)/),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Being checked')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Install update now' })).toBeDisabled();
+  });
+
+  it('nor one whose checks failed', async () => {
+    const failed: Schemas['UpdatesOut'] = {
+      ...upToDate,
+      update_available: false,
+      latest_check: {
+        state: 'failed',
+        url: 'https://github.com/o/r/actions/runs/8',
+        started_at: null,
+        minutes_running: null,
+        typical_minutes: null,
+      },
+    };
+    show(<Updates />, { [UPDATES]: { body: failed } });
+
+    expect(await screen.findByText(/did not pass its checks/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See what failed' })).toHaveAttribute(
+      'href',
+      'https://github.com/o/r/actions/runs/8',
+    );
+    expect(screen.getByRole('button', { name: 'Install update now' })).toBeDisabled();
+  });
+
   it('follows the update through the restart, then loads the new version', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { answers } = show(<Updates />, {
@@ -221,7 +272,13 @@ describe('updates', () => {
 
     // Back, with the update done.
     answers[UPDATES] = {
-      body: { ...upToDate, update_available: false, last_run: { ...upToDate.last_run, state: 'completed' } },
+      body: {
+        ...upToDate,
+        update_available: false,
+        newer_version: false,
+        latest_check: null,
+        last_run: { ...upToDate.last_run, state: 'completed' },
+      },
     };
     await act(() => vi.advanceTimersByTimeAsync(2_500));
     expect(await screen.findByText('Finished. Loading the new version…')).toBeInTheDocument();

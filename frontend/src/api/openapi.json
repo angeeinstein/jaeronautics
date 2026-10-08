@@ -4965,6 +4965,75 @@
         "title": "LastRunOut",
         "type": "object"
       },
+      "LatestCheckOut": {
+        "additionalProperties": false,
+        "description": "Whether CI passed for the newest version: it is offered once it has.",
+        "properties": {
+          "minutes_running": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes Running"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "enum": [
+              "passed",
+              "running",
+              "failed",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "typical_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typical Minutes"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "state",
+          "url",
+          "started_at",
+          "minutes_running",
+          "typical_minutes"
+        ],
+        "title": "LatestCheckOut",
+        "type": "object"
+      },
       "LeaveIn": {
         "additionalProperties": false,
         "properties": {
@@ -11463,8 +11532,22 @@
             ],
             "title": "Latest"
           },
+          "latest_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestCheckOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "latest_check_failed": {
             "title": "Latest Check Failed",
+            "type": "boolean"
+          },
+          "newer_version": {
+            "title": "Newer Version",
             "type": "boolean"
           },
           "progress": {
@@ -11497,6 +11580,8 @@
           "installed",
           "latest",
           "latest_check_failed",
+          "newer_version",
+          "latest_check",
           "update_available",
           "runner_installed",
           "in_progress",

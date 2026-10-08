@@ -23,7 +23,10 @@ the JSON status endpoint the page polls.
 import json
 import os
 import re
+import statistics
 import subprocess
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -77,6 +80,21 @@ UNCLAIMED_TOO_LONG = timedelta(minutes=15)
 BOOT_ID_PATH = Path("/proc/sys/kernel/random/boot_id")
 
 _remote_cache = {"checked_at": None, "value": None}
+
+# Whether CI passed for the newest revision. The installer only installs a
+# version whose CI passed -- it takes CI's build of the front end -- and waits
+# for CI while it runs (wait_for_ci in install.sh). Offering a version before
+# that would start an update that sits waiting for up to 25 minutes; so the page
+# asks GitHub the same question first. Unauthenticated: the repository is
+# public, and GitHub answers 60 such questions an hour, so the answers are kept:
+# briefly while CI runs, longer once it has a result.
+CI_WORKFLOW = ".github/workflows/ci.yml"
+CI_CHECK_TTL_SECONDS = {"running": 90, "none": 90, "unknown": 120}
+CI_RESULT_TTL_SECONDS = 1800
+CI_TYPICAL_TTL_SECONDS = 6 * 3600
+GITHUB_API = "https://api.github.com"
+_ci_cache = {}
+_typical_cache = {"checked_at": None, "value": None}
 
 
 def _run_git(args, timeout=10):
@@ -141,6 +159,94 @@ def get_remote_version(force=False):
     _remote_cache["checked_at"] = now
     _remote_cache["value"] = revision
     return revision
+
+
+def github_slug():
+    """``owner/repository`` of the deployment's remote on GitHub, or None."""
+    url = (_run_git(["config", "--get", "remote.origin.url"]) or "").strip()
+    match = re.match(r"^(?:https://github\.com/|git@github\.com:)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$", url)
+    return match.group(1) if match else None
+
+
+def _asks_github():
+    # Never from the test suite unless a test means to: it would go to the network.
+    return current_app.config.get("UPDATE_CI_CHECK", not current_app.testing)
+
+
+def _github_json(path):
+    """GitHub's answer to ``GET path``, or None when it cannot be had."""
+    request = urllib.request.Request(f"{GITHUB_API}{path}", headers={
+        "Accept": "application/vnd.github+json", "User-Agent": "jaeronautics-updates",
+    })
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 (a fixed host)
+            return json.loads(response.read(2_000_000))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        current_app.logger.info("GitHub could not be asked about CI: %s", exc)
+        return None
+
+
+def _iso(value):
+    return parse_time(value).isoformat() if parse_time(value) else None
+
+
+def ci_state(revision, force=False):
+    """Whether CI passed for ``revision``, as the installer asks it (ci_state in install.sh).
+
+    ``state``: success, running, none (no run yet -- a push only just made),
+    failure, or unknown (GitHub could not be asked, or the code is not on
+    GitHub). With the run's address and when it started.
+    """
+    slug = github_slug() if _asks_github() else None
+    if not slug or not revision:
+        return {"state": "unknown", "url": None, "started_at": None}
+    now = get_now_utc()
+    cached = _ci_cache.get(revision)
+    if cached and not force:
+        age = (now - cached[0]).total_seconds()
+        if age < CI_CHECK_TTL_SECONDS.get(cached[1]["state"], CI_RESULT_TTL_SECONDS):
+            return cached[1]
+
+    answer = _github_json(f"/repos/{slug}/actions/runs?head_sha={revision}&event=push&per_page=50")
+    actions = f"https://github.com/{slug}/actions"
+    if answer is None:
+        result = {"state": "unknown", "url": actions, "started_at": None}
+    else:
+        runs = [run for run in answer.get("workflow_runs") or []
+                if (run.get("path") or "").split("@")[0] == CI_WORKFLOW]
+        if not runs:
+            result = {"state": "none", "url": actions, "started_at": None}
+        else:
+            run = max(runs, key=lambda run: (run.get("run_number") or 0, run.get("run_attempt") or 0))
+            if run.get("status") != "completed":
+                state = "running"
+            elif run.get("conclusion") == "success":
+                state = "success"
+            else:
+                state = "failure"
+            result = {"state": state, "url": run.get("html_url") or actions,
+                      "started_at": _iso(run.get("run_started_at") or run.get("created_at"))}
+    _ci_cache.clear()  # only the newest revision is ever asked about
+    _ci_cache[revision] = (now, result)
+    return result
+
+
+def typical_ci_minutes():
+    """How long CI usually takes, from its last successful runs; None when unknown."""
+    now = get_now_utc()
+    if _typical_cache["checked_at"] and (now - _typical_cache["checked_at"]).total_seconds() < CI_TYPICAL_TTL_SECONDS:
+        return _typical_cache["value"]
+    slug = github_slug() if _asks_github() else None
+    answer = _github_json(f"/repos/{slug}/actions/workflows/ci.yml/runs?status=success&per_page=10") if slug else None
+    minutes = []
+    for run in (answer or {}).get("workflow_runs") or []:
+        started, finished = parse_time(run.get("run_started_at")), parse_time(run.get("updated_at"))
+        if started and finished and finished > started:
+            minutes.append((finished - started).total_seconds() / 60)
+    value = max(1, round(statistics.median(minutes))) if minutes else None
+    if answer is not None:
+        _typical_cache.update(checked_at=now, value=value)
+    return value
 
 
 def runner_is_installed():
@@ -456,7 +562,13 @@ def describe_update_state(force_remote_check=False):
         remote = get_remote_version(force=force_remote_check)
         remote_check_failed = remote is None
 
-    update_available = bool(remote and local.get("revision") and remote != local["revision"])
+    newer = bool(remote and local.get("revision") and remote != local["revision"])
+    # A newer version is offered once CI has passed for it -- or when GitHub
+    # cannot say, as before: the installer then asks again itself.
+    ci = ci_state(remote, force=force_remote_check) if newer else None
+    if ci and ci["state"] in ("running", "none"):
+        ci["typical_minutes"] = typical_ci_minutes()
+    update_available = newer and ci["state"] in ("success", "unknown")
     in_progress = update_is_in_progress()
 
     # While the update runs, prefer what the log says right now over the summary
@@ -478,6 +590,8 @@ def describe_update_state(force_remote_check=False):
         "remote_revision": remote,
         "remote_short_revision": remote[:8] if remote else None,
         "remote_check_failed": remote_check_failed,
+        "newer_version": newer,
+        "remote_ci": ci,
         "update_available": update_available,
         "runner_installed": runner_is_installed(),
         "in_progress": in_progress,

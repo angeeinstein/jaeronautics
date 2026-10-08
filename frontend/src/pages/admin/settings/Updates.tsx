@@ -4,13 +4,18 @@
  * ticked off as they happen, and below them, folded away, everything the
  * installer printed, as in a terminal.
  *
+ * A newer version is offered once CI has passed for it: the installer takes
+ * CI's build and would otherwise sit waiting for it. While CI runs the page
+ * says so, with about how long it usually takes, and looks again every
+ * minute; a version whose CI failed is not offered.
+ *
  * An update restarts the very server that answers this page, so while one
  * runs the page asks again every two seconds, takes a failed answer for the
  * restart it is, and once the update is done loads itself again -- with the
  * new version's front end. Data: GET|POST /api/v1/admin/settings/updates
  * (aeronautics_members/api/admin_system.py).
  */
-import { Alert, Button, Code, Collapse, Group, Progress, Stack, Text } from '@mantine/core';
+import { Alert, Anchor, Button, Code, Collapse, Group, Loader, Progress, Stack, Text } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
@@ -22,7 +27,7 @@ import { PageHeader } from '../../../components/PageHeader';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { ErrorState, LoadingState } from '../../../components/States';
-import { formatDateTime } from '../../../lib/format';
+import { formatDateTime, plural } from '../../../lib/format';
 import { notifyFailed } from '../../../lib/notify';
 import { reloadPage } from '../../../lib/reload';
 import classes from './Maintenance.module.css';
@@ -32,6 +37,8 @@ type Action = Schemas['UpdateIn']['action'];
 
 const KEY = ['admin', 'settings', 'updates'] as const;
 const POLL_MS = 2000;
+// While CI checks the newest version: the server asks GitHub at most every 90 s.
+const CI_POLL_MS = 60_000;
 const RELOAD_AFTER_MS = 1500;
 
 const STEP: Record<Schemas['UpdateStepOut']['state'], CheckState> = {
@@ -166,7 +173,12 @@ function Version({ state, onCheck, checking }: { state: State; onCheck: () => vo
                 Could not be checked right now.
               </Text>
             ) : (
-              <Code>{state.latest ?? 'unknown'}</Code>
+              <Group gap="xs">
+                <Code>{state.latest ?? 'unknown'}</Code>
+                {state.latest_check?.state === 'passed' ? <Pill tone="active">Checks passed</Pill> : null}
+                {state.latest_check?.state === 'running' ? <Pill tone="pending">Being checked</Pill> : null}
+                {state.latest_check?.state === 'failed' ? <Pill tone="failed">Checks failed</Pill> : null}
+              </Group>
             ),
           ],
         ]}
@@ -210,6 +222,28 @@ function Running({ state, phase }: { state: State; phase: 'running' | 'restartin
   );
 }
 
+/** A newer version that CI is still checking: since when, and about how long it takes. */
+function Checking({ check }: { check: NonNullable<State['latest_check']> }) {
+  const minutes = (count: number) => `${String(count)} ${plural(count, 'minute', 'minutes')}`;
+  const since =
+    check.minutes_running === null
+      ? 'starting'
+      : check.minutes_running < 1
+        ? 'started just now'
+        : `started ${minutes(check.minutes_running)} ago`;
+  const usually = check.typical_minutes ? `usually about ${minutes(check.typical_minutes)}` : null;
+  return (
+    <Alert color="brand" variant="light">
+      <Group gap="sm" wrap="nowrap" align="flex-start">
+        <Loader size="xs" mt={3} aria-hidden />
+        <Text size="sm">
+          {`A new version is being checked (${[since, usually].filter(Boolean).join('; ')}). It is offered here once its checks have passed; this page looks again by itself.`}
+        </Text>
+      </Group>
+    </Alert>
+  );
+}
+
 function Install({
   state,
   busy,
@@ -236,6 +270,17 @@ function Install({
           <Alert color="amber" variant="light">
             A newer version is available.
           </Alert>
+        ) : state.latest_check?.state === 'running' ? (
+          <Checking check={state.latest_check} />
+        ) : state.latest_check?.state === 'failed' ? (
+          <Alert color="red" variant="light">
+            The newest version did not pass its checks, so it is not offered.{' '}
+            {state.latest_check.url ? (
+              <Anchor href={state.latest_check.url} target="_blank" rel="noreferrer">
+                See what failed
+              </Anchor>
+            ) : null}
+          </Alert>
         ) : !state.latest_check_failed ? (
           <Alert color="green" variant="light">
             This installation is up to date.
@@ -245,7 +290,9 @@ function Install({
           <ConfirmButton
             color="brand"
             confirmLabel="Yes, install"
-            disabled={!state.runner_installed || state.in_progress}
+            disabled={
+              !state.runner_installed || state.in_progress || (state.newer_version && !state.update_available)
+            }
             loading={busy}
             onConfirm={() => {
               onStart('update');
@@ -362,7 +409,12 @@ export function Updates() {
   const updates = useQuery({
     queryKey: KEY,
     queryFn: () => call(api.GET('/api/v1/admin/settings/updates')),
-    refetchInterval: (query) => (watching || query.state.data?.in_progress ? POLL_MS : false),
+    refetchInterval: (query) =>
+      watching || query.state.data?.in_progress
+        ? POLL_MS
+        : query.state.data?.latest_check?.state === 'running'
+          ? CI_POLL_MS
+          : false,
     refetchIntervalInBackground: true,
   });
   const state = updates.data;

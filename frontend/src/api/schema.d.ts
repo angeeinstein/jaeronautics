@@ -3604,6 +3604,25 @@ export interface components {
             /** State */
             state: string | null;
         };
+        /**
+         * LatestCheckOut
+         * @description Whether CI passed for the newest version: it is offered once it has.
+         */
+        LatestCheckOut: {
+            /** Minutes Running */
+            minutes_running: number | null;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "passed" | "running" | "failed" | "unknown";
+            /** Typical Minutes */
+            typical_minutes: number | null;
+            /** Url */
+            url: string | null;
+        };
         /** LeaveIn */
         LeaveIn: {
             /**
@@ -5649,8 +5668,11 @@ export interface components {
             last_run: components["schemas"]["LastRunOut"];
             /** Latest */
             latest: string | null;
+            latest_check: components["schemas"]["LatestCheckOut"] | null;
             /** Latest Check Failed */
             latest_check_failed: boolean;
+            /** Newer Version */
+            newer_version: boolean;
             progress: components["schemas"]["ProgressOut"];
             /** Request Never Picked Up */
             request_never_picked_up: boolean;
