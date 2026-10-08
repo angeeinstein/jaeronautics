@@ -121,7 +121,8 @@
 .line {
   display: -webkit-box;
   overflow: hidden;
-  -webkit-line-clamp: 2;
+  /* One line is asked for; an older, longer description still fits in three. */
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   font-size: var(--mantine-font-size-sm);
   line-height: 1.45;

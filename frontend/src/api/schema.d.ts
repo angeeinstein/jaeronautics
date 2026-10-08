@@ -4555,6 +4555,8 @@ export interface components {
             about: string | null;
             /** Description */
             description: string | null;
+            /** Description Max */
+            description_max: number;
             /** Logo Url */
             logo_url: string | null;
             /** Photos */

@@ -7663,7 +7663,7 @@
           "description": {
             "anyOf": [
               {
-                "maxLength": 500,
+                "maxLength": 160,
                 "type": "string"
               },
               {
@@ -7702,6 +7702,10 @@
             ],
             "title": "Description"
           },
+          "description_max": {
+            "title": "Description Max",
+            "type": "integer"
+          },
           "logo_url": {
             "anyOf": [
               {
@@ -7738,6 +7742,7 @@
         },
         "required": [
           "description",
+          "description_max",
           "about",
           "picture_url",
           "logo_url",

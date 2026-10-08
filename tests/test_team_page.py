@@ -283,6 +283,14 @@ class TestTheManagementPage:
         assert body["applications_open"] is False and body["application_prompt"] == "Why rockets?"
         assert team.about == "We build rockets."
 
+    def test_the_short_description_is_one_line(self, app, client):
+        _team, lead = _led()
+        _login(client, lead.id)
+
+        too_long = send(client, "PUT", f"{API}/rocket/manage/page", {"description": "x" * 161, "about": None})
+        assert too_long.status_code == 400
+        assert send(client, "PUT", f"{API}/rocket/manage/page", {"description": "x" * 160, "about": None}).status_code == 200
+
     def test_an_old_link_to_a_section_opens_the_app(self, app, client):
         _team, lead = _led()
         _login(client, lead.id)

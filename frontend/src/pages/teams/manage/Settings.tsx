@@ -210,12 +210,16 @@ function TextPanel({ page, pageKey }: { page: Page; pageKey: readonly unknown[] 
       <Stack gap="md">
         <Textarea
           label="Short description"
-          description="One or two sentences: on the overview of all teams, and on the cover of the About page."
+          description={`One line, on the overview of all teams and the cover of the About page. What the team does, in a sentence: the rest goes below. ${String(description.length)} / ${String(page.description_max)}`}
           autosize
           minRows={2}
-          maxLength={500}
           value={description}
-          error={save.errors.description ?? null}
+          error={
+            save.errors.description ??
+            (description.length > page.description_max
+              ? `Too long by ${String(description.length - page.description_max)} characters: say the rest in the text below.`
+              : null)
+          }
           onChange={(event) => {
             setDescription(event.currentTarget.value);
           }}
@@ -254,6 +258,7 @@ function TextPanel({ page, pageKey }: { page: Page; pageKey: readonly unknown[] 
         <Group justify="flex-end">
           <Button
             loading={save.mutation.isPending}
+            disabled={description.length > page.description_max}
             onClick={() => {
               save.mutation.mutate(undefined);
             }}

@@ -380,9 +380,14 @@ def team_add_note(slug, user_id, body):
 # --- The team's page and applying --------------------------------------------------------
 
 
+DESCRIPTION_MAX = 160
+
+
 class PageOut(Model):
-    #: One or two sentences, on the overview.
+    #: One line, on the overview's card and the About page's cover.
     description: str | None
+    #: How long it may be.
+    description_max: int
     #: The longer text on the About page.
     about: str | None
     #: The cover of the About page.
@@ -395,12 +400,15 @@ class PageOut(Model):
 
 
 class PageIn(Model):
-    description: str | None = Field(None, max_length=500)
+    #: One line, for the overview's card and the About page's cover; the longer
+    #: text is ``about``. Older descriptions may be longer and are shown whole
+    #: until somebody saves the page again.
+    description: str | None = Field(None, max_length=DESCRIPTION_MAX)
     about: str | None = Field(None, max_length=teams_service.ABOUT_MAX_LENGTH)
 
 
 def _page_out(team):
-    return PageOut(description=team.description, about=team.about, logo_url=_logo_url(team),
+    return PageOut(description=team.description, description_max=DESCRIPTION_MAX, about=team.about, logo_url=_logo_url(team),
                    picture_url=url_for("teams.team_picture", token=team.picture_token) if team.picture_token else None,
                    photos=photos_out(team), photos_max=teams_service.PHOTOS_MAX)
 

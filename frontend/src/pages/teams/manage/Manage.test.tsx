@@ -283,6 +283,33 @@ describe('leads', () => {
   });
 });
 
+describe('the short description', () => {
+  it('counts towards one line, and a longer one is said and not sent', async () => {
+    show(
+      <PageSettings />,
+      {
+        [`${API}/page`]: {
+          body: {
+            description: 'x'.repeat(170),
+            description_max: 160,
+            about: null,
+            picture_url: null,
+            logo_url: null,
+            photos: [],
+            photos_max: 8,
+          },
+        },
+      },
+      '/teams/rocket/manage/page',
+      '/teams/:slug/manage/page',
+    );
+
+    expect(await screen.findByText(/170 \/ 160/)).toBeInTheDocument();
+    expect(screen.getByText(/Too long by 10 characters/)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Save' })[0]).toBeDisabled();
+  });
+});
+
 describe('the team page', () => {
   const photo = (id: number, caption: string | null): Schemas['PhotoOut'] => ({
     id,
@@ -293,6 +320,7 @@ describe('the team page', () => {
   });
   const page = (photos: Schemas['PhotoOut'][]): Schemas['PageOut'] => ({
     description: 'We build rockets.',
+    description_max: 160,
     about: '# Who we are',
     picture_url: null,
     logo_url: null,
