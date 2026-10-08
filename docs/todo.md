@@ -200,6 +200,48 @@ or sooner by the rules there.
   still stands out over a dark cover photo.
 - **Open:** none.
 
+### Teams: run from the team's own pages -- leads appoint leads, admins' settings in the side menu
+
+- **Added:** 2026-10-08
+- **Where:** the team's side menu (`teamSidebar` in
+  `frontend/src/frame/TeamLayout.tsx`), its Roles page (`RolesPage` in
+  `frontend/src/pages/teams/manage/Settings.tsx`, `team_roles` and the
+  treasurer endpoints in `aeronautics_members/api/team_manage.py`), the admin
+  team page (`frontend/src/pages/admin/teams/Team.tsx`, `api/admin_teams.py`),
+  the team permissions (`TEAM_ROLE_PERMISSIONS` in `services/teams.py`).
+- **Why:** the maintainer: making someone a team lead or treasurer "should be
+  done a bit more similar to the normal way I give someone roles … at the
+  moment it's a bit annoying to have to go into the admin settings and teams
+  and there give someone the team leader role … directly from the team page
+  … the roles tab … only for appointing a treasurer … could be changed to also
+  appoint a team leader … only shown to an admin or a team lead … a team lead
+  should also be possible and allowed to appoint another team lead … selection
+  based, like with the drop down … not … type in their exact email address."
+  And: "if I am an admin and I want to do some admin stuff about the team …
+  I just go to the team page and I just see more settings in the sidebar that
+  I only see because I am an admin … keep the teams section in the admin
+  settings because here new teams are created and set up for the first time
+  … the team roles and the team's fee and team's details … in the normal
+  teams settings."
+- **What, as decided:**
+  - **Roles page** (team › Settings › Roles): leads and treasurer, each
+    appointed from a drop-down, never by typed address. Leads and site admins
+    may appoint and remove leads (a change from `docs/teams-plan.md`, "Team
+    leads", which said only site admins); removing the last lead still asks
+    for confirmation. Leads still appoint the treasurer.
+  - **Who can be chosen:** a lead chooses from the team's members. A site
+    admin also from all of the association's members, searched by name --
+    the first lead of a new team is not in it yet. A role still only counts
+    while its holder is a member of the team (unchanged).
+  - **Admin settings in the team's side menu**, seen only by site admins
+    (`TEAMS_MANAGE`): the team's details (name, joining, places, forum group,
+    access list switch), its fee, and archiving it -- the cards of today's
+    admin team page, moved.
+  - **Admin › Teams stays** for the list of all teams and creating one; a row
+    leads to the team's own pages, and a new team opens on its admin details
+    there. The separate admin team page goes; its address forwards.
+- **Open:** none.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.

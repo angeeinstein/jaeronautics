@@ -26,7 +26,8 @@ class AccountListQuery(Model):
     role: str = Field("all", description='"all", "staff" (any admin role), "none" (no role) or a role\'s slug.')
     account: Literal["all", "active", "no_sign_in", "disabled", "erased"] = "all"
     kind: Literal["all", "portal", "archived"] = Field(
-        "all", description='"archived": carried over from the old forum and not reconnected yet.')
+        directory.DEFAULT_KIND,
+        description='"archived": carried over from the old forum and not reconnected yet. Left out unless asked for.')
     sort: Literal["name", "kind", "membership", "until", "forum"] = "name"
     dir: Literal["asc", "desc"] = "asc"
     page: int = Field(1, ge=1)
@@ -96,6 +97,10 @@ class AccountListOut(Model):
     membership_counts: MembershipCounts
     #: Every role, for the role filter.
     role_choices: list[Role]
+    #: A search among portal accounts: how many of the old forum's people,
+    #: left out, would match it too -- so they are one click away. ``None``
+    #: when nothing is searched, or the old forum's people are already in.
+    old_forum_matching: int | None = None
 
 
 def _row(user, state):
@@ -148,4 +153,6 @@ def admin_accounts(query):
         per_page=per_page,
         membership_counts=MembershipCounts(**directory.membership_counts(**others)),
         role_choices=[Role(slug=slug, label=label) for slug, label in directory.role_choices()],
+        old_forum_matching=(directory.count_accounts(**{**others, "kind": "archived"}, membership=query.membership)
+                            if query.q and query.kind == "portal" else None),
     )

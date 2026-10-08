@@ -289,6 +289,18 @@
           "membership_counts": {
             "$ref": "#/components/schemas/MembershipCounts"
           },
+          "old_forum_matching": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Old Forum Matching"
+          },
           "page": {
             "title": "Page",
             "type": "integer"
@@ -350,8 +362,8 @@
             "type": "string"
           },
           "kind": {
-            "default": "all",
-            "description": "\"archived\": carried over from the old forum and not reconnected yet.",
+            "default": "portal",
+            "description": "\"archived\": carried over from the old forum and not reconnected yet. Left out unless asked for.",
             "enum": [
               "all",
               "portal",
@@ -12482,8 +12494,8 @@
             "name": "kind",
             "required": false,
             "schema": {
-              "default": "all",
-              "description": "\"archived\": carried over from the old forum and not reconnected yet.",
+              "default": "portal",
+              "description": "\"archived\": carried over from the old forum and not reconnected yet. Left out unless asked for.",
               "enum": [
                 "all",
                 "portal",

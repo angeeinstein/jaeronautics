@@ -2131,6 +2131,11 @@ export interface components {
             /** Items */
             items: components["schemas"]["AccountRow"][];
             membership_counts: components["schemas"]["MembershipCounts"];
+            /**
+             * Old Forum Matching
+             * @default null
+             */
+            old_forum_matching?: number | null;
             /** Page */
             page: number;
             /** Pages */
@@ -2158,8 +2163,8 @@ export interface components {
             dir?: "asc" | "desc";
             /**
              * Kind
-             * @description "archived": carried over from the old forum and not reconnected yet.
-             * @default all
+             * @description "archived": carried over from the old forum and not reconnected yet. Left out unless asked for.
+             * @default portal
              * @enum {string}
              */
             kind?: "all" | "portal" | "archived";

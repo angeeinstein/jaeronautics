@@ -166,9 +166,28 @@ describe('the filters', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
 
     await waitFor(() => {
-      expect(asked()).toMatchObject({ kind: 'all', sort: 'forum', dir: 'desc' });
+      expect(asked()).toMatchObject({ kind: 'portal', sort: 'forum', dir: 'desc' });
     });
     expect(screen.queryByRole('button', { name: 'Reset' })).toBeNull();
+  });
+
+  it('leave the old forum out unless it is asked for', async () => {
+    const { asked } = show();
+    await screen.findByRole('table');
+
+    expect(asked()).toMatchObject({ kind: 'portal' });
+    expect(screen.queryByRole('button', { name: 'Reset' })).toBeNull();
+  });
+
+  it('a search offers the old forum accounts that match too', async () => {
+    const { asked } = show(list({ old_forum_matching: 2 }), '/admin/accounts?q=popovic');
+
+    expect(await screen.findByText('2 old forum accounts match too.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show them' }));
+
+    await waitFor(() => {
+      expect(asked()).toMatchObject({ q: 'popovic', kind: 'all' });
+    });
   });
 });
 

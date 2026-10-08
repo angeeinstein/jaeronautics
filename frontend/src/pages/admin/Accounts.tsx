@@ -61,9 +61,10 @@ const ACCOUNT_CHOICES = [
   { value: 'erased', label: 'Erased' },
 ];
 
+// Portal accounts unless the old forum's people are asked for (accountFilters.ts).
 const KIND_CHOICES = [
-  { value: 'all', label: 'Portal and old forum' },
   { value: 'portal', label: 'Portal accounts' },
+  { value: 'all', label: 'Portal and old forum' },
   { value: 'archived', label: 'Old forum, not back yet' },
 ];
 
@@ -252,7 +253,7 @@ export function Accounts() {
             value={filters.kind}
             allowDeselect={false}
             onChange={(kind) => {
-              update({ kind: (kind ?? 'all') as AccountFilters['kind'] });
+              update({ kind: (kind ?? DEFAULT_FILTERS.kind) as AccountFilters['kind'] });
             }}
           />
           {isFiltered(filters) ? (
@@ -294,6 +295,24 @@ export function Accounts() {
           <ErrorState error={list.error} onRetry={() => void list.refetch()} />
         ) : (
           <>
+            {list.data.old_forum_matching ? (
+              <Group gap="xs" role="status">
+                <Text size="sm" c="dimmed">
+                  {list.data.old_forum_matching === 1
+                    ? '1 old forum account matches too.'
+                    : `${String(list.data.old_forum_matching)} old forum accounts match too.`}
+                </Text>
+                <Button
+                  size="compact-sm"
+                  variant="subtle"
+                  onClick={() => {
+                    update({ kind: 'all' });
+                  }}
+                >
+                  Show them
+                </Button>
+              </Group>
+            ) : null}
             <Card padding={0} className={classes.card}>
               <DataTable
                 label="Accounts"

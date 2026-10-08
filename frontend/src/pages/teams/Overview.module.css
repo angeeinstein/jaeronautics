@@ -75,7 +75,10 @@
   z-index: 1;
 }
 
-/* Logos come round, shield-shaped or square: each shown whole in the box. */
+/* Logos come round, shield-shaped or square: each shown whole, as it is --
+   no box behind it, only a shadow along its own outline so a dark logo
+   still stands off a dark cover. A team without one gets its initials on a
+   tile. */
 .logo {
   position: absolute;
   left: 1.25rem;
@@ -85,8 +88,10 @@
   place-items: center;
   width: 4.5rem;
   height: 4.5rem;
-  padding: 0.4rem;
   box-sizing: border-box;
+}
+
+.logo:not([data-image]) {
   background: var(--ja-navbar-bg);
   border: 1px solid var(--ja-border-strong);
   font-family: var(--mantine-font-family-headings);
@@ -99,6 +104,7 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--ja-bg) 70%, transparent));
 }
 
 .body {
