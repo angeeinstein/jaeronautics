@@ -416,10 +416,6 @@ def _joining(team):
     )
 
 
-def _picture_url(token):
-    return url_for("forum.forum_avatar_public_file", token=token) if token else None
-
-
 def photos_out(team):
     """A team's gallery, for its About page and its settings."""
     return [PhotoOut(id=photo.id, url=url_for("teams.team_photo", token=photo.token), caption=photo.caption,
@@ -445,7 +441,7 @@ def _team_out(team, just_paid=None):
         applications_waiting=_waiting(team), access_list_enabled=bool(team.access_list_enabled),
         lead_missing=_manages_people(team) and not teams_service.has_lead_in_force(team),
         rules=_rules(team, current), joining=_joining(team) if current is None else None,
-        members=[RosterPersonOut(name=row["name"], picture_url=_picture_url(row["avatar_token"]), is_lead=row["is_lead"],
+        members=[RosterPersonOut(name=row["name"], picture_url=row["picture_url"], is_lead=row["is_lead"],
                            university_email=row["university_email"])
                  for row in teams_service.roster(team)] if sees else None,
     )

@@ -746,6 +746,9 @@ def import_forum_people(people, *, source_system=SOURCE_MYBB, avatar_dir=None, d
                 record["avatar"] = "yes"
                 if stored:
                     profile.avatar_path = stored
+                    # Its address, for the forum and for the portal's own
+                    # pages (services/pictures.py).
+                    profile.avatar_public_token = profile.avatar_public_token or secrets.token_hex(32)
         elif profile.avatar_path:
             record["avatar"] = "already stored"
 

@@ -1520,16 +1520,6 @@ def update_team_by_lead(actor, team, *, description=KEEP, application_prompt=KEE
     return team
 
 
-def avatar_token_for(user):
-    """The public token of the approved forum picture, or None."""
-    from ..forum_service import FORUM_AVATAR_STATUS_APPROVED
-
-    for submission in user.forum_avatar_submissions or []:
-        if submission.status == FORUM_AVATAR_STATUS_APPROVED and submission.public_token:
-            return submission.public_token
-    return None
-
-
 def person_details(user):
     """What a lead sees about a person: no address, nothing about payment."""
     member = user.member
@@ -1551,13 +1541,16 @@ def member_count(team):
 
 def roster(team):
     """The active members, by surname, for the team's own page and the lead's list."""
+    from .pictures import picture_urls
+
     members = team_memberships(team, {ACTIVE})
+    pictures = picture_urls([membership.user for membership in members])
     return sorted(
         (
             {
                 "membership": membership,
                 "user": membership.user,
-                "avatar_token": avatar_token_for(membership.user),
+                "picture_url": pictures.get(membership.user_id),
                 "is_lead": any(team_role.user_id == membership.user_id and team_role.role == ROLE_LEAD
                                for team_role in team.roles),
                 **person_details(membership.user),

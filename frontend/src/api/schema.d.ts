@@ -2264,6 +2264,8 @@ export interface components {
             old_forum: ("unclaimed" | "reconnected") | null;
             /** Old Forum Username */
             old_forum_username: string | null;
+            /** Picture Url */
+            picture_url: string | null;
             /** Roles */
             roles: components["schemas"]["Role"][];
             /** Year Group */

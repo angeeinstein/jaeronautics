@@ -186,7 +186,9 @@ def forum_imported_avatar_public_file(token):
     Guarded by an unguessable token rather than by the filename: the staging
     directory also holds avatars waiting for admin review, and a public route
     that took a path would make those reachable by guessing. A token is minted
-    only for profiles actually being published.
+    with the stored picture, for the forum and for the portal's own pages,
+    which show it to the person, their teams and the admins
+    (services/pictures.py).
     """
     profile = db.session.execute(
         db.select(ImportedForumProfile).where(

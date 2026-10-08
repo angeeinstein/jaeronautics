@@ -17,7 +17,7 @@ describe('the address of the account list', () => {
       membership: 'ending' as const,
       role: 'treasurer',
       account: 'disabled' as const,
-      kind: 'portal' as const,
+      kind: 'all' as const,
       sort: 'until' as const,
       desc: true,
       page: 3,
@@ -25,7 +25,7 @@ describe('the address of the account list', () => {
     const query = paramsFromFilters(filters).toString();
 
     expect(query).toBe(
-      'q=anna&membership=ending&role=treasurer&account=disabled&kind=portal&sort=until&dir=desc&page=3',
+      'q=anna&membership=ending&role=treasurer&account=disabled&kind=all&sort=until&dir=desc&page=3',
     );
     expect(read(query)).toEqual(filters);
   });

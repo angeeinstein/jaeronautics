@@ -67,7 +67,11 @@ urgent.
 - Forum username, the forum account link, the profile picture (uploaded,
   reviewed by an admin, then sent to the forum). Pictures are files on the
   server; an approved picture is reachable without login under an unguessable
-  link, so the forum can fetch it.
+  link, so the forum can fetch it. The portal shows it too: to the person, to
+  their teams' members and leads, and to admins -- for somebody back from the
+  old forum, the old forum's picture until they have one approved here
+  (`services/pictures.py`; privacy policy § 22 from the version of
+  2026-10-08).
 - For people from the old forum: their old username, display name, picture
   and year group, imported to reconnect them; old posts were imported into
   the forum archive.

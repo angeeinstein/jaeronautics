@@ -717,6 +717,17 @@
             ],
             "title": "Old Forum Username"
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
           "roles": {
             "items": {
               "$ref": "#/components/schemas/Role"
@@ -750,7 +761,8 @@
           "forum_username",
           "roles",
           "membership",
-          "membership_until"
+          "membership_until",
+          "picture_url"
         ],
         "title": "AccountRow",
         "type": "object"

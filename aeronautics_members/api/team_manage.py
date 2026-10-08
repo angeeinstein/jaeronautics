@@ -22,7 +22,7 @@ from ..services import teams as teams_service
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
 from .teams import (
-    WAITING, LabelsOut, PhotoOut, TeamPermissionName, _labels, _logo_url, _picture_url, _team, photos_out,
+    WAITING, LabelsOut, PhotoOut, TeamPermissionName, _labels, _logo_url, _team, photos_out,
 )
 
 TAG = "Teams"
@@ -178,7 +178,7 @@ def team_members(slug):
         may_export=teams_service.can_in_team(current_user, team, P.EXPORT),
         members=[
             MemberOut(
-                user_id=row["user"].id, name=row["name"], picture_url=_picture_url(row["avatar_token"]),
+                user_id=row["user"].id, name=row["name"], picture_url=row["picture_url"],
                 is_lead=row["is_lead"], university_email=row["university_email"], cohort=row["cohort"],
                 since=row["membership"].started_at.date() if row["membership"].started_at else None,
                 paid_until=row["membership"].paid_until, notes=_member_notes(row["membership"]),

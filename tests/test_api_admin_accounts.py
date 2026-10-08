@@ -97,7 +97,7 @@ class TestWhatARowSays:
             "id": people["anna"], "email": "c-anna@example.com", "name": "Anna Zeller", "year_group": "2020",
             "category": "alumni", "category_label": "Alumni", "old_forum": None, "old_forum_username": None,
             "account_state": "active", "disabled_reason": None, "forum_username": "ZellerA_L25", "roles": [],
-            "membership": "active", "membership_until": THIS_YEAR_END.isoformat(),
+            "membership": "active", "membership_until": THIS_YEAR_END.isoformat(), "picture_url": None,
         }
 
     def test_an_account_without_a_membership(self, admin_client, admin):

@@ -86,7 +86,7 @@ function Person({ row }: { row: Row }) {
   const state = ACCOUNT_STATE_PILL[row.account_state];
   return (
     <Group gap="sm" wrap="nowrap">
-      <Avatar size={32} color="brand" variant="light" aria-hidden>
+      <Avatar src={row.picture_url} alt="" size={32} color="brand" variant="light" aria-hidden>
         {initialsOf(row)}
       </Avatar>
       <Stack gap={2} className={classes.person}>

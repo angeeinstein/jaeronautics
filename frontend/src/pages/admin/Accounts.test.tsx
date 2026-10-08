@@ -30,6 +30,7 @@ function row(overrides: Partial<Row> = {}): Row {
     roles: [],
     membership: 'active',
     membership_until: '2026-12-31',
+    picture_url: null,
     ...overrides,
   };
 }
