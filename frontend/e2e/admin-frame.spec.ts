@@ -1,15 +1,22 @@
 import { expect, signIn, test } from './fixtures';
 
 test.describe('the admin frame', () => {
-  test('opens on the dashboard with the area and the page marked', async ({ page }) => {
+  test('the menu button at the left leads in, and folds the menu away', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'on a phone the button opens the drawer: below');
     await signIn(page);
-    await page.goto('/admin');
+    await page.goto('/account');
+
+    await page.getByRole('button', { name: 'Open the admin menu' }).click();
+    await page.getByRole('dialog', { name: 'Admin menu' }).getByRole('link', { name: 'Dashboard' }).click();
 
     await expect(page.getByRole('heading', { name: 'Dashboard', level: 1 })).toBeVisible();
-    await expect(
-      page.getByRole('navigation', { name: 'Areas' }).getByRole('link', { name: 'Admin' }),
-    ).toHaveAttribute('aria-current', 'page');
     await expect(page).toHaveTitle(/Dashboard/);
+    const sections = page.getByRole('navigation', { name: 'Sections' });
+    await expect(sections.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
+    await page.getByRole('button', { name: 'Hide the admin menu' }).click();
+    await expect(sections).toBeHidden();
+    await page.getByRole('button', { name: 'Show the admin menu' }).click();
+    await expect(sections).toBeVisible();
   });
 
   test('back to the portal: My Account, within the app', async ({ page, isMobile }) => {

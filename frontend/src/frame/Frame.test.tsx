@@ -30,8 +30,7 @@ describe('the frame', () => {
       within(areas)
         .getAllByRole('link')
         .map((link) => link.textContent),
-    ).toEqual(['Forum', 'Teams', 'Admin']);
-    expect(within(areas).getByRole('link', { name: 'Admin' })).toHaveAttribute('aria-current', 'page');
+    ).toEqual(['Forum', 'Teams']);
     // The forum is the server's address: it signs a member in there.
     expect(within(areas).getByRole('link', { name: 'Forum' })).toHaveAttribute('href', '/forum');
   });
@@ -99,6 +98,43 @@ describe('the frame', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Down.');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.queryByText('Page')).toBeNull();
+  });
+});
+
+describe('the menu button', () => {
+  function member(me = makeMe(), route = '/account') {
+    mockFetch({ '/api/v1/me': { body: me } });
+    return renderPage(
+      <Frame narrow>
+        <p>Page</p>
+      </Frame>,
+      { route },
+    );
+  }
+
+  it('in the admin area folds its menu away and back', async () => {
+    admin();
+
+    const hide = await screen.findByRole('button', { name: 'Hide the admin menu' });
+    await userEvent.click(hide);
+
+    expect(screen.getByRole('button', { name: 'Show the admin menu' })).toBeInTheDocument();
+  });
+
+  it('elsewhere brings the admin menu in, for whoever may administer', async () => {
+    member();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Open the admin menu' }));
+
+    const menu = await screen.findByRole('dialog', { name: 'Admin menu' });
+    expect(within(menu).getByRole('link', { name: 'Accounts' })).toHaveAttribute('href', '/admin/accounts');
+  });
+
+  it('is not there for a member who administers nothing', async () => {
+    member(makeMe({ admin_area: false, roles: [], permissions: [] }));
+
+    await screen.findByRole('navigation', { name: 'Areas' });
+    expect(screen.queryByRole('button', { name: /menu$/ })).not.toBeInTheDocument();
   });
 });
 

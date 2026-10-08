@@ -97,6 +97,11 @@
   border-right: 1px solid var(--ja-border);
 }
 
+/* A sidebar in a drawer runs its full height too. */
+.drawerBody {
+  height: 100%;
+}
+
 .back {
   display: flex;
   align-items: center;
