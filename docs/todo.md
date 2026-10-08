@@ -22,14 +22,20 @@ what it was is in their pull requests and in git history
   both files (the day stays, or the day it is published), nothing else.
 - **Open:** whether the board wants to see it first.
 
+### Credit: a balance members top up (prepared, nothing spends it yet)
+
+- **Added:** 2026-10-08 (first an idea on 2026-10-07)
+- **What, where, why, decided:** `docs/credit-plan.md` -- a switch, a Credit
+  card on My Account, a Credit page with top-up and full history, Stripe
+  Checkout on one "Credit" product with the amount set by the portal, an
+  append-only ledger, an admin view.
+- **Waiting for:** the maintainer's answers to the open questions at the end
+  of that note; then it is built at once (a feature, not a small change).
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
-- **A credit balance (coffee and more)** -- 2026-10-07. Members could top up a
-  credit, see it in the menu at the top right, and spend it on the
-  association's or a team's things (coffee first). My Account's side menu was
-  chosen partly so a page like this can be added.
 - **The association's Odoo website** -- 2026-10-07. People confuse it with the
   portal and try to sign in there. No decision.
 - **Rounded corners** -- 2026-10-07. Discussed what switching the square look
