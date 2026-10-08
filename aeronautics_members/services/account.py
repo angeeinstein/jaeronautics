@@ -40,6 +40,8 @@ from .clock import get_now_utc
 from . import forum
 from .forum import sync_member_forum_state
 from .identity import (
+    confirm_institute_with_account,
+    institute_is_account_address,
     read_token,
     send_email_verification_email,
     send_work_email_verification_email,
@@ -110,6 +112,8 @@ def save_contact_details(user, member, values):
     contact_fields = tuple(f for f in DIRECT_MEMBER_PROFILE_FIELDS if f != "email_private")
     apply_member_profile(member, {f: values.get(f) for f in contact_fields}, fields=contact_fields)
     work_email_changed = bool(member.email_work) and member.email_work.strip().lower() != previous_email_work
+    # An institute address that is the account's, already confirmed, needs no link of its own.
+    confirm_institute_with_account(member)
 
     log_audit_event(
         category="profile",
@@ -280,6 +284,9 @@ def send_work_confirmation(member):
     if member.email_work_is_verified:
         raise ConflictError("Your university or company email address is already confirmed.",
                             code="already_confirmed")
+    if institute_is_account_address(member):
+        # The account's own link confirms both.
+        return send_private_confirmation(member.user)
     try:
         sent = send_work_email_verification_email(current_app._get_current_object(), member)
         if sent:

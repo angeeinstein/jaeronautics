@@ -916,7 +916,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Invoices, automatic emails, the welcome email and the students' email domains. */
+        /** Invoices, automatic emails, the welcome email and the students' and staff's email domains. */
         get: operations["admin_settings_general"];
         /** Save the general settings: only these, whatever else there is. */
         put: operations["admin_settings_general_save"];
@@ -3085,10 +3085,14 @@ export interface components {
             invoice_payments: boolean;
             /** Member Categories */
             member_categories: components["schemas"]["MemberCategoryOut"][];
+            /** Programmes */
+            programmes: components["schemas"]["ProgrammeOut"][];
             /** Salutations */
             salutations: components["schemas"]["ChoiceOut"][];
-            /** University Domains */
-            university_domains: string[];
+            /** Staff Domains */
+            staff_domains: string[];
+            /** Student Domains */
+            student_domains: string[];
         };
         /** FormerMembersOut */
         FormerMembersOut: {
@@ -3318,6 +3322,11 @@ export interface components {
             /** Legal Pdfs In Welcome Emails */
             legal_pdfs_in_welcome_emails: boolean;
             /**
+             * Staff Email Domains
+             * @default null
+             */
+            staff_email_domains?: string | null;
+            /**
              * Welcome Email Sender
              * @default null
              */
@@ -3345,6 +3354,13 @@ export interface components {
             legal_pdfs_in_welcome_emails: boolean;
             /** Senders */
             senders: string[];
+            /** Staff Domains In Use */
+            staff_domains_in_use: string[];
+            /**
+             * Staff Email Domains
+             * @default null
+             */
+            staff_email_domains?: string | null;
             /** Templates */
             templates: string[];
             /**
@@ -3897,6 +3913,11 @@ export interface components {
         };
         /** MemberCategoryOut */
         MemberCategoryOut: {
+            /**
+             * Account Email
+             * @enum {string}
+             */
+            account_email: "private" | "private_or_institute" | "any";
             /** Company Name */
             company_name: boolean;
             /** Description */
@@ -3909,6 +3930,10 @@ export interface components {
             university_email_required: boolean;
             /** Value */
             value: string;
+            /** Work Email At Joining */
+            work_email_at_joining: boolean;
+            /** Work Email Whose */
+            work_email_whose: ("student" | "staff") | null;
             /**
              * Year Group
              * @enum {string}
@@ -4558,6 +4583,15 @@ export interface components {
              * Format: date
              */
             renews_on: string;
+        };
+        /** ProgrammeOut */
+        ProgrammeOut: {
+            /** Code */
+            code: string;
+            /** Degree */
+            degree: string;
+            /** Name */
+            name: string;
         };
         /** ProgressOut */
         ProgressOut: {

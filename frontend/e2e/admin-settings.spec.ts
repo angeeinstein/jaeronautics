@@ -15,7 +15,8 @@ test.describe('settings', () => {
 
     await expect(page).toHaveURL(/\/admin\/settings\/general$/);
     await expect(page.getByRole('heading', { name: 'General', level: 1 })).toBeVisible();
-    await expect(page.getByText(/^In use now: /)).toBeVisible();
+    await expect(page.getByText('In use now: edu.fh-joanneum.at', { exact: true })).toBeVisible();
+    await expect(page.getByText('In use now: fh-joanneum.at', { exact: true })).toBeVisible();
   });
 
   test('an old link to a section opens its page', async ({ page }) => {

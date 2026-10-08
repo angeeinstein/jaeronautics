@@ -40,6 +40,9 @@ export function Profile() {
     );
   }
   const member = account.data.member;
+  const kind = options.data.member_categories.find(
+    (category) => category.value === member?.identity.member_category,
+  );
   if (!member)
     return (
       <>
@@ -57,11 +60,16 @@ export function Profile() {
           options={options.data}
           email={account.data.email}
           workEmail={member.work_email}
-          asksCompany={
-            options.data.member_categories.find(
-              (category) => category.value === member.identity.member_category,
-            )?.company_name ?? false
-          }
+          asksCompany={kind?.company_name ?? false}
+          labels={{
+            account: kind?.account_email === 'private' ? 'Private email' : 'Sign-in email',
+            work:
+              kind?.work_email_whose === 'student'
+                ? 'University email'
+                : kind?.work_email_whose === 'staff'
+                  ? 'Institute email'
+                  : 'University or company email',
+          }}
         />
         <IdentityCard
           key={member.change_request?.id ?? 'form'}

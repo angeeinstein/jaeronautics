@@ -24,7 +24,7 @@ from ..services import settings as settings_service
 from ..services import settings_sections as sections
 from ..services.audit import log_audit_event
 from ..services.forum import get_forum_service, get_forum_settings_map
-from ..services.institutional_email import get_institutional_domains
+from ..services.institutional_email import get_staff_domains, get_student_domains
 from ..services.notifications import get_notification_settings_map
 from .admin_mail import ConnectionOut
 from ._core import Model, UtcDateTime, endpoint
@@ -56,21 +56,26 @@ class GeneralIn(Model):
     automatic_email_template: str | None = Field(None, max_length=200)
     #: The domains a student's address must be on, as typed: commas, spaces or lines.
     institutional_email_domains: str | None = Field(None, max_length=2000)
+    #: The domains a staff member's address must be on, the same way.
+    staff_email_domains: str | None = Field(None, max_length=2000)
 
 
 class GeneralOut(GeneralIn):
-    #: The domains in force: the built-in list while the setting is empty.
+    #: The students' domains in force: the built-in list while the setting is empty.
     domains_in_use: list[str]
+    #: The staff's, the same way.
+    staff_domains_in_use: list[str]
     senders: list[str]
     templates: list[str]
 
 
 @endpoint("GET", "/admin/settings/general", response=GeneralOut, permissions=GENERAL, tag=TAG)
 def admin_settings_general():
-    """Invoices, automatic emails, the welcome email and the students' email domains."""
+    """Invoices, automatic emails, the welcome email and the students' and staff's email domains."""
     stored = settings_service.get_settings_map([
         "invoice_payments_enabled", "automatic_emails_enabled", "legal_pdfs_in_welcome_emails",
-        "welcome_email_sender", "automatic_email_template", "institutional_email_domains"])
+        "welcome_email_sender", "automatic_email_template", "institutional_email_domains",
+        "staff_email_domains"])
     return GeneralOut(
         invoice_payments=_is_true(stored.get("invoice_payments_enabled")),
         automatic_emails=_is_true(stored.get("automatic_emails_enabled")),
@@ -78,7 +83,9 @@ def admin_settings_general():
         welcome_email_sender=stored.get("welcome_email_sender") or None,
         automatic_email_template=stored.get("automatic_email_template") or None,
         institutional_email_domains=stored.get("institutional_email_domains") or None,
-        domains_in_use=list(get_institutional_domains()),
+        staff_email_domains=stored.get("staff_email_domains") or None,
+        domains_in_use=list(get_student_domains()),
+        staff_domains_in_use=list(get_staff_domains()),
         senders=sections.sender_accounts(),
         templates=sections.email_templates(),
     )
@@ -91,7 +98,8 @@ def admin_settings_general_save(body):
         current_user, invoice_payments=body.invoice_payments, automatic_emails=body.automatic_emails,
         legal_pdfs_in_welcome_emails=body.legal_pdfs_in_welcome_emails,
         welcome_email_sender=body.welcome_email_sender, automatic_email_template=body.automatic_email_template,
-        institutional_email_domains=body.institutional_email_domains)
+        institutional_email_domains=body.institutional_email_domains,
+        staff_email_domains=body.staff_email_domains)
     db.session.commit()
     return SettingsSavedOut(changed=changed)
 

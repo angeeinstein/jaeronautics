@@ -66,11 +66,14 @@ export function ContactCard({
   email,
   workEmail,
   asksCompany = false,
+  labels = { account: 'Private email', work: 'University or company email' },
 }: {
   contact: Contact;
   options: FormOptions;
   /** A partner member, asked for the company they join for. */
   asksCompany?: boolean;
+  /** What the two addresses are called for this kind of member. */
+  labels?: { account: string; work: string };
   /** The saved addresses, with whether each is confirmed. */
   email: Address;
   workEmail: Address | null;
@@ -130,11 +133,8 @@ export function ContactCard({
       >
         <Details
           items={[
-            ['Private email', <Saved key="private" address={email} which="private" />],
-            [
-              'University or company email',
-              workEmail ? <Saved key="work" address={workEmail} which="work" /> : null,
-            ],
+            [labels.account, <Saved key="private" address={email} which="private" />],
+            [labels.work, workEmail ? <Saved key="work" address={workEmail} which="work" /> : null],
             ...(showsCompany ? [['Company', contact.company_name] satisfies Detail] : []),
             ['Private phone', contact.phone_private],
             ['Work phone', contact.phone_work],
@@ -156,7 +156,7 @@ export function ContactCard({
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
             <Stack gap={6}>
               <TextInput
-                label="Private email"
+                label={labels.account}
                 description="Your login. A new one waits to be confirmed."
                 type="email"
                 autoComplete="email"
@@ -167,7 +167,7 @@ export function ContactCard({
             </Stack>
             <Stack gap={6}>
               <TextInput
-                label="University or company email"
+                label={labels.work}
                 description="A new one waits to be confirmed."
                 type="email"
                 maxLength={255}

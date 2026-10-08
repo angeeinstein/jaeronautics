@@ -38,6 +38,11 @@ OFFERED_A_YEAR_GROUP = [MemberCategory.STUDENT, MemberCategory.ALUMNI]
 NOT_ASKED = [MemberCategory.STAFF, MemberCategory.PARTNER]
 
 
+def _institute(category):
+    """The university or institute address each kind gives: staff theirs, the others a student's."""
+    return "jonas.huber@fh-joanneum.at" if category == MemberCategory.STAFF else "jonas.huber@edu.fh-joanneum.at"
+
+
 def _signup_data(**overrides):
     data = {
         "salutation": "Mr",
@@ -163,7 +168,7 @@ class TestTheForm:
     @pytest.mark.parametrize("category", NOT_ASKED)
     def test_a_category_that_is_not_asked_needs_nothing(self, app, category):
         form = MembershipForm(
-            formdata=_signup_data(member_category=category, year_group=""),
+            formdata=_signup_data(member_category=category, year_group="", email_work=_institute(category)),
             meta={"csrf": False},
         )
 
@@ -178,7 +183,7 @@ class TestTheForm:
         dead end, so the category wins and the stale text is discarded.
         """
         form = MembershipForm(
-            formdata=_signup_data(member_category=category, year_group="LAV25"),
+            formdata=_signup_data(member_category=category, year_group="LAV25", email_work=_institute(category)),
             meta={"csrf": False},
         )
 
@@ -201,7 +206,8 @@ class TestTheForm:
 
     @pytest.mark.parametrize("category", [MemberCategory.STUDENT, MemberCategory.ALUMNI, MemberCategory.STAFF])
     def test_a_leftover_company_is_dropped(self, app, category):
-        form = MembershipForm(formdata=_signup_data(member_category=category), meta={"csrf": False})
+        form = MembershipForm(formdata=_signup_data(member_category=category, email_work=_institute(category)),
+                              meta={"csrf": False})
 
         assert form.validate() is True, form.errors
         assert form.company_name.data is None

@@ -3364,6 +3364,13 @@
             "title": "Member Categories",
             "type": "array"
           },
+          "programmes": {
+            "items": {
+              "$ref": "#/components/schemas/ProgrammeOut"
+            },
+            "title": "Programmes",
+            "type": "array"
+          },
           "salutations": {
             "items": {
               "$ref": "#/components/schemas/ChoiceOut"
@@ -3371,11 +3378,18 @@
             "title": "Salutations",
             "type": "array"
           },
-          "university_domains": {
+          "staff_domains": {
             "items": {
               "type": "string"
             },
-            "title": "University Domains",
+            "title": "Staff Domains",
+            "type": "array"
+          },
+          "student_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Student Domains",
             "type": "array"
           }
         },
@@ -3384,7 +3398,9 @@
           "salutations",
           "member_categories",
           "invoice_payments",
-          "university_domains"
+          "student_domains",
+          "staff_domains",
+          "programmes"
         ],
         "title": "FormOptionsOut",
         "type": "object"
@@ -4064,6 +4080,19 @@
             "title": "Legal Pdfs In Welcome Emails",
             "type": "boolean"
           },
+          "staff_email_domains": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Staff Email Domains"
+          },
           "welcome_email_sender": {
             "anyOf": [
               {
@@ -4141,6 +4170,26 @@
             "title": "Senders",
             "type": "array"
           },
+          "staff_domains_in_use": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Staff Domains In Use",
+            "type": "array"
+          },
+          "staff_email_domains": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Staff Email Domains"
+          },
           "templates": {
             "items": {
               "type": "string"
@@ -4167,6 +4216,7 @@
           "automatic_emails",
           "legal_pdfs_in_welcome_emails",
           "domains_in_use",
+          "staff_domains_in_use",
           "senders",
           "templates"
         ],
@@ -5865,6 +5915,15 @@
       "MemberCategoryOut": {
         "additionalProperties": false,
         "properties": {
+          "account_email": {
+            "enum": [
+              "private",
+              "private_or_institute",
+              "any"
+            ],
+            "title": "Account Email",
+            "type": "string"
+          },
           "company_name": {
             "title": "Company Name",
             "type": "boolean"
@@ -5889,6 +5948,25 @@
             "title": "Value",
             "type": "string"
           },
+          "work_email_at_joining": {
+            "title": "Work Email At Joining",
+            "type": "boolean"
+          },
+          "work_email_whose": {
+            "anyOf": [
+              {
+                "enum": [
+                  "student",
+                  "staff"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Email Whose"
+          },
           "year_group": {
             "enum": [
               "required",
@@ -5905,6 +5983,9 @@
           "description",
           "year_group",
           "university_email_required",
+          "work_email_at_joining",
+          "work_email_whose",
+          "account_email",
           "company_name",
           "joinable"
         ],
@@ -7920,6 +8001,30 @@
           "renews_on"
         ],
         "title": "PriceOut",
+        "type": "object"
+      },
+      "ProgrammeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "degree": {
+            "title": "Degree",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "degree"
+        ],
+        "title": "ProgrammeOut",
         "type": "object"
       },
       "ProgressOut": {
@@ -15423,7 +15528,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "Invoices, automatic emails, the welcome email and the students' email domains.",
+        "summary": "Invoices, automatic emails, the welcome email and the students' and staff's email domains.",
         "tags": [
           "Admin"
         ],

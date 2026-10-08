@@ -31,6 +31,9 @@ const options: Schemas['FormOptionsOut'] = {
       university_email_required: true,
       company_name: false,
       joinable: true,
+      work_email_at_joining: true,
+      work_email_whose: 'student',
+      account_email: 'private',
     },
     {
       value: 'partner',
@@ -40,10 +43,18 @@ const options: Schemas['FormOptionsOut'] = {
       university_email_required: false,
       company_name: true,
       joinable: true,
+      work_email_at_joining: false,
+      work_email_whose: null,
+      account_email: 'any',
     },
   ],
   invoice_payments: false,
-  university_domains: ['edu.fh-joanneum.at', 'fh-joanneum.at'],
+  student_domains: ['edu.fh-joanneum.at'],
+  staff_domains: ['fh-joanneum.at'],
+  programmes: [
+    { code: 'LAV', name: 'Aviation', degree: 'Bachelor' },
+    { code: 'MAV', name: 'Aviation', degree: 'Master' },
+  ],
 };
 
 const member: Schemas['MemberAccountOut'] = {
@@ -261,7 +272,8 @@ describe('my account: profile', () => {
   it('an address being changed is not said to be confirmed', async () => {
     const { contact } = await editContact();
 
-    const field = within(contact).getByRole('textbox', { name: /University or company email/ });
+    // A student's: called what it is.
+    const field = within(contact).getByRole('textbox', { name: /University email/ });
     fireEvent.change(field, { target: { value: 'anna@elsewhere.example' } });
 
     expect(within(contact).queryByText('Not confirmed')).not.toBeInTheDocument();
@@ -326,11 +338,14 @@ describe('my account: profile', () => {
     const region = await screen.findByRole('region', { name: 'Name and membership type' });
     expect(within(region).getByText('LAV25')).toBeInTheDocument();
     await userEvent.click(within(region).getByRole('button', { name: 'Request a change' }));
-    expect(within(region).getByRole('textbox', { name: /Year group/ })).toBeInTheDocument();
+    // Picked as it was: the programme and the year started.
+    expect(within(region).getByRole('radio', { name: /^Aviation · Bachelor/ })).toBeChecked();
+    expect(within(region).getByRole('radio', { name: '2025' })).toBeChecked();
+    expect(within(region).getByText('LAV25')).toBeInTheDocument();
     await userEvent.click(within(region).getByRole('combobox', { name: 'Membership type' }));
     await userEvent.click(await screen.findByRole('option', { name: 'Company or partner' }));
 
-    expect(within(region).queryByRole('textbox', { name: /Year group/ })).not.toBeInTheDocument();
+    expect(within(region).queryByRole('radio', { name: /^Aviation/ })).not.toBeInTheDocument();
   });
 
   it('a waiting change request is shown, not the form', async () => {

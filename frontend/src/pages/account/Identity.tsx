@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { api, ApiError, call, type Schemas } from '../../api/client';
 import { ConfirmButton } from '../../components/ConfirmButton';
 import { Details } from '../../components/Details';
+import { YearGroupPicker } from '../../components/YearGroupPicker';
 import { Panel } from '../../components/Panel';
 import { emptyToNull } from '../../lib/forms';
 import { notifyFailed } from '../../lib/notify';
@@ -113,7 +114,8 @@ function RequestForm({
   });
   const change = (key: keyof RequestIn, next: string) => {
     setValue({ ...value, [key]: next });
-    if (errors[key]) setErrors({ ...errors, [key]: '' });
+    if (key in errors)
+      setErrors(Object.fromEntries(Object.entries(errors).filter(([field]) => field !== key)));
   };
   const text = (key: keyof RequestIn) => ({
     value: value[key] ?? '',
@@ -155,16 +157,19 @@ function RequestForm({
               change('member_category', next ?? 'student');
             }}
           />
-          {kind?.year_group === 'hidden' ? null : (
-            <TextInput
-              label="Year group"
-              description="For example LAV25."
-              required={kind?.year_group === 'required'}
-              maxLength={50}
-              {...text('year_group')}
-            />
-          )}
         </SimpleGrid>
+        {kind === undefined || kind.year_group === 'hidden' ? null : (
+          <YearGroupPicker
+            key={kind.value}
+            value={value.year_group ?? ''}
+            programmes={options.programmes}
+            required={kind.year_group === 'required'}
+            error={errors.year_group ?? null}
+            onChange={(next) => {
+              change('year_group', next);
+            }}
+          />
+        )}
         <Textarea
           label="Why should this be changed?"
           placeholder="Optional, for example to correct a typo."

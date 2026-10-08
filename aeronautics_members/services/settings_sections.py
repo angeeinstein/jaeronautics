@@ -68,7 +68,7 @@ def _choice(value, allowed, field, message):
 
 
 def save_general(actor, *, invoice_payments, automatic_emails, legal_pdfs_in_welcome_emails, welcome_email_sender,
-                 automatic_email_template, institutional_email_domains):
+                 automatic_email_template, institutional_email_domains, staff_email_domains=None):
     sender = _choice(welcome_email_sender, sender_accounts(), "welcome_email_sender",
                      "That sender account does not exist.")
     template = _choice(automatic_email_template, email_templates(), "automatic_email_template",
@@ -81,6 +81,7 @@ def save_general(actor, *, invoice_payments, automatic_emails, legal_pdfs_in_wel
         "automatic_email_template": template,
         # Stored as typed; institutional_email.py makes sense of commas, newlines and stray @ signs.
         "institutional_email_domains": (institutional_email_domains or "").strip() or None,
+        "staff_email_domains": (staff_email_domains or "").strip() or None,
     })
 
 

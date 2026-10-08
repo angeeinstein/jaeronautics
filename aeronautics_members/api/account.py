@@ -22,6 +22,7 @@ from ..services import ConflictError, ValidationError
 from ..services import account as account_service
 from ..services import teams as teams_service
 from ..services import workflows
+from ..services.identity import institute_is_account_address
 from ..services.billing import (
     LIVE_SUBSCRIPTION_STATUSES,
     can_rejoin,
@@ -351,7 +352,8 @@ def _deletion(member):
 def _to_confirm(member):
     """Only the addresses actually waiting: many give no university address at all."""
     private = not current_user.email_is_verified
-    work = member is not None and bool(member.email_work) and not member.email_work_is_verified
+    work = (member is not None and bool(member.email_work) and not member.email_work_is_verified
+            and not institute_is_account_address(member))
     if private and work:
         text = "Both email addresses need confirming. We send a separate email to each."
     elif private:

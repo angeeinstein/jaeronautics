@@ -44,11 +44,11 @@ test.describe('joining', () => {
     await pick(page, /^Student/);
     await page.getByRole('button', { name: 'Continue' }).click();
 
-    await expect(page.getByText('Please enter your year group.')).toBeVisible();
+    await expect(page.getByText('Please choose your programme and the year you started.')).toBeVisible();
     await expect(page.getByRole('textbox', { name: /^First name/ })).toBeFocused();
     await page.getByRole('button', { name: 'Back' }).click();
     await pick(page, /^Company or partner/);
-    await expect(page.getByRole('textbox', { name: /^Year group/ })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: /^Aviation/ })).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Company', exact: true })).toBeVisible();
   });
 
@@ -63,9 +63,14 @@ test.describe('joining', () => {
     await fill(page, [
       [/^First name/, 'Nora'],
       [/^Last name/, 'Newcomer'],
-      [/^Year group/, 'lav25'],
       [/^University email/, `nora.${stamp}@edu.fh-joanneum.at`],
     ]);
+    await page.getByRole('radio', { name: /^Aviation · Bachelor/ }).click();
+    await page
+      .locator('label')
+      .filter({ hasText: /^2025$/ })
+      .click();
+    await expect(page.getByText('LAV25')).toBeVisible();
     await expect(page.getByText('NewcomerN_L25')).toBeVisible();
     await next(page, 'How we reach you');
     await fill(page, [
@@ -164,9 +169,10 @@ test.describe('a membership for a login without one', () => {
     await fill(page, [
       [/^First name/, 'Adam'],
       [/^Last name/, 'Admin'],
+      [/^Institute email/, 'adam.admin@fh-joanneum.at'],
     ]);
     await next(page, 'How we reach you');
-    await expect(page.getByRole('textbox', { name: /^Private email/ })).toHaveValue('admin@example.org');
+    await expect(page.getByRole('textbox', { name: /^Sign-in email/ })).toHaveValue('admin@example.org');
   });
 });
 

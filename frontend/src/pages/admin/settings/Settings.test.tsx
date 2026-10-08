@@ -43,6 +43,7 @@ const general: Schemas['GeneralOut'] = {
   automatic_email_template: 'welcome.html',
   institutional_email_domains: null,
   domains_in_use: ['edu.fh-joanneum.at', 'fh-joanneum.at'],
+  staff_domains_in_use: ['fh-joanneum.at'],
   senders: ['office', 'noreply'],
   templates: ['welcome.html'],
 };

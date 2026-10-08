@@ -52,6 +52,28 @@ class TestTheFormChoices:
         assert kinds["partner"]["year_group"] == "hidden"
         assert list(kinds)[0] == "student", "the common case first"
 
+    def test_and_which_addresses(self, app, client):
+        options = client.get("/api/v1/forms/options").get_json()
+        kinds = {kind["value"]: kind for kind in options["member_categories"]}
+
+        assert (kinds["student"]["work_email_whose"], kinds["student"]["account_email"]) == ("student", "private")
+        assert (kinds["staff"]["work_email_whose"], kinds["staff"]["account_email"]) == (
+            "staff", "private_or_institute")
+        assert kinds["staff"]["work_email_at_joining"] is True and kinds["staff"]["university_email_required"] is False
+        assert (kinds["partner"]["work_email_whose"], kinds["partner"]["account_email"]) == (None, "any")
+        assert (options["student_domains"], options["staff_domains"]) == (["edu.fh-joanneum.at"], ["fh-joanneum.at"])
+        assert [programme["code"] for programme in options["programmes"]] == ["LAV", "MAV"]
+
+
+class TestOneAddressForBoth:
+    def test_to_be_confirmed_once(self, app, client):
+        member = make_member(email="lena@fh-joanneum.at", email_work="lena@fh-joanneum.at",
+                             member_category="staff", first_name="Lena")
+
+        account = signed_in(client, member.user).get("/api/v1/account").get_json()
+
+        assert account["to_confirm"]["text"] == "Please confirm your email address. We sent you a link."
+
 
 class TestWhatFlaskSaid:
     def test_handed_out_once(self, app, client):
@@ -141,7 +163,7 @@ class TestContactDetails:
                         {**CONTACT, "email_work": "anna@gmail.com"})
 
         assert response.status_code == 400
-        assert "university address" in response.get_json()["error"]["fields"]["email_work"]
+        assert "student address" in response.get_json()["error"]["fields"]["email_work"]
 
     def test_a_field_it_does_not_know_is_refused(self, app, client):
         member = _anna()
@@ -209,7 +231,8 @@ class TestChangeRequests:
         response = send(signed_in(client, member.user), "POST", "/api/v1/account/change-request",
                         {**IDENTITY, "year_group": "2025"})
 
-        assert response.get_json()["error"]["fields"] == {"year_group": "Letters and two digits, e.g. LAV25."}
+        assert response.get_json()["error"]["fields"] == {
+            "year_group": "Three letters and two digits: the programme and the year you started, like LAV25."}
 
     def test_withdrawn(self, app, client):
         member = _anna()

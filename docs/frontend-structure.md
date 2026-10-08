@@ -250,13 +250,23 @@ steps on top with a line that fills, each done one a way back to it:
    Alumni, Staff or lecturer, Company or partner; an honorary member is
    appointed, never signs up). Choosing one moves on by itself.
 2. **About you** -- salutation, title, name, then what that kind is asked,
-   under its own heading: a student's year group and university address
-   (ticked once it is on the university's domain), an alumnus's year group if
-   remembered and the university address only if it still works, the
-   institute's address and phone, the company and its address and phone. The
-   forum name it makes appears as it is typed.
-3. **Contact** -- the private address (the login; for somebody signed in,
-   theirs, read only), phone, address.
+   under its own heading. A student's and an alumnus's **year group** is
+   picked, not typed: the programme (Aviation · Bachelor, LAV; Aviation ·
+   Master, MAV; or another one by its three-letter code), then the year
+   started from a row of recent years (or *Earlier*; an alumnus may say *I
+   don't remember*), shown as it will be stored: LAV25. Any programme of the
+   university may join; the scheme -- three letters, two digits -- is checked.
+   A student gives their university address, which must be a student's
+   (@edu.fh-joanneum.at); an alumnus theirs only if it still works; staff
+   their institute address (@fh-joanneum.at -- a student's never counts);
+   a company member the company. The forum name it makes appears as it is
+   typed.
+3. **Contact** -- the sign-in address, by kind: a student's and an alumnus's
+   is private (a university one stops working when they leave); staff choose
+   their institute address or a private one; a company member signs in with
+   the company address. Then phone and address. For somebody signed in, their
+   login's address, read only. When the institute address is the sign-in
+   address, one confirmation confirms both.
 4. **Password** -- signup only, with how strong it is.
 5. **Check and join** -- everything once more, each line back to its step;
    what it costs today and every year, read from Stripe's price (or nothing

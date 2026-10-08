@@ -401,6 +401,7 @@ def seed(app, app_module, subscriptions):
          "submit": "button[type=submit]"},
         {"name": "public--signup-alumni", "path": "/join", "open": "[role=radio]:has-text('Alumni')"},
         {"name": "public--signup-company", "path": "/join", "open": "[role=radio]:has-text('Company')"},
+        {"name": "public--signup-staff", "path": "/join", "open": "[role=radio]:has-text('Staff')"},
         {"name": "public--login", "path": "/login"},
         {"name": "public--forgot-password", "path": "/forgot-password"},
         {"name": "public--reset-password", "path": f"/reset-password/{reset_token}"},

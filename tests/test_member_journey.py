@@ -251,7 +251,7 @@ class TestErrorsSayWhatIsWrong:
         assert response.status_code == 400
         fields = response.get_json()["error"]["fields"]
         assert list(fields) == ["email_work"]
-        assert "university address" in fields["email_work"]
+        assert "student address" in fields["email_work"]
 
     def test_a_rejected_profile_change_says_why(self, app, client, monkeypatch):
         """The page said "please correct the profile form" and showed nothing."""

@@ -38,7 +38,7 @@ const GENERAL: KindWording = {
   workEmail: 'University or company email',
   workPhone: 'Work phone',
   workEmailOnRequest: false,
-  privateEmail: 'Your login. Your own address.',
+  privateEmail: 'You sign in with it.',
 };
 
 const WORDING: Record<string, Partial<KindWording>> = {
@@ -49,7 +49,7 @@ const WORDING: Record<string, Partial<KindWording>> = {
     block: 'Your studies',
     workEmail: 'University email',
     workPhone: null,
-    privateEmail: 'Your login. Not your university address: this one stays when you graduate.',
+    privateEmail: 'You sign in with it. Not your university address: this one stays when you graduate.',
   },
   alumni: {
     icon: IconAward,
@@ -59,7 +59,7 @@ const WORDING: Record<string, Partial<KindWording>> = {
     workEmail: 'University email',
     workPhone: null,
     workEmailOnRequest: true,
-    privateEmail: 'Your login. Not your university address: this one keeps working.',
+    privateEmail: 'You sign in with it. Not your university address: this one keeps working.',
   },
   staff: {
     icon: IconPresentation,
@@ -68,7 +68,7 @@ const WORDING: Record<string, Partial<KindWording>> = {
     block: 'At the institute',
     workEmail: 'Institute email',
     workPhone: 'Office phone',
-    privateEmail: 'Your login. Your own address, not the institute’s.',
+    privateEmail: 'You sign in with it. It keeps working if you leave the institute.',
   },
   partner: {
     icon: IconBuilding,
@@ -77,6 +77,7 @@ const WORDING: Record<string, Partial<KindWording>> = {
     block: 'Your company',
     workEmail: 'Company email',
     workPhone: 'Company phone',
+    privateEmail: 'You sign in with it. Your company address is fine.',
   },
 };
 

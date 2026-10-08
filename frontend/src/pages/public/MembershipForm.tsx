@@ -43,6 +43,7 @@ import { api, ApiError, call, type Schemas } from '../../api/client';
 import { AppLink } from '../../app/AppLink';
 import { LegalTextBody } from '../../components/legal/LegalText';
 import { Panel } from '../../components/Panel';
+import { isYearGroup, YearGroupPicker } from '../../components/YearGroupPicker';
 import { ErrorState, LoadingState } from '../../components/States';
 import { formatDate } from '../../lib/format';
 import { emptyToNull } from '../../lib/forms';
@@ -112,7 +113,6 @@ const EMPTY: Profile = {
   year_group: '',
 };
 
-const YEAR_GROUP = /^[A-Z]+[0-9]{2}$/;
 const AN_ADDRESS = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /** How long a chosen card stays on screen before the next step: long enough to see the tick. */
@@ -334,6 +334,7 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
   const [password, setPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [workEmailOpened, setWorkEmailOpened] = useState(false);
+  const [signInWith, setSignInWith] = useState<'institute' | 'private'>('institute');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [reading, setReading] = useState<LegalLink | null>(null);
   // Counts the refusals, the form's own and the server's: after each, the first refused field gets the focus.
@@ -356,14 +357,24 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
   const asksYear = kind !== undefined && kind.year_group !== 'hidden';
   const asksWorkEmail =
     kind !== undefined &&
-    (kind.university_email_required || !wording.workEmailOnRequest || workEmailOpened || !!value.email_work);
+    (kind.work_email_at_joining || (wording.workEmailOnRequest && (workEmailOpened || !!value.email_work)));
   const asksCompany = kind?.company_name ?? false;
   const yearGroup = (value.year_group ?? '').trim();
   const workEmail = (value.email_work ?? '').trim();
+  const whose = kind?.work_email_whose ?? null;
+  const studentAddress = (address: string) => onDomain(address, options.student_domains);
+  const staffAddress = (address: string) =>
+    onDomain(address, options.staff_domains) && !onDomain(address, options.student_domains);
+  const institutional = (address: string) => studentAddress(address) || staffAddress(address);
+  // Staff may keep their account on their institute address, once given as such.
+  const mayUseInstitute = door.kind === 'signup' && kind?.account_email === 'private_or_institute';
+  const signsInWithInstitute = mayUseInstitute && signInWith === 'institute' && !!workEmail;
+  const accountEmail =
+    door.kind === 'signup' ? (signsInWithInstitute ? workEmail : email.trim()) : door.email;
   const shownForumName = forumName(
     value.first_name,
     value.last_name,
-    asksYear && YEAR_GROUP.test(yearGroup) ? yearGroup : null,
+    asksYear && isYearGroup(yearGroup) ? yearGroup : null,
   );
 
   useEffect(
@@ -422,26 +433,34 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
       if (blank(value.first_name)) found.first_name = 'Please enter your first name.';
       if (blank(value.last_name)) found.last_name = 'Please enter your last name.';
       if (asksYear) {
-        if (!yearGroup && kind.year_group === 'required') found.year_group = 'Please enter your year group.';
-        else if (yearGroup && !YEAR_GROUP.test(yearGroup))
-          found.year_group = 'Letters and two digits, like LAV25.';
+        if (!yearGroup && kind.year_group === 'required')
+          found.year_group = 'Please choose your programme and the year you started.';
+        else if (yearGroup && !isYearGroup(yearGroup))
+          found.year_group = 'Three letters and two digits, like LAV25.';
       }
-      if (kind?.university_email_required) {
-        if (!workEmail) found.email_work = 'Please enter your university address.';
-        else if (!onDomain(workEmail, options.university_domains))
-          found.email_work = `Please use your @${options.university_domains[0] ?? 'university'} address.`;
-      } else if (asksWorkEmail && workEmail && !AN_ADDRESS.test(workEmail)) {
-        found.email_work = 'Please check this address.';
+      if (asksWorkEmail) {
+        if (!workEmail) {
+          if (kind.work_email_at_joining)
+            found.email_work =
+              whose === 'staff'
+                ? 'Please enter your institute address.'
+                : 'Please enter your university address.';
+        } else if (!AN_ADDRESS.test(workEmail)) found.email_work = 'Please check this address.';
+        else if (whose === 'student' && !studentAddress(workEmail))
+          found.email_work = `Please use your student address: @${options.student_domains[0] ?? 'university'}.`;
+        else if (whose === 'staff' && !staffAddress(workEmail))
+          found.email_work = `Please use your institute address: @${options.staff_domains[0] ?? 'institute'}.`;
       }
       if (asksCompany && blank(value.company_name))
         found.company_name = 'Please enter the company you join for.';
     }
     if (which === 'contact') {
-      if (door.kind === 'signup') {
+      if (door.kind === 'signup' && !signsInWithInstitute) {
         if (!AN_ADDRESS.test(email.trim())) found.email_private = 'Please enter your email address.';
-        else if (onDomain(email, options.university_domains))
-          found.email_private =
-            'Please use a private address: a university one stops working when you leave.';
+        else if (kind?.account_email !== 'any' && institutional(email))
+          found.email_private = mayUseInstitute
+            ? 'To sign in with your institute address, choose it above; otherwise use a private one.'
+            : 'Please use a private address: a university one stops working when you leave.';
       }
       if (blank(value.phone_private)) found.phone_private = 'Please enter a phone number.';
       if (blank(value.street)) found.street = 'Please enter your street.';
@@ -467,7 +486,7 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
         terms_accepted: accepted,
       };
       return door.kind === 'signup'
-        ? call(api.POST('/api/v1/signup', { body: { ...membership, email_private: email, password } }))
+        ? call(api.POST('/api/v1/signup', { body: { ...membership, email_private: accountEmail, password } }))
         : call(api.POST('/api/v1/account/membership', { body: membership }));
     },
     onMutate: () => {
@@ -512,7 +531,7 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
   const refusedAsAWhole =
     send.error &&
     !(send.error instanceof ApiError && Object.keys(send.error.fields).some((key) => key in FIELD_STEP));
-  const twoAddresses = asksWorkEmail && !!workEmail;
+  const twoAddresses = asksWorkEmail && !!workEmail && workEmail.toLowerCase() !== accountEmail.toLowerCase();
   const strength = passwordStrength(password);
   const address = [
     [value.street, value.house_number].filter(Boolean).join(' '),
@@ -532,7 +551,7 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
     ],
     ...(asksCompany ? [['Company', value.company_name ?? '', 'about'] satisfies Line] : []),
     ...(asksWorkEmail && workEmail ? [[wording.workEmail, workEmail, 'about'] satisfies Line] : []),
-    ['Email', door.kind === 'signup' ? email : door.email, 'contact'],
+    [kind?.account_email === 'private' ? 'Private email' : 'Sign-in email', accountEmail, 'contact'],
     ['Phone', value.phone_private, 'contact'],
     ['Address', address, 'contact'],
     ['Forum name', shownForumName, 'about'],
@@ -670,49 +689,43 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
                     />
                   ) : null}
                   {asksYear ? (
-                    <TextInput
-                      label="Year group"
-                      description={
-                        kind.year_group === 'required'
-                          ? 'Letters and two digits, like LAV25.'
-                          : 'If you remember it. Letters and two digits, like LAV19.'
-                      }
-                      placeholder={kind.year_group === 'required' ? 'LAV25' : 'LAV19'}
-                      required={kind.year_group === 'required'}
-                      maxLength={50}
-                      autoCapitalize="characters"
-                      w={{ base: '100%', xs: 260 }}
-                      className={classes.reveal}
-                      classNames={{ input: classes.mono }}
-                      value={value.year_group ?? ''}
-                      error={errors.year_group ?? null}
-                      onChange={(event) => {
-                        change('year_group', event.currentTarget.value.toUpperCase().replace(/\s/g, ''));
-                      }}
-                    />
+                    <div className={classes.reveal}>
+                      <YearGroupPicker
+                        value={yearGroup}
+                        programmes={options.programmes}
+                        required={kind.year_group === 'required'}
+                        error={errors.year_group ?? null}
+                        onChange={(next) => {
+                          change('year_group', next);
+                        }}
+                      />
+                    </div>
                   ) : null}
                   {asksWorkEmail ? (
                     <Stack gap={6} className={classes.reveal}>
                       <TextInput
                         label={wording.workEmail}
                         description={
-                          kind.university_email_required
-                            ? `Your @${options.university_domains[0] ?? 'university'} address: it shows you study here.`
-                            : wording.workEmailOnRequest
-                              ? 'It gives you back your old forum account, if you had one.'
-                              : undefined
+                          whose === 'student'
+                            ? `Your @${options.student_domains[0] ?? 'university'} address: it shows you study here.`
+                            : whose === 'staff'
+                              ? `Your @${options.staff_domains[0] ?? 'institute'} address: it shows you work here.`
+                              : wording.workEmailOnRequest
+                                ? 'It gives you back your old forum account, if you had one.'
+                                : undefined
                         }
-                        required={kind.university_email_required}
+                        required={kind.work_email_at_joining}
                         type="email"
                         maxLength={255}
                         {...text('email_work')}
                       />
-                      {kind.university_email_required &&
-                      onDomain(workEmail, options.university_domains) &&
+                      {((whose === 'student' && studentAddress(workEmail)) ||
+                        (whose === 'staff' && staffAddress(workEmail))) &&
                       !errors.email_work ? (
                         <span className={`${classes.good} ${classes.reveal}`}>
-                          <IconCheck size={14} stroke={3} aria-hidden />A student address. We send it a link
-                          to confirm.
+                          <IconCheck size={14} stroke={3} aria-hidden />
+                          {whose === 'student' ? 'A student address.' : 'An institute address.'} We send it a
+                          link to confirm.
                         </span>
                       ) : null}
                     </Stack>
@@ -766,25 +779,47 @@ function Form({ door, options }: { door: Door; options: FormOptions }) {
                   </h2>
                   <Text c="dimmed">For the association’s news, and your membership.</Text>
                 </Stack>
+                {mayUseInstitute && workEmail ? (
+                  <Radio.Group
+                    label="Sign in with"
+                    value={signInWith}
+                    onChange={(next) => {
+                      setSignInWith(next === 'private' ? 'private' : 'institute');
+                      clear('email_private');
+                    }}
+                  >
+                    <Stack gap="xs" mt={8}>
+                      <Radio value="institute" label={`My institute address, ${workEmail}`} />
+                      <Radio value="private" label="A private address" />
+                    </Stack>
+                  </Radio.Group>
+                ) : null}
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                   {door.kind === 'signup' ? (
-                    <TextInput
-                      label="Private email"
-                      description={wording.privateEmail}
-                      required
-                      type="email"
-                      autoComplete="email"
-                      maxLength={255}
-                      value={email}
-                      error={errors.email_private ?? null}
-                      onChange={(event) => {
-                        setEmail(event.currentTarget.value);
-                        clear('email_private');
-                      }}
-                    />
+                    signsInWithInstitute ? null : (
+                      <TextInput
+                        className={classes.reveal}
+                        label={kind?.account_email === 'any' ? 'Email' : 'Private email'}
+                        description={
+                          mayUseInstitute
+                            ? 'You sign in with it. It keeps working if you leave the institute.'
+                            : wording.privateEmail
+                        }
+                        required
+                        type="email"
+                        autoComplete="email"
+                        maxLength={255}
+                        value={email}
+                        error={errors.email_private ?? null}
+                        onChange={(event) => {
+                          setEmail(event.currentTarget.value);
+                          clear('email_private');
+                        }}
+                      />
+                    )
                   ) : (
                     <TextInput
-                      label="Private email"
+                      label="Sign-in email"
                       description="Your login’s address."
                       value={door.email}
                       readOnly

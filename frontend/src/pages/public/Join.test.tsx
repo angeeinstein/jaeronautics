@@ -23,6 +23,9 @@ function kind(
     description: `${label}, as the server says it.`,
     year_group: 'hidden',
     university_email_required: false,
+    work_email_at_joining: false,
+    work_email_whose: null,
+    account_email: 'private',
     company_name: false,
     joinable: true,
     ...more,
@@ -39,13 +42,28 @@ const options: Schemas['FormOptionsOut'] = {
     { value: 'Ms', label: 'Ms' },
   ],
   member_categories: [
-    kind('student', 'Student', { year_group: 'required', university_email_required: true }),
+    kind('student', 'Student', {
+      year_group: 'required',
+      university_email_required: true,
+      work_email_at_joining: true,
+      work_email_whose: 'student',
+    }),
     kind('alumni', 'Alumni', { year_group: 'optional' }),
-    kind('partner', 'Company or partner', { company_name: true }),
+    kind('staff', 'Staff or lecturer', {
+      work_email_at_joining: true,
+      work_email_whose: 'staff',
+      account_email: 'private_or_institute',
+    }),
+    kind('partner', 'Company or partner', { company_name: true, account_email: 'any' }),
     kind('honorary', 'Honorary member', { joinable: false }),
   ],
   invoice_payments: false,
-  university_domains: ['edu.fh-joanneum.at', 'fh-joanneum.at'],
+  student_domains: ['edu.fh-joanneum.at'],
+  staff_domains: ['fh-joanneum.at'],
+  programmes: [
+    { code: 'LAV', name: 'Aviation', degree: 'Bachelor' },
+    { code: 'MAV', name: 'Aviation', degree: 'Master' },
+  ],
 };
 
 const price: Schemas['SignupPriceOut'] = {
@@ -124,7 +142,8 @@ async function aboutAStudent() {
   await userEvent.click(screen.getByRole('radio', { name: 'Ms' }));
   type(/^First name/, 'Nora');
   type(/^Last name/, 'New');
-  type(/^Year group/, 'lav25');
+  await userEvent.click(screen.getByRole('radio', { name: /^Aviation · Bachelor/ }));
+  await userEvent.click(screen.getByRole('radio', { name: '2025' }));
   type(/^University email/, 'nora.new@edu.fh-joanneum.at');
 }
 
@@ -156,6 +175,7 @@ describe('joining, step by step', () => {
     expect(screen.getAllByRole('radio').map((radio) => radio.textContent)).toEqual([
       expect.stringMatching(/^Student/),
       expect.stringMatching(/^Alumni/),
+      expect.stringMatching(/^Staff or lecturer/),
       expect.stringMatching(/^Company or partner/),
     ]);
     expect(screen.getByRole('navigation', { name: 'Steps' })).toHaveTextContent(/Password/);
@@ -226,22 +246,122 @@ describe('joining, step by step', () => {
 
     expect(screen.getByRole('heading', { name: 'About you' })).toBeInTheDocument();
     expect(screen.getByText('Please enter your first name.')).toBeInTheDocument();
-    expect(screen.getByText('Please enter your year group.')).toBeInTheDocument();
+    expect(screen.getByText('Please choose your programme and the year you started.')).toBeInTheDocument();
     expect(screen.getByText('Please enter your university address.')).toBeInTheDocument();
-    type(/^University email/, 'nora@gmail.com');
+    // A staff address is not a student's, though it is the university's.
+    type(/^University email/, 'nora@fh-joanneum.at');
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(screen.getByText('Please use your @edu.fh-joanneum.at address.')).toBeInTheDocument();
+    expect(screen.getByText('Please use your student address: @edu.fh-joanneum.at.')).toBeInTheDocument();
   });
 
-  it('a company member is asked for the company, not a year group', async () => {
+  it('the year group: a programme by name or by its code, and the year started', async () => {
     mockFetch(base);
+    renderPage(<Join />);
+    await pick(/^Student/);
+
+    await userEvent.click(screen.getByRole('radio', { name: /^Aviation · Master/ }));
+    await userEvent.click(screen.getByRole('radio', { name: '2024' }));
+    expect(screen.getByText('MAV24')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: /^Another programme/ }));
+    type(/^Programme code/, 'bm1i');
+    expect(screen.getByRole('textbox', { name: /^Programme code/ })).toHaveValue('BMI');
+    expect(screen.getByText('BMI24')).toBeInTheDocument();
+  });
+
+  it('a company member names the company and signs in with the company address', async () => {
+    const { calls } = mockFetch({
+      ...base,
+      'POST /api/v1/signup': { body: { go_to: 'https://checkout.stripe.test/3' } },
+    });
+    vi.stubGlobal('location', {
+      origin: window.location.origin,
+      href: window.location.href,
+      assign: vi.fn(),
+    });
     renderPage(<Join />);
 
     await pick(/^Company or partner/);
+    expect(screen.queryByRole('radio', { name: /^Aviation/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /email/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Mr' }));
+    type(/^First name/, 'Rudi');
+    type(/^Last name/, 'Rep');
+    type(/^Company$/, 'Some Airline');
+    await next('How we reach you');
+    // Any address: a company's is what they join with.
+    type(/^Email/, 'rudi.rep@fh-joanneum.at');
+    type(/^Phone/, '+43123');
+    type(/^Street/, 'Main');
+    type(/^House number/, '1');
+    type(/^Postal code/, '8010');
+    type(/^City/, 'Graz');
+    await next('Your password');
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'a-good-password' } });
+    await next('Check and join');
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
 
-    expect(screen.getByRole('textbox', { name: /^Company$|^Company \*/ })).toBeRequired();
-    expect(screen.getByRole('textbox', { name: /^Company email/ })).not.toBeRequired();
-    expect(screen.queryByRole('textbox', { name: /^Year group/ })).not.toBeInTheDocument();
+    await vi.waitFor(async () => {
+      expect(await sentBody(calls, 'POST', '/api/v1/signup')).toMatchObject({
+        member_category: 'partner',
+        company_name: 'Some Airline',
+        email_private: 'rudi.rep@fh-joanneum.at',
+        email_work: null,
+        year_group: null,
+      });
+    });
+  });
+
+  it('staff give their institute address, and sign in with it or a private one', async () => {
+    const { calls } = mockFetch({
+      ...base,
+      'POST /api/v1/signup': { body: { go_to: 'https://checkout.stripe.test/4' } },
+    });
+    vi.stubGlobal('location', {
+      origin: window.location.origin,
+      href: window.location.href,
+      assign: vi.fn(),
+    });
+    renderPage(<Join />);
+
+    await pick(/^Staff or lecturer/);
+    await userEvent.click(screen.getByRole('radio', { name: 'Ms' }));
+    type(/^First name/, 'Lena');
+    type(/^Last name/, 'Lecturer');
+    type(/^Institute email/, 'lena.lecturer@edu.fh-joanneum.at');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText('Please use your institute address: @fh-joanneum.at.')).toBeInTheDocument();
+    type(/^Institute email/, 'lena.lecturer@fh-joanneum.at');
+    await next('How we reach you');
+
+    expect(screen.getByRole('radio', { name: /My institute address/ })).toBeChecked();
+    expect(screen.queryByRole('textbox', { name: /^Private email/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'A private address' }));
+    type(/^Private email/, 'lena@fh-joanneum.at');
+    type(/^Phone/, '+43123');
+    type(/^Street/, 'Main');
+    type(/^House number/, '1');
+    type(/^Postal code/, '8010');
+    type(/^City/, 'Graz');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText(/To sign in with your institute address, choose it above/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: /My institute address/ }));
+    await next('Your password');
+    fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'a-good-password' } });
+    await next('Check and join');
+    expect(screen.getByText('Sign-in email').closest('div')).toHaveTextContent(
+      'lena.lecturer@fh-joanneum.at',
+    );
+    await userEvent.click(screen.getByRole('checkbox'));
+    await userEvent.click(screen.getByRole('button', { name: 'Join and continue to payment' }));
+
+    await vi.waitFor(async () => {
+      expect(await sentBody(calls, 'POST', '/api/v1/signup')).toMatchObject({
+        member_category: 'staff',
+        email_private: 'lena.lecturer@fh-joanneum.at',
+        email_work: 'lena.lecturer@fh-joanneum.at',
+      });
+    });
   });
 
   it('an alumnus: the year group if remembered, the university address only if it still works', async () => {
@@ -250,7 +370,7 @@ describe('joining, step by step', () => {
 
     await pick(/^Alumni/);
 
-    expect(screen.getByRole('textbox', { name: /^Year group/ })).not.toBeRequired();
+    expect(screen.getByRole('radio', { name: 'I don’t remember' })).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /^University email/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'My university address still works' }));
     expect(screen.getByRole('textbox', { name: /^University email/ })).not.toBeRequired();
@@ -374,7 +494,7 @@ describe('a membership for a login without one', () => {
     expect(await screen.findByRole('navigation', { name: 'Steps' })).not.toHaveTextContent(/Password/);
     await aboutAStudent();
     await contact({ signup: false });
-    const address = screen.getByRole('textbox', { name: /^Private email/ });
+    const address = screen.getByRole('textbox', { name: /^Sign-in email/ });
     expect(address).toHaveValue('staff@example.org');
     expect(address).toHaveAttribute('readonly');
     await next('Check and join');

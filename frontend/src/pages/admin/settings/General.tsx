@@ -26,6 +26,7 @@ function Form({ data }: { data: GeneralOut }) {
     welcome_email_sender: data.welcome_email_sender,
     automatic_email_template: data.automatic_email_template,
     institutional_email_domains: data.institutional_email_domains,
+    staff_email_domains: data.staff_email_domains,
   });
   const { save, errors, clear } = useSectionSave(generalQuery.queryKey, (body: GeneralIn) =>
     call(api.PUT('/api/v1/admin/settings/general', { body })),
@@ -91,20 +92,41 @@ function Form({ data }: { data: GeneralOut }) {
           />
         </Stack>
       </Panel>
-      <Panel title="Students' email domains">
-        <Stack gap="xs">
-          <TextInput
-            label="University and company domains"
-            description="A student signing up must use an address on one of these, which is how the portal knows they study here. Separate them with commas; subdomains count. Empty keeps the built-in list rather than blocking everyone."
-            placeholder="edu.fh-joanneum.at, fh-joanneum.at"
-            value={value.institutional_email_domains ?? ''}
-            error={errors.institutional_email_domains}
-            onChange={(event) => {
-              change('institutional_email_domains', event.currentTarget.value || null);
-            }}
-          />
-          <Text size="sm" c="dimmed">
-            In use now: {data.domains_in_use.join(', ')}
+      <Panel title="University email domains">
+        <Stack gap="md">
+          <Stack gap="xs">
+            <TextInput
+              label="Students"
+              description="A student joining must give an address on one of these: it shows they study here now."
+              placeholder="edu.fh-joanneum.at"
+              value={value.institutional_email_domains ?? ''}
+              error={errors.institutional_email_domains}
+              onChange={(event) => {
+                change('institutional_email_domains', event.currentTarget.value || null);
+              }}
+            />
+            <Text size="sm" c="dimmed">
+              In use now: {data.domains_in_use.join(', ')}
+            </Text>
+          </Stack>
+          <Stack gap="xs">
+            <TextInput
+              label="Staff"
+              description="Staff and lecturers give an address on one of these, and may sign in with it. A student's address never counts as one."
+              placeholder="fh-joanneum.at"
+              value={value.staff_email_domains ?? ''}
+              error={errors.staff_email_domains}
+              onChange={(event) => {
+                change('staff_email_domains', event.currentTarget.value || null);
+              }}
+            />
+            <Text size="sm" c="dimmed">
+              In use now: {data.staff_domains_in_use.join(', ')}
+            </Text>
+          </Stack>
+          <Text size="xs" c="dimmed">
+            Separate them with commas; subdomains count. Empty keeps the built-in list rather than blocking
+            everyone.
           </Text>
         </Stack>
       </Panel>

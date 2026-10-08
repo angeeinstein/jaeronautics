@@ -71,21 +71,49 @@ YEAR_GROUP_RULES = {
 }
 
 
-# Who has to give an institutional address, and whose is checked against the
-# allowed domains.
+# Who has to give an institutional address, and on whose domains.
 #
-# Only students, and for one reason: a live @edu.fh-joanneum.at address is what
-# says somebody is a student right now. A partner gives a company address that
-# no list here could anticipate, and an alumnus's university address has
-# usually stopped working -- which is the whole reason a private address is
-# collected as well.
+# A student must, always: a live @edu.fh-joanneum.at address is what says
+# somebody is a student right now. Staff give their institute address
+# (@fh-joanneum.at) when they join -- members from before that rule are not
+# asked again for theirs -- and it must be a staff address, not a student's. A
+# partner's company address is one no list could anticipate, and an alumnus's
+# university address has usually stopped working -- which is the whole reason a
+# private address is collected as well.
 INSTITUTIONAL_EMAIL_RULES = {
-    MemberCategory.STUDENT: {"required": True, "domain_checked": True},
-    MemberCategory.ALUMNI: {"required": False, "domain_checked": False},
-    MemberCategory.STAFF: {"required": False, "domain_checked": False},
-    MemberCategory.PARTNER: {"required": False, "domain_checked": False},
-    MemberCategory.HONORARY: {"required": False, "domain_checked": False},
+    MemberCategory.STUDENT: {"required": True, "at_joining": True, "domains": "student"},
+    MemberCategory.ALUMNI: {"required": False, "at_joining": False, "domains": None},
+    MemberCategory.STAFF: {"required": False, "at_joining": True, "domains": "staff"},
+    MemberCategory.PARTNER: {"required": False, "at_joining": False, "domains": None},
+    MemberCategory.HONORARY: {"required": False, "at_joining": False, "domains": None},
 }
+
+# Which address a member's account belongs to -- where the association writes,
+# where a new password goes.
+#
+# A student's and an alumnus's must be private: a university address ends with
+# the studies, and with it the way into the account. Staff may choose theirs or
+# their institute address; somebody who leaves the institute changes it in My
+# Account first. A company member's is their company address: they join for it.
+ACCOUNT_EMAIL_RULES = {
+    MemberCategory.STUDENT: "private",
+    MemberCategory.ALUMNI: "private",
+    MemberCategory.STAFF: "private_or_institute",
+    MemberCategory.PARTNER: "any",
+    MemberCategory.HONORARY: "private",
+}
+
+
+# A year group is a study programme's three-letter code and the two digits of
+# the year somebody started it: LAV25. Every programme at the university has
+# such a code; the ones most members study are offered by name, any other is
+# typed. Membership is open to all of them, so this is a convenience, not a list
+# of who may join.
+YEAR_GROUP_PATTERN = r"^[A-Z]{3}[0-9]{2}$"
+STUDY_PROGRAMMES = (
+    ("LAV", "Aviation", "Bachelor"),
+    ("MAV", "Aviation", "Master"),
+)
 
 
 # Who is asked for the company they join for: partners, and they must say.
@@ -111,14 +139,26 @@ def is_valid(category):
     return category in CATEGORY_LABELS
 
 
-def requires_institutional_email(category):
-    """Whether this category cannot be saved without a university/company address."""
-    return INSTITUTIONAL_EMAIL_RULES.get(category, {}).get("required", False)
+def requires_institutional_email(category, joining=False):
+    """Whether this category cannot be saved without a university/company address --
+    ``joining``: when the membership is made, which asks staff for theirs too."""
+    rules = INSTITUTIONAL_EMAIL_RULES.get(category, {})
+    return rules.get("at_joining" if joining else "required", False)
+
+
+def institutional_domains_of(category):
+    """Whose domains that address must be on: "student", "staff", or None for any."""
+    return INSTITUTIONAL_EMAIL_RULES.get(category, {}).get("domains")
 
 
 def checks_institutional_domain(category):
-    """Whether that address must be on the allowed-domain list."""
-    return INSTITUTIONAL_EMAIL_RULES.get(category, {}).get("domain_checked", False)
+    """Whether that address must be on one of the allowed-domain lists."""
+    return institutional_domains_of(category) is not None
+
+
+def account_email_rule(category):
+    """Which address the account may belong to: "private", "private_or_institute" or "any"."""
+    return ACCOUNT_EMAIL_RULES.get(category, "private")
 
 
 def category_label(category):
