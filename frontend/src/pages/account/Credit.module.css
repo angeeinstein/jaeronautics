@@ -1,0 +1,121 @@
+/* My Account › Credit (Credit.tsx): the balance large in the mono face, the
+   bar of how much of the most one may hold it is, then topping up and the
+   history. Square and flat (docs/design.md). */
+
+.balance {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: var(--mantine-spacing-lg);
+  background:
+    radial-gradient(
+      ellipse at 100% 0%,
+      color-mix(in srgb, var(--ja-accent) 16%, transparent),
+      transparent 60%
+    ),
+    var(--ja-surface);
+  border: 1px solid var(--ja-border);
+}
+
+.label {
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+  color: var(--ja-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.amount {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: clamp(2.4rem, 8vw, 3.4rem);
+  font-weight: 600;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.amount[data-negative] {
+  color: var(--ja-danger);
+}
+
+.bar {
+  height: 6px;
+  background: var(--ja-surface-alt);
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ja-accent);
+  transition: width 0.9s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar > span {
+    transition: none;
+  }
+}
+
+.muted {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-muted);
+}
+
+.choice {
+  min-width: 6.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.right {
+  text-align: right;
+}
+
+/* On a phone the date goes under what it was, and the balance after each
+   entry is left out: what remains fits without scrolling sideways. */
+.narrow {
+  display: none;
+}
+
+@media (max-width: 36em) {
+  .wide {
+    display: none;
+  }
+
+  .narrow {
+    display: inline;
+  }
+}
+
+.when {
+  white-space: nowrap;
+  color: var(--ja-muted);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.money {
+  text-align: right;
+  white-space: nowrap;
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.money[data-sign='1'] {
+  color: var(--ja-success);
+}
+
+.receipt,
+.download {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+}

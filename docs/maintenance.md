@@ -408,13 +408,14 @@ are taken.
 ## Stripe Webhook Events
 
 The endpoint (`https://<portal>/stripe-webhook`, in Stripe under Developers →
-Webhooks) needs exactly these 13 events, on the test and the live account:
+Webhooks) needs exactly these 14 events, on the test and the live account:
 
 | Event | What the portal does with it |
 |---|---|
-| `checkout.session.completed` | A Checkout finished: membership, team subscription or team payment |
+| `checkout.session.completed` | A Checkout finished: membership, team subscription, team payment or credit top-up |
 | `checkout.session.async_payment_succeeded` | A SEPA debit for a one-time payment cleared |
 | `checkout.session.async_payment_failed` | A SEPA debit for a one-time payment failed |
+| `checkout.session.expired` | A credit top-up left unpaid: the next one opens a new Checkout |
 | `customer.subscription.updated` | Cancellation set or taken back, status changes |
 | `customer.subscription.deleted` | A subscription ended |
 | `invoice.paid` | A subscription payment, first or renewal |
@@ -423,8 +424,8 @@ Webhooks) needs exactly these 13 events, on the test and the live account:
 | `payment_intent.processing` | A SEPA debit is on its way |
 | `payment_intent.succeeded` | A membership payment confirmed |
 | `payment_intent.payment_failed` | A membership payment failed |
-| `charge.refunded` | A refund, taken off what a team is owed |
-| `charge.dispute.closed` | A chargeback decided |
+| `charge.refunded` | A refund, taken off what a team is owed, or off somebody's credit |
+| `charge.dispute.closed` | A chargeback decided; a lost one on a top-up comes off the credit |
 
 Any other event is accepted and ignored; leaving them out only spares the log
 and Stripe's retries.
@@ -518,6 +519,60 @@ subscription and payment intent, and give it a product of its own in Stripe --
 not a second price under the membership's product. A payment link made in the
 dashboard carries no metadata, so for those the separate product is what tells
 them apart.
+
+## Credit
+
+A balance members top up and spend with the association (coffee, drinks),
+prepared: nothing spends it yet. The plan and what was decided:
+`docs/credit-plan.md`. Code: `services/credit.py`, `api/credit.py`; pages in
+`frontend/src/pages/account/Credit.tsx` and `frontend/src/pages/admin/credit/`.
+
+**Setting it up**
+
+1. In Stripe (test account first): Product catalogue › Add product, named
+   "Credit". Its price does not matter -- the portal sets the amount of each
+   top-up -- but the product must stay active.
+2. For EPS (Austrian online banking) beside cards: Settings › Payment methods
+   › EPS on. Cards include Apple Pay and Google Pay without anything more.
+3. Add `checkout.session.expired` to the webhook's events (see Stripe Webhook
+   Events above); the others it needs are there already.
+4. Admin › Settings › Credit: paste the product's ID (`prod_…`), set the
+   limits (default: top-ups of at least 10 €, at most 20 € on one account,
+   buttons for 10, 15 and 20 €), tick EPS if switched on in Stripe, and
+   switch credit on.
+
+**Who sees what.** Active members see *Credit* in My Account (a tile on the
+overview, a page in the side menu) and may top up; somebody whose membership
+ended keeps seeing their credit but cannot top up. Admins and the treasurer
+(`credit.manage`) have Admin › Credit: every balance, the latest entries,
+and per person booking cash handed over, credit paid out, corrections (with
+a reason) and refunds. Admin › Settings › Credit is `settings.general`.
+
+**Safe by construction.**
+
+- Every change is a `credit_entries` row, never changed or deleted; the
+  balance in `credit_accounts` is changed under its row lock in the same
+  transaction. System health reports any balance that is not the sum of its
+  entries.
+- Money counts only once Stripe says it is there; a top-up reported twice is
+  recorded once (by its payment intent).
+- One top-up is open in Checkout per person at a time, so the most anybody
+  holds is checked against what they hold now.
+- A refund is made against the payment a top-up came from: Stripe refuses
+  more than is left of it, and sends it nowhere but back to whoever paid.
+  The refund is booked as it is made; the webhook reporting it afterwards
+  books nothing more. A refund made in Stripe's dashboard comes off the
+  credit through the webhook.
+
+**Switching it off** hides credit from members and stops top-ups. Balances
+and history stay, Admin › Credit stays while anybody still has some, and a
+top-up already paid is still added.
+
+**Erasing an account** refunds its credit to the payments it came from,
+newest first. What cannot go back through Stripe -- cash, or a payment too
+old to refund -- the admins are emailed about (`credit_left_at_erasure`);
+pay it out and book it as *Paid out* on the person's credit page. If Stripe
+cannot be reached, nothing is erased; try again.
 
 ## Renaming Somebody on the Forum
 

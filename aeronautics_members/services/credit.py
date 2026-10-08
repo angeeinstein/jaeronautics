@@ -351,6 +351,9 @@ def start_top_up(user, amount_cents):
     if amount > room:
         _refuse("amount_cents", f"You can top up at most {_euros(room)}: the most anyone holds is "
                                 f"{_euros(current.max_balance_cents)}.", code="credit_above_most")
+    # Part of the request's key, so a top-up after one was closed is a new
+    # page, not the closed one again; two clicks at once still make one.
+    previous = account.stripe_checkout_session_id or "none"
     if account.stripe_checkout_session_id:
         open_session = payments.open_checkout_session(account.stripe_checkout_session_id, what="credit Checkout")
         if open_session is not None and account.checkout_amount_cents == amount:
@@ -382,7 +385,7 @@ def start_top_up(user, amount_cents):
         cancel_url=build_public_url("account.credit_page"),
         **customer,
     )
-    key = f"checkout:credit:{user.id}:{account.balance_cents}:{payments.request_fingerprint(params)}"
+    key = f"checkout:credit:{user.id}:{previous}:{account.balance_cents}:{payments.request_fingerprint(params)}"
     session = payments.create_checkout_session(params, idempotency_key=key)
     account.stripe_checkout_session_id = session.get("id")
     account.checkout_amount_cents = amount

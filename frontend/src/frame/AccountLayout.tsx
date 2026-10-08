@@ -2,11 +2,12 @@
  * My Account: the frame with its side menu (docs/frontend-structure.md, 6) --
  * the overview, then each part on a page of its own: the profile, the
  * membership and its billing, the forum and one's picture, one's data. More
- * parts (credit, say) are an entry here and a page. An account without a
- * membership has the overview and its data only. Its pages keep the narrow
- * centred column.
+ * parts are an entry here and a page: credit, while it is on. An account
+ * without a membership has the overview and its data only. Its pages keep
+ * the narrow centred column.
  */
 import {
+  IconCoins,
   IconCreditCard,
   IconLayoutDashboard,
   IconMessages,
@@ -32,6 +33,7 @@ export function accountSidebar(me: Me): SidebarContent {
             ? { label: 'Membership and billing', to: '/account/membership', icon: IconCreditCard }
             : null,
           member ? { label: 'Forum and picture', to: '/account/forum', icon: IconMessages } : null,
+          me.credit_area ? { label: 'Credit', to: '/account/credit', icon: IconCoins } : null,
           { label: 'Privacy and data', to: '/account/data', icon: IconShieldLock },
         ],
       },

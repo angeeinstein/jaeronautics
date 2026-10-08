@@ -172,6 +172,15 @@ class TestTopUp:
         assert second != first
         assert credit_on.named("session.expire") == [("session.expire", "cs_1")]
 
+    def test_back_to_an_amount_after_another_is_a_new_page(self, credit_on):
+        anna = _person()
+        credit.start_top_up(anna, 1500)
+        credit.start_top_up(anna, 1000)
+        credit.start_top_up(anna, 1500)
+
+        keys = [key for _name, key, _params in credit_on.named("session.create")]
+        assert len(keys) == len(set(keys)) == 3
+
     @pytest.mark.parametrize("amount, code", [(500, "credit_below_least"), (2500, "credit_above_most")])
     def test_amounts_outside_the_limits(self, credit_on, amount, code):
         with pytest.raises(ValidationError) as refused:

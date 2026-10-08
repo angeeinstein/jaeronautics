@@ -5,11 +5,12 @@
  * person looking may see; actions only where they would not be refused --
  * the server says which (api/admin_account.py).
  */
-import { Avatar, Group, Tabs, Text } from '@mantine/core';
+import { Avatar, Button, Group, Tabs, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useMe } from '../../../api/session';
+import { AppLink } from '../../../app/AppLink';
 import { PageHeader } from '../../../components/PageHeader';
 import { Pill } from '../../../components/Pill';
 import { ErrorState, LoadingState } from '../../../components/States';
@@ -22,6 +23,7 @@ import { ProfileTab } from './ProfileTab';
 import { RolesTab } from './RolesTab';
 import { type Account as AccountData, accountQuery } from './shared';
 import { TeamsTab } from './TeamsTab';
+import { formatEuros } from '../../../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 
 const TABS = ['profile', 'membership', 'forum', 'teams', 'roles', 'danger', 'activity'] as const;
@@ -110,6 +112,13 @@ export function Account() {
           >
             {initialsOf(title)}
           </Avatar>
+        }
+        actions={
+          data.credit_cents != null ? (
+            <Button component={AppLink} to={`/admin/credit/${String(data.id)}`} variant="default">
+              {`Credit ${formatEuros(data.credit_cents)}`}
+            </Button>
+          ) : undefined
         }
         description={
           <Group gap="sm" component="span">

@@ -15,7 +15,7 @@ import { ConfirmButton } from '../../components/ConfirmButton';
 import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { ErrorState, LoadingState } from '../../components/States';
-import { formatDate } from '../../lib/format';
+import { formatDate, formatEuros } from '../../lib/format';
 import { notifyFailed } from '../../lib/notify';
 import { goTo } from './shared';
 
@@ -77,6 +77,13 @@ function What({ token, impact }: { token: string; impact: Schemas['DeletionOut']
           <Alert color="amber" variant="light">
             <Text size="sm">
               {`Your membership is paid until ${formatDate(impact.paid_until)}. Deleting your account ends it now, and the rest is not refunded.`}
+            </Text>
+          </Alert>
+        ) : null}
+        {impact.credit_cents > 0 ? (
+          <Alert color="brand" variant="light">
+            <Text size="sm">
+              {`Your credit of ${formatEuros(impact.credit_cents)} is refunded to the card or account you paid it with. Credit handed over in cash is paid out by the treasurer.`}
             </Text>
           </Alert>
         ) : null}

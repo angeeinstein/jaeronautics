@@ -106,6 +106,10 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/account/Data')).Data }),
           },
           {
+            path: 'credit',
+            lazy: async () => ({ Component: (await import('../pages/account/Credit')).Credit }),
+          },
+          {
             path: 'create-membership',
             lazy: async () => ({
               Component: (await import('../pages/account/CreateMembership')).CreateMembership,
@@ -274,6 +278,12 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/admin/settings/Billing')).Billing }),
           },
           {
+            path: 'settings/credit',
+            lazy: async () => ({
+              Component: (await import('../pages/admin/settings/CreditSettings')).CreditSettings,
+            }),
+          },
+          {
             path: 'settings/forum',
             lazy: async () => ({ Component: (await import('../pages/admin/settings/Forum')).Forum }),
           },
@@ -314,6 +324,14 @@ export const routes: RouteObject[] = [
           {
             path: 'money/:slug',
             lazy: async () => ({ Component: (await import('../pages/admin/money/TeamMoney')).TeamMoney }),
+          },
+          {
+            path: 'credit',
+            lazy: async () => ({ Component: (await import('../pages/admin/credit/Credit')).Credit }),
+          },
+          {
+            path: 'credit/:userId',
+            lazy: async () => ({ Component: (await import('../pages/admin/credit/Holder')).Holder }),
           },
         ],
       },

@@ -2395,6 +2395,11 @@ export interface components {
              */
             account_state: "active" | "no_sign_in" | "disabled" | "erased";
             actions: components["schemas"]["Actions"];
+            /**
+             * Credit Cents
+             * @default null
+             */
+            credit_cents?: number | null;
             /** Disabled At */
             disabled_at: string | null;
             /** Disabled Reason */
@@ -3259,6 +3264,8 @@ export interface components {
          * @description What deleting does to this account, said before the button.
          */
         DeletionOut: {
+            /** Credit Cents */
+            credit_cents: number;
             /** Export Url */
             export_url: string;
             /** Has Forum Account */
@@ -3357,6 +3364,11 @@ export interface components {
             confirm_email: string;
             /** Coverage End */
             coverage_end: string | null;
+            /**
+             * Credit Cents
+             * @default 0
+             */
+            credit_cents?: number;
             /** Has Forum Account */
             has_forum_account: boolean;
             /** Has Stripe Customer */

@@ -179,14 +179,14 @@ def admin_settings():
 
 #: A section of the settings, and what it needs beyond the general settings permission.
 SETTINGS_SECTIONS = {
-    "general": None, "notifications": None, "billing": Permission.SETTINGS_CREDENTIALS,
+    "general": None, "notifications": None, "credit": None, "billing": Permission.SETTINGS_CREDENTIALS,
     "forum": Permission.SETTINGS_CREDENTIALS, "mail": Permission.SETTINGS_CREDENTIALS,
     "test-email": Permission.NOTIFICATIONS_MANAGE,
     "health": Permission.SYSTEM_UPDATE, "updates": Permission.SYSTEM_UPDATE, "backup": Permission.SYSTEM_BACKUP,
 }
 
 
-@admin_bp.route("/admin/settings/<any(general, notifications, billing, forum, mail, 'test-email', health, updates, backup)"
+@admin_bp.route("/admin/settings/<any(general, notifications, billing, credit, forum, mail, 'test-email', health, updates, backup)"
                 ":section>", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)

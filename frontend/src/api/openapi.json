@@ -447,6 +447,18 @@
           "actions": {
             "$ref": "#/components/schemas/Actions"
           },
+          "credit_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Credit Cents"
+          },
           "disabled_at": {
             "anyOf": [
               {
@@ -3340,6 +3352,10 @@
         "additionalProperties": false,
         "description": "What deleting does to this account, said before the button.",
         "properties": {
+          "credit_cents": {
+            "title": "Credit Cents",
+            "type": "integer"
+          },
           "export_url": {
             "title": "Export Url",
             "type": "string"
@@ -3379,6 +3395,7 @@
           "subscription_active",
           "paid_until",
           "is_last_admin",
+          "credit_cents",
           "export_url"
         ],
         "title": "DeletionOut",
@@ -3633,6 +3650,11 @@
               }
             ],
             "title": "Coverage End"
+          },
+          "credit_cents": {
+            "default": 0,
+            "title": "Credit Cents",
+            "type": "integer"
           },
           "has_forum_account": {
             "title": "Has Forum Account",

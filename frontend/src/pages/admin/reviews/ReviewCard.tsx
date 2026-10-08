@@ -22,15 +22,10 @@ import { api, call } from '../../../api/client';
 import { AppLink } from '../../../app/AppLink';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { Pill } from '../../../components/Pill';
-import { formatDateTime } from '../../../lib/format';
+import { formatDateTime, initialsOf } from '../../../lib/format';
 import { notifyDone, notifyNote } from '../../../lib/notify';
 import { type QueueItem, useDecision } from './shared';
 import classes from './Reviews.module.css';
-
-function initialsOf(name: string) {
-  const words = name.split(/\s+/).filter(Boolean);
-  return (words.length > 1 ? [words[0]?.[0], words.at(-1)?.[0]] : [words[0]?.[0]]).join('').toUpperCase();
-}
 
 function headline(item: QueueItem) {
   if (item.kind === 'picture') return 'Profile picture';

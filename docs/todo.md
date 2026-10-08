@@ -3,13 +3,13 @@
 What is agreed but not built yet. How this list works -- when it is worked
 through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
-The last batches (both 2026-10-08) built everything that was on the list;
-what it was is in their pull requests and in git history
-(`git log -- docs/todo.md`). One thing waits for the maintainer.
+The last batches (2026-10-08) built everything that was on the list, and
+credit (`docs/credit-plan.md`); what it was is in their pull requests and in
+git history (`git log -- docs/todo.md`). One thing waits for the maintainer.
 
 ## Open
 
-### Privacy policy: publish the version that names where pictures are shown
+### Legal texts: publish the 2026-10-08 drafts (pictures, credit)
 
 - **Added:** 2026-10-08
 - **Where:** `legal/privacy-policy/{de,en}/2026-10-08.md`, `status: "draft"`.
@@ -17,20 +17,14 @@ what it was is in their pull requests and in git history
   their teams' members and leads, and admins; the old forum's picture for
   reconnected members); the policy said so only for the forum. The draft
   adds it to § 22 and "profile picture" to the list in § 27.
+- **Also (added 2026-10-08, with credit):** the privacy policy draft names
+  the credit balance (§ 20, § 41), and a new draft of the membership terms,
+  `legal/membership-terms/{de,en}/2026-10-08.md`, adds § 31 "Credit" (the
+  later sections move up by one). See `docs/credit-plan.md`.
 - **Waiting for:** the maintainer reading the wording (shown under Admin ›
   Legal texts, *Not in force yet*). Once approved: `status: "published"` in
-  both files (the day stays, or the day it is published), nothing else.
+  all four files (the day stays, or the day it is published), nothing else.
 - **Open:** whether the board wants to see it first.
-
-### Credit: a balance members top up (prepared, nothing spends it yet)
-
-- **Added:** 2026-10-08 (first an idea on 2026-10-07)
-- **What, where, why, decided:** `docs/credit-plan.md` -- a switch, a Credit
-  card on My Account, a Credit page with top-up and full history, Stripe
-  Checkout on one "Credit" product with the amount set by the portal, an
-  append-only ledger, an admin view.
-- **Waiting for:** the maintainer's answers to the open questions at the end
-  of that note; then it is built at once (a feature, not a small change).
 
 ## Ideas for later (not scheduled)
 
@@ -40,6 +34,10 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
   portal and try to sign in there. No decision.
 - **Rounded corners** -- 2026-10-07. Discussed what switching the square look
   to rounded corners would cost; nothing decided.
+- **Credit in the person menu at the top right** -- 2026-10-08. The
+  maintainer was unsure it is needed; left out to keep the top bar minimal
+  (the overview's tile and the side menu show it). A line in
+  `frame/UserMenu.tsx` reading `GET /api/v1/account/credit` if wanted.
 - **The admin entry** -- the gear at the top right was kept; a shield with an
   "Admin" label and a count of reviews waiting was suggested as an
   alternative.

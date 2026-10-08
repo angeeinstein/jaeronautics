@@ -212,6 +212,32 @@ describe('my account: the overview', () => {
     expect(teams).toHaveAccessibleDescription(/Rocket Team.*Lead/);
   });
 
+  it('credit in a tile of its own while it is on', async () => {
+    show({
+      '/api/v1/me': { body: makeMe({ credit_area: true }) },
+      '/api/v1/account/credit': {
+        body: {
+          balance_cents: 1250,
+          top_up: { refused: null, choices: [], least_cents: 1000, most_cents: 750, max_balance_cents: 2000 },
+          entries: [],
+          export_url: '/account/credit/history.csv',
+        },
+      },
+    });
+
+    const credit = await screen.findByRole('link', { name: 'Credit' });
+    expect(credit).toHaveAttribute('href', '/account/credit');
+    await waitFor(() => {
+      expect(credit).toHaveAccessibleDescription(/€12\.50.*on your account.*Top up/);
+    });
+  });
+
+  it('no credit tile while it is off', async () => {
+    show();
+    await screen.findByRole('link', { name: 'Membership' });
+    expect(screen.queryByRole('link', { name: 'Credit' })).not.toBeInTheDocument();
+  });
+
   it('an account without a membership has the way to start one', async () => {
     show({
       '/api/v1/account': { body: { ...account, to_confirm: null, member: null } },
