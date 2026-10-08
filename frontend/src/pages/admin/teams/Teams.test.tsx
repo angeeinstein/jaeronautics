@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Schemas } from '../../../api/client';
 import { makeMe } from '../../../test/fixtures';
 import { type Answers, mockFetch, renderPage } from '../../../test/render';
+import { Route, Routes } from 'react-router';
+
+import { ArchivePage, DetailsPage, FeePage } from '../../teams/manage/Admin';
 import { NewTeam } from './NewTeam';
 import { Team } from './Team';
 import { Teams } from './Teams';
@@ -123,7 +126,7 @@ describe('the list', () => {
     expect(rows[1]).toHaveTextContent('Rocket Team4€10.00 every 6 monthsLena Lead');
     expect(within(table).getByRole('link', { name: 'Rocket Team' })).toHaveAttribute(
       'href',
-      '/admin/teams/rocket',
+      '/teams/rocket/manage/details',
     );
     expect(rows[2]).toHaveTextContent('Glider Team0FreeNone');
     expect(rows[3]).toHaveTextContent('Balloon TeamArchived');
@@ -207,27 +210,28 @@ describe('a new team', () => {
   });
 });
 
-describe('one team', () => {
-  const route = ['/admin/teams/rocket', '/admin/teams/:slug'] as const;
-
-  it('its cards, and the way to its own page', async () => {
-    show(<Team />, ...route);
-
-    expect(await screen.findByRole('heading', { name: 'Rocket Team', level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Team page and settings' })).toHaveAttribute(
-      'href',
-      '/teams/rocket/manage',
+describe('one team: the old address', () => {
+  it("goes to the team's own pages", async () => {
+    renderPage(
+      <Routes>
+        <Route path="/admin/teams/:slug" element={<Team />} />
+        <Route path="/teams/:slug/manage/details" element={<p>Team details</p>} />
+      </Routes>,
+      { route: '/admin/teams/rocket', path: '*' },
     );
-    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Rocket Team');
-    expect(screen.getByRole('table', { name: 'Roles' })).toHaveTextContent(
-      'Lena Leadlena@example.orgLeadYes',
-    );
+
+    expect(await screen.findByText('Team details')).toBeInTheDocument();
   });
+});
 
+describe('one team, in its own pages (site admins only)', () => {
   it('saves the details', async () => {
-    const { calls } = show(<Team />, ...route, { [`PUT ${API}/rocket`]: { body: team() } });
+    const { calls } = show(<DetailsPage />, '/teams/rocket/manage/details', '/teams/:slug/manage/details', {
+      [`PUT ${API}/rocket`]: { body: team() },
+    });
 
-    const size = await screen.findByRole('textbox', { name: 'Maximum size' });
+    expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('Rocket Team');
+    const size = screen.getByRole('textbox', { name: 'Maximum size' });
     await userEvent.clear(size);
     await userEvent.click(screen.getByRole('checkbox', { name: /Has rooms that need an access list/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -242,7 +246,7 @@ describe('one team', () => {
   });
 
   it('changes the fee only after a second click, and says what it did to the members', async () => {
-    const { calls } = show(<Team />, ...route, {
+    const { calls } = show(<FeePage />, '/teams/rocket/manage/fee', '/teams/:slug/manage/fee', {
       [`PUT ${API}/rocket/fee`]: { body: { moving: 0, stopping: 0, switched: 0, asked_to_pay: 3 } },
     });
 
@@ -264,36 +268,8 @@ describe('one team', () => {
     ).toBeInTheDocument();
   });
 
-  it('gives a role by email address', async () => {
-    const { calls } = show(<Team />, ...route, { [`POST ${API}/rocket/roles`]: { body: team() } });
-
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Email address' }), ' tom@example.org ');
-    await userEvent.click(screen.getByRole('combobox', { name: 'Role' }));
-    await userEvent.click(screen.getByRole('option', { name: 'Treasurer' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Give role' }));
-
-    expect(await sent(calls, 'POST', `${API}/rocket/roles`)).toEqual({
-      email: 'tom@example.org',
-      role: 'treasurer',
-    });
-  });
-
-  it('removing the last lead says so and is confirmed', async () => {
-    const { calls } = show(<Team />, ...route, { [`POST ${API}/rocket/roles/revoke`]: { body: team() } });
-    const roles = await screen.findByRole('table', { name: 'Roles' });
-
-    await userEvent.click(within(roles).getByRole('button', { name: 'Remove' }));
-    await userEvent.click(within(roles).getByRole('button', { name: 'Yes, remove the last lead' }));
-
-    expect(await sent(calls, 'POST', `${API}/rocket/roles/revoke`)).toEqual({
-      user_id: 21,
-      role: 'lead',
-      confirmed: true,
-    });
-  });
-
   it('archives once the name is typed', async () => {
-    const { calls } = show(<Team />, ...route, {
+    const { calls } = show(<ArchivePage />, '/teams/rocket/manage/archive', '/teams/:slug/manage/archive', {
       [`PUT ${API}/rocket/archived`]: { body: team({ status: 'archived' }) },
     });
 
@@ -309,7 +285,7 @@ describe('one team', () => {
   });
 
   it('an archived team can be restored', async () => {
-    const { calls } = show(<Team />, ...route, {
+    const { calls } = show(<ArchivePage />, '/teams/rocket/manage/archive', '/teams/:slug/manage/archive', {
       [`${API}/rocket`]: { body: team({ status: 'archived', archived_at: '2026-09-01T10:00:00Z' }) },
       [`PUT ${API}/rocket/archived`]: { body: team() },
     });
@@ -320,13 +296,5 @@ describe('one team', () => {
       archived: false,
       confirm_name: null,
     });
-  });
-
-  it('warns when no lead is in force', async () => {
-    show(<Team />, ...route, { [`${API}/rocket`]: { body: team({ has_lead_in_force: false }) } });
-
-    expect(
-      await screen.findByText('No lead in force. Until there is one, only admins can run it.'),
-    ).toBeInTheDocument();
   });
 });

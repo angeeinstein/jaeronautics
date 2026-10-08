@@ -1653,6 +1653,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/lead-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whom this person may make a lead: the team's members -- and, for a site */
+        get: operations["team_lead_candidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make somebody a lead of the team. It counts once they are a member of it. */
+        post: operations["team_lead_appoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/leads/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** No longer a lead of the team -- the last one only when confirmed. */
+        delete: operations["team_lead_dismiss"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/members": {
         parameters: {
             query?: never;
@@ -1885,7 +1936,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The team's leads (appointed by the association's admins) and its treasurer. */
+        /** The team's leads and its treasurer, and whom this person may appoint. */
         get: operations["team_roles"];
         put?: never;
         post?: never;
@@ -2131,6 +2182,11 @@ export interface components {
             /** Items */
             items: components["schemas"]["AccountRow"][];
             membership_counts: components["schemas"]["MembershipCounts"];
+            /**
+             * Old Forum Matching
+             * @default null
+             */
+            old_forum_matching?: number | null;
             /** Page */
             page: number;
             /** Pages */
@@ -2158,8 +2214,8 @@ export interface components {
             dir?: "asc" | "desc";
             /**
              * Kind
-             * @description "archived": carried over from the old forum and not reconnected yet.
-             * @default all
+             * @description "archived": carried over from the old forum and not reconnected yet. Left out unless asked for.
+             * @default portal
              * @enum {string}
              */
             kind?: "all" | "portal" | "archived";
@@ -2259,6 +2315,8 @@ export interface components {
             old_forum: ("unclaimed" | "reconnected") | null;
             /** Old Forum Username */
             old_forum_username: string | null;
+            /** Picture Url */
+            picture_url: string | null;
             /** Roles */
             roles: components["schemas"]["Role"][];
             /** Year Group */
@@ -2562,6 +2620,16 @@ export interface components {
         };
         /** CandidateOut */
         CandidateOut: {
+            /**
+             * Detail
+             * @default null
+             */
+            detail?: string | null;
+            /**
+             * In Team
+             * @default true
+             */
+            in_team?: boolean;
             /** Name */
             name: string;
             /** User Id */
@@ -2893,6 +2961,14 @@ export interface components {
              * @default null
              */
             reason?: string | null;
+        };
+        /** DismissLeadQuery */
+        DismissLeadQuery: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed?: boolean;
         };
         /** DismissedOut */
         DismissedOut: {
@@ -3403,6 +3479,8 @@ export interface components {
             /** Healthy */
             healthy: boolean;
             membership: components["schemas"]["MembershipOut"];
+            /** @default null */
+            pages?: components["schemas"]["PagesOut"] | null;
             /** Problems */
             problems: string[];
             queues: components["schemas"]["QueuesOut"];
@@ -3594,6 +3672,44 @@ export interface components {
             revision_after: string | null;
             /** State */
             state: string | null;
+        };
+        /**
+         * LatestCheckOut
+         * @description Whether CI passed for the newest version: it is offered once it has.
+         */
+        LatestCheckOut: {
+            /** Minutes Running */
+            minutes_running: number | null;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "passed" | "running" | "failed" | "unknown";
+            /** Typical Minutes */
+            typical_minutes: number | null;
+            /** Url */
+            url: string | null;
+        };
+        /** LeadCandidateQuery */
+        LeadCandidateQuery: {
+            /**
+             * Q
+             * @description Part of a name or address.
+             * @default
+             */
+            q?: string;
+        };
+        /** LeadCandidatesOut */
+        LeadCandidatesOut: {
+            /** Items */
+            items: components["schemas"]["CandidateOut"][];
+        };
+        /** LeadIn */
+        LeadIn: {
+            /** User Id */
+            user_id: number;
         };
         /** LeaveIn */
         LeaveIn: {
@@ -3865,7 +3981,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads")[];
             /** Slug */
             slug: string;
         };
@@ -4438,6 +4554,20 @@ export interface components {
             /** Picture Url */
             picture_url: string | null;
         };
+        /**
+         * PagesOut
+         * @description What the start page arrives with, fetched through the public address.
+         */
+        PagesOut: {
+            /** Address */
+            address: string | null;
+            /** Checked */
+            checked: boolean;
+            /** Note */
+            note: string | null;
+            /** Policies */
+            policies: number | null;
+        };
         /** PasswordIn */
         PasswordIn: {
             /** Current Password */
@@ -4727,6 +4857,11 @@ export interface components {
             email: string | null;
             /** Name */
             name: string;
+            /**
+             * Picture Url
+             * @default null
+             */
+            picture_url?: string | null;
             /** User Id */
             user_id: number | null;
         };
@@ -5260,6 +5395,11 @@ export interface components {
             about_html: string | null;
             /** Access List Enabled */
             access_list_enabled: boolean;
+            /**
+             * Administers
+             * @default false
+             */
+            administers?: boolean;
             /** Applications Waiting */
             applications_waiting: number | null;
             /** Can Edit Page */
@@ -5288,7 +5428,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
@@ -5300,6 +5440,11 @@ export interface components {
             sees_team_page: boolean;
             /** Slug */
             slug: string;
+            /**
+             * Status
+             * @default active
+             */
+            status?: string;
         };
         /** TeamPayment */
         TeamPayment: {
@@ -5336,6 +5481,11 @@ export interface components {
             /** Notes */
             notes: components["schemas"]["TeamNoteOut"][];
             now: components["schemas"]["NowOut"] | null;
+            /**
+             * Picture Url
+             * @default null
+             */
+            picture_url?: string | null;
             /** User Id */
             user_id: number;
         };
@@ -5364,10 +5514,16 @@ export interface components {
         TeamRolesOut: {
             /** Candidates */
             candidates: components["schemas"]["CandidateOut"][];
+            /** Lead Candidates */
+            lead_candidates: components["schemas"]["CandidateOut"][];
             /** Leads */
             leads: components["schemas"]["HolderOut"][];
             /** May Appoint */
             may_appoint: boolean;
+            /** May Appoint Leads */
+            may_appoint_leads: boolean;
+            /** Searches Everyone */
+            searches_everyone: boolean;
             /** Treasurers */
             treasurers: components["schemas"]["HolderOut"][];
         };
@@ -5626,8 +5782,11 @@ export interface components {
             last_run: components["schemas"]["LastRunOut"];
             /** Latest */
             latest: string | null;
+            latest_check: components["schemas"]["LatestCheckOut"] | null;
             /** Latest Check Failed */
             latest_check_failed: boolean;
+            /** Newer Version */
+            newer_version: boolean;
             progress: components["schemas"]["ProgressOut"];
             /** Request Never Picked Up */
             request_never_picked_up: boolean;
@@ -11357,6 +11516,180 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_lead_candidates: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadCandidatesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_lead_appoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeadIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRolesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_lead_dismiss: {
+        parameters: {
+            query?: {
+                confirmed?: boolean;
+            };
+            header?: never;
+            path: {
+                slug: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRolesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

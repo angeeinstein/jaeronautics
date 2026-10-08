@@ -112,7 +112,7 @@ export function Teams() {
                         <Table.Td>
                           <Group gap="sm" wrap="nowrap">
                             <TeamMark name={team.name} logoUrl={team.logo_url} />
-                            <AppLink to={`/admin/teams/${team.slug}`} className={classes.name}>
+                            <AppLink to={`/teams/${team.slug}/manage/details`} className={classes.name}>
                               {team.name}
                             </AppLink>
                             {team.status === 'archived' ? <Pill tone="neutral">Archived</Pill> : null}

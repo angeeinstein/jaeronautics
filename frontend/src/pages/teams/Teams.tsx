@@ -83,7 +83,7 @@ function Tile({ card, mine }: { card: Card; mine: boolean }) {
           <span className={classes.badge} id={`${id}-badge`}>
             {card.role ? <Pill tone="info">{card.role}</Pill> : <StatusPill membership={card.membership} />}
           </span>
-          <span className={classes.logo} aria-hidden>
+          <span className={classes.logo} data-image={card.logo_url ? true : undefined} aria-hidden>
             {card.logo_url ? <img src={card.logo_url} alt="" /> : initials(card.name)}
           </span>
         </span>

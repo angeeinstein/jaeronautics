@@ -26,7 +26,8 @@ def test_a_picture_in_the_queue(client):
     [item] = client.get(API).get_json()["queue"]
 
     assert item["kind"] == "picture" and item["id"] == picture.id and item["at"].endswith("Z")
-    assert item["person"] == {"user_id": member.user_id, "name": "Petra Pending", "email": "photo@example.com"}
+    assert item["person"] == {"user_id": member.user_id, "name": "Petra Pending", "email": "photo@example.com",
+                              "picture_url": None}
     assert item["picture"] == {"image_url": "/forum/avatar/public/tok-1", "forum_username": "PendingP_L25"}
     assert item["change"] is None
 

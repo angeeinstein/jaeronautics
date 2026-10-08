@@ -10,7 +10,7 @@
 import { Alert, Anchor, Button, Checkbox, Group, Stack, Text, Textarea } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type SyntheticEvent, useEffect, useState } from 'react';
+import { type SyntheticEvent, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { api, ApiError, call } from '../../api/client';
@@ -180,10 +180,15 @@ export function About() {
   const { hash } = useLocation();
   const team = useTeam(slug);
   useDocumentTitle(team.data ? `${team.data.name}: About` : 'About');
-  // A link to #join (Join, Apply on the overview) lands on the form once it is there.
+  // A link to #join (Join, Apply on the overview) lands on the form once it is
+  // there -- once: fetched again later, the team must not pull the page back.
+  const landed = useRef(false);
+  const loaded = team.data !== undefined;
   useEffect(() => {
-    if (hash === '#join' && team.data) document.getElementById('join')?.scrollIntoView();
-  }, [hash, team.data]);
+    if (hash !== '#join' || !loaded || landed.current) return;
+    landed.current = true;
+    document.getElementById('join')?.scrollIntoView();
+  }, [hash, loaded]);
   if (team.isPending) return <LoadingState />;
   if (team.isError) return <ErrorState error={team.error} onRetry={() => void team.refetch()} />;
   const data = team.data;

@@ -201,7 +201,10 @@ guide.
 
 ## Team leads
 
-- **Appointed by site admins** — *agreed so far.* "Lead" belongs to one team, not to
+- **Appointed by site admins and by the team's leads** — *changed 2026-10-08*
+  (it was site admins only): on the team's Roles page, chosen from a
+  drop-down -- a lead from the team's members, a site admin from all of the
+  association's members. See `docs/todo.md` or its history. "Lead" belongs to one team, not to
   the whole portal: a lead sees nothing outside their team. A team can have
   several leads, and a person can lead several teams. This is deliberately not
   one of the global roles in `permissions.py`, which apply portal-wide.

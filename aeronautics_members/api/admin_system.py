@@ -20,6 +20,7 @@ from ..permissions import Permission
 from ..services import maintenance
 from ..services.diagnostics import collect_system_health
 from ..services.notifications import list_undelivered_emails
+from ..services.clock import get_now_utc
 from ..services.system_update import describe_update_state, parse_time, read_full_log
 from ._core import Model, UtcDateTime, endpoint
 
@@ -66,6 +67,18 @@ class UndeliveredOut(Model):
     error: str | None
 
 
+class PagesOut(Model):
+    """What the start page arrives with, fetched through the public address."""
+
+    address: str | None
+    #: False: it could not be fetched, or there is no public address.
+    checked: bool
+    #: How many security policies arrived with it; one is right.
+    policies: int | None
+    #: All is well, or why it was not checked. A problem is among the warnings.
+    note: str | None
+
+
 class HealthOut(Model):
     healthy: bool
     problems: list[str]
@@ -76,6 +89,8 @@ class HealthOut(Model):
     queues: QueuesOut
     #: The newest emails that gave up, up to 25.
     undelivered: list[UndeliveredOut]
+    #: None when the pages were not fetched (the test suite).
+    pages: PagesOut | None = None
 
 
 @endpoint("GET", "/admin/settings/health", response=HealthOut, permissions=SYSTEM, tag=TAG)
@@ -93,6 +108,7 @@ def admin_system_health():
                            last_tried_at=job.last_attempted_at, error=job.last_error)
             for job in list_undelivered_emails()
         ],
+        pages=PagesOut(**{key: health["pages"][key] for key in PagesOut.model_fields}) if health["pages"] else None,
     )
 
 
@@ -182,11 +198,31 @@ class LastRunOut(Model):
     interrupted: str | None
 
 
+class LatestCheckOut(Model):
+    """Whether CI passed for the newest version: it is offered once it has."""
+
+    #: passed; running (also when its run has not started yet); failed;
+    #: unknown -- GitHub could not be asked, and the version is offered as before.
+    state: Literal["passed", "running", "failed", "unknown"]
+    #: The run on GitHub, or its list of runs.
+    url: str | None
+    started_at: UtcDateTime | None
+    #: Since when it runs, in whole minutes; while it runs.
+    minutes_running: int | None
+    #: How long CI usually takes, from its last runs; while it runs.
+    typical_minutes: int | None
+
+
 class UpdatesOut(Model):
     installed: VersionOut
     #: None when it could not be checked.
     latest: str | None
     latest_check_failed: bool
+    #: The newest version is not the one installed (offered or not).
+    newer_version: bool
+    #: Its CI, while there is a newer version.
+    latest_check: LatestCheckOut | None
+    #: A newer version whose CI passed -- or that GitHub could not say about.
     update_available: bool
     #: Without the runner on the server nothing can be started from here.
     runner_installed: bool
@@ -198,6 +234,20 @@ class UpdatesOut(Model):
     last_run: LastRunOut
 
 
+_CI_STATES = {"success": "passed", "running": "running", "none": "running", "failure": "failed"}
+
+
+def _latest_check(ci):
+    if ci is None:
+        return None
+    state = _CI_STATES.get(ci["state"], "unknown")
+    started = parse_time(ci.get("started_at"))
+    running = (max(0, int((get_now_utc() - started).total_seconds() // 60))
+               if state == "running" and started else None)
+    return LatestCheckOut(state=state, url=ci.get("url"), started_at=started, minutes_running=running,
+                          typical_minutes=ci.get("typical_minutes"))
+
+
 def _updates(force_remote_check=False):
     state = describe_update_state(force_remote_check=force_remote_check)
     local, run, point = state["local"], state["last_run"], state["rollback_point"]
@@ -207,6 +257,7 @@ def _updates(force_remote_check=False):
                              branch=None if detached else local.get("branch"), rolled_back=detached,
                              committed_at=parse_time(local.get("committed_at")), subject=local.get("subject")),
         latest=state["remote_short_revision"], latest_check_failed=state["remote_check_failed"],
+        newer_version=state["newer_version"], latest_check=_latest_check(state["remote_ci"]),
         update_available=state["update_available"], runner_installed=state["runner_installed"],
         in_progress=state["in_progress"], request_never_picked_up=state["request_never_picked_up"],
         progress=ProgressOut(**state["progress"]),

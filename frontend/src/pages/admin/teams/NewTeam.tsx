@@ -42,7 +42,8 @@ export function NewTeam() {
     {
       done: (team) => {
         notifyDone('Created. Give it a lead next.');
-        go(`/admin/teams/${team.slug}`);
+        // Straight into the team's own pages, where the rest is set up.
+        go(`/teams/${team.slug}/manage/details`);
       },
     },
   );

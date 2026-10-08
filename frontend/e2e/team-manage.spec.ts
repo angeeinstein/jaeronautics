@@ -34,6 +34,7 @@ test.describe("a team's management", () => {
     await page.goto('/teams/rocket-team/manage/roles');
 
     await expect(page.getByRole('region', { name: 'Leads' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Appoint a lead' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Treasurer' })).toBeVisible();
   });
 

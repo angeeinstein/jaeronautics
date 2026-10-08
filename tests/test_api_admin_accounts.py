@@ -97,7 +97,7 @@ class TestWhatARowSays:
             "id": people["anna"], "email": "c-anna@example.com", "name": "Anna Zeller", "year_group": "2020",
             "category": "alumni", "category_label": "Alumni", "old_forum": None, "old_forum_username": None,
             "account_state": "active", "disabled_reason": None, "forum_username": "ZellerA_L25", "roles": [],
-            "membership": "active", "membership_until": THIS_YEAR_END.isoformat(),
+            "membership": "active", "membership_until": THIS_YEAR_END.isoformat(), "picture_url": None,
         }
 
     def test_an_account_without_a_membership(self, admin_client, admin):
@@ -111,7 +111,7 @@ class TestWhatARowSays:
         """forum-mybb-645@imported.invalid tells an admin nothing."""
         profile = _archived()
 
-        row = _row(admin_client, profile.user_id)
+        row = _row(admin_client, profile.user_id, "kind=archived")
 
         assert row["email"] == OLD_EMAIL
         assert row["name"] == profile.display_name and row["year_group"] == "LAV23"
@@ -221,9 +221,29 @@ class TestFilters:
         make_member(email="current@example.com")
 
         # The admin doing the looking is an account too.
-        assert _list(admin_client)["total"] == 3
+        assert _list(admin_client, "kind=all")["total"] == 3
         assert _list(admin_client, "kind=archived")["total"] == 1
         assert _list(admin_client, "kind=portal")["total"] == 2
+
+    def test_the_old_forum_is_left_out_unless_asked_for(self, admin_client):
+        profile = _archived()
+        make_member(email="current@example.com")
+
+        listed = _list(admin_client)
+        assert profile.user_id not in [row["id"] for row in listed["items"]]
+        # The counts on the quick filters leave them out too.
+        assert listed["total"] == listed["membership_counts"]["all"] == 2
+
+    def test_a_search_says_how_many_of_the_old_forum_match_too(self, admin_client):
+        profile = _archived()
+        archived = profile.source_username
+
+        searched = _list(admin_client, f"q={archived}")
+        assert searched["total"] == 0
+        assert searched["old_forum_matching"] == 1
+        # Not when nothing is searched, nor when the old forum is already in.
+        assert _list(admin_client)["old_forum_matching"] is None
+        assert _list(admin_client, f"q={archived}&kind=all")["old_forum_matching"] is None
 
     def test_a_reconnected_person_is_not_offered_as_an_archive_any_more(self, admin_client):
         profile = _archived()
@@ -267,7 +287,7 @@ class TestFilters:
         """An admin asked "is my old account in there" has a name or an address."""
         profile = _archived()
 
-        assert _ids(admin_client, f"q={search}") == [profile.user_id]
+        assert _ids(admin_client, f"q={search}&kind=all") == [profile.user_id]
 
     def test_surrounding_spaces_do_not_count(self, admin_client, people):
         assert _ids(admin_client, "q=%20anna%20") == [people["anna"]]
@@ -322,7 +342,7 @@ class TestSorting:
         """The old board's names are surname-first (HuberA_L15), which sorts like a surname."""
         archived = _archived(email="b-bert@example.com", username="KellerB_L20", uid="9")
 
-        ids = _ids(admin_client)
+        ids = _ids(admin_client, "kind=all")
 
         assert ids.index(people["bernd"]) < ids.index(archived.user_id) < ids.index(people["clara"])
 

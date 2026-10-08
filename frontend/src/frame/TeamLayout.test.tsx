@@ -78,6 +78,20 @@ describe("a team's menu", () => {
     expect(content.groups[1]?.items[0]?.count).toBe(2);
   });
 
+  it("a site admin: the admins' settings besides, in a group of their own", () => {
+    const content = teamSidebar(
+      team({
+        administers: true,
+        permissions: ['team.view_members', 'team.edit_settings', 'team.view_money', 'team.appoint_leads'],
+      }),
+    );
+
+    expect(labels(content).at(-1)).toEqual(['Admin', 'Details', 'Fee', 'Archive']);
+    expect(
+      labels(teamSidebar(team({ role: 'Lead', permissions: ['team.view_members'] }))).flat(),
+    ).not.toContain('Admin');
+  });
+
   it('a treasurer: the money, nothing about its people', () => {
     expect(labels(teamSidebar(team({ permissions: ['team.view_money'] })))).toEqual([
       ['Team', 'Overview', 'About the team'],

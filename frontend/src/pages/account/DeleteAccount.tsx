@@ -53,8 +53,8 @@ function What({ token, impact }: { token: string; impact: Schemas['DeletionOut']
           </List.Item>
           {impact.has_stripe_customer ? (
             <List.Item>
-              Your payments were handled by Stripe, who keep their own record of them -- including the name
-              and address on each invoice -- under their own rules and Austrian bookkeeping law. Deleting your
+              Your payments were handled by Stripe, who keep their own record of them — including the name and
+              address on each invoice — under their own rules and Austrian bookkeeping law. Deleting your
               account here does not delete that. Your data download names your Stripe customer number, so you
               can ask Stripe directly.
             </List.Item>

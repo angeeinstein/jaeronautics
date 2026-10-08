@@ -148,8 +148,24 @@ def get_queue_summary():
     }
 
 
-def collect_system_health():
-    """Everything the health report shows, as plain serializable data."""
+def _checks_pages(asked):
+    """Whether to fetch the portal's own pages: when asked, but never by the
+    test suite unless a test means to (``HEALTH_PAGE_CHECK``) -- it would go to
+    the network."""
+    from flask import current_app
+
+    return asked and current_app.config.get("HEALTH_PAGE_CHECK", not current_app.testing)
+
+
+def collect_system_health(check_pages=True):
+    """Everything the health report shows, as plain serializable data.
+
+    ``check_pages``: also fetch the start page through the public address and
+    look at its security policy (page_check.py) -- a network request, cached
+    for a few minutes; the dashboard, which only counts problems, leaves it.
+    """
+    from .page_check import check_security_policy
+
     schema = get_schema_revision()
     membership = get_membership_summary()
     queues = get_queue_summary()
@@ -190,6 +206,9 @@ def collect_system_health():
         )
     if queues["emails_pending"] > 20:
         warnings.append(f"{queues['emails_pending']} emails are queued for delivery.")
+    pages = check_security_policy() if _checks_pages(check_pages) else None
+    if pages and pages["warning"]:
+        warnings.append(pages["warning"])
 
     return {
         "healthy": not problems,
@@ -198,4 +217,5 @@ def collect_system_health():
         "schema": schema,
         "membership": membership,
         "queues": queues,
+        "pages": pages,
     }

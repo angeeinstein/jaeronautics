@@ -6,8 +6,10 @@
  */
 import { Alert, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 
 import { api, call, type Schemas } from '../../api/client';
+import { meQuery } from '../../api/session';
 import { notifyMessage } from '../../lib/notify';
 
 export type Account = Schemas['MyAccountOut'];
@@ -34,11 +36,21 @@ export const formOptionsQuery = {
  * so by itself.
  */
 export function useAccount() {
-  return useQuery({
+  const client = useQueryClient();
+  const account = useQuery({
     ...accountQuery,
     refetchInterval: (query) =>
       query.state.data?.member?.membership.activating ? 3000 : query.state.data?.to_confirm ? 30_000 : false,
   });
+  // Once a payment is confirmed, the person is a member: the side menu and the
+  // top bar (from /me) gain the member's parts at once, not a minute later.
+  const activating = account.data?.member?.membership.activating ?? false;
+  const was = useRef(activating);
+  useEffect(() => {
+    if (was.current && !activating) void client.invalidateQueries({ queryKey: meQuery.queryKey });
+    was.current = activating;
+  }, [activating, client]);
+  return account;
 }
 
 export function useFormOptions() {

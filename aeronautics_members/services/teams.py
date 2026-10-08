@@ -30,7 +30,7 @@ from pathlib import Path
 
 from flask import current_app
 
-from ..db_models import Setting, Team, TeamMembership, TeamRole, User, db
+from ..db_models import Member, Setting, Team, TeamMembership, TeamRole, User, db
 from ..permissions import Permission
 from . import ConflictError, NotFoundError, ValidationError
 from .audit import log_audit_event
@@ -83,11 +83,14 @@ class TeamPermission:
     EDIT_BANK_DETAILS = "team.edit_bank_details"
     #: Give and take the treasurer role, among the team's own members.
     APPOINT_TREASURER = "team.appoint_treasurer"
+    #: Give and take the lead role: a lead among the team's members, a site
+    #: admin among all of the association's (the first lead of a new team).
+    APPOINT_LEADS = "team.appoint_leads"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
-        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER,
+        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS,
     })
     #: The team's money, and the account it is paid to -- nothing about people.
     MONEY = frozenset({VIEW_MONEY, EDIT_BANK_DETAILS})
@@ -891,9 +894,64 @@ def revoke_team_role(actor, team, user, role, *, confirmed=False):
     return True
 
 
+def may_appoint_from_everyone(actor):
+    """Site admins choose a lead from all of the association's members -- the
+    first lead of a new team is not in it yet; a lead from the team's own."""
+    return actor is not None and actor.can(Permission.TEAMS_MANAGE)
+
+
+def appoint_lead(actor, team, user_id):
+    """Make somebody a lead of the team: one of its members, chosen by a lead
+    or a site admin -- or, by a site admin, any member of the association. The
+    role counts once they are in the team (role_counts)."""
+    user = db.session.get(User, user_id) if user_id else None
+    if user is None or user.deleted_at is not None:
+        raise ValidationError("Choose a person.", code="team_lead_unknown")
+    if active_team_membership(user, team) is None:
+        if not may_appoint_from_everyone(actor):
+            raise ValidationError("Choose one of the team's members.", code="team_lead_not_member")
+        if not is_active_association_member(user):
+            raise ValidationError("Choose a member of the association.", code="team_lead_not_association_member")
+    return grant_team_role(actor, team, user, ROLE_LEAD)
+
+
+def dismiss_lead(actor, team, user_id, *, confirmed=False):
+    """No longer a lead. The team's last lead only when confirmed (revoke_team_role)."""
+    user = db.session.get(User, user_id) if user_id else None
+    if user is None:
+        raise NotFoundError("That person does not exist.")
+    return revoke_team_role(actor, team, user, ROLE_LEAD, confirmed=confirmed)
+
+
+def lead_candidates(actor, team, search=""):
+    """Whom ``actor`` may make a lead: ``(user, name)``, by name, leads left out.
+
+    The team's members; for a site admin who searches, also the association's
+    members whose name or address matches -- at most 20.
+    """
+    leading = {team_role.user_id for team_role in team.roles if team_role.role == ROLE_LEAD}
+    found = {row["user"].id: (row["user"], row["name"]) for row in roster(team) if row["user"].id not in leading}
+    search = (search or "").strip()
+    if search and may_appoint_from_everyone(actor):
+        pattern = f"%{search}%"
+        members = db.session.execute(
+            db.select(Member).join(User, User.id == Member.user_id).where(
+                User.deleted_at.is_(None),
+                Member.is_active.is_(True),
+                db.or_(Member.first_name.ilike(pattern), Member.last_name.ilike(pattern),
+                       User.email.ilike(pattern),
+                       (Member.first_name + " " + Member.last_name).ilike(pattern)),
+            ).order_by(Member.last_name, Member.first_name).limit(20)
+        ).scalars()
+        for member in members:
+            if member.user_id not in leading and member.user_id not in found:
+                found[member.user_id] = (member.user, _member_name(member.user))
+    return list(found.values())
+
+
 def appoint_treasurer(actor, team, user_id):
     """A lead makes one of the team's own members its treasurer. Leads are
-    appointed by site admins; the treasurer by the team itself."""
+    appointed by the team's leads and by site admins; the treasurer by the team itself."""
     user = db.session.get(User, user_id) if user_id else None
     if user is None or active_team_membership(user, team) is None:
         raise ValidationError("Choose one of the team's members.", code="team_treasurer_not_member")
@@ -1520,16 +1578,6 @@ def update_team_by_lead(actor, team, *, description=KEEP, application_prompt=KEE
     return team
 
 
-def avatar_token_for(user):
-    """The public token of the approved forum picture, or None."""
-    from ..forum_service import FORUM_AVATAR_STATUS_APPROVED
-
-    for submission in user.forum_avatar_submissions or []:
-        if submission.status == FORUM_AVATAR_STATUS_APPROVED and submission.public_token:
-            return submission.public_token
-    return None
-
-
 def person_details(user):
     """What a lead sees about a person: no address, nothing about payment."""
     member = user.member
@@ -1551,13 +1599,16 @@ def member_count(team):
 
 def roster(team):
     """The active members, by surname, for the team's own page and the lead's list."""
+    from .pictures import picture_urls
+
     members = team_memberships(team, {ACTIVE})
+    pictures = picture_urls([membership.user for membership in members])
     return sorted(
         (
             {
                 "membership": membership,
                 "user": membership.user,
-                "avatar_token": avatar_token_for(membership.user),
+                "picture_url": pictures.get(membership.user_id),
                 "is_lead": any(team_role.user_id == membership.user_id and team_role.role == ROLE_LEAD
                                for team_role in team.roles),
                 **person_details(membership.user),

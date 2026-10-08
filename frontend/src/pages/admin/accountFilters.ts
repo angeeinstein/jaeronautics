@@ -2,7 +2,9 @@
  * The account list's filters, sort and page live in its address, so a
  * filtered list can be bookmarked, shared, reloaded and gone back to.
  *
- * Only what differs from the default is written into the address. Links made
+ * Only what differs from the default is written into the address -- and the
+ * default leaves the old forum's people out: they are shown only when asked
+ * for (``kind=all`` or ``kind=archived``). Links made
  * for the old page (``?active=active``, ``?membership_status=...``,
  * ``?role=role:admin``) are read and turned into today's filters.
  */
@@ -32,7 +34,7 @@ export const DEFAULT_FILTERS: AccountFilters = {
   membership: 'all',
   role: 'all',
   account: 'all',
-  kind: 'all',
+  kind: 'portal',
   sort: 'name',
   desc: false,
   page: 1,
@@ -54,7 +56,7 @@ export const ACCOUNT_FILTERS: readonly AccountFilter[] = [
   'disabled',
   'erased',
 ];
-export const KIND_FILTERS: readonly KindFilter[] = ['all', 'portal', 'archived'];
+export const KIND_FILTERS: readonly KindFilter[] = ['portal', 'all', 'archived'];
 export const SORT_KEYS: readonly SortKey[] = ['name', 'kind', 'membership', 'until', 'forum'];
 
 function oneOf<T extends string>(allowed: readonly T[], value: string | null, fallback: T): T {
@@ -107,7 +109,7 @@ export function filtersFromParams(params: URLSearchParams): AccountFilters {
     membership,
     role,
     account: oneOf(ACCOUNT_FILTERS, params.get('account'), 'all'),
-    kind: oneOf(KIND_FILTERS, params.get('kind'), 'all'),
+    kind: oneOf(KIND_FILTERS, params.get('kind'), DEFAULT_FILTERS.kind),
     sort,
     desc: params.get('dir') === 'desc',
     page: Number.isFinite(page) && page > 1 ? page : 1,
@@ -120,7 +122,7 @@ export function paramsFromFilters(filters: AccountFilters): URLSearchParams {
   if (filters.membership !== 'all') params.set('membership', filters.membership);
   if (filters.role !== 'all') params.set('role', filters.role);
   if (filters.account !== 'all') params.set('account', filters.account);
-  if (filters.kind !== 'all') params.set('kind', filters.kind);
+  if (filters.kind !== DEFAULT_FILTERS.kind) params.set('kind', filters.kind);
   if (filters.sort !== DEFAULT_FILTERS.sort || filters.desc) {
     params.set('sort', filters.sort);
     params.set('dir', filters.desc ? 'desc' : 'asc');
@@ -150,6 +152,6 @@ export function isFiltered(filters: AccountFilters): boolean {
     filters.membership !== 'all' ||
     filters.role !== 'all' ||
     filters.account !== 'all' ||
-    filters.kind !== 'all'
+    filters.kind !== DEFAULT_FILTERS.kind
   );
 }

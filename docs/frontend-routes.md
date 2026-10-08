@@ -64,9 +64,9 @@ Status: `[ ]` to do, `[x]` done.
 ### 4.4 Teams (the admins' part)
 - [x] `GET|POST /admin/teams` (page + action: the list, creating) → `GET /api/v1/admin/teams`, `POST /api/v1/admin/teams`; the switch and names `PUT /api/v1/admin/team-settings`
 - [x] `GET|POST /admin/teams/new` (page + action) → the page; creating as above
-- [x] `GET|POST /admin/teams/<slug>` (page + action: the admins' settings) → `GET|PUT /api/v1/admin/teams/<slug>`; the fee `PUT /api/v1/admin/teams/<slug>/fee`
+- [x] `GET|POST /admin/teams/<slug>` (page + action: the admins' settings) → `GET|PUT /api/v1/admin/teams/<slug>`; the fee `PUT /api/v1/admin/teams/<slug>/fee`. Since 2026-10-08 the page forwards to `/teams/<slug>/manage/details`; the settings are in the team's side menu (*Admin*: Details, Fee, Archive)
 - [x] `POST /admin/teams/<slug>/archive` (action) → `PUT /api/v1/admin/teams/<slug>/archived`
-- [x] `POST /admin/teams/<slug>/roles`, `/roles/revoke` (action) → `POST /api/v1/admin/teams/<slug>/roles`, `/roles/revoke`
+- [x] `POST /admin/teams/<slug>/roles`, `/roles/revoke` (action) → `POST /api/v1/admin/teams/<slug>/roles`, `/roles/revoke` (kept in the API; the pages appoint leads at `POST|DELETE /api/v1/teams/<slug>/manage/leads`, chosen from `GET .../manage/lead-candidates`)
 
 ### 4.5 Money
 - [x] `GET /admin/money` (page) → `GET /api/v1/admin/money`; the check against Stripe `GET /api/v1/admin/money/overview?since=&until=` (the page keeps `?check=1&since=&until=`)

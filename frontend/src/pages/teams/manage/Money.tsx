@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
+import { useMe } from '../../../api/session';
 import { AppLink } from '../../../app/AppLink';
 import { PageHeader } from '../../../components/PageHeader';
 import { Panel } from '../../../components/Panel';
@@ -280,12 +281,13 @@ export function Money() {
   });
   useLiveRefresh(fundsKey(slug), EVERY_MINUTE);
   const name = funds.data?.name ?? slug;
+  const plural = useMe().data?.team_labels.plural ?? 'Teams';
   return (
     <>
       <PageHeader
         title="Money"
         description="What the members paid, what was transferred to the team, and what is open."
-        crumbs={[{ label: 'Teams', to: '/teams' }, { label: name, to: `/teams/${slug}` }, { label: 'Money' }]}
+        crumbs={[{ label: plural, to: '/teams' }, { label: name, to: `/teams/${slug}` }, { label: 'Money' }]}
         actions={
           funds.data ? (
             <>

@@ -128,7 +128,7 @@ export function ReviewCard({
       id={`${base}-${String(item.id)}`}
     >
       <Group gap="sm" wrap="nowrap" align="flex-start">
-        <Avatar size={36} color="brand" variant="light" aria-hidden>
+        <Avatar src={item.person.picture_url} alt="" size={36} color="brand" variant="light" aria-hidden>
           {initialsOf(item.person.name)}
         </Avatar>
         <Stack gap={2} className={classes.who}>

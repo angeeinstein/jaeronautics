@@ -927,8 +927,18 @@ teams that have one) and *Roles*. Each settings section is saved on its own.
 Also: notes about a person (not shown to them, but in their data export,
 without the author), removing somebody (immediately, with a reason that stays
 in the record), and an export of the current members. Under *Roles* the leads
-appoint the team's **treasurer** from its members, and take the role back;
-leads themselves are appointed by site admins.
+appoint the team's **treasurer** and other **leads** from its members, chosen
+from a list, and take the roles back (the last lead only after a second
+click). Site admins do the same there and may also choose a lead from all of
+the association's members, by name -- the first lead of a new team is not in
+it yet; the role counts once they have joined.
+
+**Site admins in a team.** A site admin runs a team from the team's own pages
+like its leads, and sees one more group in its side menu, *Admin*: the team's
+*Details* (name, joining, places, forum group, access list switch), its *Fee*
+and *Archive*. Admin › Teams lists the teams and creates new ones; a row and a
+new team open the team's own pages. The old address `/admin/teams/<team>`
+forwards there.
 
 **Access list.** Only for teams with rooms: site admins switch it on in the
 team's admin form; off, the leads do not see it and nothing is sent. In the
@@ -1917,7 +1927,14 @@ the API's types and the tests: `frontend/README.md`.
 **Security policy.** The portal sets the Content-Security-Policy on every
 answer itself (`aeronautics_members/content_security.py`), with a fresh nonce
 each time, which the front end's `<style>` tags carry. nginx sets none: a
-second, fixed policy would apply as well and block what the first allows.
+second, fixed policy would apply as well and block what the first allows --
+the pages then look broken (Mantine's blue, rounded buttons, content under
+the top bar). It happened once, from an old `conf.d/` file of an earlier
+installation that nginx read before the real one. Since then the installer
+moves a file of its own from the other place (`conf.d/` or
+`sites-available/`) into the update's backups and warns about any other file
+naming the domain (`retire_other_nginx_configs`), and System health warns
+when a page arrives with two policies, or one without the nonce.
 
 ## Linting
 

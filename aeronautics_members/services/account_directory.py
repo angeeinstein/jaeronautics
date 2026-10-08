@@ -3,7 +3,8 @@
 Everybody with a portal account is in it, members or not -- and so are the
 people carried over from the old forum who have not come back yet: a former
 member is somebody the association still has a record of, and reconnecting
-one is done from their account page like anything else.
+one is done from their account page like anything else. They are shown only
+when asked for, though (``DEFAULT_KIND``).
 
 Moved here from app.py with the list's move to the new front end
 (api/admin_accounts.py). What is new is the membership *state*, one word per
@@ -36,6 +37,10 @@ MEMBERSHIP_FILTERS = ("all", *MEMBERSHIP_STATES)
 ACCOUNT_FILTERS = ("all", "active", "no_sign_in", "disabled", "erased")
 
 KIND_FILTERS = ("all", "portal", "archived")
+#: The list leaves the old forum's people out unless they are asked for: on a
+#: site carried over from the old forum they are most of the rows, and nobody
+#: looking for a member wants to wade through them.
+DEFAULT_KIND = "portal"
 
 #: Besides these, a role filter can be a role's slug.
 ROLE_FILTERS = ("all", "staff", "none")
@@ -130,7 +135,7 @@ def _joined(*columns):
     )
 
 
-def _narrow(query, *, search="", role="all", account="all", kind="all"):
+def _narrow(query, *, search="", role="all", account="all", kind=DEFAULT_KIND):
     """Every filter but the membership one, which the counts are taken across."""
     if search:
         pattern = f"%{search}%"
@@ -192,7 +197,7 @@ def is_role_filter(value):
     return value in ROLE_FILTERS or value in ROLE_PERMISSIONS
 
 
-def membership_counts(*, search="", role="all", account="all", kind="all"):
+def membership_counts(*, search="", role="all", account="all", kind=DEFAULT_KIND):
     """How many rows each membership filter would show, with the other filters as they are."""
     state = membership_state().label("state")
     query = _narrow(_joined(state, Member.is_active), search=search, role=role, account=account, kind=kind).subquery()
@@ -209,7 +214,7 @@ def membership_counts(*, search="", role="all", account="all", kind="all"):
     return counts
 
 
-def page_of_accounts(*, search="", membership="all", role="all", account="all", kind="all",
+def page_of_accounts(*, search="", membership="all", role="all", account="all", kind=DEFAULT_KIND,
                      sort=DEFAULT_SORT[0], direction=DEFAULT_SORT[1], page=1, per_page=PAGE_SIZE):
     """One page of the list: ``(rows, total, page)``, each row ``(user, membership_state)``.
 
@@ -233,6 +238,13 @@ def page_of_accounts(*, search="", membership="all", role="all", account="all", 
         .offset((page - 1) * per_page)
     ).all()
     return [(user, state) for user, state in rows], total, page
+
+
+def count_accounts(*, search="", membership="all", role="all", account="all", kind=DEFAULT_KIND):
+    """How many rows these filters show."""
+    query = _membership_filter(_narrow(_joined(User.id), search=search, role=role, account=account, kind=kind),
+                               membership)
+    return db.session.scalar(db.select(func.count()).select_from(query.subquery())) or 0
 
 
 def membership_state_of(user):

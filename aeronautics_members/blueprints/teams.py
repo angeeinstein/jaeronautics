@@ -157,6 +157,17 @@ def team_manage(slug, section=None):
     return app_shell()
 
 
+@teams_bp.route("/teams/<slug>/manage/<any(details, fee, archive):section>", methods=["GET"])
+@login_required
+def team_admin_settings(slug, section):
+    """A team's admin settings, in its side menu for site admins only
+    (frontend/src/pages/teams/manage/Admin.tsx)."""
+    _team_or_404(slug)
+    if not current_user.can(Permission.TEAMS_MANAGE):
+        abort(403)
+    return app_shell()
+
+
 @teams_bp.route("/teams/<slug>/manage/people/<int:user_id>", methods=["GET"])
 @login_required
 def team_person(slug, user_id):

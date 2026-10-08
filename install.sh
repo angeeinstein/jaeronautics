@@ -2873,8 +2873,52 @@ EOF
     success "Run 'update' any time to update ${APP_NAME}, or 'rollback' to return to the previous version."
 }
 
+# Only one nginx configuration may serve the portal. nginx reads conf.d/ before
+# sites-enabled/, so an old conf.d/<service>.conf from an earlier installation
+# answers for the domain while every update writes the real one to
+# sites-available/ -- where nginx ignores it. That happened on the live site:
+# the old file set a fixed Content-Security-Policy, two policies arrived, and
+# the stricter one blocked the app's styles. A file of ours in the other place
+# is moved into the backup folder; any other file naming the domain is only
+# reported, since it is not ours to move.
+retire_other_nginx_configs() {
+    local nginx_dir="${NGINX_DIR:-/etc/nginx}"
+    local ours="${NGINX_CONF_PATH}"
+    local enabled="${NGINX_ENABLED_PATH:-}"
+    local candidate stamp moved_to
+    local -a others=()
+
+    if [[ "${ours}" == */sites-available/* ]]; then
+        others=("${nginx_dir}/conf.d/${SERVICE_NAME}.conf")
+    else
+        others=("${nginx_dir}/sites-enabled/${SERVICE_NAME}.conf" "${nginx_dir}/sites-available/${SERVICE_NAME}.conf")
+    fi
+
+    stamp="$(date +%Y%m%d%H%M%S)"
+    for candidate in "${others[@]}"; do
+        [[ -e "${candidate}" || -L "${candidate}" ]] || continue
+        [[ "${candidate}" == "${ours}" || "${candidate}" == "${enabled}" ]] && continue
+        mkdir -p "${BACKUP_DIR}"
+        moved_to="${BACKUP_DIR}/${APP_NAME}-nginx-other-${stamp}-$(basename "$(dirname "${candidate}")")-$(basename "${candidate}")"
+        mv "${candidate}" "${moved_to}"
+        warn "A second nginx configuration for the portal was in ${candidate}; moved to ${moved_to}. Only ${ours} serves it now."
+    done
+
+    [[ -n "${DOMAIN:-}" ]] || return 0
+    local file
+    for file in "${nginx_dir}"/conf.d/*.conf "${nginx_dir}"/sites-enabled/*; do
+        [[ -f "${file}" ]] || continue
+        [[ "${file}" == "${ours}" || "${file}" == "${enabled}" ]] && continue
+        [[ "$(readlink -f "${file}")" == "$(readlink -f "${ours}" 2>/dev/null || echo "${ours}")" ]] && continue
+        if grep -Eq "server_name[^;]*[[:space:]]${DOMAIN//./\\.}([[:space:]]|;)" "${file}"; then
+            warn "${file} also serves ${DOMAIN}. nginx may answer from it instead of the portal's own configuration; remove it unless it is meant to be there."
+        fi
+    done
+}
+
 render_nginx_config() {
     step "Writing nginx configuration"
+    retire_other_nginx_configs
     local static_dir="${INSTALL_DIR}/aeronautics_members/static"
     # One connection to gunicorn per request used to be opened and closed. On
     # the Azure portal VM that filled the kernel's connection-tracking table
