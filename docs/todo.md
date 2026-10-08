@@ -179,6 +179,27 @@ or sooner by the rules there.
   old forum username still works in one step.
 - **Open:** none.
 
+### Team logos: no square behind them
+
+- **Added:** 2026-10-08
+- **Where:** the Teams overview cards (`.logo` in
+  `frontend/src/pages/teams/Overview.module.css`), the team's About page hero
+  (`.logoTile` in `frontend/src/pages/teams/About.module.css`), and anywhere
+  else a team logo sits on a tile.
+- **Why:** the maintainer, with a screenshot of the Teams overview: two cards,
+  each logo in a dark square with a border, half over the cover and half over
+  the card ("Joanneum Flight Team 'Ravens'" -- a raven on black;
+  "Team Drone Tech" -- a shield-shaped logo, whose transparent corners show
+  the dark square). "I think this isn't really nice … just show the logo …
+  if the logo is transparent then just show it like it is."
+- **What, as decided:** the logo alone, no background, no border, no padding:
+  a transparent logo shows the cover and card behind it, a logo with its own
+  background shows that. Same size and place as now.
+- **My addition, unless the maintainer objects:** a soft shadow that follows
+  the logo's own outline (`filter: drop-shadow`, not a box), so a dark logo
+  still stands out over a dark cover photo.
+- **Open:** none.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
