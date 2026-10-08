@@ -1626,6 +1626,8 @@ def roster(team):
                 "picture_url": pictures.get(membership.user_id),
                 "is_lead": any(team_role.user_id == membership.user_id and team_role.role == ROLE_LEAD
                                for team_role in team.roles),
+                "is_treasurer": any(team_role.user_id == membership.user_id and team_role.role == ROLE_TREASURER
+                                    for team_role in team.roles),
                 **person_details(membership.user),
             }
             for membership in members

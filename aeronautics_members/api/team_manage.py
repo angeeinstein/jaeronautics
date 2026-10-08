@@ -19,7 +19,7 @@ from ..db_models import TeamMembership, User, db
 from ..permissions import Permission
 from ..services import NotFoundError, PermissionError_, ServiceError, team_payments
 from ..services import teams as teams_service
-from ..services.pictures import picture_url
+from ..services.pictures import picture_url, picture_urls
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
 from .teams import (
@@ -140,6 +140,7 @@ class MemberOut(Model):
     name: str
     picture_url: str | None
     is_lead: bool
+    is_treasurer: bool
     university_email: str | None
     cohort: str | None
     since: date | None
@@ -154,6 +155,11 @@ class MembersOut(Model):
     charges: bool
     #: May download the list (/teams/<slug>/manage/export.csv).
     may_export: bool
+    #: May make a member a lead, or treasurer, from the list (its ⋯ menu).
+    may_appoint_leads: bool
+    may_appoint_treasurer: bool
+    #: How many leads there are: taking the last one away is asked twice.
+    leads: int
     members: list[MemberOut]
 
 
@@ -177,10 +183,14 @@ def team_members(slug):
     return MembersOut(
         max_members=team.max_members, charges=team_payments.charges(team),
         may_export=teams_service.can_in_team(current_user, team, P.EXPORT),
+        may_appoint_leads=teams_service.can_in_team(current_user, team, P.APPOINT_LEADS),
+        may_appoint_treasurer=teams_service.can_in_team(current_user, team, P.APPOINT_TREASURER),
+        leads=len(teams_service.role_holders(team, teams_service.ROLE_LEAD)),
         members=[
             MemberOut(
                 user_id=row["user"].id, name=row["name"], picture_url=row["picture_url"],
-                is_lead=row["is_lead"], university_email=row["university_email"], cohort=row["cohort"],
+                is_lead=row["is_lead"], is_treasurer=row["is_treasurer"],
+                university_email=row["university_email"], cohort=row["cohort"],
                 since=row["membership"].started_at.date() if row["membership"].started_at else None,
                 paid_until=row["membership"].paid_until, notes=_member_notes(row["membership"]),
             )
@@ -680,6 +690,7 @@ def team_access_list_send(slug):
 class HolderOut(Model):
     user_id: int
     name: str
+    picture_url: str | None
     #: A role counts only while its holder is a member of the team and of the association.
     in_force: bool
 
@@ -717,9 +728,13 @@ def _candidate(team, user, name):
 
 
 def _roles_out(team):
+    held_roles = teams_service.role_holders(team)
+    pictures = picture_urls([held.user for held in held_roles])
+
     def holders(role):
-        return [HolderOut(user_id=held.user_id, name=_name(held.user), in_force=teams_service.role_counts(held))
-                for held in teams_service.role_holders(team, role)]
+        return [HolderOut(user_id=held.user_id, name=_name(held.user), picture_url=pictures.get(held.user_id),
+                          in_force=teams_service.role_counts(held))
+                for held in held_roles if held.role == role]
 
     treasurers = holders(teams_service.ROLE_TREASURER)
     taken = {holder.user_id for holder in treasurers}

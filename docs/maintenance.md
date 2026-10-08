@@ -926,10 +926,11 @@ their team page says the rules have changed.
 not, the question; the rules in force, read-only), *Access list* and *Roles*. Each settings section is saved on its own.
 Also: notes about a person (not shown to them, but in their data export,
 without the author), removing somebody (immediately, with a reason that stays
-in the record), and an export of the current members. Under *Roles* the leads
-appoint the team's **treasurer** and other **leads** from its members, chosen
-from a list, and take the roles back (the last lead only after a second
-click). Site admins do the same there and may also choose a lead from all of
+in the record), and an export of the current members. Leads appoint the
+team's **treasurer** and other **leads** from its members -- from the ⋯
+beside each member in *Members*, or on *Roles* (who holds which role, and
+one line: the person, the role, +) -- and take the roles back (the last
+lead only after a second click). Site admins do the same there and may also choose a lead from all of
 the association's members, by name -- the first lead of a new team is not in
 it yet; the role counts once they have joined.
 

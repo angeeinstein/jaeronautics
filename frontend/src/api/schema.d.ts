@@ -3558,6 +3558,8 @@ export interface components {
             in_force: boolean;
             /** Name */
             name: string;
+            /** Picture Url */
+            picture_url: string | null;
             /** User Id */
             user_id: number;
         };
@@ -4086,6 +4088,8 @@ export interface components {
             cohort: string | null;
             /** Is Lead */
             is_lead: boolean;
+            /** Is Treasurer */
+            is_treasurer: boolean;
             /** Name */
             name: string;
             /** Notes */
@@ -4105,8 +4109,14 @@ export interface components {
         MembersOut: {
             /** Charges */
             charges: boolean;
+            /** Leads */
+            leads: number;
             /** Max Members */
             max_members: number | null;
+            /** May Appoint Leads */
+            may_appoint_leads: boolean;
+            /** May Appoint Treasurer */
+            may_appoint_treasurer: boolean;
             /** May Export */
             may_export: boolean;
             /** Members */

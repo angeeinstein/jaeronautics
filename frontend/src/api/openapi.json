@@ -4615,6 +4615,17 @@
             "title": "Name",
             "type": "string"
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
           "user_id": {
             "title": "User Id",
             "type": "integer"
@@ -4623,6 +4634,7 @@
         "required": [
           "user_id",
           "name",
+          "picture_url",
           "in_force"
         ],
         "title": "HolderOut",
@@ -6252,6 +6264,10 @@
             "title": "Is Lead",
             "type": "boolean"
           },
+          "is_treasurer": {
+            "title": "Is Treasurer",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -6319,6 +6335,7 @@
           "name",
           "picture_url",
           "is_lead",
+          "is_treasurer",
           "university_email",
           "cohort",
           "since",
@@ -6335,6 +6352,10 @@
             "title": "Charges",
             "type": "boolean"
           },
+          "leads": {
+            "title": "Leads",
+            "type": "integer"
+          },
           "max_members": {
             "anyOf": [
               {
@@ -6345,6 +6366,14 @@
               }
             ],
             "title": "Max Members"
+          },
+          "may_appoint_leads": {
+            "title": "May Appoint Leads",
+            "type": "boolean"
+          },
+          "may_appoint_treasurer": {
+            "title": "May Appoint Treasurer",
+            "type": "boolean"
           },
           "may_export": {
             "title": "May Export",
@@ -6362,6 +6391,9 @@
           "max_members",
           "charges",
           "may_export",
+          "may_appoint_leads",
+          "may_appoint_treasurer",
+          "leads",
           "members"
         ],
         "title": "MembersOut",

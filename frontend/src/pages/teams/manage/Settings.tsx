@@ -12,6 +12,7 @@ import {
   ActionIcon,
   Alert,
   Anchor,
+  Avatar,
   Button,
   Checkbox,
   FileInput,
@@ -26,8 +27,10 @@ import {
   Text,
   Textarea,
   TextInput,
+  Tooltip,
+  VisuallyHidden,
 } from '@mantine/core';
-import { IconArrowDown, IconArrowUp } from '@tabler/icons-react';
+import { IconArrowDown, IconArrowUp, IconPlus } from '@tabler/icons-react';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -46,6 +49,7 @@ import { formatDate } from '../../../lib/format';
 import about from '../About.module.css';
 import classes from '../Teams.module.css';
 import { ADMISSION_CHOICES } from '../../admin/teams/shared';
+import { type TeamRole, useRoleChange } from './roles';
 import { ManageHeader, useManageChange, useSlug } from './shared';
 
 function Loaded<T>({
@@ -848,79 +852,125 @@ export function AccessListPage() {
 // --- Roles --------------------------------------------------------------------------------
 
 type Roles = Schemas['TeamRolesOut'];
+type Holder = Schemas['HolderOut'];
 
-function Holder({ holder }: { holder: Schemas['HolderOut'] }) {
+const ROLE_CHOICES: { value: TeamRole; label: string }[] = [
+  { value: 'lead', label: 'Lead' },
+  { value: 'treasurer', label: 'Treasurer' },
+];
+
+/** Who holds which role: the people first, large; the role beside them; taking it away. */
+function HolderRow({
+  holder,
+  role,
+  mayChange,
+  last,
+  change,
+}: {
+  holder: Holder;
+  role: TeamRole;
+  mayChange: boolean;
+  /** The team's last lead: taking it away is said as that. */
+  last: boolean;
+  change: ReturnType<typeof useRoleChange>;
+}) {
   return (
-    <>
-      {holder.name}
-      {holder.in_force ? null : (
-        <Text span size="xs" c="dimmed">
-          {' '}
-          (not in force)
-        </Text>
-      )}
-    </>
+    <Table.Tr>
+      <Table.Td>
+        <Group gap="sm" wrap="nowrap">
+          <Avatar src={holder.picture_url} alt="" radius={0} size={40} aria-hidden>
+            {holder.name.charAt(0)}
+          </Avatar>
+          <Stack gap={0}>
+            <Text fw={600}>{holder.name}</Text>
+            {holder.in_force ? null : (
+              <Text size="xs" c="dimmed">
+                Counts once they are in the team and a member of the association
+              </Text>
+            )}
+          </Stack>
+        </Group>
+      </Table.Td>
+      <Table.Td>
+        <Pill tone={role === 'lead' ? 'info' : 'neutral'}>{role === 'lead' ? 'Lead' : 'Treasurer'}</Pill>
+      </Table.Td>
+      <Table.Td ta="right">
+        {mayChange ? (
+          <ConfirmButton
+            size="xs"
+            variant="subtle"
+            color="gray"
+            confirmLabel={last ? 'Yes, remove the last lead' : 'Yes, remove'}
+            loading={change.isPending && change.variables.userId === holder.user_id}
+            onConfirm={() => {
+              change.mutate({ give: false, role, userId: holder.user_id, confirmed: last });
+            }}
+          >
+            Remove
+          </ConfirmButton>
+        ) : null}
+      </Table.Td>
+    </Table.Tr>
   );
 }
 
-/** Choosing a new lead: the team's members -- and, for a site admin who types a name, the association's. */
-function LeadPicker({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unknown[] }) {
-  const slug = useSlug();
+/**
+ * One line to give a role: who, as what, and the plus. For a lead, a site
+ * admin may also type the name of anybody in the association (the first lead
+ * of a new team is not in it yet).
+ */
+function AddRole({ roles, slug }: { roles: Roles; slug: string }) {
+  const choices = ROLE_CHOICES.filter((choice) =>
+    choice.value === 'lead' ? roles.may_appoint_leads : roles.may_appoint,
+  );
+  const [role, setRole] = useState<TeamRole>(choices[0]?.value ?? 'lead');
   const [chosen, setChosen] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [query] = useDebouncedValue(search.trim(), 250);
+  const searches = role === 'lead' && roles.searches_everyone;
   const found = useQuery({
-    queryKey: [...rolesKey, 'lead-candidates', query],
+    queryKey: ['teams', slug, 'manage', 'roles', 'lead-candidates', query],
     queryFn: () =>
       call(
         api.GET('/api/v1/teams/{slug}/manage/lead-candidates', {
           params: { path: { slug }, query: { q: query } },
         }),
       ),
-    enabled: roles.searches_everyone && query.length >= 2,
+    enabled: searches && query.length >= 2,
     placeholderData: keepPreviousData,
   });
-  const appoint = useManageChange(
-    rolesKey,
-    () =>
-      call(
-        api.POST('/api/v1/teams/{slug}/manage/leads', {
-          params: { path: { slug } },
-          body: { user_id: Number(chosen) },
-        }),
-      ),
-    'Lead appointed.',
-  );
+  const change = useRoleChange(slug, () => {
+    setChosen(null);
+    setSearch('');
+  });
+  if (!choices.length) return null;
 
   const label = (candidate: Schemas['CandidateOut']) =>
     candidate.in_team || !candidate.detail ? candidate.name : `${candidate.name} · ${candidate.detail}`;
-  const inTeam = roles.lead_candidates.map((candidate) => ({
-    value: String(candidate.user_id),
-    label: label(candidate),
-  }));
+  const pool =
+    role === 'lead'
+      ? roles.lead_candidates
+      : roles.candidates.map((one) => ({ ...one, detail: null, in_team: true }));
+  const inTeam = pool.map((candidate) => ({ value: String(candidate.user_id), label: label(candidate) }));
   const known = new Set(inTeam.map((option) => option.value));
-  const others = (found.data?.items ?? [])
-    .filter((candidate) => !candidate.in_team && !known.has(String(candidate.user_id)))
-    .map((candidate) => ({ value: String(candidate.user_id), label: label(candidate) }));
+  const others = searches
+    ? (found.data?.items ?? [])
+        .filter((candidate) => !candidate.in_team && !known.has(String(candidate.user_id)))
+        .map((candidate) => ({ value: String(candidate.user_id), label: label(candidate) }))
+    : [];
   const fromServer = new Set(others.map((option) => option.value));
-  const data = roles.searches_everyone
+  const data = searches
     ? [
         { group: 'In the team', items: inTeam },
         { group: 'Other members of the association', items: others },
       ].filter((group) => group.items.length)
     : inTeam;
-  if (!inTeam.length && !roles.searches_everyone) return null;
 
   return (
-    <Group align="flex-end" gap="sm">
+    <Group align="flex-end" gap="sm" wrap="wrap">
       <Select
-        label="Appoint a lead"
-        placeholder={roles.searches_everyone ? 'Choose, or type a name…' : 'Choose…'}
-        description={
-          roles.searches_everyone
-            ? 'Somebody not in the team yet becomes a lead once they have joined it.'
-            : undefined
-        }
+        label="Give a role"
+        placeholder={searches ? 'Choose, or type a name…' : 'Choose a member…'}
         data={data}
         value={chosen}
         searchable
@@ -935,189 +985,96 @@ function LeadPicker({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unkn
                 option.label.toLowerCase().includes(typed.toLowerCase().trim()),
           )
         }
-        nothingFoundMessage={roles.searches_everyone && query.length < 2 ? 'Type a name' : 'Nobody found'}
-        error={appoint.errors.user_id ?? null}
+        nothingFoundMessage={searches && query.length < 2 ? 'Type a name' : 'Nobody found'}
         onChange={setChosen}
-        flex="1 1 18rem"
+        flex="1 1 16rem"
       />
-      <Button
-        variant="default"
-        disabled={!chosen}
-        loading={appoint.mutation.isPending}
-        onClick={() => {
-          appoint.mutation.mutate(undefined, {
-            onSuccess: () => {
-              setChosen(null);
-              setSearch('');
-            },
-          });
+      <Select
+        label="As"
+        aria-label="Role"
+        data={choices}
+        value={role}
+        allowDeselect={false}
+        onChange={(next) => {
+          setRole(next === 'treasurer' ? 'treasurer' : 'lead');
+          setChosen(null);
         }}
-      >
-        Appoint
-      </Button>
+        w={150}
+      />
+      <Tooltip label="Add">
+        <ActionIcon
+          size={42}
+          variant="filled"
+          aria-label="Add"
+          disabled={!chosen}
+          loading={change.isPending}
+          onClick={() => {
+            if (chosen) change.mutate({ give: true, role, userId: Number(chosen) });
+          }}
+        >
+          <IconPlus size={20} />
+        </ActionIcon>
+      </Tooltip>
     </Group>
   );
 }
 
-function LeadsPanel({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unknown[] }) {
-  const slug = useSlug();
+function RolesBody({ roles, slug }: { roles: Roles; slug: string }) {
   const me = useMe().data;
   const go = useNavigate();
-  const dismiss = useManageChange(
-    rolesKey,
-    ({ userId, confirmed }: { userId: number; confirmed: boolean }) =>
-      call(
-        api.DELETE('/api/v1/teams/{slug}/manage/leads/{user_id}', {
-          params: { path: { slug, user_id: userId }, query: { confirmed } },
-        }),
-      ),
-    'No longer a lead.',
-  );
-  const last = roles.leads.length <= 1;
+  const change = useRoleChange(slug, (done) => {
+    // Without the role, the team's management is not theirs any more.
+    if (
+      !done.give &&
+      done.role === 'lead' &&
+      done.userId === me?.id &&
+      !me.permissions.includes('teams.manage')
+    )
+      void go(`/teams/${slug}`);
+  });
+  const lastLead = roles.leads.length <= 1;
+  const rows: [Holder, TeamRole][] = [
+    ...roles.leads.map((holder): [Holder, TeamRole] => [holder, 'lead']),
+    ...roles.treasurers.map((holder): [Holder, TeamRole] => [holder, 'treasurer']),
+  ];
   return (
-    <Panel title="Leads">
-      <Stack gap="md">
-        <Text size="sm" c="dimmed">
-          Run the team: its members, applications, money and settings. Appointed by the team's leads and the
-          association's admins.
-        </Text>
-        {roles.leads.length ? (
-          <Stack gap="xs">
-            {roles.leads.map((holder) => {
-              const self = holder.user_id === me?.id;
-              return (
-                <Group key={holder.user_id} gap="sm">
-                  <Text size="sm">
-                    <Holder holder={holder} />
-                  </Text>
-                  {roles.may_appoint_leads ? (
-                    <ConfirmButton
-                      size="xs"
-                      confirmLabel={
-                        last ? 'Yes, remove the last lead' : self ? 'Yes, step down' : 'Yes, remove'
-                      }
-                      loading={
-                        dismiss.mutation.isPending && dismiss.mutation.variables.userId === holder.user_id
-                      }
-                      onConfirm={() => {
-                        dismiss.mutation.mutate(
-                          { userId: holder.user_id, confirmed: last },
-                          {
-                            onSuccess: () => {
-                              // Without the role, the team's management is not theirs any more.
-                              if (self && !me.permissions.includes('teams.manage')) void go(`/teams/${slug}`);
-                            },
-                          },
-                        );
-                      }}
-                    >
-                      {self ? 'Step down' : 'Remove'}
-                    </ConfirmButton>
-                  ) : null}
-                </Group>
-              );
-            })}
-          </Stack>
-        ) : (
-          <EmptyState>None.</EmptyState>
-        )}
-        {roles.may_appoint_leads ? <LeadPicker roles={roles} rolesKey={rolesKey} /> : null}
-      </Stack>
-    </Panel>
-  );
-}
-
-function RolesBody({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unknown[] }) {
-  const slug = useSlug();
-  const [chosen, setChosen] = useState<string | null>(null);
-  const appoint = useManageChange(
-    rolesKey,
-    () =>
-      call(
-        api.POST('/api/v1/teams/{slug}/manage/treasurer', {
-          params: { path: { slug } },
-          body: { user_id: Number(chosen) },
-        }),
-      ),
-    'Treasurer appointed.',
-  );
-  const dismiss = useManageChange(
-    rolesKey,
-    (userId: number) =>
-      call(
-        api.DELETE('/api/v1/teams/{slug}/manage/treasurer/{user_id}', {
-          params: { path: { slug, user_id: userId } },
-        }),
-      ),
-    'No longer treasurer.',
-  );
-  return (
-    <Stack gap="lg">
-      <LeadsPanel roles={roles} rolesKey={rolesKey} />
-      <Panel title="Treasurer">
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Sees what the team's members paid and what was transferred to the team, and keeps its bank
-            details. Nothing about the people.
-          </Text>
-          {roles.treasurers.length ? (
-            <Stack gap="xs">
-              {roles.treasurers.map((holder) => (
-                <Group key={holder.user_id} gap="sm">
-                  <Text size="sm">
-                    <Holder holder={holder} />
-                  </Text>
-                  {roles.may_appoint ? (
-                    <ConfirmButton
-                      size="xs"
-                      confirmLabel="Yes, remove"
-                      loading={dismiss.mutation.isPending && dismiss.mutation.variables === holder.user_id}
-                      onConfirm={() => {
-                        dismiss.mutation.mutate(holder.user_id);
-                      }}
-                    >
-                      Remove
-                    </ConfirmButton>
-                  ) : null}
-                </Group>
+    <Stack gap="md">
+      <Panel title="Roles" flush>
+        {rows.length ? (
+          <Table verticalSpacing="sm" aria-label="Roles">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th scope="col">Person</Table.Th>
+                <Table.Th scope="col">Role</Table.Th>
+                <Table.Th scope="col">
+                  <VisuallyHidden>Action</VisuallyHidden>
+                </Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {rows.map(([holder, role]) => (
+                <HolderRow
+                  key={`${role}-${String(holder.user_id)}`}
+                  holder={holder}
+                  role={role}
+                  mayChange={role === 'lead' ? roles.may_appoint_leads : roles.may_appoint}
+                  last={role === 'lead' && lastLead}
+                  change={change}
+                />
               ))}
-            </Stack>
-          ) : (
-            <EmptyState>None.</EmptyState>
-          )}
-          {roles.may_appoint && roles.candidates.length ? (
-            <Group align="flex-end" gap="sm">
-              <Select
-                label="Appoint a treasurer"
-                placeholder="Choose…"
-                data={roles.candidates.map((candidate) => ({
-                  value: String(candidate.user_id),
-                  label: candidate.name,
-                }))}
-                value={chosen}
-                error={appoint.errors.user_id ?? null}
-                onChange={setChosen}
-                searchable
-                flex="1 1 16rem"
-              />
-              <Button
-                variant="default"
-                disabled={!chosen}
-                loading={appoint.mutation.isPending}
-                onClick={() => {
-                  appoint.mutation.mutate(undefined, {
-                    onSuccess: () => {
-                      setChosen(null);
-                    },
-                  });
-                }}
-              >
-                Appoint
-              </Button>
-            </Group>
-          ) : null}
-        </Stack>
+            </Table.Tbody>
+          </Table>
+        ) : (
+          <Stack px="md">
+            <EmptyState>Nobody yet.</EmptyState>
+          </Stack>
+        )}
       </Panel>
+      <AddRole roles={roles} slug={slug} />
+      <Text size="xs" c="dimmed">
+        Leads run the team. The treasurer sees its money and keeps its bank details, nothing about the people.
+        Also from the ⋯ beside each member in Members.
+      </Text>
     </Stack>
   );
 }
@@ -1132,7 +1089,7 @@ export function RolesPage() {
   return (
     <>
       <ManageHeader title="Roles" description="Who leads the team, and who keeps its money." />
-      <Loaded query={roles}>{(data) => <RolesBody roles={data} rolesKey={rolesKey} />}</Loaded>
+      <Loaded query={roles}>{(data) => <RolesBody roles={data} slug={slug} />}</Loaded>
     </>
   );
 }
