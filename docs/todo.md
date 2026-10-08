@@ -164,6 +164,15 @@ or sooner by the rules there.
   the address (`kind=all`) since the default is no longer `all`; "Clear
   filters" goes back to Portal accounts. Links from elsewhere (the dashboard)
   get the new default with them, which is right for all of them today.
+- **Also decided:** showing old forum accounts is always a deliberate choice.
+  Every other filter -- the membership chips at the top (with their counts),
+  role, account state, search -- works on portal accounts only, unless old
+  forum accounts were picked in the "Portal or old forum" filter (or with the
+  search button below). The maintainer: "for all the other filters and those
+  small batches that I can quickly select … the old forum accounts would not
+  be included … But I can show them if I want to." (The counts already follow
+  the other filters, `membership_counts` in `admin_accounts.py`; check that
+  no chip, like "No membership", counts them anyway.)
 - **My addition, unless the maintainer objects:** a search that finds nothing
   among portal accounts but would find old forum ones says so, with a button
   -- "2 old forum accounts match. Show them" -- so looking someone up by an
