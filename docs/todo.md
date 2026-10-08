@@ -147,6 +147,29 @@ or sooner by the rules there.
   text.
 - **Open:** none.
 
+### Accounts list: old forum accounts hidden by default
+
+- **Added:** 2026-10-08
+- **Where:** Admin › Accounts -- the "Portal or old forum" filter
+  (`KIND_CHOICES` in `frontend/src/pages/admin/Accounts.tsx`, `DEFAULT_FILTERS`
+  and `filtersFromParams`/`paramsFromFilters` in
+  `frontend/src/pages/admin/accountFilters.ts`; `AccountListQuery.kind` in
+  `aeronautics_members/api/admin_accounts.py`).
+- **Why:** the maintainer: "most of what I see are just non-active old forum
+  accounts, and this doesn't really help anyone." The list shows "Portal and
+  old forum" by default, and most rows on the live site are old forum people
+  who have not come back.
+- **What, as decided:** the default is **Portal accounts**, in the front end
+  and in the API's default. "Portal and old forum" stays as a choice, kept in
+  the address (`kind=all`) since the default is no longer `all`; "Clear
+  filters" goes back to Portal accounts. Links from elsewhere (the dashboard)
+  get the new default with them, which is right for all of them today.
+- **My addition, unless the maintainer objects:** a search that finds nothing
+  among portal accounts but would find old forum ones says so, with a button
+  -- "2 old forum accounts match. Show them" -- so looking someone up by an
+  old forum username still works in one step.
+- **Open:** none.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
