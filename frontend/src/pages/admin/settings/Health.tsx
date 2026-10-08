@@ -56,6 +56,11 @@ function Report({ health }: { health: Health }) {
             Nothing needs attention right now.
           </Alert>
         ) : null}
+        {health.pages?.note ? (
+          <Text size="sm" c="dimmed">
+            {health.pages.note}
+          </Text>
+        ) : null}
         <Text size="sm" c="dimmed">
           Database structure: <Code>{schema.applied ?? 'unknown'}</Code>
           {schema.up_to_date ? (

@@ -4221,6 +4221,9 @@ def create_app(config_overrides=None):
         for key, value in health["queues"].items():
             click.echo(f"  {key.replace('_', ' '):26s}: {value}")
 
+        if health["pages"] and health["pages"]["note"]:
+            click.echo(f"Pages: {health['pages']['note']}")
+
         for problem in health["problems"]:
             click.echo(f"PROBLEM: {problem}", err=True)
         for warning in health["warnings"]:

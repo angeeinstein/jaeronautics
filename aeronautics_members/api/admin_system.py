@@ -66,6 +66,18 @@ class UndeliveredOut(Model):
     error: str | None
 
 
+class PagesOut(Model):
+    """What the start page arrives with, fetched through the public address."""
+
+    address: str | None
+    #: False: it could not be fetched, or there is no public address.
+    checked: bool
+    #: How many security policies arrived with it; one is right.
+    policies: int | None
+    #: All is well, or why it was not checked. A problem is among the warnings.
+    note: str | None
+
+
 class HealthOut(Model):
     healthy: bool
     problems: list[str]
@@ -76,6 +88,8 @@ class HealthOut(Model):
     queues: QueuesOut
     #: The newest emails that gave up, up to 25.
     undelivered: list[UndeliveredOut]
+    #: None when the pages were not fetched (the test suite).
+    pages: PagesOut | None = None
 
 
 @endpoint("GET", "/admin/settings/health", response=HealthOut, permissions=SYSTEM, tag=TAG)
@@ -93,6 +107,7 @@ def admin_system_health():
                            last_tried_at=job.last_attempted_at, error=job.last_error)
             for job in list_undelivered_emails()
         ],
+        pages=PagesOut(**{key: health["pages"][key] for key in PagesOut.model_fields}) if health["pages"] else None,
     )
 
 

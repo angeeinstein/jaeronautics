@@ -4345,6 +4345,17 @@
           "membership": {
             "$ref": "#/components/schemas/MembershipOut"
           },
+          "pages": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PagesOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "problems": {
             "items": {
               "type": "string"
@@ -7573,6 +7584,57 @@
           "photos_max"
         ],
         "title": "PageOut",
+        "type": "object"
+      },
+      "PagesOut": {
+        "additionalProperties": false,
+        "description": "What the start page arrives with, fetched through the public address.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "checked": {
+            "title": "Checked",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "policies": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policies"
+          }
+        },
+        "required": [
+          "address",
+          "checked",
+          "policies",
+          "note"
+        ],
+        "title": "PagesOut",
         "type": "object"
       },
       "PasswordIn": {

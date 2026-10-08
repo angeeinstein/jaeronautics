@@ -3410,6 +3410,8 @@ export interface components {
             /** Healthy */
             healthy: boolean;
             membership: components["schemas"]["MembershipOut"];
+            /** @default null */
+            pages?: components["schemas"]["PagesOut"] | null;
             /** Problems */
             problems: string[];
             queues: components["schemas"]["QueuesOut"];
@@ -4444,6 +4446,20 @@ export interface components {
             photos_max: number;
             /** Picture Url */
             picture_url: string | null;
+        };
+        /**
+         * PagesOut
+         * @description What the start page arrives with, fetched through the public address.
+         */
+        PagesOut: {
+            /** Address */
+            address: string | null;
+            /** Checked */
+            checked: boolean;
+            /** Note */
+            note: string | null;
+            /** Policies */
+            policies: number | null;
         };
         /** PasswordIn */
         PasswordIn: {

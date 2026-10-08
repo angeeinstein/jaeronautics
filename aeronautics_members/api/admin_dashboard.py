@@ -100,7 +100,7 @@ def _attention():
         )
     health = None
     if current_user.can(Permission.SYSTEM_UPDATE):
-        health = list(collect_system_health()["problems"])
+        health = list(collect_system_health(check_pages=False)["problems"])
     transfers = None
     if current_user.can(Permission.TEAMS_MONEY):
         transfers = Transfers(**team_money.open_transfers())
