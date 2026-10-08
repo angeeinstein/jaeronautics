@@ -12,6 +12,19 @@ test.describe('the account list', () => {
     await expect(page.getByRole('heading', { name: 'Accounts', level: 1 })).toBeVisible();
     await expect(table.getByRole('row', { name: /Carla Cancel/ })).toContainText('Ending');
     await expect(table.getByRole('row', { name: /Fritz Failed/ })).toContainText('Payment failed');
+    // The old forum's people only when asked for.
+    await expect(table.getByRole('row', { name: /BackB_L21/ })).toHaveCount(0);
+  });
+
+  test("the old forum's people when asked for, and a search that would find them says so", async ({
+    page,
+  }) => {
+    await page.goto('/admin/accounts?q=BackB');
+
+    await page.getByRole('button', { name: 'Show them' }).click();
+
+    await expect(page).toHaveURL(/kind=all/);
+    const table = page.getByRole('table', { name: 'Accounts' });
     await expect(table.getByRole('row', { name: /BackB_L21/ })).toContainText('Old forum');
   });
 
