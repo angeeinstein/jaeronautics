@@ -1,9 +1,7 @@
-"""Stripe webhook blueprint.
-
-Handles incoming Stripe events (checkout, invoices, subscriptions, disputes) and
-keeps membership billing state in sync. Moved verbatim out of app.py; the only
-changes are the blueprint route decorator and app.logger -> current_app.logger.
-CSRF exemption is applied at registration time in create_app.
+"""Stripe's webhook: checkout, invoices, subscriptions, disputes. Keeps the
+membership's billing state in sync, and hands team payments to their handler
+(services/payments.py). Exempt from CSRF (create_app); every event is checked
+against Stripe's signature instead.
 """
 
 

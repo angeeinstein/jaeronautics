@@ -11,9 +11,12 @@ So the property these tests really protect is the independence. Anything that
 made disabling touch the membership would mean suspending a person by
 cancelling what they had paid for.
 """
+from flask import g
 from datetime import date, datetime
 
 import pytest
+
+from api_helpers import send, signed_in
 
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import User
@@ -191,7 +194,7 @@ class TestWhatADisabledAccountCanDo:
 
         assert member.user.check_password("the-password") is True
 
-        response = client.post("/login", data={
+        response = client.post("/api/v1/session", json={
             "email": member.email_private, "password": "the-password",
         }, follow_redirects=True)
         body = response.get_data(as_text=True)
@@ -205,12 +208,14 @@ class TestWhatADisabledAccountCanDo:
         with client.session_transaction() as session:
             session["_user_id"] = str(member.user_id)
 
-        assert client.get("/account").status_code < 400
+        assert client.get("/api/v1/account").status_code == 200
 
         set_account_disabled(member.user, disable=True, actor_user=admin)
         db.session.commit()
+        # The test's one application context keeps the user the last request found.
+        g.pop("_login_user", None)
 
-        assert client.get("/account").status_code in (302, 401)
+        assert client.get("/api/v1/account").status_code == 401
 
     def test_the_forum_syncs_them_out_even_though_they_paid(self, app, admin):
         """Discourse holds its own groups, so barring here means nothing there."""
@@ -295,27 +300,21 @@ class TestTheAdminScreens:
             session["_user_id"] = str(second_admin.id)
         return client
 
-    def _rows(self, response):
-        return response.get_data(as_text=True).count('class="account-row"')
-
     def test_the_account_page_shows_both_states(self, app, admin_client):
         member = _paid_member()
 
-        body = admin_client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        body = admin_client.get(f"/api/v1/admin/accounts/{member.user_id}").get_json()
 
-        assert "Account Status" in body
-        assert "Deactivate Account" in body
+        assert body["account_state"] == "active" and body["membership"]["is_active"] is True
+        assert body["access"]["disable_blockers"] == [], "the switch is offered"
 
     def test_deactivating_from_the_page_works(self, app, admin_client):
         member = _paid_member()
 
-        response = admin_client.post(
-            f"/admin/accounts/{member.user_id}/disabled",
-            data={"disable": "1", "reason": "Conduct"},
-            follow_redirects=True,
-        )
+        response = send(admin_client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/disabled",
+                        {"disabled": True, "reason": "Conduct"})
 
-        assert response.status_code < 400
+        assert response.get_json() == {"changed": True}
         db.session.expire_all()
         user = db.session.get(User, member.user_id)
         assert user.is_disabled is True
@@ -328,14 +327,12 @@ class TestTheAdminScreens:
         member = _paid_member()
         ended = []
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.admin.log_out_forum_session_if_possible",
+            "aeronautics_members.services.account_admin.log_out_forum_session_if_possible",
             lambda user: ended.append(user.id) or (True, None),
         )
 
-        admin_client.post(
-            f"/admin/accounts/{member.user_id}/disabled",
-            data={"disable": "1", "reason": "Conduct"},
-        )
+        send(admin_client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/disabled",
+             {"disabled": True, "reason": "Conduct"})
 
         assert ended == [member.user_id]
 
@@ -344,43 +341,30 @@ class TestTheAdminScreens:
         member = _paid_member()
         ended = []
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.admin.log_out_forum_session_if_possible",
+            "aeronautics_members.services.account_admin.log_out_forum_session_if_possible",
             lambda user: ended.append(user.id) or (True, None),
         )
-        admin_client.post(f"/admin/accounts/{member.user_id}/disabled",
-                          data={"disable": "1", "reason": "Conduct"})
+        url = f"/api/v1/admin/accounts/{member.user_id}/disabled"
+        send(admin_client, "PUT", url, {"disabled": True, "reason": "Conduct"})
         ended.clear()
 
-        admin_client.post(f"/admin/accounts/{member.user_id}/disabled",
-                          data={"disable": "0"})
+        send(admin_client, "PUT", url, {"disabled": False})
 
         assert ended == []
 
-    def test_the_page_says_why_the_switch_is_missing(self, app, client, admin):
+    def test_a_refusal_says_why(self, app, client, second_admin):
         """"You cannot do this to yourself" leads somewhere different from
         "nobody else could install an update"."""
-        with client.session_transaction() as session:
-            session["_user_id"] = str(admin.id)
+        signed_in(client, second_admin)
 
-        body = client.get(f"/admin/accounts/{admin.id}").get_data(as_text=True)
+        response = send(client, "PUT", f"/api/v1/admin/accounts/{second_admin.id}/disabled", {"disabled": True})
 
-        assert "Deactivate Account" not in body
-        assert "your own account" in body
+        assert response.status_code in (400, 403, 409)
+        assert "your own account" in response.get_json()["error"]["message"]
 
-    def test_the_list_filters_by_account_state(self, app, admin_client):
-        member = _paid_member()
-        set_account_disabled(member.user, disable=True, actor_user=None)
-        db.session.commit()
+    def test_the_page_says_why_the_switch_is_missing(self, app, client, second_admin):
+        signed_in(client, second_admin)
 
-        assert self._rows(admin_client.get("/admin/accounts?account=disabled")) == 1
-        assert self._rows(admin_client.get("/admin/accounts?account=active")) == 2
+        body = client.get(f"/api/v1/admin/accounts/{second_admin.id}").get_json()
 
-    def test_the_list_shows_the_two_states_in_separate_columns(self, app, admin_client):
-        member = _paid_member()
-        set_account_disabled(member.user, disable=True, actor_user=None)
-        db.session.commit()
-
-        body = admin_client.get("/admin/accounts?account=disabled").get_data(as_text=True)
-
-        assert "Deactivated" in body
-        assert "Membership Active" in body
+        assert any("your own account" in reason for reason in body["access"]["disable_blockers"])

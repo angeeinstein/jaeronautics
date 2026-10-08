@@ -20,13 +20,20 @@ from aeronautics_members.db_models import Setting
 from aeronautics_members.forms import MembershipForm
 from aeronautics_members.member_categories import MemberCategory
 from aeronautics_members.services.identity import (
+    build_email_verification_claims,
     build_work_email_verification_claims,
+    mark_email_verified_from_token,
     mark_work_email_verified_from_token,
+    send_work_email_verification_email,
 )
 from aeronautics_members.services.institutional_email import (
     SETTING_KEY,
+    STAFF_SETTING_KEY,
     get_institutional_domains,
+    get_student_domains,
     is_institutional_email,
+    is_staff_email,
+    is_student_email,
     parse_domains,
 )
 from aeronautics_members.services.members import apply_member_profile
@@ -42,6 +49,8 @@ def _signup(**overrides):
         "email_private": "anna.private@gmail.com",
         "email_work": UNI,
         "member_category": MemberCategory.STUDENT, "year_group": "LAV23",
+        # Asked of partners only; dropped for everybody else.
+        "company_name": "Some Airline",
         "password": "a-long-enough-password",
         "confirm_password": "a-long-enough-password",
         "terms_accepted": "y",
@@ -70,7 +79,7 @@ class TestTheDomainList:
         db.session.add(Setting(key=SETTING_KEY, value="partner.example"))
         db.session.commit()
 
-        assert get_institutional_domains() == ("partner.example",)
+        assert get_student_domains() == ("partner.example",)
         assert is_institutional_email("someone@partner.example") is True
 
     def test_clearing_it_falls_back_rather_than_locking_everyone_out(self, app):
@@ -123,9 +132,8 @@ class TestTheSignupForm:
         assert form.validate() is True, form.errors
         assert form.email_work.data == UNI
 
-    @pytest.mark.parametrize("category", [
-        MemberCategory.PARTNER, MemberCategory.HONORARY, MemberCategory.STAFF,
-    ])
+    # Of those who may join: an honorary member is appointed, never signs up.
+    @pytest.mark.parametrize("category", [MemberCategory.PARTNER, MemberCategory.ALUMNI])
     def test_other_categories_are_not_required_to_give_one(self, app, category):
         form = MembershipForm(
             formdata=_signup(member_category=category, email_work="", year_group=""),
@@ -278,26 +286,24 @@ class TestTheAdminSetting:
         return client
 
     def test_the_settings_page_shows_the_list_in_force(self, app, client):
-        body = self._admin_client(app, client).get("/admin/settings").get_data(as_text=True)
+        body = self._admin_client(app, client).get("/api/v1/admin/settings/general").get_json()
 
-        assert "institutional_email_domains" in body
-        assert "edu.fh-joanneum.at" in body
+        assert "edu.fh-joanneum.at" in body["domains_in_use"]
 
     def test_saving_it_changes_which_addresses_are_accepted(self, app, client):
         admin = self._admin_client(app, client)
 
-        response = admin.post("/admin/settings", data={
-            "save_settings": "1",
-            "settings_section": "general",
-            "welcome_email_sender": "",
-            "automatic_email_template": "",
-            "institutional_email_domains": "partner.example, other.example",
-        }, follow_redirects=True)
+        from api_helpers import send
 
-        assert response.status_code < 400
-        assert get_institutional_domains() == ("partner.example", "other.example")
-        assert is_institutional_email("someone@partner.example") is True
-        assert is_institutional_email("someone@edu.fh-joanneum.at") is False
+        response = send(admin, "PUT", "/api/v1/admin/settings/general", {
+            "invoice_payments": False, "automatic_emails": False, "legal_pdfs_in_welcome_emails": False,
+            "institutional_email_domains": "partner.example, other.example",
+        })
+
+        assert response.status_code == 200 and "institutional_email_domains" in response.get_json()["changed"]
+        assert get_student_domains() == ("partner.example", "other.example")
+        assert is_student_email("someone@partner.example") is True
+        assert is_student_email("someone@edu.fh-joanneum.at") is False
 
 
 class TestTheLoginAddressCannotBeInstitutional:
@@ -347,6 +353,7 @@ class TestTheLoginAddressCannotBeInstitutional:
     def test_it_follows_the_admin_setting(self, app):
         """Whatever counts as institutional counts here too, by definition."""
         db.session.add(Setting(key=SETTING_KEY, value="partner.example"))
+        db.session.add(Setting(key=STAFF_SETTING_KEY, value="staff.example"))
         db.session.commit()
 
         refused = MembershipForm(
@@ -386,3 +393,82 @@ class TestTheLoginAddressCannotBeInstitutional:
 
         assert form.validate() is False
         assert "email_private" in form.errors
+
+
+STAFF = "a.popovic@fh-joanneum.at"
+
+
+def _staff(**overrides):
+    return _signup(**{"member_category": MemberCategory.STAFF, "year_group": "", "email_work": STAFF, **overrides})
+
+
+class TestWhoseAddressIsWhose:
+    """A student's address is not a staff member's, though it sits under the same domain."""
+
+    def test_the_lists_are_told_apart(self, app):
+        assert is_student_email(UNI) and not is_staff_email(UNI)
+        assert is_staff_email(STAFF) and not is_student_email(STAFF)
+        assert is_institutional_email(UNI) and is_institutional_email(STAFF)
+        assert set(get_institutional_domains()) == {"edu.fh-joanneum.at", "fh-joanneum.at"}
+
+    def test_a_student_cannot_use_a_staff_address(self, app):
+        form = MembershipForm(formdata=_signup(email_work=STAFF), meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "student address" in " ".join(form.errors["email_work"])
+
+    def test_staff_give_their_institute_address_when_joining(self, app):
+        form = MembershipForm(formdata=_staff(email_work=""), meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "institute" in " ".join(form.errors["email_work"])
+
+    def test_and_a_students_address_is_not_one(self, app):
+        form = MembershipForm(formdata=_staff(email_work=UNI), meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "institute address" in " ".join(form.errors["email_work"])
+
+    def test_staff_sign_in_with_a_private_address(self, app):
+        form = MembershipForm(formdata=_staff(), meta={"csrf": False})
+
+        assert form.validate() is True, form.errors
+
+    def test_or_with_their_institute_address(self, app):
+        form = MembershipForm(formdata=_staff(email_private=STAFF), meta={"csrf": False})
+
+        assert form.validate() is True, form.errors
+
+    def test_but_not_with_another_institutional_one(self, app):
+        form = MembershipForm(formdata=_staff(email_private="someone.else@fh-joanneum.at"), meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "email_private" in form.errors
+
+    def test_a_company_member_signs_in_with_the_company_address(self, app):
+        form = MembershipForm(
+            formdata=_signup(member_category=MemberCategory.PARTNER, year_group="", email_work="",
+                             email_private="rep@some-airline.example", company_name="Some Airline"),
+            meta={"csrf": False},
+        )
+
+        assert form.validate() is True, form.errors
+
+
+class TestOneAddressOneConfirmation:
+    def test_the_institute_address_as_the_login_is_confirmed_with_it(self, app):
+        member = make_member(email=STAFF, email_work=STAFF, member_category="staff")
+        user = member.user
+
+        assert send_work_email_verification_email(app, member) is None  # no second email
+        assert mark_email_verified_from_token(build_email_verification_claims(user), user) is True
+
+        assert member.email_work_is_verified is True
+
+    def test_two_addresses_are_still_two(self, app):
+        member = make_member(email="anna@example.org", email_work=STAFF, member_category="staff")
+        user = member.user
+
+        mark_email_verified_from_token(build_email_verification_claims(user), user)
+
+        assert member.email_work_is_verified is False

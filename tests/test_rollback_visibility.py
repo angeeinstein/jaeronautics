@@ -16,7 +16,7 @@ from aeronautics_members.services import system_update
 
 REPO = Path(__file__).resolve().parent.parent
 INSTALLER = (REPO / "install.sh").read_text()
-SETTINGS_TEMPLATE = (REPO / "aeronautics_members" / "templates" / "admin_settings.html").read_text()
+UPDATES_PAGE = (REPO / "frontend" / "src" / "pages" / "admin" / "settings" / "Updates.tsx").read_text()
 
 
 class TestTheFileIsReadableByTheApp:
@@ -73,13 +73,13 @@ class TestAnUnreadableFileIsReported:
 
 
 class TestThePageExplainsItsAbsence:
-    def test_the_template_has_an_else_branch(self):
+    def test_the_page_has_an_else_branch(self):
         """Otherwise 'no panel' means both 'not yet' and 'broken'."""
-        assert "No rollback point has been recorded yet" in SETTINGS_TEMPLATE
+        assert "No rollback point has been recorded yet" in UPDATES_PAGE
 
-    @pytest.mark.parametrize("marker", ["rollback_point", "action\" value=\"rollback"])
+    @pytest.mark.parametrize("marker", ["state.rollback_point", "onStart('rollback')"])
     def test_the_panel_is_still_wired_up(self, marker):
-        assert marker in SETTINGS_TEMPLATE
+        assert marker in UPDATES_PAGE
 
 
 class TestTheRollbackPointNamesTheOldRevision:

@@ -1,0 +1,67 @@
+/* A legal text: long German text, set for reading. Its HTML comes from the
+   server's Markdown, so its elements are styled here rather than in it. */
+.text {
+  max-width: 46rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.text :global(h2) {
+  font-size: 1.1rem;
+  margin-top: 1.75rem;
+  scroll-margin-top: 5rem;
+}
+
+/* A part of a long text ("Teil B"): above its sections, with its own line. */
+.text :global(h1.legal-part) {
+  font-size: 1.3rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--ja-border);
+  scroll-margin-top: 5rem;
+}
+
+.text :global(hr:has(+ h1.legal-part)) {
+  display: none;
+}
+
+.text :global(h3) {
+  font-size: 1rem;
+  margin-top: 1.25rem;
+}
+
+.text :global(table) {
+  width: 100%;
+  margin-bottom: 1rem;
+  border-collapse: collapse;
+}
+
+.text :global(th),
+.text :global(td) {
+  border: 1px solid var(--ja-border);
+  padding: 0.35rem 0.5rem;
+  vertical-align: top;
+}
+
+.layout {
+  display: grid;
+  gap: var(--mantine-spacing-lg);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 62em) {
+  .layout {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .aside {
+    position: sticky;
+    top: calc(var(--ja-header-height) + 1rem);
+  }
+}
+
+.part {
+  font-weight: 600;
+  margin-top: 0.5rem;
+}

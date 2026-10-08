@@ -1,16 +1,12 @@
-"""Showing a legal text -- the association's, or a team's rules -- as a page and as a PDF.
-
-Both kinds are the same files (services/legal_texts.py) and are shown the same
-way; only their addresses and the way back differ, which the caller passes in:
-``url(language, version)`` and ``pdf_url(version)`` with ``version`` None for
-the version in force, and ``crumbs``, the way back as (label, url) pairs.
+"""A legal text -- the association's, or a team's rules -- as a PDF, made
+before it is opened (``?prepare=1``). The pages are the app's (api/legal.py).
 """
 
 import io
 from datetime import date
 from urllib.parse import urlencode
 
-from flask import abort, current_app, flash, jsonify, redirect, render_template, request, send_file
+from flask import abort, current_app, flash, jsonify, redirect, request, send_file
 from flask_babel import _
 
 from .. import legal_pdf
@@ -29,55 +25,6 @@ def _german(slug, version, team):
     if german is None:
         abort(404)
     return german
-
-
-def text_page(slug, language, version, *, url, pdf_url, crumbs, label, team=None):
-    """One text: the version in force, or an earlier one by its day.
-
-    Without a language, the English translation where there is one of the
-    version shown, else the German text. A translation always says the German
-    text is the one that applies. With ``?part=body`` only the text itself, for
-    reading it in a window over a form without leaving it.
-    """
-    if language is not None and language not in legal.LANGUAGES:
-        abort(404)
-    in_force = legal.current_version(slug, team=team)
-    if in_force is None:
-        abort(404)
-    german = _german(slug, version, team)
-    english = legal.translation(german)
-    if language == legal.AUTHORITATIVE:
-        shown = german
-    elif language is not None:
-        if english is None:
-            if version is None:
-                return redirect(url(legal.AUTHORITATIVE, None))
-            abort(404)
-        shown = english
-    else:
-        shown = english or german
-
-    def address(of):
-        if of is None:
-            return None
-        return url(of.language, None if of.version == in_force.version else of.version.isoformat())
-
-    template = "legal/_body.html" if request.args.get("part") == "body" else "legal/text.html"
-    return render_template(
-        template,
-        label=label,
-        crumbs=crumbs,
-        shown=shown,
-        rendered=legal.render(shown),
-        in_force=in_force,
-        german_url=address(german),
-        english_url=address(english),
-        english_elsewhere=english is None and legal.has_language(slug, "en", team=team),
-        others=[(v, address(v)) for v in legal.versions(slug, shown.language, team=team)
-                if v.version != shown.version],
-        pdf_url=pdf_url(None if german.version == in_force.version else german.version.isoformat()),
-        pdf_has_english=english is not None,
-    )
 
 
 def preparing():

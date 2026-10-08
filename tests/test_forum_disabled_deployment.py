@@ -62,43 +62,34 @@ class TestTheMemberJourney:
         member = _member()
 
         response = client.post(
-            "/login",
-            data={"email": member.email_private, "password": "Str0ngPassw0rd!x"},
-            follow_redirects=True,
+            "/api/v1/session", json={"email": member.email_private, "password": "Str0ngPassw0rd!x"},
         )
 
-        assert response.status_code == 200
+        assert response.get_json() == {"go_to": "/account"}
 
     def test_the_account_page_renders(self, client):
         member = _member("account@example.com")
         _login(client, member.user_id)
 
-        # The page self-redirects once with a cache-busting parameter.
-        response = client.get("/account", follow_redirects=True)
+        response = client.get("/api/v1/account")
 
         assert response.status_code == 200
-        assert "My Account" in response.get_data(as_text=True)
+        assert response.get_json()["member"]["forum"]["status"] == "disabled"
 
     def test_the_profile_can_be_saved(self, client):
         """Saving a profile triggers a forum sync when the forum is on."""
         member = _member("profile@example.com")
         _login(client, member.user_id)
 
-        response = client.post(
-            "/account/profile",
-            data={
-                f"profile-{key}": value
-                for key, value in {
-                    "street": "Alte Poststrasse", "house_number": "149",
-                    "postal_code": "8020", "city": "Vienna", "country": "Austria",
-                    "phone_private": "+43660000000", "email_private": member.email_private,
-                    # A student's profile now carries a university address.
-                    "email_work": "profile@edu.fh-joanneum.at",
-                }.items()
-            },
-        )
+        response = client.put("/api/v1/account/contact", json={
+            "street": "Alte Poststrasse", "house_number": "149",
+            "postal_code": "8020", "city": "Vienna", "country": "Austria",
+            "phone_private": "+43660000000", "email_private": member.email_private,
+            # A student's profile now carries a university address.
+            "email_work": "profile@edu.fh-joanneum.at",
+        })
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         assert member.city == "Vienna"
 
     def test_the_data_export_still_works(self, client):
@@ -136,6 +127,10 @@ class TestTheAdminSideRenders:
             "/admin/logs",
             "/admin/settings",
             "/admin/reviews",
+            # The pages the new front end draws are answered by their data.
+            "/api/v1/admin/dashboard",
+            "/api/v1/admin/accounts",
+            f"/api/v1/admin/accounts/{member.user_id}",
         ):
             assert client.get(path).status_code == 200, path
 

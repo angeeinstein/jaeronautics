@@ -122,17 +122,19 @@ def _login(client, user_id):
 
 
 def _change_email(client, member, new_email):
-    return client.post("/account/profile", data={
-        "profile-street": member.street,
-        "profile-house_number": member.house_number,
-        "profile-postal_code": member.postal_code,
-        "profile-city": member.city,
-        "profile-country": member.country,
-        "profile-phone_private": member.phone_private,
-        "profile-email_private": new_email,
-        "profile-phone_work": "",
-        "profile-email_work": member.email_work or "",
-    }, follow_redirects=True)
+    """What the page sends (frontend/src/pages/account/Contact.tsx); the answer
+    carries the messages for the page, or the field that was refused."""
+    return client.put("/api/v1/account/contact", json={
+        "street": member.street,
+        "house_number": member.house_number,
+        "postal_code": member.postal_code,
+        "city": member.city,
+        "country": member.country,
+        "phone_private": member.phone_private,
+        "email_private": new_email,
+        "phone_work": "",
+        "email_work": member.email_work or "",
+    })
 
 
 def _forum_user(forum, member):
@@ -150,12 +152,13 @@ class TestTheWholeWay:
     def test_the_new_address_reaches_the_forum_and_pauses_it(self, client, member_on_forum, forum):
         _login(client, member_on_forum.user.id)
 
-        body = _change_email(client, member_on_forum, "anna.new@example.com").get_data(as_text=True)
+        answer = _change_email(client, member_on_forum, "anna.new@example.com").get_json()
 
         remote = _forum_user(forum, member_on_forum)
         assert remote["email"] == "anna.new@example.com"
         assert remote["active"] is False
-        assert "Your forum access is paused until you confirm the new address." in body
+        assert {"tone": "info", "text": "Your forum access is paused until you confirm the new address."} \
+            in answer["messages"]
 
     def test_confirming_reactivates_it_without_a_second_welcome(self, client, member_on_forum, forum):
         _login(client, member_on_forum.user.id)
@@ -187,10 +190,12 @@ class TestAnAddressTheForumAlreadyHas:
         forum.add_local_user("taken@example.com")
         _login(client, member_on_forum.user.id)
 
-        body = _change_email(client, member_on_forum, "taken@example.com").get_data(as_text=True)
+        response = _change_email(client, member_on_forum, "taken@example.com")
 
         db.session.refresh(member_on_forum)
-        assert "already belongs to another account on the forum" in body
+        assert response.status_code == 400
+        assert "already belongs to another account on the forum" in \
+            response.get_json()["error"]["fields"]["email_private"]
         assert member_on_forum.email_private == "anna@example.com"
         assert member_on_forum.user.email == "anna@example.com"
         assert member_on_forum.user.email_is_verified

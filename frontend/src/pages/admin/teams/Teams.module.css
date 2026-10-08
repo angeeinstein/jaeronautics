@@ -1,0 +1,19 @@
+.card {
+  background: var(--ja-surface);
+}
+
+.name {
+  color: var(--ja-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.name:hover,
+.name:focus-visible {
+  color: var(--ja-link-hover);
+  text-decoration: underline;
+}
+
+.empty {
+  padding: 0 1rem;
+}

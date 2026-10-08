@@ -68,17 +68,10 @@ try:
         db,
     )
     from .forms import (
-        ChangePasswordForm,
         CreateMembershipProfileForm,
-        EmailRequestForm,
         IdentityChangeRequestForm,
-        LoginForm,
-        MailAccountForm,
         MemberProfileForm,
         MembershipForm,
-        RegistrationForm,
-        SetPasswordForm,
-        TestEmailForm,
     )
     from .forum_service import (
         FORUM_AVATAR_STATUS_APPROVED,
@@ -131,17 +124,10 @@ except ImportError:
         db,
     )
     from forms import (
-        ChangePasswordForm,
         CreateMembershipProfileForm,
-        EmailRequestForm,
         IdentityChangeRequestForm,
-        LoginForm,
-        MailAccountForm,
         MemberProfileForm,
         MembershipForm,
-        RegistrationForm,
-        SetPasswordForm,
-        TestEmailForm,
     )
     from forum_service import (
         FORUM_AVATAR_STATUS_APPROVED,
@@ -178,12 +164,6 @@ from .services.institutional_email import (  # noqa: E402
     SETTING_KEY as INSTITUTIONAL_EMAIL_SETTING_KEY,
     get_institutional_domains,
 )
-from .member_categories import (  # noqa: E402
-    CATEGORY_ORDER,
-    categories_showing_year_group,
-    category_label,
-    requires_year_group,
-)
 from .permissions import (  # noqa: E402
     Permission,
     ROLE_PERMISSIONS,
@@ -193,7 +173,6 @@ from .permissions import (  # noqa: E402
 )
 from .services.diagnostics import collect_system_health  # noqa: E402
 from .services.system_update import describe_update_state  # noqa: E402
-from .services.backup import describe_backup_page  # noqa: E402
 from .services.outbox import (  # noqa: E402
     failed_items,
     pending_count,
@@ -352,6 +331,7 @@ from .services.members import (  # noqa: E402
 from .services.settings import (  # noqa: E402
     get_settings_map,
     get_stripe_settings_map,
+    set_setting_value,
 )
 from .services.membership import (  # noqa: E402
     RESUMABLE_MEMBER_STATUSES,
@@ -448,7 +428,9 @@ def rate_limit_network_and_address():
     account lock that account's guessing from that network, and nobody else's.
     The address is hashed so the limiter's store holds no email addresses.
     """
-    address = (request.form.get("email") or request.form.get("email_private") or "").strip().lower()
+    body = request.get_json(silent=True) if request.is_json else None
+    sent = body if isinstance(body, dict) else request.form
+    address = str(sent.get("email") or sent.get("email_private") or "").strip().lower()
     digest = hashlib.sha256(address.encode("utf-8")).hexdigest()[:16] if address else "-"
     return f"{rate_limit_network()}|{digest}"
 
@@ -531,8 +513,6 @@ def requires(*permissions):
 # default to a generous one-year window.
 AUDIT_LOG_RETENTION_DAYS = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "0"))
 NOTIFICATION_RETENTION_DAYS = int(os.getenv("NOTIFICATION_RETENTION_DAYS", "365"))
-ADMIN_DIRECTORY_PAGE_SIZE = 50
-AUDIT_LOG_PAGE_SIZE = 50
 
 
 
@@ -691,18 +671,6 @@ def _stand_down_while_paused(job_name):
     return False
 
 
-def set_setting_value(key, value):
-    setting = db.session.get(Setting, key)
-    if value is None or value == "":
-        if setting is not None:
-            db.session.delete(setting)
-        return
-
-    normalized_value = str(value)
-    if setting is None:
-        db.session.add(Setting(key=key, value=normalized_value))
-    else:
-        setting.value = normalized_value
 
 
 
@@ -778,35 +746,9 @@ def is_safe_next_url(target):
 
 
 
-def create_identity_change_request(member, requested_by_user, form_data):
-    if member.open_identity_change_request is not None:
-        raise ValueError(_("You already have a pending identity change request."))
-
-    request_record = MemberProfileChangeRequest(
-        member=member,
-        requested_by=requested_by_user,
-        requested_salutation=form_data["salutation"],
-        requested_title=normalize_optional_member_value("title", form_data.get("title")),
-        requested_first_name=form_data["first_name"],
-        requested_last_name=form_data["last_name"],
-        requested_member_category=form_data["member_category"],
-        requested_year_group=normalize_optional_member_value("year_group", form_data.get("year_group")),
-        member_note=(form_data.get("member_note") or "").strip() or None,
-        status="pending",
-    )
-    db.session.add(request_record)
-    return request_record
 
 
 
-def has_identity_changes(member, form_data):
-    for field_name in IDENTITY_MEMBER_FIELDS:
-        current_value = getattr(member, field_name)
-        requested_value = normalize_optional_member_value(field_name, form_data.get(field_name))
-        if current_value != requested_value:
-            return True
-    member_note = (form_data.get("member_note") or "").strip()
-    return bool(member_note)
 
 
 
@@ -898,14 +840,6 @@ def get_current_member_for_user(user):
 
 
 
-def can_resume_payment(member):
-    if member is None:
-        return False
-    if member_has_active_access(member):
-        return False
-    if member.payment_status not in RESUMABLE_MEMBER_STATUSES:
-        return False
-    return not member.stripe_customer_id
 
 
 
@@ -958,16 +892,6 @@ def get_member_portal_target(user):
 
 
 
-def get_portal_session(member):
-    if not member or not member.stripe_customer_id:
-        raise ValueError(_("No Stripe billing profile is available for this membership yet."))
-
-    refresh_token = int(datetime.now(timezone.utc).timestamp())
-    apply_runtime_stripe_config()
-    return stripe.billing_portal.Session.create(
-        customer=member.stripe_customer_id,
-        return_url=build_public_url("account.account", refresh_billing=1, rt=refresh_token),
-    )
 
 
 
@@ -1027,410 +951,6 @@ def backfill_member_user_links():
 
     if changed:
         db.session.commit()
-
-
-
-def populate_member_profile_form(form, member):
-    for field_name in DIRECT_MEMBER_PROFILE_FIELDS:
-        getattr(form, field_name).data = getattr(member, field_name)
-
-
-def populate_identity_change_form(form, member, pending_request=None):
-    if pending_request is not None:
-        form.salutation.data = pending_request.requested_salutation
-        form.title.data = pending_request.requested_title
-        form.first_name.data = pending_request.requested_first_name
-        form.last_name.data = pending_request.requested_last_name
-        form.year_group.data = pending_request.requested_year_group
-        form.member_category.data = pending_request.requested_member_category
-        form.member_note.data = pending_request.member_note
-        return
-
-    form.salutation.data = member.salutation
-    form.title.data = member.title
-    form.first_name.data = member.first_name
-    form.last_name.data = member.last_name
-    form.year_group.data = member.year_group
-    form.member_category.data = member.member_category
-
-
-def decorate_pending_identity_requests(requests_):
-    for request_record in requests_:
-        request_record.current_forum_username = (
-            request_record.member.user.forum_username if request_record.member and request_record.member.user else None
-        )
-        request_record.suggested_forum_username = generate_unique_forum_username(
-            request_record.requested_first_name,
-            request_record.requested_last_name,
-            request_record.requested_year_group,
-            exclude_user_id=request_record.member.user.id if request_record.member and request_record.member.user else None,
-        )
-        request_record.username_would_change = bool(
-            request_record.current_forum_username
-            and request_record.current_forum_username != request_record.suggested_forum_username
-        )
-    return requests_
-
-
-def render_account_dashboard(profile_form=None, identity_form=None):
-    member = get_current_member_for_user(current_user)
-    if member is None:
-        return render_template("account/no_membership.html")
-
-    has_stripe_reference = bool(member.stripe_customer_id or member.stripe_subscription_id)
-    stripe_subscription = None
-    if has_stripe_reference:
-        try:
-            billing_changed, stripe_subscription, _forum_result = refresh_member_billing_state(member, force_stripe_sync=True, sync_forum=False)
-            if billing_changed:
-                db.session.commit()
-        except stripe.StripeError as exc:
-            current_app.logger.warning("Could not refresh Stripe billing state for member_id=%s: %s", member.id, exc)
-    elif sync_member_active_state(member):
-        db.session.commit()
-
-    pending_request = member.open_identity_change_request
-    profile_form = profile_form or MemberProfileForm(prefix="profile")
-    profile_form.member_category_value = member.member_category
-    identity_form = identity_form or IdentityChangeRequestForm(prefix="identity")
-
-    if not profile_form.is_submitted():
-        populate_member_profile_form(profile_form, member)
-    if not identity_form.is_submitted():
-        populate_identity_change_form(identity_form, member, pending_request=pending_request)
-
-    suggested_username_from_request = None
-    if pending_request is not None and member.user is not None:
-        suggested_username_from_request = generate_unique_forum_username(
-            pending_request.requested_first_name,
-            pending_request.requested_last_name,
-            pending_request.requested_year_group,
-            exclude_user_id=member.user.id,
-        )
-
-    forum_context = build_forum_context(member)
-    payment_arriving = checkout_completed_but_not_yet_confirmed(member)
-    # A failed payment on a subscription Stripe is still running -- a renewal
-    # debit that bounced, say. Stripe tries again, and a new card or account
-    # under Manage Billing is what helps. "Rejoin" would only be refused.
-    payment_needs_attention = (
-        member.payment_status == "failed"
-        and (stripe_subscription or {}).get("status") in LIVE_SUBSCRIPTION_STATUSES
-    )
-
-    return render_template(
-        "account/index.html",
-        member=member,
-        profile_form=profile_form,
-        identity_form=identity_form,
-        pending_request=pending_request,
-        suggested_username_from_request=suggested_username_from_request,
-        can_manage_billing=bool(member.stripe_customer_id),
-        can_resume_payment=can_resume_payment(member) and not payment_arriving,
-        payment_arriving=payment_arriving,
-        has_access=member_has_active_access(member),
-        can_rejoin=can_rejoin(member) and not payment_needs_attention,
-        payment_needs_attention=payment_needs_attention,
-        invoice_payments_enabled=invoice_payments_allowed(),
-        forum_context=forum_context,
-        teams_invite=_invite_to_teams(member),
-    )
-
-
-def _invite_to_teams(member):
-    from .services.teams import invite_to_teams
-
-    return invite_to_teams(member.user) if member is not None else False
-
-
-def get_admin_dashboard_metrics():
-    # Erased rows stay -- they are the payment record -- but they are not people
-    # the association has any more, so they are excluded here exactly as they
-    # are in the health report. Counting them made the dashboard disagree with
-    # the Maintenance panel by the number of erasures, and any future import of
-    # non-member accounts would widen that gap until neither number meant
-    # anything.
-    present_user = User.deleted_at.is_(None)
-    present_member = Member.deleted_at.is_(None)
-    return {
-        # Portal accounts only. Counting the archive here would say the
-        # association has 760 accounts when it has twenty, and this number is
-        # read as "how many people use this".
-        #
-        # Somebody who has reconnected counts, though: they signed up, they
-        # pay, they are here. Excluding them on the grounds that they were once
-        # imported would leave this figure hundreds short after an intake, and
-        # permanently.
-        "total_accounts": db.session.scalar(
-            db.select(func.count()).select_from(User).where(
-                present_user,
-                ~User.imported_forum_profile.has(
-                    ImportedForumProfile.claimed_at.is_(None)
-                ),
-            )
-        ) or 0,
-        "archived_forum_accounts": db.session.scalar(
-            db.select(func.count()).select_from(ImportedForumProfile)
-        ) or 0,
-        "archived_forum_claimed": db.session.scalar(
-            db.select(func.count()).select_from(ImportedForumProfile).where(
-                ImportedForumProfile.claimed_at.is_not(None)
-            )
-        ) or 0,
-        "linked_members": db.session.scalar(
-            db.select(func.count()).select_from(Member).where(present_member, Member.user_id.is_not(None))
-        ) or 0,
-        "active_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.is_active.is_(True))) or 0,
-        "pending_checkouts": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.payment_status == "pending_checkout")) or 0,
-        "pending_identity_requests": db.session.scalar(db.select(func.count()).select_from(MemberProfileChangeRequest).where(MemberProfileChangeRequest.status == "pending")) or 0,
-        "cancel_scheduled_memberships": db.session.scalar(db.select(func.count()).select_from(Member).where(present_member, Member.cancel_at_period_end.is_(True))) or 0,
-        "forum_onboarding_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ONBOARDING)) or 0,
-        "forum_active_accounts": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_ACTIVE)) or 0,
-        "forum_sync_errors": db.session.scalar(db.select(func.count()).select_from(ForumAccount).where(ForumAccount.state == FORUM_STATE_SYNC_ERROR)) or 0,
-        "pending_forum_avatars": db.session.scalar(db.select(func.count()).select_from(ForumAvatarSubmission).where(ForumAvatarSubmission.status == FORUM_AVATAR_STATUS_PENDING)) or 0,
-    }
-
-
-
-
-# The columns the account list can be sorted by, and the default. Roles are not
-# among them: one person can hold several, so there is no single value to sort.
-ACCOUNT_SORT_KEYS = ("email", "member", "account", "forum", "subscription", "active")
-ACCOUNT_SORT_DEFAULT = ("email", "asc")
-
-
-def _account_sort_expressions():
-    """What each column sorts by -- what it shows, not merely what is stored.
-
-    An unclaimed archive shows the address and name the old forum recorded, so
-    that is what it sorts by too; the portal account behind it has a
-    placeholder address nobody would recognise.
-    """
-    unclaimed_archive = and_(Member.id.is_(None), ImportedForumProfile.id.is_not(None))
-    return {
-        "email": func.lower(case(
-            (unclaimed_archive, func.coalesce(ImportedForumProfile.source_email,
-                                              ImportedForumProfile.source_username)),
-            else_=User.email,
-        )),
-        # Surname first. An archive has no surname column, but the old board's
-        # usernames are surname-first (HuberA_L15), which sorts the same way.
-        "member": [
-            func.lower(func.coalesce(Member.last_name, ImportedForumProfile.source_username)),
-            func.lower(Member.first_name),
-        ],
-        # Usable accounts first, then the ones nobody has signed in to, then
-        # switched off, then erased.
-        "account": case(
-            (User.deleted_at.is_not(None), 3),
-            (User.disabled_at.is_not(None), 2),
-            (User.password_hash.is_(None), 1),
-            else_=0,
-        ),
-        "forum": func.lower(User.forum_username),
-        "subscription": Member.payment_status,
-        # Active first on the first click: that is the question being asked.
-        "active": case((Member.is_active.is_(True), 0), (Member.is_active.is_(False), 1), else_=None),
-    }
-
-
-def account_sort_order(sort, direction):
-    """ORDER BY for the account list. Empty values go last either way round."""
-    expressions = _account_sort_expressions()[sort]
-    if not isinstance(expressions, list):
-        expressions = [expressions]
-    order = []
-    for expression in expressions:
-        order.append(expression.is_(None))
-        order.append(expression.desc() if direction == "desc" else expression.asc())
-    # A stable order within equal values, so paging never repeats or skips.
-    order += [User.email.asc(), User.id.asc()]
-    return order
-
-
-def build_account_directory_query(
-    search_term, role_filter, membership_filter, active_filter,
-    kind_filter="all", account_filter="all", sort="email", direction="asc",
-):
-    query = (
-        db.select(User)
-        .options(
-            selectinload(User.member),
-            selectinload(User.roles),
-            selectinload(User.imported_forum_profile),
-        )
-        .outerjoin(Member, Member.user_id == User.id)
-        .outerjoin(ImportedForumProfile, ImportedForumProfile.user_id == User.id)
-    )
-
-    if search_term:
-        pattern = f"%{search_term}%"
-        query = query.where(
-            or_(
-                User.email.ilike(pattern),
-                User.forum_username.ilike(pattern),
-                Member.email_private.ilike(pattern),
-                Member.first_name.ilike(pattern),
-                Member.last_name.ilike(pattern),
-                # A person carried over from the old forum has no name and a
-                # placeholder address, so the only things worth searching them
-                # by are what the archive recorded.
-                ImportedForumProfile.display_name.ilike(pattern),
-                ImportedForumProfile.source_email.ilike(pattern),
-            )
-        )
-
-    # Former forum people live in this same list -- a former member is a member
-    # the association still has a record of, and reconnecting one is the same
-    # action as anything else done from an account page. This only narrows it.
-    #
-    # "Archived" means still only an archive: a profile nobody has claimed.
-    # Once somebody comes back they are an ordinary account that happens to
-    # carry its history, and filing them under "from the old forum" for the
-    # next decade would be describing where they came from rather than what
-    # they are.
-    unclaimed = User.imported_forum_profile.has(ImportedForumProfile.claimed_at.is_(None))
-    if kind_filter == "archived":
-        query = query.where(unclaimed)
-    elif kind_filter == "portal":
-        query = query.where(~unclaimed)
-
-    # "Who can administer" is a capability question, not a role-name one. Asking
-    # for Role.slug == "admin" would file an account holding only a future role
-    # under "member only", and would have to be edited every time a role is
-    # added -- which is the thing permissions.py exists to avoid.
-    staff_roles = roles_with(Permission.ADMIN_ACCESS)
-    if role_filter == "staff":
-        query = query.where(User.roles.any(Role.slug.in_(staff_roles)))
-    elif role_filter.startswith("role:"):
-        query = query.where(User.roles.any(Role.slug == role_filter.split(":", 1)[1]))
-    elif role_filter == "member":
-        query = query.where(User.member.has(), ~User.roles.any(Role.slug.in_(staff_roles)))
-    elif role_filter == "no_membership":
-        query = query.where(~User.member.has())
-
-    if membership_filter == "none":
-        query = query.where(~User.member.has())
-    elif membership_filter == "inactive":
-        query = query.where(User.member.has(Member.is_active.is_(False)))
-    elif membership_filter != "all":
-        query = query.where(User.member.has(Member.payment_status == membership_filter))
-
-    if active_filter == "active":
-        query = query.where(User.member.has(Member.is_active.is_(True)))
-    elif active_filter == "inactive":
-        query = query.where(User.member.has(Member.is_active.is_(False)))
-
-    # The account's own state, which is a different question from the
-    # membership's and filtered separately for that reason.
-    if account_filter == "active":
-        query = query.where(
-            User.disabled_at.is_(None),
-            User.deleted_at.is_(None),
-            User.password_hash.is_not(None),
-        )
-    elif account_filter == "disabled":
-        query = query.where(User.disabled_at.is_not(None))
-    elif account_filter == "no_sign_in":
-        query = query.where(User.password_hash.is_(None), User.deleted_at.is_(None))
-
-    if sort not in ACCOUNT_SORT_KEYS:
-        sort, direction = ACCOUNT_SORT_DEFAULT
-    # No DISTINCT: both joins are one to one (member.user_id and
-    # imported_forum_profiles.user_id are unique) and the role filters are
-    # subqueries, so no account appears twice -- and DISTINCT beside an ORDER
-    # BY on expressions is refused by some databases.
-    return query.order_by(*account_sort_order(sort, direction))
-
-
-def build_settings_page_context(edit_mail_account_id=None):
-    test_email_form = TestEmailForm()
-    mail_account_form = MailAccountForm(prefix="mail")
-    editing_mail_account = None
-    sender_choices = []
-    template_choices = get_email_template_choices(current_app._get_current_object())
-    mail_account_records = get_db_mail_accounts()
-    general_settings = get_settings_map([
-        "invoice_payments_enabled",
-        "automatic_emails_enabled",
-        "legal_pdfs_in_welcome_emails",
-        "welcome_email_sender",
-        "automatic_email_template",
-        INSTITUTIONAL_EMAIL_SETTING_KEY,
-    ])
-    notification_settings = normalize_notification_settings(get_notification_settings_map())
-    forum_settings = normalize_forum_settings(get_forum_settings_map())
-    stripe_settings = get_stripe_settings_map()
-    forum_service = ForumService(forum_settings)
-    notification_service = NotificationService(current_app._get_current_object())
-    try:
-        mail_accounts = load_mail_accounts_config()
-        sender_choices = [(account_key, account_key) for account_key in mail_accounts.keys()]
-    except Exception as exc:
-        current_app.logger.error(f"Could not load email accounts for admin settings: {exc}")
-
-    if edit_mail_account_id:
-        editing_mail_account = db.session.get(MailAccount, edit_mail_account_id)
-        if editing_mail_account is not None:
-            mail_account_form.mail_account_id.data = str(editing_mail_account.id)
-            mail_account_form.account_key.data = editing_mail_account.account_key
-            mail_account_form.host.data = editing_mail_account.host
-            mail_account_form.port.data = editing_mail_account.port
-            mail_account_form.username.data = editing_mail_account.username
-            mail_account_form.starttls.data = editing_mail_account.starttls
-            mail_account_form.from_email.data = editing_mail_account.from_email
-            mail_account_form.from_name.data = editing_mail_account.from_name
-
-    test_email_form.sender.choices = sender_choices
-    test_email_form.template.choices = template_choices
-    return {
-        # Version/update state for the Maintenance tab. Same service call the
-        # JSON status endpoint uses, so the page and the API cannot disagree.
-        "update_state": describe_update_state(),
-        "system_health": collect_system_health(),
-        "backup_page": describe_backup_page(),
-        # The health report counts undelivered emails; this is what an admin
-        # needs to actually resolve one -- who it was for, and why it failed.
-        "undelivered_emails": list_undelivered_emails(),
-        "test_email_form": test_email_form,
-        "mail_account_form": mail_account_form,
-        "mail_account_records": mail_account_records,
-        "editing_mail_account": editing_mail_account,
-        "sender_choices": sender_choices,
-        "template_choices": template_choices,
-        "general_settings": general_settings,
-        # The list actually in force, which is not the same as the stored text
-        # when the box is empty and the built-in default applies.
-        "institutional_email_domains": get_institutional_domains(),
-        "notification_settings": notification_settings,
-        "notification_health": notification_service.get_health_snapshot(),
-        "forum_settings": forum_settings,
-        # One box per kind of member rather than a text area somebody has to
-        # write both sides of. The left-hand side is fixed -- it is what this
-        # portal stores on a member -- so it belongs in the label, not in
-        # something to be typed correctly.
-        "forum_category_group_fields": [
-            {
-                "kind": kind,
-                "label": category_label(kind),
-                "value": member_category_groups(forum_settings).get(kind, ""),
-            }
-            for kind in CATEGORY_ORDER
-        ],
-        "stripe_settings": stripe_settings,
-        "forum_service": forum_service,
-        "forum_endpoint_urls": {
-            "entry": build_public_url("forum.forum_entry"),
-            "connect": build_public_url("forum.forum_discourse_connect"),
-            "logout": build_public_url("forum.forum_logout"),
-        },
-        "public_base_url": current_app.config.get("PUBLIC_BASE_URL") or "",
-        "forum_provider_choices": [("discourse", _("Discourse"))],
-        "forum_auth_strategy_choices": [
-            ("discourse_connect", _("DiscourseConnect")),
-            ("oauth2_provider", _("OAuth2 Provider (reserved)")),
-        ],
-    }
 
 
 
@@ -1547,22 +1067,6 @@ def build_forum_context(member):
 def create_app(config_overrides=None):
     app = Flask(__name__)
 
-    @app.context_processor
-    def inject_language_switcher():
-        def switch_lang_url(lang):
-            endpoint = request.endpoint or "public.index"
-            values = dict(request.view_args or {})
-            values.update(request.args.to_dict(flat=True))
-            values["lang"] = lang
-            try:
-                return url_for(endpoint, **values)
-            except BuildError:
-                fallback_values = request.args.to_dict(flat=True)
-                fallback_values["lang"] = lang
-                return url_for("public.index", **fallback_values)
-
-        return dict(switch_lang_url=switch_lang_url)
-
     app.config["SECRET_KEY"] = SECRET_KEY
     # A DATABASE_URL override lets tests (and alternative deployments) point at a
     # different backend such as SQLite without touching the MySQL defaults.
@@ -1633,8 +1137,10 @@ def create_app(config_overrides=None):
     from .blueprints.public import public_bp
     from .blueprints.teams import teams_bp
     from .blueprints.webhook import webhook_bp
+    from .api import api_bp
 
     csrf.exempt(webhook_bp)
+    app.register_blueprint(api_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(auth_bp)
@@ -1650,85 +1156,10 @@ def create_app(config_overrides=None):
 
     register_purpose(PURPOSE_TEAM, handle_team_payment_event)
 
+    # The emails say when they come from the test server (emails/_layout.html).
     @app.context_processor
-    def inject_babel_globals():
-        cleaned_args = {}
-        try:
-            if request.args is not None:
-                cleaned_args = {key: value for key, value in request.args.items() if key != "lang"}
-        except Exception:
-            pass
-
-        return dict(
-            babel=babel,
-            get_locale=get_locale,
-            cleaned_args=cleaned_args,
-        )
-
-    @app.context_processor
-    def inject_footer():
-        from .config import ASSOCIATION_WEBSITE_URL, CONTACT_EMAIL, IMPRESSUM_URL, PRIVACY_URL, STATUTES_URL
-        from .services.clock import get_membership_today
-
-        return dict(footer={
-            "year": get_membership_today().year,
-            "website_url": ASSOCIATION_WEBSITE_URL,
-            "impressum_url": IMPRESSUM_URL,
-            "privacy_url": PRIVACY_URL,
-            "statutes_url": STATUTES_URL,
-            "contact_email": CONTACT_EMAIL,
-        }, test_server=bool(app.config.get("TEST_SERVER")))
-
-    @app.context_processor
-    def inject_member_category_rules():
-        """Hands the year group rules to the page so JavaScript need not know them.
-
-        Rendered into data attributes and read back by member-kind-toggle.js,
-        which keeps member_categories.py the only place the rule is written
-        down.
-        """
-        return dict(
-            year_group_categories=" ".join(categories_showing_year_group()),
-            year_group_required_categories=" ".join(
-                category for category in CATEGORY_ORDER if requires_year_group(category)
-            ),
-            member_category_label=category_label,
-        )
-
-    @app.template_global("test_free_period_start")
-    def test_free_period_start_global():
-        from .services.membership import free_period_start_test_override
-
-        override = free_period_start_test_override()
-        return f"{override[1]:02d}.{override[0]:02d}." if override else None
-
-    @app.template_global("background_jobs_paused")
-    def background_jobs_paused_global():
-        from .services.background_jobs import is_paused
-
-        return is_paused()
-
-    # The number on the Reviews tab, on every admin page: what is waiting for
-    # this user's decision, so it is noticed without opening the dashboard.
-    @app.template_global("waiting_for_review_count")
-    def waiting_for_review_count_global():
-        from .services.reviews import waiting_for_review_count
-
-        return waiting_for_review_count(current_user)
-
-    # What teams are called here, as (singular, plural) -- "Teams" unless an
-    # admin chose another word.
-    @app.template_global("teams_switched_on")
-    def teams_switched_on_global():
-        from .services.teams import teams_enabled
-
-        return teams_enabled()
-
-    @app.template_global("team_labels")
-    def team_labels_global():
-        from .services.teams import team_labels
-
-        return team_labels()
+    def inject_test_server():
+        return dict(test_server=bool(app.config.get("TEST_SERVER")))
 
     # Dates and times on every page and email in one format and in Vienna
     # time: 31.12.2026, 31.12.2026 14:05.
@@ -1739,10 +1170,6 @@ def create_app(config_overrides=None):
     @app.template_filter("datetime_display")
     def datetime_display_filter(value):
         return format_datetime_display(value) if value else ""
-
-    @app.template_filter("redact_audit_payload")
-    def redact_audit_payload_filter(value):
-        return redact_sensitive_audit_value(value)
 
     @app.url_defaults
     def add_static_file_version(endpoint, values):
@@ -1762,6 +1189,12 @@ def create_app(config_overrides=None):
             host = host[1:-1]
         if not is_trusted_host(host):
             abort(400)
+
+    # The security policy of every answer (content_security.py): set here,
+    # per answer, with a nonce for the new front end's style tags.
+    from .content_security import apply as apply_content_security_policy
+
+    app.after_request(apply_content_security_policy)
 
     @app.after_request
     def disable_dynamic_page_caching(response):
@@ -4798,6 +4231,21 @@ def create_app(config_overrides=None):
         else:
             sys.exit(1)
 
+    @app.cli.command("api-schema")
+    @click.option("--out", default="-", show_default=True, help="File to write; - for the screen.")
+    @with_appcontext
+    def api_schema_command(out):
+        """Write the API's OpenAPI description (from api/), for the front end's types."""
+        from .api import openapi
+
+        text = json.dumps(openapi.build(), indent=2, sort_keys=True) + "\n"
+        if out == "-":
+            click.echo(text, nl=False)
+        else:
+            Path(out).parent.mkdir(parents=True, exist_ok=True)
+            Path(out).write_text(text, encoding="utf-8")
+            click.echo(f"Written to {out}.")
+
     @app.cli.command("build-legal-pdfs")
     @click.option("--again", is_flag=True, help="Make each anew, even when a kept one looks current.")
     @with_appcontext
@@ -4941,28 +4389,58 @@ def create_app(config_overrides=None):
 
 
 
+    # The API answers its errors as JSON (api/_core.py); these handlers serve
+    # the pages and pass the API's requests on.
+    from .api import error as api_error, is_api_request
+    from .blueprints.app_shell import app_shell
+
+    def error_page(status, title, *lines):
+        """The plain error page (templates/error.html), rendered without the
+        site's context processors: it must still work when the database failed."""
+        html = app.jinja_env.get_template("error.html").render(
+            title=title, lines=lines, test_server=bool(app.config.get("TEST_SERVER")))
+        return html, status
+
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
-        flash(_("Your session has expired or the form is invalid. Please try submitting again."), "warning")
-        return redirect(request.referrer or url_for("public.index"))
+        if is_api_request():
+            return api_error(400, "csrf_failed", "The session has expired. Reload the page and try again.")
+        return error_page(400, "This page was open too long",
+                          "Your session has expired. Go back, reload the page and try again.")
 
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
-        # Rendered, not redirected. Browsers do not follow a Location header on
-        # a 429, so returning a redirect left the member on an unstyled
-        # "Redirecting..." page that never went anywhere and explained nothing.
-        return render_template("429.html"), 429
+        if is_api_request():
+            return api_error(429, "rate_limited", "Too many requests. Please wait a moment and try again.")
+        # A page, not a redirect: browsers do not follow a Location header on a
+        # 429, so a redirect left the member on an unstyled "Redirecting..." page.
+        return error_page(
+            429, "Too many attempts",
+            "We have had a lot of requests from your network in a short time, so this one was held back.",
+            "Please wait a few minutes and try again. On university WiFi, someone else on the same "
+            "network may have caused this.")
 
     @app.errorhandler(413)
     def request_entity_too_large(e):
-        flash(_("The submitted data is too large to process. Please reduce the file size and try again."), "danger")
-        if request.path == url_for("forum.upload_forum_avatar"):
-            return redirect(url_for("forum.forum_entry"))
-        return redirect(request.referrer or url_for("public.index"))
+        if is_api_request():
+            return api_error(413, "too_large", "The upload is too large.")
+        return error_page(413, "Too large", "What was sent is too large. Please send a smaller file.")
 
     @app.errorhandler(404)
     def page_not_found(e):
-        return render_template("404.html"), 404
+        if is_api_request():
+            return api_error(404, "not_found", "Not found.")
+        # The app says so, in its own frame (pages/NotFound.tsx).
+        response = app_shell()
+        if response.status_code == 200:
+            response.status_code = 404
+        return response
+
+    @app.errorhandler(405)
+    def method_not_allowed(e):
+        if is_api_request():
+            return api_error(405, "method_not_allowed", "Not possible with this method.")
+        return e
 
     @app.errorhandler(500)
     def internal_server_error(e):
@@ -4983,7 +4461,10 @@ def create_app(config_overrides=None):
             severity="critical",
             commit=True,
         )
-        return render_template("500.html"), 500
+        if is_api_request():
+            return api_error(500, "server_error", "Something went wrong on our side. Please try again later.")
+        return error_page(500, "Something went wrong",
+                          "Sorry, something went wrong on our side. We have been told and are looking into it.")
 
     @app.cli.command("send-welcome-email")
     @with_appcontext

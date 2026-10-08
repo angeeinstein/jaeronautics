@@ -1,0 +1,35 @@
+.entry {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--ja-border);
+}
+
+.entry:last-child {
+  border-bottom: 0;
+}
+
+.entryHead {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.entryHead:not(:disabled):hover {
+  color: var(--ja-link-hover);
+}
+
+.empty {
+  padding: 0 1rem;
+}
+
+.fold {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-link);
+}
+
+.fold:hover {
+  color: var(--ja-link-hover);
+}
+
+.indent {
+  padding-left: 2rem;
+}

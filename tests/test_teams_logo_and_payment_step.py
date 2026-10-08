@@ -135,28 +135,35 @@ class TestTheLogo:
         team, _lead = _led()
         _login(client, _staff("admin@example.com", "admin").id)
         # On the team's management page -- open to admins while teams are still off.
-        fields = {"section": "page", "description": ""}
-
-        client.post("/teams/rocket/manage/settings", data={**fields, "logo": (BytesIO(_png()), "logo.png")},
+        client.post("/api/v1/teams/rocket/manage/page/logo", data={"image": (BytesIO(_png()), "logo.png")},
                     content_type="multipart/form-data")
         db.session.refresh(team)
         assert team.logo_token is not None
 
-        client.post("/teams/rocket/manage/settings", data={**fields, "remove_logo": "on"},
-                    content_type="multipart/form-data")
+        client.delete("/api/v1/teams/rocket/manage/page/logo")
         db.session.refresh(team)
         assert team.logo_token is None
+
+    def test_not_a_picture_is_said_at_the_field(self, app, client):
+        _team, _lead = _led()
+        _login(client, _staff("admin@example.com", "admin").id)
+
+        response = client.post("/api/v1/teams/rocket/manage/page/logo",
+                               data={"image": (BytesIO(b"%PDF-1.4"), "logo.png")},
+                               content_type="multipart/form-data")
+
+        assert response.status_code == 400
 
     @pytest.mark.usefixtures("switched_on")
     def test_a_lead_uploads_it_too(self, app, client):
         team, lead = _led()
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/settings", data={"logo": (BytesIO(_png()), "logo.png")},
-                    content_type="multipart/form-data")
+        page = client.post("/api/v1/teams/rocket/manage/page/logo", data={"image": (BytesIO(_png()), "logo.png")},
+                           content_type="multipart/form-data").get_json()
 
         db.session.refresh(team)
-        assert team.logo_token is not None
+        assert team.logo_token is not None and page["logo_url"] == f"/teams/logo/{team.logo_token}"
 
     @pytest.mark.usefixtures("switched_on")
     def test_shown_to_somebody_choosing_a_team(self, app, client):
@@ -165,7 +172,8 @@ class TestTheLogo:
         db.session.commit()
         _login(client, _person().id)
 
-        assert f"/teams/logo/{team.logo_token}" in client.get("/teams").get_data(as_text=True)
+        [card] = client.get("/api/v1/teams").get_json()["others"]
+        assert card["logo_url"] == f"/teams/logo/{team.logo_token}"
 
     @pytest.mark.usefixtures("outbox")
     def test_in_its_emails_below_the_associations_header(self, app):

@@ -1,0 +1,140 @@
+/*
+ * The design's colours as variables (docs/design.md), for the theme
+ * (theme.ts) and the few components of our own. Pages use these, never a
+ * colour of their own.
+ */
+:root {
+  --ja-bg: #161718;
+  --ja-surface: #1f2123;
+  --ja-surface-alt: #26292b;
+  --ja-surface-input: #1b1b1c;
+  --ja-navbar-bg: #000000;
+  --ja-border: #34383b;
+  --ja-border-strong: #3a3d40;
+  --ja-text: #ffffff;
+  --ja-muted: #aab4bb;
+  --ja-placeholder: #8b8b8c;
+  --ja-accent: #00dfff;
+  --ja-accent-hover: #33e7ff;
+  --ja-accent-active: #00c2df;
+  --ja-accent-text: #081114;
+  --ja-link: #66ecff;
+  --ja-link-hover: #33e7ff;
+  --ja-success: #28a745;
+  --ja-success-text: #4dbf68;
+  --ja-warning: #f2b84b;
+  --ja-danger-strong: #dc3545;
+  --ja-danger: #ff6b6b;
+  --ja-info: #00dfff;
+
+  /* The frame (docs/frontend-structure.md, section 3). */
+  --ja-topbar-height: 3.75rem;
+  /* The test server's red bar above the top bar (frame/TestServerBar.tsx); none on the live site. */
+  --ja-test-bar: #c62828;
+  --ja-test-bar-height: 0px;
+  --ja-header-height: calc(var(--ja-topbar-height) + var(--ja-test-bar-height));
+  --ja-sidebar-width: 15.5rem;
+  --ja-content-narrow: 54rem;
+  --ja-content-wide: 80rem;
+
+  color-scheme: dark;
+}
+
+html[data-test-server] {
+  --ja-test-bar-height: 1.75rem;
+}
+
+body {
+  background: var(--ja-bg);
+}
+
+/* A plain link in text. :where() keeps it below any class, so buttons and
+   navigation drawn as links keep their own colours. */
+:where(a) {
+  color: var(--ja-link);
+}
+
+:where(a):hover,
+:where(a):focus-visible {
+  color: var(--ja-link-hover);
+}
+
+/* Figures line up in columns. */
+.ja-figures {
+  font-family: var(--mantine-font-family-monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* A button that cannot be pressed yet still looks like a button -- dimmed,
+   with its outline -- rather than like a line of grey text. */
+.mantine-Button-root:where(:disabled, [data-disabled]) {
+  border: 1px solid var(--ja-border-strong);
+  background: transparent;
+  color: var(--ja-placeholder);
+}
+
+/* Something that arrived or changed while the page was open (lib/arrivals.ts,
+   components/StatTile.tsx): a cyan glow that fades out. Not for whoever has
+   asked their device for less motion -- the change is there all the same. */
+@keyframes ja-arrive {
+  from {
+    background-color: rgb(0 223 255 / 0.2);
+    box-shadow: inset 3px 0 0 var(--ja-accent);
+  }
+  to {
+    background-color: transparent;
+    box-shadow: inset 3px 0 0 transparent;
+  }
+}
+
+@keyframes ja-change {
+  from {
+    color: var(--ja-accent);
+  }
+  to {
+    color: inherit;
+  }
+}
+
+@keyframes ja-arrive-card {
+  from {
+    box-shadow:
+      0 0 0 1px var(--ja-accent),
+      inset 3px 0 0 var(--ja-accent);
+  }
+  to {
+    box-shadow:
+      0 0 0 1px transparent,
+      inset 3px 0 0 transparent;
+  }
+}
+
+.ja-arrived {
+  animation: ja-arrive 3.5s ease-out;
+}
+
+/* A card has its own background: only its outline lights up. */
+.ja-arrived-card {
+  animation: ja-arrive-card 3.5s ease-out;
+}
+
+.ja-changed {
+  animation: ja-change 2.5s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ja-arrived,
+  .ja-arrived-card,
+  .ja-changed {
+    animation: none;
+  }
+}

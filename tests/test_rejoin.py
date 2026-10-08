@@ -115,28 +115,28 @@ class TestTheAccountPage:
         member = _ended()
         _sign_in(client, member)
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        membership = client.get("/api/v1/account").get_json()["member"]["membership"]
 
-        assert "/account/rejoin" in body
-        assert 'name="payment_method"' not in body  # invoices are off by default
+        assert membership["may_rejoin"] is True
+        assert membership["invoice_payments"] is False  # invoices are off by default
 
     def test_with_the_invoice_choice_when_invoices_are_on(self, app, client):
         db.session.add(Setting(key="invoice_payments_enabled", value="True"))
         member = _ended()
         _sign_in(client, member)
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        membership = client.get("/api/v1/account").get_json()["member"]["membership"]
 
-        assert 'name="payment_method"' in body
+        assert membership["invoice_payments"] is True
 
     def test_not_to_a_member_whose_membership_runs(self, app, client):
         member = _ended(payment_status="paid", is_active=True,
                         membership_ends_on=date(TODAY.year, 12, 31))
         _sign_in(client, member)
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        membership = client.get("/api/v1/account").get_json()["member"]["membership"]
 
-        assert "/account/rejoin" not in body
+        assert membership["may_rejoin"] is False
 
 
 class TestRejoining:
@@ -144,10 +144,9 @@ class TestRejoining:
         member = _ended()
         _sign_in(client, member)
 
-        response = client.post("/account/rejoin")
+        response = client.post("/api/v1/account/rejoin", json={})
 
-        assert response.status_code == 303
-        assert response.headers["Location"] == "https://checkout.stripe.test/cs_rejoin"
+        assert response.get_json() == {"url": "https://checkout.stripe.test/cs_rejoin", "message": None}
         (sent,) = stripe_stub["checkout"]
         assert sent["customer"] == "cus_old"
         assert "customer_email" not in sent  # Stripe refuses both
@@ -168,7 +167,7 @@ class TestRejoining:
         member = _ended()
         _sign_in(client, member)
 
-        client.post("/account/rejoin")
+        client.post("/api/v1/account/rejoin", json={})
 
         (sent,) = stripe_stub["checkout"]
         assert sent["customer_email"] == "lapsed@example.com"
@@ -179,7 +178,7 @@ class TestRejoining:
         member = _ended()
         _sign_in(client, member)
 
-        client.post("/account/rejoin", data={"payment_method": "invoice"})
+        client.post("/api/v1/account/rejoin", json={"payment_method": "invoice"})
 
         assert stripe_stub["customer_create"] == []
         (sent,) = stripe_stub["subscription_create"]
@@ -196,10 +195,11 @@ class TestRejoining:
         member = _ended(payment_status="expired")
         _sign_in(client, member)
 
-        body = client.post("/account/rejoin", follow_redirects=True).get_data(as_text=True)
+        answer = client.post("/api/v1/account/rejoin", json={}).get_json()
 
         assert stripe_stub["checkout"] == []
-        assert "still running in Stripe" in body
+        assert answer["url"] is None
+        assert "still running in Stripe" in answer["message"]
         assert db.session.get(Member, member.id).stripe_subscription_id == "sub_running"
 
     def test_an_ended_subscription_in_stripe_does_not_stop_it(self, app, client, stripe_stub):
@@ -209,7 +209,7 @@ class TestRejoining:
         member = _ended()
         _sign_in(client, member)
 
-        client.post("/account/rejoin")
+        client.post("/api/v1/account/rejoin", json={})
 
         assert len(stripe_stub["checkout"]) == 1
 
@@ -219,18 +219,20 @@ class TestRejoining:
         member = _ended()
         _sign_in(client, member)
 
-        body = client.post("/account/rejoin", follow_redirects=True).get_data(as_text=True)
+        response = client.post("/api/v1/account/rejoin", json={})
 
         assert stripe_stub["checkout"] == []
-        assert "could not check your billing" in body
+        assert response.status_code == 502
+        assert "could not check your billing" in response.get_json()["error"]["message"]
 
     def test_refused_while_the_membership_runs(self, app, client, stripe_stub):
         member = _ended(payment_status="paid", is_active=True,
                         membership_ends_on=date(TODAY.year, 12, 31))
         _sign_in(client, member)
 
-        client.post("/account/rejoin")
+        response = client.post("/api/v1/account/rejoin", json={})
 
+        assert response.status_code == 409
         assert stripe_stub["checkout"] == []
 
 

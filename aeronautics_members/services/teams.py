@@ -291,6 +291,12 @@ def _snapshot(team):
     }
 
 
+#: Short names the addresses use themselves: /admin/teams/new is the form for a
+#: new team, so a team called "new" could never be opened; the same for
+#: /api/v1/admin/money/overview beside a team's /api/v1/admin/money/<slug>.
+RESERVED_SLUGS = frozenset({"new", "overview"})
+
+
 def create_team(actor, *, slug, **fields):
     cleaned = _clean_team_fields(**fields)
     slug = (slug or "").strip().lower() or suggest_slug(cleaned["name"])
@@ -299,6 +305,9 @@ def create_team(actor, *, slug, **fields):
             "The short name may only contain lowercase letters, digits and hyphens.",
             code="team_slug_invalid",
         )
+    if slug in RESERVED_SLUGS:
+        raise ValidationError("That short name is used by the pages themselves. Choose another.",
+                              code="team_slug_reserved")
     if db.session.execute(db.select(Team.id).filter_by(slug=slug)).first() is not None:
         raise ConflictError("Another team already has that short name.", code="team_slug_taken")
 
@@ -513,11 +522,15 @@ def accepted_rules_in_force(membership, rules):
     return membership.terms_version.date() == rules.day
 
 
-# --- The team's page: a longer text, a picture ------------------------------------
+# --- The team's page: a longer text, a picture, a gallery ---------------------------
 
 PICTURE_MAX_BYTES = 10 * 1024 * 1024
 PICTURE_MAX_SIDE = 1600
 ABOUT_MAX_LENGTH = 10000
+#: The gallery on the About page.
+PHOTOS_MAX = 8
+PHOTO_MAX_SIDE = 2000
+CAPTION_MAX_LENGTH = 200
 
 
 def picture_storage_dir():
@@ -532,21 +545,22 @@ def picture_file(team):
     return path if path.is_file() else None
 
 
-def set_team_picture(actor, team, raw_bytes):
-    """The picture on the team's page. Re-encoded as a JPEG, like the logo is
-    as a PNG: what is served is a picture this code made, never the upload."""
+def _store_jpeg(team, raw_bytes, max_side, what):
+    """An upload re-encoded as a JPEG, at most ``max_side`` on its longer side:
+    what is served is a picture this code made, never the upload. Returns
+    ``(path, token, width, height)``."""
     from PIL import Image
 
     from ..forum_service import ForumProviderError, _load_image_for_processing
 
     if not raw_bytes:
-        raise ValidationError("Choose a picture.", code="team_picture_missing")
+        raise ValidationError(f"Choose a {what}.", code="team_picture_missing")
     if len(raw_bytes) > PICTURE_MAX_BYTES:
-        raise ValidationError("The picture may be at most 10 MB.", code="team_picture_too_large")
+        raise ValidationError(f"The {what} may be at most 10 MB.", code="team_picture_too_large")
     try:
         image = _load_image_for_processing(raw_bytes, formats=LOGO_FORMATS)
     except ForumProviderError:
-        raise ValidationError("Please upload a PNG, JPG or WebP picture.", code="team_picture_invalid") from None
+        raise ValidationError(f"Please upload a PNG, JPG or WebP {what}.", code="team_picture_invalid") from None
 
     if image.mode in ("RGBA", "LA", "P"):
         image = image.convert("RGBA")
@@ -555,13 +569,19 @@ def set_team_picture(actor, team, raw_bytes):
         image = flat
     else:
         image = image.convert("RGB")
-    image.thumbnail((PICTURE_MAX_SIDE, PICTURE_MAX_SIDE))
+    image.thumbnail((max_side, max_side))
     directory = picture_storage_dir()
     directory.mkdir(parents=True, exist_ok=True)
     token = secrets.token_hex(16)
     path = directory / f"{team.slug}-{token}.jpg"
-    image.save(path, format="JPEG", quality=85, optimize=True)
+    image.save(path, format="JPEG", quality=85, optimize=True, progressive=True)
+    return path, token, image.width, image.height
 
+
+def set_team_picture(actor, team, raw_bytes):
+    """The picture on the team's page -- the cover of its About page. Re-encoded
+    as a JPEG, like the logo is as a PNG."""
+    path, token, _width, _height = _store_jpeg(team, raw_bytes, PICTURE_MAX_SIDE, "picture")
     previous = team.picture_path
     team.picture_path, team.picture_token = str(path), token
     _delete_logo_file(previous)
@@ -576,6 +596,120 @@ def remove_team_picture(actor, team):
     team.picture_path, team.picture_token = None, None
     log_audit_event("teams", "team_picture_removed", actor_user=actor, metadata={"team": team.slug})
     return team
+
+
+def _caption(text):
+    text = " ".join((text or "").split())
+    if len(text) > CAPTION_MAX_LENGTH:
+        raise ValidationError(f"A caption may be at most {CAPTION_MAX_LENGTH} characters.",
+                              code="team_caption_too_long")
+    return text or None
+
+
+def add_team_photo(actor, team, raw_bytes, caption=None):
+    """A photo for the gallery on the About page, after the ones there."""
+    from ..db_models import TeamPhoto
+
+    if len(team.photos) >= PHOTOS_MAX:
+        raise ValidationError(f"The gallery holds {PHOTOS_MAX} photos. Remove one first.",
+                              code="team_photos_full")
+    caption = _caption(caption)
+    path, token, width, height = _store_jpeg(team, raw_bytes, PHOTO_MAX_SIDE, "photo")
+    photo = TeamPhoto(team=team, path=str(path), token=token, caption=caption, width=width, height=height,
+                      position=max((photo.position for photo in team.photos), default=-1) + 1)
+    db.session.add(photo)
+    log_audit_event("teams", "team_photo_added", actor_user=actor, metadata={"team": team.slug})
+    return photo
+
+
+def arrange_team_photos(actor, team, arrangement):
+    """The gallery's order and captions: ``[(photo id, caption), ...]``, every
+    photo of the team once, in the order to show them."""
+    photos = {photo.id: photo for photo in team.photos}
+    ids = [photo_id for photo_id, _caption_text in arrangement]
+    if sorted(ids) != sorted(photos):
+        raise ConflictError("The gallery changed meanwhile. Reload the page and try again.",
+                            code="team_photos_changed")
+    changed = False
+    for position, (photo_id, caption) in enumerate(arrangement):
+        photo, caption = photos[photo_id], _caption(caption)
+        if (photo.position, photo.caption) != (position, caption):
+            photo.position, photo.caption = position, caption
+            changed = True
+    if changed:
+        team.photos.sort(key=lambda photo: photo.position)
+        log_audit_event("teams", "team_photos_arranged", actor_user=actor, metadata={"team": team.slug})
+    return changed
+
+
+def remove_team_photo(actor, team, photo_id):
+    photo = next((photo for photo in team.photos if photo.id == photo_id), None)
+    if photo is None:
+        raise NotFoundError("That photo is not in this team's gallery.", code="team_photo_missing")
+    team.photos.remove(photo)
+    db.session.delete(photo)
+    _delete_logo_file(photo.path)
+    for position, rest in enumerate(team.photos):
+        rest.position = position
+    log_audit_event("teams", "team_photo_removed", actor_user=actor, metadata={"team": team.slug})
+
+
+def team_photo_by_token(token):
+    from ..db_models import TeamPhoto
+
+    if not token:
+        return None
+    return db.session.execute(db.select(TeamPhoto).filter_by(token=token)).scalar_one_or_none()
+
+
+def photo_file(photo):
+    if photo is None or not photo.path:
+        return None
+    path = Path(photo.path)
+    return path if path.is_file() else None
+
+
+def _about_markdown():
+    """Light formatting for the text about a team: paragraphs, headings, lists,
+    emphasis, links. No HTML and no images (an image from elsewhere would be
+    refused by the security policy anyway; photos go in the gallery). A line
+    break is kept, so a text typed before formatting existed looks as it did.
+    Headings start one below the page's own: ``#`` is a section, not a title."""
+    from markdown_it import MarkdownIt
+
+    markdown = MarkdownIt("commonmark", {"html": False, "breaks": True, "linkify": False, "typographer": True})
+    markdown.disable("image")
+
+    def demote(state):
+        for token in state.tokens:
+            if token.type in ("heading_open", "heading_close"):
+                token.tag = f"h{min(int(token.tag[1]) + 1, 6)}"
+
+    def outside_links(renderer, tokens, idx, options, env):
+        # Links leave the portal in a tab of their own.
+        token = tokens[idx]
+        href = str(token.attrGet("href") or "")
+        if href.startswith(("http://", "https://", "mailto:")):
+            token.attrSet("target", "_blank")
+            token.attrSet("rel", "noopener noreferrer")
+        return renderer.renderToken(tokens, idx, options, env)
+
+    markdown.core.ruler.push("demote_headings", demote)
+    markdown.add_render_rule("link_open", outside_links)
+    return markdown
+
+
+_about_renderer = None
+
+
+def render_about(text):
+    """The text about a team as safe HTML (see _about_markdown), or None."""
+    global _about_renderer
+    if not text:
+        return None
+    if _about_renderer is None:
+        _about_renderer = _about_markdown()
+    return _about_renderer.render(text)
 
 
 def team_by_picture_token(token):
@@ -667,6 +801,15 @@ def teams_led_by(user):
         (team for team in teams if team_permissions(user, team)),
         key=lambda team: team.name,
     )
+
+
+def role_label(user, team):
+    """The role ``user`` holds in ``team`` and that is in force, as said: "Lead" before "Treasurer"; None."""
+    held = {team_role.role for team_role in team.roles if team_role.user_id == user.id and role_counts(team_role)}
+    for role in (ROLE_LEAD, ROLE_TREASURER):
+        if role in held:
+            return TEAM_ROLE_LABELS[role]
+    return None
 
 
 def role_holders(team, role=None):
@@ -772,7 +915,6 @@ def find_account(address):
     if user is None or user.deleted_at is not None:
         raise NotFoundError("No account uses that address.", code="team_account_not_found")
     return user
-
 
 
 # --- The forum ---------------------------------------------------------------
@@ -1400,6 +1542,13 @@ def person_details(user):
     }
 
 
+def member_count(team):
+    """How many are in the team now."""
+    return db.session.execute(
+        db.select(db.func.count(TeamMembership.id)).filter_by(team_id=team.id, status=ACTIVE)
+    ).scalar_one()
+
+
 def roster(team):
     """The active members, by surname, for the team's own page and the lead's list."""
     members = team_memberships(team, {ACTIVE})
@@ -1651,11 +1800,6 @@ def update_access_list(actor, team, *, recipients, dates, auto_send):
         log_audit_event("teams", "team_access_list_settings_changed", actor_user=actor,
                         before=before, after=after, metadata={"team": team.slug})
     return team
-
-
-def access_list_rows(team):
-    """(name, university email) of every current member, by surname."""
-    return [(row["name"], row["university_email"] or "") for row in roster(team)]
 
 
 def last_access_list(team):

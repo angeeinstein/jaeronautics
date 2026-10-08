@@ -114,11 +114,20 @@ Tests point the app at SQLite via the `DATABASE_URL` environment variable, which
 
 ## Updating and Rolling Back
 
-Settings → Maintenance has the update button. The web process never installs
+Settings → Updates has the update button. The web process never installs
 anything itself: it writes a request file, and a root-owned watcher acts on it.
 The request carries no branch, remote or revision, so reaching that endpoint
 cannot choose what gets deployed — which is the whole reason this is not a
 sudoers rule.
+
+While an update runs, the page lists its steps as the installer reaches them
+(its `[STEP]` lines in `/var/lib/jaeronautics/updates/last-run.log`) -- done,
+under way, failed -- with any warning or error under its step, and the steps
+still to come as the last successful update went (kept by the portal in
+`step-plan.json` beside the log). Below, folded away, is everything the
+installer printed, as in a terminal; after the update the same list and output
+stay under *Last update*. A step's name is the same on every update, so a
+revision or a count it mentions goes on a line of its own.
 
 **A rollback restores the program only.** It does *not* restore the database.
 The schema is deliberately left where it is, because every migration here adds
@@ -300,11 +309,11 @@ later), with which it trims the fonts it embeds; `install.sh` installs them,
 also on an update. Ubuntu 24.04 has all of them; an older release's
 HarfBuzz is too old. Only
 the fonts and the logo in `static/` are read while laying out; an image a
-text points at elsewhere is left out. nginx sends PDFs without the pages'
-Content-Security-Policy, whose `object-src 'none'` would stop Chrome's PDF
-viewer from showing them.
+text points at elsewhere is left out. PDFs go without the pages'
+Content-Security-Policy (`content_security.py`), whose `object-src 'none'`
+would stop Chrome's PDF viewer from showing them.
 
-**Opening one:** a PDF link (`data-legal-file`, `static/legal-pdf-open.js`)
+**Opening one:** a PDF link (`frontend/src/components/PdfLink.tsx`)
 first asks for the PDF to be made (`?prepare=1`), shows *Making the PDF…*
 with a spinner meanwhile, and opens it once it is there -- in a new tab where
 the browser still allows one after the wait, else in the same tab. The address
@@ -365,11 +374,9 @@ build-legal-pdfs`. A team without a file in force has no rules: joining it
 asks for none.
 
 **At signup** the one checkbox names every text accepted then, each a link.
-A click opens the text in a window over the form (`static/legal-dialog.js`
-fetches `/legal/<text>?part=body`); links inside it (to the German version,
-to another text) load in the same window, anything else in a new tab.
-Without JavaScript the link opens in a new tab. Either way nothing typed
-into the form is lost. The member keeps which version of each text was
+A click opens the text in a window over the form (`GET /api/v1/legal/<text>`,
+drawn by `frontend/src/pages/public/MembershipForm.tsx`); a click with Ctrl or
+Cmd opens its page in a new tab. Either way nothing typed into the form is lost. The member keeps which version of each text was
 accepted -- the version day, the same in both languages -- and when
 (`legal_versions_accepted`, `legal_accepted_at`; in the member's data
 export). Members who signed up before October 2026 have neither; for them
@@ -894,22 +901,27 @@ this is how to use them.
    holder is a member of the association *and* of the team, so the lead joins
    the team like anybody else and an admin approves them.
 
-**A team's About page** (`/teams/<short name>/about`): every signed-in visitor
-sees the logo, name, an "About the team" text, one optional picture, the fee,
-the team's rules (see "Legal Texts") and the form to apply or join. The overview shows each team's
+**A team's About page** (`/teams/<short name>/about`) presents the team to
+every signed-in visitor: a cover picture across the top with the logo, name,
+short description and a few facts (how many are in it, whether it takes
+applications, the fee); below it the "About the team" text -- with light
+formatting: headings, bold, lists, links (Markdown, no HTML, no pictures from
+elsewhere) -- and up to 8 photos, each opening large with its caption; beside
+it the team's rules (see "Legal Texts") and the form to apply or join. The overview shows each team's
 short description and leads there. **The team's own page**
 (`/teams/<short name>`) is for its members: their membership and who is in the
-team, without the texts; anybody else is sent to the About page. The texts
-and picture are edited by the team's leads (Manage → Settings) and by site
-admins. Rules are optional and kept by the association as files (see "Legal
+team, without the texts; anybody else is sent to the About page. The texts,
+cover and photos are edited by the team's leads (the team's menu → Team page, with a
+preview of the text) and by site admins; uploads are made anew as JPEG on the
+server, like members' pictures, and go into backups. Rules are optional and kept by the association as files (see "Legal
 Texts"); a team with rules needs them ticked to apply or join, and each
 membership keeps when they were accepted and which version. A new version
 applies to whoever applies next; members already in are not asked again, and
 their team page says the rules have changed.
 
-**Running a team** (its leads, Teams → Manage), in sections down the side:
+**Running a team** (its leads, from the team's side menu: open the team's tile under Teams), in sections:
 *Applications* (invite with the meeting details, approve, not accept),
-*Members*, *Former members*, *Team page* (descriptions, picture, logo),
+*Members*, *Former members*, *Team page* (descriptions, cover, logo, photos),
 *Applying* (open or closed, the question; the rules in force, read-only), *Access list* (only for
 teams that have one) and *Roles*. Each settings section is saved on its own.
 Also: notes about a person (not shown to them, but in their data export,
@@ -1048,11 +1060,13 @@ and site admins for every team (Admin → Money), also archived ones.
   Treasurer and site admins can set them. The IBAN is checked by its check
   digits. Every change is in the log with before and after, and the
   association's Treasurer is emailed when somebody else made it.
-- **Transferring**: the association's Treasurer (or an admin) opens the team's
-  Money page, scans the GiroCode with the banking app -- it fills in account,
-  open amount and reference -- sends it, then *Mark as transferred*. A
-  transfer is recorded with the account it went to and cannot exceed what is
-  open.
+- **Transferring**: the association's Treasurer (or an admin) opens Admin →
+  Money → the team, scans the GiroCode with the banking app -- it fills in
+  account, amount and reference as they stand in the form, the whole open
+  amount unless changed -- sends it, then *Mark as transferred* and confirms.
+  A transfer is recorded with the account it went to and cannot exceed what
+  is open. The dashboard shows the Treasurer how many teams are owed money,
+  how much in all, and which of them have no bank details yet.
 
 **Before teams charge on the live portal** -- things only Stripe's dashboard
 can show:
@@ -1378,9 +1392,9 @@ membership over a label nobody needs would be absurd.
 
 **Adding a category** is an edit to `member_categories.py` plus a migration
 only if existing rows need re-pointing. The forms, the show/hide behaviour and
-the admin screens all read from that module — the browser gets the rule through
-`data-year-group-categories`, rendered from Python, so `member-kind-toggle.js`
-never restates it. `tests/test_member_categories.py` fails if a new category is
+the admin screens all read from that module — the browser gets the rule from
+`GET /api/v1/forms/options` (`api/form_options.py`), so the front end never
+restates it. `tests/test_member_categories.py` fails if a new category is
 added without a label, a description or a year group rule.
 
 **Nothing about money is in there.** Every category pays the same annual fee
@@ -1857,6 +1871,54 @@ wheel for a newer Python, say — `USE_DEPENDENCY_LOCK=0 ./install.sh` falls bac
 to `requirements.txt`. That install is unpinned and unverified, so treat it as a
 way to get unstuck, not as a setting to leave in place.
 
+## The Front End
+
+The new front end (`frontend/`, React and TypeScript; `docs/frontend-plan.md`)
+is built by CI, not on the server. Each step of the build needs 650–870 MB of
+memory, more than a server with 1 GB has free beside the portal and MariaDB —
+and when memory runs out, the kernel may stop the database rather than the
+build. So once a commit's tests have passed, CI's `publish-frontend` job
+attaches the build to the **Front-end builds** pre-release on GitHub
+(tag `frontend-builds`), one file per version of `frontend/`:
+`frontend-<tree>.tar.gz`, named by the folder's git tree hash, so a commit that
+changes only Python reuses the build before it. The newest 200 are kept.
+
+On every install, update and rollback, `install.sh` downloads the build for the
+revision it installs — before anything is stopped:
+
+- **CI still running** (an update straight after a push): it waits, up to 25
+  minutes (`FRONTEND_CI_WAIT_MINUTES`), and says so.
+- **CI failed** for that commit: the update stops, and the running portal is
+  left as it was.
+- **Downloaded:** checked to be built from this revision's `frontend/`,
+  swapped in whole. The last three downloads stay in
+  `/var/cache/jaeronautics/frontend/`, so a rollback finds its own. No
+  Node.js and no npm packages are needed on the server.
+
+**Built on the server instead** with `update --build-locally` (or
+`install.sh --build-locally`), and when there is nothing to download — the
+repository not on GitHub, GitHub out of reach, a build cleaned up long ago.
+Then `install.sh` installs Node.js 24 from NodeSource's package repository
+(Ubuntu's own is too old) and runs `npm ci` and `npm run build`: with
+temporary swap (`/jaeronautics-build.swap`, removed again however the run
+ends) when RAM and swap together have less than 2 GB free, at the lowest CPU
+and disk priority, and marked as the first process to stop if memory runs
+out — not MariaDB or the portal. Slow on a 1 GB server, but safe.
+
+Either way the new build goes into `aeronautics_members/static/app.next/` and
+is swapped in whole; the previous build's files stay one more update, so a page
+opened before it still loads its scripts. An update that stops on the way
+starts the paused background jobs again.
+
+Its JavaScript dependencies are pinned in `frontend/package-lock.json`, with
+their hashes, as the Python ones are in the lock files. Working on it,
+the API's types and the tests: `frontend/README.md`.
+
+**Security policy.** The portal sets the Content-Security-Policy on every
+answer itself (`aeronautics_members/content_security.py`), with a fresh nonce
+each time, which the front end's `<style>` tags carry. nginx sets none: a
+second, fixed policy would apply as well and block what the first allows.
+
 ## Linting
 
 Ruff runs the pyflakes checks (real bugs: undefined names, unused imports):
@@ -1867,9 +1929,19 @@ ruff check .
 
 ## Continuous Integration
 
-`.github/workflows/ci.yml` runs `ruff check` and the pytest suite on every push
-and pull request. The tests use SQLite, so CI needs no database or other
-services.
+`.github/workflows/ci.yml` runs on every push and pull request, with the
+versions the servers run (Python 3.12, Node.js 24):
+
+- **test** -- `ruff check` and the pytest suite. The tests use SQLite, so CI
+  needs no database or other services.
+- **frontend** -- whether the API's types are current, the type check, ESLint,
+  Prettier, the component tests (Vitest) and the build (`frontend/README.md`).
+- **e2e** -- the built front end in Chromium against the real Flask app with
+  sample data (Playwright); traces of failed tests are kept for a week.
+- **publish-frontend** -- after the three above pass, on a push: the built
+  front end for the servers, on the Front-end builds pre-release (see The Front
+  End). The only job that may write to the repository; one that fails does not
+  fail the commit — the installer then builds it itself.
 
 ## Send a Welcome Email Manually
 

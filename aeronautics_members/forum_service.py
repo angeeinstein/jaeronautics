@@ -541,16 +541,6 @@ def read_limited_upload_bytes(upload, max_input_bytes):
     return b"".join(chunks)
 
 
-def detect_image_type(raw_bytes):
-    if raw_bytes.startswith(b"\xff\xd8\xff"):
-        return "jpeg"
-    if raw_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "png"
-    if raw_bytes.startswith(b"RIFF") and raw_bytes[8:12] == b"WEBP":
-        return "webp"
-    return None
-
-
 # How long one call to Discourse may take. Somebody waiting on a page gets a
 # short one: the forum normally answers in well under a second, and a forum
 # that has not answered in eight will not be answering soon -- better to show
@@ -1847,12 +1837,10 @@ def normalize_forum_settings(settings_map):
     return values
 
 
-
 def normalize_bool(value):
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
 
 
 def normalize_int(value, default):
@@ -1860,7 +1848,6 @@ def normalize_int(value, default):
         return int(value)
     except (TypeError, ValueError):
         return default
-
 
 
 def member_has_active_membership(member):
@@ -1872,10 +1859,8 @@ def member_has_active_membership(member):
     return member_has_active_access(member)
 
 
-
 def get_forum_storage_dir():
     return Path(current_app.root_path).parent / "storage" / "forum_avatar_staging"
-
 
 
 def delete_submission_file(submission, clear_reference=False):

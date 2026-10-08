@@ -193,15 +193,16 @@ def test_cli_exits_nonzero_when_unhealthy(app):
     assert result.exit_code == 1, "an unhealthy install must fail the command"
 
 
-def test_health_panel_renders_on_the_settings_page(client, app):
+def test_the_report_reaches_system_health(client, app):
+    """The same report as the command, for Settings -> System health (api/admin_system.py)."""
     _login_admin(client, app)
 
-    response = client.get("/admin/settings")
+    response = client.get("/api/v1/admin/settings/health")
 
     assert response.status_code == 200
-    body = response.get_data(as_text=True)
-    assert "System Health" in body
-    assert "Background work" in body
+    body = response.get_json()
+    assert set(body) >= {"healthy", "problems", "warnings", "database_schema", "membership", "queues"}
+    assert client.get("/admin/settings/health").status_code == 200
 
 
 def test_expired_member_is_not_counted_as_covered(app):
@@ -233,7 +234,9 @@ def test_the_dashboard_counts_agree_with_the_health_report(app, monkeypatch):
     privacy.erase_account(leaving.user, initiated_by=privacy.INITIATED_BY_MEMBER)
     db.session.commit()
 
-    metrics = app_module.get_admin_dashboard_metrics()
+    from aeronautics_members.services.dashboard import metrics as dashboard_metrics
+
+    metrics = dashboard_metrics()
     health = diagnostics.collect_system_health()
 
     assert metrics["linked_members"] == health["membership"]["members"] == 1

@@ -117,13 +117,12 @@ MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
 # every email, and "[TEST]" before each email's subject and the tab title.
 TEST_SERVER = os.getenv("TEST_SERVER", "").strip().lower() in {"1", "true", "yes", "on"}
 
-# Domains that prove somebody is currently a student or staff. An admin can
-# edit the list at runtime; this is only the fallback for a fresh install, and
-# the reason it is a list at all is that a renamed domain or a partner company
-# must not need a code change.
-DEFAULT_INSTITUTIONAL_EMAIL_DOMAINS = os.getenv(
-    "INSTITUTIONAL_EMAIL_DOMAINS", "edu.fh-joanneum.at,fh-joanneum.at"
-)
+# Domains that prove somebody is currently a student, and those that prove
+# somebody works at the institute. An admin can edit both lists at runtime;
+# these are only the fallbacks for a fresh install, and the reason they are
+# lists at all is that a renamed domain must not need a code change.
+DEFAULT_INSTITUTIONAL_EMAIL_DOMAINS = os.getenv("INSTITUTIONAL_EMAIL_DOMAINS", "edu.fh-joanneum.at")
+DEFAULT_STAFF_EMAIL_DOMAINS = os.getenv("STAFF_EMAIL_DOMAINS", "fh-joanneum.at")
 
 SENSITIVE_SETTING_KEYS = {"stripe_secret_key", "stripe_webhook_secret", "discourse_api_key", "discourse_connect_secret"}
 SENSITIVE_AUDIT_FIELD_NAMES = SENSITIVE_SETTING_KEYS | {"password", "pass", "secret", "smtp_password", "export_password"}

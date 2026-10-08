@@ -19,17 +19,17 @@ import pytest
 from conftest import db
 
 from aeronautics_members.db_models import Setting, User
-from aeronautics_members.blueprints import _signup as signup
+from aeronautics_members.services import account, signup
 
 FORM = {
     "salutation": "Mr", "first_name": "Angelo", "last_name": "Popovic",
     "street": "Dreierschützengasse", "house_number": "10", "postal_code": "8020",
     "city": "Graz", "country": "Austria", "phone_private": "+436601234567",
-    "email_private": "login.only@example.com",
     "email_work": "angelo.popovic@edu.fh-joanneum.at",
     "member_category": "student", "year_group": "LAV23",
-    "terms_accepted": "y",
+    "terms_accepted": True,
 }
+URL = "/api/v1/account/membership"
 
 
 @pytest.fixture
@@ -68,6 +68,7 @@ def starting(monkeypatch):
         seen["work_email"] += 1
 
     monkeypatch.setattr(signup, "create_checkout_session_for_member", checkout)
+    monkeypatch.setattr(account, "create_checkout_session_for_member", checkout)
     monkeypatch.setattr(signup, "create_invoice_membership_for_member", invoice)
     monkeypatch.setattr(signup, "send_work_email_verification_email", work_email)
     monkeypatch.setattr(signup, "send_email_verification_email", lambda *a, **k: True)
@@ -75,27 +76,25 @@ def starting(monkeypatch):
 
 
 class TestInvoicesFollowTheSetting:
-    def test_switched_off_the_page_does_not_offer_it(self, logged_in, invoices):
+    def test_switched_off_the_form_does_not_offer_it(self, logged_in, invoices):
         invoices(False)
-        body = logged_in.get("/account/create-membership").get_data(as_text=True)
-        assert 'value="invoice"' not in body
+        assert logged_in.get("/api/v1/forms/options").get_json()["invoice_payments"] is False
 
     def test_switched_on_it_does(self, logged_in, invoices):
         invoices(True)
-        body = logged_in.get("/account/create-membership").get_data(as_text=True)
-        assert 'value="invoice"' in body
+        assert logged_in.get("/api/v1/forms/options").get_json()["invoice_payments"] is True
 
     def test_asking_for_it_anyway_goes_to_card_payment(
             self, logged_in, invoices, starting):
         invoices(False)
-        logged_in.post("/account/create-membership",
-                       data={**FORM, "payment_method": "invoice"})
+        response = logged_in.post(URL, json={**FORM, "payment_method": "invoice"})
+        assert response.get_json() == {"go_to": "https://checkout.example/s"}
         assert starting == {"checkout": 1, "invoice": 0, "work_email": 1}
 
     def test_allowed_it_is_honoured(self, logged_in, invoices, starting):
         invoices(True)
-        logged_in.post("/account/create-membership",
-                       data={**FORM, "payment_method": "invoice"})
+        response = logged_in.post(URL, json={**FORM, "payment_method": "invoice"})
+        assert response.get_json()["go_to"] == "/thank-you?method=invoice&phase=prorated"
         assert starting["invoice"] == 1
 
 
@@ -103,21 +102,40 @@ class TestTheUniversityAddressIsConfirmed:
     def test_the_link_is_sent(self, logged_in, invoices, starting):
         """The link that reconnects a returning student's old forum account."""
         invoices(False)
-        logged_in.post("/account/create-membership", data=FORM)
+        logged_in.post(URL, json=FORM)
         assert starting["work_email"] == 1
 
     def test_without_one_nothing_is_sent(self, logged_in, invoices, starting):
         invoices(False)
-        logged_in.post("/account/create-membership",
-                       data={**FORM, "member_category": "partner",
-                             "year_group": "", "email_work": ""})
+        logged_in.post(URL, json={**FORM, "member_category": "partner", "year_group": None, "email_work": None})
         assert starting["work_email"] == 0
 
 
 class TestTheErrorsAreSaid:
-    def test_a_bad_phone_number_is_named(self, logged_in):
-        body = logged_in.post(
-            "/account/create-membership",
-            data={**FORM, "phone_private": "call me"},
-        ).get_data(as_text=True)
-        assert "Private Phone" in body
+    def test_each_refused_field_is_named(self, logged_in):
+        response = logged_in.post(URL, json={**FORM, "phone_private": "call me", "city": "",
+                                             "terms_accepted": False})
+        assert response.status_code == 400
+        assert set(response.get_json()["error"]["fields"]) == {"phone_private", "city", "terms_accepted"}
+        assert db.session.execute(db.select(User).filter_by(email="login.only@example.com")).scalar_one().member is None
+
+    def test_the_address_is_the_logins(self, logged_in, invoices, starting):
+        invoices(False)
+        logged_in.post(URL, json=FORM)
+        user = db.session.execute(db.select(User).filter_by(email="login.only@example.com")).scalar_one()
+        assert user.member.email_private == "login.only@example.com"
+
+
+class TestTheSecondTime:
+    def test_with_a_membership_already_nothing_new_is_made(self, logged_in, invoices, starting):
+        """A double click: the second answer goes on from the first membership."""
+        invoices(False)
+        logged_in.post(URL, json=FORM)
+        again = logged_in.post(URL, json=FORM)
+        assert again.status_code == 200
+        assert starting["checkout"] == 2  # the payment page again, not a second membership
+
+    def test_the_page_sends_somebody_with_one_to_my_account(self, logged_in, invoices, starting):
+        invoices(False)
+        logged_in.post(URL, json=FORM)
+        assert logged_in.get("/account/create-membership").headers["Location"] == "/account"

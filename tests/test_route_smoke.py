@@ -12,14 +12,16 @@ import pytest
 
 from conftest import app_module, db, make_member
 from aeronautics_members.blueprints import public, account, auth, forum, admin
-from aeronautics_members.blueprints import _signup as signup
+from aeronautics_members.services import account as account_service
+from aeronautics_members.services import forum as forum_services
+from aeronautics_members.services import signup, workflows
 from aeronautics_members.db_models import (
     User, Member, MemberProfileChangeRequest, ForumAvatarSubmission, MailAccount,
 )
 from aeronautics_members.forum_service import ForumProviderError
 
 # signup is where both membership forms start paying, so it is patched with them.
-BLUEPRINT_MODULES = [app_module, public, account, auth, forum, admin, signup]
+BLUEPRINT_MODULES = [app_module, public, account, auth, forum, admin, signup, account_service, workflows, forum_services]
 
 
 class _FakeCheckout:
@@ -33,6 +35,7 @@ class _FakeForumService:
     def get_pending_submission(self, m): return None
     def get_current_approved_submission(self, m): return None
     def get_latest_submission(self, m): return None
+    def get_reclaimed_avatar(self, m): return None
     def get_upload_request_limit(self): return 10 * 1024 * 1024
     def get_desired_state(self, m): return "inactive"
     def sync_member(self, m): return types.SimpleNamespace(changed=False, desired_state=None, forum_account=None, error=None)
@@ -58,12 +61,15 @@ def mocked(app, monkeypatch):
 
     patch_all("send_member_welcome_email", lambda *a, **k: None)
     patch_all("send_email_verification_email", lambda *a, **k: True)
+    patch_all("send_work_email_verification_email", lambda *a, **k: True)
+    patch_all("send_account_deletion_email", lambda *a, **k: True)
     patch_all("send_password_reset_email", lambda *a, **k: True)
     patch_all("send_mail", lambda *a, **k: None)
     patch_all("probe_mail_account_connection", lambda *a, **k: (True, "ok"))
     patch_all("create_checkout_session_for_member", lambda m: (_FakeCheckout(), {"free_period": False, "thank_you_phase": "prorated"}))
     patch_all("create_invoice_membership_for_member", lambda m: (types.SimpleNamespace(id="sub_x"), {"free_period": True, "thank_you_phase": "free_period"}))
     patch_all("refresh_member_billing_state", lambda *a, **k: (False, None, None))
+    patch_all("billing_portal_session", lambda m: _FakeCheckout())
     patch_all("get_forum_service", lambda: _FakeForumService())
 
     import stripe
@@ -119,8 +125,13 @@ MEMBERSHIP = {"salutation": "Mr", "first_name": "A", "last_name": "B", "year_gro
 
 
 def _login(client, uid):
+    from flask import g
+
     with client.session_transaction() as sess:
         sess["_user_id"] = str(uid)
+    # The app fixture keeps one application context open, and Flask-Login keeps
+    # the user it found on it: after /logout everybody stayed signed out.
+    g.pop("_login_user", None)
 
 
 def test_all_routes_no_server_error(client, seeded):
@@ -128,67 +139,88 @@ def test_all_routes_no_server_error(client, seeded):
     a, mu, nm = ids["admin_id"], ids["member_uid"], ids["nomember_id"]
     calls = []
 
-    def hit(method, path, uid=None, data=None):
+    def hit(method, path, uid=None, data=None, json=None):
         if uid is not None:
             _login(client, uid)
-        resp = client.open(path, method=method, data=data)
+        resp = client.open(path, method=method, data=data, json=json)
         calls.append((resp.status_code, method, path))
         assert resp.status_code < 500, f"{method} {path} -> {resp.status_code}"
 
     # public
     for p in ["/", "/join", "/__health", "/legal", "/thank-you", "/cancel"]:
         hit("GET", p)
-    hit("POST", "/process-membership", data={**MEMBERSHIP, "email_private": "brand@new.co",
-        "password": "password123", "confirm_password": "password123", "payment_method": "checkout", "terms_accepted": "y"})
+    hit("POST", "/api/v1/signup", json={**MEMBERSHIP, "email_private": "brand@new.co",
+        "password": "password123", "payment_method": "checkout", "terms_accepted": True})
     # auth
     for p in ["/login", "/register", "/forgot-password", "/verify-email/bad", "/reset-password/bad"]:
         hit("GET", p)
-    hit("POST", "/login", data={"email": "m@t.co", "password": "password123"})
-    hit("POST", "/forgot-password", data={"email": "m@t.co"})
+    hit("POST", "/api/v1/session", json={"email": "m@t.co", "password": "password123"})
+    hit("POST", "/api/v1/password-reset", json={"email": "m@t.co"})
     hit("POST", "/register", data={"email": "new2@t.co", "password": "password123", "confirm_password": "password123"})
-    hit("POST", "/reset-password/bad", data={"password": "password123", "confirm_password": "password123"})
+    hit("GET", "/api/v1/password-reset/bad")
+    hit("PUT", "/api/v1/password-reset/bad", json={"password": "password123"})
     hit("GET", "/change-password", uid=mu)
-    hit("POST", "/change-password", uid=mu, data={"current_password": "password123", "new_password": "password124", "confirm_new_password": "password124"})
-    hit("POST", "/logout", uid=mu)
+    hit("PUT", "/api/v1/account/password", uid=mu, json={"current_password": "password123", "new_password": "password124"})
+    hit("DELETE", "/api/v1/session", uid=mu)
     # account
-    hit("GET", "/account?rt=1", uid=mu)
+    hit("GET", "/account", uid=mu)
+    hit("GET", "/api/v1/account", uid=mu)
+    hit("GET", "/api/v1/account", uid=nm)
+    hit("GET", "/api/v1/forms/options")
     hit("GET", "/account/create-membership", uid=nm)
-    hit("POST", "/account/profile", uid=mu, data={f"profile-{k}": v for k, v in {**PROFILE, "city": "Vienna"}.items()})
-    hit("POST", "/account/identity-request", uid=mu, data={"identity-salutation": "Mr", "identity-first_name": "X", "identity-last_name": "Y", "identity-year_group": "LAV25", "identity-member_note": "n"})
-    hit("POST", f"/account/identity-request/{ids['pcr_id']}/cancel", uid=mu)
-    hit("POST", "/account/billing", uid=mu, data={"action": "cancel"})
-    hit("POST", "/account/resume-payment", uid=mu)
-    hit("POST", "/account/resend-verification", uid=mu)
+    hit("POST", "/api/v1/account/membership", uid=nm, json={
+        **{key: value for key, value in MEMBERSHIP.items() if key != "email_private"}, "terms_accepted": True})
+    hit("PUT", "/api/v1/account/contact", uid=mu, json={**PROFILE, "city": "Vienna"})
+    hit("POST", "/api/v1/account/change-request", uid=mu, json={"salutation": "Mr", "first_name": "X", "last_name": "Y", "member_category": "student", "year_group": "LAV25", "note": "n"})
+    hit("DELETE", f"/api/v1/account/change-request/{ids['pcr_id']}", uid=mu)
+    hit("POST", "/api/v1/account/billing", uid=mu)
+    hit("POST", "/api/v1/account/payment", uid=mu)
+    hit("POST", "/api/v1/account/rejoin", uid=mu, json={})
+    hit("POST", "/api/v1/account/emails/private/confirmation", uid=mu)
+    hit("POST", "/api/v1/account/emails/work/confirmation", uid=mu)
+    hit("POST", "/api/v1/account/deletion", uid=mu)
     # forum
     hit("GET", "/forum", uid=mu)
     hit("GET", "/forum/discourse/connect", uid=mu)
     hit("GET", "/forum/logout", uid=mu)
     hit("GET", "/forum/avatar/public/bad")
-    hit("POST", "/forum/avatar", uid=mu, data={})
+    hit("GET", "/api/v1/account/forum", uid=mu)
+    hit("POST", "/api/v1/account/picture", uid=mu, data={})
+    hit("GET", "/account/delete/bad", uid=mu)
+    hit("GET", "/api/v1/account/deletion/bad", uid=mu)
     # admin
-    for p in ["/admin", "/admin/accounts", f"/admin/accounts/{mu}", "/admin/reviews", "/admin/logs", "/admin/settings"]:
+    for p in ["/admin", "/admin/accounts", f"/admin/accounts/{mu}", "/admin/reviews", "/admin/logs", "/admin/settings",
+              f"/api/v1/admin/accounts/{mu}", f"/api/v1/admin/accounts/{mu}/erasure",
+              f"/api/v1/admin/accounts/{mu}/old-forum-candidates"]:
         hit("GET", p, uid=a)
-    hit("POST", f"/admin/accounts/{mu}/billing-sync", uid=a)
-    hit("POST", f"/admin/accounts/{mu}/forum-resync", uid=a)
-    hit("POST", f"/admin/accounts/{mu}/roles", uid=a, data={"roles": ["admin"]})
-    hit("POST", f"/admin/accounts/{mu}/roles", uid=a, data={})
-    hit("POST", f"/admin/reviews/pictures/{ids['sub_id']}/approve", uid=a, data={"review_note": "ok"})
-    hit("POST", f"/admin/reviews/pictures/{ids['sub_id']}/reject", uid=a, data={"review_note": "no"})
-    hit("POST", f"/admin/reviews/name-changes/{ids['pcr_id']}/approve", uid=a, data={"admin_note": "ok"})
-    hit("POST", f"/admin/reviews/name-changes/{ids['pcr_id']}/reject", uid=a, data={"admin_note": "no"})
-    hit("POST", "/admin/settings/mail-accounts", uid=a, data={"mail-account_key": "office2", "mail-host": "smtp.x", "mail-port": "587", "mail-username": "u", "mail-password": "p", "mail-starttls": "y"})
-    hit("POST", f"/admin/settings/mail-accounts/{ids['mail_id']}/test-connection", uid=a)
-    hit("POST", "/admin/settings/mail-accounts/export", uid=a, data={"export_password": "secretsecret"})
-    hit("POST", "/admin/settings/send-test-email", uid=a, data={"sender": "office", "recipient": "x@t.co", "template": "welcome_email"})
-    hit("POST", "/admin/settings/test-forum-connection", uid=a)
-    hit("POST", f"/admin/settings/mail-accounts/{ids['mail_id']}/delete", uid=a)
+    hit("POST", f"/api/v1/admin/accounts/{mu}/billing-sync", uid=a)
+    hit("POST", f"/api/v1/admin/accounts/{mu}/forum-resync", uid=a)
+    hit("PUT", f"/api/v1/admin/accounts/{mu}/roles", uid=a, json={"roles": ["admin"]})
+    hit("PUT", f"/api/v1/admin/accounts/{mu}/roles", uid=a, json={"roles": []})
+    hit("GET", "/api/v1/admin/reviews", uid=a)
+    hit("GET", "/api/v1/admin/reviews/history", uid=a)
+    hit("POST", f"/api/v1/admin/reviews/pictures/{ids['sub_id']}/approve", uid=a, json={"note": "ok"})
+    hit("POST", f"/api/v1/admin/reviews/pictures/{ids['sub_id']}/reject", uid=a, json={"note": "no"})
+    hit("POST", f"/api/v1/admin/reviews/name-changes/{ids['pcr_id']}/approve", uid=a, json={"note": "ok"})
+    hit("POST", f"/api/v1/admin/reviews/name-changes/{ids['pcr_id']}/reject", uid=a, json={"note": "no"})
+    hit("GET", "/api/v1/admin/settings/mail", uid=a)
+    hit("POST", "/api/v1/admin/settings/mail/accounts", uid=a, json={
+        "key": "office2", "host": "smtp.x", "port": 587, "username": "u", "password": "p", "starttls": True})
+    hit("POST", f"/api/v1/admin/settings/mail/accounts/{ids['mail_id']}/test", uid=a)
+    hit("POST", "/api/v1/admin/settings/mail/export", uid=a, json={"password": "secretsecret"})
+    hit("POST", "/api/v1/admin/settings/test-email", uid=a,
+        json={"sender": "office", "recipient": "x@t.co", "template": "welcome_email.html"})
+    hit("POST", "/api/v1/admin/settings/forum/test", uid=a)
+    for section in ("general", "notifications", "billing", "forum"):
+        hit("GET", f"/api/v1/admin/settings/{section}", uid=a)
+    hit("DELETE", f"/api/v1/admin/settings/mail/accounts/{ids['mail_id']}", uid=a)
 
     assert len(calls) >= 45
 
 
-def test_signup_creates_user_and_member(client, seeded):
-    client.post("/process-membership", data={**MEMBERSHIP, "email_private": "brand@new.co",
-        "password": "password123", "confirm_password": "password123", "payment_method": "checkout", "terms_accepted": "y"})
+def test_signup_creates_user_and_member(client, seeded, mocked):
+    client.post("/api/v1/signup", json={**MEMBERSHIP, "email_private": "brand@new.co",
+        "password": "password123", "payment_method": "checkout", "terms_accepted": True})
     user = db.session.execute(db.select(User).filter_by(email="brand@new.co")).scalar_one_or_none()
     assert user is not None and user.member is not None
 
@@ -197,15 +229,15 @@ def test_setting_roles_grants_and_revokes(client, seeded):
     _login(client, seeded["admin_id"])
     uid = seeded["member_uid"]
 
-    client.post(f"/admin/accounts/{uid}/roles", data={"roles": ["admin"]})
+    client.put(f"/api/v1/admin/accounts/{uid}/roles", json={"roles": ["admin"]})
     assert db.session.get(User, uid).has_role("admin")
 
-    client.post(f"/admin/accounts/{uid}/roles", data={})
+    client.put(f"/api/v1/admin/accounts/{uid}/roles", json={"roles": []})
     assert db.session.get(User, uid).has_role("admin") is False
 
 
 def test_profile_save_persists(client, seeded):
     _login(client, seeded["member_uid"])
-    resp = client.post("/account/profile", data={f"profile-{k}": v for k, v in {**PROFILE, "city": "Vienna"}.items()})
-    assert resp.status_code == 302
+    resp = client.put("/api/v1/account/contact", json={**PROFILE, "city": "Vienna"})
+    assert resp.status_code == 200
     assert db.session.get(Member, seeded["member_id"]).city == "Vienna"

@@ -11,6 +11,7 @@ from io import BytesIO
 
 import pytest
 
+from api_helpers import send
 from conftest import app_module, db
 from aeronautics_members.db_models import AuditLog, User
 from aeronautics_members.services.clock import get_membership_today
@@ -19,6 +20,7 @@ from test_legal_texts import legal_dir  # noqa: F401 -- fixture
 from test_teams_flow import _led, _login, _person, switched_on  # noqa: F401
 from test_teams_foundation import _in_team
 
+API = "/api/v1/teams"
 RULES = "1. Safety briefing before every flight.\n2. Tools go back where they came from."
 RULES_DAY = datetime.combine(get_membership_today(), time())
 
@@ -71,10 +73,12 @@ class TestThePage:
         db.session.commit()
         _login(client, _person().id)
 
-        body = client.get("/teams/rocket/about").get_data(as_text=True)
+        body = client.get(f"{API}/rocket").get_json()
 
-        assert "We build rockets." in body and f"/teams/picture/{team.picture_token}" in body
-        assert 'action="/teams/rocket/join"' in body and 'name="accept_terms"' not in body
+        assert body["about"].startswith("We build rockets.")
+        assert body["picture_url"] == f"/teams/picture/{team.picture_token}"
+        assert body["joining"]["submit_label"] == "Apply" and body["rules"] is None
+        assert body["members"] is None, "only its members see who is in it"
         picture = client.get(f"/teams/picture/{team.picture_token}")
         assert picture.status_code == 200 and picture.mimetype == "image/jpeg"
 
@@ -82,18 +86,19 @@ class TestThePage:
         _led()
         _login(client, _person().id)
 
-        body = client.get("/teams").get_data(as_text=True)
+        [card] = client.get(API).get_json()["others"]
 
-        assert 'href="/teams/rocket/about"' in body and 'action="/teams/rocket/join"' not in body
+        assert card["opens"] == "about" and card["about_label"] == "About & apply"
 
     def test_shows_the_rules_with_a_box_to_tick(self, app, client, with_rules):
         team, _lead = _led()
         with_rules(team)
         _login(client, _person().id)
 
-        body = client.get("/teams/rocket/about").get_data(as_text=True)
+        body = client.get(f"{API}/rocket").get_json()
 
-        assert 'href="/teams/rocket/rules"' in body and 'name="accept_terms"' in body
+        assert body["rules"]["version"] == get_membership_today().isoformat()
+        assert body["rules"]["accepted"] is None
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -102,7 +107,9 @@ class TestTheTeamsOwnPage:
         _led()
         _login(client, _person().id)
 
-        assert client.get("/teams/rocket").headers["Location"].endswith("/teams/rocket/about")
+        # The page itself is the app's; it goes to /about when the answer says so.
+        assert client.get("/teams/rocket").status_code == 200
+        assert client.get(f"{API}/rocket").get_json()["sees_team_page"] is False
 
     def test_shows_members_their_team_without_the_join_page(self, app, client, picture_dir, with_rules):
         team, _lead = _led()
@@ -114,11 +121,11 @@ class TestTheTeamsOwnPage:
         db.session.commit()
         _login(client, anna.id)
 
-        body = client.get("/teams/rocket").get_data(as_text=True)
+        body = client.get(f"{API}/rocket").get_json()
 
-        assert "Lena Lead" in body and "Anna Berger" in body
-        assert "We build rockets." not in body and team.picture_token not in body
-        assert 'action="/teams/rocket/join"' not in body and 'href="/teams/rocket/about"' in body
+        assert body["sees_team_page"] is True and body["joining"] is None
+        assert {person["name"] for person in body["members"]} >= {"Lena Lead", "Anna Berger"}
+        assert body["membership"]["status"] == "active" and "leave" in body["membership"]["actions"]
 
 
 class TestThePicture:
@@ -156,11 +163,11 @@ class TestTheRules:
         anna = _person()
         _login(client, anna.id)
 
-        refused = client.post("/teams/rocket/join", data={})
-        assert refused.headers["Location"].endswith("/teams/rocket/about#join")
+        refused = send(client, "POST", f"{API}/rocket/join", {})
+        assert refused.status_code == 400
         assert teams.ongoing_membership(anna, team) is None
 
-        client.post("/teams/rocket/join", data={"accept_terms": "on"})
+        send(client, "POST", f"{API}/rocket/join", {"accept_rules": True})
         membership = teams.ongoing_membership(anna, team)
         assert membership.terms_accepted_at is not None
         assert membership.terms_version == RULES_DAY
@@ -177,10 +184,13 @@ class TestTheRules:
         with_rules(team)
         _login(client, lead.id)
 
-        body = client.get("/teams/rocket/manage").get_data(as_text=True)
+        applying = client.get(f"{API}/rocket/manage/applying").get_json()
 
-        assert 'name="terms_text"' not in body and "send the new text to the association" in body
-        assert 'href="/teams/rocket/rules"' in body
+        assert applying["rules"]["page_url"] == "/teams/rocket/rules"
+        # The rules are not a field of the leads' settings: a request with them is refused.
+        assert send(client, "PUT", f"{API}/rocket/manage/applying",
+                    {"applications_open": True, "terms_text": "Changed."}).status_code == 400
+        assert "Changed." not in teams.team_rules(team).version.path.read_text()
 
     def test_without_rules_nothing_is_ticked_or_kept(self, app):
         team, _lead = _led()
@@ -207,7 +217,7 @@ class TestEditingThePage:
         team, lead = _led()
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/settings", data={"description": "Rockets.", "about": "We build rockets."})
+        send(client, "PUT", f"{API}/rocket/manage/page", {"description": "Rockets.", "about": "We build rockets."})
 
         assert team.about == "We build rockets."
         assert db.session.query(AuditLog).filter_by(event_type="team_about_changed", actor_user_id=lead.id).count() == 1
@@ -218,7 +228,7 @@ class TestEditingThePage:
         _in_team(anna, team)
         _login(client, anna.id)
 
-        response = client.post("/teams/rocket/manage/settings", data={"about": "Hijacked."})
+        response = send(client, "PUT", f"{API}/rocket/manage/page", {"about": "Hijacked."})
 
         assert response.status_code == 403 and team.about is None
 
@@ -227,19 +237,20 @@ class TestEditingThePage:
         _login(client, _admin().id)
 
         # On the team's management page, like the leads; the admin form is for the rest.
-        client.post("/teams/rocket/manage/settings", data={"section": "page", "about": "From the admins."})
+        send(client, "PUT", f"{API}/rocket/manage/page", {"description": None, "about": "From the admins."})
 
         assert team.about == "From the admins."
-        admin_form = client.get("/admin/teams/rocket").get_data(as_text=True)
-        assert 'href="/teams/rocket/manage"' in admin_form and "Rules to accept" not in admin_form
+        admin_view = client.get("/api/v1/admin/teams/rocket").get_json()
+        assert admin_view["manage_url"] == "/teams/rocket/manage"
+        assert "about" not in admin_view and "rules" not in admin_view, "the leads' part is theirs"
 
     def test_the_admin_form_leaves_the_leads_part_be(self, app, client):
         team, _lead = _led(application_prompt="Why?")
         teams.update_team_by_lead(None, team, description="Rockets.", applications_open=False)
         _login(client, _admin().id)
 
-        client.post("/admin/teams/rocket", data={
-            "name": "Rocket Team", "admission_mode": "approval", "access_list_enabled": "on",
+        send(client, "PUT", "/api/v1/admin/teams/rocket", {
+            "name": "Rocket Team", "admission_mode": "approval", "access_list_enabled": True,
         })
 
         assert (team.name, team.description, team.application_prompt, team.applications_open) == (
@@ -255,18 +266,29 @@ class TestTheManagementPage:
         db.session.commit()
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/settings", data={"section": "page", "description": "Rockets.", "about": "New."})
+        send(client, "PUT", f"{API}/rocket/manage/page", {"description": "Rockets.", "about": "New."})
 
         assert (team.description, team.about, team.application_prompt) == ("Rockets.", "New.", "Why?")
         assert team.applications_open is True
 
-    def test_back_to_the_section_saved(self, app, client):
+    def test_applying_saved_on_its_own(self, app, client):
+        team, lead = _led(application_prompt="Why?")
+        teams.update_team_page(None, team, about="We build rockets.")
+        db.session.commit()
+        _login(client, lead.id)
+
+        body = send(client, "PUT", f"{API}/rocket/manage/applying",
+                    {"applications_open": False, "application_prompt": "Why rockets?"}).get_json()
+
+        assert body["applications_open"] is False and body["application_prompt"] == "Why rockets?"
+        assert team.about == "We build rockets."
+
+    def test_an_old_link_to_a_section_opens_the_app(self, app, client):
         _team, lead = _led()
         _login(client, lead.id)
 
-        response = client.post("/teams/rocket/manage/settings", data={"section": "applying", "applications_open": "on"})
-
-        assert response.headers["Location"].endswith("/teams/rocket/manage#manage-applying")
+        for path in ("/teams/rocket/manage", "/teams/rocket/manage/applying", "/teams/rocket/manage/roles"):
+            assert client.get(path).status_code == 200, path
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -277,11 +299,12 @@ class TestTheTreasurer:
         _in_team(anna, team)
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/treasurer", data={"user_id": anna.id})
+        roles = send(client, "POST", f"{API}/rocket/manage/treasurer", {"user_id": anna.id}).get_json()
+        assert [holder["name"] for holder in roles["treasurers"]] == ["Anna Berger"]
         assert teams.can_in_team(anna, team, teams.TeamPermission.VIEW_MONEY)
         assert db.session.query(AuditLog).filter_by(event_type="team_role_granted", target_user_id=anna.id).count() == 1
 
-        client.post("/teams/rocket/manage/treasurer/remove", data={"user_id": anna.id})
+        send(client, "DELETE", f"{API}/rocket/manage/treasurer/{anna.id}")
         assert not teams.can_in_team(anna, team, teams.TeamPermission.VIEW_MONEY)
 
     def test_only_one_of_the_teams_members(self, app, client):
@@ -289,9 +312,9 @@ class TestTheTreasurer:
         outsider = _person("out@example.com", "Otto", "Outside")
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/treasurer", data={"user_id": outsider.id})
+        response = send(client, "POST", f"{API}/rocket/manage/treasurer", {"user_id": outsider.id})
 
-        assert not teams.role_holders(team, teams.ROLE_TREASURER)
+        assert response.status_code == 400 and not teams.role_holders(team, teams.ROLE_TREASURER)
 
     def test_not_by_the_treasurer_or_an_ordinary_member(self, app, client):
         team, _lead = _led()
@@ -304,7 +327,7 @@ class TestTheTreasurer:
 
         for who in (anna, tim):
             _login(client, who.id)
-            assert client.post("/teams/rocket/manage/treasurer", data={"user_id": anna.id}).status_code == 403
+            assert send(client, "POST", f"{API}/rocket/manage/treasurer", {"user_id": anna.id}).status_code == 403
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -316,16 +339,16 @@ class TestTheOverview:
         _in_team(anna, rocket)
         _login(client, anna.id)
 
-        body = client.get("/teams").get_data(as_text=True)
+        body = client.get(API).get_json()
 
-        mine, others = body.split('id="other-teams-heading"')
-        assert "My teams" in mine and "Rocket" in mine and 'href="/teams/rocket"' in mine
-        assert "Glider" in others and 'href="/teams/glider/about"' in others and "About & apply" in others
+        assert [(card["slug"], card["opens"]) for card in body["mine"]] == [("rocket", "team")]
+        assert [(card["slug"], card["opens"], card["about_label"]) for card in body["others"]] == [
+            ("glider", "about", "About & apply")]
 
     def test_nothing_of_mine_just_the_teams(self, app, client):
         _led()
         _login(client, _person().id)
 
-        body = client.get("/teams").get_data(as_text=True)
+        body = client.get(API).get_json()
 
-        assert "My teams" not in body and 'href="/teams/rocket/about"' in body
+        assert body["mine"] == [] and [card["slug"] for card in body["others"]] == ["rocket"]

@@ -162,12 +162,13 @@ class TestTheApprovalEmail:
 
     @pytest.fixture
     def approve(self, app, client, monkeypatch):
-        from aeronautics_members.blueprints import admin as admin_module
         from aeronautics_members.db_models import ForumAccount, ForumAvatarSubmission
+        from aeronautics_members.services import forum as forum_module
+        from aeronautics_members.services import notifications as notifications_module
 
         queued = []
         monkeypatch.setattr(
-            admin_module, "queue_user_status_notification",
+            notifications_module, "queue_user_status_notification",
             lambda event_type, *a, **k: queued.append(event_type),
         )
 
@@ -184,7 +185,7 @@ class TestTheApprovalEmail:
                 submission.status = "approved"
                 return types.SimpleNamespace(error=None, desired_state="active", changed=True, forum_account=None)
 
-        monkeypatch.setattr(admin_module, "get_forum_service", lambda: FakeForum())
+        monkeypatch.setattr(forum_module, "get_forum_service", lambda: FakeForum())
 
         admin = make_member(email="admin@example.org")
         admin.user.grant_role(app_module.get_role("superadmin"))
@@ -202,7 +203,7 @@ class TestTheApprovalEmail:
             db.session.commit()
             with client.session_transaction() as session:
                 session["_user_id"] = str(admin.user.id)
-            client.post(f"/admin/reviews/pictures/{submission.id}/approve", data={})
+            client.post(f"/api/v1/admin/reviews/pictures/{submission.id}/approve", json={})
             return queued
 
         return run
@@ -240,9 +241,11 @@ class TestTheTestEmail:
         with client.session_transaction() as session:
             session["_user_id"] = str(admin.user.id)
 
-        client.post("/admin/settings/send-test-email", data={
+        from api_helpers import send
+
+        assert send(client, "POST", "/api/v1/admin/settings/test-email", {
             "sender": "office", "recipient": "me@example.org", "template": template,
-        })
+        }).get_json() == {"ok": True}
 
         (text,) = _parts(outbox[-1], "text/plain")
         body = text.get_payload(decode=True).decode()

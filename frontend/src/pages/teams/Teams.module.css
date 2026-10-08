@@ -1,0 +1,92 @@
+/* A team's logo at the top of its pages: shown whole, whatever its shape. */
+.logo {
+  width: 4rem;
+  height: 4rem;
+  object-fit: contain;
+  flex: none;
+}
+
+/* Text somebody typed with line breaks: the leads' meeting details, a team's longer text. */
+.preLine {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* The cover of a team's About page, in its settings. */
+/* A photo of a team's gallery, in its settings. */
+.thumb {
+  flex: none;
+  width: 5rem;
+  height: 3.75rem;
+  object-fit: cover;
+  background: var(--ja-surface);
+}
+
+.picture {
+  width: 100%;
+  max-height: 24rem;
+  object-fit: cover;
+  margin-bottom: var(--mantine-spacing-md);
+}
+
+.cards {
+  display: grid;
+  gap: var(--mantine-spacing-lg);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+}
+
+.row {
+  display: grid;
+  gap: var(--mantine-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 48em) {
+  .row {
+    grid-template-columns: 17rem minmax(0, 1fr);
+  }
+}
+
+.roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--mantine-spacing-sm);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-width: 0;
+  padding: var(--mantine-spacing-xs);
+  border: 1px solid transparent;
+}
+
+/* What waits for whoever runs the team: a figure, what it is, the way there. */
+.todo {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-sm) 0;
+  color: var(--ja-text);
+  text-decoration: none;
+}
+
+.todo:hover {
+  color: var(--ja-accent);
+}
+
+.todoCount {
+  min-width: 2ch;
+  font-family: var(--mantine-font-family-headings);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.todoText {
+  flex: 1;
+}

@@ -4,12 +4,14 @@ A team is owed exactly what its members paid -- Stripe's fees are the
 association's -- less refunds and lost chargebacks, less what was transferred.
 Its leads and treasurers see that and keep the team's bank details; the
 association's treasurer sees it for every team, records the transfers, and
-pays by scanning a GiroCode. Nobody with only money rights sees the people.
+pays by scanning a GiroCode (the API's side: tests/test_api_admin_money.py).
+Nobody with only money rights sees the people.
 """
 from datetime import timedelta
 
 import pytest
 
+from api_helpers import send
 from conftest import app_module, db
 from aeronautics_members.db_models import AuditLog, NotificationEvent, Payment, TeamPayout, User
 from aeronautics_members.services import ValidationError, team_money, teams
@@ -83,7 +85,7 @@ class TestTheBalance:
         assert team_money.summary(team)["earned"] == 0
 
     def test_euros(self):
-        assert [team_money.euros(c) for c in (0, 1250, 123456, -500)] == ["€0.00", "€12.50", "€1.234.56", "-€5.00"]
+        assert [team_money.euros(c) for c in (0, 1250, 123456, -500)] == ["€0.00", "€12.50", "€1,234.56", "-€5.00"]
 
 
 class TestRecordingATransfer:
@@ -214,13 +216,14 @@ class TestWhoSeesWhat:
         _paid(team, lead)
         _login(client, lead.id)
 
-        page = client.get("/teams/rocket/money").get_data(as_text=True)
-        assert "€25.00" in page and 'name="iban"' in page and "Mark as transferred" not in page
-        assert 'href="/teams/rocket/money"' in client.get("/teams/rocket/manage").get_data(as_text=True)
-        assert client.post("/teams/rocket/money/payouts", data={"amount": "5"}).status_code in (302, 403)
+        funds = client.get("/api/v1/teams/rocket/money").get_json()
+        assert funds["earned"] == 2500 and funds["may_edit_bank"] is True and funds["records_transfers"] is False
+        assert "team.view_money" in client.get("/api/v1/teams/rocket/manage").get_json()["permissions"]
+        assert send(client, "POST", "/api/v1/admin/money/rocket/transfers", {"amount": "5"}).status_code == 403
         assert db.session.query(TeamPayout).count() == 0
-        client.post("/teams/rocket/money/bank", data={"account_holder": "Rocket Team", "iban": IBAN})
-        assert team.bank_iban == IBAN
+        saved = send(client, "PUT", "/api/v1/teams/rocket/money/bank", {"account_holder": "Rocket Team", "iban": IBAN})
+        assert saved.get_json()["changed"] is True and team.bank_iban == IBAN
+        assert saved.get_json()["funds"]["bank"]["iban"] == IBAN, "whoever may change it sees it whole"
 
     def test_a_team_treasurer_sees_the_money_not_the_management(self, app, client):
         team, _lead = _led()
@@ -229,9 +232,12 @@ class TestWhoSeesWhat:
 
         assert client.get("/teams/rocket/money").status_code == 200
         assert client.get("/teams/rocket/manage").status_code == 403
-        home = client.get("/teams").get_data(as_text=True)
-        assert 'href="/teams/rocket/money"' in home and 'href="/teams/rocket/manage"' not in home
-        client.post("/teams/rocket/money/bank", data={"account_holder": "Rocket Team", "iban": IBAN})
+        assert client.get("/api/v1/teams/rocket/manage/members").status_code == 403
+        # The frame of the money page: the team's sidebar, without its people.
+        assert client.get("/api/v1/teams/rocket/manage").get_json()["applications"] == 0
+        [card] = client.get("/api/v1/teams").get_json()["mine"]
+        assert "money" in card["membership"]["actions"] and "manage" not in card["membership"]["actions"]
+        send(client, "PUT", "/api/v1/teams/rocket/money/bank", {"account_holder": "Rocket Team", "iban": IBAN})
         assert team.bank_iban == IBAN
 
     def test_a_member_sees_none_of_it(self, app, client):
@@ -241,7 +247,8 @@ class TestWhoSeesWhat:
         _login(client, anna.id)
 
         assert client.get("/teams/rocket/money").status_code == 403
-        assert client.post("/teams/rocket/money/bank", data={"iban": IBAN}).status_code == 403
+        assert client.get("/api/v1/teams/rocket/money").status_code == 403
+        assert send(client, "PUT", "/api/v1/teams/rocket/money/bank", {"iban": IBAN}).status_code == 403
         assert client.get("/admin/money").status_code in (302, 403)
         assert team.bank_iban is None
 
@@ -252,17 +259,19 @@ class TestWhoSeesWhat:
         treasurer = _treasurer()
         _login(client, treasurer.id)
 
-        overview = client.get("/admin/money").get_data(as_text=True)
-        assert "Rocket" in overview and "€25.00" in overview
-        page = client.get("/teams/rocket/money").get_data(as_text=True)
-        assert "Mark as transferred" in page and "<svg" in page
+        [row] = client.get("/api/v1/admin/money").get_json()["teams"]
+        assert row["team"]["name"] == "Rocket" and row["open"] == 2500
+        code = client.get("/admin/money/rocket/transfer-code.svg?amount=2500")
+        assert code.mimetype == "image/svg+xml" and b"<svg" in code.data
+        funds = client.get("/api/v1/teams/rocket/money").get_json()
+        assert funds["records_transfers"] is True and funds["may_edit_bank"] is True
         assert client.get("/teams/rocket/manage").status_code == 403
-        assert client.get("/teams/rocket").headers["Location"].endswith("/teams/rocket/about")
+        assert client.get("/api/v1/teams/rocket").get_json()["sees_team_page"] is False
         assert client.get("/admin/teams").status_code in (302, 403)
         assert client.get("/admin/accounts").status_code in (302, 403)
 
-        client.post("/teams/rocket/money/payouts",
-                    data={"amount": "25,00", "paid_on": get_membership_today().isoformat(), "reference": "WS"})
+        send(client, "POST", "/api/v1/admin/money/rocket/transfers",
+             {"amount": "25,00", "paid_on": get_membership_today().isoformat(), "reference": "WS"})
         assert db.session.query(TeamPayout).one().amount_cents == 2500
         assert team_money.summary(team)["open"] == 0
 
@@ -275,6 +284,7 @@ class TestWhoSeesWhat:
         _login(client, _treasurer().id)
 
         assert client.get("/teams/rocket/money").status_code == 200
+        assert client.get("/api/v1/admin/money/rocket").status_code == 200
         _login(client, lead.id)
         assert client.get("/teams/rocket/money").status_code == 404
 
@@ -303,7 +313,7 @@ def test_the_email_about_changed_bank_details(app):
         ok, _error = service._send_user_status_mail(event, subject, template_vars)
 
     assert ok and subject == "Bank details of Rocket changed"
-    assert "/teams/rocket/money" in template_vars["action_url"]
+    assert template_vars["action_url"].endswith("/admin/money/rocket"), "the association's side of it"
     assert FakeSMTP.sent
 
 
@@ -311,14 +321,3 @@ def test_the_treasurer_role_carries_no_other_admin_rights(app):
     from aeronautics_members.permissions import ROLE_PERMISSIONS, Permission
 
     assert ROLE_PERMISSIONS["treasurer"] == {Permission.ADMIN_ACCESS, Permission.TEAMS_MONEY}
-
-
-@pytest.mark.usefixtures("switched_on")
-def test_recording_a_transfer_asks_first_naming_the_amount(app, client):
-    team, lead = _led()
-    _paid(team, lead)
-    _login(client, _treasurer().id)
-
-    page = client.get("/teams/rocket/money").get_data(as_text=True)
-
-    assert "Record a transfer of €{amount} to Rocket?" in page

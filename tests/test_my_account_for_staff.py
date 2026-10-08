@@ -26,49 +26,46 @@ def _login(client, user_id):
 
 
 class TestMyAccountWithoutAMembership:
-    def test_the_link_is_in_the_top_bar(self, client, app):
+    def test_the_top_bar_has_what_it_needs(self, client, app):
+        """The top bar (frontend/src/frame/TopBar.tsx) always offers My Account;
+        for a staff account without a membership it has no name to show, only the email."""
         staff = _staff("staff@example.org", "admin")
         _login(client, staff.id)
 
-        body = client.get("/admin").get_data(as_text=True)
+        me = client.get("/api/v1/me").get_json()
 
-        assert ">My Account</a>" in body
+        assert (me["first_name"], me["email"], me["admin_area"]) == (None, "staff@example.org", True)
 
     def test_it_shows_the_account_instead_of_the_payment_form(self, client, app):
         staff = _staff("staff2@example.org", "admin")
         _login(client, staff.id)
 
-        response = client.get("/account", follow_redirects=True)
-        body = response.get_data(as_text=True)
+        account = client.get("/api/v1/account").get_json()
 
-        assert response.status_code == 200
-        assert "staff2@example.org" in body
-        assert "This account has no membership." in body
-        assert "/change-password" in body
-        assert "/account/create-membership" in body
-        # Not the membership form itself.
-        assert 'name="first_name"' not in body
+        # The page says it has no membership, with the way to start one
+        # (frontend/src/pages/account/Account.tsx) -- not the membership form itself.
+        assert account["email"]["address"] == "staff2@example.org"
+        assert account["member"] is None
 
-    def test_a_password_change_comes_back_to_my_account(self, client, app):
+    def test_a_staff_account_changes_its_password_too(self, client, app):
         staff = _staff("staff3@example.org", "admin")
         _login(client, staff.id)
 
-        response = client.post("/change-password", data={
-            "current_password": "old-password-1",
-            "new_password": "new-password-22",
-            "confirm_new_password": "new-password-22",
+        assert client.get("/change-password").status_code == 200
+        response = client.put("/api/v1/account/password", json={
+            "current_password": "old-password-1", "new_password": "new-password-22",
         })
 
-        assert response.status_code == 302
-        assert response.headers["Location"].startswith("/account")
+        assert response.status_code == 200
+        assert db.session.get(User, staff.id).check_password("new-password-22")
 
     def test_members_still_get_their_full_page(self, client, app):
         member = make_member(email="member@example.org")
         _login(client, member.user.id)
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        account = client.get("/api/v1/account").get_json()
 
-        assert "This account has no membership." not in body
+        assert account["member"]["contact"]["email_private"] == "member@example.org"
 
 
 class TestTheAdminPagesNoLongerCarryAccountShortcuts:
@@ -97,13 +94,9 @@ class TestHealthOnTheDashboard:
         db.session.commit()
         _login(client, boss.id)
 
-        body = client.get("/admin").get_data(as_text=True)
+        attention = client.get("/api/v1/admin/dashboard").get_json()["attention"]
 
-        assert "System health problem" in body
-        assert "1 email(s) could not be delivered." in body
-        assert "/admin/settings#settings-maintenance" in body
-        # Not the list with Retry buttons itself.
-        assert "/admin/undelivered-emails/" not in body
+        assert attention["health_problems"] == ["1 email(s) could not be delivered."]
 
     def test_not_shown_to_somebody_who_cannot_open_maintenance(self, client, app):
         admin = _staff("plainadmin@example.org", "admin")
@@ -111,15 +104,10 @@ class TestHealthOnTheDashboard:
         db.session.commit()
         _login(client, admin.id)
 
-        body = client.get("/admin").get_data(as_text=True)
-
-        assert "System health problem" not in body
+        assert client.get("/api/v1/admin/dashboard").get_json()["attention"]["health_problems"] is None
 
     def test_a_healthy_system_adds_nothing(self, client, app):
         boss = _staff("fine@example.org", "superadmin")
         _login(client, boss.id)
 
-        body = client.get("/admin").get_data(as_text=True)
-
-        assert "System health problem" not in body
-        assert "Nothing needs your attention" in body
+        assert client.get("/api/v1/admin/dashboard").get_json()["attention"]["health_problems"] == []

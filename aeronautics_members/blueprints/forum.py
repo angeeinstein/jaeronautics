@@ -1,21 +1,14 @@
-"""Forum blueprint.
-
-Route handlers moved verbatim out of app.py (dedented; @app.route ->
-@forum_bp.route; app.logger -> current_app.logger). Helpers are imported
-from the app module, which is fully initialized before this is imported.
+"""The forum: the page (the app's, api/account.py), Discourse's sign-in through
+the portal (DiscourseConnect), the sign-out Discourse sends back, and the
+profile pictures Discourse fetches.
 """
 
 from flask import Blueprint, current_app
 
-from ..services.audit import (
-    log_audit_event,
-    snapshot_forum_avatar_submission_for_audit,
-)
 from ..services.clock import (
     get_now_utc,
 )
 from ..services.forum import (
-    get_forum_service,
     log_out_forum_session_if_possible,
     sync_member_forum_state,
 )
@@ -31,17 +24,12 @@ from ..services.identity import (
 from ..services.membership import (
     member_has_active_access,
 )
-from ..services.notifications import (
-    flush_marked_notification_channels,
-    queue_curated_admin_notification,
-)
 from ..services.workflows import finish_forum_cleanup_for
 from ._email_cooldown import remember_sent, sent_just_now
 from flask import (
     abort,
     flash,
     redirect,
-    render_template,
     request,
     send_file,
     session,
@@ -52,7 +40,6 @@ from flask_babel import (
 )
 from flask_login import (
     current_user,
-    login_required,
     login_user,
     logout_user,
 )
@@ -71,17 +58,14 @@ from ..db_models import (
 from ..forum_service import (
     ForumProviderError,
 )
-from ..notification_service import (
-    ADMIN_GENERAL_CHANNEL,
-)
 from ..app import (
     build_forum_context,
-    format_bytes_human,
     get_current_member_for_user,
     get_member_portal_target,
     limiter,
 )
 from ..config import RATELIMIT_FORUM_CONNECT
+from .app_shell import app_shell
 
 forum_bp = Blueprint("forum", __name__)
 
@@ -172,86 +156,8 @@ def forum_entry():
             current_app.logger.warning("Could not hand off to Discourse for member_id=%s: %s", member.id, exc)
             flash(_("The forum could not be opened right now. Please try again later."), "danger")
 
-    return render_template("account/forum.html", member=member, forum_context=forum_context)
-
-
-@forum_bp.route("/forum/avatar", methods=["POST"])
-@login_required
-def upload_forum_avatar():
-    member = get_current_member_for_user(current_user)
-    if member is None:
-        flash(_("A linked membership profile is required before you can upload a forum profile picture."), "warning")
-        return redirect(url_for("account.create_membership_profile"))
-
-    forum_service = get_forum_service()
-    if not forum_service.is_enabled():
-        flash(_("The forum integration is not enabled yet."), "warning")
-        return redirect(url_for("account.account"))
-
-    if not member_has_active_access(member):
-        flash(_("Your membership must be active before you can upload a forum profile picture."), "warning")
-        return redirect(url_for("account.account"))
-
-    # An approved picture stays unless an admin has allowed a new one. The page
-    # only offers the upload then; this is for a request that did not come
-    # from the page.
-    has_picture = (
-        forum_service.get_current_approved_submission(member) is not None
-        or forum_service.get_reclaimed_avatar(member) is not None
-    )
-    if has_picture and member.avatar_replacement_allowed_at is None:
-        flash(_("To change your picture, please ask an admin."), "info")
-        return redirect(url_for("account.account"))
-
-    upload_request_limit = forum_service.get_upload_request_limit()
-    if request.content_length and request.content_length > upload_request_limit:
-        flash(
-            _("The selected image is too large to upload. Please keep it below %(size)s.", size=format_bytes_human(upload_request_limit)),
-            "danger",
-        )
-        return redirect(url_for("forum.forum_entry"))
-
-    upload = request.files.get("avatar")
-    crop_options = {
-        "crop_mode": request.form.get("crop_mode"),
-        "crop_zoom": request.form.get("crop_zoom"),
-        "crop_center_x": request.form.get("crop_center_x"),
-        "crop_center_y": request.form.get("crop_center_y"),
-    }
-    try:
-        submission = forum_service.create_avatar_submission(upload, current_user, member, crop_options=crop_options)
-        forum_result = forum_service.sync_member(member)
-        log_audit_event(
-            category="forum",
-            event_type="avatar_uploaded",
-            actor_user=current_user,
-            target_user=current_user,
-            target_member=member,
-            before=None,
-            after=snapshot_forum_avatar_submission_for_audit(submission),
-            metadata={"forum_state": forum_result.desired_state if forum_result else None},
-        )
-        queue_curated_admin_notification(
-            ADMIN_GENERAL_CHANNEL,
-            "forum_avatar_uploaded",
-            _("%(email)s uploaded a profile picture for approval.", email=member.email_private),
-            payload={
-                "member_email": member.email_private,
-                "forum_username": current_user.forum_username,
-                "submission_id": submission.id,
-            },
-            target_user=current_user,
-            target_member=member,
-            object_type="forum_avatar_submission",
-            object_id=submission.id,
-        )
-        db.session.commit()
-        flush_marked_notification_channels()
-        flash(_("Thanks! Your profile picture is waiting for approval. We will email you once it is approved."), "success")
-    except ForumProviderError as exc:
-        db.session.rollback()
-        flash(str(exc), "danger")
-    return redirect(url_for("forum.forum_entry"))
+    # Where things stand, and the picture: the app's page (api/account.py).
+    return app_shell()
 
 
 @forum_bp.route("/forum/avatar/public/<token>", methods=["GET"])

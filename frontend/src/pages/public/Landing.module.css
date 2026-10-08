@@ -1,0 +1,39 @@
+/* The start page: the way in, then what the portal is for in three points. */
+.hero {
+  padding: 2rem 0 2.5rem;
+  text-align: center;
+}
+
+.eyebrow {
+  color: var(--ja-accent);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lead {
+  max-width: 36rem;
+  margin: 0 auto;
+}
+
+.points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.point {
+  height: 100%;
+  padding: 1.25rem;
+  background: var(--ja-surface);
+  border: 1px solid var(--ja-border);
+}
+
+.number {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--ja-accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

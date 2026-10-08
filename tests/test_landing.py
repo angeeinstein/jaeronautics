@@ -1,5 +1,8 @@
 """The front door: a landing page for visitors, the form at /join, and neither
-for somebody already signed in."""
+for somebody already signed in. Both are the app's pages
+(frontend/src/pages/public/Landing.tsx, Join.tsx)."""
+import pytest
+
 from conftest import app_module, db, make_member
 from aeronautics_members.db_models import User
 
@@ -9,20 +12,21 @@ def _login(client, user_id):
         session["_user_id"] = str(user_id)
 
 
-def test_a_visitor_gets_the_landing_page_not_the_form(client):
-    body = client.get("/").get_data(as_text=True)
+@pytest.mark.parametrize("path", ["/", "/join"])
+def test_a_visitor_gets_the_app(client, path):
+    response = client.get(path)
 
-    assert "Your membership, in one place" in body
-    assert 'href="/join"' in body
-    assert 'href="/login"' in body
-    assert 'name="first_name"' not in body
+    assert response.status_code == 200
+    assert '<div id="root">' in response.get_data(as_text=True)
 
 
-def test_the_form_is_at_join(client):
-    body = client.get("/join").get_data(as_text=True)
+def test_the_form_has_what_it_needs_without_an_account(client):
+    """The choices and the texts to accept are there for somebody not signed in."""
+    options = client.get("/api/v1/forms/options")
+    texts = client.get("/api/v1/legal")
 
-    assert 'action="/process-membership"' in body
-    assert 'name="first_name"' in body
+    assert options.status_code == 200 and options.get_json()["member_categories"]
+    assert texts.status_code == 200
 
 
 def test_a_signed_in_member_is_sent_to_their_account(client, app):
@@ -44,7 +48,6 @@ def test_staff_land_where_logging_in_would_take_them(client, app):
     assert client.get("/").headers["Location"] == "/admin"
 
 
-def test_the_login_page_points_new_people_at_the_form(client):
-    body = client.get("/login").get_data(as_text=True)
-
-    assert 'href="/join"' in body
+def test_the_login_page_is_the_apps(client):
+    """It points new people at the form (frontend/src/pages/public/SignIn.tsx)."""
+    assert '<div id="root">' in client.get("/login").get_data(as_text=True)

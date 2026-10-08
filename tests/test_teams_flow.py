@@ -10,6 +10,8 @@ from datetime import timedelta
 
 import pytest
 
+from api_helpers import send
+
 from conftest import db
 from aeronautics_members.db_models import AuditLog, NotificationEvent, TeamMembership, TeamNote, TeamRole
 from aeronautics_members.services import ConflictError, ValidationError, privacy, teams
@@ -30,6 +32,9 @@ def _login(client, user_id):
 
     g.pop("_login_user", None)
     _set_session_user(client, user_id)
+
+
+API = "/api/v1/teams"
 
 
 @pytest.fixture
@@ -83,7 +88,9 @@ class TestSwitchedOff:
     def test_and_there_is_no_link(self, app, client):
         _login(client, _person().id)
 
-        assert 'href="/teams"' not in client.get("/account", follow_redirects=True).get_data(as_text=True)
+        # The top bar offers Teams by this (frontend/src/frame/TopBar.tsx), and My Account has no card.
+        assert client.get("/api/v1/me").get_json()["teams_area"] is False
+        assert client.get("/api/v1/account").get_json()["member"]["teams"] is None
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -91,15 +98,16 @@ class TestJoining:
     def test_the_link_is_there_once_switched_on(self, app, client):
         _login(client, _person().id)
 
-        assert 'href="/teams"' in client.get("/account", follow_redirects=True).get_data(as_text=True)
+        assert client.get("/api/v1/me").get_json()["teams_area"] is True
 
     def test_an_open_team_is_joined_at_once_and_the_leads_are_told(self, app, client):
         team, lead = _led("Glider", admission_mode="open")
         anna = _person()
         _login(client, anna.id)
 
-        client.post("/teams/glider/join")
+        done = send(client, "POST", f"{API}/glider/join", {}).get_json()
 
+        assert done["message"] == "Welcome to Glider." and done["team"]["sees_team_page"] is True
         assert teams.active_team_membership(anna, team) is not None
         [event] = _events("team_member_joined", lead.email)
         assert "Anna Berger joined Glider." in event.summary
@@ -109,8 +117,9 @@ class TestJoining:
         anna = _person()
         _login(client, anna.id)
 
-        assert "Why do you want to join?" in client.get("/teams/rocket/about").get_data(as_text=True)
-        client.post("/teams/rocket/join", data={"application_text": "I like rockets."})
+        assert client.get(f"{API}/rocket").get_json()["joining"]["prompt"] == "Why do you want to join?"
+        done = send(client, "POST", f"{API}/rocket/join", {"application_text": "I like rockets."}).get_json()
+        assert done["message"] == "Application sent. The leads will be in touch."
 
         membership = teams.ongoing_membership(anna, team)
         assert (membership.status, membership.application_text) == (teams.APPLIED, "I like rockets.")
@@ -135,10 +144,9 @@ class TestJoining:
         lapsed = _association_member("old@example.com", active=False)
         _login(client, lapsed.id)
 
-        body = client.get("/teams").get_data(as_text=True)
-        assert "Teams are for members of the association." in body
+        assert client.get(API).get_json()["is_member"] is False
 
-        client.post("/teams/rocket/join")
+        assert send(client, "POST", f"{API}/rocket/join", {}).status_code in (400, 403, 409)
         assert db.session.query(TeamMembership).filter_by(user_id=lapsed.id).count() == 0
 
     def test_not_while_closed_or_full(self, app):
@@ -157,7 +165,7 @@ class TestJoining:
         db.session.commit()
         _login(client, anna.id)
 
-        client.post("/teams/rocket/withdraw")
+        send(client, "POST", f"{API}/rocket/withdraw")
 
         assert teams.ongoing_membership(anna, team) is None
         assert db.session.query(TeamMembership).filter_by(user_id=anna.id).one().status == teams.WITHDRAWN
@@ -168,7 +176,7 @@ class TestJoining:
         _in_team(anna, team)
         _login(client, anna.id)
 
-        client.post("/teams/rocket/leave", data={"confirm": "on"})
+        send(client, "POST", f"{API}/rocket/leave", {"confirm": True})
 
         membership = db.session.query(TeamMembership).filter_by(user_id=anna.id).one()
         assert (membership.status, membership.end_reason) == (teams.ENDED, teams.END_LEFT)
@@ -187,17 +195,17 @@ class TestJoining:
         anna = _person()
         _in_team(anna, team)
         _login(client, anna.id)
-        client.post("/teams/rocket/leave", data={"confirm": "on"})
-        client.post("/teams/rocket/join", data={"application_text": "Back again."})
+        send(client, "POST", f"{API}/rocket/leave", {"confirm": True})
+        send(client, "POST", f"{API}/rocket/join", {"application_text": "Back again."})
 
-        body = client.get("/teams").get_data(as_text=True)
-        assert "Application received" in body and "Withdraw application" in body
-        assert "already in this team" not in body
+        [card] = client.get(API).get_json()["mine"]
+        assert card["membership"]["status_label"] == "Application received"
+        assert "withdraw" in card["membership"]["actions"] and card["membership"]["why_not"] is None
 
         teams.approve(lead, team, teams.ongoing_membership(anna, team).id)
         db.session.commit()
-        body = client.get("/teams").get_data(as_text=True)
-        assert "Leave" in body and ">Ended<" not in body
+        [card] = client.get(API).get_json()["mine"]
+        assert card["membership"]["status"] == "active" and "leave" in card["membership"]["actions"]
 
     def test_leaving_is_a_page_of_its_own_and_a_deliberate_yes(self, app, client):
         team, lead = _led()
@@ -205,23 +213,25 @@ class TestJoining:
         _in_team(anna, team)
         _login(client, anna.id)
 
-        assert 'href="/teams/rocket/leave"' in client.get("/teams").get_data(as_text=True)
-        page = client.get("/teams/rocket/leave").get_data(as_text=True)
-        assert "Yes, I want to leave Rocket." in page and "apply again" in page
+        leaving = client.get(f"{API}/rocket/leave").get_json()
+        assert leaving["team"]["name"] == "Rocket" and leaving["stays_until"] is None
 
-        client.post("/teams/rocket/leave", data={"message": "Exams."})
+        assert send(client, "POST", f"{API}/rocket/leave", {"message": "Exams."}).status_code == 400
         assert teams.ongoing_membership(anna, team).status == teams.ACTIVE
 
-        client.post("/teams/rocket/leave", data={"confirm": "on", "message": "Exams."})
+        left = send(client, "POST", f"{API}/rocket/leave", {"confirm": True, "message": "Exams."}).get_json()
+        assert left == {"message": "You have left Rocket."}
         membership = db.session.query(TeamMembership).filter_by(user_id=anna.id).one()
         assert (membership.status, membership.end_note) == (teams.ENDED, "Exams.")
         [email] = _events("team_member_left", lead.email)
         assert "Their message: Exams." in email.summary
 
-    def test_the_confirmation_script_is_loaded_once(self, app, client):
+    def test_the_pages_are_the_apps(self, app, client):
+        _led()
         _login(client, _person().id)
 
-        assert client.get("/teams").get_data(as_text=True).count("confirm-submit.js") == 1
+        for path in ("/teams", "/teams/rocket", "/teams/rocket/about", "/teams/rocket/rules"):
+            assert '<div id="root">' in client.get(path).get_data(as_text=True), path
 
 @pytest.mark.usefixtures("switched_on")
 class TestTheTeamPage:
@@ -231,7 +241,7 @@ class TestTheTeamPage:
         _in_team(anna, team)
         _login(client, anna.id)
 
-        body = client.get("/teams/rocket").get_data(as_text=True)
+        body = client.get(f"{API}/rocket").get_data(as_text=True)
 
         assert "Anna Berger" in body and "anna.berger@edu.example" in body
         assert "Lena Lead" in body
@@ -241,10 +251,9 @@ class TestTheTeamPage:
         _led()
         _login(client, _person().id)
 
-        assert client.get("/teams/rocket").headers["Location"].endswith("/teams/rocket/about")
-        body = client.get("/teams/rocket/about").get_data(as_text=True)
-        assert "Rocket" in body and 'id="join"' in body
-        assert "Lena Lead" not in body
+        body = client.get(f"{API}/rocket").get_json()
+        assert body["sees_team_page"] is False and body["joining"]["submit_label"] == "Apply"
+        assert body["members"] is None and "Lena Lead" not in str(body)
 
 
 @pytest.mark.usefixtures("switched_on")
@@ -279,13 +288,16 @@ class TestTheLeadsPage:
         db.session.commit()
         _login(client, lead.id)
 
-        assert "Anna Berger" in client.get("/teams/rocket/manage").get_data(as_text=True)
-        client.post(f"/teams/rocket/manage/memberships/{membership.id}/invite",
-                    data={"meeting_details": "Tuesday 18:00, room 2.04"})
+        [row] = client.get(f"{API}/rocket/manage/applications").get_json()["applications"]
+        assert (row["name"], row["status"]) == ("Anna Berger", "applied")
+        assert client.get(f"{API}/rocket/manage").get_json()["applications"] == 1
+        person = send(client, "POST", f"{API}/rocket/manage/memberships/{membership.id}/invite",
+                      {"meeting_details": "Tuesday 18:00, room 2.04"}).get_json()
+        assert person["now"]["status"] == "invited" and person["now"]["meeting"] == "Tuesday 18:00, room 2.04"
         [invited] = _events("team_invited", anna.email)
         assert invited.payload["meeting_details"] == "Tuesday 18:00, room 2.04"
 
-        client.post(f"/teams/rocket/manage/memberships/{membership.id}/approve")
+        send(client, "POST", f"{API}/rocket/manage/memberships/{membership.id}/approve")
 
         assert teams.active_team_membership(anna, team) is not None
         assert len(_events("team_approved", anna.email)) == 1
@@ -331,10 +343,10 @@ class TestTheLeadsPage:
         membership = teams.active_team_membership(anna, team)
         _login(client, lead.id)
 
-        client.post(f"/teams/rocket/manage/memberships/{membership.id}/remove", data={"reason": ""})
-        assert membership.status == teams.ACTIVE
+        refused = send(client, "POST", f"{API}/rocket/manage/memberships/{membership.id}/remove", {"reason": ""})
+        assert refused.status_code == 400 and membership.status == teams.ACTIVE
 
-        client.post(f"/teams/rocket/manage/memberships/{membership.id}/remove", data={"reason": "Never came."})
+        send(client, "POST", f"{API}/rocket/manage/memberships/{membership.id}/remove", {"reason": "Never came."})
         db.session.refresh(membership)
         assert (membership.status, membership.end_reason, membership.end_note) == (teams.ENDED, teams.END_REMOVED, "Never came.")
         [told] = _events("team_removed", anna.email)
@@ -348,9 +360,9 @@ class TestTheLeadsPage:
         db.session.commit()
         _login(client, lead.id)
 
-        body = client.get("/teams/rocket/manage").get_data(as_text=True)
+        [row] = client.get(f"{API}/rocket/manage/former").get_json()["former"]
 
-        assert "Former members" in body and "Anna Berger" in body and "Left" in body
+        assert (row["name"], row["why"]) == ("Anna Berger", "Left")
 
     def test_notes_are_for_the_leads(self, app, client):
         team, lead = _led()
@@ -358,11 +370,13 @@ class TestTheLeadsPage:
         _in_team(anna, team)
         _login(client, lead.id)
 
-        client.post(f"/teams/rocket/manage/people/{anna.id}/notes", data={"body": "Knows CATIA."})
-        assert "Knows CATIA." in client.get(f"/teams/rocket/manage/people/{anna.id}").get_data(as_text=True)
+        send(client, "POST", f"{API}/rocket/manage/people/{anna.id}/notes", {"body": "Knows CATIA."})
+        [note] = client.get(f"{API}/rocket/manage/people/{anna.id}").get_json()["notes"]
+        assert (note["body"], note["author"]) == ("Knows CATIA.", lead.email)
 
         _login(client, anna.id)
-        assert "Knows CATIA." not in client.get("/teams/rocket").get_data(as_text=True)
+        assert "Knows CATIA." not in client.get(f"{API}/rocket").get_data(as_text=True)
+        assert client.get(f"{API}/rocket/manage/people/{anna.id}").status_code == 403
         assert client.get(f"/teams/rocket/manage/people/{anna.id}").status_code == 403
 
     def test_the_person_page_shows_contact_details_but_no_address(self, app, client):
@@ -371,7 +385,7 @@ class TestTheLeadsPage:
         _in_team(anna, team)
         _login(client, lead.id)
 
-        body = client.get(f"/teams/rocket/manage/people/{anna.id}").get_data(as_text=True)
+        body = client.get(f"{API}/rocket/manage/people/{anna.id}").get_data(as_text=True)
 
         assert "+43 660 1234567" in body and "LAV24" in body and "anna@example.com" in body
         assert anna.member.street not in body
@@ -393,10 +407,11 @@ class TestTheLeadsPage:
         team, lead = _led()
         _login(client, lead.id)
 
-        client.post("/teams/rocket/manage/settings", data={"description": "We fly.", "application_prompt": ""})
+        send(client, "PUT", f"{API}/rocket/manage/page", {"description": "We fly.", "about": None})
+        send(client, "PUT", f"{API}/rocket/manage/applying", {"applications_open": False, "application_prompt": ""})
 
         db.session.refresh(team)
-        assert (team.description, team.applications_open) == ("We fly.", False)
+        assert (team.description, team.applications_open, team.application_prompt) == ("We fly.", False, None)
 
     def test_without_a_lead_in_force_the_admins_are_told(self, app):
         team = _team("Rocket")
@@ -552,6 +567,8 @@ def test_approving_asks_first(app, client):
     db.session.commit()
     _login(client, lead.id)
 
-    person = client.get(f"/teams/{team.slug}/manage/people/{anna.id}").get_data(as_text=True)
+    person = client.get(f"{API}/{team.slug}/manage/people/{anna.id}").get_json()
 
-    assert "Approve Anna Berger? They are emailed straight away." in person
+    # The page asks again before each decision (ConfirmButton); the answer says what may be decided.
+    assert person["now"]["status"] == "applied" and person["now"]["answer"] is None
+    assert person["may_review"] is True

@@ -198,3 +198,54 @@ def get_recent_audit_logs(limit=10, category=None):
     if category:
         query = query.where(AuditLog.category == category)
     return db.session.execute(query.order_by(AuditLog.created_at.desc()).limit(limit)).scalars().all()
+
+
+# --- Reading it -----------------------------------------------------------------------------
+
+LOG_PAGE_SIZE = 50
+
+
+def about_user(user):
+    """Entries about ``user``: done to them, by them, or to their membership."""
+    from sqlalchemy import or_
+
+    conditions = [AuditLog.target_user_id == user.id, AuditLog.actor_user_id == user.id]
+    if user.member is not None:
+        conditions.append(AuditLog.target_member_id == user.member.id)
+    return or_(*conditions)
+
+
+def log_page(*, q="", category=None, user=None, page=1, per_page=LOG_PAGE_SIZE):
+    """One page of the log, newest first: ``q`` in the actor's or target's
+    address, the category or the event; only ``category``; only about ``user``."""
+    from sqlalchemy import or_
+    from sqlalchemy.orm import aliased
+
+    from ..db_models import Member, User
+
+    actor, target, target_member = aliased(User), aliased(User), aliased(Member)
+    query = (
+        db.select(AuditLog)
+        .options(selectinload(AuditLog.actor_user), selectinload(AuditLog.target_user),
+                 selectinload(AuditLog.target_member))
+        .outerjoin(actor, AuditLog.actor_user_id == actor.id)
+        .outerjoin(target, AuditLog.target_user_id == target.id)
+        .outerjoin(target_member, AuditLog.target_member_id == target_member.id)
+    )
+    if q:
+        pattern = f"%{q}%"
+        query = query.where(or_(actor.email.ilike(pattern), target.email.ilike(pattern),
+                                target_member.email_private.ilike(pattern), AuditLog.category.ilike(pattern),
+                                AuditLog.event_type.ilike(pattern)))
+    if category:
+        query = query.where(AuditLog.category == category)
+    if user is not None:
+        query = query.where(about_user(user))
+    return db.paginate(query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()), page=page,
+                       per_page=per_page, error_out=False)
+
+
+def log_categories():
+    return db.session.execute(
+        db.select(AuditLog.category).distinct().order_by(AuditLog.category.asc())
+    ).scalars().all()

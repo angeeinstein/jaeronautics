@@ -134,6 +134,26 @@ def mark_email_verified_from_token(token_data, user):
     if user.email_is_verified:
         return False
     user.email_verified_at = get_now_utc()
+    confirm_institute_with_account(getattr(user, "member", None))
+    return True
+
+
+def institute_is_account_address(member):
+    """Whether the institute (or university) address is the account's own -- as staff may have it."""
+    user = getattr(member, "user", None)
+    work = (getattr(member, "email_work", None) or "").strip().lower()
+    return bool(work) and user is not None and work == (user.email or "").strip().lower()
+
+
+def confirm_institute_with_account(member):
+    """One address, one confirmation: when the institute address is the account's, the
+    account's confirmed confirms it too. True when it newly did."""
+    if member is None or not institute_is_account_address(member):
+        return False
+    if not member.user.email_is_verified or member.email_work_is_verified:
+        return False
+    member.email_work_verified_at = get_now_utc()
+    _unconfirm_elsewhere(member)
     return True
 
 
@@ -263,6 +283,9 @@ def send_work_email_verification_email(app, member):
     and sending it anywhere else would establish nothing.
     """
     if not (member.email_work or "").strip():
+        return None
+    if institute_is_account_address(member):
+        # The account's own link confirms it: one address, one email.
         return None
     token = generate_token(
         "verify-work-email", **build_work_email_verification_claims(member)

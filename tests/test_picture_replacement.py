@@ -10,6 +10,7 @@ from io import BytesIO
 
 import pytest
 
+from api_helpers import send
 from conftest import db
 from aeronautics_members.db_models import ForumAccount, ForumAvatarSubmission, Member
 from aeronautics_members.forum_service import ForumService
@@ -31,17 +32,18 @@ class TestTheMembersSide:
     def test_without_permission_there_is_no_upload(self, app, client):
         _paid_member(client, verified=True)
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        forum_card = client.get("/api/v1/account").get_json()["member"]["forum"]
 
-        assert "data-avatar-upload-root" not in body
+        assert forum_card["picture"] is None
 
     def test_a_direct_upload_without_permission_is_refused(self, app, client, monkeypatch):
         member = _paid_member(client, verified=True)
 
-        response = client.post("/forum/avatar", data={"avatar": (_png(), "new.png")},
-                               content_type="multipart/form-data", follow_redirects=True)
+        response = client.post("/api/v1/account/picture", data={"image": (_png(), "new.png")},
+                               content_type="multipart/form-data")
 
-        assert "please ask an admin" in response.get_data(as_text=True)
+        assert (response.status_code, response.get_json()["error"]["code"]) == (409, "picture_kept")
+        assert "please ask an admin" in response.get_json()["error"]["message"]
         assert db.session.query(ForumAvatarSubmission).filter_by(member_id=member.id).count() == 0
 
     def test_once_allowed_the_upload_is_offered(self, app, client):
@@ -49,11 +51,11 @@ class TestTheMembersSide:
         member.avatar_replacement_allowed_at = datetime(2026, 10, 1)
         db.session.commit()
 
-        body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+        forum_card = client.get("/api/v1/account").get_json()["member"]["forum"]
 
-        assert "data-avatar-upload-root" in body
-        assert "Upload your new picture." in body
-        assert "Open Forum" in body, "their access is untouched meanwhile"
+        assert forum_card["picture"]["upload"] is True
+        assert forum_card["picture"]["replacing"] is True
+        assert forum_card["may_open"] is True, "their access is untouched meanwhile"
 
 
 class TestTheAdminsSide:
@@ -62,10 +64,12 @@ class TestTheAdminsSide:
         admin = _staff("mod@example.org", "admin")
         _login(client, admin.id)
 
-        client.post(f"/admin/accounts/{member.user_id}/picture-replacement", data={"allow": "1"})
+        response = send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/picture-replacement",
+                        {"allow": True})
+        assert response.get_json()["allowed_since"].endswith("Z")
         assert db.session.get(Member, member.id).avatar_replacement_allowed_at is not None
 
-        client.post(f"/admin/accounts/{member.user_id}/picture-replacement", data={"allow": "0"})
+        send(client, "PUT", f"/api/v1/admin/accounts/{member.user_id}/picture-replacement", {"allow": False})
         assert db.session.get(Member, member.id).avatar_replacement_allowed_at is None
 
 
@@ -124,19 +128,20 @@ def test_a_replacement_never_takes_them_out_of_the_members_group(app, client, tm
 
 
 def test_approving_the_new_picture_uses_the_permission_up_and_says_so(app, client, tmp_path, monkeypatch):
-    from aeronautics_members.blueprints import admin as admin_module
+    from aeronautics_members.services import forum as forum_module
+    from aeronautics_members.services import notifications as notifications_module
 
     member, pending = _with_pictures(tmp_path, client)
     service = ForumService({"forum_integration_enabled": "True"})
     service.provider = RecordingProvider()
     monkeypatch.setattr(service, "is_ready", lambda: True)
-    monkeypatch.setattr(admin_module, "get_forum_service", lambda: service)
+    monkeypatch.setattr(forum_module, "get_forum_service", lambda: service)
     told = []
-    monkeypatch.setattr(admin_module, "queue_user_status_notification",
+    monkeypatch.setattr(notifications_module, "queue_user_status_notification",
                         lambda event_type, *a, **k: told.append(event_type))
     _login(client, _staff("mod2@example.org", "admin").id)
 
-    client.post(f"/admin/reviews/pictures/{pending.id}/approve")
+    send(client, "POST", f"/api/v1/admin/reviews/pictures/{pending.id}/approve", {})
 
     assert db.session.get(Member, member.id).avatar_replacement_allowed_at is None
     assert told == ["forum_avatar_replaced"]
@@ -145,16 +150,16 @@ def test_approving_the_new_picture_uses_the_permission_up_and_says_so(app, clien
 
 def test_a_rejected_new_picture_keeps_the_permission(app, client, tmp_path, monkeypatch):
     """The old picture stays, and they may try again."""
-    from aeronautics_members.blueprints import admin as admin_module
+    from aeronautics_members.services import forum as forum_module
 
     member, pending = _with_pictures(tmp_path, client)
     service = ForumService({"forum_integration_enabled": "True"})
     service.provider = RecordingProvider()
     monkeypatch.setattr(service, "is_ready", lambda: True)
-    monkeypatch.setattr(admin_module, "get_forum_service", lambda: service)
+    monkeypatch.setattr(forum_module, "get_forum_service", lambda: service)
     _login(client, _staff("mod3@example.org", "admin").id)
 
-    client.post(f"/admin/reviews/pictures/{pending.id}/reject", data={"review_note": "Blurry"})
+    send(client, "POST", f"/api/v1/admin/reviews/pictures/{pending.id}/reject", {"note": "Blurry"})
 
     assert db.session.get(Member, member.id).avatar_replacement_allowed_at is not None
 
@@ -166,6 +171,6 @@ def test_the_upload_hint_names_what_may_be_uploaded(app, client):
     member.avatar_replacement_allowed_at = datetime(2026, 10, 1)
     db.session.commit()
 
-    body = client.get("/account", follow_redirects=True).get_data(as_text=True)
+    picture = client.get("/api/v1/account").get_json()["member"]["forum"]["picture"]
 
-    assert "JPG, PNG, WebP, AVIF" in body
+    assert picture["formats"] == "JPG, PNG, WebP, AVIF"

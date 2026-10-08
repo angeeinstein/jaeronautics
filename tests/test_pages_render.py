@@ -58,12 +58,12 @@ def test_admin_pages_render(client, admin_user, path):
 
 def test_admin_account_detail_renders(client, admin_user, active_member):
     _login(client, admin_user.id)
-    resp = client.get(f"/admin/accounts/{active_member.user_id}")
-    assert resp.status_code < 500
+    assert client.get(f"/admin/accounts/{active_member.user_id}").status_code == 200
+    assert client.get(f"/api/v1/admin/accounts/{active_member.user_id}").status_code == 200
 
 
 def test_account_and_forum_render(client, active_member):
     _login(client, active_member.user_id)
-    for path in ["/account?rt=1", "/forum"]:
+    for path in ["/account", "/api/v1/account", "/forum"]:
         resp = client.get(path)
         assert resp.status_code < 500, f"{path} returned {resp.status_code}"

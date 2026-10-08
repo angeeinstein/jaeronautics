@@ -10,6 +10,7 @@ from datetime import timedelta
 
 import pytest
 
+from api_helpers import send
 from conftest import db, make_member
 from aeronautics_members.db_models import AuditLog, TeamMembership, TeamRole
 from aeronautics_members.services import ConflictError, ValidationError
@@ -225,43 +226,46 @@ class TestRoles:
         assert teams.has_lead_in_force(team) is True
 
 
+API = "/api/v1/admin/teams"
+
+
 class TestTheAdminPages:
+    """The admins' part of teams (api/admin_teams.py; tests/test_api_admin_teams.py has the rest)."""
+
     def test_closed_to_members(self, app, client):
         member = _association_member("member@example.com")
         _login(client, member.id)
 
-        response = client.get("/admin/teams")
-
-        assert response.status_code == 302
+        assert client.get("/admin/teams").status_code == 302
+        assert client.get(API).status_code == 403
 
     def test_an_admin_switches_teams_on_and_names_them(self, app, client):
         admin = _staff("admin@example.com", "admin")
         _login(client, admin.id)
 
-        client.post("/admin/teams", data={"teams_enabled": "on", "label_singular": "Section", "label_plural": "Sections"})
+        response = send(client, "PUT", "/api/v1/admin/team-settings",
+                        {"enabled": True, "label_singular": "Section", "label_plural": "Sections"})
 
+        assert response.get_json() == {"changed": True}
         assert teams.teams_enabled() is True
-        body = client.get("/admin/teams").get_data(as_text=True)
-        assert "Sections" in body and "New Section" in body
+        assert client.get(API).get_json()["settings"] == {
+            "enabled": True, "label_singular": "Section", "label_plural": "Sections"}
 
     def test_an_admin_creates_a_team_and_appoints_a_lead(self, app, client):
         admin = _staff("admin@example.com", "admin")
         lead = _association_member("lead@example.com")
         _login(client, admin.id)
 
-        response = client.post("/admin/teams/new", data={
-            "name": "Rocket Team", "slug": "", "admission_mode": "approval", "applications_open": "on",
-        })
-        assert response.headers["Location"].endswith("/admin/teams/rocket-team")
+        response = send(client, "POST", API, {"name": "Rocket Team", "admission_mode": "approval"})
+        assert response.status_code == 201 and response.get_json()["slug"] == "rocket-team"
 
-        client.post("/admin/teams/rocket-team/roles", data={"email": "LEAD@example.com", "role": "lead"})
-        body = client.get("/admin/teams/rocket-team").get_data(as_text=True)
+        roles = send(client, "POST", f"{API}/rocket-team/roles",
+                     {"email": "LEAD@example.com", "role": "lead"}).get_json()["roles"]
 
-        assert "lead@example.com" in body
-        assert "Not yet a team member" in body
+        assert [(r["email"], r["role"], r["in_force"]) for r in roles] == [("lead@example.com", "lead", False)]
         assert db.session.query(TeamRole).filter_by(user_id=lead.id, role="lead").count() == 1
 
-    def test_removing_the_last_lead_on_the_page_carries_the_confirmation(self, app, client):
+    def test_removing_the_last_lead_needs_the_confirmation(self, app, client):
         admin = _staff("admin@example.com", "admin")
         team = _team("Rocket")
         lead = _association_member("lead@example.com")
@@ -269,10 +273,10 @@ class TestTheAdminPages:
         db.session.commit()
         _login(client, admin.id)
 
-        body = client.get("/admin/teams/rocket").get_data(as_text=True)
-        assert "This is the last lead. Remove anyway?" in body
+        refused = send(client, "POST", f"{API}/rocket/roles/revoke", {"user_id": lead.id, "role": "lead"})
+        assert refused.status_code == 409 and refused.get_json()["error"]["code"] == "team_last_lead"
 
-        client.post("/admin/teams/rocket/roles/revoke", data={"user_id": lead.id, "role": "lead", "confirmed": "1"})
+        send(client, "POST", f"{API}/rocket/roles/revoke", {"user_id": lead.id, "role": "lead", "confirmed": True})
         assert db.session.query(TeamRole).count() == 0
 
     def test_an_unknown_address_is_said_so(self, app, client):
@@ -280,22 +284,22 @@ class TestTheAdminPages:
         _team("Rocket")
         _login(client, admin.id)
 
-        response = client.post("/admin/teams/rocket/roles", data={"email": "nobody@example.com", "role": "lead"},
-                               follow_redirects=True)
+        response = send(client, "POST", f"{API}/rocket/roles", {"email": "nobody@example.com", "role": "lead"})
 
-        assert "No account uses that address." in response.get_data(as_text=True)
+        assert "No account uses that address." in response.get_json()["error"]["message"]
 
     def test_the_nav_shows_teams_to_admins(self, app, client):
         admin = _staff("admin@example.com", "admin")
         _login(client, admin.id)
 
-        assert 'href="/admin/teams"' in client.get("/admin").get_data(as_text=True)
+        # The admin sidebar shows Teams with this permission (frontend/src/frame/adminNavigation.ts).
+        assert "teams.manage" in client.get("/api/v1/me").get_json()["permissions"]
 
     def test_every_change_is_in_the_audit_log(self, app, client):
         admin = _staff("admin@example.com", "admin")
         _login(client, admin.id)
-        client.post("/admin/teams/new", data={"name": "Rocket", "admission_mode": "open"})
-        client.post("/admin/teams/rocket/archive", data={"archived": "1", "confirm_name": "Rocket"})
+        send(client, "POST", API, {"name": "Rocket", "admission_mode": "open"})
+        send(client, "PUT", f"{API}/rocket/archived", {"archived": True, "confirm_name": "Rocket"})
 
         events = {entry.event_type for entry in db.session.query(AuditLog).filter_by(category="teams")}
         assert {"team_created", "team_archived"} <= events

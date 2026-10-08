@@ -1,0 +1,85 @@
+# The Member Portal's Front End
+
+React and TypeScript, built with Vite; Mantine for components, themed with
+the portal's design (`src/theme.ts`, `src/styles/global.css`,
+`docs/design.md`). It draws the pages listed in `src/app/paths.json`; every
+other address is still one of Flask's own pages. The plan and the order in
+which pages move: `docs/frontend-plan.md`.
+
+## Working on it
+
+```bash
+cd frontend
+npm ci                     # once, and after package-lock.json changed
+npm run dev                # http://127.0.0.1:5173, with Flask on :5000 behind it
+```
+
+`npm run dev` serves the app with hot reloading and passes everything else --
+the API, downloads, static files -- to Flask on port 5000
+(`flask --app aeronautics_members.app:create_app run`). Sign in on the app's
+sign-in page as usual; the session cookie is shared.
+
+Before committing:
+
+```bash
+npm run typecheck && npm run lint && npm run format:check && npm test
+```
+
+## The API's types
+
+`src/api/schema.d.ts` is generated from the API's description, which Flask
+builds from the endpoints' own declarations (`aeronautics_members/api/`).
+After changing the API, regenerate both files (from the repository root):
+
+```bash
+DATABASE_URL=sqlite:////tmp/schema.db python -m flask --app aeronautics_members.app:create_app \
+  api-schema --out frontend/src/api/openapi.json
+(cd frontend && npm run api:types)
+```
+
+CI fails when they are not current. Call the API through `src/api/client.ts`:
+`await call(api.GET('/api/v1/me'))` -- typed paths, bodies and answers, the
+CSRF token for changes, a renewed token when one has expired, and the login
+page when the session has ended.
+
+## Tests
+
+- `npm test` -- component tests (Vitest, `src/**/*.test.ts(x)`).
+- `npm run e2e` -- end-to-end tests (Playwright, `e2e/`): the built app in
+  Chromium against the real Flask app on a throwaway database with sample
+  people (`python scripts/visual/snapshot.py serve`, started for you). Run
+  `npm run build` first. Every test fails on a console error or anything the
+  security policy blocked.
+
+## How it is served
+
+`npm run build` writes to `aeronautics_members/static/app/` (not committed),
+which nginx serves under `/static/`. Flask answers each address in
+`paths.json` with its `index.html` (`aeronautics_members/blueprints/app_shell.py`),
+putting the page's nonce in for the security policy
+(`aeronautics_members/content_security.py`). On the server, `install.sh`
+installs Node.js and builds on every install and update.
+
+## Adding a page
+
+1. Its endpoints in `aeronautics_members/api/`, with tests; regenerate the types.
+2. The page in `src/pages/`, added to `src/app/routes.tsx` (loaded lazily)
+   and its address to `src/app/paths.json`.
+3. Its Flask route answers `app_shell()`; the old template and its page tests go.
+4. Tick it off in `docs/frontend-routes.md`.
+
+Lists: `DataTable` (`src/components/DataTable.tsx`) for every table of
+records -- the server sorts and pages, the page keeps filters, sort and page
+in its address (see `src/pages/admin/Accounts.tsx` and `accountFilters.ts`).
+
+Data that changes while a page is open (the dashboard, the accounts, the
+reviews, a team's people, money): `useLiveRefresh(queryKey, EVERY_MINUTE)`
+(`src/lib/live.ts`) asks again every so often -- only while the tab is in view,
+and not while somebody types into a form on the page. What arrives in a list is
+marked for a moment (`useArrivals` and `arrivedClass` in `src/lib/arrivals.ts`,
+or `scope` on `DataTable`); a `StatTile` whose figure changes lights up. No
+sound, and no motion for whoever asked their device for less.
+
+Links: use `AppLink` (`src/app/AppLink.tsx`) for every internal link -- it
+moves within the app where the page is the app's, and loads it from the server
+where it is Flask's (a download, a PDF, the forum's sign-in).

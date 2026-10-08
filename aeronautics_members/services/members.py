@@ -24,6 +24,7 @@ DIRECT_MEMBER_PROFILE_FIELDS = (
     "email_private",
     "phone_work",
     "email_work",
+    "company_name",
 )
 
 IDENTITY_MEMBER_FIELDS = (
@@ -41,7 +42,7 @@ MEMBER_PROFILE_FIELDS = IDENTITY_MEMBER_FIELDS + DIRECT_MEMBER_PROFILE_FIELDS
 # Fields that are stored as NULL rather than "" when left empty. The year group
 # is here because empty means something specific -- not a student -- and two
 # spellings of that ("" and NULL) would have to be checked for everywhere.
-OPTIONAL_MEMBER_FIELDS = {"title", "phone_work", "email_work", "year_group"}
+OPTIONAL_MEMBER_FIELDS = {"title", "phone_work", "email_work", "year_group", "company_name"}
 
 
 def normalize_optional_member_value(field_name, value):
@@ -72,12 +73,6 @@ def apply_member_profile(member, form_data, fields=MEMBER_PROFILE_FIELDS):
         if (member.email_work or "").strip().lower() != previous_email_work:
             member.email_work_verified_at = None
             member.email_work_verification_nonce = None
-
-
-def build_member_payload(member):
-    payload = {field_name: getattr(member, field_name) for field_name in MEMBER_PROFILE_FIELDS}
-    payload["terms_accepted"] = True
-    return payload
 
 
 def get_member_by_email(email):

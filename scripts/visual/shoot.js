@@ -48,20 +48,30 @@ function inspect() {
   }
 
   // Things a person reads or clicks -- and the cards holding them -- lying on
-  // top of one another.
-  const targets = [...document.querySelectorAll(
+  // top of one another. With a dialog open, only what is in it: the page
+  // behind is meant to be covered.
+  const dialog = [...document.querySelectorAll('[role=dialog]')].find(visible);
+  const targets = [...(dialog ?? document).querySelectorAll(
     'a, button, input:not([type=hidden]), select, textarea, label, h1, h2, h3, h4, h5, p, dt, dd, img, .badge, .alert, .card')]
-    .filter(visible);
+    // The short messages after an action float over the page by design, and
+    // so does what stands on a picture marked as a backdrop (a team's cover).
+    .filter((el) => visible(el) && !el.closest('.mantine-Notifications-root') && !el.hasAttribute('data-backdrop'));
+  // A link wrapping onto a second line is two boxes, not the one around both.
+  const boxes = (el) => (getComputedStyle(el).display === 'inline' ? [...el.getClientRects()] : [el.getBoundingClientRect()]);
+  // A field and what sits inside its box by design (the eye of a password field).
+  const field = (el) => el.closest('.mantine-Input-wrapper');
+  const overlap = (ra, rb) => {
+    const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+    const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+    if (w <= 2 || h <= 2) return false;
+    return (w * h) / Math.min(ra.width * ra.height, rb.width * rb.height) >= 0.15;
+  };
   for (let i = 0; i < targets.length; i++) {
     for (let j = i + 1; j < targets.length; j++) {
       const a = targets[i], b = targets[j];
       if (a.contains(b) || b.contains(a)) continue;
-      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-      const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
-      const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
-      if (w <= 2 || h <= 2) continue;
-      const smaller = Math.min(ra.width * ra.height, rb.width * rb.height);
-      if ((w * h) / smaller < 0.15) continue;
+      if (field(a) && field(a) === field(b)) continue;
+      if (!boxes(a).some((ra) => boxes(b).some((rb) => overlap(ra, rb)))) continue;
       problems.overlapping.push(`${describe(a)}  <->  ${describe(b)}`);
     }
   }
@@ -101,9 +111,12 @@ function inspect() {
       const context = await browser.newContext();
       const page = await context.newPage();
       await page.goto(`${base}/login`);
-      await page.fill('input[name=email]', user);
-      await page.fill('input[name=password]', password);
-      await Promise.all([page.waitForNavigation(), page.click('form[action$="/login"] [type=submit]')]);
+      await page.getByLabel(/^Email/).fill(user);
+      await page.getByLabel(/^Password/).fill(password);
+      await Promise.all([
+        page.waitForURL((url) => !url.pathname.startsWith('/login')),
+        page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+      ]);
       sessions[user] = await context.storageState();
       await context.close();
     }
@@ -118,15 +131,19 @@ function inspect() {
       });
       const page = await context.newPage();
       await page.goto(`${base}${entry.path}`, { waitUntil: 'networkidle' });
+      if (entry.open) {
+        // Something on the page opened first (a card's *Edit*, a choice that moves on by
+        // itself): shown as it then is.
+        await page.click(entry.open);
+        await page.waitForTimeout(800);
+      }
       if (entry.submit) {
-        await Promise.all([
-          page.waitForNavigation({ waitUntil: 'networkidle' }),
-          page.evaluate((selector) => {
-            const form = document.querySelector(selector);
-            form.noValidate = true;
-            form.requestSubmit();
-          }, entry.submit),
-        ]);
+        // A form sent as it is (its button): shown with the server's answer.
+        await page.click(entry.submit);
+        await page.waitForLoadState('networkidle');
+        await page.waitForTimeout(200);
+        // Back to the top, as the page is shot whole: scrolled, the fixed top bar lies over its middle.
+        await page.evaluate(() => window.scrollTo(0, 0));
       }
       if (entry.click) {
         // Something that opens over the page (a dialog): shown open.

@@ -1,0 +1,51 @@
+.filters {
+  flex-wrap: wrap;
+}
+
+.search {
+  flex: 1 1 16rem;
+  min-width: 14rem;
+}
+
+.select {
+  flex: 0 1 12.5rem;
+  min-width: 10rem;
+}
+
+.count {
+  margin-left: 0.15em;
+  opacity: 0.7;
+}
+
+.card {
+  background: var(--ja-surface);
+}
+
+.person {
+  min-width: 0;
+}
+
+.name {
+  color: var(--ja-text);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.name:hover,
+.name:focus-visible {
+  color: var(--ja-link-hover);
+  text-decoration: underline;
+}
+
+.under,
+.nowrap {
+  white-space: nowrap;
+}
+
+@media (max-width: 48em) {
+  .select,
+  .search {
+    flex: 1 1 100%;
+  }
+}

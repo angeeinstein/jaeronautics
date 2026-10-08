@@ -11,6 +11,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from api_helpers import send
 from conftest import db
 from aeronautics_members.db_models import NotificationEvent
 from aeronautics_members.services import ConflictError, ValidationError, team_payments, teams
@@ -107,7 +108,8 @@ class TestChargingFromNowOn:
         [email] = _emails("team_now_charges", anna.email)
         assert email.payload["fee"] == "€10.00 every 6 months"
         _login(client, anna.id)
-        assert "Pay to stay" in client.get("/teams").get_data(as_text=True)
+        [card] = client.get("/api/v1/teams").get_json()["mine"]
+        assert "pay_stay" in card["membership"]["actions"]
 
     def test_paying_early_charges_nothing_today(self, app, stripe_calls):
         team, _lead, anna, membership = self._free_member()
@@ -176,10 +178,10 @@ class TestArchivingAsksForTheName:
         team, _lead = _led()
         _login(client, _staff("admin@example.com", "admin").id)
 
-        assert "Type the team name, Rocket, to confirm" in client.get(f"/admin/teams/{team.slug}").get_data(as_text=True)
-        body = client.post(f"/admin/teams/{team.slug}/archive", data={"archived": "1", "confirm_name": "nope"},
-                           follow_redirects=True).get_data(as_text=True)
-        assert "Type the team&#39;s name to archive it." in body
+        response = send(client, "PUT", f"/api/v1/admin/teams/{team.slug}/archived",
+                        {"archived": True, "confirm_name": "nope"})
+        assert response.status_code == 400
+        assert response.get_json()["error"]["message"] == "Type the team's name to archive it."
         db.session.refresh(team)
         assert team.status == teams.STATUS_ACTIVE
 

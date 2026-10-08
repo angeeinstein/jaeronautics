@@ -182,9 +182,10 @@ class TestRendering:
             'effective_from: "2019-03-17"\nstatus: "published"\nsource_revision: "Rev 1"\n---\n\nText.\n',
             encoding="utf-8")
 
-        body = client.get("/legal/statutes").get_data(as_text=True)
+        text = _text(client, "statutes").get_json()
 
-        assert "Version of 17.03.2019 (Rev 1)" in body
+        # The page says "Version of 17.03.2019 (Rev 1)" (components/legal/LegalText.tsx).
+        assert (text["version"], text["revision"]) == ("2019-03-17", "Rev 1")
 
     def test_html_in_a_text_is_shown_as_text_never_run(self, texts):
         texts("privacy-policy", "2026-10-04", "<script>alert(1)</script>\n\n[x](javascript:alert(1))")
@@ -195,127 +196,134 @@ class TestRendering:
         assert 'href="javascript:' not in html
 
 
+def _text(client, slug, language=None, version=None):
+    """One text as its page gets it (GET /api/v1/legal/<slug>)."""
+    query = {key: value for key, value in (("language", language), ("version", version)) if value}
+    return client.get(f"/api/v1/legal/{slug}", query_string=query)
+
+
 class TestThePages:
     def test_the_list(self, client, texts):
         texts("statutes", "2019-03-17")
         texts("privacy-policy", "2026-10-04")
 
-        body = client.get("/legal").get_data(as_text=True)
+        listed = client.get("/api/v1/legal").get_json()["texts"]
 
-        assert 'href="/legal/statutes"' in body and 'href="/legal/privacy-policy"' in body
-        assert "/legal/membership-terms" not in body
+        assert [(text["slug"], text["url"]) for text in listed] == [
+            ("statutes", "/legal/statutes"), ("privacy-policy", "/legal/privacy-policy")]
+        assert client.get("/legal").status_code == 200
 
     def test_the_english_translation_first_saying_german_applies(self, client, texts):
         texts("privacy-policy", "2026-10-04", "Deutscher Text.", title="Datenschutzerklärung")
         texts("privacy-policy", "2026-10-04", "English text.", language="en", title="Privacy Policy")
 
-        body = client.get("/legal/privacy-policy").get_data(as_text=True)
+        english = _text(client, "privacy-policy").get_json()
 
-        assert "English text." in body and "Privacy Policy" in body and TRANSLATION_NOTICE in body
-        assert 'href="/legal/privacy-policy/de"' in body
-        german = client.get("/legal/privacy-policy/de").get_data(as_text=True)
-        assert "Deutscher Text." in german and TRANSLATION_NOTICE not in german
-        assert 'href="/legal/privacy-policy/en"' in german
+        assert "English text." in english["html"] and english["title"] == "Privacy Policy"
+        assert english["is_translation"] is True  # the page then says the German text applies
+        assert english["german_url"] == "/legal/privacy-policy/de"
+        german = _text(client, "privacy-policy", "de").get_json()
+        assert "Deutscher Text." in german["html"] and german["is_translation"] is False
+        assert german["english_url"] == "/legal/privacy-policy/en"
 
     def test_german_alone_where_there_is_no_translation(self, client, texts):
         texts("statutes", "2019-03-17", "Deutscher Text.")
 
-        body = client.get("/legal/statutes").get_data(as_text=True)
+        text = _text(client, "statutes").get_json()
 
-        assert "Deutscher Text." in body and TRANSLATION_NOTICE not in body and "In German only." in body
-        assert client.get("/legal/statutes/en").headers["Location"].endswith("/legal/statutes/de")
+        assert "Deutscher Text." in text["html"] and text["is_translation"] is False
+        assert text["english_url"] is None and text["english_elsewhere"] is False
+        # Asked for in English, the German text: the only one there is.
+        assert _text(client, "statutes", "en").get_json()["language"] == "de"
 
     def test_an_outdated_translation_is_not_passed_off_as_current(self, client, texts):
         texts("privacy-policy", "2026-01-01", "Alt.")
         texts("privacy-policy", "2026-01-01", "Old English.", language="en")
         texts("privacy-policy", "2026-09-01", "Neu.")
 
-        body = client.get("/legal/privacy-policy").get_data(as_text=True)
+        text = _text(client, "privacy-policy").get_json()
 
-        assert "Neu." in body and "Old English." not in body
-        assert "No English translation of this version yet." in body
-        old = client.get("/legal/privacy-policy/en/2026-01-01").get_data(as_text=True)
-        assert "Old English." in old and "No longer in force" in old and TRANSLATION_NOTICE in old
+        assert "Neu." in text["html"] and "Old English." not in text["html"]
+        assert text["english_elsewhere"] is True  # "No English translation of this version yet."
+        old = _text(client, "privacy-policy", "en", "2026-01-01").get_json()
+        assert "Old English." in old["html"] and old["is_translation"] is True
+        assert old["version"] != old["in_force"]  # "No longer in force"
 
     def test_the_version_in_force_with_the_earlier_ones_linked(self, client, texts):
         texts("statutes", "2019-03-17", "Alt.")
         texts("statutes", "2026-01-01", "Neu.")
 
-        body = client.get("/legal/statutes").get_data(as_text=True)
+        text = _text(client, "statutes").get_json()
 
-        assert "Neu." in body and "Alt." not in body
-        assert 'href="/legal/statutes/de/2019-03-17"' in body
+        assert "Neu." in text["html"] and "Alt." not in text["html"]
+        assert [other["url"] for other in text["others"]] == ["/legal/statutes/de/2019-03-17"]
 
     def test_an_earlier_version_says_it_is_no_longer_in_force(self, client, texts):
         texts("statutes", "2019-03-17", "Alt.")
         texts("statutes", "2026-01-01", "Neu.")
 
-        body = client.get("/legal/statutes/de/2019-03-17").get_data(as_text=True)
+        text = _text(client, "statutes", "de", "2019-03-17").get_json()
 
-        assert "Alt." in body and "No longer in force" in body
+        assert "Alt." in text["html"] and (text["version"], text["in_force"]) == ("2019-03-17", "2026-01-01")
 
     def test_a_version_not_yet_in_force_or_a_draft_is_not_shown(self, client, texts):
         texts("statutes", "2019-03-17")
         texts("statutes", "2999-01-01", "Geheim.")
         texts("statutes", "2020-01-01", "Entwurf.", status="draft")
 
-        assert client.get("/legal/statutes/de/2999-01-01").status_code == 404
-        assert client.get("/legal/statutes/de/2020-01-01").status_code == 404
-        body = client.get("/legal/statutes").get_data(as_text=True)
-        assert "Geheim." not in body and "Entwurf." not in body
+        assert _text(client, "statutes", "de", "2999-01-01").status_code == 404
+        assert _text(client, "statutes", "de", "2020-01-01").status_code == 404
+        html = _text(client, "statutes").get_json()["html"]
+        assert "Geheim." not in html and "Entwurf." not in html
 
-    @pytest.mark.parametrize("path", [
-        "/legal/nonsense", "/legal/privacy-policy", "/legal/statutes/fr", "/legal/statutes/de/2020-01-01",
-        "/legal/statutes/de/yesterday", "/legal/statutes/en/2019-03-17",
-    ])
-    def test_what_does_not_exist(self, client, texts, path):
+    @pytest.mark.parametrize("path", ["/legal/nonsense", "/legal/statutes/fr"])
+    def test_a_page_that_cannot_exist(self, client, texts, path):
         texts("statutes", "2019-03-17")
 
         assert client.get(path).status_code == 404
 
-    def test_the_text_alone_for_the_window_over_the_form(self, client, texts):
-        texts("privacy-policy", "2026-10-04", "Text.")
-        texts("privacy-policy", "2026-10-04", "English.", language="en")
+    @pytest.mark.parametrize("slug, language, version, status", [
+        ("nonsense", None, None, 404), ("privacy-policy", None, None, 404),
+        ("statutes", "fr", None, 400), ("statutes", "de", "2020-01-01", 404),
+        ("statutes", "de", "yesterday", 400),
+    ])
+    def test_what_does_not_exist(self, client, texts, slug, language, version, status):
+        texts("statutes", "2019-03-17")
 
-        body = client.get("/legal/privacy-policy?part=body").get_data(as_text=True)
-
-        assert "English." in body and TRANSLATION_NOTICE in body
-        assert "<html" not in body and "site-footer" not in body
+        assert _text(client, slug, language, version).status_code == status
 
 
 class TestAtSignup:
-    def test_each_text_is_linked_to_open_over_the_form(self, client, texts):
+    def test_the_form_is_told_which_texts_to_accept(self, client, texts):
+        """Each opens over the form (frontend/src/pages/public/MembershipForm.tsx)."""
         texts("statutes", "2019-03-17")
         texts("privacy-policy", "2026-10-04")
         texts("legal-notice", "2026-10-04")
 
-        body = client.get("/join").get_data(as_text=True)
-        tick = body.split('name="terms_accepted"')[1].split("</label>")[0]
+        listed = client.get("/api/v1/legal").get_json()["texts"]
 
-        for slug in ("statutes", "privacy-policy"):
-            assert f'<a href="/legal/{slug}" target="_blank" rel="noopener" data-legal-dialog' in tick
-        assert "/legal/legal-notice" not in tick
-        assert "legal-dialog.js" in body
+        assert [(text["slug"], text["accepted_at_signup"]) for text in listed] == [
+            ("statutes", True), ("privacy-policy", True), ("legal-notice", False)]
+        assert client.get("/api/v1/legal/privacy-policy").get_json()["title"]
 
     def test_the_versions_ticked_are_kept(self, app, client, texts, monkeypatch):
-        from aeronautics_members.blueprints import _signup, public
+        from aeronautics_members.services import signup as _signup
 
         texts("statutes", "2019-03-17")
         texts("privacy-policy", "2026-10-04")
         texts("privacy-policy", "2026-10-04", language="en")
         checkout = lambda member: (types.SimpleNamespace(url="https://checkout.stripe.test/s"), {})  # noqa: E731
         monkeypatch.setattr(_signup, "create_checkout_session_for_member", checkout)
-        monkeypatch.setattr(public, "create_checkout_session_for_member", checkout)
         monkeypatch.setattr(_signup, "send_email_verification_email", lambda *a, **k: True)
         monkeypatch.setattr(_signup, "send_work_email_verification_email", lambda *a, **k: True)
 
-        client.post("/process-membership", data={
+        client.post("/api/v1/signup", json={
             "salutation": "Ms", "first_name": "Lea", "last_name": "Legal", "street": "Main",
             "house_number": "1", "postal_code": "8010", "city": "Graz", "country": "Austria",
             "phone_private": "+43123", "email_private": "lea@example.com",
             "email_work": "lea.legal@edu.fh-joanneum.at", "member_category": "student",
-            "year_group": "LAV25", "password": "right-password", "confirm_password": "right-password",
-            "payment_method": "checkout", "terms_accepted": "y",
+            "year_group": "LAV25", "password": "right-password",
+            "payment_method": "checkout", "terms_accepted": True,
         })
 
         member = db.session.query(Member).filter_by(email_private="lea@example.com").one()

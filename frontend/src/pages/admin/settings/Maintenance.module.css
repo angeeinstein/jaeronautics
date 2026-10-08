@@ -1,0 +1,20 @@
+/* Shared by Updates and Backup and restore. */
+
+/* A log as a terminal shows it: newest at the bottom, kept in view. */
+.log {
+  max-height: 28rem;
+  overflow: auto;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.6;
+  color: var(--ja-text);
+  background: var(--ja-navbar-bg);
+  border: 1px solid var(--ja-border);
+}
+
+/* A file name, which has no spaces to break at. */
+.name {
+  overflow-wrap: anywhere;
+}

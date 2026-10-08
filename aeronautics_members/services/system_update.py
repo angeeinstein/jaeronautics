@@ -22,6 +22,7 @@ the JSON status endpoint the page polls.
 
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -41,6 +42,9 @@ UPDATE_STATE_DIR = Path(
 REQUEST_FILENAME = "request.json"
 STATUS_FILENAME = "status.json"
 LOG_FILENAME = "last-run.log"
+# The steps the last successful update went through, kept by this side (the
+# runner rewrites its own files on every run), to list the ones still to come.
+PLAN_FILENAME = "step-plan.json"
 
 # Written by the installer before each update, on the privileged side.
 ROLLBACK_FILE = Path(os.getenv("ROLLBACK_FILE", "/etc/jaeronautics/rollback.conf"))
@@ -48,6 +52,16 @@ ROLLBACK_FILE = Path(os.getenv("ROLLBACK_FILE", "/etc/jaeronautics/rollback.conf
 # How much of the running update's output to show. An install log is long and
 # the interesting part is always the end.
 LIVE_LOG_TAIL_LINES = 40
+
+# The whole output is read for the step list and the full log on the page. An
+# update's output is a few hundred kilobytes; past this only its end is read.
+LOG_READ_LIMIT = 2 * 1024 * 1024
+# The installer's colours, when it ran in a terminal: not for a web page.
+_COLOURS = re.compile(r"\x1b\[[0-9;]*m")
+# Its marked lines: a step begins, or something within it is worth saying.
+_MARKED = re.compile(r"^\[(STEP|WARN|ERR|ERROR)\]\s*(.*)$")
+# Of a step's warnings, how many are said under it.
+WARNINGS_SHOWN = 2
 
 # How long a remote-revision lookup is reused. The check is a network call to
 # the git remote, so it is not made on every page load.
@@ -161,7 +175,8 @@ def read_status():
     return status
 
 
-def _parse_time(value):
+def parse_time(value):
+    """An ISO time written by the runner or the installer, as an aware datetime; None if it is none."""
     try:
         parsed = datetime.fromisoformat(value)
     except (TypeError, ValueError):
@@ -183,7 +198,7 @@ def _why_it_cannot_still_be_running(status):
     if recorded_boot and current_boot and recorded_boot != current_boot:
         return ("The server restarted while this update was running, so it did not finish. "
                 "Start it again, or run \"update\" from a shell.")
-    started_at = _parse_time(status.get("started_at"))
+    started_at = parse_time(status.get("started_at"))
     if started_at and get_now_utc() - started_at > RUNNING_TOO_LONG:
         return ("This update stopped without finishing: it was still marked as running after more "
                 "than an hour. Start it again, or run \"update\" from a shell to see where it stops.")
@@ -206,7 +221,7 @@ def request_is_waiting():
     pending = read_pending_request()
     if pending is None:
         return False
-    requested_at = _parse_time(pending.get("requested_at"))
+    requested_at = parse_time(pending.get("requested_at"))
     return not (requested_at and get_now_utc() - requested_at > UNCLAIMED_TOO_LONG)
 
 
@@ -287,30 +302,147 @@ def read_rollback_point():
     }
 
 
-def describe_progress(log_text, status):
-    """Turn the installer's [STEP] markers into something a bar can show.
+def read_full_log():
+    """The latest run's whole output, without colour codes: ``(text, cut)``.
+
+    ``cut`` says only the end was read (past LOG_READ_LIMIT). None for the
+    text when there is no log, or it cannot be read.
+    """
+    log_path = UPDATE_STATE_DIR / LOG_FILENAME
+    try:
+        with log_path.open("rb") as handle:
+            size = handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, size - LOG_READ_LIMIT))
+            raw = handle.read()
+    except FileNotFoundError:
+        return None, False
+    except OSError as exc:
+        current_app.logger.warning("Could not read the update log: %s", exc)
+        return None, False
+    text = raw.decode("utf-8", errors="replace")
+    cut = size > LOG_READ_LIMIT
+    if cut:
+        text = text.partition("\n")[2]  # the first line read is a part of one
+    return _COLOURS.sub("", text), cut
+
+
+def read_steps(log_text):
+    """The installer's [STEP] lines, each with the warnings and errors said within it.
+
+    What is said before the first step (the runner's own errors) goes with a
+    step of its own, so a run that failed before it began still says why.
+    """
+    steps, before = [], {"label": None, "warnings": [], "errors": []}
+    for line in (log_text or "").splitlines():
+        marked = _MARKED.match(line.strip())
+        if not marked:
+            continue
+        kind, text = marked.groups()
+        if kind == "STEP":
+            steps.append({"label": text, "warnings": [], "errors": []})
+            continue
+        into = steps[-1] if steps else before
+        (into["warnings"] if kind == "WARN" else into["errors"]).append(text)
+    if before["errors"] or before["warnings"]:
+        steps.insert(0, {**before, "label": "Starting the update", "before": True})
+    return steps
+
+
+def _said_under(step, state):
+    if step["errors"] and state in {"failed", "done"}:
+        return step["errors"][-1]
+    warnings = step["warnings"]
+    if not warnings:
+        return None
+    more = len(warnings) - WARNINGS_SHOWN
+    return " · ".join(warnings[:WARNINGS_SHOWN]) + (f" (and {more} more)" if more > 0 else "")
+
+
+def _read_plan():
+    try:
+        plan = json.loads((UPDATE_STATE_DIR / PLAN_FILENAME).read_text())
+    except (OSError, ValueError):
+        return {}
+    return plan if isinstance(plan, dict) else {}
+
+
+def _is_rollback(status, steps):
+    # Runners from before the status said which, by what a rollback does first.
+    return status.get("action") == "rollback" or any(step["label"].startswith("Rolling back") for step in steps)
+
+
+def _remember_plan(status, steps):
+    """After a successful update, its steps: the ones to list ahead next time."""
+    if status.get("state") != "completed" or not steps or _is_rollback(status, steps):
+        return
+    finished_at = status.get("finished_at")
+    if _read_plan().get("finished_at") == finished_at:
+        return
+    plan_path = UPDATE_STATE_DIR / PLAN_FILENAME
+    temporary_path = plan_path.with_suffix(".json.tmp")
+    try:
+        temporary_path.write_text(json.dumps(
+            {"finished_at": finished_at, "steps": [step["label"] for step in steps if not step.get("before")]}))
+        os.replace(temporary_path, plan_path)
+    except OSError as exc:
+        current_app.logger.warning("Could not keep the update's steps: %s", exc)
+
+
+def _still_to_come(plan, seen):
+    """The planned steps after the last one reached, that have not come yet."""
+    seen = set(seen)
+    after = 0
+    for index, label in enumerate(plan):
+        if label in seen:
+            after = index + 1
+    return [label for label in plan[after:] if label not in seen]
+
+
+def describe_steps(steps, state, in_progress, plan=()):
+    """The run as a list to tick off: done, the one under way, failed, and those still to come."""
+    lines = []
+    for index, step in enumerate(steps):
+        last = index == len(steps) - 1
+        if last and in_progress:
+            line_state = "running"
+        elif last and state == "failed":
+            line_state = "failed"
+        else:
+            line_state = "done"
+        lines.append({"label": step["label"], "state": line_state, "detail": _said_under(step, line_state)})
+    if in_progress:
+        if not steps:
+            lines.append({"label": "Starting the update", "state": "running", "detail": None})
+        lines += [{"label": label, "state": "pending", "detail": None}
+                  for label in _still_to_come(plan, [step["label"] for step in steps])]
+    elif state == "failed" and not steps:
+        lines.append({"label": "Starting the update", "state": "failed", "detail": None})
+    return lines
+
+
+def describe_progress(steps, status, in_progress=False):
+    """How far the run is, for the bar and the list.
 
     The number of steps is not fixed -- a local database or a TLS certificate
     each add their own -- so the expected total comes from how many the previous
     successful update actually took, and the first ever run simply has no
     percentage to show.
     """
-    steps = [
-        line[len("[STEP]"):].strip()
-        for line in (log_text or "").splitlines()
-        if line.startswith("[STEP]")
-    ]
+    labels = [step["label"] for step in steps if not step.get("before")]
     expected = status.get("steps_expected") or 0
     percent = None
-    if expected and steps:
+    if expected and labels:
         # Hold just short of complete until the runner says it finished, so the
         # bar never sits at 100% while work is still going on.
-        percent = min(int(len(steps) * 100 / expected), 95)
+        percent = min(int(len(labels) * 100 / expected), 95)
+    rollback = _is_rollback(status, steps)
+    plan = [] if rollback else (_read_plan().get("steps") or [])
     return {
-        "steps_done": len(steps),
+        "steps_done": len(labels),
         "steps_expected": expected or None,
         "percent": percent,
-        "current_step": steps[-1] if steps else None,
+        "current_step": labels[-1] if labels else None,
+        "steps": describe_steps(steps, status.get("state"), in_progress, plan),
     }
 
 
@@ -332,7 +464,14 @@ def describe_update_state(force_remote_check=False):
     log_tail = status.get("log_tail")
     if in_progress:
         log_tail = read_live_log_tail() or log_tail
-    progress = describe_progress(log_tail, status)
+    # The whole log for the steps: the tail alone misses the early ones. Until
+    # the runner has taken a request up, the log is still the previous run's.
+    started = status.get("state") in {"running", "completed", "failed"} and not request_is_waiting()
+    full_log = read_full_log()[0] if started else None
+    steps = read_steps(full_log if full_log is not None else (log_tail if started else None))
+    if not in_progress:
+        _remember_plan(status, steps)
+    progress = describe_progress(steps, status, in_progress=in_progress)
 
     return {
         "local": local,

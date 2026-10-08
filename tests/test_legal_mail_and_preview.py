@@ -9,16 +9,16 @@ The preview (Admin -> Legal Texts): upload the Markdown of a new version, get
 it checked as CI checks it and back as its PDF, marked ENTWURF or VORSCHAU on
 every page. Nothing is kept.
 """
-import html
 import io
 from pathlib import Path
 from datetime import datetime
 
 import pytest
 
+from api_helpers import send
 from conftest import db, make_member
 from aeronautics_members import legal_pdf, mail_utils
-from aeronautics_members.db_models import NotificationEvent, Setting
+from aeronautics_members.db_models import AuditLog, NotificationEvent, Setting
 from aeronautics_members.services import legal_texts as legal
 from aeronautics_members.services import teams, workflows
 from test_admin_reviews import _login, _staff
@@ -177,14 +177,16 @@ class TestTheSwitch:
     def test_set_on_the_general_settings_and_kept_by_the_others(self, app, client):
         _login(client, _staff("boss@example.org", "admin").id)
 
-        client.post("/admin/settings", data={"save_settings": "1", "settings_section": "general",
-                                             "legal_pdfs_in_welcome_emails": "on"})
+        general = {"invoice_payments": False, "automatic_emails": False}
+
+        send(client, "PUT", "/api/v1/admin/settings/general", {**general, "legal_pdfs_in_welcome_emails": True})
         assert legal_pdf.attach_to_welcome_emails()
 
-        client.post("/admin/settings", data={"save_settings": "1", "settings_section": "notifications"})
+        send(client, "PUT", "/api/v1/admin/settings/notifications",
+             {"admin_general": True, "admin_error": True, "user_status": True})
         assert legal_pdf.attach_to_welcome_emails()
 
-        client.post("/admin/settings", data={"save_settings": "1", "settings_section": "general"})
+        send(client, "PUT", "/api/v1/admin/settings/general", {**general, "legal_pdfs_in_welcome_emails": False})
         assert not legal_pdf.attach_to_welcome_emails()
 
 
@@ -199,7 +201,7 @@ class TestThePreview:
         data = {"german": (io.BytesIO(german), german_name)}
         if english is not None:
             data["english"] = (io.BytesIO(english), english_name)
-        return client.post("/admin/legal", data=data, content_type="multipart/form-data")
+        return client.post("/api/v1/admin/legal/preview", data=data, content_type="multipart/form-data")
 
     def test_a_pdf_of_the_upload_marked_as_a_draft_and_nothing_kept(self, app, client, legal_dir):  # noqa: F811
         _login(client, _staff("boss@example.org", "admin").id)
@@ -236,8 +238,16 @@ class TestThePreview:
 
         response = self._post(client, german, english, english_name=english_name or "2026-10-05.md")
 
-        assert response.status_code == 200 and response.mimetype == "text/html"
-        assert problem in html.unescape(response.get_data(as_text=True))
+        body = response.get_json()
+        assert response.status_code == 400 and body["error"]["code"] == "legal_preview_invalid"
+        assert any(problem in line for line in body["error"]["details"]["problems"])
+
+    def test_the_german_file_is_needed(self, app, client):
+        _login(client, _staff("boss@example.org", "admin").id)
+
+        response = client.post("/api/v1/admin/legal/preview", data={}, content_type="multipart/form-data")
+
+        assert response.status_code == 400 and response.get_json()["error"]["fields"] == {"german": "Choose a file."}
 
     def test_a_teams_rules_with_its_logo(self, app, client, monkeypatch):
         seen = {}
@@ -261,7 +271,7 @@ class TestTheTemplate:
         assert response.mimetype == "text/markdown" and f'filename="{name}"' in response.headers["Content-Disposition"]
         text = response.get_data(as_text=True)
         assert text.startswith("---\n") and f'version: "{TODAY.isoformat()}"' in text and "{{" not in text
-        preview = client.post("/admin/legal", data={"german": (io.BytesIO(response.data), name)},
+        preview = client.post("/api/v1/admin/legal/preview", data={"german": (io.BytesIO(response.data), name)},
                               content_type="multipart/form-data")
         assert preview.mimetype == "application/pdf"
 
@@ -284,15 +294,17 @@ class TestNotInForceYet:
         rules_file(team="rocket", status="draft")
         _login(client, _staff("boss@example.org", "admin").id)
 
-        body = client.get("/admin/legal").get_data(as_text=True)
-        waiting = body.split('id="legal-waiting"')[1].split('class="card"')[0]
+        waiting = client.get("/api/v1/admin/legal").get_json()["waiting"]
+        by_title = {item["title"]: item for item in waiting}
 
-        assert "Statuten" in waiting and "Draft" in waiting
-        assert "Datenschutzerklärung" in waiting and "From 01.01.2099" in waiting and "with English" in waiting
-        assert "Teamordnung" in waiting and "Rocket" in waiting
-        assert "2019-03-17" not in waiting  # in force, so above
-        assert "document=statutes&amp;version=2026-01-01" in waiting
-        assert "document=team-rules&amp;version=" in waiting and "team=rocket" in waiting
+        assert by_title["Statuten"]["status"] == "draft"
+        privacy = by_title["Datenschutzerklärung"]
+        assert privacy["status"] == "scheduled" and privacy["effective_from"] == "2099-01-01" and privacy["has_english"]
+        assert by_title["Teamordnung"]["team_name"] == "Rocket"
+        assert "2019-03-17" not in {item["version"] for item in waiting}, "in force, so not waiting"
+        assert "document=statutes&version=2026-01-01" in by_title["Statuten"]["pdf_url"]
+        rules = by_title["Teamordnung"]["pdf_url"]
+        assert "document=team-rules&version=" in rules and "team=rocket" in rules
 
     def test_their_pdf_marked_and_with_the_english(self, app, client, texts, monkeypatch):  # noqa: F811
         texts("privacy-policy", "2099-01-01", title="Datenschutzerklärung", status="draft")
@@ -320,7 +332,7 @@ class TestNotInForceYet:
         texts("statutes", "2019-03-17", title="Statuten")
         _login(client, _staff("boss@example.org", "admin").id)
 
-        assert "No drafts, and no versions waiting" in client.get("/admin/legal").get_data(as_text=True)
+        assert client.get("/api/v1/admin/legal").get_json()["waiting"] == []
 
 
 class TestThePage:
@@ -330,31 +342,32 @@ class TestThePage:
         (legal_dir / "stray.md").write_text("x")
         _login(client, _staff("boss@example.org", "admin").id)
 
-        body = client.get("/admin/legal").get_data(as_text=True)
+        body = client.get("/api/v1/admin/legal").get_json()
 
-        assert 'href="/legal/statutes/pdf"' in body
-        assert "stray.md: not where a version goes" in body
-        assert "legal/teams/ghost/: no team has this short name" in body
+        [statutes] = [item for item in body["in_force"] if item["title"] == "Statuten"]
+        assert statutes["pdf_url"] == "/legal/statutes/pdf" and statutes["page_url"] == "/legal/statutes"
+        assert any("stray.md: not where a version goes" in problem for problem in body["problems"])
+        assert any("legal/teams/ghost/: no team has this short name" in problem for problem in body["problems"])
+        assert client.get("/admin/legal").status_code == 200, "the page is the app's"
 
     def test_not_for_a_member(self, app, client):
         member = make_member()
         _login(client, member.user.id)
 
         assert client.get("/admin/legal").status_code in (302, 403)
+        assert client.get("/api/v1/admin/legal").status_code == 403
 
 
 class TestMakingThemAllAgain:
-    """Admin -> Legal Texts -> "Make all PDFs again": one PDF per request, ticked off by the page."""
+    """Admin -> Legal Texts -> "Make all PDFs again": the kept ones removed, then one PDF per request."""
 
     def test_listed_one_line_each(self, app, client, texts):  # noqa: F811
         texts("statutes", "2019-03-17", title="Statuten")
         _login(client, _staff("boss@example.org", "admin").id)
 
-        body = client.get("/admin/legal").get_data(as_text=True)
-        progress = body.split('id="legal-pdfs-progress"')[1].split("</ul>")[0]
+        jobs = client.get("/api/v1/admin/legal").get_json()["pdf_jobs"]
 
-        assert 'data-item="stored"' in progress and 'data-item="/statutes/2019-03-17"' in progress
-        assert "legal-pdf-remake.js" in body
+        assert [(job["key"], job["title"]) for job in jobs] == [("/statutes/2019-03-17", "Statuten")]
 
     def test_kept_ones_removed_then_each_made(self, app, client, texts, monkeypatch):  # noqa: F811
         texts("statutes", "2019-03-17", title="Statuten")
@@ -363,12 +376,12 @@ class TestMakingThemAllAgain:
         _login(client, _staff("boss@example.org", "admin").id)
         legal_pdf.pdf_for(legal.current_version("statutes", today=TODAY))
 
-        stored = client.post("/admin/legal/pdfs/remake", data={"item": "stored"}).get_json()
-        assert stored["state"] == "ok" and stored["detail"] == "1 removed"
+        assert send(client, "POST", "/api/v1/admin/legal/pdfs/forget").get_json() == {"removed": 1}
         assert not list(legal_pdf.cache_dir().glob("*.pdf"))
+        assert db.session.query(AuditLog).filter_by(event_type="legal_pdfs_remade").count() == 1
 
-        one = client.post("/admin/legal/pdfs/remake", data={"item": "/statutes/2019-03-17"}).get_json()
-        assert one == {"state": "ok", "detail": "1 KB"}
+        one = send(client, "POST", "/api/v1/admin/legal/pdfs/make", {"key": "/statutes/2019-03-17"}).get_json()
+        assert one == {"size_kb": 1}
         assert made == ["statutes", "statutes"]
 
     def test_one_that_cannot_be_made_says_why(self, app, client, texts, monkeypatch):  # noqa: F811
@@ -376,32 +389,22 @@ class TestMakingThemAllAgain:
         monkeypatch.setattr(legal_pdf, "build", lambda *a, **k: 1 / 0)
         _login(client, _staff("boss@example.org", "admin").id)
 
-        answer = client.post("/admin/legal/pdfs/remake", data={"item": "/statutes/2019-03-17"}).get_json()
+        response = send(client, "POST", "/api/v1/admin/legal/pdfs/make", {"key": "/statutes/2019-03-17"})
 
-        assert answer["state"] == "failed" and "division" in answer["detail"]
+        assert response.status_code == 422 and "division" in response.get_json()["error"]["message"]
 
     def test_one_no_longer_there(self, app, client, texts):  # noqa: F811
         _login(client, _staff("boss@example.org", "admin").id)
 
-        response = client.post("/admin/legal/pdfs/remake", data={"item": "/statutes/1999-01-01"})
+        response = send(client, "POST", "/api/v1/admin/legal/pdfs/make", {"key": "/statutes/1999-01-01"})
 
-        assert response.status_code == 404 and response.get_json()["state"] == "failed"
-
-    def test_without_the_script_all_in_one_go(self, app, client, texts, monkeypatch):  # noqa: F811
-        texts("statutes", "2019-03-17", title="Statuten")
-        monkeypatch.setattr(legal_pdf, "build", lambda german, team=None, **_: b"%PDF-1.7 x")
-        _login(client, _staff("boss@example.org", "admin").id)
-
-        response = client.post("/admin/legal/pdfs/remake", follow_redirects=True)
-
-        assert "All 1 PDFs were made again." in response.get_data(as_text=True)
-        assert len(list(legal_pdf.cache_dir().glob("statutes_*.pdf"))) == 1
+        assert response.status_code == 404
 
     def test_only_for_those_who_manage_the_settings(self, app, client, texts):  # noqa: F811
         texts("statutes", "2019-03-17", title="Statuten")
         _login(client, make_member(email="someone@example.org").user.id)
 
-        assert client.post("/admin/legal/pdfs/remake", data={"item": "stored"}).status_code in (302, 403)
+        assert send(client, "POST", "/api/v1/admin/legal/pdfs/forget").status_code == 403
 
 
 class TestTheDraftsPdfMadeFirst:

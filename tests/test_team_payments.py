@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
+from api_helpers import send
 from conftest import db
 from aeronautics_members.db_models import MembershipPeriod, NotificationEvent, Payment, Setting
 from aeronautics_members.services import ConflictError, ValidationError, payments, privacy, team_payments, teams
@@ -165,8 +166,7 @@ class TestTheSettings:
         team, _lead = _led()
         _login(client, _staff("admin@example.com", "admin").id)
 
-        client.post(f"/admin/teams/{team.slug}", data={
-            "name": team.name, "admission_mode": team.admission_mode, "applications_open": "on",
+        send(client, "PUT", f"/api/v1/admin/teams/{team.slug}/fee", {
             "payment_mode": "subscription", "stripe_price_id": PRICE_ID, "period_starts": "1.4, 1.10",
         })
 
@@ -252,10 +252,11 @@ class TestPaying:
         anna, _membership = _approved(team, lead)
         _login(client, anna.id)
 
-        assert "Pay and join" in client.get("/teams").get_data(as_text=True)
-        response = client.post(f"/teams/{team.slug}/pay")
+        [card] = client.get("/api/v1/teams").get_json()["mine"]
+        assert card["membership"]["actions"][0] == "pay_join"
+        response = send(client, "POST", f"/api/v1/teams/{team.slug}/pay")
 
-        assert response.status_code == 303 and response.location.startswith("https://checkout.example/")
+        assert response.status_code == 200 and response.get_json()["url"].startswith("https://checkout.example/")
 
     def test_a_free_team_has_nothing_to_pay(self, app, fake_stripe):
         team, lead = _led()
@@ -494,9 +495,10 @@ def test_the_leads_see_paid_until(app, client, monkeypatch, fake_stripe):
     _paid_member(client, monkeypatch, team, lead)
     _login(client, lead.id)
 
-    body = client.get(f"/teams/{team.slug}/manage").get_data(as_text=True)
+    members = client.get(f"/api/v1/teams/{team.slug}/manage/members").get_json()
 
-    assert "Paid until" in body and "31.03.2027" in body
+    assert members["charges"] is True
+    assert "2027-03-31" in [row["paid_until"] for row in members["members"]]
 
 
 @pytest.mark.usefixtures("outbox")

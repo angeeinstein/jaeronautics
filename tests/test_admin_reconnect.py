@@ -6,6 +6,7 @@ or the old forum never had one: the student ends up with an empty new forum
 account beside their old one. An admin who recognises them picks the old
 account instead, and the reconnection itself is the same.
 """
+from api_helpers import send
 from conftest import db, make_member
 from aeronautics_members.db_models import AuditLog, ExternalWorkItem, ImportedForumProfile, User
 from test_admin_reviews import _login, _staff
@@ -26,10 +27,11 @@ def test_the_search_finds_the_old_account_by_its_username(app, client):
     member = _married_returner()
     _login(client, _staff("boss@example.org", "admin").id)
 
-    body = client.get(f"/admin/accounts/{member.user_id}?reconnect_q=hubera").get_data(as_text=True)
+    body = client.get(f"/api/v1/admin/accounts/{member.user_id}/old-forum-candidates?q=hubera").get_json()
 
-    assert "HuberA_L21" in body
-    assert "Reconnect" in body
+    assert [item["username"] for item in body["items"]] == ["HuberA_L21"]
+    assert body["likely"] is False
+    assert client.get(f"/api/v1/admin/accounts/{member.user_id}").get_json()["actions"]["reconnect"] is True
 
 
 def test_reconnecting_by_hand_moves_the_member_onto_the_old_account(app, client):
@@ -39,10 +41,11 @@ def test_reconnecting_by_hand_moves_the_member_onto_the_old_account(app, client)
     new_user_id = member.user_id
     _login(client, _staff("boss2@example.org", "admin").id)
 
-    response = client.post(f"/admin/accounts/{new_user_id}/reconnect", data={"profile_id": profile.id})
+    response = send(client, "POST", f"/api/v1/admin/accounts/{new_user_id}/reconnect", {"profile_id": profile.id})
 
-    assert response.status_code == 302
-    assert response.headers["Location"].endswith(f"/admin/accounts/{archived_id}")
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["account_id"] == archived_id, "the page goes on to the account's new home"
+    assert response.get_json()["old_username"] == "HuberA_L21"
     db.session.expire_all()
     archived = db.session.get(User, archived_id)
     assert archived.email == "anna.berger@example.com", "they sign in as before"
@@ -60,12 +63,12 @@ def test_an_old_account_taken_meanwhile_is_not_taken_twice(app, client):
     first = _married_returner()
     second = make_member(email="someone.else@example.com")
     _login(client, _staff("boss3@example.org", "admin").id)
-    client.post(f"/admin/accounts/{first.user_id}/reconnect", data={"profile_id": profile.id})
+    send(client, "POST", f"/api/v1/admin/accounts/{first.user_id}/reconnect", {"profile_id": profile.id})
 
-    response = client.post(f"/admin/accounts/{second.user_id}/reconnect", data={"profile_id": profile.id},
-                           follow_redirects=True)
+    response = send(client, "POST", f"/api/v1/admin/accounts/{second.user_id}/reconnect", {"profile_id": profile.id})
 
-    assert "taken already" in response.get_data(as_text=True)
+    assert response.status_code == 409
+    assert "taken already" in response.get_json()["error"]["message"]
     assert db.session.get(User, second.user_id) is not None
 
 
@@ -74,8 +77,8 @@ def test_a_reconnected_account_is_not_offered_in_the_search(app, client):
     first = _married_returner()
     other = make_member(email="other@example.com")
     _login(client, _staff("boss4@example.org", "admin").id)
-    client.post(f"/admin/accounts/{first.user_id}/reconnect", data={"profile_id": profile.id})
+    send(client, "POST", f"/api/v1/admin/accounts/{first.user_id}/reconnect", {"profile_id": profile.id})
 
-    body = client.get(f"/admin/accounts/{other.user_id}?reconnect_q=hubera").get_data(as_text=True)
+    body = client.get(f"/api/v1/admin/accounts/{other.user_id}/old-forum-candidates?q=hubera").get_json()
 
-    assert "No unclaimed old forum account found." in body
+    assert body["items"] == []

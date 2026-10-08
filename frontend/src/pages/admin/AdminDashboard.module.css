@@ -1,0 +1,40 @@
+.task {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--ja-border);
+}
+
+.task:last-child {
+  border-bottom: 0;
+}
+
+.count {
+  min-width: 2.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ja-text);
+}
+
+.taskText {
+  /* The button moves under the text where the two do not fit side by side. */
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.entry {
+  display: block;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--ja-border);
+}
+
+.entry:last-child {
+  border-bottom: 0;
+}
+
+.entry:hover {
+  background: var(--ja-surface-alt);
+}
+
+.empty {
+  padding: 0 1rem;
+}

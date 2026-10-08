@@ -25,18 +25,38 @@ def _html(message):
     raise AssertionError("no HTML part")
 
 
+def _error_page(client):
+    """The plain error page, as a 500 shows it."""
+    return client.get("/__test-error").get_data(as_text=True)
+
+
+@pytest.fixture(autouse=True)
+def failing_route(app):
+    from flask import abort
+
+    app.add_url_rule("/__test-error", "test_error", lambda: abort(500))
+
+
 def test_the_live_site_shows_no_bar(client):
+    for page in (client.get("/").get_data(as_text=True), _error_page(client)):
+        assert "test-server-bar" not in page and "data-test-server" not in page
+        assert "[TEST]" not in page
+
+
+def test_an_app_page_on_the_test_server_says_so(app, client, test_server, tmp_path):
+    """The app draws the bar where the page is marked (frontend/src/frame/TestServerBar.tsx)."""
+    (tmp_path / "index.html").write_text('<!doctype html><html lang="en"><head><title>Joanneum Aeronautics</title>'
+                                         '</head><body><div id="root"></div></body></html>')
+    app.config["FRONTEND_DIST_DIR"] = str(tmp_path)
+
     page = client.get("/").get_data(as_text=True)
 
-    assert "test-server-bar" not in page
-    assert "[TEST]" not in page
+    assert '<html data-test-server lang="en">' in page
+    assert "<title>[TEST] Joanneum Aeronautics</title>" in page
 
 
-def test_a_page_on_the_test_server_says_so(client, test_server):
-    page = client.get("/").get_data(as_text=True)
-
-    assert 'class="test-server-bar"' in page
-    assert "<title>[TEST] " in page
+def test_the_error_page_on_the_test_server_says_so(client, test_server):
+    assert 'class="test-server-bar"' in _error_page(client)
 
 
 def test_an_email_from_the_test_server_says_so(app, smtp, test_server):  # noqa: F811

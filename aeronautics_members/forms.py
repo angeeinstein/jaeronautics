@@ -1,14 +1,16 @@
+"""The rules the member forms are checked by: kinds of member, the university
+address, the year group, phone numbers, the tick for the legal texts. The API
+checks what the front end sends against them (api/_forms.py, ``checked``), so
+each rule is written down once, here.
+"""
 from flask_babel import _, lazy_gettext as _l
 from flask_wtf import FlaskForm
 from wtforms import (
     BooleanField,
-    HiddenField,
-    IntegerField,
     PasswordField,
     RadioField,
     SelectField,
     StringField,
-    SubmitField,
     TextAreaField,
 )
 from wtforms.validators import (
@@ -17,7 +19,6 @@ from wtforms.validators import (
     EqualTo,
     InputRequired,
     Length,
-    NumberRange,
     Optional,
     Regexp,
     StopValidation,
@@ -26,13 +27,23 @@ from wtforms.validators import (
 
 from .member_categories import (
     DEFAULT_CATEGORY,
+    YEAR_GROUP_PATTERN,
+    account_email_rule,
+    asks_company_name,
     category_choices,
-    checks_institutional_domain,
+    institutional_domains_of,
+    joinable_category_choices,
+    requires_company_name,
     requires_institutional_email,
     requires_year_group,
     shows_year_group,
 )
-from .services.institutional_email import is_institutional_email, normalize_email
+from .services.institutional_email import (
+    is_institutional_email,
+    is_staff_email,
+    is_student_email,
+    normalize_email,
+)
 
 COUNTRIES = [
     ("", _l("-- Select a Country --")),
@@ -127,8 +138,8 @@ def resolve_member_category(form):
 
 
 YEAR_GROUP_VALIDATOR = Regexp(
-    r"^[A-Z]+[0-9]{2}$",
-    message=_l("Letters and two digits, e.g. LAV25."),
+    YEAR_GROUP_PATTERN,
+    message=_l("Three letters and two digits: the programme and the year you started, like LAV25."),
 )
 
 
@@ -159,7 +170,7 @@ class YearGroupRequirement:
 
         if not value:
             if requires_year_group(category):
-                raise ValidationError(_("Please enter your year group, for example LAV25."))
+                raise ValidationError(_("Please choose your programme and the year you started."))
             # Offered but not required -- an alumnus who does not remember.
             field.data = None
             raise StopValidation()
@@ -170,6 +181,28 @@ class YearGroupRequirement:
 
 
 YEAR_GROUP_FIELD_VALIDATORS = [YearGroupRequirement(), Length(max=50), YEAR_GROUP_VALIDATOR]
+
+
+class CompanyNameRequirement:
+    """The company a partner joins for: asked of partners, who must give it, and dropped for
+    everybody else -- a leftover from before the kind of member was switched, not a claim.
+    Which categories are asked is member_categories.py's to say."""
+
+    def __call__(self, form, field):
+        category = resolve_member_category(form)
+        value = (field.data or "").strip()
+        if not asks_company_name(category):
+            field.data = None
+            raise StopValidation()
+        if not value:
+            if requires_company_name(category):
+                raise ValidationError(_("Please enter the company you join for."))
+            field.data = None
+            raise StopValidation()
+        field.data = value
+
+
+COMPANY_NAME_FIELD_VALIDATORS = [CompanyNameRequirement(), Length(max=255)]
 
 
 class InstitutionalEmailRequirement:
@@ -188,9 +221,12 @@ class InstitutionalEmailRequirement:
         category = resolve_member_category(form)
         value = normalize_email(field.data)
 
+        whose = institutional_domains_of(category)
         if not value:
-            if requires_institutional_email(category):
+            if requires_institutional_email(category, joining=getattr(form, "joining", False)):
                 raise ValidationError(
+                    _("Please enter your institute email address. We use it to confirm that you work here.")
+                    if whose == "staff" else
                     _("Please enter your university email address. We use it to "
                       "confirm that you currently study here.")
                 )
@@ -198,12 +234,14 @@ class InstitutionalEmailRequirement:
             raise StopValidation()
 
         field.data = value
-        if checks_institutional_domain(category) and not is_institutional_email(value):
+        if whose == "student" and not is_student_email(value):
             raise ValidationError(
-                _("Please use your university address, for example "
+                _("Please use your student address, for example "
                   "name@edu.fh-joanneum.at. Your private address goes in the "
                   "field above.")
             )
+        if whose == "staff" and not is_staff_email(value):
+            raise ValidationError(_("Please use your institute address, for example name@fh-joanneum.at."))
 
 
 class PrivateEmailRequirement:
@@ -222,12 +260,25 @@ class PrivateEmailRequirement:
     """
 
     def __call__(self, form, field):
-        if not normalize_email(field.data):
+        value = normalize_email(field.data)
+        if not value:
             return  # DataRequired has already said what to do about empty
-        if is_institutional_email(field.data):
+        rule = account_email_rule(resolve_member_category(form))
+        if rule == "any" or not is_institutional_email(value):
+            # A company member's account is their company address, whatever its domain.
+            return
+        if rule == "private_or_institute":
+            # Staff may keep their account on their institute address -- the one they gave as such.
+            institute = getattr(form, "email_work", None)
+            if institute is not None and normalize_email(institute.data) == value:
+                return
             raise ValidationError(
-                _("This looks like a university address. Please use a private one – it must keep working after you leave.")
+                _("To sign in with your institute address, give it as your institute email too; "
+                  "otherwise use a private address.")
             )
+        raise ValidationError(
+            _("This looks like a university address. Please use a private one – it must keep working after you leave.")
+        )
 
 
 PRIVATE_EMAIL_FIELD_VALIDATORS = [DataRequired(), Email(), PrivateEmailRequirement()]
@@ -239,6 +290,9 @@ PHONE_VALIDATOR = Regexp(r"^\+?[0-9\s\-\(\)]*$", message=_l("Invalid phone numbe
 
 
 class MembershipForm(FlaskForm):
+    #: A membership being made: staff are asked for their institute address.
+    joining = True
+
     salutation = SelectField(_l("Salutation"), choices=SALUTATION_CHOICES, validators=[DataRequired()])
     title = StringField(_l("Title"), validators=[Optional()])
     first_name = StringField(_l("First Name"), validators=[DataRequired()])
@@ -256,8 +310,10 @@ class MembershipForm(FlaskForm):
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
+    company_name = StringField(_l("Company"), validators=COMPANY_NAME_FIELD_VALIDATORS)
+    # Not the appointed kinds: an honorary member is made one by an admin.
     member_category = SelectField(
-        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        _l("Membership Type"), choices=joinable_category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
@@ -269,15 +325,16 @@ class MembershipForm(FlaskForm):
         validators=[Optional()],
         default="checkout",
     )
-    # The label is rendered by templates/legal/_accept.html, with the texts linked.
+    # The front end writes the label, with the texts linked (pages/public/MembershipForm.tsx).
     terms_accepted = BooleanField(
         _l("I accept the legal texts."),
         validators=[InputRequired(message=_l("Please accept the legal texts to continue."))],
     )
-    submit = SubmitField(_("Proceed to Payment"))
 
 
 class CreateMembershipProfileForm(FlaskForm):
+    joining = True
+
     salutation = SelectField(_l("Salutation"), choices=SALUTATION_CHOICES, validators=[DataRequired()])
     title = StringField(_l("Title"), validators=[Optional()])
     first_name = StringField(_l("First Name"), validators=[DataRequired()])
@@ -295,8 +352,10 @@ class CreateMembershipProfileForm(FlaskForm):
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
+    company_name = StringField(_l("Company"), validators=COMPANY_NAME_FIELD_VALIDATORS)
+    # Not the appointed kinds: an honorary member is made one by an admin.
     member_category = SelectField(
-        _l("Membership Type"), choices=category_choices(), default=DEFAULT_CATEGORY,
+        _l("Membership Type"), choices=joinable_category_choices(), default=DEFAULT_CATEGORY,
         validators=[DataRequired()],
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
@@ -306,43 +365,11 @@ class CreateMembershipProfileForm(FlaskForm):
         validators=[Optional()],
         default="checkout",
     )
-    # The label is rendered by templates/legal/_accept.html, with the texts linked.
+    # The front end writes the label, with the texts linked (pages/public/MembershipForm.tsx).
     terms_accepted = BooleanField(
         _l("I accept the legal texts."),
         validators=[InputRequired(message=_l("Please accept the legal texts to continue."))],
     )
-    submit = SubmitField(_("Create Membership and Proceed to Payment"))
-
-
-class RegistrationForm(FlaskForm):
-    email = StringField(_("Email"), validators=[DataRequired(), Email()])
-    password = PasswordField(_("Password"), validators=[DataRequired(), Length(min=8)])
-    confirm_password = PasswordField(_("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
-    submit = SubmitField(_("Register"))
-
-
-class LoginForm(FlaskForm):
-    email = StringField(_("Email"), validators=[DataRequired(), Email()])
-    password = PasswordField(_("Password"), validators=[DataRequired()])
-    submit = SubmitField(_("Login"))
-
-
-class ChangePasswordForm(FlaskForm):
-    current_password = PasswordField(_("Current Password"), validators=[DataRequired()])
-    new_password = PasswordField(_("New Password"), validators=[DataRequired(), Length(min=8)])
-    confirm_new_password = PasswordField(_("Confirm New Password"), validators=[DataRequired(), EqualTo("new_password")])
-    submit = SubmitField(_("Change Password"))
-
-
-class EmailRequestForm(FlaskForm):
-    email = StringField(_("Email"), validators=[DataRequired(), Email()])
-    submit = SubmitField(_("Send Link"))
-
-
-class SetPasswordForm(FlaskForm):
-    password = PasswordField(_("Password"), validators=[DataRequired(), Length(min=8, max=128)])
-    confirm_password = PasswordField(_("Confirm Password"), validators=[DataRequired(), EqualTo("password")])
-    submit = SubmitField(_("Save Password"))
 
 
 class MemberProfileForm(FlaskForm):
@@ -356,10 +383,10 @@ class MemberProfileForm(FlaskForm):
         _l("Private Email"), validators=PRIVATE_EMAIL_FIELD_VALIDATORS
     )
     phone_work = StringField(_l("Work Phone"), validators=[Optional(), PHONE_VALIDATOR])
+    company_name = StringField(_l("Company"), validators=[Optional(), Length(max=255)])
     email_work = StringField(
         _l("University or Company Email"), validators=INSTITUTIONAL_EMAIL_FIELD_VALIDATORS
     )
-    submit = SubmitField(_("Save Profile Changes"))
 
 
 class IdentityChangeRequestForm(FlaskForm):
@@ -373,31 +400,3 @@ class IdentityChangeRequestForm(FlaskForm):
     )
     year_group = StringField(_l("Year Group"), validators=YEAR_GROUP_FIELD_VALIDATORS)
     member_note = TextAreaField(_l("Why should this be changed?"), validators=[Optional(), Length(max=1000)])
-    submit = SubmitField(_("Submit Change Request"))
-
-
-class TestEmailForm(FlaskForm):
-    sender = SelectField(_l("Sender"), validators=[DataRequired()])
-    recipient = StringField(_("Recipient Email"), validators=[DataRequired(), Email()])
-    template = SelectField(_l("Template"), validators=[DataRequired()])
-    submit = SubmitField(_("Send Test Email"))
-
-
-class MailAccountForm(FlaskForm):
-    mail_account_id = HiddenField()
-    account_key = StringField(
-        _l("Account Key"),
-        validators=[
-            DataRequired(),
-            Length(max=80),
-            Regexp(r"^[a-zA-Z0-9_-]+$", message=_l("Use only letters, numbers, dashes, and underscores.")),
-        ],
-    )
-    host = StringField(_l("SMTP Host"), validators=[DataRequired(), Length(max=255)])
-    port = IntegerField(_l("SMTP Port"), validators=[DataRequired(), NumberRange(min=1, max=65535)])
-    username = StringField(_l("SMTP Username"), validators=[DataRequired(), Length(max=255)])
-    password = PasswordField(_l("SMTP Password"), validators=[Optional(), Length(max=255)])
-    starttls = BooleanField(_l("Use STARTTLS"))
-    from_email = StringField(_l("Sender Address"), validators=[Optional(), Email(), Length(max=255)])
-    from_name = StringField(_l("Sender Name"), validators=[Optional(), Length(max=120)])
-    submit = SubmitField(_l("Save Mail Account"))

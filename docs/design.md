@@ -10,13 +10,13 @@ was a starting point, not a specification: where it did not fit the portal,
 this concept differs, and every difference is listed with its reason under
 [Where this differs from the proposal](#where-this-differs-from-the-proposal).
 
-`aeronautics_members/static/style.css` implements it on top of Bootstrap 5.3.
-Change the two together.
+The front end implements it with Mantine: `frontend/src/theme.ts` and the
+`--ja-*` variables in `frontend/src/styles/global.css`. Change them together.
 
 ## Principles
 
 - **Always dark.** One dark theme, never a light one, whatever the visitor's
-  device is set to. `base.html` switches Bootstrap's dark theme on for good.
+  device is set to. `frontend/index.html` switches Mantine's dark scheme on for good.
 - **One accent, and it means "act here".** Cyan marks the main action, the
   link, the focused field, the current page. It is not decoration.
 - **Flat.** Surfaces are told apart by a 1px hairline and a slightly lighter
@@ -62,7 +62,7 @@ border in the same colour at about half strength. Text on a tint stays white.
 | **IBM Plex Mono** | Figures (the admin dashboard counts), code, logs |
 
 - Headings: Archivo; `h1`/`h2` bold (700), `h3`-`h6` semibold (600). Sizes
-  are Bootstrap's, which get smaller on a phone.
+  are the theme's (`theme.ts`), which get smaller on a phone.
 - A card's title (in its header band): 1.125rem, semibold.
 - Body: 1rem, line height 1.5. Small print: 0.875rem.
 - The opening sentence of a page (thank-you, cancelled, error pages):
@@ -81,10 +81,10 @@ right face.
   minimum for a comfortable tap); small ones 2.25rem, large ones 3.25rem.
   Button text is 1rem, small 0.875rem, large 1.25rem, with side padding of
   1 / 0.75 / 1.5rem.
-- Spacing follows Bootstrap's scale (0.25, 0.5, 1, 1.5, 3rem), which matches
-  the proposal's steps where they overlap.
-- Content is at most 1320px wide (Bootstrap's container); the admin
-  workspace at most 1280px.
+- Spacing follows Mantine's scale (xs to xl), which matches the proposal's
+  steps where they overlap.
+- Content is at most 54rem wide on a narrow page (My Account, signing in,
+  joining) and 80rem on a wide one (`--ja-content-narrow`, `--ja-content-wide`).
 
 ## Components
 
@@ -141,6 +141,13 @@ tick is simply there.
 ("no reviews waiting", "no sync problems"), it is left out; if the page would
 then be empty, one card with the still tick, a bold sentence and a muted one
 takes its place. Never a card per thing that is not happening.
+
+**Checklists** -- lines that each come to an answer (a backup being made,
+the checks after resuming a restored portal, PDFs made again): a green tick,
+a red cross, a small spinner while it is being worked out, a clock for what
+runs later on its own, a muted dot for what has not started. What the line
+found goes under it, muted (red when it failed); the state is also said in
+words for screen readers (`components/Checklist.tsx`).
 
 **Attention list** -- the dashboard's first card: one row per kind of open
 task, the count in the mono face, a line naming the oldest one, and a button
@@ -206,11 +213,11 @@ bands, and the one real shadow (`0 12px 32px rgba(0,0,0,0.45)`).
 
 | Proposal | Here | Why |
 | --- | --- | --- |
-| React components | Bootstrap 5.3 with its variables set to these colours | The portal is server-rendered Flask; a React front end is planned for later and can take this concept over as it is |
+| React components of its own | Mantine, themed with these colours (`frontend/src/theme.ts`) | A maintained component library gives accessible menus, dialogs and fields; the theme carries the look |
 | Fonts from Google Fonts | Served from the portal | No visitor's address goes to Google (a German court awarded a visitor damages over exactly this in 2022), and the site's security policy allows no outside fonts |
 | Button heights 2.25 / 3 / 3.5rem, text 0.875 / 1 / 1.125rem, wide side padding | Minimum heights 2.25 / 2.75 / 3.25rem, text 0.875 / 1 / 1.25rem, side padding in proportion to the text | Tried as proposed: the label looked small in a box with a lot of empty space around it, and large buttons (login, payment) had smaller text than before. 2.75rem keeps normal buttons easy to tap on a phone. Minimums, not fixed heights, so a label that wraps still fits |
 | Primary button hover: fade to 88% | Lighter cyan (`--ja-accent-hover`) | The proposal defines that colour itself; fading towards the dark page reads like "disabled" |
-| Fixed heading sizes (h1 2.25rem ...) | Bootstrap's responsive sizes, the proposal's faces and weights | Fixed sizes are too large on a phone; the look comes from the face and weight |
+| Fixed heading sizes (h1 2.25rem ...) | Responsive sizes, the proposal's faces and weights | Fixed sizes are too large on a phone; the look comes from the face and weight |
 | Tick box outline `--ja-border-strong` | `--ja-placeholder` (lighter grey) | The proposal's outline is about 1.5:1 against a card, and empty boxes were easy to miss; accessibility guidance (WCAG) asks for 3:1, the lighter grey gives 4.7:1 |
 | Message border in full tone colour | Tone colour at about half strength | Many messages here are quiet notices ("no log entries yet"); full-strength borders made them shout louder than the buttons |
 | Mono face for dates and year groups too | Only for figures, code and logs so far | Dates and codes sit inside running text and tables; setting them apart needs markup changes, left for later |

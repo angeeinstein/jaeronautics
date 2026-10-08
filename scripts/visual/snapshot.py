@@ -6,6 +6,12 @@ clicking through every page by hand hoping to spot the one that broke.
 
     python scripts/visual/snapshot.py shoot  OUT_DIR
     python scripts/visual/snapshot.py compare BEFORE_DIR AFTER_DIR
+    python scripts/visual/snapshot.py serve
+
+`serve` only starts that seeded portal (on SNAPSHOT_PORT, 8777) and keeps it
+running: for the front end's end-to-end tests (frontend/e2e/), or to click
+through the sample data by hand. Sign in as admin@example.org with the
+password below.
 
 `shoot` starts the portal on a throwaway SQLite database seeded with members
 in the states the pages show differently (new, photo needed, SEPA pending,
@@ -60,20 +66,68 @@ def build_app(db_path):
         "PUBLIC_BASE_URL": BASE,
         # Beside the throwaway database, never the repository's storage.
         "TEAM_LOGO_DIR": str(Path(db_path).parent / "team_logos"),
+        "BACKUP_STORAGE_DIR": str(Path(db_path).parent / "storage"),
+        # In this process, against the throwaway database -- not a second one.
+        "BACKUP_RUN_INLINE": True,
     })
     return app, app_module
+
+
+UPDATE_LOG = """[INFO] Requested update for branch main.
+[STEP] Pausing background jobs for the update
+[OK] Background jobs paused; they resume when the update is done.
+[STEP] Re-running installer from the latest repository copy
+From https://github.com/example/portal
+   1a2b3c4..5d6e7f8  main       -> origin/main
+[STEP] Fetching the front end built by CI
+[INFO] Built from 5d6e7f80.
+[WARN] CI is still running for this revision; waiting up to 25 minutes.
+[OK] Front end downloaded and checked.
+[STEP] Putting the front end in place
+[STEP] Installing Python dependencies
+Requirement already satisfied: Flask==3.1.1 in ./venv/lib/python3.12/site-packages
+Requirement already satisfied: SQLAlchemy==2.0.41 in ./venv/lib/python3.12/site-packages
+[STEP] Writing application environment file
+[STEP] Initializing database schema
+INFO  [alembic.runtime.migration] Running upgrade a7d3e9f1c5b2 -> b8e4f2a6c1d9, team photos
+[STEP] Writing systemd service
+[STEP] Installing admin-page update runner
+[STEP] Writing nginx configuration
+[STEP] Reloading system services
+[STEP] Verifying deployment
+[OK] The portal answers on http://127.0.0.1:8000.
+[OK] Update complete.
+"""
+
+
+def _an_update_that_ran(system_update):
+    """The Updates page as after an update: its steps, and the whole output to unfold."""
+    state_dir = Path(os.environ["DATABASE_URL"].removeprefix("sqlite:///")).parent / "updates"
+    state_dir.mkdir(exist_ok=True)
+    (state_dir / system_update.LOG_FILENAME).write_text(UPDATE_LOG)
+    (state_dir / system_update.STATUS_FILENAME).write_text(json.dumps({
+        "state": "completed", "action": "update", "exit_code": 0,
+        "started_at": "2026-10-01T09:58:00+02:00", "finished_at": "2026-10-01T10:04:00+02:00",
+        "revision_after": "5d6e7f8090a1b2c3", "steps_expected": UPDATE_LOG.count("[STEP]"),
+        "log_tail": "\n".join(UPDATE_LOG.splitlines()[-40:]),
+    }))
+    system_update.UPDATE_STATE_DIR = state_dir
 
 
 def go_offline(app_module):
     """Stripe, the forum and the git remote answer without a network."""
     from aeronautics_members.forum_service import DiscourseConnectProvider, ForumProviderError
-    from aeronautics_members.services import system_update
+    from aeronautics_members.services import billing, system_update, workflows
 
     def offline(self, *args, **kwargs):
         raise ForumProviderError("Offline for screenshots.")
 
     DiscourseConnectProvider._request = offline
+    # What joining costs, as Stripe would say it; paying itself stays offline.
+    billing._price_shown_cached = lambda: {"id": "price_example", "currency": "eur", "unit_amount": 4000,
+                                           "interval": "year", "interval_count": 1}
     system_update.get_remote_version = lambda force=False: None
+    _an_update_that_ran(system_update)
 
     subscriptions = {}  # email -> the Stripe subscription the page should see
 
@@ -81,6 +135,7 @@ def go_offline(app_module):
         return False, subscriptions.get(member.email_private), None
 
     app_module.refresh_member_billing_state = refresh
+    workflows.refresh_member_billing_state = refresh
     return subscriptions
 
 
@@ -137,6 +192,25 @@ def seed(app, app_module, subscriptions):
     db.session.flush()
     admin.grant_role(app_module.get_role("superadmin"))
     admin.grant_role(app_module.get_role("admin"))
+    # The association's treasurer: the money and nothing else of the admin area.
+    treasurer = User(email="treasurer@example.org", forum_username="TreasurerT")
+    treasurer.set_password(PASSWORD)
+    treasurer.email_verified_at = now
+    db.session.add(treasurer)
+    db.session.flush()
+    treasurer.grant_role(app_module.get_role("treasurer"))
+
+    # The pictures the submissions point at, so the pages show a picture
+    # rather than a broken image: a plain square in a colour per person, kept
+    # beside the throwaway database.
+    from PIL import Image
+
+    pictures = Path(db.engine.url.database).parent
+
+    def picture_file(name, colour):
+        path = pictures / f"{name}.png"
+        Image.new("RGB", (240, 240), colour).save(path)
+        return dict(storage_path=str(path), content_type="image/png")
 
     new = person("new", "Nora", "Neumann", verified=False, work_verified=False,
                  payment_status="pending_checkout", is_active=False,
@@ -144,10 +218,12 @@ def seed(app, app_module, subscriptions):
     photo = person("photo-needed", "Paul", "Photo")
     pending = person("photo-pending", "Petra", "Pending")
     db.session.add(ForumAvatarSubmission(user_id=pending.user.id, member_id=pending.id,
-                                         status="pending", public_token="snap-pending"))
+                                         status="pending", public_token="snap-pending",
+                                         **picture_file("snap-pending", (70, 140, 170))))
     rejected = person("photo-rejected", "Rene", "Rejected")
     db.session.add(ForumAvatarSubmission(user_id=rejected.user.id, member_id=rejected.id,
                                          status="rejected", public_token="snap-rejected",
+                                         **picture_file("snap-rejected", (170, 90, 70)),
                                          review_note="Please use a photo of yourself.",
                                          reviewed_at=now))
     active = person("active", "Anna", "Maximilian-Hofstetter-Wallensteiner",
@@ -155,6 +231,7 @@ def seed(app, app_module, subscriptions):
                     stripe_subscription_id="sub_snap_active")
     db.session.add(ForumAvatarSubmission(user_id=active.user.id, member_id=active.id,
                                          status="approved", public_token="snap-approved",
+                                         **picture_file("snap-approved", (90, 160, 100)),
                                          reviewed_at=now))
     person("sepa", "Sepp", "Sepa", payment_status="processing", is_active=False,
            stripe_customer_id="cus_snap_sepa")
@@ -196,29 +273,73 @@ def seed(app, app_module, subscriptions):
         charging.payment_mode, charging.stripe_price_id = "subscription", "price_example"
         charging.period_starts, charging.fee_display = "01.04, 01.10", "€10.00 every 6 months"
     teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
-    # A made-up logo for one team; the other has none, as many will not.
+    # Made-up logos in the shapes real ones come in: one round with a line of
+    # text under it, one a shield -- neither quite square, both to be shown whole.
     from io import BytesIO
 
-    from PIL import Image, ImageDraw
+    from PIL import ImageDraw
 
-    logo = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(logo)
-    draw.polygon([(20, 180), (100, 20), (180, 180)], fill=(0, 223, 255, 255))
-    draw.rectangle([(220, 70), (580, 130)], fill=(255, 255, 255, 255))
-    buffer = BytesIO()
-    logo.save(buffer, format="PNG")
-    teams.set_team_logo(None, rocket, buffer.getvalue())
-    # The team's page: a longer text, a picture and rules to accept.
-    photo = Image.new("RGB", (1600, 1000), (40, 60, 80))
-    ImageDraw.Draw(photo).polygon([(200, 900), (800, 100), (1400, 900)], fill=(0, 223, 255))
-    photo_buffer = BytesIO()
-    photo.save(photo_buffer, format="JPEG")
-    teams.set_team_picture(None, rocket, photo_buffer.getvalue())
+    def png(image):
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    round_logo = Image.new("RGBA", (400, 440), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(round_logo)
+    draw.ellipse([(30, 10), (370, 350)], fill=(16, 24, 30, 255), outline=(0, 223, 255, 255), width=14)
+    draw.polygon([(120, 270), (200, 70), (280, 270)], fill=(0, 223, 255, 255))
+    draw.rectangle([(70, 380), (330, 420)], fill=(235, 240, 245, 255))
+    teams.set_team_logo(None, rocket, png(round_logo))
+    shield = Image.new("RGBA", (360, 420), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(shield)
+    draw.polygon([(20, 20), (340, 20), (340, 220), (180, 400), (20, 220)], fill=(30, 70, 140, 255),
+                 outline=(235, 240, 245, 255))
+    draw.polygon([(110, 230), (180, 90), (250, 230)], fill=(235, 240, 245, 255))
+    teams.set_team_logo(None, glider, png(shield))
+    # The team's page: a cover, a formatted text, photos and rules to accept. The
+    # pictures are drawn: a sky and a rocket on it, each in other light.
+    def scene(size, sky, ground, rocket_at):
+        width, height = size
+        picture = Image.new("RGB", size)
+        paint = ImageDraw.Draw(picture)
+        for y in range(height):
+            mix = y / height
+            paint.line([(0, y), (width, y)], fill=tuple(int(a + (b - a) * mix) for a, b in zip(sky, ground)))
+        paint.rectangle([(0, int(height * 0.82)), (width, height)], fill=tuple(int(c * 0.45) for c in ground))
+        x, top = int(width * rocket_at), int(height * 0.18)
+        body = width // 28
+        paint.polygon([(x, top), (x - body, top + body * 2), (x + body, top + body * 2)], fill=(235, 240, 245))
+        paint.rectangle([(x - body, top + body * 2), (x + body, int(height * 0.82))], fill=(225, 230, 238))
+        paint.polygon([(x - body, int(height * 0.7)), (x - body * 2, int(height * 0.82)), (x - body, int(height * 0.82))],
+                      fill=(0, 223, 255))
+        paint.polygon([(x + body, int(height * 0.7)), (x + body * 2, int(height * 0.82)), (x + body, int(height * 0.82))],
+                      fill=(0, 223, 255))
+        out = BytesIO()
+        picture.save(out, format="JPEG", quality=88)
+        return out.getvalue()
+
+    teams.set_team_picture(None, rocket, scene((1800, 900), (18, 32, 58), (64, 96, 128), 0.72))
+    for size, sky, ground, at, caption in [
+        ((1600, 1200), (30, 50, 90), (210, 140, 90), 0.5, "Launch day at the European Rocketry Challenge"),
+        ((1200, 900), (70, 110, 160), (160, 190, 210), 0.35, "Integration in the workshop"),
+        ((1200, 900), (12, 18, 36), (40, 60, 110), 0.6, None),
+        ((1200, 900), (120, 80, 120), (230, 170, 120), 0.45, "Recovery test"),
+        ((1200, 900), (20, 70, 80), (90, 160, 150), 0.55, "Avionics bench"),
+        ((1200, 900), (50, 50, 60), (150, 150, 160), 0.4, "Static fire"),
+    ]:
+        teams.add_team_photo(None, rocket, scene(size, sky, ground, at), caption)
     teams.update_team_page(
         None, rocket,
-        about="We design, build and fly sounding rockets, and take part in the European Rocketry Challenge.\n\n"
-              "We meet every Tuesday at 18:00 in the workshop. New members start in one of the sub-teams: "
-              "structures, propulsion, avionics or recovery.",
+        about="We design, build and fly **sounding rockets**, and take part in the "
+              "[European Rocketry Challenge](https://euroc.pt).\n\n"
+              "# What members do\n\n"
+              "New members start in one of the sub-teams:\n\n"
+              "- **Structures**: airframe, fins and the nose cone\n"
+              "- **Propulsion**: the motor and its tests\n"
+              "- **Avionics**: flight computer and telemetry\n"
+              "- **Recovery**: parachutes, and finding the rocket again\n\n"
+              "# When we meet\n\n"
+              "Every Tuesday at 18:00 in the workshop. Come along before you apply.",
     )
     db.session.add(TeamMembership(team=rocket, user=active.user, status=teams.ACTIVE, started_at=now,
                                   payment_mode="subscription", stripe_subscription_id="sub_example_1",
@@ -273,29 +394,42 @@ def seed(app, app_module, subscriptions):
     return [
         {"name": "public--landing", "path": "/"},
         {"name": "public--signup", "path": "/join"},
-        {"name": "public--signup-errors", "path": "/join", "submit": "form[action$='process-membership']"},
+        {"name": "public--signup-errors", "path": "/join", "submit": "button[type=submit]"},
+        # The steps after the first, as each kind of member gets them.
+        {"name": "public--signup-student", "path": "/join", "open": "[role=radio]:has-text('Student')"},
+        {"name": "public--signup-student-errors", "path": "/join", "open": "[role=radio]:has-text('Student')",
+         "submit": "button[type=submit]"},
+        {"name": "public--signup-alumni", "path": "/join", "open": "[role=radio]:has-text('Alumni')"},
+        {"name": "public--signup-company", "path": "/join", "open": "[role=radio]:has-text('Company')"},
+        {"name": "public--signup-staff", "path": "/join", "open": "[role=radio]:has-text('Staff')"},
         {"name": "public--login", "path": "/login"},
         {"name": "public--forgot-password", "path": "/forgot-password"},
         {"name": "public--reset-password", "path": f"/reset-password/{reset_token}"},
         {"name": "public--legal", "path": "/legal"},
         {"name": "public--legal-statutes", "path": "/legal/statutes"},
-        {"name": "public--signup-legal-dialog", "path": "/join", "click": "a[data-legal-dialog]"},
         {"name": "public--thank-you", "path": "/thank-you?method=checkout&phase=prorated"},
         {"name": "public--thank-you-free", "path": "/thank-you?method=checkout&phase=free_period"},
         {"name": "public--cancel", "path": "/cancel"},
         {"name": "public--not-found", "path": "/no-such-page"},
-        *member_pages("new"),
+        *member_pages("new", {"name": "account--profile-unconfirmed", "path": "/account/profile"}),
         *member_pages("photo-needed", {"name": "forum--photo-needed", "path": "/forum"}),
         *member_pages("photo-pending"),
         *member_pages("photo-rejected"),
         *member_pages("active",
                       {"name": "account--change-password", "path": "/change-password"},
+                      {"name": "account--profile", "path": "/account/profile"},
+                      {"name": "account--profile-edit", "path": "/account/profile",
+                       "open": "section[aria-label='Contact details'] button:has-text('Edit')"},
+                      {"name": "account--membership", "path": "/account/membership"},
+                      {"name": "account--forum", "path": "/account/forum"},
+                      {"name": "account--data", "path": "/account/data"},
                       # Saving the profile: the success message with its tick.
-                      {"name": "account--saved", "path": "/account",
-                       "submit": "form[action$='/account/profile']"},
+                      {"name": "account--saved", "path": "/account/profile",
+                       "open": "section[aria-label='Contact details'] button:has-text('Edit')",
+                       "submit": "section[aria-label='Contact details'] button[type=submit]"},
                       {"name": "account--delete-confirm", "path": f"/account/delete/{delete_token}"}),
-        *member_pages("sepa"),
-        *member_pages("ended"),
+        *member_pages("sepa", {"name": "account--membership-sepa", "path": "/account/membership"}),
+        *member_pages("ended", {"name": "account--membership-ended", "path": "/account/membership"}),
         *member_pages("failed"),
         *member_pages("cancelling"),
         *member_pages("returning"),
@@ -309,6 +443,7 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--reviews", "user": "admin@example.org", "path": "/admin/reviews"},
         {"name": "admin--logs", "user": "admin@example.org", "path": "/admin/logs"},
         {"name": "admin--settings", "user": "admin@example.org", "path": "/admin/settings"},
+        {"name": "admin--settings-updates", "user": "admin@example.org", "path": "/admin/settings/updates"},
         {"name": "admin--teams", "user": "admin@example.org", "path": "/admin/teams"},
         {"name": "admin--team-detail", "user": "admin@example.org", "path": "/admin/teams/rocket-team"},
         {"name": "admin--team-new", "user": "admin@example.org", "path": "/admin/teams/new"},
@@ -327,6 +462,8 @@ def seed(app, app_module, subscriptions):
         {"name": "teams--money", "user": "active@example.org", "path": "/teams/rocket-team/money"},
         {"name": "teams--money-treasurer", "user": "admin@example.org", "path": "/teams/rocket-team/money"},
         {"name": "admin--money", "user": "admin@example.org", "path": "/admin/money"},
+        {"name": "admin--money-team", "user": "admin@example.org", "path": "/admin/money/rocket-team"},
+        {"name": "admin--dashboard-treasurer", "user": "treasurer@example.org", "path": "/admin"},
     ]
 
 
@@ -438,8 +575,32 @@ def compare(before_dir, after_dir):
         print(f"  {state}: {name}")
 
 
+def serve_forever():
+    import time
+
+    with tempfile.TemporaryDirectory() as tmp:
+        app, app_module = build_app(Path(tmp) / "snapshot.db")
+        with app.app_context():
+            from aeronautics_members.db_models import db
+
+            db.create_all()
+            subscriptions = go_offline(app_module)
+            seed(app, app_module, subscriptions)
+        server = serve(app)
+        print(f"Serving the seeded portal on {BASE} (admin@example.org / {PASSWORD}).", flush=True)
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.shutdown()
+
+
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "shoot":
+    if len(sys.argv) >= 2 and sys.argv[1] == "serve":
+        serve_forever()
+    elif len(sys.argv) >= 3 and sys.argv[1] == "shoot":
         shoot(sys.argv[2])
     elif len(sys.argv) >= 4 and sys.argv[1] == "compare":
         compare(sys.argv[2], sys.argv[3])

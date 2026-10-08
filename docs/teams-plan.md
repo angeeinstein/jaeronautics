@@ -256,11 +256,12 @@ details, and anything about the association membership itself.
   balance for the drinks terminal, documents, dates. It should be built so that
   sections can be added without reworking the page.
 - **An About page for everyone, to apply from** — *built (October 2026).*
-  `/teams/<name>/about`: every signed-in visitor sees what the team does, one
-  picture, the fee and the team's rules, and applies or joins there. The
+  `/teams/<name>/about`: every signed-in visitor sees the team presented -- a
+  cover with its name and facts, its formatted story, up to 8 photos -- the fee
+  and the team's rules, and applies or joins there. The
   members' page stays separate and lean -- their membership and who is in the
   team -- and sends anybody else to the About page. Leads and site admins edit
-  the texts.
+  the texts, cover and photos.
 - **Team rules to accept** — *built.* Teams may have rules of their own, like
   the association's terms at signup: applying or joining needs them ticked
   (read in a window over the form), and the membership keeps when and which

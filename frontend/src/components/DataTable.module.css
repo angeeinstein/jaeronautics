@@ -1,0 +1,36 @@
+.table {
+  transition: opacity 0.15s;
+}
+
+.table[data-busy] {
+  opacity: 0.6;
+}
+
+/* Small upper-case headings (docs/frontend-structure.md, 7). */
+.th {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ja-muted);
+  white-space: nowrap;
+}
+
+.sortButton {
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.sortButton:hover {
+  color: var(--ja-text);
+}
+
+.idle {
+  opacity: 0.45;
+}
+
+.linkRow {
+  cursor: pointer;
+}

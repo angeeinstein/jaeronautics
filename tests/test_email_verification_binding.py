@@ -119,11 +119,9 @@ class TestOldLinksDieWithTheOldAddress:
         workflows.sync_member_primary_email(member, "after@example.com")
         db.session.commit()
 
-        resp = client.post(f"/reset-password/{token}",
-                           data={"password": "A-new-password-1", "confirm_password": "A-new-password-1"})
+        resp = client.put(f"/api/v1/password-reset/{token}", json={"password": "A-new-password-1"})
 
-        assert resp.status_code == 302
-        assert "/forgot-password" in resp.headers["Location"]
+        assert (resp.status_code, resp.get_json()["error"]["code"]) == (400, "link_invalid")
         assert db.session.get(User, member.user.id).check_password("initial-password")
 
     def test_a_reset_link_still_works_while_the_address_is_unchanged(self, app, client):
@@ -131,9 +129,13 @@ class TestOldLinksDieWithTheOldAddress:
         token = identity.build_password_reset_token(member.user)
         db.session.commit()
 
-        resp = client.get(f"/reset-password/{token}")
+        assert client.get(f"/api/v1/password-reset/{token}").get_json() == {"valid": True}
+        resp = client.put(f"/api/v1/password-reset/{token}", json={"password": "A-new-password-1"})
 
         assert resp.status_code == 200
+        assert db.session.get(User, member.user.id).check_password("A-new-password-1")
+        # Once.
+        assert client.get(f"/api/v1/password-reset/{token}").status_code == 400
 
     def _welcome_link(self, user):
         from aeronautics_members.services.forum import build_forum_entry_url

@@ -1,0 +1,68 @@
+/* The year group picked (YearGroupPicker.tsx): a card per programme, then the
+   start year as a row of choices. Square, flat, dark (docs/design.md). */
+
+.programmes {
+  display: grid;
+  gap: var(--mantine-spacing-sm);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  margin-top: 6px;
+}
+
+.programme {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  background: var(--ja-surface);
+  border: 1px solid var(--ja-border);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.programme[data-checked] {
+  background: color-mix(in srgb, var(--ja-accent) 10%, var(--ja-surface));
+  border-color: var(--ja-accent);
+}
+
+.name {
+  font-weight: 600;
+}
+
+.code {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-muted);
+}
+
+.hint {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-muted);
+}
+
+.programme[data-checked] .code {
+  color: var(--ja-accent);
+}
+
+.fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+}
+
+.result {
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: 600;
+  color: var(--ja-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .programme {
+    transition: none;
+  }
+}

@@ -10,6 +10,7 @@ from datetime import date
 
 import pytest
 
+from api_helpers import send
 from conftest import app_module, db, make_member, privacy
 from aeronautics_members.db_models import (
     AuditLog,
@@ -552,10 +553,10 @@ class TestStripeIsLeftAlone:
         _login(client, member.user_id)
         token = privacy.build_account_deletion_token(member.user)
 
-        response = client.get(f"/account/delete/{token}")
+        response = client.get(f"/api/v1/account/deletion/{token}")
 
-        assert response.status_code == 200
-        assert "Stripe" in response.get_data(as_text=True)
+        # The page says Stripe keeps its own copy (frontend/src/pages/account/DeleteAccount.tsx).
+        assert response.get_json()["has_stripe_customer"] is True
 
 
 class TestTheForumIsNotAllowedToBlockErasure:
@@ -670,12 +671,10 @@ class TestAdminRoutes:
         victim = make_member(email="victim2@example.com")
         _login(client, member.user_id)
 
-        response = client.post(
-            f"/admin/accounts/{victim.user_id}/delete",
-            data={"confirm_email": "victim2@example.com"},
-        )
+        response = send(client, "POST", f"/api/v1/admin/accounts/{victim.user_id}/erase",
+                        {"confirm_email": "victim2@example.com"})
 
-        assert response.status_code in (302, 403)
+        assert response.status_code == 403
         assert victim.deleted_at is None
 
     def test_the_typed_address_must_match(self, client):
@@ -683,11 +682,11 @@ class TestAdminRoutes:
         victim = make_member(email="typo@example.com")
         _login(client, admin.id)
 
-        client.post(
-            f"/admin/accounts/{victim.user_id}/delete",
-            data={"confirm_email": "wrong@example.com"},
-        )
+        response = send(client, "POST", f"/api/v1/admin/accounts/{victim.user_id}/erase",
+                        {"confirm_email": "wrong@example.com"})
 
+        assert response.status_code == 400
+        assert response.get_json()["error"]["fields"] == {"confirm_email": "This is not the account's address."}
         assert victim.deleted_at is None
         assert victim.first_name == "Test"
 
@@ -696,10 +695,10 @@ class TestAdminRoutes:
         victim = make_member(email="goodbye@example.com")
         _login(client, admin.id)
 
-        client.post(
-            f"/admin/accounts/{victim.user_id}/delete",
-            data={"confirm_email": "goodbye@example.com", "reason": "expelled"},
-        )
+        response = send(client, "POST", f"/api/v1/admin/accounts/{victim.user_id}/erase",
+                        {"confirm_email": "goodbye@example.com", "reason": "expelled"})
+
+        assert response.get_json() == {"subscription_cancelled": False, "forum_deferred": False}
 
         assert victim.deleted_at is not None
         entry = db.session.execute(
@@ -714,7 +713,7 @@ class TestAdminRoutes:
         victim = make_member(email="navigated@example.com")
         _login(client, admin.id)
 
-        assert client.get(f"/admin/accounts/{victim.user_id}/delete").status_code == 405
+        assert client.get(f"/api/v1/admin/accounts/{victim.user_id}/erase").status_code == 405
         assert victim.deleted_at is None
 
     def test_the_detail_page_warns_about_an_active_subscription(self, client):
@@ -722,26 +721,27 @@ class TestAdminRoutes:
         victim = _paid_member(email="warned@example.com")
         _login(client, admin.id)
 
-        body = client.get(f"/admin/accounts/{victim.user_id}").get_data(as_text=True)
+        erasure = client.get(f"/api/v1/admin/accounts/{victim.user_id}/erasure").get_json()
 
-        assert "active subscription" in body
-        assert "No refund is issued" in body
+        assert erasure["subscription_active"] is True
+        assert erasure["blockers"] == []
 
 
 class TestMemberInitiatedDeletion:
     def test_the_button_only_sends_an_email(self, client, monkeypatch):
-        from aeronautics_members.blueprints import account as account_bp_module
+        from aeronautics_members.services import account as account_service
 
         sent = []
         monkeypatch.setattr(
-            account_bp_module, "send_account_deletion_email",
+            account_service, "send_account_deletion_email",
             lambda app, user: sent.append(user.id) or True,
         )
         member = make_member(email="askfirst@example.com")
         _login(client, member.user_id)
 
-        client.post("/account/delete")
+        response = client.post("/api/v1/account/deletion")
 
+        assert "askfirst@example.com" in response.get_json()["text"]
         assert sent == [member.user_id]
         assert member.deleted_at is None
 
@@ -751,11 +751,11 @@ class TestMemberInitiatedDeletion:
         _login(client, member.user_id)
         token = privacy.build_account_deletion_token(member.user)
 
-        response = client.get(f"/account/delete/{token}")
+        page = client.get(f"/account/delete/{token}")
+        response = client.get(f"/api/v1/account/deletion/{token}")
 
-        assert response.status_code == 200
+        assert (page.status_code, response.status_code) == (200, 200)
         assert member.deleted_at is None
-        assert "Delete my account permanently" in response.get_data(as_text=True)
 
     def test_the_confirmation_page_offers_cancelling_instead(self, client):
         """Leaving and deleting are separate steps, done in that order.
@@ -768,17 +768,18 @@ class TestMemberInitiatedDeletion:
         _login(client, member.user_id)
         token = privacy.build_account_deletion_token(member.user)
 
-        body = client.get(f"/account/delete/{token}").get_data(as_text=True)
+        impact = client.get(f"/api/v1/account/deletion/{token}").get_json()
 
-        assert "cancel your membership instead" in body
-        assert "no refund" in body
+        # The page then says what is lost, and that cancelling would keep it.
+        assert impact["subscription_active"] is True
+        assert impact["paid_until"] is not None
 
     def test_confirming_erases_the_account(self, client):
         member = make_member(email="confirmed@example.com")
         _login(client, member.user_id)
         token = privacy.build_account_deletion_token(member.user)
 
-        client.post(f"/account/delete/{token}")
+        client.post(f"/api/v1/account/deletion/{token}", json={"confirm": True})
 
         assert member.deleted_at is not None
         assert member.first_name == privacy.ERASED_TEXT
@@ -788,7 +789,7 @@ class TestMemberInitiatedDeletion:
         _login(client, member.user_id)
         token = privacy.build_account_deletion_token(member.user)
 
-        client.post(f"/account/delete/{token}")
+        client.post(f"/api/v1/account/deletion/{token}", json={"confirm": True})
 
         with client.session_transaction() as session:
             assert "_user_id" not in session
@@ -799,7 +800,7 @@ class TestMemberInitiatedDeletion:
         _login(client, member.user_id)
         token = privacy.build_account_deletion_token(other.user)
 
-        client.post(f"/account/delete/{token}")
+        client.post(f"/api/v1/account/deletion/{token}", json={"confirm": True})
 
         assert other.deleted_at is None
         assert member.deleted_at is None
@@ -820,11 +821,11 @@ class TestMemberInitiatedDeletion:
         _login(client, member.user_id)
         token = privacy.build_account_deletion_token(member.user)
         monkeypatch.setattr(privacy, "TOKEN_MAX_AGE_ACCOUNT_DELETION", -1)
-        from aeronautics_members.blueprints import account as account_bp_module
+        from aeronautics_members.services import account as account_service
 
-        monkeypatch.setattr(account_bp_module, "TOKEN_MAX_AGE_ACCOUNT_DELETION", -1)
+        monkeypatch.setattr(account_service, "TOKEN_MAX_AGE_ACCOUNT_DELETION", -1)
 
-        client.post(f"/account/delete/{token}")
+        client.post(f"/api/v1/account/deletion/{token}", json={"confirm": True})
 
         assert member.deleted_at is None
 
@@ -832,13 +833,13 @@ class TestMemberInitiatedDeletion:
         member = make_member(email="garbage@example.com")
         _login(client, member.user_id)
 
-        response = client.post("/account/delete/not-a-real-token")
+        response = client.post("/api/v1/account/deletion/not-a-real-token", json={"confirm": True})
 
-        assert response.status_code == 302
+        assert (response.status_code, response.get_json()["error"]["code"]) == (400, "link_invalid")
         assert member.deleted_at is None
 
     def test_deletion_needs_a_login(self, client):
-        assert client.post("/account/delete").status_code in (302, 401)
+        assert client.post("/api/v1/account/deletion").status_code == 401
 
 
 class TestErasedAccountsStayErased:
@@ -891,11 +892,9 @@ class TestErasedAccountsStayErased:
         db.session.commit()
 
         response = client.post(
-            "/login",
-            data={"email": "ghost@example.com", "password": "initial-password"},
-            follow_redirects=True,
+            "/api/v1/session", json={"email": "ghost@example.com", "password": "initial-password"},
         )
 
         with client.session_transaction() as session:
             assert "_user_id" not in session
-        assert response.status_code == 200
+        assert response.get_json()["error"]["code"] == "invalid_credentials"

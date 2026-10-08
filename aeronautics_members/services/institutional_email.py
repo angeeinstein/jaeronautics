@@ -12,10 +12,13 @@ must not need a code change. And being the one place that knows the list, so a
 form, a settings page and the archive-claim all agree about it.
 """
 
-from ..config import DEFAULT_INSTITUTIONAL_EMAIL_DOMAINS
+from ..config import DEFAULT_INSTITUTIONAL_EMAIL_DOMAINS, DEFAULT_STAFF_EMAIL_DOMAINS
 from .settings import get_settings_map
 
+#: The students' domains. The key is from when there was one list for everybody.
 SETTING_KEY = "institutional_email_domains"
+#: The staff's: a lecturer's ``@fh-joanneum.at`` is not a student's ``@edu.fh-joanneum.at``.
+STAFF_SETTING_KEY = "staff_email_domains"
 
 
 def normalize_email(email):
@@ -45,14 +48,42 @@ def parse_domains(raw):
     return tuple(domains)
 
 
-def get_institutional_domains():
-    """The allowed domains, from the admin setting, falling back to the default.
+def get_student_domains():
+    """The domains a student's address is on, from the admin setting, falling back to the default.
 
     An empty setting means the default rather than "nothing is allowed": a
     cleared box must not lock every student out of signing up.
     """
     stored = get_settings_map([SETTING_KEY]).get(SETTING_KEY)
     return parse_domains(stored) or parse_domains(DEFAULT_INSTITUTIONAL_EMAIL_DOMAINS)
+
+
+def get_staff_domains():
+    """The domains a staff member's address is on; the same fallback."""
+    stored = get_settings_map([STAFF_SETTING_KEY]).get(STAFF_SETTING_KEY)
+    return parse_domains(stored) or parse_domains(DEFAULT_STAFF_EMAIL_DOMAINS)
+
+
+def get_institutional_domains():
+    """Every domain the institutions own, students' and staff's."""
+    return tuple(dict.fromkeys(get_student_domains() + get_staff_domains()))
+
+
+def _on(domain, allowed):
+    return any(domain == item or domain.endswith(f".{item}") for item in allowed)
+
+
+def is_student_email(email):
+    """Whether the address is a student's: what says somebody studies here now."""
+    domain = email_domain(email)
+    return bool(domain) and _on(domain, get_student_domains())
+
+
+def is_staff_email(email):
+    """Whether the address is a staff member's -- and not a student's, which is usually a
+    subdomain of the staff's (edu.fh-joanneum.at under fh-joanneum.at)."""
+    domain = email_domain(email)
+    return bool(domain) and _on(domain, get_staff_domains()) and not _on(domain, get_student_domains())
 
 
 def is_institutional_email(email, domains=None):
@@ -65,5 +96,4 @@ def is_institutional_email(email, domains=None):
     domain = email_domain(email)
     if not domain:
         return False
-    allowed = domains if domains is not None else get_institutional_domains()
-    return any(domain == item or domain.endswith(f".{item}") for item in allowed)
+    return _on(domain, domains if domains is not None else get_institutional_domains())

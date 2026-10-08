@@ -7,6 +7,7 @@ what the claim left broken for the person it had just helped.
 """
 from datetime import datetime, timezone
 
+from api_helpers import said, send
 from conftest import db, make_member
 
 from aeronautics_members.db_models import (
@@ -55,14 +56,12 @@ def _returning(uid, username, address, private):
     )
 
 
-def _profile_form(private, work):
-    return {
-        "profile-street": "Main", "profile-house_number": "1",
-        "profile-postal_code": "8010", "profile-city": "Graz",
-        "profile-country": "Austria", "profile-phone_private": "+43123",
-        "profile-email_private": private,
-        "profile-email_work": work,
-    }
+def _save_contact(client, private, work):
+    response = client.put("/api/v1/account/contact", json={
+        "street": "Main", "house_number": "1", "postal_code": "8010", "city": "Graz",
+        "country": "Austria", "phone_private": "+43123", "email_private": private, "email_work": work,
+    })
+    assert response.status_code == 200, response.get_json()
 
 
 class TestChangingTheUniversityAddress:
@@ -78,9 +77,7 @@ class TestChangingTheUniversityAddress:
         db.session.commit()
         _sign_in(client, member.user.id)
 
-        client.post("/account/profile", data=_profile_form(
-            "someone@example.com", "somebody.else@edu.fh-joanneum.at",
-        ))
+        _save_contact(client, "someone@example.com", "somebody.else@edu.fh-joanneum.at")
 
         db.session.expire_all()
         member = db.session.get(Member, member.id)
@@ -98,9 +95,7 @@ class TestChangingTheUniversityAddress:
         _sign_in(client, member.user.id)
 
         # Only the capitalisation differs, which is the same mailbox.
-        client.post("/account/profile", data=_profile_form(
-            "keeper@example.com", "Keeper@edu.fh-joanneum.at",
-        ))
+        _save_contact(client, "keeper@example.com", "Keeper@edu.fh-joanneum.at")
 
         db.session.expire_all()
         assert db.session.get(Member, member.id).email_work_verified_at is not None
@@ -117,12 +112,10 @@ class TestChangingTheUniversityAddress:
         member.user.email_verified_at = _now()
         db.session.commit()
         _sign_in(client, member.user.id)
-        client.post("/account/profile", data=_profile_form(
-            "intruder@example.com", "victim@edu.fh-joanneum.at",
-        ))
+        _save_contact(client, "intruder@example.com", "victim@edu.fh-joanneum.at")
         client.post("/logout")
 
-        client.post("/login", data={
+        client.post("/api/v1/session", json={
             "email": "intruder@example.com", "password": "initial-password",
         })
 
@@ -209,7 +202,7 @@ class TestStayingSignedIn:
         member.user.email_verified_at = _now()
         db.session.commit()
 
-        client.post("/login", data={"email": "sign@example.com", "password": "initial-password"})
+        client.post("/api/v1/session", json={"email": "sign@example.com", "password": "initial-password"})
 
         response = client.get("/account", follow_redirects=True)
         assert response.request.path == "/account"
@@ -264,9 +257,9 @@ class TestStayingSignedIn:
         db.session.commit()
 
         forged = generate_token("verify-email", **{**claims, "nonce": "guessed"})
-        body = client.get(f"/verify-email/{forged}", follow_redirects=True).get_data(as_text=True)
+        client.get(f"/verify-email/{forged}", follow_redirects=True)
 
-        assert "invalid or has expired" in body
+        assert "invalid or has expired" in said(client)
         account = db.session.execute(
             db.select(User).filter_by(email="nonce@example.com")
         ).scalar_one()
@@ -669,7 +662,7 @@ class TestTheSyncWaitsForTheCleanup:
         self._queued(member)
         _login(client, _staff("boss@example.org", "admin").id)
 
-        client.post(f"/admin/accounts/{member.user_id}/forum-resync")
+        send(client, "POST", f"/api/v1/admin/accounts/{member.user_id}/forum-resync")
 
         assert order == ["cleanup", "sync"]
 
@@ -682,10 +675,11 @@ class TestTheSyncWaitsForTheCleanup:
         self._queued(member)
         _login(client, _staff("boss@example.org", "admin").id)
 
-        response = client.post(f"/admin/accounts/{member.user_id}/forum-resync", follow_redirects=True)
+        response = send(client, "POST", f"/api/v1/admin/accounts/{member.user_id}/forum-resync")
 
         assert "sync" not in order
-        assert "could not be removed yet" in response.get_data(as_text=True)
+        assert response.status_code == 409
+        assert "could not be removed yet" in response.get_json()["error"]["message"]
 
     def test_the_account_page_says_a_cleanup_is_waiting_or_gave_up(self, app, client):
         from test_admin_reviews import _login, _staff
@@ -694,11 +688,10 @@ class TestTheSyncWaitsForTheCleanup:
         discard = self._queued(member)
         _login(client, _staff("boss@example.org", "admin").id)
 
-        assert "is being removed in the background" in client.get(
-            f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        url = f"/api/v1/admin/accounts/{member.user_id}"
+        assert client.get(url).get_json()["forum"]["cleanup"] == {"failed": False, "error": None}
 
         discard.status, discard.last_error = ExternalWorkItem.STATUS_FAILED, "Discourse said no."
         db.session.commit()
-        body = client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
 
-        assert "could not be removed" in body and "Discourse said no." in body
+        assert client.get(url).get_json()["forum"]["cleanup"] == {"failed": True, "error": "Discourse said no."}

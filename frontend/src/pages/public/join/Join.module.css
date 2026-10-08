@@ -1,0 +1,513 @@
+/* Joining, step by step (MembershipForm.tsx): the steps on top with a line
+   that fills, one step at a time sliding in, the next steps beside it on a
+   wide screen. Square, flat, dark (docs/design.md); every movement off for
+   whoever asks their device for less. */
+
+.layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-xl);
+}
+
+.main {
+  /* Back in view below the fixed top bar when a step is changed further down. */
+  scroll-margin-top: calc(var(--ja-header-height) + var(--mantine-spacing-md));
+  display: flex;
+  flex: 999 1 32rem;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+  min-width: 0;
+}
+
+.aside {
+  flex: 1 1 13rem;
+  min-width: 0;
+}
+
+/* The next steps: beside the form on a wide screen, in the last step on a narrow one. */
+.inlineAfter {
+  display: none;
+}
+
+@media (max-width: $mantine-breakpoint-md) {
+  .aside {
+    display: none;
+  }
+
+  .inlineAfter {
+    display: block;
+  }
+}
+
+/* --- The steps ---------------------------------------------------------------------- */
+
+.steps {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepButton {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+  padding: 0;
+  font: inherit;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-muted);
+  text-align: left;
+  background: none;
+  border: 0;
+}
+
+.stepButton:not(:disabled) {
+  cursor: pointer;
+}
+
+.stepButton:not(:disabled):hover .stepLabel {
+  color: var(--ja-text);
+}
+
+.stepButton:focus-visible {
+  outline: 2px solid var(--ja-accent);
+  outline-offset: 3px;
+}
+
+.stepMark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  font-weight: 600;
+  font-size: var(--mantine-font-size-xs);
+  border: 1px solid var(--ja-border-strong);
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease;
+}
+
+.stepButton[aria-current='step'] {
+  font-weight: 600;
+  color: var(--ja-text);
+}
+
+.stepButton[aria-current='step'] .stepMark {
+  color: var(--ja-accent);
+  border-color: var(--ja-accent);
+}
+
+.stepButton[data-done] {
+  color: var(--ja-text);
+}
+
+.stepButton[data-done] .stepMark {
+  color: var(--ja-accent-text);
+  background: var(--ja-accent);
+  border-color: var(--ja-accent);
+}
+
+.track {
+  height: 3px;
+  background: var(--ja-surface-alt);
+}
+
+.fill {
+  height: 100%;
+  background: var(--ja-accent);
+  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (max-width: $mantine-breakpoint-sm) {
+  /* On a phone the current step's name only; the marks say where the others are. */
+  .stepButton:not([aria-current='step']) .stepLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+/* --- One step ------------------------------------------------------------------------ */
+
+.card {
+  padding: var(--mantine-spacing-xl);
+  overflow: hidden;
+  background: var(--ja-surface);
+  border: 1px solid var(--ja-border);
+}
+
+@media (max-width: $mantine-breakpoint-sm) {
+  .card {
+    padding: var(--mantine-spacing-lg) var(--mantine-spacing-md);
+  }
+}
+
+.step {
+  animation: enter-forward 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.step[data-direction='back'] {
+  animation-name: enter-back;
+}
+
+.heading {
+  font-family: var(--mantine-font-family-headings);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.heading:focus {
+  outline: none;
+}
+
+.reveal {
+  animation: rise 0.3s ease both;
+}
+
+/* What this kind of member is asked besides the name. */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-lg);
+  background: var(--ja-bg);
+  border: 1px solid var(--ja-border);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  margin-top: var(--mantine-spacing-xl);
+  padding-top: var(--mantine-spacing-lg);
+  border-top: 1px solid var(--ja-border);
+}
+
+.actions > .push {
+  margin-left: auto;
+}
+
+@media (max-width: $mantine-breakpoint-sm) {
+  .actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .actions > .push {
+    margin-left: 0;
+  }
+}
+
+/* --- Who you are: a card each -------------------------------------------------------- */
+
+.kinds {
+  display: grid;
+  gap: var(--mantine-spacing-md);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+}
+
+.kind {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 9rem;
+  padding: var(--mantine-spacing-lg);
+  background: var(--ja-bg);
+  border: 1px solid var(--ja-border);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.kind:hover {
+  border-color: var(--ja-border-strong);
+  transform: translateY(-2px);
+}
+
+.kind[data-checked] {
+  background: color-mix(in srgb, var(--ja-accent) 10%, var(--ja-bg));
+  border-color: var(--ja-accent);
+}
+
+.kindIcon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  color: var(--ja-accent);
+  background: var(--ja-surface-alt);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.kind[data-checked] .kindIcon {
+  color: var(--ja-accent-text);
+  background: var(--ja-accent);
+}
+
+.kindName {
+  font-family: var(--mantine-font-family-headings);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.tick {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  color: var(--ja-accent-text);
+  background: var(--ja-accent);
+  animation: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+
+@media (max-width: $mantine-breakpoint-sm) {
+  .kind {
+    flex-direction: row;
+    align-items: center;
+    min-height: 0;
+    padding: var(--mantine-spacing-md);
+  }
+}
+
+/* --- About you ----------------------------------------------------------------------- */
+
+.forumName {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border: 1px dashed var(--ja-border-strong);
+}
+
+.forumIcon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  color: var(--ja-accent);
+  background: var(--ja-surface-alt);
+}
+
+.forumValue {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 1.05rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.forumValue[data-empty] {
+  font-weight: 400;
+  color: var(--ja-placeholder);
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+}
+
+.good {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--ja-success-text);
+}
+
+/* --- Password ------------------------------------------------------------------------ */
+
+.meter {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.meter > span {
+  flex: 1;
+  height: 6px;
+  background: var(--ja-surface-alt);
+  transition: background 0.35s ease;
+}
+
+.meter[data-strength='1'] > span:nth-child(-n + 1) {
+  background: var(--ja-danger);
+}
+
+.meter[data-strength='2'] > span:nth-child(-n + 2) {
+  background: var(--ja-warning);
+}
+
+.meter[data-strength='3'] > span {
+  background: var(--ja-success);
+}
+
+/* --- Check and join ------------------------------------------------------------------ */
+
+.summary {
+  margin: 0;
+  border: 1px solid var(--ja-border);
+}
+
+.summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem var(--mantine-spacing-md);
+  padding: 0.7rem var(--mantine-spacing-md);
+}
+
+.summary > div + div {
+  border-top: 1px solid var(--ja-border);
+}
+
+.summary dt {
+  flex: 0 0 8.5rem;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-muted);
+}
+
+.summary dd {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-lg);
+  padding: var(--mantine-spacing-md) var(--mantine-spacing-lg);
+  background:
+    radial-gradient(
+      ellipse at 100% 0%,
+      color-mix(in srgb, var(--ja-accent) 16%, transparent),
+      transparent 60%
+    ),
+    var(--ja-bg);
+  border: 1px solid var(--ja-border);
+}
+
+.amount {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+/* --- After joining ------------------------------------------------------------------- */
+
+.after {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: after;
+}
+
+.after > li {
+  display: flex;
+  gap: 0.75rem;
+  font-size: var(--mantine-font-size-sm);
+  counter-increment: after;
+}
+
+.after > li::before {
+  content: counter(after);
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  color: var(--ja-accent);
+  border: 1px solid var(--ja-border-strong);
+}
+
+@keyframes enter-forward {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes enter-back {
+  from {
+    opacity: 0;
+    transform: translateX(-2rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+
+  70% {
+    transform: scale(1.1);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step,
+  .reveal,
+  .tick {
+    animation: none;
+  }
+
+  .kind,
+  .kind:hover,
+  .fill,
+  .stepMark,
+  .meter > span {
+    transform: none;
+    transition: none;
+  }
+}

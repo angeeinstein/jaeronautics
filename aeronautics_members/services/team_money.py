@@ -61,10 +61,10 @@ def summary(team):
 
 
 def euros(cents):
-    """"€12.50", as the portal shows money."""
+    """"€1,234.50", as the portal shows money (and the new front end, lib/format.ts)."""
     sign = "-" if cents < 0 else ""
     cents = abs(int(cents))
-    return f"{sign}€{cents // 100:,}.{cents % 100:02d}".replace(",", ".")
+    return f"{sign}€{cents // 100:,}.{cents % 100:02d}"
 
 
 def payer_name(payment):
@@ -172,6 +172,16 @@ def all_teams_money():
     return rows
 
 
+def open_transfers():
+    """What is waiting to be passed on: how many teams are owed something, how
+    much in all, and how many of those have given no account to send it to."""
+    owed = [row for row in all_teams_money() if row["open"] > 0]
+    return {
+        "teams": len(owed),
+        "open": sum(row["open"] for row in owed),
+        "without_account": sum(1 for row in owed if not row["team"].bank_iban),
+    }
+
 
 # --- The team's bank account -------------------------------------------------------
 
@@ -189,11 +199,6 @@ def iban_problem(iban):
     if int(digits) % 97 != 1:
         return "That IBAN is mistyped: its check digits do not match."
     return None
-
-
-def grouped_iban(iban):
-    """AT61 1904 3002 3457 3201, as it is read out and typed."""
-    return " ".join(iban[i:i + 4] for i in range(0, len(iban), 4)) if iban else ""
 
 
 def masked_iban(iban):
@@ -274,10 +279,16 @@ def epc_payload(team, cents, reference):
 
 
 def payout_qr_svg(team, cents, reference):
-    """The GiroCode as an inline SVG, or None when there is nothing to pay or nowhere to pay it."""
+    """The GiroCode as an SVG file of its own (scalable: no size, a viewBox), or
+    None when there is nothing to pay or nowhere to pay it."""
+    import io
+
     import segno
 
     if cents <= 0 or not (team.bank_iban and team.bank_account_holder):
         return None
     code = segno.make(epc_payload(team, cents, reference), error="m", micro=False)
-    return code.svg_inline(scale=4, border=4, dark="#000000", light="#ffffff", omitsize=True)
+    out = io.BytesIO()
+    code.save(out, kind="svg", xmldecl=False, svgns=True, scale=4, border=4, dark="#000000", light="#ffffff",
+              omitsize=True)
+    return out.getvalue().decode()

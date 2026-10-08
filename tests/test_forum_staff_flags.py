@@ -10,6 +10,7 @@ administer the members here is trusted to keep order on the forum (decided
 """
 import pytest
 
+from api_helpers import send
 from conftest import db, make_member
 
 from aeronautics_members import app as app_module
@@ -116,17 +117,14 @@ class TestSavingRolesReachesTheForum:
         db.session.commit()
         synced = []
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.admin.sync_member_forum_state",
+            "aeronautics_members.services.account_admin.sync_member_forum_state",
             lambda member, **kwargs: synced.append(member.id) or (None, None),
         )
         with client.session_transaction() as session:
             session["_user_id"] = str(boss.user.id)
             session["_fresh"] = True
 
-        client.post(
-            f"/admin/accounts/{target.user.id}/roles",
-            data={"roles": ["forum_moderator"]},
-        )
+        send(client, "PUT", f"/api/v1/admin/accounts/{target.user.id}/roles", {"roles": ["forum_moderator"]})
 
         assert synced == [target.id]
 
@@ -141,17 +139,14 @@ class TestSavingRolesReachesTheForum:
             raise RuntimeError("forum down")
 
         monkeypatch.setattr(
-            "aeronautics_members.blueprints.admin.sync_member_forum_state",
+            "aeronautics_members.services.account_admin.sync_member_forum_state",
             unreachable,
         )
         with client.session_transaction() as session:
             session["_user_id"] = str(boss.user.id)
             session["_fresh"] = True
 
-        client.post(
-            f"/admin/accounts/{target.user.id}/roles",
-            data={"roles": ["forum_moderator"]},
-        )
+        send(client, "PUT", f"/api/v1/admin/accounts/{target.user.id}/roles", {"roles": ["forum_moderator"]})
 
         db.session.expire_all()
         assert target.user.can(Permission.FORUM_MODERATOR)
@@ -171,25 +166,22 @@ class TestTheSwitch:
             session["_user_id"] = str(admin.id)
         return client
 
-    def _save(self, client, **extra):
-        form = {
-            "save_settings": "1",
-            "settings_section": "forum",
-            "forum_integration_enabled": "y",
-            "forum_provider": "discourse",
-            "forum_auth_strategy": "discourse_connect",
-            "forum_base_url": "https://forum.example.org",
-            "discourse_api_username": "system",
-            "forum_member_group": "members",
-            "forum_onboarding_group": "members-onboarding",
-            "forum_inactive_group": "membership-inactive",
-            "forum_lecture_groups": "students",
-            "forum_onboarding_path": "/",
-            "forum_avatar_max_bytes": "5242880",
-            "forum_avatar_allowed_types": "jpg,png",
-            **extra,
-        }
-        response = client.post("/admin/settings", data=form, follow_redirects=True)
+    def _save(self, client, manage_staff_flags=False):
+        from api_helpers import send
+
+        response = send(client, "PUT", "/api/v1/admin/settings/forum", {
+            "enabled": True,
+            "base_url": "https://forum.example.org",
+            "api_username": "system",
+            "member_group": "members",
+            "onboarding_group": "members-onboarding",
+            "inactive_group": "membership-inactive",
+            "manage_staff_flags": manage_staff_flags,
+            "lecture_groups": "students",
+            "onboarding_path": "/",
+            "avatar_max_bytes": 5242880,
+            "avatar_allowed_types": ["jpg", "png"],
+        })
         assert response.status_code == 200
 
     def _stored(self):
@@ -203,11 +195,11 @@ class TestTheSwitch:
         assert get_forum_service().settings["forum_manage_staff_flags"] is False
 
     def test_ticking_it_is_kept(self, app, admin_client):
-        self._save(admin_client, forum_manage_staff_flags="on")
+        self._save(admin_client, manage_staff_flags=True)
         assert self._stored() == "True"
 
     def test_unticking_it_is_kept_too(self, app, admin_client):
-        self._save(admin_client, forum_manage_staff_flags="on")
+        self._save(admin_client, manage_staff_flags=True)
         self._save(admin_client)
         assert self._stored() == "False"
 

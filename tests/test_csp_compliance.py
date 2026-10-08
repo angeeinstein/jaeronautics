@@ -1,9 +1,11 @@
-"""Templates must not rely on inline scripts the deployed CSP blocks.
+"""Templates must not rely on inline scripts or styles the deployed CSP blocks.
 
-The nginx config serves ``script-src 'self' https://js.stripe.com
-https://cdn.jsdelivr.net/npm/`` with no ``'unsafe-inline'`` and no nonce, so an
-inline <script> block is silently dropped by the browser in production while
-still "working" in a Flask render test. This guard keeps the two apart.
+The portal's policy (aeronautics_members/content_security.py) allows
+``script-src 'self'`` with no ``'unsafe-inline'``, and inline styles only in
+``<style>`` tags carrying the answer's nonce -- which the new front end's
+components use and no template does. An inline <script> block, a style=""
+attribute or an onclick="" is silently dropped by the browser in production
+while still "working" in a Flask render test. This guard keeps the two apart.
 """
 import re
 from pathlib import Path
@@ -23,8 +25,10 @@ INLINE_HANDLER = re.compile(r"(?<![\w-])on[a-z]+\s*=\s*[\"']", re.I)
 
 
 def _csp():
-    """The pages' policy: nginx maps it per content type (PDFs go without), so read it from the map."""
-    return re.search(r'"(default-src [^"]+)"', NGINX_CONF.read_text()).group(1)
+    """The pages' policy, as the portal sends it (with a stand-in nonce)."""
+    from aeronautics_members.content_security import policy
+
+    return policy("TESTNONCE")
 
 
 def test_no_inline_scripts_in_templates():
@@ -83,13 +87,16 @@ def test_no_inline_style_attributes_in_templates():
 
     assert not offenders, (
         "Inline style attributes are blocked by the production CSP; use a class "
-        "in static/style.css instead:\n" + "\n".join(offenders)
+        "in the page's stylesheet instead:\n" + "\n".join(offenders)
     )
 
 
 def test_csp_does_not_permit_inline_styles():
     csp = _csp()
-    assert "'unsafe-inline'" not in csp.split("style-src")[1].split(";")[0]
+    style_src = csp.split("style-src")[1].split(";")[0]
+    assert "'unsafe-inline'" not in style_src
+    # Only <style> tags with the answer's nonce: style="" attributes stay blocked.
+    assert style_src.split() == ["'self'", "'nonce-TESTNONCE'"]
 
 
 def test_hsts_is_sent():
@@ -101,9 +108,6 @@ def test_hsts_is_sent():
     # preload is effectively irreversible; it should be a deliberate decision,
     # not something that arrives with a default config.
     assert "preload" not in header
-
-
-VENDOR = REPO / "aeronautics_members" / "static" / "vendor"
 
 
 def test_no_external_asset_origins_in_templates():
@@ -136,23 +140,6 @@ def test_no_external_asset_origins_in_templates():
     )
 
 
-def test_vendored_assets_are_present():
-    # The templates reference these by path, so a missing file is an unstyled
-    # site rather than a test failure anywhere else.
-    for name in ("bootstrap.min.css", "bootstrap.bundle.min.js"):
-        asset = VENDOR / name
-        assert asset.exists(), f"{name} is missing from static/vendor"
-        assert asset.stat().st_size > 10_000, f"{name} looks truncated"
-
-
-def test_vendored_assets_request_no_source_maps():
-    """A source map reference is a request the CSP will refuse."""
-    for asset in VENDOR.iterdir():
-        assert "sourceMappingURL" not in asset.read_text(errors="replace"), (
-            f"{asset.name} points at a source map that is not vendored"
-        )
-
-
 # Third-party origins the policy allows on purpose, each with the reason. Any
 # origin not listed here fails the test below, so a CDN cannot creep back in
 # without someone deciding to add it.
@@ -181,7 +168,7 @@ def test_csp_allows_no_unrecorded_external_origin():
 
 
 def test_stylesheets_stay_same_origin():
-    # Nothing needs a third-party stylesheet now that Bootstrap is vendored.
+    # Nothing needs a third-party stylesheet: the front end's are built into static/app.
     csp = _csp()
     assert "http" not in csp.split("style-src")[1].split(";")[0]
     # Defences that cost nothing once everything is same-origin.

@@ -34,7 +34,13 @@ from aeronautics_members.services.members import normalize_optional_member_value
 
 NEEDS_A_YEAR_GROUP = [MemberCategory.STUDENT]
 OFFERED_A_YEAR_GROUP = [MemberCategory.STUDENT, MemberCategory.ALUMNI]
-NOT_ASKED = [MemberCategory.STAFF, MemberCategory.PARTNER, MemberCategory.HONORARY]
+# Of those who may join: an honorary member is appointed, never signs up.
+NOT_ASKED = [MemberCategory.STAFF, MemberCategory.PARTNER]
+
+
+def _institute(category):
+    """The university or institute address each kind gives: staff theirs, the others a student's."""
+    return "jonas.huber@fh-joanneum.at" if category == MemberCategory.STAFF else "jonas.huber@edu.fh-joanneum.at"
 
 
 def _signup_data(**overrides):
@@ -52,6 +58,8 @@ def _signup_data(**overrides):
         "email_work": "jonas.huber@edu.fh-joanneum.at",
         "member_category": MemberCategory.STUDENT,
         "year_group": "LAV25",
+        # Asked of partners only; dropped for everybody else.
+        "company_name": "Example Aero GmbH",
         "password": "a-long-enough-password",
         "confirm_password": "a-long-enough-password",
         "terms_accepted": "y",
@@ -160,7 +168,7 @@ class TestTheForm:
     @pytest.mark.parametrize("category", NOT_ASKED)
     def test_a_category_that_is_not_asked_needs_nothing(self, app, category):
         form = MembershipForm(
-            formdata=_signup_data(member_category=category, year_group=""),
+            formdata=_signup_data(member_category=category, year_group="", email_work=_institute(category)),
             meta={"csrf": False},
         )
 
@@ -175,12 +183,34 @@ class TestTheForm:
         dead end, so the category wins and the stale text is discarded.
         """
         form = MembershipForm(
-            formdata=_signup_data(member_category=category, year_group="LAV25"),
+            formdata=_signup_data(member_category=category, year_group="LAV25", email_work=_institute(category)),
             meta={"csrf": False},
         )
 
         assert form.validate() is True, form.errors
         assert form.year_group.data is None
+
+    def test_nobody_signs_up_as_an_honorary_member(self, app):
+        form = MembershipForm(formdata=_signup_data(member_category=MemberCategory.HONORARY, year_group=""),
+                              meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "member_category" in form.errors
+
+    def test_a_partner_names_their_company(self, app):
+        form = MembershipForm(formdata=_signup_data(member_category=MemberCategory.PARTNER, year_group="",
+                                                    company_name=""), meta={"csrf": False})
+
+        assert form.validate() is False
+        assert "company_name" in form.errors
+
+    @pytest.mark.parametrize("category", [MemberCategory.STUDENT, MemberCategory.ALUMNI, MemberCategory.STAFF])
+    def test_a_leftover_company_is_dropped(self, app, category):
+        form = MembershipForm(formdata=_signup_data(member_category=category, email_work=_institute(category)),
+                              meta={"csrf": False})
+
+        assert form.validate() is True, form.errors
+        assert form.company_name.data is None
 
     def test_whitespace_does_not_count_as_a_year_group(self, app):
         form = MembershipForm(formdata=_signup_data(year_group="   "), meta={"csrf": False})
@@ -346,9 +376,9 @@ class TestWhatTheScreensShow:
             year_group=None,
         )
 
-        body = admin_client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        membership = admin_client.get(f"/api/v1/admin/accounts/{member.user_id}").get_json()["membership"]
 
-        assert "Company or partner" in body
+        assert membership["category_label"] == "Company or partner"
 
     def test_an_alumnus_shows_both_facts(self, app, admin_client):
         member = make_member(
@@ -357,25 +387,22 @@ class TestWhatTheScreensShow:
             year_group="LAV11",
         )
 
-        body = admin_client.get(f"/admin/accounts/{member.user_id}").get_data(as_text=True)
+        membership = admin_client.get(f"/api/v1/admin/accounts/{member.user_id}").get_json()["membership"]
 
-        assert "Alumni" in body
-        assert "LAV11" in body
+        assert (membership["category_label"], membership["year_group"]) == ("Alumni", "LAV11")
 
-    def test_the_signup_page_offers_every_category(self, app, client):
-        body = client.get("/join").get_data(as_text=True)
+    def test_the_signup_offers_every_category(self, app, client):
+        categories = client.get("/api/v1/forms/options").get_json()["member_categories"]
 
-        assert 'name="member_category"' in body
-        for category in CATEGORY_ORDER:
-            assert f'value="{category}"' in body
+        assert [category["value"] for category in categories] == list(CATEGORY_ORDER)
 
-    def test_the_page_carries_the_rules_for_the_browser(self, app, client):
-        """So the show/hide rule is not written down a second time in JavaScript."""
-        body = client.get("/join").get_data(as_text=True)
+    def test_the_rules_come_with_them_for_the_browser(self, app, client):
+        """So the show/hide rule is not written down a second time in the front end."""
+        categories = client.get("/api/v1/forms/options").get_json()["member_categories"]
+        year_group = {category["value"]: category["year_group"] for category in categories}
 
-        assert 'data-year-group-categories="student alumni"' in body
-        assert 'data-year-group-required="student"' in body
-        assert "member-kind-toggle.js" in body
+        assert {value for value, rule in year_group.items() if rule != "hidden"} == {"student", "alumni"}
+        assert {value for value, rule in year_group.items() if rule == "required"} == {"student"}
 
 
 class TestChangingCategory:

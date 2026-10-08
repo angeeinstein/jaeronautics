@@ -1,0 +1,33 @@
+.list {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) 1fr;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.list[data-compact] .row {
+  grid-template-columns: minmax(5rem, 7.5rem) 1fr;
+}
+
+.label {
+  color: var(--ja-muted);
+}
+
+.value {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 36em) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+}

@@ -164,41 +164,69 @@ def test_all_matching_says_so(app, client, stripe_account):
     stripe_account["elsewhere"] = {}
     _login(client, _staff("treasurer@example.org", "treasurer").id)
 
-    body = client.get(f"/admin/money?check=1&since={YEAR}-01-01").get_data(as_text=True)
+    body = client.get(f"/api/v1/admin/money/overview?since={YEAR}-01-01").get_json()
 
-    assert "matches the portal" in body and "of which the association" in body
-    assert "add up to the balance Stripe holds now" in body
+    assert body["since"] == f"{YEAR}-01-01" and body["until"] == TODAY.isoformat()
+    assert body["mismatches"] == []
+    assert body["association_own"] == body["books"]["total"]["net"] - body["teams_share"]
+    now = body["in_stripe_now"]
+    assert now["available"] + now["pending"] == body["books"]["balance_at_end"], "Stripe's books add up"
 
 
 def test_a_balance_that_does_not_add_up_is_shown(app, client, stripe_account):
     stripe_account["balance"]["pending"][0]["amount"] = 999
     _login(client, _staff("treasurer@example.org", "treasurer").id)
 
-    body = client.get("/admin/money?check=1").get_data(as_text=True)
+    body = client.get("/api/v1/admin/money/overview").get_json()
 
-    assert "From the start to" in body and "but Stripe holds" in body
+    assert body["since"] is None
+    now = body["in_stripe_now"]
+    assert now["available"] + now["pending"] != body["books"]["balance_at_end"]
 
 
-@pytest.mark.parametrize("query, expected", [
-    ("", (None, TODAY)),
-    (f"since={YEAR}-01-01&until={YEAR}-01-31", (date(YEAR, 1, 1), date(YEAR, 1, 31))),
-    ("since=2999-01-01", (None, TODAY)),          # after the end
-    ("until=2999-01-01", (None, TODAY)),          # no later than today
-    ("since=nonsense&until=", (None, TODAY)),
+def test_the_mismatches_name_their_kind(app, client, stripe_account):
+    _portal_records()
+    _login(client, _staff("treasurer@example.org", "treasurer").id)
+
+    mismatches = client.get("/api/v1/admin/money/overview").get_json()["mismatches"]
+
+    assert {(m["kind"], m["invoice"]) for m in mismatches} >= {("team", "in_t2"), ("membership", "in_m_gone")}
+
+
+def test_stripe_out_of_reach_is_said_so(app, client, monkeypatch):
+    def unreachable(**kwargs):
+        raise stripe.APIConnectionError("no network")
+
+    monkeypatch.setattr(stripe.BalanceTransaction, "list", staticmethod(unreachable))
+    monkeypatch.setattr(stripe.Invoice, "list", staticmethod(unreachable))
+    monkeypatch.setattr(money_overview.payments, "apply_runtime_stripe_config", lambda: {})
+    _login(client, _staff("treasurer@example.org", "treasurer").id)
+
+    response = client.get("/api/v1/admin/money/overview")
+
+    assert response.status_code == 502 and response.get_json()["error"]["code"] == "stripe_unavailable"
+
+
+@pytest.mark.parametrize("since, until, expected", [
+    (None, None, (None, TODAY)),
+    (date(YEAR, 1, 1), date(YEAR, 1, 31), (date(YEAR, 1, 1), date(YEAR, 1, 31))),
+    (date(2999, 1, 1), None, (None, TODAY)),          # after the end
+    (None, date(2999, 1, 1), (None, TODAY)),          # no later than today
+    (date(1999, 1, 1), None, (None, TODAY)),
 ])
-def test_the_period_asked_for(app, query, expected):
-    from aeronautics_members.blueprints.teams import _money_period
-    from urllib.parse import parse_qs
+def test_the_period_asked_for(app, since, until, expected):
+    assert money_overview.period_asked(since, until, TODAY) == expected
 
-    args = {key: values[0] for key, values in parse_qs(query, keep_blank_values=True).items()}
 
-    assert _money_period(args.get("since"), args.get("until"), TODAY) == expected
+def test_a_day_that_is_no_day_is_refused(app, client):
+    _login(client, _staff("treasurer@example.org", "treasurer").id)
+
+    assert client.get("/api/v1/admin/money/overview?since=nonsense").status_code == 400
 
 
 def test_without_asking_nothing_is_fetched(app, client, monkeypatch):
     monkeypatch.setattr(stripe.BalanceTransaction, "list", staticmethod(lambda **k: pytest.fail("asked Stripe")))
     _login(client, _staff("treasurer@example.org", "treasurer").id)
 
-    body = client.get("/admin/money").get_data(as_text=True)
-
-    assert "Check against Stripe" in body and "Since the start" in body
+    assert client.get("/admin/money").status_code == 200
+    assert client.get("/api/v1/admin/money").status_code == 200

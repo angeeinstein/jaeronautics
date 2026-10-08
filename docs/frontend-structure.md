@@ -39,8 +39,9 @@ that appears when entering the admin area.
 
 1. **At most two levels of navigation on screen**: the top bar, and either a
    sidebar *or* tabs on a detail page -- never a sidebar, tabs and a list.
-2. **The top bar says which area; the sidebar says where in it.** Areas: My
-   Account, Teams, Admin. Each sidebar belongs to one area and replaces the
+2. **The top bar says which area; the sidebar says where in it.** Areas:
+   Forum, Teams, Admin -- My Account is the user menu and the logo, the
+   admin area the gear beside it. Each sidebar belongs to one area and replaces the
    previous one rather than nesting inside it.
 3. **Every page in a sidebar area has a breadcrumb** whose first entry is the
    area (Admin › Accounts › Anna Berger). It replaces "Back" buttons.
@@ -60,12 +61,23 @@ that appears when entering the admin area.
 
 ### Top bar (every page while signed in)
 
-- Left: logo mark, "Aeronautics" and a small "Members" label (the portal is
+- Far left, where a page has a sidebar (the admin area, a team's
+  management): the **☰ button**, right above it. It folds the sidebar away
+  and back; on a phone it opens it as a drawer.
+- Then the logo mark, "Aeronautics" and a small "Members" label (the portal is
   not the association's website).
-- Links: **My Account**, **Teams** (while teams are switched on), **Admin**
-  (only with access to the admin area). The current area is underlined in the
-  accent colour.
-- Right: **the user menu** -- a round avatar with initials and the name. Opens a
+- Links: **Forum** (for a member: `/forum`, which signs them into the forum or
+  says what is still missing) and **Teams** (while teams are switched on).
+  The current area is underlined in the accent colour. My Account has no link
+  here since October 2026: it is the user menu, and the logo.
+- Right, for whoever may administer something: a **gear** (*Admin*) into the
+  admin area, beside the user menu -- as on many sites, the back office behind
+  an icon by the person, so the pages everybody uses stay as they are. It is
+  lit while one is in the admin area. (Before: a link among the areas, whose
+  menu then opened at the far left, which felt wrong; then a menu button that
+  slid the admin menu in over other pages, which did too.)
+- Right: **the user menu** -- the approved forum picture (or the initials) and
+  the name. The one place to change the password from. Opens a
   small menu: name and email, *My account*, *Change password*, *Download my
   data*, *Log out*. Closes on a click elsewhere or Escape. "Log out" is no
   longer a link of its own in the bar.
@@ -76,18 +88,25 @@ that appears when entering the admin area.
 
 | Area | Sidebar | Content width |
 |---|---|---|
-| My Account | none | narrow, centred (about 860 px) |
-| Teams -- overview, a team's page, About, Money | none | narrow, centred |
-| Teams -- a team's management | the team's sidebar | full |
+| My Account | its own side menu | narrow, centred (about 860 px) |
+| Teams -- overview, a team's page, About | none | narrow, centred |
+| Teams -- a team's management, its Money | the team's sidebar | full |
 | Admin | the admin sidebar | full |
 
-The member side needs no sidebar: it is a handful of pages, reached from the
-top bar and from links on the pages themselves. Sidebars are for the places
-where people *work*: running a team, running the association.
+Sidebars are for the places where people *work* -- running a team, running
+the association -- and for My Account, which grows (a credit balance is
+planned) and so gets one place to add a page.
+
+### The footer
+
+Under every page, as the column above it is wide: Impressum, Privacy,
+Statutes, Legal texts, Contact and Website, then the copyright -- small and
+quiet, the links wrapping on a phone. The first three lead to the portal's
+own legal texts unless an address elsewhere is configured.
 
 ## 4. The admin area
 
-Entered with **Admin** in the top bar; opens on the Dashboard.
+Entered with the **gear** at the right of the top bar; opens on the Dashboard.
 
 **Sidebar**, top to bottom:
 
@@ -98,7 +117,9 @@ Entered with **Admin** in the top bar; opens on the Dashboard.
 - *System* -- **Logs**, **Settings** ▸
   - Settings folds open in place (chevron) to its parts: **General**,
     **Notifications**, **Membership fee**, **Forum**, **Mail accounts**,
-    **Test tools**, **Maintenance**. Clicking *Settings* opens it on General.
+    **Test email**, **System health**, **Updates**, **Backup and restore**.
+    Clicking *Settings* opens it on General.
+    (The forum's connection test is on the Forum page, beside what it tests.)
     While one is on a settings page it stays open.
 
 Group labels are small, upper-case and muted; the current item is highlighted
@@ -130,45 +151,133 @@ Treasurer, for example, sees only what touches the money they transfer
   team's Money page.
 - **Logs** -- table (when, who, what) with filters.
 - **Settings pages** -- each one card of fields with *Save* at the bottom right.
-  Maintenance keeps its own parts (updates, backups, background jobs) as
-  separate cards on that one page.
+  What used to be one Maintenance tab is three pages: System health (the
+  report and what to do about it), Updates (version, install, roll back,
+  the last run) and Backup and restore (with the background jobs).
 
 ## 5. The teams area
 
-**Overview** (Teams): page title; **My teams** as rows (mark, name, status pill,
-paid until; *Open* as the main button, *Manage* and *Money* when one has those
-rights, *Leave* set apart as a quiet button at the far right); **Other teams**
-as cards (mark, name, short description, fee, *About & apply*).
+**Overview** (Teams): **My teams**, then **Other teams**, each team a **tile**
+-- the whole tile is the way in, no buttons on it (since October 2026). A tile:
+the team's cover picture (or the brand's backdrop), its logo shown whole in a
+square box (logos come round, shield-shaped or square, never cut), one's place
+in it in the corner (*Lead*, *Member*, *Applied*), its name and line, how many
+are in it, and the one thing that matters now -- applications to answer, a fee
+due, *Applications open* / *Open to join* and the fee for the others. What to
+do about it is on the team's own pages. A member's or lead's tile opens the
+team's overview, anybody else's its About page.
 
-**A team's page** (Teams › Rocket Team) for its members: title and short
-description, *About the team* and *Manage* at the top right; *Your membership*
-(paid until, Leave); *Members*.
-
-**About** (Teams › Glider Team) for everybody: the longer text and picture,
-then *Applying* -- fee, the question, the rules with the tick box, *Apply*.
-
-**Management** -- entering it swaps in **the team's sidebar**:
+**A team's own area** -- every page of one team in one frame (TeamLayout),
+with **the team's side menu** for whoever is in it or runs some part of it:
 
 - **‹ All teams**
 - the team's mark and name
+- *Team* -- **Overview**, **About the team**
 - *People* -- **Applications** (count), **Members**, **Former members**
+- *Money* -- **Money**
 - *Settings* -- **Team page**, **Applying**, **Access list** (only when switched
   on), **Roles**
-- *Elsewhere* -- **Team page**, **Money**
 
-Breadcrumb: Teams › Rocket Team › Members. Each settings section is one card
-with *Save* at the bottom right and saves only its own fields (as built).
+A plain member sees only *Team*; the team's treasurer *Team* and *Money*; a
+lead everything. Somebody not in the team gets its pages without the menu --
+its About page, and joining it; the association's treasurer, who has no part
+in the team, opens a team's Money page without it too. The ☰ at the left of
+the top bar folds the menu away, as in the admin area.
+
+**Overview** (Teams › Rocket Team): the team's cover, lower; *Needs your
+attention* for whoever runs it (applications to answer, each a way straight
+there); *Your membership* (paid until, paying for the next period, *Leave the
+team…* set apart, quietly); *Members*, each by their picture, asked again every
+minute so somebody who joins appears.
+
+**About** (Teams › Glider Team) for everybody, the team presenting itself: a
+cover (its picture, or the brand's backdrop) with logo, name, tagline, facts
+(members, applications open, fee) and *Apply* for whoever may; below, the
+formatted story and the photo grid (one large when they fill rows of three;
+each opens in a viewer, arrow keys for the next), with *Applying* -- the
+question, the rules with the tick box, *Apply* -- beside them on a wide screen,
+below them on a phone. A member reads it in the team's frame, without the
+form. The leads' *Team page* settings: the text with *Write* / *Preview*, cover
+and logo, the photos (add several at once, caption, order, remove).
+
+Breadcrumb: Teams › Rocket Team (its overview) › Members. Each settings section
+is one card with *Save* at the bottom right and saves only its own fields (as
+built).
 
 ## 6. My Account
 
-One narrow column of cards, two side by side on wide screens:
-**Membership** (status pill; paid until, next renewal and amount, paid by;
-*Manage billing*), **Forum** (forum name and picture state; *Open forum*),
-**Profile** (name, university email, cohort; *Edit*), **Teams** (one's teams;
-*All teams*). The flows that exist today -- verifying emails, paying,
-uploading the picture, profile change requests, deleting the account -- stay
-on this page as cards that appear when they apply, at the top when something
-is to be done.
+Its own **side menu** (since October 2026), under *My account*: **Overview**,
+**Profile**, **Membership and billing**, **Forum and picture**, **Privacy and
+data**. An account without a membership has only *Overview* and *Privacy and
+data*. A new part of the account is a new item there. The ☰ folds it away
+on a wide screen and opens it as a drawer on a phone, as elsewhere. *Change
+password* and the forum's own address (/forum) are in the same frame.
+
+**Overview** (My Account): who this is -- the picture (or initials), the name,
+the kind of membership, year group and login address -- then what is to be
+done first (addresses waiting to be confirmed, with the link sent again right
+there), then a **tile** for each part, the whole tile the way to its page:
+
+- **Membership** -- its state, the day it is paid until, a bar of how much of
+  the paid year has run, since when and when it renews; while a payment just
+  made is confirmed, it says so and the page asks again every few seconds.
+- **Forum and picture** -- its state (*Ready*, *Picture needed*, *In review*,
+  …), the picture, the forum username and one line on where things stand.
+- **Teams** -- across the row: one's teams with one's place in each, or what
+  teams are; it opens the teams overview.
+
+An account without a membership shows its login address and *Become a
+member* instead of the tiles.
+
+**Profile** -- **Contact details** read first (both email addresses, each with
+whether it is confirmed and its link sent again, the phones, the address);
+*Edit* turns the card into the form, saved at once, *Cancel* back. **Name and
+membership type** likewise read first; *Request a change* opens the request an
+admin decides, and while one waits it is shown instead.
+
+**Membership and billing** -- the membership card: dates, what to do about it
+(*Manage billing*, *Resume payment*, *Rejoin*). **Forum and picture** -- the
+forum card with the picture upload. **Privacy and data** -- the download and
+deleting the account by emailed link, with cancelling offered instead while a
+paid membership runs.
+
+### Joining
+
+**Become a member** (/join) is a few short steps (since October 2026), the
+steps on top with a line that fills, each done one a way back to it:
+
+1. **Who you are** -- a card for each kind of member who may join (Student,
+   Alumni, Staff or lecturer, Company or partner; an honorary member is
+   appointed, never signs up). Choosing one moves on by itself.
+2. **About you** -- salutation, title, name, then what that kind is asked,
+   under its own heading. A student's and an alumnus's **year group** is
+   picked, not typed: the programme (Aviation · Bachelor, LAV; Aviation ·
+   Master, MAV; or another one by its three-letter code), then the year
+   started from a row of recent years (or *Earlier*; an alumnus may say *I
+   don't remember*), shown as it will be stored: LAV25. Any programme of the
+   university may join; the scheme -- three letters, two digits -- is checked.
+   A student gives their university address, which must be a student's
+   (@edu.fh-joanneum.at); an alumnus theirs only if it still works; staff
+   their institute address (@fh-joanneum.at -- a student's never counts);
+   a company member the company. The forum name it makes appears as it is
+   typed.
+3. **Contact** -- the sign-in address, by kind: a student's and an alumnus's
+   is private (a university one stops working when they leave); staff choose
+   their institute address or a private one; a company member signs in with
+   the company address. Then phone and address. For somebody signed in, their
+   login's address, read only. When the institute address is the sign-in
+   address, one confirmation confirms both.
+4. **Password** -- signup only, with how strong it is.
+5. **Check and join** -- everything once more, each line back to its step;
+   what it costs today and every year, read from Stripe's price (or nothing
+   today in the free months); the texts to accept, each opening over the form.
+   How to pay is chosen on Stripe's page.
+
+*After joining* (pay, confirm the address or both, add a picture for the
+forum) stands beside the steps on a wide screen and in the last step on a
+narrow one. Each step is checked before the next; a field the server refuses
+takes the form back to its step. Steps slide in, fields that become relevant
+fade in -- all of it still for whoever asks their device for less motion.
 
 ## 7. Page patterns
 
@@ -212,9 +321,9 @@ is to be done.
 
 - The top bar keeps its links (the logo shrinks to the mark, the user menu to
   the avatar); it scrolls sideways if it ever has to.
-- A sidebar becomes a drawer: a **☰** button at the left of the top bar opens
-  it over the page with a dimmed background; choosing an item or tapping the
-  background closes it.
+- A sidebar becomes a drawer: the **☰** button at the left of the top bar
+  opens it over the page with a dimmed background; choosing an item or tapping
+  the background closes it.
 - Two-column card grids become one column; label/value lists stack.
 
 ## 10. Accessibility
@@ -231,7 +340,7 @@ headed. Motion is minimal and off when the device asks for reduced motion.
 | Top menu: My Account, Teams, Admin, Logout | Top bar: My Account, Teams, Admin; Logout moves into the user menu |
 | Admin tab row (Dashboard … Settings) | Admin sidebar |
 | Admin → Settings with its vertical list | Admin sidebar → Settings, folded open |
-| Settings → Backup & Restore, updates, background jobs | Settings → Maintenance |
+| Settings → Maintenance: health, updates, backups, background jobs | Settings → System health, Updates, Backup and restore |
 | Admin → Accounts → account page (long single page) | Account page with tabs: Profile, Membership, Forum, Teams, Roles, Danger zone |
 | Admin → Teams → team form | Admin › Teams › team (cards) + *Team page and settings* |
 | Admin → Money | Admin sidebar → Money |
@@ -240,7 +349,7 @@ headed. Motion is minimal and off when the device asks for reduced motion.
 | A team's Money page | Teams area (from the team's sidebar or the overview) |
 | Change password (page) | User menu → Change password |
 | Download my data (button on My Account) | User menu → Download my data (and stays on My Account) |
-| `/forum` (forum status and picture upload) | My Account → Forum card; *Open forum* goes to the forum |
+| `/forum` (forum status and picture upload) | My Account › Forum and picture; *Open forum* goes to the forum |
 
 ## 12. For the new front end
 
@@ -335,7 +444,10 @@ The mockup's CSS is at the top of `docs/design/navigation-mockup.html`.
   different things: the admins' part (name, joining, fee, forum group, access
   list switch, leads, archiving) and the leads' part (people, team page,
   applying, access list, roles). They link to each other.
-- **What the association's Treasurer sees** -- *open, for later.* Direction:
-  everything that touches the money they transfer to the teams (Money, each
-  team's money and bank details, and whatever leads to those amounts), and
-  nothing else of the admin area.
+- **What the association's Treasurer sees** -- *decided (step 4.5).* Everything
+  that touches the money they transfer to the teams, and nothing else of the admin
+  area: Money (what each team is owed, the check against Stripe), each team's money
+  with its payments, transfers and bank details, and a dashboard that shows what is
+  open to transfer -- not the membership figures, which need the accounts
+  permission. Who paid is shown, as it is what leads to the amounts; no other member
+  data.
