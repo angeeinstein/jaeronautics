@@ -1808,18 +1808,26 @@
         "title": "CandidateOut",
         "type": "object"
       },
-      "CandidateQuery": {
+      "CandidatesOut": {
         "additionalProperties": false,
         "properties": {
-          "q": {
-            "default": "",
-            "description": "Part of a name or address.",
-            "maxLength": 200,
-            "title": "Q",
-            "type": "string"
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "likely": {
+            "title": "Likely",
+            "type": "boolean"
           }
         },
-        "title": "CandidateQuery",
+        "required": [
+          "items",
+          "likely"
+        ],
+        "title": "CandidatesOut",
         "type": "object"
       },
       "CandidatesQuery": {
@@ -5053,6 +5061,37 @@
           "typical_minutes"
         ],
         "title": "LatestCheckOut",
+        "type": "object"
+      },
+      "LeadCandidateQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "q": {
+            "default": "",
+            "description": "Part of a name or address.",
+            "maxLength": 200,
+            "title": "Q",
+            "type": "string"
+          }
+        },
+        "title": "LeadCandidateQuery",
+        "type": "object"
+      },
+      "LeadCandidatesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "LeadCandidatesOut",
         "type": "object"
       },
       "LeadIn": {
@@ -8637,6 +8676,18 @@
             "title": "Name",
             "type": "string"
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Picture Url"
+          },
           "user_id": {
             "anyOf": [
               {
@@ -10722,6 +10773,18 @@
               }
             ]
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Picture Url"
+          },
           "user_id": {
             "title": "User Id",
             "type": "integer"
@@ -11769,45 +11832,6 @@
           "at"
         ],
         "title": "WaitingCountOut",
-        "type": "object"
-      },
-      "aeronautics_members__api__admin_account__CandidatesOut": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/Candidate"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "likely": {
-            "title": "Likely",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "items",
-          "likely"
-        ],
-        "title": "CandidatesOut",
-        "type": "object"
-      },
-      "aeronautics_members__api__team_manage__CandidatesOut": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/CandidateOut"
-            },
-            "title": "Items",
-            "type": "array"
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "title": "CandidatesOut",
         "type": "object"
       }
     }
@@ -13450,7 +13474,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/aeronautics_members__api__admin_account__CandidatesOut"
+                  "$ref": "#/components/schemas/CandidatesOut"
                 }
               }
             },
@@ -19194,7 +19218,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/aeronautics_members__api__team_manage__CandidatesOut"
+                  "$ref": "#/components/schemas/LeadCandidatesOut"
                 }
               }
             },

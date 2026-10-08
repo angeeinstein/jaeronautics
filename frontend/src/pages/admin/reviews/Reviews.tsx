@@ -10,7 +10,7 @@
 import { Group, Pagination, Stack, Table, Text, UnstyledButton } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 
 import { AppLink } from '../../../app/AppLink';
@@ -203,10 +203,15 @@ export function Reviews() {
   const { hash } = useLocation();
   const canOpenAccounts = can(me.data, 'accounts.view');
 
-  // A link to a part of the page (from the dashboard) lands on it once it is there.
+  // A link to a part of the page (from the dashboard) lands on it once it is
+  // there -- once: the list refreshes itself, and must not pull the page back.
+  const landed = useRef<string | null>(null);
+  const loaded = reviews.data !== undefined;
   useEffect(() => {
-    if (reviews.data && hash) document.getElementById(hash.slice(1))?.scrollIntoView();
-  }, [reviews.data, hash]);
+    if (!loaded || !hash || landed.current === hash) return;
+    landed.current = hash;
+    document.getElementById(hash.slice(1))?.scrollIntoView();
+  }, [loaded, hash]);
 
   return (
     <>

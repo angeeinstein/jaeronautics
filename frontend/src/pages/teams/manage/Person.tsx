@@ -5,7 +5,7 @@
  * leads' notes. Data: GET /api/v1/teams/<slug>/manage/people/<user> and the
  * decisions under .../memberships/<id>/.
  */
-import { Button, Group, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Avatar, Button, Group, SimpleGrid, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router';
@@ -259,14 +259,19 @@ export function Person() {
       <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg">
         <Stack gap="lg">
           <Panel title="Details">
-            <Details
-              items={[
-                ['University email', data.details.university_email],
-                ['Private email', data.details.private_email],
-                ['Phone', data.details.phone],
-                ['Cohort', data.details.cohort],
-              ]}
-            />
+            <Group gap="md" align="flex-start" wrap="nowrap">
+              <Avatar src={data.picture_url} alt="" radius={0} size={72} aria-hidden>
+                {data.name.charAt(0)}
+              </Avatar>
+              <Details
+                items={[
+                  ['University email', data.details.university_email],
+                  ['Private email', data.details.private_email],
+                  ['Phone', data.details.phone],
+                  ['Cohort', data.details.cohort],
+                ]}
+              />
+            </Group>
           </Panel>
           <Now person={data} personKey={personKey} />
           <Panel title="History">

@@ -2635,14 +2635,12 @@ export interface components {
             /** User Id */
             user_id: number;
         };
-        /** CandidateQuery */
-        CandidateQuery: {
-            /**
-             * Q
-             * @description Part of a name or address.
-             * @default
-             */
-            q?: string;
+        /** CandidatesOut */
+        CandidatesOut: {
+            /** Items */
+            items: components["schemas"]["Candidate"][];
+            /** Likely */
+            likely: boolean;
         };
         /** CandidatesQuery */
         CandidatesQuery: {
@@ -3693,6 +3691,20 @@ export interface components {
             typical_minutes: number | null;
             /** Url */
             url: string | null;
+        };
+        /** LeadCandidateQuery */
+        LeadCandidateQuery: {
+            /**
+             * Q
+             * @description Part of a name or address.
+             * @default
+             */
+            q?: string;
+        };
+        /** LeadCandidatesOut */
+        LeadCandidatesOut: {
+            /** Items */
+            items: components["schemas"]["CandidateOut"][];
         };
         /** LeadIn */
         LeadIn: {
@@ -4845,6 +4857,11 @@ export interface components {
             email: string | null;
             /** Name */
             name: string;
+            /**
+             * Picture Url
+             * @default null
+             */
+            picture_url?: string | null;
             /** User Id */
             user_id: number | null;
         };
@@ -5464,6 +5481,11 @@ export interface components {
             /** Notes */
             notes: components["schemas"]["TeamNoteOut"][];
             now: components["schemas"]["NowOut"] | null;
+            /**
+             * Picture Url
+             * @default null
+             */
+            picture_url?: string | null;
             /** User Id */
             user_id: number;
         };
@@ -5806,18 +5828,6 @@ export interface components {
             count: number;
             /** Summary */
             summary: string | null;
-        };
-        /** CandidatesOut */
-        aeronautics_members__api__admin_account__CandidatesOut: {
-            /** Items */
-            items: components["schemas"]["Candidate"][];
-            /** Likely */
-            likely: boolean;
-        };
-        /** CandidatesOut */
-        aeronautics_members__api__team_manage__CandidatesOut: {
-            /** Items */
-            items: components["schemas"]["CandidateOut"][];
         };
     };
     responses: never;
@@ -7042,7 +7052,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__admin_account__CandidatesOut"];
+                    "application/json": components["schemas"]["CandidatesOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */
@@ -11534,7 +11544,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["aeronautics_members__api__team_manage__CandidatesOut"];
+                    "application/json": components["schemas"]["LeadCandidatesOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

@@ -19,6 +19,7 @@ from ..db_models import TeamMembership, User, db
 from ..permissions import Permission
 from ..services import NotFoundError, PermissionError_, ServiceError, team_payments
 from ..services import teams as teams_service
+from ..services.pictures import picture_url
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
 from .teams import (
@@ -253,6 +254,8 @@ class TeamNoteOut(Model):
 class TeamPersonOut(Model):
     user_id: int
     name: str
+    #: Their picture (services/pictures.py), or None.
+    picture_url: str | None = None
     details: DetailsOut
     now: NowOut | None
     history: list[TeamHistoryOut]
@@ -279,7 +282,7 @@ def _person_out(team, user_id):
     current = next((membership for membership in history if membership.status in teams_service.ONGOING), None)
     details = teams_service.person_details(person)
     return TeamPersonOut(
-        user_id=person.id, name=details["name"],
+        user_id=person.id, name=details["name"], picture_url=picture_url(person),
         details=DetailsOut(university_email=details["university_email"], private_email=details["private_email"],
                            phone=details["phone"], cohort=details["cohort"]),
         now=NowOut(membership_id=current.id, status=current.status,
@@ -719,20 +722,21 @@ def team_roles(slug):
     return _roles_out(_managed(slug))
 
 
-class CandidateQuery(Model):
+class LeadCandidateQuery(Model):
     q: str = Field("", max_length=200, description="Part of a name or address.")
 
 
-class CandidatesOut(Model):
+class LeadCandidatesOut(Model):
     items: list[CandidateOut]
 
 
-@endpoint("GET", "/teams/<slug>/manage/lead-candidates", response=CandidatesOut, query=CandidateQuery, tag=TAG)
+@endpoint("GET", "/teams/<slug>/manage/lead-candidates", response=LeadCandidatesOut, query=LeadCandidateQuery,
+          tag=TAG)
 def team_lead_candidates(slug, query):
     """Whom this person may make a lead: the team's members -- and, for a site
     admin who searches, the association's members whose name or address matches."""
     team = _managed(slug, P.APPOINT_LEADS)
-    return CandidatesOut(items=[_candidate(team, user, name)
+    return LeadCandidatesOut(items=[_candidate(team, user, name)
                                 for user, name in teams_service.lead_candidates(current_user, team, query.q)])
 
 

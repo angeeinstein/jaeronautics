@@ -15,6 +15,7 @@ from pydantic import Field
 
 from ..permissions import Permission
 from ..services import PermissionError_, reviews
+from ..services.pictures import picture_url
 from ._core import Model, UtcDateTime, endpoint
 
 TAG = "Admin"
@@ -31,6 +32,8 @@ class ReviewPersonOut(Model):
     user_id: int | None
     name: str
     email: str | None
+    #: Their picture as it is now (services/pictures.py) -- beside a new one, to compare.
+    picture_url: str | None = None
 
 
 class Change(Model):
@@ -97,9 +100,9 @@ class ReviewsOut(Model):
 def _person(member, user):
     if member is not None:
         return ReviewPersonOut(user_id=member.user_id, name=f"{member.first_name} {member.last_name}".strip(),
-                      email=member.email_private)
+                               email=member.email_private, picture_url=picture_url(member.user))
     return ReviewPersonOut(user_id=user.id if user else None, name=user.email if user else "Unknown",
-                  email=user.email if user else None)
+                           email=user.email if user else None, picture_url=picture_url(user) if user else None)
 
 
 def _queue_item(item):
