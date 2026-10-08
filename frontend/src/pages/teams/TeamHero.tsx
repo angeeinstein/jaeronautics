@@ -11,6 +11,7 @@ import { type ReactNode, useId } from 'react';
 import { Pill } from '../../components/Pill';
 import classes from './About.module.css';
 import { StatusPill, type Team } from './shared';
+import { GlowLogo } from '../../components/GlowLogo';
 
 /** Whether somebody could get in from here: the form is there and nothing stands in the way. */
 export function canJoin(team: Team) {
@@ -45,7 +46,7 @@ export function TeamHero({
         <Group gap="lg" wrap="nowrap" align="flex-end">
           {team.logo_url ? (
             <div className={classes.logoTile}>
-              <img src={team.logo_url} alt="" />
+              <GlowLogo url={team.logo_url} />
             </div>
           ) : null}
           <Stack gap={6}>

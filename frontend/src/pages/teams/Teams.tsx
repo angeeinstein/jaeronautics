@@ -12,6 +12,7 @@ import { useId } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { api, call, type Schemas } from '../../api/client';
+import { GlowLogo } from '../../components/GlowLogo';
 import { AppLink } from '../../app/AppLink';
 import { PageHeader } from '../../components/PageHeader';
 import { Pill } from '../../components/Pill';
@@ -84,7 +85,7 @@ function Tile({ card, mine }: { card: Card; mine: boolean }) {
             {card.role ? <Pill tone="info">{card.role}</Pill> : <StatusPill membership={card.membership} />}
           </span>
           <span className={classes.logo} data-image={card.logo_url ? true : undefined} aria-hidden>
-            {card.logo_url ? <img src={card.logo_url} alt="" /> : initials(card.name)}
+            {card.logo_url ? <GlowLogo url={card.logo_url} /> : initials(card.name)}
           </span>
         </span>
         <span className={classes.body}>
