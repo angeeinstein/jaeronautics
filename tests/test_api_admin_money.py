@@ -147,6 +147,6 @@ def test_the_short_name_overview_is_taken_by_the_api(client):
 
     signed_in(client, _staff("boss@example.org", "admin"))
 
-    response = send(client, "POST", "/api/v1/admin/teams", {"name": "Overview", "admission_mode": "open"})
+    response = send(client, "POST", "/api/v1/admin/teams", {"name": "Overview"})
 
     assert response.status_code == 400 and response.get_json()["error"]["code"] == "team_slug_reserved"
