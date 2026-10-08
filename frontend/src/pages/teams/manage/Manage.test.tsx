@@ -184,7 +184,7 @@ describe('roles', () => {
       '/teams/:slug/manage/roles',
     );
 
-    await userEvent.click(await screen.findByRole('combobox', { name: 'Appoint a member' }));
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Appoint a treasurer' }));
     await userEvent.click(await screen.findByRole('option', { name: 'Anna Berger' }));
     await userEvent.click(screen.getByRole('button', { name: 'Appoint' }));
 

@@ -1050,7 +1050,7 @@ function RolesBody({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unkno
           {roles.may_appoint && roles.candidates.length ? (
             <Group align="flex-end" gap="sm">
               <Select
-                label="Appoint a member"
+                label="Appoint a treasurer"
                 placeholder="Choose…"
                 data={roles.candidates.map((candidate) => ({
                   value: String(candidate.user_id),
