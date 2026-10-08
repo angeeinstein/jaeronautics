@@ -115,7 +115,12 @@ export function TopBar({ me, menu }: TopBarProps) {
                   {...(me.forum_ready ? { target: '_blank', rel: 'noopener' } : {})}
                 >
                   {entry.label}
-                  {me.forum_ready ? <VisuallyHidden> (opens in a new tab)</VisuallyHidden> : null}
+                  {me.forum_ready ? (
+                    <>
+                      {' '}
+                      <VisuallyHidden>(opens in a new tab)</VisuallyHidden>
+                    </>
+                  ) : null}
                 </a>
               ) : (
                 <AppLink
