@@ -532,7 +532,7 @@ describe('back from paying', () => {
     mockFetch({});
     renderPage(<Cancel />);
 
-    expect(screen.getByText(/You have not been charged/)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing was charged/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Go to My Account' })).toHaveAttribute('href', '/account');
   });
 });

@@ -187,6 +187,6 @@ test.describe('back from paying', () => {
   test('cancelled: nothing was charged', async ({ page }) => {
     await page.goto('/cancel');
 
-    await expect(page.getByText(/You have not been charged/)).toBeVisible();
+    await expect(page.getByText(/Nothing was charged/)).toBeVisible();
   });
 });
