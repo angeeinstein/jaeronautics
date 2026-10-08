@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Schemas } from '../../../api/client';
 import { Providers } from '../../../app/Providers';
-import { teamSidebar } from '../../../frame/TeamManageLayout';
 import { makeMe } from '../../../test/fixtures';
 import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { QueryClient } from '@tanstack/react-query';
@@ -45,22 +44,6 @@ function show(element: React.ReactNode, answers: Answers, route: string, path: s
   renderPage(element, { route, path });
   return fetched;
 }
-
-describe('the team sidebar', () => {
-  it('what this person may do, and nothing else', () => {
-    const groups = teamSidebar(manage).groups;
-    expect(groups.map((group) => group.items.map((item) => item.label))).toEqual([
-      ['Applications', 'Members', 'Former members'],
-      ['Team page', 'Applying', 'Roles'],
-      ['Team page'],
-    ]);
-    expect(groups[0]?.items[0]?.count).toBe(2);
-
-    const treasurerLike = teamSidebar({ ...manage, permissions: ['team.view_members', 'team.view_money'] });
-    expect(treasurerLike.groups[1]?.items.map((item) => item.label)).toEqual(['Roles']);
-    expect(treasurerLike.groups[2]?.items.map((item) => item.label)).toEqual(['Team page', 'Money']);
-  });
-});
 
 describe('applications', () => {
   it('each a way to the person', async () => {

@@ -270,18 +270,29 @@ def seed(app, app_module, subscriptions):
         charging.payment_mode, charging.stripe_price_id = "subscription", "price_example"
         charging.period_starts, charging.fee_display = "01.04, 01.10", "€10.00 every 6 months"
     teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
-    # A made-up logo for one team; the other has none, as many will not.
+    # Made-up logos in the shapes real ones come in: one round with a line of
+    # text under it, one a shield -- neither quite square, both to be shown whole.
     from io import BytesIO
 
     from PIL import ImageDraw
 
-    logo = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(logo)
-    draw.polygon([(20, 180), (100, 20), (180, 180)], fill=(0, 223, 255, 255))
-    draw.rectangle([(220, 70), (580, 130)], fill=(255, 255, 255, 255))
-    buffer = BytesIO()
-    logo.save(buffer, format="PNG")
-    teams.set_team_logo(None, rocket, buffer.getvalue())
+    def png(image):
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    round_logo = Image.new("RGBA", (400, 440), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(round_logo)
+    draw.ellipse([(30, 10), (370, 350)], fill=(16, 24, 30, 255), outline=(0, 223, 255, 255), width=14)
+    draw.polygon([(120, 270), (200, 70), (280, 270)], fill=(0, 223, 255, 255))
+    draw.rectangle([(70, 380), (330, 420)], fill=(235, 240, 245, 255))
+    teams.set_team_logo(None, rocket, png(round_logo))
+    shield = Image.new("RGBA", (360, 420), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(shield)
+    draw.polygon([(20, 20), (340, 20), (340, 220), (180, 400), (20, 220)], fill=(30, 70, 140, 255),
+                 outline=(235, 240, 245, 255))
+    draw.polygon([(110, 230), (180, 90), (250, 230)], fill=(235, 240, 245, 255))
+    teams.set_team_logo(None, glider, png(shield))
     # The team's page: a cover, a formatted text, photos and rules to accept. The
     # pictures are drawn: a sky and a rocket on it, each in other light.
     def scene(size, sky, ground, rocket_at):

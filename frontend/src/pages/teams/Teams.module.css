@@ -61,4 +61,32 @@
   align-items: center;
   gap: var(--mantine-spacing-sm);
   min-width: 0;
+  padding: var(--mantine-spacing-xs);
+  border: 1px solid transparent;
+}
+
+/* What waits for whoever runs the team: a figure, what it is, the way there. */
+.todo {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-sm) 0;
+  color: var(--ja-text);
+  text-decoration: none;
+}
+
+.todo:hover {
+  color: var(--ja-accent);
+}
+
+.todoCount {
+  min-width: 2ch;
+  font-family: var(--mantine-font-family-headings);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.todoText {
+  flex: 1;
 }

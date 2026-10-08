@@ -25,6 +25,7 @@ from ._core import Model, endpoint
 from .legal import LegalTextOut, TextQuery, legal_text
 
 TAG = "Teams"
+P = teams_service.TeamPermission
 
 Status = Literal["applied", "invited", "approved", "active", "ended", "rejected", "withdrawn"]
 Action = Literal["open", "pay_join", "pay_next", "pay_stay", "stay", "leave", "withdraw", "join", "manage", "money"]
@@ -65,11 +66,30 @@ class TeamMembershipOut(Model):
     why_not: str | None
 
 
+TeamPermissionName = Literal[
+    "team.view_members", "team.review_applications", "team.remove_members", "team.write_notes", "team.export",
+    "team.edit_settings", "team.send_access_list", "team.view_money", "team.edit_bank_details",
+    "team.appoint_treasurer",
+]
+
+#: Applications still to be decided or completed: applied, invited, or approved and paying.
+WAITING = {teams_service.APPLIED, teams_service.INVITED, teams_service.APPROVED}
+
+
 class TeamCardOut(Model):
     slug: str
     name: str
     description: str | None
     logo_url: str | None
+    #: The cover of its About page, for the tile.
+    picture_url: str | None
+    member_count: int
+    #: The role this person holds in it: "Lead", "Treasurer"; None.
+    role: str | None
+    #: For whoever sees its people: applications waiting.
+    applications_waiting: int | None
+    #: How somebody gets in now; None while it takes nobody new.
+    admission: Literal["open", "approval"] | None
     membership: TeamMembershipOut
     #: Its members see its own page; anybody else what it is about.
     opens: Literal["team", "about"]
@@ -149,6 +169,15 @@ class TeamPageOut(Model):
     #: May change this page: its text, cover and photos.
     can_edit_page: bool
     can_see_money: bool
+    #: What this person may do in this team, for its side menu.
+    permissions: list[TeamPermissionName]
+    #: The role this person holds in it: "Lead", "Treasurer"; None.
+    role: str | None
+    #: For whoever sees its people: applications waiting.
+    applications_waiting: int | None
+    access_list_enabled: bool
+    #: Said to whoever runs it: no lead in force.
+    lead_missing: bool
     #: None when the team has no rules.
     rules: RulesOut | None
     #: None when there is a membership under way.
@@ -315,13 +344,31 @@ def _membership(team, latest, just_paid, is_member):
 # --- The overview -----------------------------------------------------------------------
 
 
+def _cover_url(team):
+    return url_for("teams.team_picture", token=team.picture_token) if team.picture_token else None
+
+
+def _waiting(team):
+    if not _manages_people(team):
+        return None
+    return len(teams_service.team_memberships(team, WAITING))
+
+
+def _admission(team):
+    if not team.applications_open:
+        return None
+    return "approval" if team.admission_mode == teams_service.ADMISSION_APPROVAL else "open"
+
+
 def _card(team, latest, just_paid, is_member):
     membership = _membership(team, latest, just_paid, is_member)
     rejoin = teams_service.rejoin_by_paying_until(current_user, team)
     member = membership.status == "active" and membership.ongoing
     return TeamCardOut(
         slug=team.slug, name=team.name, description=team.description, logo_url=_logo_url(team),
-        membership=membership,
+        picture_url=_cover_url(team), member_count=teams_service.member_count(team),
+        role=teams_service.role_label(current_user, team), applications_waiting=_waiting(team),
+        admission=_admission(team), membership=membership,
         opens="team" if member or _manages_people(team) else "about",
         about_label="About & rejoin" if rejoin else (
             "About & apply" if team.admission_mode == teams_service.ADMISSION_APPROVAL else "About & join"),
@@ -386,16 +433,18 @@ def _team_out(team, just_paid=None):
     current = teams_service.ongoing_membership(current_user, team)
     active = teams_service.active_team_membership(current_user, team)
     sees = _manages_people(team) or (is_member and active is not None)
+    held = teams_service.team_permissions(current_user, team)
     return TeamPageOut(
         slug=team.slug, name=team.name, description=team.description, logo_url=_logo_url(team),
         about=team.about, about_html=teams_service.render_about(team.about),
-        picture_url=url_for("teams.team_picture", token=team.picture_token) if team.picture_token else None,
-        photos=photos_out(team), member_count=teams_service.member_count(team),
+        picture_url=_cover_url(team), photos=photos_out(team), member_count=teams_service.member_count(team),
         fee=team.fee_display if team_payments.charges(team) and team.fee_display else None,
         labels=_labels(), is_member=is_member, membership=membership, sees_team_page=sees,
-        can_manage=_manages_people(team),
-        can_edit_page=teams_service.can_in_team(current_user, team, teams_service.TeamPermission.EDIT_SETTINGS),
-        can_see_money=_sees_money(team), rules=_rules(team, current), joining=_joining(team) if current is None else None,
+        can_manage=_manages_people(team), can_edit_page=P.EDIT_SETTINGS in held, can_see_money=_sees_money(team),
+        permissions=sorted(held), role=teams_service.role_label(current_user, team),
+        applications_waiting=_waiting(team), access_list_enabled=bool(team.access_list_enabled),
+        lead_missing=_manages_people(team) and not teams_service.has_lead_in_force(team),
+        rules=_rules(team, current), joining=_joining(team) if current is None else None,
         members=[RosterPersonOut(name=row["name"], picture_url=_picture_url(row["avatar_token"]), is_lead=row["is_lead"],
                            university_email=row["university_email"])
                  for row in teams_service.roster(team)] if sees else None,

@@ -10,7 +10,7 @@ import type { RouteObject } from 'react-router';
 import { AccountLayout } from '../frame/AccountLayout';
 import { AdminLayout } from '../frame/AdminLayout';
 import { PublicLayout } from '../frame/PublicLayout';
-import { TeamManageLayout } from '../frame/TeamManageLayout';
+import { TeamLayout } from '../frame/TeamLayout';
 import { TeamsLayout } from '../frame/TeamsLayout';
 import { LoadingState } from '../components/States';
 import { NotFound } from '../pages/NotFound';
@@ -122,83 +122,72 @@ export const routes: RouteObject[] = [
         ],
       },
       {
-        path: '/teams/:slug/money',
-        element: <TeamManageLayout optional />,
+        path: '/teams',
+        element: <TeamsLayout />,
         children: [
-          {
-            index: true,
-            lazy: async () => ({ Component: (await import('../pages/teams/manage/Money')).Money }),
-          },
+          { index: true, lazy: async () => ({ Component: (await import('../pages/teams/Teams')).Teams }) },
         ],
       },
       {
-        path: '/teams/:slug/manage',
-        element: <TeamManageLayout />,
+        // One team's pages, in its frame: its side menu for whoever is in it or runs part of it.
+        path: '/teams/:slug',
+        element: <TeamLayout />,
         children: [
           {
             index: true,
+            lazy: async () => ({ Component: (await import('../pages/teams/TeamPage')).TeamPage }),
+          },
+          {
+            path: 'about',
+            lazy: async () => ({ Component: (await import('../pages/teams/About')).About }),
+          },
+          {
+            path: 'leave',
+            lazy: async () => ({ Component: (await import('../pages/teams/Leave')).Leave }),
+          },
+          // The two languages by name: /rules/pdf is the PDF, Flask's.
+          ...['rules', 'rules/de', 'rules/en', 'rules/de/:version', 'rules/en/:version'].map((path) => ({
+            path,
+            lazy: async () => ({ Component: (await import('../pages/teams/Rules')).Rules }),
+          })),
+          {
+            path: 'money',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Money')).Money }),
+          },
+          {
+            path: 'manage',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/People')).Applications }),
           },
           {
-            path: 'members',
+            path: 'manage/members',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/People')).Members }),
           },
           {
-            path: 'former',
+            path: 'manage/former',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/People')).FormerMembers }),
           },
           {
-            path: 'people/:userId',
+            path: 'manage/people/:userId',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Person')).Person }),
           },
           {
-            path: 'page',
+            path: 'manage/page',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Settings')).PageSettings }),
           },
           {
-            path: 'applying',
+            path: 'manage/applying',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Settings')).Applying }),
           },
           {
-            path: 'access-list',
+            path: 'manage/access-list',
             lazy: async () => ({
               Component: (await import('../pages/teams/manage/Settings')).AccessListPage,
             }),
           },
           {
-            path: 'roles',
+            path: 'manage/roles',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Settings')).RolesPage }),
           },
-        ],
-      },
-      {
-        path: '/teams',
-        element: <TeamsLayout />,
-        children: [
-          { index: true, lazy: async () => ({ Component: (await import('../pages/teams/Teams')).Teams }) },
-          {
-            path: ':slug',
-            lazy: async () => ({ Component: (await import('../pages/teams/TeamPage')).TeamPage }),
-          },
-          {
-            path: ':slug/about',
-            lazy: async () => ({ Component: (await import('../pages/teams/About')).About }),
-          },
-          {
-            path: ':slug/leave',
-            lazy: async () => ({ Component: (await import('../pages/teams/Leave')).Leave }),
-          },
-          // The two languages by name: /rules/pdf is the PDF, Flask's.
-          ...[
-            ':slug/rules',
-            ':slug/rules/de',
-            ':slug/rules/en',
-            ':slug/rules/de/:version',
-            ':slug/rules/en/:version',
-          ].map((path) => ({
-            path,
-            lazy: async () => ({ Component: (await import('../pages/teams/Rules')).Rules }),
-          })),
         ],
       },
       {

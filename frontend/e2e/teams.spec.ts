@@ -1,16 +1,31 @@
 import { expect, signIn, test } from './fixtures';
 
 test.describe('teams, for members', () => {
-  test('the overview: a member sees their team first and opens it', async ({ page }) => {
+  test('the overview: their team first, as a tile that opens it', async ({ page }) => {
     await signIn(page, 'active@example.org');
     await page.goto('/teams');
 
     const mine = page.getByRole('region', { name: 'My teams' });
-    await expect(mine.getByText('Member', { exact: true }).first()).toBeVisible();
-    await mine.getByRole('link', { name: 'Open' }).first().click();
+    const rocket = mine.getByRole('link', { name: 'Rocket Team' });
+    await expect(rocket).toContainText('Lead');
+    await expect(mine.getByRole('button')).toHaveCount(0);
+    await rocket.click();
 
     await expect(page).toHaveURL(/\/teams\/rocket-team$/);
     await expect(page.getByRole('list', { name: 'Members' })).toBeVisible();
+  });
+
+  test("a team's overview: what waits for its lead, a way straight there", async ({ page }) => {
+    await signIn(page, 'active@example.org');
+    await page.goto('/teams/rocket-team');
+
+    await page
+      .getByRole('region', { name: 'Needs your attention' })
+      .getByRole('link', { name: /Application/ })
+      .click();
+
+    await expect(page).toHaveURL(/\/teams\/rocket-team\/manage$/);
+    await expect(page.getByRole('heading', { name: 'Applications', level: 1 })).toBeVisible();
   });
 
   test('somebody not in it reads what it is about, with the form to apply', async ({ page }) => {

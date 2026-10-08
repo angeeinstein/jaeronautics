@@ -11,6 +11,7 @@ import { useParams } from 'react-router';
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { type Crumb, PageHeader } from '../../../components/PageHeader';
 import { notifyDone, notifyFailed } from '../../../lib/notify';
+import { teamQuery } from '../shared';
 
 export type Manage = Schemas['ManageOut'];
 export type TeamPermission = Manage['permissions'][number];
@@ -37,7 +38,7 @@ export function may(manage: Manage | undefined, permission: TeamPermission) {
   return manage?.permissions.includes(permission) ?? false;
 }
 
-/** The top of a management page: Teams › Rocket Team › Members. */
+/** The top of a management page: Teams › Rocket Team (its overview) › Members. */
 export function ManageHeader({
   title,
   description,
@@ -59,7 +60,7 @@ export function ManageHeader({
       actions={actions}
       crumbs={[
         { label: manage?.labels.plural ?? 'Teams', to: '/teams' },
-        { label: manage?.name ?? slug, to: `/teams/${slug}/manage` },
+        { label: manage?.name ?? slug, to: `/teams/${slug}` },
         ...crumbs,
         { label: title },
       ]}
@@ -87,6 +88,8 @@ export function useManageChange<In, Out>(
       client.setQueryData(key, out);
       notifyDone(typeof done === 'string' ? done : done(out));
       await client.invalidateQueries({ queryKey: manageKey(slug), exact: true });
+      // The team's frame: the count of applications in its menu, the missing lead.
+      await client.invalidateQueries({ queryKey: teamQuery(slug).queryKey, exact: true });
       await client.invalidateQueries({ queryKey: ['teams'], exact: false, refetchType: 'none' });
     },
     onError: (error) => {

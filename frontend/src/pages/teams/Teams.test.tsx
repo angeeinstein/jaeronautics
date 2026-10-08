@@ -51,6 +51,11 @@ function team(overrides: Partial<Schemas['TeamPageOut']> = {}): Schemas['TeamPag
     can_manage: false,
     can_edit_page: false,
     can_see_money: false,
+    permissions: [],
+    role: null,
+    applications_waiting: null,
+    access_list_enabled: false,
+    lead_missing: false,
     rules: null,
     joining: { mode: 'approval', rejoin_until: null, prompt: 'Why?', why_not: null, submit_label: 'Apply' },
     members: null,
@@ -68,61 +73,86 @@ function show(element: React.ReactNode, answers: Answers, route = '/', path = '*
   return fetched;
 }
 
+function card(overrides: Partial<Schemas['TeamCardOut']> = {}): Schemas['TeamCardOut'] {
+  return {
+    slug: 'rocket',
+    name: 'Rocket',
+    description: null,
+    logo_url: null,
+    picture_url: null,
+    member_count: 3,
+    role: null,
+    applications_waiting: null,
+    admission: null,
+    opens: 'team',
+    about_label: 'About & apply',
+    membership: membership(),
+    ...overrides,
+  };
+}
+
 describe('the overview', () => {
-  it('mine first, with what to do next; the others to read about', async () => {
+  it('each team a tile, the whole of it the way in, with the one thing that matters now', async () => {
     show(<Teams />, {
       [API]: {
         body: {
           labels,
           is_member: true,
           mine: [
-            {
-              slug: 'rocket',
-              name: 'Rocket',
-              description: null,
-              logo_url: null,
-              opens: 'team',
-              about_label: 'About & apply',
+            card({
+              logo_url: '/teams/logo/r',
               membership: membership({
                 status: 'active',
                 status_label: 'Member',
                 ongoing: true,
-                notes: [
-                  {
-                    tone: 'warning',
-                    text: 'Pay for the next period, until 31.03.2027, to stay without a gap.',
-                  },
-                ],
+                notes: [{ tone: 'warning', text: 'Pay for the next period, until 31.03.2027.' }],
                 actions: ['open', 'pay_next', 'leave'],
               }),
-            },
+            }),
+            card({
+              slug: 'drone',
+              name: 'Drone Tech',
+              role: 'Lead',
+              applications_waiting: 2,
+              membership: membership({ status: 'active', status_label: 'Member', ongoing: true }),
+            }),
           ],
           others: [
-            {
+            card({
               slug: 'glider',
-              name: 'Glider',
+              name: 'Glider Team',
               description: 'We fly gliders.',
-              logo_url: null,
               opens: 'about',
-              about_label: 'About & apply',
+              admission: 'approval',
+              member_count: 1,
               membership: membership({ fee: '€10.00 every 6 months' }),
-            },
+            }),
           ],
         },
       },
     });
 
     const mine = await screen.findByRole('region', { name: 'My teams' });
-    const rocket = within(mine).getByRole('region', { name: 'Rocket' });
+    const rocket = within(mine).getByRole('link', { name: 'Rocket' });
+    expect(rocket).toHaveAttribute('href', '/teams/rocket');
+    expect(rocket).toHaveAccessibleDescription(/Member.*3 members/);
     expect(rocket).toHaveTextContent('Member');
-    expect(within(rocket).getByRole('button', { name: 'Pay for next period' })).toBeInTheDocument();
-    expect(within(rocket).getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/teams/rocket');
+    expect(rocket).toHaveTextContent('3 members');
+    expect(rocket).toHaveTextContent('Pay for the next period, until 31.03.2027.');
+    expect(rocket.querySelector('img')).toHaveAttribute('src', '/teams/logo/r');
+    const drone = within(mine).getByRole('link', { name: 'Drone Tech' });
+    expect(drone).toHaveTextContent('Lead');
+    expect(drone).toHaveTextContent('2 applications to answer');
+    expect(drone).toHaveTextContent('DT'); // no logo: the initials
+    // What to do is on the team's own pages, not here.
+    expect(within(mine).queryByRole('button')).not.toBeInTheDocument();
+
     const others = screen.getByRole('region', { name: 'Other teams' });
-    expect(within(others).getByRole('link', { name: 'About & apply' })).toHaveAttribute(
-      'href',
-      '/teams/glider/about',
-    );
-    expect(others).toHaveTextContent('Fee: €10.00 every 6 months.');
+    const glider = within(others).getByRole('link', { name: 'Glider Team' });
+    expect(glider).toHaveAttribute('href', '/teams/glider/about');
+    expect(glider).toHaveTextContent('1 member');
+    expect(glider).toHaveTextContent('Applications open');
+    expect(glider).toHaveTextContent('€10.00 every 6 months');
   });
 });
 
@@ -154,7 +184,37 @@ describe('a team', () => {
     const members = await screen.findByRole('list', { name: 'Members' });
     expect(members).toHaveTextContent(/Lena Lead\s*Lead\s*lena@edu.example/);
     expect(screen.queryByRole('link', { name: 'Open' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Leave' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Leave the team…' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Needs your attention' })).not.toBeInTheDocument();
+  });
+
+  it('whoever runs it sees what waits for them, a way straight there', async () => {
+    show(
+      <TeamPage />,
+      {
+        [`${API}/rocket`]: {
+          body: team({
+            sees_team_page: true,
+            can_manage: true,
+            role: 'Lead',
+            permissions: ['team.view_members'],
+            applications_waiting: 2,
+            joining: null,
+            membership: membership({ status: 'active', status_label: 'Member', ongoing: true }),
+            members: [],
+          }),
+        },
+      },
+      '/teams/rocket',
+      '/teams/:slug',
+    );
+
+    const attention = await screen.findByRole('region', { name: 'Needs your attention' });
+    expect(within(attention).getByRole('link', { name: /2\s*Applications to answer/ })).toHaveAttribute(
+      'href',
+      '/teams/rocket/manage',
+    );
+    expect(screen.getByRole('region', { name: 'Rocket' })).toHaveTextContent('Lead');
   });
 
   it('applying: the rules ticked, read in a dialog without leaving the form', async () => {
@@ -255,7 +315,7 @@ describe('the about page', () => {
     expect(screen.getByRole('img', { name: 'Photo of Rocket' })).toBeInTheDocument();
   });
 
-  it('for a lead in it: the team page and editing this one, no form', async () => {
+  it('for somebody in it: the story without the form, their membership being on the overview', async () => {
     show(
       <About />,
       {
@@ -274,15 +334,15 @@ describe('the about page', () => {
     );
 
     const cover = await screen.findByRole('region', { name: 'Rocket' });
-    expect(within(cover).getByRole('link', { name: 'Edit page' })).toHaveAttribute(
+    expect(cover).toHaveTextContent('No team fee');
+    expect(cover).not.toHaveTextContent('Applications open');
+    // The team's menu has the ways elsewhere; the cover has none.
+    expect(within(cover).queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Membership' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Write it' })).toHaveAttribute(
       'href',
       '/teams/rocket/manage/page',
     );
-    expect(within(cover).getByRole('link', { name: 'Team page' })).toHaveAttribute('href', '/teams/rocket');
-    expect(cover).toHaveTextContent('No team fee');
-    expect(cover).not.toHaveTextContent('Applications open');
-    expect(screen.queryByRole('region', { name: 'Photos' })).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Membership' })).toBeInTheDocument();
   });
 });
 

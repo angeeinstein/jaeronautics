@@ -1,7 +1,7 @@
 /**
- * A team's logo, small, beside its name in a list. Logos are often wide, so
- * each is shown whole in a box; a team without one gets its initial in the
- * same box, so the names line up.
+ * A team's logo, small, beside its name in a list or menu. Logos come round,
+ * shield-shaped or square, so each is shown whole in a square box; a team
+ * without one gets its initial in the same box, so the names line up.
  */
 import classes from './TeamMark.module.css';
 

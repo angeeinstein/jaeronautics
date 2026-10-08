@@ -21,12 +21,16 @@ export type Team = Schemas['TeamPageOut'];
 
 export const teamsKey = ['teams'] as const;
 
-export function useTeam(slug: string, paid: string | null = null) {
-  return useQuery({
+export function teamQuery(slug: string, paid: string | null = null) {
+  return {
     queryKey: [...teamsKey, slug, paid] as const,
     queryFn: () =>
       call(api.GET('/api/v1/teams/{slug}', { params: { path: { slug }, query: paid ? { paid } : {} } })),
-  });
+  };
+}
+
+export function useTeam(slug: string, paid: string | null = null) {
+  return useQuery(teamQuery(slug, paid));
 }
 
 const TONES: Record<NonNullable<Membership['status']>, Tone> = {
@@ -92,7 +96,8 @@ const PAY_LABELS = {
 
 /**
  * The state's notes and its buttons. On a team's own pages (``onTeamPage``)
- * there is no *Open*, and joining is the form on the page, not a button.
+ * there is no *Open*, *Manage* or *Money* -- its menu has them -- and joining
+ * is the form on the page, not a button.
  */
 export function MembershipBlock({
   slug,
@@ -108,7 +113,7 @@ export function MembershipBlock({
   const withdraw = useWithdraw(slug);
   const stay = useStay(slug);
   const actions = membership.actions.filter(
-    (action) => !(onTeamPage && (action === 'open' || action === 'join')),
+    (action) => !(onTeamPage && ['open', 'join', 'manage', 'money'].includes(action)),
   );
   const payAction = actions.find((action) => action in PAY_LABELS) as keyof typeof PAY_LABELS | undefined;
 
@@ -221,10 +226,13 @@ export function MembershipBlock({
                     key={action}
                     variant="subtle"
                     color="gray"
+                    size="compact-sm"
+                    c="dimmed"
+                    fw={400}
                     ml="auto"
                     onClick={() => void navigate(`/teams/${slug}/leave`)}
                   >
-                    Leave
+                    Leave the team…
                   </Button>
                 );
             }

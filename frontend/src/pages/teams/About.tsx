@@ -3,14 +3,14 @@
  * it is in a line and a few facts (how many are in it, how to get in, what it
  * costs); then its story, formatted, and its photos, with joining -- or
  * applying, with the leads' question and the rules to accept, read in a dialog
- * without leaving the form -- beside them. For a member, their membership
- * instead. Data: GET /api/v1/teams/<slug>, POST .../join.
+ * without leaving the form -- beside them. A member reads it in the team's
+ * frame, without the form: their membership is on the team's overview.
+ * Data: GET /api/v1/teams/<slug>, POST .../join.
  */
-import { Alert, Anchor, Button, Checkbox, Group, Stack, Text, Textarea, Title } from '@mantine/core';
+import { Alert, Anchor, Button, Checkbox, Group, Stack, Text, Textarea } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCoin, IconDoorEnter, IconPencil, IconUsers } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type SyntheticEvent, useEffect, useId, useState } from 'react';
+import { type SyntheticEvent, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { api, ApiError, call } from '../../api/client';
@@ -24,7 +24,8 @@ import { notifyDone } from '../../lib/notify';
 import classes from './About.module.css';
 import { Gallery } from './Gallery';
 import { RulesDialog, RulesLine } from './Rules';
-import { MembershipBlock, StatusPill, type Team, teamsKey, useTeam } from './shared';
+import { MembershipBlock, type Team, teamsKey, useTeam } from './shared';
+import { canJoin, TeamHero } from './TeamHero';
 
 function JoinForm({ team }: { team: Team }) {
   const joining = team.joining;
@@ -122,81 +123,19 @@ function JoinForm({ team }: { team: Team }) {
   );
 }
 
-/** Whether somebody could get in from here: the form is there and nothing stands in the way. */
-function canJoin(team: Team) {
-  return team.is_member && team.joining !== null && !team.joining.why_not;
-}
-
+/** On its cover: applying, for whoever could. Everything else is in the team's menu. */
 function Hero({ team }: { team: Team }) {
   const joining = team.joining;
-  const named = useId();
   return (
-    <section className={classes.hero} aria-labelledby={named}>
-      {team.picture_url ? (
-        <img className={classes.cover} src={team.picture_url} alt="" data-backdrop />
-      ) : (
-        <div className={classes.backdrop} />
-      )}
-      <div className={classes.shade} />
-      <Stack className={classes.heroBody} gap="md">
-        <Group gap="lg" wrap="nowrap" align="flex-end">
-          {team.logo_url ? (
-            <div className={classes.logoTile}>
-              <img src={team.logo_url} alt="" />
-            </div>
-          ) : null}
-          <Stack gap={6}>
-            <Title order={1} className={classes.name} id={named}>
-              {team.name}
-            </Title>
-            {team.description ? <Text className={classes.tagline}>{team.description}</Text> : null}
-          </Stack>
-        </Group>
+    <TeamHero team={team}>
+      {joining && canJoin(team) ? (
         <Group gap="xs">
-          <span className={classes.fact}>
-            <IconUsers size={16} aria-hidden />
-            {team.member_count === 1 ? '1 member' : `${String(team.member_count)} members`}
-          </span>
-          {joining && canJoin(team) ? (
-            <span className={classes.fact}>
-              <IconDoorEnter size={16} aria-hidden />
-              {joining.mode === 'approval' ? 'Applications open' : 'Open to join'}
-            </span>
-          ) : null}
-          <span className={classes.fact}>
-            <IconCoin size={16} aria-hidden />
-            {team.fee ?? 'No team fee'}
-          </span>
-          <StatusPill membership={team.membership} />
+          <Button component="a" href="#join">
+            {joining.submit_label}
+          </Button>
         </Group>
-        <Group gap="xs">
-          {joining && canJoin(team) ? (
-            <Button component="a" href="#join">
-              {joining.submit_label}
-            </Button>
-          ) : null}
-          {team.sees_team_page ? (
-            <Button
-              component={AppLink}
-              to={`/teams/${team.slug}`}
-              variant={canJoin(team) ? 'default' : 'filled'}
-            >
-              Team page
-            </Button>
-          ) : null}
-          {team.can_edit_page ? (
-            <Button
-              component={AppLink}
-              to={`/teams/${team.slug}/manage/page`}
-              variant="default"
-              leftSection={<IconPencil size={16} />}
-            >
-              Edit page
-            </Button>
-          ) : null}
-        </Group>
-      </Stack>
-    </section>
+      ) : null}
+    </TeamHero>
   );
 }
 
@@ -249,13 +188,26 @@ export function About() {
   if (team.isError) return <ErrorState error={team.error} onRetry={() => void team.refetch()} />;
   const data = team.data;
   const told = Boolean(data.about_html) || data.photos.length > 0;
+  // Joining, or one's membership, beside the story -- for whoever is not in the
+  // team: a member has their membership on the team's overview.
+  const aside = !data.sees_team_page;
   return (
     <>
       <Stack gap="xs" mb="md">
-        <Breadcrumbs crumbs={[{ label: data.labels.plural, to: '/teams' }, { label: data.name }]} />
+        <Breadcrumbs
+          crumbs={
+            data.sees_team_page
+              ? [
+                  { label: data.labels.plural, to: '/teams' },
+                  { label: data.name, to: `/teams/${slug}` },
+                  { label: 'About' },
+                ]
+              : [{ label: data.labels.plural, to: '/teams' }, { label: data.name }]
+          }
+        />
       </Stack>
       <Hero team={data} />
-      <div className={classes.layout} data-aside={told || undefined}>
+      <div className={classes.layout} data-aside={(told && aside) || undefined}>
         {told ? (
           <Stack gap="xl">
             {data.about_html ? (
@@ -264,10 +216,21 @@ export function About() {
             ) : null}
             <Gallery photos={data.photos} teamName={data.name} />
           </Stack>
+        ) : aside ? null : (
+          <Text c="dimmed">
+            {'Nothing has been written about the team yet. '}
+            {data.can_edit_page ? (
+              <Anchor component={AppLink} to={`/teams/${slug}/manage/page`}>
+                Write it
+              </Anchor>
+            ) : null}
+          </Text>
+        )}
+        {aside ? (
+          <div id="join" className={classes.aside}>
+            <Joining team={data} />
+          </div>
         ) : null}
-        <div id="join" className={classes.aside}>
-          <Joining team={data} />
-        </div>
       </div>
     </>
   );

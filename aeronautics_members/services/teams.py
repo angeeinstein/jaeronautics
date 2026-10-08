@@ -803,6 +803,15 @@ def teams_led_by(user):
     )
 
 
+def role_label(user, team):
+    """The role ``user`` holds in ``team`` and that is in force, as said: "Lead" before "Treasurer"; None."""
+    held = {team_role.role for team_role in team.roles if team_role.user_id == user.id and role_counts(team_role)}
+    for role in (ROLE_LEAD, ROLE_TREASURER):
+        if role in held:
+            return TEAM_ROLE_LABELS[role]
+    return None
+
+
 def role_holders(team, role=None):
     roles = [team_role for team_role in team.roles if role is None or team_role.role == role]
     return sorted(roles, key=lambda team_role: (team_role.role, (team_role.user.email or "")))

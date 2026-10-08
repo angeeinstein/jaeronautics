@@ -21,16 +21,13 @@ from ..services import NotFoundError, PermissionError_, ServiceError, team_payme
 from ..services import teams as teams_service
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, UtcDateTime, endpoint
-from .teams import LabelsOut, PhotoOut, _labels, _logo_url, _picture_url, _team, photos_out
+from .teams import (
+    WAITING, LabelsOut, PhotoOut, TeamPermissionName, _labels, _logo_url, _picture_url, _team, photos_out,
+)
 
 TAG = "Teams"
 P = teams_service.TeamPermission
 
-TeamPermissionName = Literal[
-    "team.view_members", "team.review_applications", "team.remove_members", "team.write_notes", "team.export",
-    "team.edit_settings", "team.send_access_list", "team.view_money", "team.edit_bank_details",
-    "team.appoint_treasurer",
-]
 
 
 def _managed(slug, permission=P.VIEW_MEMBERS):
@@ -69,9 +66,6 @@ class ManageOut(Model):
     applications: int
     has_lead_in_force: bool
     access_list_enabled: bool
-
-
-WAITING = {teams_service.APPLIED, teams_service.INVITED, teams_service.APPROVED}
 
 
 def _frame_team(slug):

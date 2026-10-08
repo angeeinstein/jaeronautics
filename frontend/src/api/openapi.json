@@ -9160,6 +9160,32 @@
             "title": "About Label",
             "type": "string"
           },
+          "admission": {
+            "anyOf": [
+              {
+                "enum": [
+                  "open",
+                  "approval"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admission"
+          },
+          "applications_waiting": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applications Waiting"
+          },
           "description": {
             "anyOf": [
               {
@@ -9182,6 +9208,10 @@
             ],
             "title": "Logo Url"
           },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
           "membership": {
             "$ref": "#/components/schemas/TeamMembershipOut"
           },
@@ -9197,6 +9227,28 @@
             "title": "Opens",
             "type": "string"
           },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -9207,6 +9259,11 @@
           "name",
           "description",
           "logo_url",
+          "picture_url",
+          "member_count",
+          "role",
+          "applications_waiting",
+          "admission",
           "membership",
           "opens",
           "about_label"
@@ -9899,6 +9956,21 @@
             ],
             "title": "About Html"
           },
+          "access_list_enabled": {
+            "title": "Access List Enabled",
+            "type": "boolean"
+          },
+          "applications_waiting": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applications Waiting"
+          },
           "can_edit_page": {
             "title": "Can Edit Page",
             "type": "boolean"
@@ -9950,6 +10022,10 @@
           "labels": {
             "$ref": "#/components/schemas/LabelsOut"
           },
+          "lead_missing": {
+            "title": "Lead Missing",
+            "type": "boolean"
+          },
           "logo_url": {
             "anyOf": [
               {
@@ -9986,6 +10062,25 @@
             "title": "Name",
             "type": "string"
           },
+          "permissions": {
+            "items": {
+              "enum": [
+                "team.view_members",
+                "team.review_applications",
+                "team.remove_members",
+                "team.write_notes",
+                "team.export",
+                "team.edit_settings",
+                "team.send_access_list",
+                "team.view_money",
+                "team.edit_bank_details",
+                "team.appoint_treasurer"
+              ],
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
           "photos": {
             "items": {
               "$ref": "#/components/schemas/PhotoOut"
@@ -10003,6 +10098,17 @@
               }
             ],
             "title": "Picture Url"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
           },
           "rules": {
             "anyOf": [
@@ -10041,6 +10147,11 @@
           "can_manage",
           "can_edit_page",
           "can_see_money",
+          "permissions",
+          "role",
+          "applications_waiting",
+          "access_list_enabled",
+          "lead_missing",
           "rules",
           "joining",
           "members"

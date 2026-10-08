@@ -4937,10 +4937,16 @@ export interface components {
         TeamCardOut: {
             /** About Label */
             about_label: string;
+            /** Admission */
+            admission: ("open" | "approval") | null;
+            /** Applications Waiting */
+            applications_waiting: number | null;
             /** Description */
             description: string | null;
             /** Logo Url */
             logo_url: string | null;
+            /** Member Count */
+            member_count: number;
             membership: components["schemas"]["TeamMembershipOut"];
             /** Name */
             name: string;
@@ -4949,6 +4955,10 @@ export interface components {
              * @enum {string}
              */
             opens: "team" | "about";
+            /** Picture Url */
+            picture_url: string | null;
+            /** Role */
+            role: string | null;
             /** Slug */
             slug: string;
         };
@@ -5151,6 +5161,10 @@ export interface components {
             about: string | null;
             /** About Html */
             about_html: string | null;
+            /** Access List Enabled */
+            access_list_enabled: boolean;
+            /** Applications Waiting */
+            applications_waiting: number | null;
             /** Can Edit Page */
             can_edit_page: boolean;
             /** Can Manage */
@@ -5165,6 +5179,8 @@ export interface components {
             is_member: boolean;
             joining: components["schemas"]["JoiningOut"] | null;
             labels: components["schemas"]["LabelsOut"];
+            /** Lead Missing */
+            lead_missing: boolean;
             /** Logo Url */
             logo_url: string | null;
             /** Member Count */
@@ -5174,10 +5190,14 @@ export interface components {
             membership: components["schemas"]["TeamMembershipOut"];
             /** Name */
             name: string;
+            /** Permissions */
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
             picture_url: string | null;
+            /** Role */
+            role: string | null;
             rules: components["schemas"]["RulesOut"] | null;
             /** Sees Team Page */
             sees_team_page: boolean;

@@ -3,10 +3,12 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 3rem;
-  height: 1.75rem;
-  border-radius: 4px;
-  background: var(--ja-surface-alt);
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 2px;
+  box-sizing: border-box;
+  background: var(--ja-navbar-bg);
+  border: 1px solid var(--ja-border);
   color: var(--ja-muted);
   font-weight: 600;
   font-size: 0.8125rem;

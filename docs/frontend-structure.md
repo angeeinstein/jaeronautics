@@ -157,40 +157,52 @@ Treasurer, for example, sees only what touches the money they transfer
 
 ## 5. The teams area
 
-**Overview** (Teams): page title; **My teams** as rows (mark, name, status pill,
-paid until; *Open* as the main button, *Manage* and *Money* when one has those
-rights, *Leave* set apart as a quiet button at the far right); **Other teams**
-as cards (mark, name, short description, fee, *About & apply*).
+**Overview** (Teams): **My teams**, then **Other teams**, each team a **tile**
+-- the whole tile is the way in, no buttons on it (since October 2026). A tile:
+the team's cover picture (or the brand's backdrop), its logo shown whole in a
+square box (logos come round, shield-shaped or square, never cut), one's place
+in it in the corner (*Lead*, *Member*, *Applied*), its name and line, how many
+are in it, and the one thing that matters now -- applications to answer, a fee
+due, *Applications open* / *Open to join* and the fee for the others. What to
+do about it is on the team's own pages. A member's or lead's tile opens the
+team's overview, anybody else's its About page.
 
-**A team's page** (Teams › Rocket Team) for its members: title and short
-description, *About the team* and *Manage* at the top right; *Your membership*
-(paid until, Leave); *Members*.
-
-**About** (Teams › Glider Team) for everybody, the team presenting itself: a
-cover (its picture, or the brand's backdrop) with logo, name, tagline, facts
-(members, applications open, fee) and *Apply* / *Team page* / *Edit page*;
-below, the formatted story and the photo grid (one large when they fill rows of
-three; each opens in a viewer, arrow keys for the next), with *Applying* --
-the question, the rules with the tick box, *Apply* -- beside them on a wide
-screen, below them on a phone. The leads' *Team page* settings: the text with
-*Write* / *Preview*, cover and logo, the photos (add several at once, caption,
-order, remove).
-
-**Management** -- entering it swaps in **the team's sidebar**:
+**A team's own area** -- every page of one team in one frame (TeamLayout),
+with **the team's side menu** for whoever is in it or runs some part of it:
 
 - **‹ All teams**
 - the team's mark and name
+- *Team* -- **Overview**, **About the team**
 - *People* -- **Applications** (count), **Members**, **Former members**
+- *Money* -- **Money**
 - *Settings* -- **Team page**, **Applying**, **Access list** (only when switched
   on), **Roles**
-- *Elsewhere* -- **Team page**, **Money**
 
-The team's treasurer sees only *Money* and the team page; the association's
-treasurer, who has no part in the team, opens a team's Money page without the
-team's sidebar.
+A plain member sees only *Team*; the team's treasurer *Team* and *Money*; a
+lead everything. Somebody not in the team gets its pages without the menu --
+its About page, and joining it; the association's treasurer, who has no part
+in the team, opens a team's Money page without it too. The ☰ at the left of
+the top bar folds the menu away, as in the admin area.
 
-Breadcrumb: Teams › Rocket Team › Members. Each settings section is one card
-with *Save* at the bottom right and saves only its own fields (as built).
+**Overview** (Teams › Rocket Team): the team's cover, lower; *Needs your
+attention* for whoever runs it (applications to answer, each a way straight
+there); *Your membership* (paid until, paying for the next period, *Leave the
+team…* set apart, quietly); *Members*, each by their picture, asked again every
+minute so somebody who joins appears.
+
+**About** (Teams › Glider Team) for everybody, the team presenting itself: a
+cover (its picture, or the brand's backdrop) with logo, name, tagline, facts
+(members, applications open, fee) and *Apply* for whoever may; below, the
+formatted story and the photo grid (one large when they fill rows of three;
+each opens in a viewer, arrow keys for the next), with *Applying* -- the
+question, the rules with the tick box, *Apply* -- beside them on a wide screen,
+below them on a phone. A member reads it in the team's frame, without the
+form. The leads' *Team page* settings: the text with *Write* / *Preview*, cover
+and logo, the photos (add several at once, caption, order, remove).
+
+Breadcrumb: Teams › Rocket Team (its overview) › Members. Each settings section
+is one card with *Save* at the bottom right and saves only its own fields (as
+built).
 
 ## 6. My Account
 

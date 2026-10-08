@@ -69,6 +69,55 @@ class TestTheMembership:
 
 
 @pytest.mark.usefixtures("switched_on")
+class TestTheTiles:
+    """What the overview's tiles and a team's menu are told."""
+
+    def test_a_lead_is_told_their_role_and_what_waits(self, app, client):
+        team, lead = _led()
+        teams.join_or_apply(_person(), team)
+        db.session.commit()
+        _login(client, lead.id)
+
+        [card] = client.get(API).get_json()["mine"]
+
+        assert (card["role"], card["applications_waiting"], card["member_count"]) == ("Lead", 1, 1)
+
+    def test_somebody_else_how_to_get_in_and_nothing_of_its_people(self, app, client):
+        team, _lead = _led()
+        team.applications_open = True
+        db.session.commit()
+        _login(client, _person().id)
+
+        [card] = client.get(API).get_json()["others"]
+
+        assert (card["role"], card["applications_waiting"], card["picture_url"]) == (None, None, None)
+        assert card["admission"] == ("approval" if team.admission_mode == teams.ADMISSION_APPROVAL else "open")
+
+    def test_a_team_taking_nobody_new_says_none(self, app, client):
+        team, _lead = _led()
+        team.applications_open = False
+        db.session.commit()
+        _login(client, _person().id)
+
+        assert client.get(API).get_json()["others"][0]["admission"] is None
+
+    def test_its_menu_follows_what_one_may_do(self, app, client):
+        team, lead = _led()
+        anna = _person()
+        _in_team(anna, team)
+        db.session.commit()
+
+        _login(client, lead.id)
+        led = client.get(f"{API}/rocket").get_json()
+        _login(client, anna.id)
+        member = client.get(f"{API}/rocket").get_json()
+
+        assert "team.view_members" in led["permissions"] and led["applications_waiting"] == 0
+        assert led["role"] == "Lead" and led["lead_missing"] is False
+        assert member["permissions"] == [] and member["applications_waiting"] is None and member["role"] is None
+
+
+@pytest.mark.usefixtures("switched_on")
 class TestLeaving:
     def test_only_a_member(self, app, client):
         _led()

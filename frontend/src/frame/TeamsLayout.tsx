@@ -1,7 +1,6 @@
 /**
- * The teams area for members: the frame without a sidebar -- the overview, a
- * team's page, what a team is about, its rules. A team's management has the
- * team's own sidebar.
+ * The overview of all teams: the frame without a sidebar. Each team's own
+ * pages have their own frame (TeamLayout).
  */
 import { Outlet } from 'react-router';
 
