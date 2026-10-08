@@ -10,6 +10,8 @@
  * team that is archived, say) the pages still show, in the plain frame.
  */
 import {
+  IconAdjustments,
+  IconArchive,
   IconCoin,
   IconForms,
   IconHistory,
@@ -18,6 +20,7 @@ import {
   IconLayout,
   IconLayoutDashboard,
   IconListCheck,
+  IconReceipt,
   IconUserShield,
   IconUsers,
 } from '@tabler/icons-react';
@@ -99,6 +102,17 @@ export function teamSidebar(team: Team): SidebarContent {
             : null,
           people ? { label: 'Roles', to: `${base}/manage/roles`, icon: IconUserShield } : null,
         ],
+      },
+      {
+        // Only site admins: what is the association's to decide about the team.
+        label: 'Admin',
+        items: team.administers
+          ? [
+              { label: 'Details', to: `${base}/manage/details`, icon: IconAdjustments },
+              { label: 'Fee', to: `${base}/manage/fee`, icon: IconReceipt },
+              { label: 'Archive', to: `${base}/manage/archive`, icon: IconArchive },
+            ]
+          : [],
       },
     ]),
   };

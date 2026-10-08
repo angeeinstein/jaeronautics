@@ -1653,6 +1653,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/lead-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whom this person may make a lead: the team's members -- and, for a site */
+        get: operations["team_lead_candidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make somebody a lead of the team. It counts once they are a member of it. */
+        post: operations["team_lead_appoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/leads/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** No longer a lead of the team -- the last one only when confirmed. */
+        delete: operations["team_lead_dismiss"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/members": {
         parameters: {
             query?: never;
@@ -1885,7 +1936,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The team's leads (appointed by the association's admins) and its treasurer. */
+        /** The team's leads and its treasurer, and whom this person may appoint. */
         get: operations["team_roles"];
         put?: never;
         post?: never;
@@ -2569,17 +2620,29 @@ export interface components {
         };
         /** CandidateOut */
         CandidateOut: {
+            /**
+             * Detail
+             * @default null
+             */
+            detail?: string | null;
+            /**
+             * In Team
+             * @default true
+             */
+            in_team?: boolean;
             /** Name */
             name: string;
             /** User Id */
             user_id: number;
         };
-        /** CandidatesOut */
-        CandidatesOut: {
-            /** Items */
-            items: components["schemas"]["Candidate"][];
-            /** Likely */
-            likely: boolean;
+        /** CandidateQuery */
+        CandidateQuery: {
+            /**
+             * Q
+             * @description Part of a name or address.
+             * @default
+             */
+            q?: string;
         };
         /** CandidatesQuery */
         CandidatesQuery: {
@@ -2900,6 +2963,14 @@ export interface components {
              * @default null
              */
             reason?: string | null;
+        };
+        /** DismissLeadQuery */
+        DismissLeadQuery: {
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed?: boolean;
         };
         /** DismissedOut */
         DismissedOut: {
@@ -3623,6 +3694,11 @@ export interface components {
             /** Url */
             url: string | null;
         };
+        /** LeadIn */
+        LeadIn: {
+            /** User Id */
+            user_id: number;
+        };
         /** LeaveIn */
         LeaveIn: {
             /**
@@ -3893,7 +3969,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads")[];
             /** Slug */
             slug: string;
         };
@@ -5302,6 +5378,11 @@ export interface components {
             about_html: string | null;
             /** Access List Enabled */
             access_list_enabled: boolean;
+            /**
+             * Administers
+             * @default false
+             */
+            administers?: boolean;
             /** Applications Waiting */
             applications_waiting: number | null;
             /** Can Edit Page */
@@ -5330,7 +5411,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
@@ -5342,6 +5423,11 @@ export interface components {
             sees_team_page: boolean;
             /** Slug */
             slug: string;
+            /**
+             * Status
+             * @default active
+             */
+            status?: string;
         };
         /** TeamPayment */
         TeamPayment: {
@@ -5406,10 +5492,16 @@ export interface components {
         TeamRolesOut: {
             /** Candidates */
             candidates: components["schemas"]["CandidateOut"][];
+            /** Lead Candidates */
+            lead_candidates: components["schemas"]["CandidateOut"][];
             /** Leads */
             leads: components["schemas"]["HolderOut"][];
             /** May Appoint */
             may_appoint: boolean;
+            /** May Appoint Leads */
+            may_appoint_leads: boolean;
+            /** Searches Everyone */
+            searches_everyone: boolean;
             /** Treasurers */
             treasurers: components["schemas"]["HolderOut"][];
         };
@@ -5714,6 +5806,18 @@ export interface components {
             count: number;
             /** Summary */
             summary: string | null;
+        };
+        /** CandidatesOut */
+        aeronautics_members__api__admin_account__CandidatesOut: {
+            /** Items */
+            items: components["schemas"]["Candidate"][];
+            /** Likely */
+            likely: boolean;
+        };
+        /** CandidatesOut */
+        aeronautics_members__api__team_manage__CandidatesOut: {
+            /** Items */
+            items: components["schemas"]["CandidateOut"][];
         };
     };
     responses: never;
@@ -6938,7 +7042,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CandidatesOut"];
+                    "application/json": components["schemas"]["aeronautics_members__api__admin_account__CandidatesOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */
@@ -11402,6 +11506,180 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_lead_candidates: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["aeronautics_members__api__team_manage__CandidatesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_lead_appoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LeadIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRolesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_lead_dismiss: {
+        parameters: {
+            query?: {
+                confirmed?: boolean;
+            };
+            header?: never;
+            path: {
+                slug: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamRolesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

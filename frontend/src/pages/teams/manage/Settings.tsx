@@ -3,8 +3,9 @@
  * its page (description, longer text -- formatted, with a preview -- cover,
  * logo and photos), applying (open or not,
  * the question; the rules are the association's), the access list (who gets
- * it, when, and the email as it would go out) and its roles (the treasurer is
- * the team's to appoint). Data: /api/v1/teams/<slug>/manage/page, /applying,
+ * it, when, and the email as it would go out) and its roles (leads and the
+ * treasurer, chosen from a list -- by the team's leads, and by site admins,
+ * who may also choose a lead from outside the team). Data: /api/v1/teams/<slug>/manage/page, /applying,
  * /access-list, /roles.
  */
 import {
@@ -26,10 +27,13 @@ import {
   TextInput,
 } from '@mantine/core';
 import { IconArrowDown, IconArrowUp } from '@tabler/icons-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useDebouncedValue } from '@mantine/hooks';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 
 import { api, call, type Schemas } from '../../../api/client';
+import { useMe } from '../../../api/session';
 import { AppLink } from '../../../app/AppLink';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { type Detail, Details } from '../../../components/Details';
@@ -821,6 +825,170 @@ function Holder({ holder }: { holder: Schemas['HolderOut'] }) {
   );
 }
 
+/** Choosing a new lead: the team's members -- and, for a site admin who types a name, the association's. */
+function LeadPicker({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unknown[] }) {
+  const slug = useSlug();
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [query] = useDebouncedValue(search.trim(), 250);
+  const found = useQuery({
+    queryKey: [...rolesKey, 'lead-candidates', query],
+    queryFn: () =>
+      call(
+        api.GET('/api/v1/teams/{slug}/manage/lead-candidates', {
+          params: { path: { slug }, query: { q: query } },
+        }),
+      ),
+    enabled: roles.searches_everyone && query.length >= 2,
+    placeholderData: keepPreviousData,
+  });
+  const appoint = useManageChange(
+    rolesKey,
+    () =>
+      call(
+        api.POST('/api/v1/teams/{slug}/manage/leads', {
+          params: { path: { slug } },
+          body: { user_id: Number(chosen) },
+        }),
+      ),
+    'Lead appointed.',
+  );
+
+  const label = (candidate: Schemas['CandidateOut']) =>
+    candidate.in_team || !candidate.detail ? candidate.name : `${candidate.name} · ${candidate.detail}`;
+  const inTeam = roles.lead_candidates.map((candidate) => ({
+    value: String(candidate.user_id),
+    label: label(candidate),
+  }));
+  const known = new Set(inTeam.map((option) => option.value));
+  const others = (found.data?.items ?? [])
+    .filter((candidate) => !candidate.in_team && !known.has(String(candidate.user_id)))
+    .map((candidate) => ({ value: String(candidate.user_id), label: label(candidate) }));
+  const fromServer = new Set(others.map((option) => option.value));
+  const data = roles.searches_everyone
+    ? [
+        { group: 'In the team', items: inTeam },
+        { group: 'Other members of the association', items: others },
+      ].filter((group) => group.items.length)
+    : inTeam;
+  if (!inTeam.length && !roles.searches_everyone) return null;
+
+  return (
+    <Group align="flex-end" gap="sm">
+      <Select
+        label="Appoint a lead"
+        placeholder={roles.searches_everyone ? 'Choose, or type a name…' : 'Choose…'}
+        description={
+          roles.searches_everyone
+            ? 'Somebody not in the team yet becomes a lead once they have joined it.'
+            : undefined
+        }
+        data={data}
+        value={chosen}
+        searchable
+        searchValue={search}
+        onSearchChange={setSearch}
+        // The server has already searched the association; the team's own are filtered here.
+        filter={({ options, search: typed }) =>
+          options.filter((option) =>
+            'group' in option
+              ? true
+              : fromServer.has(option.value) ||
+                option.label.toLowerCase().includes(typed.toLowerCase().trim()),
+          )
+        }
+        nothingFoundMessage={roles.searches_everyone && query.length < 2 ? 'Type a name' : 'Nobody found'}
+        error={appoint.errors.user_id ?? null}
+        onChange={setChosen}
+        flex="1 1 18rem"
+      />
+      <Button
+        variant="default"
+        disabled={!chosen}
+        loading={appoint.mutation.isPending}
+        onClick={() => {
+          appoint.mutation.mutate(undefined, {
+            onSuccess: () => {
+              setChosen(null);
+              setSearch('');
+            },
+          });
+        }}
+      >
+        Appoint
+      </Button>
+    </Group>
+  );
+}
+
+function LeadsPanel({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unknown[] }) {
+  const slug = useSlug();
+  const me = useMe().data;
+  const go = useNavigate();
+  const dismiss = useManageChange(
+    rolesKey,
+    ({ userId, confirmed }: { userId: number; confirmed: boolean }) =>
+      call(
+        api.DELETE('/api/v1/teams/{slug}/manage/leads/{user_id}', {
+          params: { path: { slug, user_id: userId }, query: { confirmed } },
+        }),
+      ),
+    'No longer a lead.',
+  );
+  const last = roles.leads.length <= 1;
+  return (
+    <Panel title="Leads">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          Run the team: its members, applications, money and settings. Appointed by the team's leads and the
+          association's admins.
+        </Text>
+        {roles.leads.length ? (
+          <Stack gap="xs">
+            {roles.leads.map((holder) => {
+              const self = holder.user_id === me?.id;
+              return (
+                <Group key={holder.user_id} gap="sm">
+                  <Text size="sm">
+                    <Holder holder={holder} />
+                  </Text>
+                  {roles.may_appoint_leads ? (
+                    <ConfirmButton
+                      size="xs"
+                      confirmLabel={
+                        last ? 'Yes, remove the last lead' : self ? 'Yes, step down' : 'Yes, remove'
+                      }
+                      loading={
+                        dismiss.mutation.isPending && dismiss.mutation.variables.userId === holder.user_id
+                      }
+                      onConfirm={() => {
+                        dismiss.mutation.mutate(
+                          { userId: holder.user_id, confirmed: last },
+                          {
+                            onSuccess: () => {
+                              // Without the role, the team's management is not theirs any more.
+                              if (self && !me.permissions.includes('teams.manage')) void go(`/teams/${slug}`);
+                            },
+                          },
+                        );
+                      }}
+                    >
+                      {self ? 'Step down' : 'Remove'}
+                    </ConfirmButton>
+                  ) : null}
+                </Group>
+              );
+            })}
+          </Stack>
+        ) : (
+          <EmptyState>None.</EmptyState>
+        )}
+        {roles.may_appoint_leads ? <LeadPicker roles={roles} rolesKey={rolesKey} /> : null}
+      </Stack>
+    </Panel>
+  );
+}
+
 function RolesBody({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unknown[] }) {
   const slug = useSlug();
   const [chosen, setChosen] = useState<string | null>(null);
@@ -847,24 +1015,7 @@ function RolesBody({ roles, rolesKey }: { roles: Roles; rolesKey: readonly unkno
   );
   return (
     <Stack gap="lg">
-      <Panel title="Leads">
-        <Stack gap="xs">
-          {roles.leads.length ? (
-            <List size="sm">
-              {roles.leads.map((holder) => (
-                <List.Item key={holder.user_id}>
-                  <Holder holder={holder} />
-                </List.Item>
-              ))}
-            </List>
-          ) : (
-            <EmptyState>None.</EmptyState>
-          )}
-          <Text size="xs" c="dimmed">
-            Leads are appointed by the association's admins.
-          </Text>
-        </Stack>
-      </Panel>
+      <LeadsPanel roles={roles} rolesKey={rolesKey} />
       <Panel title="Treasurer">
         <Stack gap="md">
           <Text size="sm" c="dimmed">

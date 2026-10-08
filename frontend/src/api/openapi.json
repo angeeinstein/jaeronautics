@@ -1775,6 +1775,23 @@
       "CandidateOut": {
         "additionalProperties": false,
         "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Detail"
+          },
+          "in_team": {
+            "default": true,
+            "title": "In Team",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1791,26 +1808,18 @@
         "title": "CandidateOut",
         "type": "object"
       },
-      "CandidatesOut": {
+      "CandidateQuery": {
         "additionalProperties": false,
         "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/Candidate"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "likely": {
-            "title": "Likely",
-            "type": "boolean"
+          "q": {
+            "default": "",
+            "description": "Part of a name or address.",
+            "maxLength": 200,
+            "title": "Q",
+            "type": "string"
           }
         },
-        "required": [
-          "items",
-          "likely"
-        ],
-        "title": "CandidatesOut",
+        "title": "CandidateQuery",
         "type": "object"
       },
       "CandidatesQuery": {
@@ -2855,6 +2864,18 @@
           "disabled"
         ],
         "title": "DisabledIn",
+        "type": "object"
+      },
+      "DismissLeadQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          }
+        },
+        "title": "DismissLeadQuery",
         "type": "object"
       },
       "DismissedOut": {
@@ -5034,6 +5055,20 @@
         "title": "LatestCheckOut",
         "type": "object"
       },
+      "LeadIn": {
+        "additionalProperties": false,
+        "properties": {
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "LeadIn",
+        "type": "object"
+      },
       "LeaveIn": {
         "additionalProperties": false,
         "properties": {
@@ -5783,7 +5818,8 @@
                 "team.send_access_list",
                 "team.view_money",
                 "team.edit_bank_details",
-                "team.appoint_treasurer"
+                "team.appoint_treasurer",
+                "team.appoint_leads"
               ],
               "type": "string"
             },
@@ -10359,6 +10395,11 @@
             "title": "Access List Enabled",
             "type": "boolean"
           },
+          "administers": {
+            "default": false,
+            "title": "Administers",
+            "type": "boolean"
+          },
           "applications_waiting": {
             "anyOf": [
               {
@@ -10473,7 +10514,8 @@
                 "team.send_access_list",
                 "team.view_money",
                 "team.edit_bank_details",
-                "team.appoint_treasurer"
+                "team.appoint_treasurer",
+                "team.appoint_leads"
               ],
               "type": "string"
             },
@@ -10525,6 +10567,11 @@
           },
           "slug": {
             "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
             "type": "string"
           }
         },
@@ -10763,6 +10810,13 @@
             "title": "Candidates",
             "type": "array"
           },
+          "lead_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Lead Candidates",
+            "type": "array"
+          },
           "leads": {
             "items": {
               "$ref": "#/components/schemas/HolderOut"
@@ -10772,6 +10826,14 @@
           },
           "may_appoint": {
             "title": "May Appoint",
+            "type": "boolean"
+          },
+          "may_appoint_leads": {
+            "title": "May Appoint Leads",
+            "type": "boolean"
+          },
+          "searches_everyone": {
+            "title": "Searches Everyone",
             "type": "boolean"
           },
           "treasurers": {
@@ -10786,7 +10848,10 @@
           "leads",
           "treasurers",
           "may_appoint",
-          "candidates"
+          "candidates",
+          "may_appoint_leads",
+          "lead_candidates",
+          "searches_everyone"
         ],
         "title": "TeamRolesOut",
         "type": "object"
@@ -11704,6 +11769,45 @@
           "at"
         ],
         "title": "WaitingCountOut",
+        "type": "object"
+      },
+      "aeronautics_members__api__admin_account__CandidatesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "likely": {
+            "title": "Likely",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "likely"
+        ],
+        "title": "CandidatesOut",
+        "type": "object"
+      },
+      "aeronautics_members__api__team_manage__CandidatesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "CandidatesOut",
         "type": "object"
       }
     }
@@ -13346,7 +13450,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CandidatesOut"
+                  "$ref": "#/components/schemas/aeronautics_members__api__admin_account__CandidatesOut"
                 }
               }
             },
@@ -19060,6 +19164,249 @@
         ]
       }
     },
+    "/api/v1/teams/{slug}/manage/lead-candidates": {
+      "get": {
+        "operationId": "team_lead_candidates",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Part of a name or address.",
+              "maxLength": 200,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/aeronautics_members__api__team_manage__CandidatesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Whom this person may make a lead: the team's members -- and, for a site",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/leads": {
+      "post": {
+        "operationId": "team_lead_appoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamRolesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Make somebody a lead of the team. It counts once they are a member of it.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/leads/{user_id}": {
+      "delete": {
+        "operationId": "team_lead_dismiss",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confirmed",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Confirmed",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamRolesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "No longer a lead of the team -- the last one only when confirmed.",
+        "tags": [
+          "Teams"
+        ]
+      }
+    },
     "/api/v1/teams/{slug}/manage/members": {
       "get": {
         "operationId": "team_members",
@@ -20385,7 +20732,7 @@
             "description": "Not found."
           }
         },
-        "summary": "The team's leads (appointed by the association's admins) and its treasurer.",
+        "summary": "The team's leads and its treasurer, and whom this person may appoint.",
         "tags": [
           "Teams"
         ]

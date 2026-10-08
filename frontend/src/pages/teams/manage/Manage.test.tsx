@@ -163,6 +163,9 @@ describe('roles', () => {
             treasurers: [],
             may_appoint: true,
             candidates: [{ user_id: 7, name: 'Anna Berger' }],
+            may_appoint_leads: false,
+            lead_candidates: [],
+            searches_everyone: false,
           },
         },
         [`POST ${API}/treasurer`]: {
@@ -171,6 +174,9 @@ describe('roles', () => {
             treasurers: [{ user_id: 7, name: 'Anna Berger', in_force: true }],
             may_appoint: true,
             candidates: [],
+            may_appoint_leads: false,
+            lead_candidates: [],
+            searches_everyone: false,
           },
         },
       },
@@ -187,6 +193,93 @@ describe('roles', () => {
       const sent = calls.find((call) => call.method === 'POST');
       expect(await sent?.clone().json()).toEqual({ user_id: 7 });
     });
+  });
+});
+
+describe('leads', () => {
+  const anna = { user_id: 7, name: 'Anna Berger', detail: null, in_team: true };
+  const roles = (overrides: Partial<Schemas['TeamRolesOut']> = {}): Schemas['TeamRolesOut'] => ({
+    leads: [{ user_id: 1, name: 'Lena Lead', in_force: true }],
+    treasurers: [],
+    may_appoint: true,
+    candidates: [],
+    may_appoint_leads: true,
+    lead_candidates: [anna],
+    searches_everyone: false,
+    ...overrides,
+  });
+  const at = ['/teams/rocket/manage/roles', '/teams/:slug/manage/roles'] as const;
+
+  it('a lead makes another member a lead, from a list', async () => {
+    const { calls } = show(
+      <RolesPage />,
+      {
+        [`${API}/roles`]: { body: roles() },
+        [`POST ${API}/leads`]: {
+          body: roles({ leads: [...roles().leads, { user_id: 7, name: 'Anna Berger', in_force: true }] }),
+        },
+      },
+      ...at,
+    );
+
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Appoint a lead' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Anna Berger' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Appoint' }));
+
+    expect(await screen.findByText('Lead appointed.')).toBeInTheDocument();
+    await waitFor(async () => {
+      const sent = calls.find((call) => call.method === 'POST');
+      expect(await sent?.clone().json()).toEqual({ user_id: 7 });
+    });
+  });
+
+  it('removing the last lead is confirmed as that', async () => {
+    const { calls } = show(
+      <RolesPage />,
+      {
+        [`${API}/roles`]: { body: roles() },
+        [`DELETE ${API}/leads/1`]: { body: roles({ leads: [] }) },
+      },
+      ...at,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, remove the last lead' }));
+
+    await waitFor(() => {
+      const sent = calls.find((call) => call.method === 'DELETE');
+      expect(sent && new URL(sent.url).search).toBe('?confirmed=true');
+    });
+  });
+
+  it('a site admin can choose somebody from outside the team, by name', async () => {
+    const { calls } = show(
+      <RolesPage />,
+      {
+        [`${API}/roles`]: { body: roles({ searches_everyone: true }) },
+        [`${API}/lead-candidates`]: {
+          body: { items: [{ user_id: 9, name: 'Tom Neu', detail: 'LAV24', in_team: false }] },
+        },
+      },
+      ...at,
+    );
+
+    await userEvent.type(await screen.findByRole('combobox', { name: 'Appoint a lead' }), 'Tom');
+
+    expect(await screen.findByRole('option', { name: 'Tom Neu · LAV24' })).toBeInTheDocument();
+    expect(calls.some((call) => new URL(call.url).search === '?q=Tom')).toBe(true);
+  });
+
+  it('nobody to appoint for somebody who may not', async () => {
+    show(
+      <RolesPage />,
+      { [`${API}/roles`]: { body: roles({ may_appoint_leads: false, lead_candidates: [] }) } },
+      ...at,
+    );
+
+    expect(await screen.findByText('Lena Lead')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Appoint a lead' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
   });
 });
 

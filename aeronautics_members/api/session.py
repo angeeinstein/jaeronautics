@@ -89,7 +89,7 @@ class MeOut(Model):
     first_name: str | None
     last_name: str | None
     forum_username: str | None
-    #: Their approved forum picture, for the top bar; None shows their initials.
+    #: Their picture (approved here, else the old forum's), for the top bar; None shows their initials.
     picture_url: str | None
     roles: list[str]
     permissions: list[PermissionName]

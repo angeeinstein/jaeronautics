@@ -206,6 +206,19 @@ export const routes: RouteObject[] = [
             path: 'manage/roles',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Settings')).RolesPage }),
           },
+          // Site admins only: what used to be the team's page under Admin › Teams.
+          {
+            path: 'manage/details',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Admin')).DetailsPage }),
+          },
+          {
+            path: 'manage/fee',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Admin')).FeePage }),
+          },
+          {
+            path: 'manage/archive',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Admin')).ArchivePage }),
+          },
         ],
       },
       {

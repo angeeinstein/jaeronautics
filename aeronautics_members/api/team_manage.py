@@ -663,14 +663,33 @@ class HolderOut(Model):
 class CandidateOut(Model):
     user_id: int
     name: str
+    #: For somebody not in the team yet (a site admin's search): their year
+    #: group or address, to tell two of the same name apart.
+    detail: str | None = None
+    in_team: bool = True
 
 
 class TeamRolesOut(Model):
     leads: list[HolderOut]
     treasurers: list[HolderOut]
+    #: May give and take the treasurer role.
     may_appoint: bool
     #: Members who could be appointed treasurer.
     candidates: list[CandidateOut]
+    #: May give and take the lead role: the team's leads and site admins.
+    may_appoint_leads: bool
+    #: Members who could be made a lead.
+    lead_candidates: list[CandidateOut]
+    #: A site admin: may also search all of the association's members for a lead
+    #: (GET .../manage/lead-candidates?q=).
+    searches_everyone: bool
+
+
+def _candidate(team, user, name):
+    in_team = teams_service.active_team_membership(user, team) is not None
+    member = user.member
+    detail = None if in_team else ((member.year_group if member else None) or user.email)
+    return CandidateOut(user_id=user.id, name=name, detail=detail, in_team=in_team)
 
 
 def _roles_out(team):
@@ -680,18 +699,69 @@ def _roles_out(team):
 
     treasurers = holders(teams_service.ROLE_TREASURER)
     taken = {holder.user_id for holder in treasurers}
+    may_appoint_leads = teams_service.can_in_team(current_user, team, P.APPOINT_LEADS)
     return TeamRolesOut(
         leads=holders(teams_service.ROLE_LEAD), treasurers=treasurers,
         may_appoint=teams_service.can_in_team(current_user, team, P.APPOINT_TREASURER),
         candidates=[CandidateOut(user_id=row["user"].id, name=row["name"])
                     for row in teams_service.roster(team) if row["user"].id not in taken],
+        may_appoint_leads=may_appoint_leads,
+        lead_candidates=[_candidate(team, user, name)
+                         for user, name in teams_service.lead_candidates(current_user, team)]
+        if may_appoint_leads else [],
+        searches_everyone=may_appoint_leads and teams_service.may_appoint_from_everyone(current_user),
     )
 
 
 @endpoint("GET", "/teams/<slug>/manage/roles", response=TeamRolesOut, tag=TAG)
 def team_roles(slug):
-    """The team's leads (appointed by the association's admins) and its treasurer."""
+    """The team's leads and its treasurer, and whom this person may appoint."""
     return _roles_out(_managed(slug))
+
+
+class CandidateQuery(Model):
+    q: str = Field("", max_length=200, description="Part of a name or address.")
+
+
+class CandidatesOut(Model):
+    items: list[CandidateOut]
+
+
+@endpoint("GET", "/teams/<slug>/manage/lead-candidates", response=CandidatesOut, query=CandidateQuery, tag=TAG)
+def team_lead_candidates(slug, query):
+    """Whom this person may make a lead: the team's members -- and, for a site
+    admin who searches, the association's members whose name or address matches."""
+    team = _managed(slug, P.APPOINT_LEADS)
+    return CandidatesOut(items=[_candidate(team, user, name)
+                                for user, name in teams_service.lead_candidates(current_user, team, query.q)])
+
+
+class LeadIn(Model):
+    user_id: int
+
+
+@endpoint("POST", "/teams/<slug>/manage/leads", response=TeamRolesOut, body=LeadIn, tag=TAG)
+def team_lead_appoint(slug, body):
+    """Make somebody a lead of the team. It counts once they are a member of it."""
+    team = _managed(slug, P.APPOINT_LEADS)
+    teams_service.appoint_lead(current_user, team, body.user_id)
+    _commit()
+    return _roles_out(team)
+
+
+class DismissLeadQuery(Model):
+    #: Needed to take away the team's last lead (409 ``team_last_lead`` otherwise).
+    confirmed: bool = False
+
+
+@endpoint("DELETE", "/teams/<slug>/manage/leads/<int:user_id>", response=TeamRolesOut, query=DismissLeadQuery,
+          tag=TAG)
+def team_lead_dismiss(slug, user_id, query):
+    """No longer a lead of the team -- the last one only when confirmed."""
+    team = _managed(slug, P.APPOINT_LEADS)
+    teams_service.dismiss_lead(current_user, team, user_id, confirmed=query.confirmed)
+    _commit()
+    return _roles_out(team)
 
 
 class TreasurerIn(Model):
