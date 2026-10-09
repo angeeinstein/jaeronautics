@@ -176,11 +176,12 @@ main() {
     # whole of its influence: which revision to return to comes from this side,
     # from the rollback point install.sh recorded. Anything unrecognised is
     # treated as an update rather than trusted.
-    local command_args=()
+    # --yes: nobody is at a terminal to answer a question, so none is asked.
+    local command_args=(--yes)
     ACTION="update"
     if [[ "$(read_request_field action)" == "rollback" ]]; then
         ACTION="rollback"
-        command_args=(--rollback)
+        command_args=(--rollback --yes)
     fi
 
     local started_at revision_before expected_steps
