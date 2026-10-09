@@ -83,8 +83,10 @@ RECIPIENTS_KEPT = timedelta(days=365)
 
 UNSUBSCRIBE_PURPOSE = "news-unsubscribe"
 
-_markdown = MarkdownIt("commonmark", {"html": False, "linkify": True, "typographer": False}).enable(
-    ["table", "linkify", "strikethrough"]
+# Links as [text](https://...) or <https://...>: bare addresses are not turned
+# into links, which would need another package.
+_markdown = MarkdownIt("commonmark", {"html": False, "linkify": False, "typographer": False}).enable(
+    ["table", "strikethrough"]
 )
 
 

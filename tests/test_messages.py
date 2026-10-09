@@ -189,3 +189,26 @@ class TestPrivacy:
         erase_account(user, actor_user=admins[1])
         db.session.commit()
         assert db.session.query(ContactMessage).count() == 0
+
+
+def test_the_email_to_the_admins_as_sent(app, admins, monkeypatch):
+    """Through the real send_mail and template: answering it answers the sender."""
+    from test_emails import FakeSMTP, _parts
+
+    from aeronautics_members import mail_utils
+
+    FakeSMTP.sent = []
+    monkeypatch.setattr(mail_utils, "load_mail_accounts_config",
+                        lambda required=False: {"office": {"host": "h", "port": 465, "user": "office@example.org",
+                                                           "pass": "p"}})
+    monkeypatch.setattr(mail_utils.smtplib, "SMTP_SSL", FakeSMTP)
+    monkeypatch.setattr(messages, "_sender_account", lambda: "office")
+    messages.send_contact(user=None, name="Vera Visitor", email="vera@example.net", topic="portal",
+                          subject="Broken <button>", body="It does not work.\n\nSecond paragraph.", seconds=10)
+
+    message = FakeSMTP.sent[0]
+    assert message["Reply-To"] == "vera@example.net"
+    html = _parts(message, "text/html")[0].get_payload(decode=True).decode()
+    assert "Vera Visitor &lt;vera@example.net&gt;" in html and "Problem with the portal" in html
+    assert "Broken &lt;button&gt;" in html and "Second paragraph." in html
+    assert "/admin/messages" in html
