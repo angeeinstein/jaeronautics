@@ -11,6 +11,7 @@
  * current by useAccount.
  */
 import { Avatar, Button, Group, Stack, Text } from '@mantine/core';
+import { useQuery } from '@tanstack/react-query';
 import { type ReactNode, useId } from 'react';
 
 import { can, displayName, initials, useMe } from '../../api/session';
@@ -20,8 +21,9 @@ import { Panel } from '../../components/Panel';
 import { Pill, type Tone } from '../../components/Pill';
 import { ErrorState, LoadingState } from '../../components/States';
 import { TeamMark } from '../../components/TeamMark';
-import { formatDate } from '../../lib/format';
+import { formatDate, formatDateTime, formatEuros } from '../../lib/format';
 import classes from './Account.module.css';
+import { creditQuery, signedEuros } from './creditData';
 import { EmailsCard, ResendButton } from './Emails';
 import { forumUsername } from './ForumCard';
 import { type Account as AccountData, type MemberAccount, useAccount } from './shared';
@@ -242,7 +244,29 @@ function TeamsTile({ teams }: { teams: NonNullable<MemberAccount['teams']> }) {
   );
 }
 
+function CreditTile() {
+  const credit = useQuery(creditQuery);
+  const data = credit.data;
+  return (
+    <Tile to="/account/credit" title="Credit">
+      <span className={classes.figure}>
+        <span className={classes.date}>{data ? formatEuros(data.balance_cents) : '…'}</span>{' '}
+        <span className={classes.muted}>on your account</span>
+      </span>{' '}
+      {data?.entries[0] ? (
+        <span className={classes.muted}>
+          {`Last: ${data.entries[0].kind_label.toLowerCase()} ${signedEuros(data.entries[0].amount_cents)}, ${formatDateTime(data.entries[0].at)}`}
+        </span>
+      ) : (
+        <span className={classes.muted}>For coffee, drinks and more from the association.</span>
+      )}{' '}
+      <span className={classes.go}>{data?.top_up.refused ? 'History' : 'Top up'}</span>
+    </Tile>
+  );
+}
+
 function Body({ account }: { account: AccountData }) {
+  const me = useMe().data;
   const member = account.member;
   const teams = member?.teams;
   return (
@@ -254,6 +278,7 @@ function Body({ account }: { account: AccountData }) {
         <div className={classes.grid}>
           <MembershipTile membership={member.membership} />
           <ForumTile forum={member.forum} />
+          {me?.credit_area ? <CreditTile /> : null}
           {teams && (teams.mine.length || teams.invite) ? <TeamsTile teams={teams} /> : null}
         </div>
       ) : (

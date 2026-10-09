@@ -89,6 +89,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/credit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The balance, whether and how much one may top up, and every entry, newest first. */
+        get: operations["my_credit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/credit/top-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open Stripe Checkout for this amount. The credit grows once Stripe says the money is there. */
+        post: operations["my_credit_top_up"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/deletion": {
         parameters: {
             query?: never;
@@ -458,6 +492,91 @@ export interface paths {
         /** Set the account's roles to exactly these. */
         put: operations["admin_account_roles"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every balance, what came in, and the latest entries. */
+        get: operations["admin_credit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One person's credit, every entry, and what a refund would give back. */
+        get: operations["admin_credit_holder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/{user_id}/cash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cash handed over, added to the credit -- or credit paid out by hand. */
+        post: operations["admin_credit_cash"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/{user_id}/correction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Put a mistake right, with the reason. Never below zero. */
+        post: operations["admin_credit_correction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/{user_id}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Give the credit back to the payments it came from, newest first. */
+        post: operations["admin_credit_refund"];
         delete?: never;
         options?: never;
         head?: never;
@@ -867,6 +986,24 @@ export interface paths {
         get: operations["admin_settings_billing"];
         /** Save the keys and the price. A new price moves every running membership to it from its */
         put: operations["admin_settings_billing_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/credit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Credit: on or off, its Stripe product, and its limits. */
+        get: operations["admin_settings_credit"];
+        /** Save them. A new product is checked with Stripe; switching on needs one. */
+        put: operations["admin_settings_credit_save"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2258,6 +2395,11 @@ export interface components {
              */
             account_state: "active" | "no_sign_in" | "disabled" | "erased";
             actions: components["schemas"]["Actions"];
+            /**
+             * Credit Cents
+             * @default null
+             */
+            credit_cents?: number | null;
             /** Disabled At */
             disabled_at: string | null;
             /** Disabled Reason */
@@ -2383,6 +2525,36 @@ export interface components {
             id: number;
             /** Target */
             target: string | null;
+        };
+        /** AdminCreditEntryOut */
+        AdminCreditEntryOut: {
+            /** Amount Cents */
+            amount_cents: number;
+            /** At */
+            at: string;
+            /** Balance After Cents */
+            balance_after_cents: number;
+            /** Booked By */
+            booked_by: string | null;
+            /** Description */
+            description: string;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "top_up" | "cash_in" | "cash_out" | "purchase" | "refund" | "reversal" | "correction";
+            /** Kind Label */
+            kind_label: string;
+            /** Name */
+            name: string;
+            /** Receipt Url */
+            receipt_url: string | null;
+            /** Team Name */
+            team_name: string | null;
+            /** User Id */
+            user_id: number;
         };
         /** ApplicationOut */
         ApplicationOut: {
@@ -2670,6 +2842,21 @@ export interface components {
              */
             q?: string;
         };
+        /** CashIn */
+        CashIn: {
+            /** Amount Cents */
+            amount_cents: number;
+            /**
+             * Note
+             * @default null
+             */
+            note?: string | null;
+            /**
+             * Paid Out
+             * @default false
+             */
+            paid_out?: boolean;
+        };
         /** CategoryGroup */
         CategoryGroup: {
             /** Group */
@@ -2895,6 +3082,13 @@ export interface components {
             /** Street */
             street: string | null;
         };
+        /** CorrectionIn */
+        CorrectionIn: {
+            /** Amount Cents */
+            amount_cents: number;
+            /** Note */
+            note: string;
+        };
         /**
          * Counts
          * @description Numbers shown beside menu entries; 0 when there is nothing, or nothing the person may see.
@@ -2902,6 +3096,129 @@ export interface components {
         Counts: {
             /** Reviews Waiting */
             reviews_waiting: number;
+        };
+        /** CreditEntryOut */
+        CreditEntryOut: {
+            /** Amount Cents */
+            amount_cents: number;
+            /** At */
+            at: string;
+            /** Balance After Cents */
+            balance_after_cents: number;
+            /** Description */
+            description: string;
+            /** Id */
+            id: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "top_up" | "cash_in" | "cash_out" | "purchase" | "refund" | "reversal" | "correction";
+            /** Kind Label */
+            kind_label: string;
+            /** Receipt Url */
+            receipt_url: string | null;
+            /** Team Name */
+            team_name: string | null;
+        };
+        /** CreditHolderOut */
+        CreditHolderOut: {
+            /** Account Url */
+            account_url: string | null;
+            /** Balance Cents */
+            balance_cents: number;
+            /** Email */
+            email: string | null;
+            /** Entries */
+            entries: components["schemas"]["AdminCreditEntryOut"][];
+            /** Erased */
+            erased: boolean;
+            /** Max Balance Cents */
+            max_balance_cents: number;
+            /** Member */
+            member: boolean;
+            /** Name */
+            name: string;
+            /** Picture Url */
+            picture_url: string | null;
+            /** Refundable Cents */
+            refundable_cents: number;
+            /** User Id */
+            user_id: number;
+        };
+        /** CreditOverviewOut */
+        CreditOverviewOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Mismatched */
+            mismatched: number[];
+            /** People */
+            people: components["schemas"]["CreditPersonOut"][];
+            /** Recent */
+            recent: components["schemas"]["AdminCreditEntryOut"][];
+            totals: components["schemas"]["CreditTotalsOut"];
+        };
+        /** CreditPersonOut */
+        CreditPersonOut: {
+            /** Balance Cents */
+            balance_cents: number;
+            /** Erased */
+            erased: boolean;
+            /** Name */
+            name: string;
+            /** Picture Url */
+            picture_url: string | null;
+            /** User Id */
+            user_id: number;
+        };
+        /** CreditSettingsIn */
+        CreditSettingsIn: {
+            /** Enabled */
+            enabled: boolean;
+            /** Eps */
+            eps: boolean;
+            /** Max Balance Cents */
+            max_balance_cents: number;
+            /** Min Top Up Cents */
+            min_top_up_cents: number;
+            /**
+             * Product Id
+             * @default null
+             */
+            product_id?: string | null;
+            /** Suggested Cents */
+            suggested_cents: number[];
+        };
+        /** CreditSettingsOut */
+        CreditSettingsOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Eps */
+            eps: boolean;
+            /** Max Balance Cents */
+            max_balance_cents: number;
+            /** Min Top Up Cents */
+            min_top_up_cents: number;
+            /**
+             * Product Id
+             * @default null
+             */
+            product_id?: string | null;
+            /** Stripe Ready */
+            stripe_ready: boolean;
+            /** Suggested Cents */
+            suggested_cents: number[];
+        };
+        /** CreditTotalsOut */
+        CreditTotalsOut: {
+            /** Came In Cents */
+            came_in_cents: number;
+            /** Held Cents */
+            held_cents: number;
+            /** People */
+            people: number;
+            /** Spent Cents */
+            spent_cents: number;
         };
         /**
          * CropQuery
@@ -2947,6 +3264,8 @@ export interface components {
          * @description What deleting does to this account, said before the button.
          */
         DeletionOut: {
+            /** Credit Cents */
+            credit_cents: number;
             /** Export Url */
             export_url: string;
             /** Has Forum Account */
@@ -3045,6 +3364,11 @@ export interface components {
             confirm_email: string;
             /** Coverage End */
             coverage_end: string | null;
+            /**
+             * Credit Cents
+             * @default 0
+             */
+            credit_cents?: number;
             /** Has Forum Account */
             has_forum_account: boolean;
             /** Has Stripe Customer */
@@ -4013,6 +4337,16 @@ export interface components {
             /** Admin Notices */
             admin_notices: components["schemas"]["Notice"][];
             counts: components["schemas"]["Counts"];
+            /**
+             * Credit Admin
+             * @default false
+             */
+            credit_admin?: boolean;
+            /**
+             * Credit Area
+             * @default false
+             */
+            credit_area?: boolean;
             /** Email */
             email: string;
             /** First Name */
@@ -4031,7 +4365,7 @@ export interface components {
             /** Last Name */
             last_name: string | null;
             /** Permissions */
-            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "approvals.review" | "forum.admin" | "forum.moderate" | "forum.moderator" | "logs.view" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
+            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "approvals.review" | "credit.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "logs.view" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
             /** Picture Url */
             picture_url: string | null;
             /** Roles */
@@ -4361,6 +4695,16 @@ export interface components {
             export_url: string;
             member: components["schemas"]["MemberAccountOut"] | null;
             to_confirm: components["schemas"]["NoteOut"] | null;
+        };
+        /** MyCreditOut */
+        MyCreditOut: {
+            /** Balance Cents */
+            balance_cents: number;
+            /** Entries */
+            entries: components["schemas"]["CreditEntryOut"][];
+            /** Export Url */
+            export_url: string;
+            top_up: components["schemas"]["TopUpOut"];
         };
         /** NewTeamIn */
         NewTeamIn: {
@@ -4807,6 +5151,35 @@ export interface components {
             forum_error: string | null;
             /** Old Username */
             old_username: string;
+        };
+        /** RefundOut */
+        RefundOut: {
+            /** Account Url */
+            account_url: string | null;
+            /** Balance Cents */
+            balance_cents: number;
+            /** Email */
+            email: string | null;
+            /** Entries */
+            entries: components["schemas"]["AdminCreditEntryOut"][];
+            /** Erased */
+            erased: boolean;
+            /** Left Cents */
+            left_cents: number;
+            /** Max Balance Cents */
+            max_balance_cents: number;
+            /** Member */
+            member: boolean;
+            /** Name */
+            name: string;
+            /** Picture Url */
+            picture_url: string | null;
+            /** Refundable Cents */
+            refundable_cents: number;
+            /** Refunded Cents */
+            refunded_cents: number;
+            /** User Id */
+            user_id: number;
         };
         /** RejoinIn */
         RejoinIn: {
@@ -5651,6 +6024,24 @@ export interface components {
              */
             version?: string | null;
         };
+        /** TopUpIn */
+        TopUpIn: {
+            /** Amount Cents */
+            amount_cents: number;
+        };
+        /** TopUpOut */
+        TopUpOut: {
+            /** Choices */
+            choices: number[];
+            /** Least Cents */
+            least_cents: number;
+            /** Max Balance Cents */
+            max_balance_cents: number;
+            /** Most Cents */
+            most_cents: number;
+            /** Refused */
+            refused: string | null;
+        };
         /** Totals */
         Totals: {
             /** Fees */
@@ -6036,6 +6427,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountSavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    my_credit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCreditOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    my_credit_top_up: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopUpIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */
@@ -7277,6 +7748,293 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditOverviewOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit_holder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditHolderOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit_cash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CashIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditHolderOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit_correction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectionIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditHolderOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit_refund: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundOut"];
                 };
             };
             /** @description Not signed in. */
@@ -8669,6 +9427,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BillingSavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_credit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditSettingsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_settings_credit_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsSavedOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

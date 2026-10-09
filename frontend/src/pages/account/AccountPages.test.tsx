@@ -144,6 +144,7 @@ describe('deleting from the emailed link', () => {
     subscription_active: true,
     paid_until: '2026-12-31',
     is_last_admin: false,
+    credit_cents: 0,
     export_url: '/account/data-export',
   };
 

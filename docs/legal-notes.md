@@ -58,6 +58,12 @@ urgent.
   stay with Stripe.
 - Team fees: one record per payment (amount, refunded amount, what period it
   pays for, Stripe IDs).
+- Credit (October 2026, when switched on): the balance and every change of it
+  -- top-up, cash handed over, paid out, purchase, refund, chargeback,
+  correction -- with date, amount, a short description, the Stripe payment
+  it came from, the team a purchase was for, and who booked it by hand.
+  Never changed afterwards; kept, without the name, when the account is
+  erased (bookkeeping). Seen by the person, the admins and the treasurer.
 
 **Profile changes**
 - Name, category and year group can only be changed by request; the request,
@@ -213,6 +219,18 @@ under Stripe's privacy policy.
 - What members pay goes in full to the team; the association pays Stripe's
   fees.
 
+**Credit** (when switched on; `docs/credit-plan.md`)
+- Topping up: active members only, through Stripe (card, Apple/Google Pay,
+  EPS if switched on); at least 10 €, at most 20 € on one account (both
+  settings). Counted once Stripe confirms the payment.
+- Spent only with the association and its teams; no transfers between
+  members, no interest, no expiry.
+- Refunded on request, and automatically when the account is erased, to the
+  payment it came from; cash is paid out by the treasurer. A refund or lost
+  chargeback in Stripe comes off the credit.
+- Drafted: membership terms 2026-10-08 § 31, privacy policy 2026-10-08
+  §§ 20, 41. Waiting for approval.
+
 ## 9. The statutes and rules of procedure vs. the portal
 
 The texts on the portal's `/legal` page (files in `legal/`) are Statutes
@@ -275,6 +293,8 @@ Collected so nothing is forgotten; none of it is urgent.
       the portal.
 - [ ] Statutes / rules: team insurance — decide and reword.
 - [ ] Impressum: name the portal (section 11).
+- [ ] Approve and publish the 2026-10-08 drafts: privacy policy (pictures,
+      credit) and membership terms (§ 31 Credit).
 
 **Decisions**
 - [ ] Whether members already in a team must accept changed team rules.

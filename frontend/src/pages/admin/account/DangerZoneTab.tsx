@@ -11,7 +11,7 @@ import { api, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { Panel } from '../../../components/Panel';
 import { ErrorState, LoadingState } from '../../../components/States';
-import { formatDate, formatDayOf, plural } from '../../../lib/format';
+import { formatDate, formatDayOf, formatEuros, plural } from '../../../lib/format';
 import { notifyDone, notifyNote } from '../../../lib/notify';
 import { type Account, erasureQuery, path, useAccountAction } from './shared';
 
@@ -170,6 +170,11 @@ function Erase({ account }: { account: Account }) {
           {erasure.data.coverage_end ? (
             <Alert color="amber" variant="light">
               Paid until {formatDate(erasure.data.coverage_end)}. Erasing ends the access now.
+            </Alert>
+          ) : null}
+          {erasure.data.credit_cents ? (
+            <Alert color="brand" variant="light">
+              {`${formatEuros(erasure.data.credit_cents)} of credit is refunded to the payments it came from. What was cash, the admins are told to pay out by hand.`}
             </Alert>
           ) : null}
           <TextInput

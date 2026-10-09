@@ -613,6 +613,8 @@ class DeletionOut(Model):
     paid_until: date | None
     #: Nobody else could run the portal: it cannot be deleted.
     is_last_admin: bool
+    #: Credit left: refunded to the card or account it was paid with.
+    credit_cents: int
     export_url: str
 
 
@@ -620,7 +622,8 @@ def _deletion_out(impact):
     return DeletionOut(
         has_forum_account=impact["has_forum_account"], has_stripe_customer=impact["has_stripe_customer"],
         subscription_active=impact["subscription_active"], paid_until=impact["coverage_end"],
-        is_last_admin=impact["is_last_admin"], export_url=url_for("account.export_my_data"),
+        is_last_admin=impact["is_last_admin"], credit_cents=impact["credit_cents"],
+        export_url=url_for("account.export_my_data"),
     )
 
 

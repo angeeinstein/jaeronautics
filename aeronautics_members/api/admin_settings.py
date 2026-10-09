@@ -20,6 +20,7 @@ from ..member_categories import CATEGORY_ORDER, category_label
 from ..notification_service import NotificationService, normalize_notification_settings
 from ..permissions import Permission
 from ..security_utils import build_public_url
+from ..services import credit as credit_service
 from ..services import settings as settings_service
 from ..services import settings_sections as sections
 from ..services.audit import log_audit_event
@@ -222,6 +223,51 @@ def admin_settings_billing_save(body):
                                                     webhook_secret=body.webhook_secret)
     db.session.commit()
     return BillingSavedOut(changed=changed, moving=moving)
+
+
+# --- Credit -----------------------------------------------------------------------------
+
+
+class CreditSettingsIn(Model):
+    enabled: bool
+    #: The Stripe product top-ups are sold as (prod_...), with no price: the portal sets the amount.
+    product_id: str | None = Field(None, max_length=255)
+    min_top_up_cents: int
+    #: The most one person may hold; a top-up never goes past it.
+    max_balance_cents: int
+    #: Offered as buttons; each between the two above.
+    suggested_cents: list[int] = Field(max_length=8)
+    #: EPS, Austrian online banking, beside cards. Switched on in Stripe's dashboard first.
+    eps: bool
+
+
+class CreditSettingsOut(CreditSettingsIn):
+    #: Stripe's keys are set (Settings › Membership fee): nothing can be paid without them.
+    stripe_ready: bool
+
+
+@endpoint("GET", "/admin/settings/credit", response=CreditSettingsOut, permissions=GENERAL, tag=TAG)
+def admin_settings_credit():
+    """Credit: on or off, its Stripe product, and its limits."""
+    current = credit_service.settings()
+    keys = settings_service.get_stripe_settings_map()
+    return CreditSettingsOut(
+        enabled=current.enabled, product_id=current.product_id, min_top_up_cents=current.min_top_up_cents,
+        max_balance_cents=current.max_balance_cents, suggested_cents=list(current.suggested_cents), eps=current.eps,
+        stripe_ready=bool(keys.get("stripe_secret_key") and keys.get("stripe_webhook_secret")),
+    )
+
+
+@endpoint("PUT", "/admin/settings/credit", response=SettingsSavedOut, body=CreditSettingsIn, permissions=GENERAL,
+          tag=TAG)
+def admin_settings_credit_save(body):
+    """Save them. A new product is checked with Stripe; switching on needs one."""
+    changed = credit_service.save_settings(
+        current_user, enabled=body.enabled, product_id=body.product_id, min_top_up_cents=body.min_top_up_cents,
+        max_balance_cents=body.max_balance_cents, suggested_cents=body.suggested_cents, eps=body.eps,
+    )
+    db.session.commit()
+    return SettingsSavedOut(changed=changed)
 
 
 # --- Forum ------------------------------------------------------------------------------

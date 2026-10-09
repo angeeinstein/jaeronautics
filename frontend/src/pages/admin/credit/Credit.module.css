@@ -1,0 +1,54 @@
+/* Admin › Credit (Credit.tsx, Holder.tsx): tables of balances and entries,
+   the amounts right-aligned in the mono face, money in in green. */
+
+.inset {
+  padding: 0 var(--mantine-spacing-md) var(--mantine-spacing-xs);
+}
+
+.name {
+  color: var(--ja-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.name:hover,
+.name:focus-visible {
+  color: var(--ja-link-hover);
+  text-decoration: underline;
+}
+
+.amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.amount[data-sign='1'] {
+  color: var(--ja-success);
+}
+
+.amount[data-negative] {
+  color: var(--ja-danger);
+}
+
+.when {
+  white-space: nowrap;
+  color: var(--ja-muted);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.muted {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--ja-muted);
+}
+
+.download {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

@@ -28,6 +28,7 @@ from ..services.system_update import (
     describe_update_state,
 )
 from flask import (
+    Response,
     abort,
     flash,
     redirect,
@@ -104,6 +105,55 @@ def admin_account_detail(user_id):
     return app_shell()
 
 
+@admin_bp.route("/admin/credit", methods=["GET"])
+@admin_bp.route("/admin/credit/<int:user_id>", methods=["GET"])
+@login_required
+@requires(Permission.CREDIT_MANAGE)
+def admin_credit(user_id=None):
+    """Everybody's credit, and one person's (frontend/src/pages/admin/credit/)."""
+    return app_shell()
+
+
+@admin_bp.route("/admin/credit/receipt/<int:entry_id>", methods=["GET"])
+@login_required
+@requires(Permission.CREDIT_MANAGE)
+def credit_receipt(entry_id):
+    """Stripe's receipt for somebody's top-up."""
+    from ..services import NotFoundError, credit
+
+    try:
+        url = credit.receipt_url(credit.entry_of(None, entry_id))
+    except NotFoundError:
+        url = None
+    if not url:
+        abort(404)
+    return redirect(url)
+
+
+@admin_bp.route("/admin/credit/export.csv", methods=["GET"])
+@login_required
+@requires(Permission.CREDIT_MANAGE)
+def credit_export():
+    """Every entry of everybody's credit, oldest first; accounts by number."""
+    import csv
+    import io
+
+    from ..services import credit
+    from ..services.clock import get_membership_today
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(credit.EXPORT_COLUMNS_ALL)
+    writer.writerows(credit.export_rows_all())
+    log_audit_event("credit", "credit_exported", actor_user=current_user)
+    db.session.commit()
+    return Response(
+        "\ufeff" + buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="credit-{get_membership_today().isoformat()}.csv"'},
+    )
+
+
 @admin_bp.route("/admin/reviews", methods=["GET"])
 @login_required
 @requires(Permission.ADMIN_ACCESS)
@@ -129,14 +179,14 @@ def admin_settings():
 
 #: A section of the settings, and what it needs beyond the general settings permission.
 SETTINGS_SECTIONS = {
-    "general": None, "notifications": None, "billing": Permission.SETTINGS_CREDENTIALS,
+    "general": None, "notifications": None, "credit": None, "billing": Permission.SETTINGS_CREDENTIALS,
     "forum": Permission.SETTINGS_CREDENTIALS, "mail": Permission.SETTINGS_CREDENTIALS,
     "test-email": Permission.NOTIFICATIONS_MANAGE,
     "health": Permission.SYSTEM_UPDATE, "updates": Permission.SYSTEM_UPDATE, "backup": Permission.SYSTEM_BACKUP,
 }
 
 
-@admin_bp.route("/admin/settings/<any(general, notifications, billing, forum, mail, 'test-email', health, updates, backup)"
+@admin_bp.route("/admin/settings/<any(general, notifications, billing, credit, forum, mail, 'test-email', health, updates, backup)"
                 ":section>", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)

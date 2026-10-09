@@ -320,4 +320,4 @@ def test_the_email_about_changed_bank_details(app):
 def test_the_treasurer_role_carries_no_other_admin_rights(app):
     from aeronautics_members.permissions import ROLE_PERMISSIONS, Permission
 
-    assert ROLE_PERMISSIONS["treasurer"] == {Permission.ADMIN_ACCESS, Permission.TEAMS_MONEY}
+    assert ROLE_PERMISSIONS["treasurer"] == {Permission.ADMIN_ACCESS, Permission.TEAMS_MONEY, Permission.CREDIT_MANAGE}

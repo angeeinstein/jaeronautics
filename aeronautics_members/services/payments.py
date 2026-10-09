@@ -36,6 +36,7 @@ from .settings import get_stripe_settings_map
 
 PURPOSE_MEMBERSHIP = "membership"
 PURPOSE_TEAM = "team"
+PURPOSE_CREDIT = "credit"
 
 # Card and SEPA direct debit, for everything; the same as the membership.
 PAYMENT_METHOD_TYPES = ("card", "sepa_debit")
@@ -255,6 +256,27 @@ def create_checkout_session(params, *, idempotency_key):
 def retrieve_price(price_id):
     apply_runtime_stripe_config()
     return stripe.Price.retrieve(price_id)
+
+
+def retrieve_product(product_id):
+    apply_runtime_stripe_config()
+    return stripe.Product.retrieve(product_id)
+
+
+def retrieve_invoice(invoice_id):
+    apply_runtime_stripe_config()
+    return stripe.Invoice.retrieve(invoice_id)
+
+
+def refund(payment_intent_id, amount_cents, *, idempotency_key, metadata=None):
+    """Give back part or all of one payment, to the card or account it came from.
+
+    Stripe itself refuses more than is left of that payment, and a refund can
+    go nowhere else: whatever asks, the money returns to whoever paid it.
+    """
+    apply_runtime_stripe_config()
+    return stripe.Refund.create(payment_intent=payment_intent_id, amount=amount_cents,
+                                metadata=metadata or {}, idempotency_key=idempotency_key)
 
 
 # --- Subscriptions ------------------------------------------------------------------

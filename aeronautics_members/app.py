@@ -1151,10 +1151,12 @@ def create_app(config_overrides=None):
 
     # What else the association sells comes through the same Stripe webhook;
     # each purpose has its handler. See services/payments.py.
-    from .services.payments import PURPOSE_TEAM, register_purpose
+    from .services.credit import handle_event as handle_credit_event
+    from .services.payments import PURPOSE_CREDIT, PURPOSE_TEAM, register_purpose
     from .services.team_payments import handle_event as handle_team_payment_event
 
     register_purpose(PURPOSE_TEAM, handle_team_payment_event)
+    register_purpose(PURPOSE_CREDIT, handle_credit_event)
 
     # The emails say when they come from the test server (emails/_layout.html).
     @app.context_processor

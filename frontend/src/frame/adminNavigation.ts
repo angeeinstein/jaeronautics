@@ -5,6 +5,7 @@
  */
 import {
   IconChecklist,
+  IconCoins,
   IconCurrencyEuro,
   IconFlag,
   IconLayoutDashboard,
@@ -22,7 +23,11 @@ function settingsChildren(me: Me): NavItem[] {
   const page = (label: string, slug: string): NavItem => ({ label, to: `/admin/settings/${slug}` });
   // The parts holding secrets only with settings.credentials; health and
   // updates with system.update, backups with system.backup.
-  const children = [page('General', 'general'), page('Notifications', 'notifications')];
+  const children = [
+    page('General', 'general'),
+    page('Notifications', 'notifications'),
+    page('Credit', 'credit'),
+  ];
   if (can(me, 'settings.credentials')) {
     children.push(page('Membership fee', 'billing'), page('Forum', 'forum'), page('Mail accounts', 'mail'));
   }
@@ -52,6 +57,7 @@ export function adminSidebar(me: Me): SidebarContent {
                 count: me.counts.reviews_waiting,
               }
             : null,
+          me.credit_admin ? { label: 'Credit', to: '/admin/credit', icon: IconCoins } : null,
         ],
       },
       {

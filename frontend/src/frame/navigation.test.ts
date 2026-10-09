@@ -57,6 +57,7 @@ describe('the admin sidebar', () => {
     expect(settings?.children?.map((child) => child.label)).toEqual([
       'General',
       'Notifications',
+      'Credit',
       'Test email',
     ]);
   });
@@ -68,6 +69,7 @@ describe('the admin sidebar', () => {
     expect(settings?.children?.map((child) => child.to)).toEqual([
       '/admin/settings/general',
       '/admin/settings/notifications',
+      '/admin/settings/credit',
       '/admin/settings/billing',
       '/admin/settings/forum',
       '/admin/settings/mail',

@@ -73,6 +73,12 @@ Status: `[ ]` to do, `[x]` done.
 - [x] new: `GET /admin/money/<slug>` (page: a team's money, the association's side) → `GET /api/v1/admin/money/<slug>`; `POST .../transfers`, `PUT .../bank`
 - `GET /admin/money/<slug>/transfer-code.svg?amount=&reference=` (image: the GiroCode for the amount and reference typed) -- stays
 
+### 4.5a Credit (new, 2026-10-08)
+- [x] `GET /admin/credit` (page) → `GET /api/v1/admin/credit`
+- [x] `GET /admin/credit/<user_id>` (page: one person's credit) → `GET /api/v1/admin/credit/<user_id>`; `POST .../cash`, `.../correction`, `.../refund`
+- `GET /admin/credit/export.csv` (download: every entry, accounts by number), `GET /admin/credit/receipt/<entry_id>` (out: Stripe's receipt)
+- [x] `GET /admin/settings/credit` (page) → `GET|PUT /api/v1/admin/settings/credit`
+
 ### 4.6 Logs
 - [x] `GET /admin/logs` (page) → `GET /api/v1/admin/logs?q=&category=&user=&page=`; old links (`?category=all`) still work
 
@@ -142,6 +148,7 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `GET /forum` (page; link in emails) → the forum card's page, `GET /api/v1/account/forum`; Flask still reads the link's token and sends an open forum's members straight in
 - [x] `POST /forum/avatar` (action, upload) → `POST /api/v1/account/picture?zoom=&x=&y=` (upload `image`), with the cropper (`pages/account/Picture.tsx`, `lib/crop.ts`)
 - `GET /account/data-export` (download) -- stays
+- [x] new (2026-10-08): `GET /account/credit` (page; Stripe Checkout comes back to `?topped_up=1`) → `GET /api/v1/account/credit`; topping up `POST /api/v1/account/credit/top-up` answers Stripe's address. `GET /account/credit/history.csv` (download), `GET /account/credit/receipt/<entry_id>` (out: Stripe's receipt)
 
 ## Step 7 -- Public pages and signing in
 

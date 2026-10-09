@@ -208,8 +208,18 @@ class AccountOut(Model):
     teams: Teams | None
     #: ``None`` for somebody who may not manage access.
     access: Access | None
+    #: Their credit balance (Admin › Credit), for whoever may manage credit; ``None`` when they never had any.
+    credit_cents: int | None = None
     recent_activity: list[AccountActivity]
     actions: Actions
+
+
+def _credit(user):
+    from ..services import credit
+
+    if not current_user.can(Permission.CREDIT_MANAGE) or not credit.has_credit(user):
+        return None
+    return credit.balance_of(user)
 
 
 def _load(user_id):
@@ -406,6 +416,7 @@ def _account(user):
         forum=forum,
         teams=_teams(user),
         access=_access(user),
+        credit_cents=_credit(user),
         recent_activity=_activity(user),
         actions=Actions(
             sync_billing=(current_user.can(Permission.ACCOUNTS_BILLING) and member is not None
@@ -457,6 +468,8 @@ class ErasureOut(Model):
     subscription_status: str | None
     #: Paid coverage that ends with the erasure.
     coverage_end: date | None
+    #: Credit left: refunded at erasure to the payments it came from; cash the admins are told to pay out.
+    credit_cents: int = 0
 
 
 @endpoint("GET", "/admin/accounts/<int:user_id>/erasure", response=ErasureOut,
@@ -475,6 +488,7 @@ def admin_account_erasure(user_id):
         subscription_active=impact["subscription_active"],
         subscription_status=(live or {}).get("status"),
         coverage_end=impact["coverage_end"],
+        credit_cents=impact["credit_cents"],
     )
 
 

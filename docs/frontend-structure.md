@@ -94,8 +94,8 @@ that appears when entering the admin area.
 | Admin | the admin sidebar | full |
 
 Sidebars are for the places where people *work* -- running a team, running
-the association -- and for My Account, which grows (a credit balance is
-planned) and so gets one place to add a page.
+the association -- and for My Account, which grows (credit, since October
+2026, is one more page in its side menu) and so gets one place to add a page.
 
 ### The footer
 

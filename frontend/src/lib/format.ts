@@ -57,3 +57,9 @@ const euroFormat = new Intl.NumberFormat('en-IE', { style: 'currency', currency:
 export function formatEuros(cents: number): string {
   return euroFormat.format(cents / 100);
 }
+
+/** "Anna Berger" as "AB", for a picture that is not there. */
+export function initialsOf(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? [words[0]?.[0], words.at(-1)?.[0]] : [words[0]?.[0]]).join('').toUpperCase();
+}

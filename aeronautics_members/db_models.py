@@ -1000,6 +1000,54 @@ class TeamPayout(db.Model):
     recorded_by = db.relationship("User")
 
 
+class CreditAccount(db.Model):
+    """A person's credit: the balance, and the top-up open in Checkout.
+
+    The balance is kept here as well as being the sum of the entries, so that
+    one locked row is what every change waits on (services/credit.py). One
+    top-up at a time is open in Checkout, so the most a person may hold is
+    checked against what they hold now.
+    """
+
+    __tablename__ = "credit_accounts"
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
+    balance_cents = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    stripe_checkout_session_id = db.Column(db.String(255), nullable=True)
+    checkout_amount_cents = db.Column(db.Integer, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    user = db.relationship("User")
+
+
+class CreditEntry(db.Model):
+    """One change of a person's credit. Never changed or deleted afterwards:
+    a mistake is put right by another entry. Kept when the account is erased
+    (the row of the account survives, nameless): it is the bookkeeping.
+    """
+
+    __tablename__ = "credit_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    # top_up, cash_in, cash_out, purchase, refund, reversal, correction.
+    kind = db.Column(db.String(20), nullable=False, index=True)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    balance_after_cents = db.Column(db.Integer, nullable=False)
+    description = db.Column(db.String(140), nullable=False)
+    # The Stripe payment a top-up, refund or reversal belongs to.
+    payment_id = db.Column(db.Integer, db.ForeignKey("payments.id"), nullable=True, index=True)
+    # What something bought was for, where it was a team's.
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
+    booked_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+
+    user = db.relationship("User", foreign_keys=[user_id])
+    booked_by = db.relationship("User", foreign_keys=[booked_by_user_id])
+    payment = db.relationship("Payment")
+    team = db.relationship("Team")
+
+
 class TeamAccessListSend(db.Model):
     """The access list a team last sent, to mark who is new on the next one.
 

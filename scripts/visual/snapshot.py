@@ -383,6 +383,22 @@ def seed(app, app_module, subscriptions):
                               reference="Teambeiträge Rocket Team bis 01.10.2026",
                               account_holder=rocket.bank_account_holder, iban=rocket.bank_iban))
     db.session.commit()
+    # Credit: on, with a top-up through Stripe, cash handed over and a coffee.
+    from aeronautics_members.services import credit
+    from aeronautics_members.services.settings import set_setting_value
+
+    set_setting_value(credit.SETTING_ENABLED, "True")
+    set_setting_value(credit.SETTING_PRODUCT, "prod_example_credit")
+    top_up = Payment(purpose="credit", user_id=active.user.id, amount_cents=1000, currency="eur",
+                     stripe_payment_intent_id="pi_example_credit", stripe_invoice_id="in_example_credit")
+    db.session.add(top_up)
+    db.session.flush()
+    credit._book(credit._account(active.user.id), credit.TOP_UP, 1000, "Top-up", payment=top_up)
+    admin_user = User.query.filter_by(email="admin@example.org").one()
+    credit.book_cash(admin_user, active.user, 500, note="Handed over at the office")
+    credit.spend(active.user, 120, "Coffee")
+    credit.book_cash(admin_user, carla, 1500)
+    db.session.commit()
 
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
@@ -424,6 +440,7 @@ def seed(app, app_module, subscriptions):
                       {"name": "account--membership", "path": "/account/membership"},
                       {"name": "account--forum", "path": "/account/forum"},
                       {"name": "account--data", "path": "/account/data"},
+                      {"name": "account--credit", "path": "/account/credit"},
                       # Saving the profile: the success message with its tick.
                       {"name": "account--saved", "path": "/account/profile",
                        "open": "section[aria-label='Contact details'] button:has-text('Edit')",
@@ -467,6 +484,9 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--money", "user": "admin@example.org", "path": "/admin/money"},
         {"name": "admin--money-team", "user": "admin@example.org", "path": "/admin/money/rocket-team"},
         {"name": "admin--dashboard-treasurer", "user": "treasurer@example.org", "path": "/admin"},
+        {"name": "admin--credit", "user": "admin@example.org", "path": "/admin/credit"},
+        {"name": "admin--credit-holder", "user": "treasurer@example.org", "path": f"/admin/credit/{active.user.id}"},
+        {"name": "admin--settings-credit", "user": "admin@example.org", "path": "/admin/settings/credit"},
     ]
 
 
