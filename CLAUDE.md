@@ -63,10 +63,12 @@ frontend/src/api/openapi.json`, then `npm run api:types` in `frontend/`.
 ### Branches and releases
 
 - Never push to `main`; it is protected (pull request, CI green).
-- Each batch: a branch from the current `main`, one pull request, the
-  maintainer tests on the test server and merges, the branch is deleted.
-- The live server installs from `main`, the test server from the branch under
-  test.
+- One development branch for good: **`claude/new-frontend`** (decided
+  2026-10-09). Each batch is built there, one pull request, the maintainer
+  tests on the test server and merges. After the merge the branch is not
+  deleted but reset to the new `main` (it holds only merged history then).
+- The live server installs from `main`; the test server always follows
+  `claude/new-frontend`, so between batches it runs what `main` has.
 
 ## Not losing context
 
@@ -84,7 +86,8 @@ when it is built:
 
 The list is pushed with the working branch whenever it changes. Until that
 branch is merged, `main` has an older list: a new session also looks at open
-pull requests from `claude/*` branches and takes the newest `docs/todo.md`.
+pull requests from `claude/*` branches and takes the newest `docs/todo.md`
+(normally the one on `claude/new-frontend`).
 
 ### Writing an item
 

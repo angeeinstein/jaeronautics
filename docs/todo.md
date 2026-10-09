@@ -5,7 +5,7 @@ through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
 The last batches (2026-10-08) built everything that was on the list, and
 credit (`docs/credit-plan.md`); what it was is in their pull requests and in
-git history (`git log -- docs/todo.md`). One thing waits for the maintainer.
+git history (`git log -- docs/todo.md`).
 
 ## Open
 
@@ -25,6 +25,58 @@ git history (`git log -- docs/todo.md`). One thing waits for the maintainer.
   Legal texts, *Not in force yet*). Once approved: `status: "published"` in
   all four files (the day stays, or the day it is published), nothing else.
 - **Open:** whether the board wants to see it first.
+
+### My Account overview: Credit and Teams side by side
+
+- **Added:** 2026-10-09
+- **Where:** My Account › Overview, `frontend/src/pages/account/Account.tsx`
+  (`Body`, `TeamsTile`, the `wide` prop of `Tile`).
+- **What:** with credit on, the tiles are Membership and Forum in the first
+  row, Credit alone in the second (half width, a hole beside it), Teams
+  across the full width in the third. That "breaks up the existing
+  overview". Make it a 2 × 2 grid: Membership, Forum / Credit, Teams. Teams
+  stays full width only when it would otherwise stand alone, i.e. with credit
+  off.
+- **Decided:** the Credit tile keeps its size, the same as Membership and
+  Forum. That is prominent enough. Not in the header: credit "is not meant
+  to be the main feature of the association", and it is not yet clear
+  whether or how it will be used. A credit-card-shaped card in the header
+  was suggested and turned down for that reason. A slim line at the bottom
+  was also offered and not wanted.
+- **Open:** nothing.
+
+### Credit settings: menus show the change without a reload
+
+- **Added:** 2026-10-09
+- **Where:** Admin › Settings › Credit,
+  `frontend/src/pages/admin/settings/CreditSettings.tsx`.
+- **What:** after switching credit on, the maintainer had to reload the page
+  before *Credit* appeared in the menus. The menus come from `GET
+  /api/v1/me` (`credit_area`, `credit_admin`), which is not asked again
+  after the save; the admin frame asks every 30 s, My Account never. After a
+  successful save, invalidate `['me']`, as `pages/admin/teams/shared.ts`
+  does for the teams switch. Add a test.
+- **Open:** nothing.
+
+### Membership tile: "Ended" beside "paid until" and "Renews"
+
+- **Added:** 2026-10-09
+- **Where:** My Account › Overview, Membership tile
+  (`frontend/src/pages/account/Account.tsx`, `MembershipTile`; the data
+  from `_membership` in `aeronautics_members/api/account.py`).
+- **What:** on the test server the maintainer's own tile showed the pill
+  *Ended* together with "31.12.2026 paid until", the progress bar and
+  "Renews 01.01.2027". The pill is taken from `payment_status`
+  (`canceled` → "Ended"); the dates and "Renews" from the membership dates
+  and `cancel_at_period_end` (false). Most likely the test subscription was
+  cancelled at once in Stripe's test mode while the paid period stayed.
+- **To do:** find how the account got there (Admin › Accounts › the
+  account's Activity and Membership tabs on the test server). Then make the
+  tile consistent: never "Ended" while access is active, and no "Renews" for
+  a subscription that is cancelled. Fix the state handling if it is wrong
+  there, not only the display.
+- **Open:** whether a test-mode subscription cancelled by hand explains it
+  completely.
 
 ## Ideas for later (not scheduled)
 
