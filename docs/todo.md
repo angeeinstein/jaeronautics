@@ -9,6 +9,40 @@ is in their pull requests and in git history (`git log -- docs/todo.md`).
 
 ## Open
 
+### Admin error emails: drop what has resolved itself before it is sent
+
+- **Added:** 2026-10-09
+- **What happened:** the maintainer put the forum (Discourse) in read-only mode
+  for a backup and an update. Meanwhile, clicking *Forum* in the portal made
+  the account's forum sync fail ("forum_sync_failed" on the error channel).
+  The maintainer switched read-only off and resynced, and the errors were
+  gone. About an hour later an admin email still reported them.
+  - The first two of a kind go out at once; the rest are held back and sent
+    as a summary later (`KIND_SUMMARY_MINUTES`: 60, 240, 1440 minutes,
+    `notification_service.py`, `_deliver_admin_digest`).
+  - Nothing checks whether a held-back error is still a problem.
+- **Maintainer:** "I think it would make sense to delete those events out of
+  the queue if the underlying problem has solved itself."
+- **What to build:**
+  - Before a held-back admin error goes out, check whether it still holds.
+    One check per kind (event_type), in a small registry. A kind without a
+    check is sent as now.
+  - A resolved event is not emailed. It is marked (e.g. status `resolved`,
+    with when) rather than deleted, so the record stays.
+  - Perhaps one line in the email: "N more resolved themselves before this
+    email".
+  - If every held-back event is resolved, no email.
+- **First kind:** `forum_sync_failed`. It is resolved when that member's
+  forum account has no `last_error` any more (cleared by a successful sync,
+  `forum_service.py`, `sync_member`). The event carries `object_type`
+  "forum_account" and `object_id`.
+- **While building:** go through the other error kinds and add a check where
+  "still a problem" can be read from the data, e.g.:
+  - an email job that was sent after all;
+  - a webhook event processed on a retry.
+- **Open:** whether the resolved ones should also show somewhere, e.g. on
+  System health or in the logs (they are in the event table either way).
+
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit)
 
 - **Added:** 2026-10-08
