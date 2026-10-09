@@ -28,6 +28,7 @@ from ..db_models import MailAccount, Setting, db
 from ..forum_service import FORUM_SETTING_KEYS
 from ..notification_service import NOTIFICATION_SETTING_KEYS
 from ..services.credit import SETTING_KEYS as CREDIT_SETTING_KEYS
+from ..services.money_settings import SETTING_KEYS as MONEY_SETTING_KEYS
 from ..services.institutional_email import SETTING_KEY as INSTITUTIONAL_EMAIL_SETTING_KEY
 from ..services.teams import SETTING_KEYS as TEAMS_SETTING_KEYS
 
@@ -52,6 +53,7 @@ SECTIONS = {
     "stripe": STRIPE_SETTING_KEYS,
     "teams": TEAMS_SETTING_KEYS,
     "credit": CREDIT_SETTING_KEYS,
+    "money": MONEY_SETTING_KEYS,
 }
 
 #: Values that are credentials rather than configuration. Left out unless they

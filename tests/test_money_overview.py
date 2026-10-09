@@ -218,6 +218,15 @@ def test_the_period_asked_for(app, since, until, expected):
     assert money_overview.period_asked(since, until, TODAY) == expected
 
 
+def test_never_before_the_portal_took_over(app):
+    app.config["MONEY_RECORDS_SINCE"] = date(2026, 10, 1)
+    today = date(2026, 12, 31)
+
+    assert money_overview.period_asked(None, None, today) == (date(2026, 10, 1), today)
+    assert money_overview.period_asked(date(2025, 1, 1), None, today) == (date(2026, 10, 1), today)
+    assert money_overview.period_asked(date(2026, 11, 1), None, today) == (date(2026, 11, 1), today)
+
+
 def test_a_day_that_is_no_day_is_refused(app, client):
     _login(client, _staff("treasurer@example.org", "treasurer").id)
 

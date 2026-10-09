@@ -28,7 +28,7 @@ import { EmptyState } from '../../../components/States';
 import { Panel } from '../../../components/Panel';
 import { fileNameOf, saveFile } from '../../../lib/files';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
-import { SettingsPage } from './shared';
+import { SettingsPage, useNotMyLogin } from './shared';
 
 type Account = Schemas['MailAccountOut'];
 type AccountIn = Schemas['MailAccountIn'];
@@ -107,6 +107,8 @@ function AccountForm({ editing, onDone }: { editing: Account | null; onDone: () 
     setValue({ ...value, [key]: next });
     if (errors[key]) setErrors(Object.fromEntries(Object.entries(errors).filter(([field]) => field !== key)));
   };
+  const notLogin = useNotMyLogin();
+  const notPassword = useNotMyLogin(true);
   const text = (key: 'key' | 'host' | 'username' | 'from_email' | 'from_name', label: string, extra = {}) => (
     <TextInput
       label={label}
@@ -152,11 +154,16 @@ function AccountForm({ editing, onDone }: { editing: Account | null; onDone: () 
           />
         </SimpleGrid>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          {text('username', 'Username', { placeholder: 'noreply@example.com' })}
+          {text('username', 'Username', {
+            placeholder: 'noreply@example.com',
+            name: 'smtp-login',
+            ...notLogin,
+          })}
           <PasswordInput
             label="Password"
             description={editing ? 'Leave empty to keep the one it has.' : undefined}
-            autoComplete="new-password"
+            name="smtp-secret"
+            {...notPassword}
             value={value.password ?? ''}
             error={errors.password ?? null}
             onChange={(event) => {

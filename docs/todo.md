@@ -3,9 +3,9 @@
 What is agreed but not built yet. How this list works -- when it is worked
 through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
-The last batches (2026-10-08) built everything that was on the list, and
-credit (`docs/credit-plan.md`); what it was is in their pull requests and in
-git history (`git log -- docs/todo.md`). One thing waits for the maintainer.
+The last batches (2026-10-08 and 2026-10-09) built everything that was on
+the list, credit and selling for credit (`docs/credit-plan.md`); what it was
+is in their pull requests and in git history (`git log -- docs/todo.md`).
 
 ## Open
 
@@ -26,6 +26,14 @@ git history (`git log -- docs/todo.md`). One thing waits for the maintainer.
   all four files (the day stays, or the day it is published), nothing else.
 - **Open:** whether the board wants to see it first.
 
+### Card readers for credit (later)
+
+- **Added:** 2026-10-09
+- **Put off by the maintainer:** "this is not something we need to build now".
+- **What, how, open questions:** `docs/credit-plan.md`, "Card readers". The
+  base it builds on is done: price lists, `credit_sales.sell(...)`, the
+  accounting for teams and the association.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
@@ -42,7 +50,11 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
   "Admin" label and a count of reviews waiting was suggested as an
   alternative.
 
-## Decided against
+## Turned down
+
+What the maintainer did not want, and why -- a record, not a ban. Any of it
+may be suggested again, saying what has changed since. Only what the
+maintainer explicitly says must never change is marked so.
 
 - **A short code for staff and company members like the year group**
   (2026-10-08). The year group feeds forum usernames (`_L25`), the forum's

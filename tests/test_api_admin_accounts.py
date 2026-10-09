@@ -144,12 +144,15 @@ class TestWhatARowSays:
         assert barred["membership"] == "active"
         assert _row(admin_client, never.user_id)["account_state"] == "no_sign_in"
 
-    def test_an_erased_account(self, admin_client):
+    def test_an_erased_account_only_when_asked_for(self, admin_client):
         member = make_member(email="erased@example.com")
         member.user.deleted_at = datetime.utcnow()
         db.session.commit()
 
-        assert _row(admin_client, member.user_id)["account_state"] == "erased"
+        # Kept as a row for the bookkeeping, but in no list, count or chip unless asked for.
+        assert member.user_id not in _ids(admin_client)
+        assert member.user_id not in _ids(admin_client, "membership=none")
+        assert _row(admin_client, member.user_id, "account=erased")["account_state"] == "erased"
 
 
 class TestMembershipStates:

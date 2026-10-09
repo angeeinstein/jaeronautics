@@ -9,8 +9,11 @@ import { Alert, Anchor, Avatar, Group, SimpleGrid, Stack, Table, Text } from '@m
 import { IconDownload } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 
+import { api, call } from '../../../api/client';
+
 import { AppLink } from '../../../app/AppLink';
 import { PageHeader } from '../../../components/PageHeader';
+import { type ItemChange, PriceListPanel } from '../../../components/PriceList';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { StatTile } from '../../../components/StatTile';
@@ -105,6 +108,76 @@ function Recent({ entries }: { entries: CreditOverview['recent'] }) {
   );
 }
 
+function Sellers({ sellers }: { sellers: CreditOverview['sellers'] }) {
+  if (!sellers.some((seller) => seller.earned || seller.items)) return null;
+  return (
+    <Panel title="Sold" flush>
+      <div className={classes.inset}>
+        <Table.ScrollContainer minWidth={480} type="native">
+          <Table verticalSpacing="sm" aria-label="Sold">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th scope="col">Seller</Table.Th>
+                <Table.Th scope="col" className={classes.amount}>
+                  Items
+                </Table.Th>
+                <Table.Th scope="col" className={classes.amount}>
+                  Last 30 days
+                </Table.Th>
+                <Table.Th scope="col" className={classes.amount}>
+                  Ever
+                </Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {sellers.map((seller) => (
+                <Table.Tr key={seller.team_slug ?? 'association'}>
+                  <Table.Td>
+                    {seller.team_slug ? (
+                      <AppLink to={`/admin/money/${seller.team_slug}`} className={classes.name}>
+                        {seller.name}
+                      </AppLink>
+                    ) : (
+                      <span className={classes.name}>{seller.name}</span>
+                    )}
+                  </Table.Td>
+                  <Table.Td className={`${classes.amount} ja-figures`}>{seller.items}</Table.Td>
+                  <Table.Td className={`${classes.amount} ja-figures`}>
+                    {formatEuros(seller.earned_30_days)}
+                  </Table.Td>
+                  <Table.Td className={`${classes.amount} ja-figures`}>{formatEuros(seller.earned)}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      </div>
+    </Panel>
+  );
+}
+
+const associationPricesKey = ['admin', 'credit', 'items'] as const;
+
+/** The association's own price list: coffee in the student area, say. */
+function AssociationPrices() {
+  const list = useQuery({
+    queryKey: associationPricesKey,
+    queryFn: () => call(api.GET('/api/v1/admin/credit/items')),
+  });
+  if (!list.data) return null;
+  return (
+    <PriceListPanel
+      title="The association's price list"
+      list={list.data}
+      queryKey={associationPricesKey}
+      add={(body) => call(api.POST('/api/v1/admin/credit/items', { body }))}
+      change={(id: number, body: ItemChange) =>
+        call(api.PUT('/api/v1/admin/credit/items/{item_id}', { params: { path: { item_id: id } }, body }))
+      }
+    />
+  );
+}
+
 export function Credit() {
   const overview = useQuery(creditOverviewQuery);
   useLiveRefresh(creditOverviewQuery.queryKey, EVERY_MINUTE);
@@ -153,6 +226,8 @@ export function Credit() {
               note="Last 30 days"
             />
           </SimpleGrid>
+          <Sellers sellers={overview.data.sellers} />
+          <AssociationPrices />
           <Panel title="Balances" flush>
             <div className={classes.inset}>
               <People people={overview.data.people} />
@@ -164,7 +239,8 @@ export function Credit() {
             </div>
           </Panel>
           <Text size="sm" c="dimmed">
-            Cash handed over, credit paid out, corrections and refunds are booked on a person&apos;s page.
+            Cash handed over, credit paid out, corrections, sales and refunds are booked on a person&apos;s
+            page. A team keeps its own price list, on its Prices page.
           </Text>
         </Stack>
       )}

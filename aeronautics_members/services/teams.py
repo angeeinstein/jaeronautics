@@ -86,14 +86,16 @@ class TeamPermission:
     #: Give and take the lead role: a lead among the team's members, a site
     #: admin among all of the association's (the first lead of a new team).
     APPOINT_LEADS = "team.appoint_leads"
+    #: The team's price list for what it sells for credit.
+    EDIT_PRICES = "team.edit_prices"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
-        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS,
+        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS, EDIT_PRICES,
     })
-    #: The team's money, and the account it is paid to -- nothing about people.
-    MONEY = frozenset({VIEW_MONEY, EDIT_BANK_DETAILS})
+    #: The team's money, the account it is paid to, and its prices -- nothing about people.
+    MONEY = frozenset({VIEW_MONEY, EDIT_BANK_DETAILS, EDIT_PRICES})
 
 
 ROLE_LEAD = "lead"
@@ -305,8 +307,8 @@ def _snapshot(team):
 
 #: Short names the addresses use themselves: /admin/teams/new is the form for a
 #: new team, so a team called "new" could never be opened; the same for
-#: /api/v1/admin/money/overview beside a team's /api/v1/admin/money/<slug>.
-RESERVED_SLUGS = frozenset({"new", "overview"})
+#: /api/v1/admin/money/overview and .../settings beside a team's /api/v1/admin/money/<slug>.
+RESERVED_SLUGS = frozenset({"new", "overview", "settings"})
 
 
 def create_team(actor, *, slug, **fields):

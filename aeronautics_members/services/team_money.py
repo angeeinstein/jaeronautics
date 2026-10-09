@@ -8,8 +8,9 @@ suits, and records each transfer; what is still open is what was earned less
 what was transferred. No cut-off dates: the open balance is simply everything
 not passed on yet, shown by the period it paid for.
 
-Later sources (a drinks reader belonging to a team, say) add to what a team
-earned in the same way; the payouts and the balance stay as they are.
+What a team sold for credit (services/credit_sales.py: a beer from its
+fridge) adds to what it earned in the same way, less what was taken back;
+the payouts and the balance stay as they are.
 """
 
 import re
@@ -20,12 +21,42 @@ from . import ValidationError
 from .audit import log_audit_event
 from .clock import get_membership_today
 from .membership import format_date_display, format_membership_date_display
+# Who carries Stripe's fees: its own module (selling for credit reads it too).
+from .money_settings import credit_share_bps, save_money_settings, teams_bear_fees  # noqa: F401
 
 
 def _earned(payment):
+    """What of a payment the team is owed; None while Stripe's fee it carries is not known yet."""
     if payment.status == "disputed":
         return 0
-    return max(payment.amount_cents - (payment.refunded_cents or 0), 0)
+    net = max(payment.amount_cents - (payment.refunded_cents or 0), 0)
+    if not payment.team_bears_fee:
+        return net
+    if payment.fee_cents is None:
+        return None
+    # Stripe keeps its fee on a refund too: a refunded payment can cost the team.
+    return net - payment.fee_cents
+
+
+def fill_in_fees(limit=100):
+    """Every night: ask Stripe for the fee of the team payments that carry theirs and lack it.
+
+    A fee is known once the money has arrived at Stripe; a SEPA debit takes days.
+    Returns how many were filled in.
+    """
+    from . import payments
+
+    waiting = db.session.execute(
+        db.select(Payment).filter_by(purpose="team", team_bears_fee=True, fee_cents=None)
+        .order_by(Payment.id).limit(limit)
+    ).scalars().all()
+    filled = 0
+    for payment in waiting:
+        fee = payments.stripe_fee(payment.stripe_payment_intent_id, payment.stripe_invoice_id)
+        if fee is not None:
+            payment.fee_cents = fee
+            filled += 1
+    return filled
 
 
 def team_payments(team):
@@ -41,16 +72,27 @@ def team_payouts(team):
 
 
 def summary(team):
-    """Earned, paid out and open, in cents; earnings by the period they paid for."""
+    """Earned (fees and credit sales), paid out and open, in cents; the fees by the period they paid for."""
+    from .credit_sales import sales_summary
+
     payments = team_payments(team)
     payouts = team_payouts(team)
-    earned = sum(_earned(payment) for payment in payments)
+    sales = sales_summary(team)
+    counted = [(payment, _earned(payment)) for payment in payments]
+    fees = sum(cents for _payment, cents in counted if cents is not None)
+    # Paid, carrying Stripe's fee, and the fee not known yet: counted once it is.
+    waiting = [payment for payment, cents in counted if cents is None]
+    earned = fees + sales["earned"]
     paid_out = sum(payout.amount_cents for payout in payouts)
     by_period = {}
-    for payment in payments:
-        by_period[payment.covers_until] = by_period.get(payment.covers_until, 0) + _earned(payment)
+    for payment, cents in counted:
+        if cents is not None:
+            by_period[payment.covers_until] = by_period.get(payment.covers_until, 0) + cents
     return {
         "earned": earned,
+        "fees": fees,
+        "sales": sales,
+        "waiting_for_fee": sum(max(payment.amount_cents - (payment.refunded_cents or 0), 0) for payment in waiting),
         "paid_out": paid_out,
         "open": earned - paid_out,
         "by_period": sorted(by_period.items(), key=lambda item: item[0] or date.min, reverse=True),
@@ -74,7 +116,7 @@ def payer_name(payment):
 
 
 def counts(payment):
-    """What of ``payment`` the team is owed, in cents."""
+    """What of ``payment`` the team is owed, in cents; None while Stripe's fee it carries is not known."""
     return _earned(payment)
 
 
@@ -91,7 +133,7 @@ def export_rows(team):
             format_membership_date_display(payment.covers_until) if payment.covers_until else "",
             f"{payment.amount_cents / 100:.2f}",
             f"{(payment.refunded_cents or 0) / 100:.2f}",
-            f"{_earned(payment) / 100:.2f}",
+            f"{_earned(payment) / 100:.2f}" if _earned(payment) is not None else "",
             payment.status,
         )
 

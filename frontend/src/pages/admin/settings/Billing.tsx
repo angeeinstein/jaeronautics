@@ -12,7 +12,7 @@ import { api, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { Panel } from '../../../components/Panel';
 import { notifyNote } from '../../../lib/notify';
-import { SaveBar, secretHint, SettingsPage, useSectionSave } from './shared';
+import { SaveBar, secretHint, SettingsPage, useNotMyLogin, useSectionSave } from './shared';
 
 type BillingOut = Schemas['BillingOut'];
 type BillingIn = Schemas['BillingIn'];
@@ -43,6 +43,8 @@ function Form({ data }: { data: BillingOut }) {
     setValue({ ...value, [key]: next });
     clear(key);
   };
+  const notSecretKey = useNotMyLogin(true);
+  const notWebhookSecret = useNotMyLogin(true);
   const newPrice = (value.price_id ?? '').trim() !== (data.price_id ?? '') && Boolean(value.price_id?.trim());
   const submit = () => {
     save.mutate(value);
@@ -79,7 +81,8 @@ function Form({ data }: { data: BillingOut }) {
             <PasswordInput
               label="Secret key"
               description={secretHint(data.secret_key_set)}
-              autoComplete="off"
+              name="stripe-secret-key"
+              {...notSecretKey}
               value={value.secret_key ?? ''}
               onChange={(event) => {
                 set('secret_key', event.currentTarget.value || null);
@@ -88,7 +91,8 @@ function Form({ data }: { data: BillingOut }) {
             <PasswordInput
               label="Webhook secret"
               description={secretHint(data.webhook_secret_set)}
-              autoComplete="off"
+              name="stripe-webhook-secret"
+              {...notWebhookSecret}
               value={value.webhook_secret ?? ''}
               onChange={(event) => {
                 set('webhook_secret', event.currentTarget.value || null);

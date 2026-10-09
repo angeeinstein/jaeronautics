@@ -6,15 +6,15 @@ test.describe('money', () => {
     await page.goto('/admin/money');
 
     const table = page.getByRole('table', { name: 'What the teams are owed' });
-    await expect(table.getByRole('row', { name: /Rocket Team/ })).toContainText('€10.00');
+    await expect(table.getByRole('row', { name: /Rocket Team/ })).toContainText('€12.00');
     await table.getByRole('link', { name: 'Rocket Team' }).click();
 
     await expect(page).toHaveURL(/\/admin\/money\/rocket-team$/);
-    const code = page.getByRole('img', { name: 'Transfer code for €10.00' });
+    const code = page.getByRole('img', { name: 'Transfer code for €12.00' });
     await expect(code).toBeVisible();
     expect(await code.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Mark as transferred' }).click();
-    await expect(page.getByRole('button', { name: 'Yes, record €10.00' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Yes, record €12.00' })).toBeVisible();
   });
 
   test('the treasurer sees the money and nothing else', async ({ page, isMobile }) => {
@@ -23,7 +23,7 @@ test.describe('money', () => {
 
     await expect(page.getByText('What needs doing.')).toBeVisible();
     const attention = page.getByRole('region', { name: 'Needs your attention' });
-    await expect(attention).toContainText('€10.00 open');
+    await expect(attention).toContainText('€12.00 open');
     await expect(page.getByText('Active members')).toHaveCount(0);
     if (!isMobile) {
       // On a phone the sections are behind the menu button.

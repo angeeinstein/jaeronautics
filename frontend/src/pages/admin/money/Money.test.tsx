@@ -79,6 +79,9 @@ function team(overrides: Partial<TeamMoneyOut> = {}): TeamMoneyOut {
   return {
     team: rocketRef,
     earned: 3100,
+    fees: 3100,
+    sales: { earned: 0, count: 0, by_item: [] },
+    waiting_for_fee: 0,
     paid_out: 0,
     open: 3100,
     bank: { account_holder: 'Rocket Team', iban: 'AT611904300234573201', bic: null },

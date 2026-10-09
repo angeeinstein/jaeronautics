@@ -36,6 +36,7 @@ from ..security_utils import build_public_url
 from . import ConflictError, ValidationError
 from . import payments
 from .audit import log_audit_event
+from .money_settings import teams_bear_fees
 from ..config import MEMBERSHIP_TIMEZONE
 from .clock import get_membership_today, get_now_utc, start_of_day_unix
 from .membership import format_membership_date_display
@@ -747,7 +748,7 @@ def _invoice_paid(invoice):
             team_membership_id=membership.id, stripe_invoice_id=invoice.get("id"),
             stripe_subscription_id=subscription_id, amount_cents=amount,
             currency=(invoice.get("currency") or "eur")[:3], covers_until=covers_until,
-            paid_at=get_now_utc(),
+            paid_at=get_now_utc(), team_bears_fee=teams_bear_fees(),
         ))
     if covers_until and (membership.paid_until is None or covers_until > membership.paid_until):
         membership.paid_until = covers_until
@@ -928,6 +929,7 @@ def _one_time_paid(session, membership):
         stripe_invoice_id=invoice if isinstance(invoice, str) else (invoice or {}).get("id"),
         amount_cents=int(session.get("amount_total") or 0),
         currency=(session.get("currency") or "eur")[:3], covers_until=covers_until, paid_at=get_now_utc(),
+        team_bears_fee=teams_bear_fees(),
     ))
     if covers_until and (membership.paid_until is None or covers_until > membership.paid_until):
         membership.paid_until = covers_until

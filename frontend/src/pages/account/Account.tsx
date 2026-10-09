@@ -219,9 +219,9 @@ function ForumTile({ forum }: { forum: MemberAccount['forum'] }) {
   );
 }
 
-function TeamsTile({ teams }: { teams: NonNullable<MemberAccount['teams']> }) {
+function TeamsTile({ teams, wide }: { teams: NonNullable<MemberAccount['teams']>; wide: boolean }) {
   return (
-    <Tile to="/teams" title={teams.plural} wide>
+    <Tile to="/teams" title={teams.plural} wide={wide}>
       {teams.mine.length ? (
         <ul className={classes.teams}>
           {teams.mine.map((team) => (
@@ -279,7 +279,11 @@ function Body({ account }: { account: AccountData }) {
           <MembershipTile membership={member.membership} />
           <ForumTile forum={member.forum} />
           {me?.credit_area ? <CreditTile /> : null}
-          {teams && (teams.mine.length || teams.invite) ? <TeamsTile teams={teams} /> : null}
+          {/* Across the row only where it would otherwise stand alone: beside Credit it fills the grid's
+              second row. */}
+          {teams && (teams.mine.length || teams.invite) ? (
+            <TeamsTile teams={teams} wide={!me?.credit_area} />
+          ) : null}
         </div>
       ) : (
         <div className={classes.grid}>

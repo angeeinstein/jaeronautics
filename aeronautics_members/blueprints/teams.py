@@ -157,6 +157,15 @@ def team_manage(slug, section=None):
     return app_shell()
 
 
+@teams_bp.route("/teams/<slug>/manage/prices", methods=["GET"])
+@login_required
+def team_prices(slug):
+    """The team's price list for what it sells for credit (frontend/src/pages/teams/manage/Prices.tsx)."""
+    team = _money_team_or_404(slug)
+    _may(team, teams_service.TeamPermission.EDIT_PRICES)
+    return app_shell()
+
+
 @teams_bp.route("/teams/<slug>/manage/<any(details, fee, archive):section>", methods=["GET"])
 @login_required
 def team_admin_settings(slug, section):

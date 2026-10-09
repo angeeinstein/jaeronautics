@@ -48,7 +48,11 @@ test.describe('settings', () => {
     const form = page.getByRole('region', { name: 'Add an account' });
     await form.getByRole('textbox', { name: 'Key', exact: true }).fill('e2e-office');
     await form.getByRole('textbox', { name: 'SMTP server' }).fill('smtp.example.org');
+    // The login fields wait for a click before they take anything: the browser's
+    // own saved login must not land in them (settings/shared.tsx, useNotMyLogin).
+    await form.getByRole('textbox', { name: 'Username' }).click();
     await form.getByRole('textbox', { name: 'Username' }).fill('office@example.org');
+    await form.getByLabel('Password', { exact: true }).click();
     await form.getByLabel('Password', { exact: true }).fill('not-shown');
     await form.getByRole('button', { name: 'Add' }).click();
 

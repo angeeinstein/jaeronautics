@@ -58,6 +58,8 @@ class MoneyOut(Model):
     teams: list[MoneyRow]
     total_open: int
     today: date
+    #: The check against Stripe reaches no further back: the day the portal took over.
+    records_since: date | None = None
 
 
 @endpoint("GET", "/admin/money", response=MoneyOut, permissions=PERMISSIONS, tag=TAG)
@@ -69,7 +71,8 @@ def admin_money():
                  account=money.masked_iban(row["team"].bank_iban) or None)
         for row in money.all_teams_money()
     ]
-    return MoneyOut(teams=rows, total_open=sum(row.open for row in rows), today=get_membership_today())
+    return MoneyOut(teams=rows, total_open=sum(row.open for row in rows), today=get_membership_today(),
+                    records_since=overview_service.records_since())
 
 
 # --- On Stripe ---------------------------------------------------------------------------
@@ -218,13 +221,49 @@ class TeamPayment(Model):
     refunded: int
     #: Taken back by a chargeback: counts nothing.
     disputed: bool
-    #: What the team is owed of it.
-    counts: int
+    #: Stripe's fee, where this payment carries it (Admin › Money, "Stripe's fees").
+    fee: int | None = None
+    #: What the team is owed of it; None while the fee it carries is not known yet.
+    counts: int | None
+
+
+class SoldItem(Model):
+    name: str
+    #: Sales that stand (taken back ones count for neither).
+    count: int
+    earned: int
+
+
+class CreditSales(Model):
+    """What the team sold for credit, less what was taken back and the association's share."""
+
+    earned: int
+    count: int
+    by_item: list[SoldItem]
+
+
+def credit_sales_out(found):
+    sales = found["sales"]
+    return CreditSales(earned=sales["earned"], count=sales["count"],
+                       by_item=[SoldItem(**row) for row in sales["by_item"]])
+
+
+def team_payment_out(payment):
+    return TeamPayment(id=payment.id, paid_at=payment.paid_at, name=money.payer_name(payment) or None,
+                       paid_until=payment.covers_until, amount=payment.amount_cents,
+                       refunded=payment.refunded_cents or 0, disputed=payment.status == "disputed",
+                       fee=payment.fee_cents if payment.team_bears_fee else None, counts=money.counts(payment))
 
 
 class TeamMoneyOut(Model):
     team: TeamRef
+    #: Fees and credit sales together.
     earned: int
+    #: Of it, from fees.
+    fees: int
+    sales: CreditSales
+    #: Paid, but carrying a Stripe fee not known yet: counted once Stripe says (overnight).
+    waiting_for_fee: int
     paid_out: int
     open: int
     bank: Bank
@@ -246,18 +285,15 @@ def _team(slug):
 def _team_money_out(team):
     found = money.summary(team)
     return TeamMoneyOut(
-        team=_team_ref(team), earned=found["earned"], paid_out=found["paid_out"], open=found["open"],
+        team=_team_ref(team), earned=found["earned"], fees=found["fees"], sales=credit_sales_out(found),
+        waiting_for_fee=found["waiting_for_fee"], paid_out=found["paid_out"], open=found["open"],
         bank=Bank(account_holder=team.bank_account_holder, iban=team.bank_iban, bic=team.bank_bic),
         reference=money.default_reference(team), today=get_membership_today(),
         by_period=[Period(paid_until=until, earned=cents) for until, cents in found["by_period"]],
         transfers=[Transfer(id=payout.id, paid_on=payout.paid_on, amount=payout.amount_cents,
                             reference=payout.reference, to=money.masked_iban(payout.iban) or None)
                    for payout in found["payouts"]],
-        payments=[TeamPayment(id=payment.id, paid_at=payment.paid_at, name=money.payer_name(payment) or None,
-                              paid_until=payment.covers_until, amount=payment.amount_cents,
-                              refunded=payment.refunded_cents or 0, disputed=payment.status == "disputed",
-                              counts=money.counts(payment))
-                  for payment in found["payments"]],
+        payments=[team_payment_out(payment) for payment in found["payments"]],
         export_url=url_for("teams.team_money_export", slug=team.slug),
     )
 
@@ -303,3 +339,34 @@ def admin_team_money_bank(slug, body):
     db.session.commit()
     flush_marked_notification_channels()
     return _team_money_out(team)
+
+
+# --- Who carries Stripe's fees ----------------------------------------------------------
+
+
+class MoneySettings(Model):
+    #: Stripe's fee on a team fee: paid by the association, or taken from what the team is owed.
+    fee_payer: Literal["association", "team"]
+    #: Of what a team sells for credit, the association keeps this share, in hundredths of a percent.
+    credit_share_bps: int = Field(ge=0, le=2000)
+
+
+class MoneySettingsSavedOut(Model):
+    changed: list[str]
+
+
+@endpoint("GET", "/admin/money/settings", response=MoneySettings, permissions=PERMISSIONS, tag=TAG)
+def admin_money_settings():
+    """Who carries Stripe's fees. Each payment and sale keeps how it was when it was made."""
+    return MoneySettings(fee_payer="team" if money.teams_bear_fees() else "association",
+                         credit_share_bps=money.credit_share_bps())
+
+
+@endpoint("PUT", "/admin/money/settings", response=MoneySettingsSavedOut, body=MoneySettings,
+          permissions=PERMISSIONS, tag=TAG)
+def admin_money_settings_save(body):
+    """Change them, from now on: what was paid and sold before stays as it was counted."""
+    changed = money.save_money_settings(current_user, fee_payer=body.fee_payer,
+                                        credit_share_bps=body.credit_share_bps)
+    db.session.commit()
+    return MoneySettingsSavedOut(changed=changed)

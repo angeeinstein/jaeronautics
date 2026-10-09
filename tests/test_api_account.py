@@ -133,6 +133,18 @@ class TestThePage:
         assert membership["note"] == {"tone": "warning",
                                       "text": "Your membership stays active until 31.12.2099, but it will not renew."}
 
+    def test_a_subscription_ended_outright_while_paid_up_is_not_ended_and_does_not_renew(self, app, client):
+        # As on the test server: the subscription cancelled at once in Stripe,
+        # the time paid for still running. It said "Ended" beside "Renews ...".
+        member = _anna(payment_status="canceled", is_active=True, cancel_at_period_end=False,
+                       membership_starts_on=date(2026, 9, 30), membership_ends_on=date(2099, 12, 31))
+        membership = signed_in(client, member.user).get("/api/v1/account").get_json()["member"]["membership"]
+
+        assert membership["active"] is True
+        assert (membership["status_label"], membership["tone"]) == ("Renewal cancelled", "pending")
+        assert (membership["renews_on"], membership["auto_renew"]) == (None, False)
+        assert "will not renew" in membership["note"]["text"]
+
     def test_deleting_says_what_it_costs_while_paid_up(self, app, client):
         member = _anna(payment_status="paid", is_active=True, stripe_customer_id="cus_a",
                        stripe_subscription_id="sub_a", membership_ends_on=date(2099, 12, 31))

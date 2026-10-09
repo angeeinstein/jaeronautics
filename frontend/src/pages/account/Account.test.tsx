@@ -232,6 +232,51 @@ describe('my account: the overview', () => {
     });
   });
 
+  it('with credit on, Teams beside it rather than across the row', async () => {
+    const withTeams = {
+      ...account,
+      member: {
+        ...member,
+        teams: {
+          plural: 'Teams',
+          invite: false,
+          mine: [
+            {
+              slug: 'rocket',
+              name: 'Rocket Team',
+              logo_url: null,
+              status_label: 'Lead',
+              opens: 'team' as const,
+            },
+          ],
+        },
+      },
+    };
+    show({
+      '/api/v1/me': { body: makeMe({ credit_area: true }) },
+      '/api/v1/account': { body: withTeams },
+      '/api/v1/account/credit': {
+        body: {
+          balance_cents: 0,
+          top_up: {
+            refused: null,
+            choices: [1000],
+            least_cents: 1000,
+            most_cents: 2000,
+            max_balance_cents: 2000,
+          },
+          entries: [],
+          export_url: '/account/credit/history.csv',
+        },
+      },
+    });
+
+    const teams = await screen.findByRole('link', { name: 'Teams' });
+    await waitFor(() => {
+      expect(teams).not.toHaveAttribute('data-wide');
+    });
+  });
+
   it('no credit tile while it is off', async () => {
     show();
     await screen.findByRole('link', { name: 'Membership' });

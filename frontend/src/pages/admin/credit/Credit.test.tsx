@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Schemas } from '../../../api/client';
+import { useMe } from '../../../api/session';
 import { makeMe } from '../../../test/fixtures';
 import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { CreditSettings, parseAmounts } from '../settings/CreditSettings';
@@ -39,6 +40,7 @@ const overview: Schemas['CreditOverviewOut'] = {
   people: [{ user_id: 3, name: 'Anna Berger', picture_url: null, balance_cents: 1500, erased: false }],
   recent: [entry],
   mismatched: [],
+  sellers: [{ name: 'Joanneum Aeronautics', team_slug: null, earned_30_days: 120, earned: 120, items: 1 }],
 };
 
 const holder: Schemas['CreditHolderOut'] = {
@@ -53,6 +55,7 @@ const holder: Schemas['CreditHolderOut'] = {
   max_balance_cents: 2000,
   entries: [entry],
   account_url: '/admin/accounts/3',
+  items: [{ id: 9, name: 'Coffee', price_cents: 120, seller: 'Joanneum Aeronautics' }],
 };
 
 describe('admin: credit', () => {
@@ -129,6 +132,56 @@ describe('admin: credit', () => {
   });
 });
 
+describe('admin: selling by hand', () => {
+  it('a sale from a price list, then taken back on the second click', async () => {
+    const sold: typeof holder = {
+      ...holder,
+      balance_cents: 1380,
+      entries: [
+        {
+          ...entry,
+          id: 8,
+          kind: 'purchase',
+          kind_label: 'Purchase',
+          description: 'Coffee',
+          amount_cents: -120,
+          balance_after_cents: 1380,
+          seller: 'Joanneum Aeronautics',
+          may_take_back: true,
+        },
+        entry,
+      ],
+    };
+    const { calls } = mockFetch({
+      ...base,
+      '/api/v1/admin/credit/3': { body: holder },
+      'POST /api/v1/admin/credit/3/sale': { body: sold },
+      'POST /api/v1/admin/credit/3/entries/8/take-back': { body: holder },
+    });
+    renderPage(<Holder />, { route: '/admin/credit/3', path: '/admin/credit/:userId' });
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'Sale' }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Item' }));
+    await userEvent.click(await screen.findByRole('option', { name: /Coffee/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Book' }));
+    await waitFor(() => {
+      expect(calls.some((call) => call.url.endsWith('/sale'))).toBe(true);
+    });
+    expect(
+      await calls
+        .find((call) => call.url.endsWith('/sale'))
+        ?.clone()
+        .json(),
+    ).toEqual({ item_id: 9 });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Take back' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, take it back' }));
+    await waitFor(() => {
+      expect(calls.some((call) => call.url.endsWith('/take-back'))).toBe(true);
+    });
+  });
+});
+
 describe('settings: credit', () => {
   const settings: Schemas['CreditSettingsOut'] = {
     enabled: false,
@@ -146,7 +199,12 @@ describe('settings: credit', () => {
       '/api/v1/admin/settings/credit': { body: settings },
       'PUT /api/v1/admin/settings/credit': { body: { changed: ['credit_enabled'] } },
     });
-    renderPage(<CreditSettings />);
+    // The frame reads who is signed in; the save asks it again.
+    function Frame() {
+      useMe();
+      return <CreditSettings />;
+    }
+    renderPage(<Frame />);
 
     await userEvent.click(await screen.findByRole('checkbox', { name: /Credit is on/ }));
     await userEvent.type(screen.getByLabelText('Stripe product'), 'prod_123');
@@ -154,6 +212,10 @@ describe('settings: credit', () => {
 
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'PUT')).toBe(true);
+    });
+    // The menus follow the switch: who may see credit is asked again.
+    await waitFor(() => {
+      expect(calls.filter((call) => new URL(call.url).pathname === '/api/v1/me').length).toBeGreaterThan(1);
     });
     const sent = calls.find((call) => call.method === 'PUT');
     expect(await sent?.clone().json()).toEqual({

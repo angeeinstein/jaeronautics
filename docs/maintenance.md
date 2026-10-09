@@ -564,6 +564,14 @@ a reason) and refunds. Admin › Settings › Credit is `settings.general`.
   books nothing more. A refund made in Stripe's dashboard comes off the
   credit through the webhook.
 
+**Selling.** The association's price list is on Admin › Credit; each team's
+on its *Prices* page (leads and team treasurer). A sale is booked by hand on
+a person's credit page (Admin › Credit › the person › *Book by hand* ›
+*Sale*) and taken back from its row. What a team sells counts in its money
+like its fees and is transferred with the next payout; the association's
+own sales stay with it. Card readers are designed in `docs/credit-plan.md`,
+not built.
+
 **Switching it off** hides credit from members and stops top-ups. Balances
 and history stay, Admin › Credit stays while anybody still has some, and a
 top-up already paid is still added.
@@ -573,6 +581,28 @@ newest first. What cannot go back through Stripe -- cash, or a payment too
 old to refund -- the admins are emailed about (`credit_left_at_erasure`);
 pay it out and book it as *Paid out* on the person's credit page. If Stripe
 cannot be reached, nothing is erased; try again.
+
+## Stripe's fees
+
+Admin › Money › *Stripe's fees* (treasurer and admins):
+
+- **On team fees:** *The association pays* (the default) or *Taken from the
+  team*. Taken from the team, every team fee paid from then on counts for
+  the team less Stripe's actual fee for it. The nightly job asks Stripe for
+  the fee (`fill_in_fees`, "Filled in Stripe's fee for N team payment(s)");
+  until then the payment shows "Waiting for Stripe's fee" and does not
+  count, so nothing is transferred before the fee is known. A SEPA debit's
+  fee is known only once the money has arrived, days later.
+- **Kept of what teams sell for credit:** 0–20 %, default 0. Covers the
+  association's Stripe fee on top-ups, which cannot be split per sale.
+
+Both count from the moment they are saved; earlier payments and sales stay
+as they were counted (each keeps `team_bears_fee` / `kept_cents`).
+
+The check against Stripe (Admin › Money › *On Stripe*) never reaches before
+01.10.2026, the day the portal took over the association's payments:
+Stripe's earlier bookings were the old site's (`PORTAL_STARTED_ON` in
+`services/money_overview.py`; the tests set `MONEY_RECORDS_SINCE`).
 
 ## Renaming Somebody on the Forum
 

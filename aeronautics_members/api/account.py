@@ -238,9 +238,14 @@ def _membership(member, subscription):
                                     ((member.payment_status or "").replace("_", " ").capitalize(), "neutral"))
     if activating:
         label, tone = "Payment received", "pending"
+    # A subscription Stripe ended outright -- cancelled at once in its dashboard,
+    # say -- while the time paid for still runs: not "Ended", and nothing renews.
+    stopped_early = member.payment_status == "canceled" and active
+    if stopped_early:
+        label, tone = STATUS_LABELS["cancel_scheduled"]
 
     note = None
-    if member.cancel_at_period_end:
+    if member.cancel_at_period_end or stopped_early:
         note = NoteOut(tone="warning", text=(
             f"Your membership stays active until {_day(member.membership_ends_on)}, but it will not renew."
             if member.membership_ends_on else "Your membership stays active, but it will not renew."))
@@ -261,8 +266,8 @@ def _membership(member, subscription):
     return MembershipCardOut(
         status=member.payment_status or "", status_label=label, tone=tone, active=active,
         starts_on=member.membership_starts_on, ends_on=member.membership_ends_on,
-        renews_on=None if member.cancel_at_period_end else member.renewal_due_on,
-        auto_renew=not member.cancel_at_period_end, activating=activating, note=note,
+        renews_on=None if member.cancel_at_period_end or stopped_early else member.renewal_due_on,
+        auto_renew=not (member.cancel_at_period_end or stopped_early), activating=activating, note=note,
         may_manage_billing=bool(member.stripe_customer_id), may_resume_payment=may_resume, may_rejoin=may_rejoin,
         invoice_payments=invoice_payments_allowed(),
     )

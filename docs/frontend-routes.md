@@ -78,6 +78,9 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `GET /admin/credit/<user_id>` (page: one person's credit) → `GET /api/v1/admin/credit/<user_id>`; `POST .../cash`, `.../correction`, `.../refund`
 - `GET /admin/credit/export.csv` (download: every entry, accounts by number), `GET /admin/credit/receipt/<entry_id>` (out: Stripe's receipt)
 - [x] `GET /admin/settings/credit` (page) → `GET|PUT /api/v1/admin/settings/credit`
+- [x] new (2026-10-09): the association's price list on `/admin/credit` → `GET|POST /api/v1/admin/credit/items`, `PUT .../items/<id>`; a sale `POST /api/v1/admin/credit/<user_id>/sale`, taken back `POST .../entries/<entry_id>/take-back`
+- [x] new (2026-10-09): `GET /teams/<slug>/manage/prices` (page) → `GET|POST /api/v1/teams/<slug>/manage/prices`, `PUT .../prices/<id>`
+- [x] new (2026-10-09): who carries Stripe's fees, on `/admin/money` → `GET|PUT /api/v1/admin/money/settings`
 
 ### 4.6 Logs
 - [x] `GET /admin/logs` (page) → `GET /api/v1/admin/logs?q=&category=&user=&page=`; old links (`?category=all`) still work

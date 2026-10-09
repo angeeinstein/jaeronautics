@@ -18,6 +18,7 @@ import {
   Stack,
   Text,
   TextInput,
+  type TextInputProps,
 } from '@mantine/core';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -26,7 +27,7 @@ import { api, call, type Schemas } from '../../../api/client';
 import { type Detail, Details } from '../../../components/Details';
 import { Panel } from '../../../components/Panel';
 import { notifyFailed } from '../../../lib/notify';
-import { SaveBar, secretHint, SettingsPage, useSectionSave } from './shared';
+import { SaveBar, SettingsPage, secretHint, useNotMyLogin, useSectionSave } from './shared';
 
 type ForumOut = Schemas['ForumSettingsOut'];
 type ForumIn = Schemas['ForumIn'];
@@ -115,10 +116,13 @@ function Form({ data }: { data: ForumOut }) {
   const { save, errors, clear } = useSectionSave(forumQuery.queryKey, (body: ForumIn) =>
     call(api.PUT('/api/v1/admin/settings/forum', { body })),
   );
+  const notLogin = useNotMyLogin();
+  const notPassword = useNotMyLogin(true);
+  const notSecret = useNotMyLogin(true);
   const text = (
     key: keyof ForumIn,
     label: string,
-    extra: { description?: string; placeholder?: string } = {},
+    extra: Partial<TextInputProps> & Record<string, unknown> = {},
   ) => (
     <TextInput
       label={label}
@@ -146,11 +150,16 @@ function Form({ data }: { data: ForumOut }) {
           />
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
             {text('base_url', 'Address', { placeholder: 'https://forum.example.com' })}
-            {text('api_username', 'API username', { placeholder: 'system' })}
+            {text('api_username', 'API username', {
+              placeholder: 'system',
+              name: 'forum-api-user',
+              ...notLogin,
+            })}
             <PasswordInput
               label="API key"
               description={secretHint(data.api_key_set)}
-              autoComplete="off"
+              name="forum-api-key"
+              {...notPassword}
               value={value.api_key ?? ''}
               onChange={(event) => {
                 setValue({ ...value, api_key: event.currentTarget.value || null });
@@ -159,7 +168,8 @@ function Form({ data }: { data: ForumOut }) {
             <PasswordInput
               label="DiscourseConnect secret"
               description={secretHint(data.connect_secret_set)}
-              autoComplete="off"
+              name="forum-connect-secret"
+              {...notSecret}
               value={value.connect_secret ?? ''}
               onChange={(event) => {
                 setValue({ ...value, connect_secret: event.currentTarget.value || null });

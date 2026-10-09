@@ -228,8 +228,15 @@ under Stripe's privacy policy.
 - Refunded on request, and automatically when the account is erased, to the
   payment it came from; cash is paid out by the treasurer. A refund or lost
   chargeback in Stripe comes off the credit.
+- Selling (October 2026): the association and each team keep a price list;
+  a sale records the item, the seller and who booked it. What a team sells
+  is passed on to it like its fees. A sale can be taken back.
+- Stripe's fees: paid by the association unless set otherwise (Admin ›
+  Money); then a team's fees count less Stripe's fee, and the association
+  may keep a share (0–20 %) of what teams sell for credit.
 - Drafted: membership terms 2026-10-08 § 31, privacy policy 2026-10-08
-  §§ 20, 41. Waiting for approval.
+  §§ 20, 41. Waiting for approval. A card reader (later) would add a hashed
+  card ID per member: privacy policy and terms then.
 
 ## 9. The statutes and rules of procedure vs. the portal
 
