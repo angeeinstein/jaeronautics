@@ -197,7 +197,7 @@ class TestMe:
         me = client.get("/api/v1/me").get_json()
 
         assert (me["first_name"], me["last_name"], me["email"]) == ("Anna", "Berger", "member@example.com")
-        assert me["roles"] == [] and me["admin_area"] is False and me["counts"] == {"reviews_waiting": 0}
+        assert me["roles"] == [] and me["admin_area"] is False and me["counts"] == {"reviews_waiting": 0, "messages_open": 0}
         assert me["forum_area"] is True and me["picture_url"] is None
 
     def test_their_picture_once_it_is_approved(self, app, client):

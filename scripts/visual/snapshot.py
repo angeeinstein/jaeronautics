@@ -38,7 +38,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -70,6 +70,15 @@ def build_app(db_path):
         # In this process, against the throwaway database -- not a second one.
         "BACKUP_RUN_INLINE": True,
     })
+    # Who is using the portal (Settings › Updates) is whoever the screenshots
+    # themselves happen to be: one fixed answer, so both colour schemes and
+    # every run show the same panel -- one visitor typing on the join page.
+    from aeronautics_members.services import presence
+
+    presence.report = lambda **_kwargs: {
+        "active": 1, "signed_in": 0, "visitors": 1, "typing": 1,
+        "pages": [{"page": "/join", "people": 1, "typing": 1}], "last_seen_at": None,
+    }
     return app, app_module
 
 
@@ -407,6 +416,41 @@ def seed(app, app_module, subscriptions):
     credit_sales.sell(carla, beer, by=admin_user)
     db.session.commit()
 
+    # Messages: two to the admins (one answered), one to the Rocket Team's
+    # leads; an announcement half sent, one team mailing sent.
+    from aeronautics_members.db_models import ContactMessage, MailingRecipient
+    from aeronautics_members.services import mailings
+
+    now = datetime.now(timezone.utc)
+    db.session.add_all([
+        ContactMessage(topic="membership", sender_name="Vera Visitor", sender_email="vera@example.net",
+                       subject="Can alumni join?", body="I finished in 2019. Can I still become a member?\n\nVera",
+                       context={"page": "/join"}, delivered_at=now, created_at=now - timedelta(hours=3)),
+        ContactMessage(topic="portal", sender_user_id=active.user.id, sender_name="Anna Active",
+                       sender_email="active@example.org", subject="Forum password",
+                       body="The forum asks for a password I never set.",
+                       context={"account_id": active.user.id, "membership": "active", "page": "/account/forum"},
+                       delivered_at=now, created_at=now - timedelta(days=2), done_at=now - timedelta(days=1),
+                       done_by_user_id=admin_user.id),
+        ContactMessage(team_id=rocket.id, sender_user_id=carla.id, sender_name="Carla Member",
+                       sender_email=carla.email, subject="Workshop on Monday?",
+                       body="Is the workshop open on Monday evening? I would like to see the engine test.",
+                       context={"account_id": carla.id, "membership": "active"}, delivered_at=now,
+                       created_at=now - timedelta(hours=5)),
+    ])
+    db.session.commit()
+    announcement = mailings.announce(admin_user, kind="news", audience={"scope": "all"}, subject="Summer party",
+                                     body="We meet on **Friday** at the institute.\n\n- Food\n- Drinks")
+    for recipient in announcement.recipients[: max(1, len(announcement.recipients) // 2)]:
+        recipient.status, recipient.sent_at, recipient.attempts = "sent", now, 1
+    team_mailing = mailings.write_to_team(active.user, rocket, subject="Engine test on Saturday",
+                                          body="We test the new engine on Saturday at 10:00. Bring gloves.")
+    for recipient in team_mailing.recipients:
+        recipient.status, recipient.sent_at, recipient.attempts = "sent", now, 1
+    team_mailing.status, team_mailing.finished_at = "sent", now
+    db.session.commit()
+    assert MailingRecipient.query.count()
+
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
     db.session.commit()
@@ -495,6 +539,15 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--credit-holder", "user": "treasurer@example.org", "path": f"/admin/credit/{active.user.id}"},
         {"name": "admin--settings-credit", "user": "admin@example.org", "path": "/admin/settings/credit"},
         {"name": "teams--prices", "user": "active@example.org", "path": "/teams/rocket-team/manage/prices"},
+        {"name": "public--contact", "path": "/contact"},
+        {"name": "public--contact-signed-in", "user": "active@example.org", "path": "/contact"},
+        {"name": "public--unsubscribe", "path": f"/unsubscribe/{mailings.unsubscribe_token(active.user)}"},
+        {"name": "admin--messages", "user": "admin@example.org", "path": "/admin/messages"},
+        {"name": "admin--announcements", "user": "admin@example.org", "path": "/admin/announcements"},
+        {"name": "admin--announcement", "user": "admin@example.org",
+         "path": f"/admin/announcements/{announcement.id}"},
+        {"name": "admin--settings-mailings", "user": "admin@example.org", "path": "/admin/settings/mailings"},
+        {"name": "teams--messages", "user": "active@example.org", "path": "/teams/rocket-team/manage/messages"},
     ]
 
 

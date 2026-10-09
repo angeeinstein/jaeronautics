@@ -1,6 +1,12 @@
 # Messages: contact form, announcements, team mailings
 
-**Status:** agreed 2026-10-09; being built in the batch on `claude/messages`.
+**Status:** built 2026-10-09 (`claude/messages`). Running it:
+`docs/maintenance.md`, "Messages, announcements and team mailings".
+
+**One change from the proposal:** no "voting members" choice of recipients.
+Which of the portal's kinds of member are the statutes' ordinary members is
+not decided (`docs/legal-notes.md`, section 9). The general assembly's
+invitation goes to all members anyway, as § 10 (3) asks.
 
 ## What the maintainer asked for
 
@@ -53,8 +59,7 @@ like you proposed."
 **Announcements** (Admin › Announcements):
 - **Recipients:**
   - all active members;
-  - voting members (ordinary and honorary);
-  - one kind of member;
+  - one or more kinds of member;
   - teams (their active members);
   - all team leads.
 

@@ -4,53 +4,14 @@ What is agreed but not built yet. How this list works -- when it is worked
 through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
 The last batches (2026-10-08 and 2026-10-09) built everything that was on
-the list, credit and selling for credit (`docs/credit-plan.md`); what it was
-is in their pull requests and in git history (`git log -- docs/todo.md`).
+the list -- credit and selling for credit (`docs/credit-plan.md`); messages,
+announcements and team mailings (`docs/messages-plan.md`); admin error emails
+that resolved themselves left out. What it was is in their pull requests and
+in git history (`git log -- docs/todo.md`).
 
 ## Open
 
-### Messages: contact form, announcements, team mailings
-
-- **Added:** 2026-10-09
-- **What, where, why, decided:** `docs/messages-plan.md`.
-- **Built now** ("please implement them just like you proposed"), in the
-  batch on `claude/messages`.
-
-### Admin error emails: drop what has resolved itself before it is sent
-
-- **Added:** 2026-10-09
-- **What happened:** the maintainer put the forum (Discourse) in read-only mode
-  for a backup and an update. Meanwhile, clicking *Forum* in the portal made
-  the account's forum sync fail ("forum_sync_failed" on the error channel).
-  The maintainer switched read-only off and resynced, and the errors were
-  gone. About an hour later an admin email still reported them.
-  - The first two of a kind go out at once; the rest are held back and sent
-    as a summary later (`KIND_SUMMARY_MINUTES`: 60, 240, 1440 minutes,
-    `notification_service.py`, `_deliver_admin_digest`).
-  - Nothing checks whether a held-back error is still a problem.
-- **Maintainer:** "I think it would make sense to delete those events out of
-  the queue if the underlying problem has solved itself."
-- **What to build:**
-  - Before a held-back admin error goes out, check whether it still holds.
-    One check per kind (event_type), in a small registry. A kind without a
-    check is sent as now.
-  - A resolved event is not emailed. It is marked (e.g. status `resolved`,
-    with when) rather than deleted, so the record stays.
-  - Perhaps one line in the email: "N more resolved themselves before this
-    email".
-  - If every held-back event is resolved, no email.
-- **First kind:** `forum_sync_failed`. It is resolved when that member's
-  forum account has no `last_error` any more (cleared by a successful sync,
-  `forum_service.py`, `sync_member`). The event carries `object_type`
-  "forum_account" and `object_id`.
-- **While building:** go through the other error kinds and add a check where
-  "still a problem" can be read from the data, e.g.:
-  - an email job that was sent after all;
-  - a webhook event processed on a retry.
-- **Open:** whether the resolved ones should also show somewhere, e.g. on
-  System health or in the logs (they are in the event table either way).
-
-### Legal texts: publish the 2026-10-08 drafts (pictures, credit)
+### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
 - **Where:** `legal/privacy-policy/{de,en}/2026-10-08.md`, `status: "draft"`.
@@ -62,6 +23,9 @@ is in their pull requests and in git history (`git log -- docs/todo.md`).
   the credit balance (§ 20, § 41), and a new draft of the membership terms,
   `legal/membership-terms/{de,en}/2026-10-08.md`, adds § 31 "Credit" (the
   later sections move up by one). See `docs/credit-plan.md`.
+- **Also (added 2026-10-09, with messages):** the privacy policy draft names
+  the contact form, messages to team leads, announcements and team mailings
+  (§ 27, § 31, § 40, § 41). See `docs/messages-plan.md`.
 - **Waiting for:** the maintainer reading the wording (shown under Admin ›
   Legal texts, *Not in force yet*). Once approved: `status: "published"` in
   all four files (the day stays, or the day it is published), nothing else.
