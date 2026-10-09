@@ -90,6 +90,20 @@ What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
 
+- **Handling the forum's read-only mode in the portal** (2026-10-09).
+  - The proposal had two parts:
+    - while Discourse is read-only, *Forum* would show a short portal page
+      ("read-only for maintenance, you can read but not sign in") instead
+      of Discourse's dead end;
+    - syncs Discourse refuses for read-only would count as "try again
+      later", not as errors.
+  - Discourse marks its answers in read-only mode, so this can be detected.
+  - The maintainer: not worth the complexity for now, since read-only only
+    happens when they switch it on by hand for a short time during a backup
+    or update.
+  - The spurious emails it causes are handled by the to-do item above
+    ("Admin error emails").
+
 - **A short code for staff and company members like the year group**
   (2026-10-08). The year group feeds forum usernames (`_L25`), the forum's
   cohort groups and team lists; a made-up code would make fake cohorts and
