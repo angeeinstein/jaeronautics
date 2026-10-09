@@ -63,12 +63,17 @@ frontend/src/api/openapi.json`, then `npm run api:types` in `frontend/`.
 ### Branches and releases
 
 - Never push to `main`; it is protected (pull request, CI green).
-- One development branch for good: **`claude/new-frontend`** (decided
-  2026-10-09). Each batch is built there, one pull request, the maintainer
-  tests on the test server and merges. After the merge the branch is not
-  deleted but reset to the new `main` (it holds only merged history then).
-- The live server installs from `main`; the test server always follows
-  `claude/new-frontend`, so between batches it runs what `main` has.
+- A branch per feature or batch, from the current `main`, named after what it
+  holds (`claude/credit`, `claude/account-overview-fixes`) -- at least roughly:
+  a batch of small items is named after its main theme. One pull request; the
+  maintainer tests on the test server and merges; the branch is deleted
+  (GitHub does it at the merge). The next feature or batch gets a new branch.
+- The to-do list is pushed on the branch of the next batch: the first item
+  written after a merge opens that branch.
+- The live server installs from `main`; the test server from the branch under
+  test. Each pull request says the one command that points the test server
+  at its branch:
+  `sudo bash /var/www/jaeronautics/install.sh --mode update --branch <branch>`.
 
 ## Not losing context
 
@@ -80,14 +85,15 @@ when it is built:
   saw the conversation can build it (see below).
 - A bigger feature or a design decision: a short note in `docs/` (or a section
   of the matching document there), linked from its to-do item.
-- Something decided *against*, and why: the "Decided against" section of
-  `docs/todo.md`, so it is not proposed again.
+- Something the maintainer turned down, and why: the "Turned down" section of
+  `docs/todo.md`. It is a record, not a ban: it may be suggested again,
+  saying what has changed since. Only what the maintainer explicitly says
+  must never change is written down as such.
 - A standing preference of the maintainer: "Standing preferences" below.
 
 The list is pushed with the working branch whenever it changes. Until that
 branch is merged, `main` has an older list: a new session also looks at open
-pull requests from `claude/*` branches and takes the newest `docs/todo.md`
-(normally the one on `claude/new-frontend`).
+pull requests from `claude/*` branches and takes the newest `docs/todo.md`.
 
 ### Writing an item
 

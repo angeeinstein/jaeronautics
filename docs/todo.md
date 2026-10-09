@@ -38,11 +38,11 @@ git history (`git log -- docs/todo.md`).
   stays full width only when it would otherwise stand alone, i.e. with credit
   off.
 - **Decided:** the Credit tile keeps its size, the same as Membership and
-  Forum. That is prominent enough. Not in the header: credit "is not meant
-  to be the main feature of the association", and it is not yet clear
-  whether or how it will be used. A credit-card-shaped card in the header
-  was suggested and turned down for that reason. A slim line at the bottom
-  was also offered and not wanted.
+  Forum; that is prominent enough. A credit-card-shaped card in the header
+  was suggested and not wanted for now: credit "is not meant to be the main
+  feature of the association", and it is not yet clear whether or how it
+  will be used. If credit becomes important, it may be suggested again. A
+  slim line at the bottom was also offered and not wanted.
 - **Open:** nothing.
 
 ### Credit settings: menus show the change without a reload
@@ -94,7 +94,11 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
   "Admin" label and a count of reviews waiting was suggested as an
   alternative.
 
-## Decided against
+## Turned down
+
+What the maintainer did not want, and why -- a record, not a ban. Any of it
+may be suggested again, saying what has changed since. Only what the
+maintainer explicitly says must never change is marked so.
 
 - **A short code for staff and company members like the year group**
   (2026-10-08). The year group feeds forum usernames (`_L25`), the forum's
