@@ -158,6 +158,12 @@ are installed. Meanwhile:
   cannot show when the whole server or the Cloudflare tunnel is down: then
   Cloudflare shows its own error page.
 
+**Before starting one**, the Install panel says whether anybody else is using
+the portal right now, on which pages, and whether somebody is typing
+(`docs/presence.md`). A form being filled in lives in the browser and survives
+the restart; what is sent during the restart is what fails. So with somebody
+typing, wait a minute.
+
 Two things about the timing are easy to trip over:
 
 - `update` runs `install.sh` **from the current checkout**, and the rollback

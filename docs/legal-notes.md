@@ -102,6 +102,11 @@ urgent.
   with before/after values where something was changed. No IP addresses.
 - Emails sent and queued (recipient, type, status, errors).
 - Stripe webhook events processed (IDs, for not processing one twice).
+- Presence (`docs/presence.md`): per open browser tab in use, a random id,
+  signed in or not, the page as an address pattern, and when -- nothing about
+  who, gone 15 minutes after the tab went quiet. Shown to admins as counts
+  before an update. Not personal data as built; if it ever names people or
+  grows into analytics, the privacy policy needs to say so.
 
 ## 3. Where data goes
 

@@ -15,9 +15,11 @@ import { TeamsLayout } from '../frame/TeamsLayout';
 import { LoadingState } from '../components/States';
 import { NotFound } from '../pages/NotFound';
 import { RouteError } from '../pages/RouteError';
+import { Root } from './Root';
 
 export const routes: RouteObject[] = [
   {
+    Component: Root,
     errorElement: <RouteError />,
     // While the first page's own code is still on its way.
     hydrateFallbackElement: <LoadingState />,

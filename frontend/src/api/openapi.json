@@ -8958,6 +8958,125 @@
         "title": "PictureReplacementOut",
         "type": "object"
       },
+      "PresenceIn": {
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "maxLength": 200,
+            "title": "Page",
+            "type": "string"
+          },
+          "tab": {
+            "maxLength": 36,
+            "minLength": 8,
+            "title": "Tab",
+            "type": "string"
+          },
+          "typed": {
+            "default": false,
+            "title": "Typed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tab",
+          "page"
+        ],
+        "title": "PresenceIn",
+        "type": "object"
+      },
+      "PresenceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "integer"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/PresencePageOut"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "signed_in": {
+            "title": "Signed In",
+            "type": "integer"
+          },
+          "typing": {
+            "title": "Typing",
+            "type": "integer"
+          },
+          "visitors": {
+            "title": "Visitors",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active",
+          "signed_in",
+          "visitors",
+          "typing",
+          "pages",
+          "last_seen_at"
+        ],
+        "title": "PresenceOut",
+        "type": "object"
+      },
+      "PresencePageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "title": "Page",
+            "type": "string"
+          },
+          "people": {
+            "title": "People",
+            "type": "integer"
+          },
+          "typing": {
+            "title": "Typing",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "people",
+          "typing"
+        ],
+        "title": "PresencePageOut",
+        "type": "object"
+      },
+      "PresenceQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "tab": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tab"
+          }
+        },
+        "title": "PresenceQuery",
+        "type": "object"
+      },
       "PreviewIn": {
         "additionalProperties": false,
         "properties": {
@@ -16856,6 +16975,79 @@
         ]
       }
     },
+    "/api/v1/admin/presence": {
+      "get": {
+        "operationId": "admin_presence",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tab",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Tab"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresenceOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Who is using the portal right now: counts and pages, never who.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "system.update"
+        ]
+      }
+    },
     "/api/v1/admin/reviews": {
       "get": {
         "operationId": "admin_reviews",
@@ -20513,6 +20705,50 @@
           }
         },
         "summary": "Choose the new password. The link works once.",
+        "tags": [
+          "Session"
+        ]
+      }
+    },
+    "/api/v1/presence": {
+      "post": {
+        "operationId": "presence_seen",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresenceIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "This tab is in use: the page, and whether somebody typed. Answers nothing.",
         "tags": [
           "Session"
         ]
