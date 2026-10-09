@@ -333,7 +333,11 @@ EOF
 }
 
 has_tty() {
-    [[ -r /dev/tty && -w /dev/tty ]]
+    # Opened, not only checked: /dev/tty is readable and writable by its
+    # permissions everywhere, but without a controlling terminal -- the admin
+    # page's update runner, a systemd unit -- opening it fails ("No such device
+    # or address"), and a prompt written there ended the whole update.
+    ( : < /dev/tty > /dev/tty ) 2>/dev/null
 }
 
 tty_print() {
@@ -2322,7 +2326,7 @@ initialize_database_schema() {
 }
 
 count_admin_accounts() {
-    run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/python" -c "from sqlalchemy import func; from aeronautics_members.app import create_app; from aeronautics_members.db_models import Role, User, db; app=create_app(); ctx=app.app_context(); ctx.push(); print(db.session.scalar(db.select(func.count()).select_from(User).where(User.roles.any(Role.slug == 'admin'))) or 0); ctx.pop()"
+    run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/python" -c "from sqlalchemy import func; from aeronautics_members.app import create_app; from aeronautics_members.db_models import Role, User, db; app=create_app(); ctx=app.app_context(); ctx.push(); print(db.session.scalar(db.select(func.count()).select_from(User).where(User.roles.any(Role.slug.in_(('admin', 'superadmin'))))) or 0); ctx.pop()"
 }
 
 ensure_admin_account() {
@@ -2342,7 +2346,8 @@ ensure_admin_account() {
     if [[ -n "${ADMIN_EMAIL:-}" ]]; then
         create_admin_now="1"
     elif [[ "${existing_admin_count}" -eq 0 ]]; then
-        if [[ "${NONINTERACTIVE}" == "1" ]]; then
+        # Only a new installation offers one: an update never waits on a question.
+        if [[ "${NONINTERACTIVE}" == "1" || "${MODE}" == "update" ]]; then
             warn "No admin account exists yet. After install, create one manually with: flask --app aeronautics_members.app:create_app create-admin <email>"
             return
         fi

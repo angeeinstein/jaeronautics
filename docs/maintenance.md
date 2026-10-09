@@ -164,6 +164,12 @@ the portal right now, on which pages, and whether somebody is typing
 the restart; what is sent during the restart is what fails. So with somebody
 typing, wait a minute.
 
+**An update from the admin page never asks anything.** The runner passes
+`--yes`, and in update mode the installer does not offer to create an admin
+account (a super admin counts as one anyway). Before 2026-10-09 an update
+stopped after the migration -- with the old code still running -- because it
+tried to ask that question with no terminal to ask on.
+
 Two things about the timing are easy to trip over:
 
 - `update` runs `install.sh` **from the current checkout**, and the rollback
