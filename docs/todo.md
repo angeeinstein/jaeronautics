@@ -96,6 +96,34 @@ git history (`git log -- docs/todo.md`).
   stays and is the way to them.
 - **Open:** nothing.
 
+### Settings: the browser must not fill in the login on credential fields
+
+- **Added:** 2026-10-09
+- **Where:** Admin › Settings › Mail accounts, the add and edit form
+  (`frontend/src/pages/admin/settings/MailAccounts.tsx`: *Username* via
+  `text('username', …)`, *Password* already `autoComplete="new-password"`).
+  Check the same on Settings › Forum (API username and key) and Settings ›
+  Membership fee (secret key, webhook secret; both `autoComplete="off"`),
+  which have the same pattern.
+- **What:** Chrome fills the maintainer's own portal login -- their email
+  address and their password -- into the SMTP *Username* and *Password*
+  fields. Nothing is saved unless *Add* is pressed, but it is annoying and
+  could slip through. A text field followed by a password field looks like a
+  login form to the browser, and Chrome ignores `autocomplete="off"`.
+- **How (to try):**
+  - on the username-like fields, `autoComplete="off"` plus a `name` that is
+    not "username" or "email";
+  - on the secret fields, keep `new-password`, add `data-1p-ignore` and
+    `data-lpignore="true"` for password managers;
+  - if Chrome still fills them, make the fields read-only until they get the
+    focus.
+- **Check:** automated browsers keep no saved passwords, so this can only be
+  checked by hand: Chrome with the portal login saved, on the test server.
+  Say so in the pull request.
+- **Not to change:** *Your current password* above *Export* is a real
+  password prompt; Chrome filling it is right (`current-password`).
+- **Open:** nothing.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
