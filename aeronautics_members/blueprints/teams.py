@@ -157,6 +157,15 @@ def team_manage(slug, section=None):
     return app_shell()
 
 
+@teams_bp.route("/teams/<slug>/manage/messages", methods=["GET"])
+@login_required
+def team_messages(slug):
+    """Messages to the team's leads, and writing to its members (frontend/src/pages/teams/manage/Messages.tsx)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.MESSAGES)
+    return app_shell()
+
+
 @teams_bp.route("/teams/<slug>/manage/prices", methods=["GET"])
 @login_required
 def team_prices(slug):

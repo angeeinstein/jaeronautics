@@ -71,6 +71,10 @@ class User(UserMixin, db.Model):
     # membership ledger and the audit trail reference it and must stay readable;
     # what made it a person is gone. See services/privacy.py.
     deleted_at = db.Column(db.DateTime, nullable=True)
+    # Switched off the association's news (services/mailings.py): set when the
+    # person unsubscribed, cleared when they subscribe again. Notices -- the
+    # general assembly's invitation -- and team mailings still reach them.
+    news_unsubscribed_at = db.Column(db.DateTime, nullable=True)
 
     member = db.relationship("Member", back_populates="user", uselist=False)
     forum_account = db.relationship("ForumAccount", back_populates="user", uselist=False)
@@ -1082,6 +1086,95 @@ class CreditItem(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     team = db.relationship("Team")
+
+
+class ContactMessage(db.Model):
+    """A message through the contact form, to the site's admins, or to one
+    team's leads (``team_id``) -- services/messages.py. Answered by email:
+    the email to the recipients carries the sender as Reply-To. Kept a year
+    after it is marked done.
+    """
+
+    __tablename__ = "contact_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
+    #: The contact form's topic; none for a message to a team.
+    topic = db.Column(db.String(20), nullable=True)
+    sender_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    sender_name = db.Column(db.String(120), nullable=False)
+    sender_email = db.Column(db.String(255), nullable=False)
+    subject = db.Column(db.String(150), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    #: For somebody signed in: member number, membership, the page they came from.
+    context = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    delivered_at = db.Column(db.DateTime, nullable=True)
+    delivery_attempts = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    delivery_error = db.Column(db.Text, nullable=True)
+    done_at = db.Column(db.DateTime, nullable=True)
+    done_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+
+    team = db.relationship("Team")
+    sender = db.relationship("User", foreign_keys=[sender_user_id])
+    done_by = db.relationship("User", foreign_keys=[done_by_user_id])
+
+
+class Mailing(db.Model):
+    """An email to many members (services/mailings.py): an announcement from
+    the association -- news, which can be switched off, or a notice such as
+    the general assembly's invitation, which cannot -- or a team's mailing to
+    its members (``team_id``). Sent through a paced queue, one recipient row
+    each.
+    """
+
+    __tablename__ = "mailings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
+    #: "news", "notice" or "team".
+    kind = db.Column(db.String(20), nullable=False)
+    #: Who it was for, as chosen: {"scope": ..., "kinds": [...], "teams": [...]}.
+    audience = db.Column(db.JSON, nullable=False)
+    subject = db.Column(db.String(150), nullable=False)
+    #: Markdown.
+    body = db.Column(db.Text, nullable=False)
+    #: The general assembly's date, for its invitation.
+    assembly_at = db.Column(db.DateTime, nullable=True)
+    author_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    reply_to = db.Column(db.String(255), nullable=True)
+    #: "sending", "sent" or "stopped".
+    status = db.Column(db.String(20), nullable=False, default="sending")
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    finished_at = db.Column(db.DateTime, nullable=True)
+    recipient_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    #: Left out because they switched the news off.
+    unsubscribed_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
+    team = db.relationship("Team")
+    author = db.relationship("User")
+    recipients = db.relationship("MailingRecipient", back_populates="mailing", cascade="all, delete-orphan")
+
+
+class MailingRecipient(db.Model):
+    """One person a mailing goes to, and how it went. Forgotten a year later;
+    the mailing keeps its counts."""
+
+    __tablename__ = "mailing_recipients"
+    __table_args__ = (db.UniqueConstraint("mailing_id", "user_id", name="uq_mailing_recipient"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    mailing_id = db.Column(db.Integer, db.ForeignKey("mailings.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    email = db.Column(db.String(255), nullable=True)
+    #: "pending", "sent", "failed" or "stopped".
+    status = db.Column(db.String(20), nullable=False, default="pending", index=True)
+    attempts = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    sent_at = db.Column(db.DateTime, nullable=True, index=True)
+    error = db.Column(db.Text, nullable=True)
+
+    mailing = db.relationship("Mailing", back_populates="recipients")
+    user = db.relationship("User")
 
 
 class Presence(db.Model):

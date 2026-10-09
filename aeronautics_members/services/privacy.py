@@ -251,6 +251,11 @@ def export_account_data(user):
 
     payload["teams"] = _team_data(user)
     payload["credit"] = _credit_data(user)
+    from .messages import sent_by
+
+    payload["messages"] = sent_by(user)
+    payload["news_by_email"] = {"subscribed": user.news_unsubscribed_at is None,
+                                "unsubscribed_at": user.news_unsubscribed_at}
     return serialize_audit_value(payload)
 
 
@@ -540,6 +545,14 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
     from .teams import forget_for_erasure
 
     forget_for_erasure(user)
+
+    # What they wrote through the contact form or to a team goes; their
+    # address leaves the mailings' recipient lists (docs/messages-plan.md).
+    from .mailings import forget_user as forget_mailing_recipient
+    from .messages import forget_sender
+
+    forget_sender(user)
+    forget_mailing_recipient(user)
 
     # Somebody from the old forum -- still archived, or a returning student
     # who reclaimed the account -- also has what that board knew about them.

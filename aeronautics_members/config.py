@@ -112,6 +112,11 @@ RATELIMIT_EMAIL_RESEND = os.getenv("RATELIMIT_EMAIL_RESEND", "10 per hour")
 # for this person, so it is the one button that makes the forum do work.
 # A person signs in to the forum a few times a day; this only stops a loop.
 RATELIMIT_FORUM_CONNECT = os.getenv("RATELIMIT_FORUM_CONNECT", "20 per 10 minute")
+# The contact form and messages to a team's leads (services/messages.py):
+# somebody signed in counts as themselves, a visitor as their address; on top,
+# a looser cap per address so a lecture hall can still write.
+RATELIMIT_CONTACT = os.getenv("RATELIMIT_CONTACT", "5 per hour")
+RATELIMIT_CONTACT_PER_IP = os.getenv("RATELIMIT_CONTACT_PER_IP", "30 per hour")
 # A page in use saying so (services/presence.py): about twice a minute per open
 # tab, so this only stops a flood. Somebody signed in counts as themselves; a
 # lecture hall of visitors behind one campus address shares it.

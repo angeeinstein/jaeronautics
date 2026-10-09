@@ -191,7 +191,7 @@ def correct_private_email(user, new_email, *, actor_user):
 
     Returns the new address.
     """
-    from ..config import CONTACT_EMAIL
+    from ..security_utils import build_public_url
     from .identity import send_email_verification_email
     from .notifications import flush_marked_notification_channels, queue_user_status_notification
     from .workflows import sync_member_primary_email
@@ -238,7 +238,7 @@ def correct_private_email(user, new_email, *, actor_user):
             f"The email address of account {user.id} was changed by an admin.",
             old_email,
             payload={"first_name": member.first_name, "new_email_masked": f"{new_local[:2]}…@{new_domain}",
-                     "contact_email": CONTACT_EMAIL},
+                     "contact_url": build_public_url("public.contact")},
             target_user=user, target_member=member,
         )
     if has_forum_account:

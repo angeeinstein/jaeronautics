@@ -1,0 +1,23 @@
+{% extends "emails/_layout.html" %}
+{#- An announcement from the association, or a team's mailing to its members
+    (services/mailings.py). The text is the author's Markdown, rendered with
+    raw HTML switched off. News ends with the way to switch the news off. -#}
+{% block styles %}
+        .content ul, .content ol { margin: 0 0 16px; padding-left: 22px; }
+        .content table { border-collapse: collapse; margin: 0 0 16px; }
+        .content th, .content td { border: 1px solid #34383b; padding: 6px 10px; text-align: left; }
+{% endblock %}
+{% block content %}
+    {% if team_badge_name %}
+        <p style="margin:0 0 18px; color:#aab4bb; font-size:14px; font-weight:600;">{{ team_badge_name }}</p>
+    {% endif %}
+    <h2>{{ heading }}</h2>
+    {{ body_html }}
+{% endblock %}
+{% block footer %}
+    <p style="margin:0 0 6px;">{{ why }}</p>
+    {% if unsubscribe_url %}
+        <p style="margin:0 0 6px;"><a href="{{ unsubscribe_url }}" style="color:#aab4bb;">No more news by email</a></p>
+    {% endif %}
+    &copy; {{ now.year }} Joanneum Aeronautics
+{% endblock %}

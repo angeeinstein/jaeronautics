@@ -13,7 +13,7 @@ def test_every_page_has_it(client):
 
     assert [link["label"] for link in site["footer"]] == [
         "Impressum", "Privacy", "Statutes", "Legal texts", "Contact", "Website"]
-    assert {"label": "Contact", "url": "mailto:office@joanneum-aeronautics.at", "external": False} in site["footer"]
+    assert {"label": "Contact", "url": "/contact", "external": False} in site["footer"]
     assert site["copyright"].startswith("© 20")
 
 

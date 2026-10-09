@@ -650,8 +650,9 @@ class NotificationService:
                         _("An administrator of Joanneum Aeronautics changed the email address of your account "
                           "to %(new)s, at the request of somebody who said the account was theirs.",
                           new=payload.get("new_email_masked")),
-                        _("If that was you, there is nothing to do. If it was not, please write to %(contact)s "
-                          "at once.", contact=payload.get("contact_email")),
+                        _("If that was you, there is nothing to do. If it was not, please tell us at once "
+                          "through the contact form: %(contact)s",
+                          contact=payload.get("contact_url") or payload.get("contact_email")),
                     ],
                 },
             )
