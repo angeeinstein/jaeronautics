@@ -857,6 +857,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who is using the portal right now: counts and pages, never who. */
+        get: operations["admin_presence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/reviews": {
         parameters: {
             query?: never;
@@ -1628,6 +1645,23 @@ export interface paths {
         /** Choose the new password. The link works once. */
         put: operations["password_reset"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** This tab is in use: the page, and whether somebody typed. Answers nothing. */
+        post: operations["presence_seen"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5221,6 +5255,50 @@ export interface components {
         PictureReplacementOut: {
             /** Allowed Since */
             allowed_since: string | null;
+        };
+        /** PresenceIn */
+        PresenceIn: {
+            /** Page */
+            page: string;
+            /** Tab */
+            tab: string;
+            /**
+             * Typed
+             * @default false
+             */
+            typed?: boolean;
+        };
+        /** PresenceOut */
+        PresenceOut: {
+            /** Active */
+            active: number;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Pages */
+            pages: components["schemas"]["PresencePageOut"][];
+            /** Signed In */
+            signed_in: number;
+            /** Typing */
+            typing: number;
+            /** Visitors */
+            visitors: number;
+        };
+        /** PresencePageOut */
+        PresencePageOut: {
+            /** Page */
+            page: string;
+            /** People */
+            people: number;
+            /** Typing */
+            typing: number;
+        };
+        /** PresenceQuery */
+        PresenceQuery: {
+            /**
+             * Tab
+             * @default null
+             */
+            tab?: string | null;
         };
         /** PreviewIn */
         PreviewIn: {
@@ -9353,6 +9431,55 @@ export interface operations {
             };
         };
     };
+    admin_presence: {
+        parameters: {
+            query?: {
+                tab?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresenceOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_reviews: {
         parameters: {
             query?: never;
@@ -12263,6 +12390,46 @@ export interface operations {
             };
             /** @description Not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    presence_seen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresenceIn"];
+            };
+        };
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

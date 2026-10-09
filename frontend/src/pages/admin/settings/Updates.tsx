@@ -12,8 +12,9 @@
  * An update restarts the very server that answers this page, so while one
  * runs the page asks again every two seconds, takes a failed answer for the
  * restart it is, and once the update is done loads itself again -- with the
- * new version's front end. Data: GET|POST /api/v1/admin/settings/updates
- * (aeronautics_members/api/admin_system.py).
+ * new version's front end. Beside the button: whether anybody else is using
+ * the portal right now (Presence.tsx). Data: GET|POST
+ * /api/v1/admin/settings/updates (aeronautics_members/api/admin_system.py).
  */
 import { Alert, Anchor, Button, Code, Collapse, Group, Loader, Progress, Stack, Text } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -31,6 +32,7 @@ import { formatDateTime, plural } from '../../../lib/format';
 import { notifyFailed } from '../../../lib/notify';
 import { reloadPage } from '../../../lib/reload';
 import classes from './Maintenance.module.css';
+import { PresenceNote } from './Presence';
 
 type State = Schemas['UpdatesOut'];
 type Action = Schemas['UpdateIn']['action'];
@@ -286,6 +288,7 @@ function Install({
             This installation is up to date.
           </Alert>
         ) : null}
+        <PresenceNote />
         <Group gap="md">
           <ConfirmButton
             color="brand"

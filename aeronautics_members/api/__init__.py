@@ -23,6 +23,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     credit,
     form_options,
     legal,
+    presence,
     session,
     sign_in,
     signup,

@@ -1084,6 +1084,23 @@ class CreditItem(db.Model):
     team = db.relationship("Team")
 
 
+class Presence(db.Model):
+    """An open page somebody used in the last minutes (services/presence.py):
+    a random id the browser tab made up, whether it is signed in, the page as
+    the app's address pattern, and when it last spoke and was typed in.
+    Nothing about who; gone a quarter of an hour after the tab went quiet.
+    """
+
+    __tablename__ = "presence"
+
+    tab = db.Column(db.String(36), primary_key=True)
+    signed_in = db.Column(db.Boolean, nullable=False, default=False)
+    page = db.Column(db.String(80), nullable=False)
+    first_seen_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    seen_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    typed_at = db.Column(db.DateTime, nullable=True)
+
+
 class TeamAccessListSend(db.Model):
     """The access list a team last sent, to mark who is new on the next one.
 

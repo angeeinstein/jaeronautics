@@ -112,6 +112,10 @@ RATELIMIT_EMAIL_RESEND = os.getenv("RATELIMIT_EMAIL_RESEND", "10 per hour")
 # for this person, so it is the one button that makes the forum do work.
 # A person signs in to the forum a few times a day; this only stops a loop.
 RATELIMIT_FORUM_CONNECT = os.getenv("RATELIMIT_FORUM_CONNECT", "20 per 10 minute")
+# A page in use saying so (services/presence.py): about twice a minute per open
+# tab, so this only stops a flood. Somebody signed in counts as themselves; a
+# lecture hall of visitors behind one campus address shares it.
+RATELIMIT_PRESENCE = os.getenv("RATELIMIT_PRESENCE", "600 per 10 minute")
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
 # A test server says so: a red bar under the header on every page and in
 # every email, and "[TEST]" before each email's subject and the tab title.
