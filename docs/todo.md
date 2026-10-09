@@ -78,6 +78,24 @@ git history (`git log -- docs/todo.md`).
 - **Open:** whether a test-mode subscription cancelled by hand explains it
   completely.
 
+### Accounts list: erased accounts only when asked for
+
+- **Added:** 2026-10-09
+- **Where:** Admin › Accounts; `aeronautics_members/services/account_directory.py`
+  (`_narrow`, `membership_counts`, `count_accounts`), the filter chips in
+  `frontend/src/pages/admin/Accounts.tsx` / `accountFilters.ts`.
+- **What:** an erased account stays in the database (bookkeeping, audit
+  trail), so it stays in the list and in every count. The maintainer erased
+  the account they had used to set up the first admin -- no membership, no
+  details -- to get rid of the one account always counted under "No
+  membership"; the count did not change, the row just reads as erased now.
+  Leave erased accounts out of the list and every count and chip by default,
+  as old forum accounts are (2026-10-08): shown only when the account filter
+  *Erased* is chosen deliberately.
+- **Decided:** same pattern as the old forum accounts. The *Erased* filter
+  stays and is the way to them.
+- **Open:** nothing.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
