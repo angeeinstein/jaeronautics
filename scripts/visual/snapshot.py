@@ -396,8 +396,15 @@ def seed(app, app_module, subscriptions):
     credit._book(credit._account(active.user.id), credit.TOP_UP, 1000, "Top-up", payment=top_up)
     admin_user = User.query.filter_by(email="admin@example.org").one()
     credit.book_cash(admin_user, active.user, 500, note="Handed over at the office")
-    credit.spend(active.user, 120, "Coffee")
+    from aeronautics_members.services import credit_sales
+
+    coffee = credit_sales.add_item(admin_user, name="Coffee", price_cents=120)
+    credit_sales.add_item(admin_user, name="Tea", price_cents=100)
+    beer = credit_sales.add_item(active.user, team=rocket, name="Beer", price_cents=200)
+    credit_sales.add_item(active.user, team=rocket, name="Mate", price_cents=250)
+    credit_sales.sell(active.user, coffee, by=admin_user)
     credit.book_cash(admin_user, carla, 1500)
+    credit_sales.sell(carla, beer, by=admin_user)
     db.session.commit()
 
     reset_token = build_password_reset_token(new.user)
@@ -487,6 +494,7 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--credit", "user": "admin@example.org", "path": "/admin/credit"},
         {"name": "admin--credit-holder", "user": "treasurer@example.org", "path": f"/admin/credit/{active.user.id}"},
         {"name": "admin--settings-credit", "user": "admin@example.org", "path": "/admin/settings/credit"},
+        {"name": "teams--prices", "user": "active@example.org", "path": "/teams/rocket-team/manage/prices"},
     ]
 
 

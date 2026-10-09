@@ -40,7 +40,7 @@ function TeamsTable({ money }: { money: MoneyOut }) {
           <Table.Tr>
             <Table.Th scope="col">Team</Table.Th>
             <Table.Th scope="col" className={classes.amount}>
-              Paid by members
+              Earned
             </Table.Th>
             <Table.Th scope="col" className={classes.amount}>
               Transferred

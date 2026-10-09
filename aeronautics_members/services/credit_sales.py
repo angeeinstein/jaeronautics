@@ -134,7 +134,7 @@ def sell(user, item, *, by=None, channel=BOOKED):
         raise ConflictError(f"{item.team.name} is archived.", code="credit_seller_archived")
     entry = credit.spend(user, item.price_cents, item.name, team=item.team, by=by, item=item, channel=channel)
     if item.team is not None:
-        from .team_money import credit_share_bps
+        from .money_settings import credit_share_bps
 
         entry.kept_cents = item.price_cents * credit_share_bps() // 10000
     return entry

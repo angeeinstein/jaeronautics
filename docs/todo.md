@@ -3,9 +3,9 @@
 What is agreed but not built yet. How this list works -- when it is worked
 through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
-The last batches (2026-10-08) built everything that was on the list, and
-credit (`docs/credit-plan.md`); what it was is in their pull requests and in
-git history (`git log -- docs/todo.md`).
+The last batches (2026-10-08 and 2026-10-09) built everything that was on
+the list, credit and selling for credit (`docs/credit-plan.md`); what it was
+is in their pull requests and in git history (`git log -- docs/todo.md`).
 
 ## Open
 
@@ -26,103 +26,13 @@ git history (`git log -- docs/todo.md`).
   all four files (the day stays, or the day it is published), nothing else.
 - **Open:** whether the board wants to see it first.
 
-### My Account overview: Credit and Teams side by side
+### Card readers for credit (later)
 
 - **Added:** 2026-10-09
-- **Where:** My Account › Overview, `frontend/src/pages/account/Account.tsx`
-  (`Body`, `TeamsTile`, the `wide` prop of `Tile`).
-- **What:** with credit on, the tiles are Membership and Forum in the first
-  row, Credit alone in the second (half width, a hole beside it), Teams
-  across the full width in the third. That "breaks up the existing
-  overview". Make it a 2 × 2 grid: Membership, Forum / Credit, Teams. Teams
-  stays full width only when it would otherwise stand alone, i.e. with credit
-  off.
-- **Decided:** the Credit tile keeps its size, the same as Membership and
-  Forum; that is prominent enough. A credit-card-shaped card in the header
-  was suggested and not wanted for now: credit "is not meant to be the main
-  feature of the association", and it is not yet clear whether or how it
-  will be used. If credit becomes important, it may be suggested again. A
-  slim line at the bottom was also offered and not wanted.
-- **Open:** nothing.
-
-### Credit settings: menus show the change without a reload
-
-- **Added:** 2026-10-09
-- **Where:** Admin › Settings › Credit,
-  `frontend/src/pages/admin/settings/CreditSettings.tsx`.
-- **What:** after switching credit on, the maintainer had to reload the page
-  before *Credit* appeared in the menus. The menus come from `GET
-  /api/v1/me` (`credit_area`, `credit_admin`), which is not asked again
-  after the save; the admin frame asks every 30 s, My Account never. After a
-  successful save, invalidate `['me']`, as `pages/admin/teams/shared.ts`
-  does for the teams switch. Add a test.
-- **Open:** nothing.
-
-### Membership tile: "Ended" beside "paid until" and "Renews"
-
-- **Added:** 2026-10-09
-- **Where:** My Account › Overview, Membership tile
-  (`frontend/src/pages/account/Account.tsx`, `MembershipTile`; the data
-  from `_membership` in `aeronautics_members/api/account.py`).
-- **What:** on the test server the maintainer's own tile showed the pill
-  *Ended* together with "31.12.2026 paid until", the progress bar and
-  "Renews 01.01.2027". The pill is taken from `payment_status`
-  (`canceled` → "Ended"); the dates and "Renews" from the membership dates
-  and `cancel_at_period_end` (false). Most likely the test subscription was
-  cancelled at once in Stripe's test mode while the paid period stayed.
-- **To do:** find how the account got there (Admin › Accounts › the
-  account's Activity and Membership tabs on the test server). Then make the
-  tile consistent: never "Ended" while access is active, and no "Renews" for
-  a subscription that is cancelled. Fix the state handling if it is wrong
-  there, not only the display.
-- **Open:** whether a test-mode subscription cancelled by hand explains it
-  completely.
-
-### Accounts list: erased accounts only when asked for
-
-- **Added:** 2026-10-09
-- **Where:** Admin › Accounts; `aeronautics_members/services/account_directory.py`
-  (`_narrow`, `membership_counts`, `count_accounts`), the filter chips in
-  `frontend/src/pages/admin/Accounts.tsx` / `accountFilters.ts`.
-- **What:** an erased account stays in the database (bookkeeping, audit
-  trail), so it stays in the list and in every count. The maintainer erased
-  the account they had used to set up the first admin -- no membership, no
-  details -- to get rid of the one account always counted under "No
-  membership"; the count did not change, the row just reads as erased now.
-  Leave erased accounts out of the list and every count and chip by default,
-  as old forum accounts are (2026-10-08): shown only when the account filter
-  *Erased* is chosen deliberately.
-- **Decided:** same pattern as the old forum accounts. The *Erased* filter
-  stays and is the way to them.
-- **Open:** nothing.
-
-### Settings: the browser must not fill in the login on credential fields
-
-- **Added:** 2026-10-09
-- **Where:** Admin › Settings › Mail accounts, the add and edit form
-  (`frontend/src/pages/admin/settings/MailAccounts.tsx`: *Username* via
-  `text('username', …)`, *Password* already `autoComplete="new-password"`).
-  Check the same on Settings › Forum (API username and key) and Settings ›
-  Membership fee (secret key, webhook secret; both `autoComplete="off"`),
-  which have the same pattern.
-- **What:** Chrome fills the maintainer's own portal login -- their email
-  address and their password -- into the SMTP *Username* and *Password*
-  fields. Nothing is saved unless *Add* is pressed, but it is annoying and
-  could slip through. A text field followed by a password field looks like a
-  login form to the browser, and Chrome ignores `autocomplete="off"`.
-- **How (to try):**
-  - on the username-like fields, `autoComplete="off"` plus a `name` that is
-    not "username" or "email";
-  - on the secret fields, keep `new-password`, add `data-1p-ignore` and
-    `data-lpignore="true"` for password managers;
-  - if Chrome still fills them, make the fields read-only until they get the
-    focus.
-- **Check:** automated browsers keep no saved passwords, so this can only be
-  checked by hand: Chrome with the portal login saved, on the test server.
-  Say so in the pull request.
-- **Not to change:** *Your current password* above *Export* is a real
-  password prompt; Chrome filling it is right (`current-password`).
-- **Open:** nothing.
+- **Put off by the maintainer:** "this is not something we need to build now".
+- **What, how, open questions:** `docs/credit-plan.md`, "Card readers". The
+  base it builds on is done: price lists, `credit_sales.sell(...)`, the
+  accounting for teams and the association.
 
 ## Ideas for later (not scheduled)
 

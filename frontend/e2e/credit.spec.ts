@@ -1,7 +1,8 @@
 import { expect, signIn, test } from './fixtures';
 
 // The example portal (scripts/visual/snapshot.py) has credit on: Anna topped
-// up €10.00, handed over €5.00 in cash and had a coffee (€1.20).
+// up €10.00, handed over €5.00 in cash and had a coffee (€1.20) from the
+// association; Carla bought a beer (€2.00) from the Rocket Team.
 
 test.describe('credit', () => {
   test('a member: the tile, the balance and the history', async ({ page, isMobile }) => {
@@ -43,10 +44,22 @@ test.describe('credit', () => {
     await expect(page.getByRole('button', { name: /^Refund €/ })).toBeVisible();
   });
 
+  test('a lead keeps the team’s prices, and its money shows what it sold', async ({ page }) => {
+    await signIn(page, 'active@example.org');
+    await page.goto('/teams/rocket-team/manage/prices');
+
+    const list = page.getByRole('table', { name: 'Price list' });
+    await expect(list.getByRole('row', { name: /Beer/ })).toContainText('€2.00');
+    await page.goto('/teams/rocket-team/money');
+    await expect(
+      page.getByRole('table', { name: 'Sold for credit' }).getByRole('row', { name: /Beer/ }),
+    ).toContainText('€2.00');
+  });
+
   test('on a phone nothing sticks out of the page', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'phones only');
     await signIn(page);
-    for (const path of ['/admin/credit', '/admin/settings/credit']) {
+    for (const path of ['/admin/credit', '/admin/settings/credit', '/admin/money']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       const overflow = await page.evaluate(

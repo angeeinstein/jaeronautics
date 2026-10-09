@@ -36,7 +36,7 @@ from ..security_utils import build_public_url
 from . import ConflictError, ValidationError
 from . import payments
 from .audit import log_audit_event
-from .team_money import teams_bear_fees
+from .money_settings import teams_bear_fees
 from ..config import MEMBERSHIP_TIMEZONE
 from .clock import get_membership_today, get_now_utc, start_of_day_unix
 from .membership import format_membership_date_display
