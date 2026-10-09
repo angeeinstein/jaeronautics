@@ -53,6 +53,22 @@ describe('mail accounts', () => {
     );
   });
 
+  it('the browser leaves its saved login out of the SMTP login', async () => {
+    show(<MailAccounts />, { [API]: { body: { accounts: [] } } });
+
+    const username = await screen.findByLabelText('Username');
+    const password = screen.getByLabelText('Password');
+    // Read-only until focused: browsers fill only what they could type into.
+    expect(username).toHaveAttribute('readonly');
+    expect(username).toHaveAttribute('autocomplete', 'off');
+    expect(password).toHaveAttribute('autocomplete', 'new-password');
+    expect(password).toHaveAttribute('data-1p-ignore');
+
+    await userEvent.type(username, 'smtp-user');
+    expect(username).not.toHaveAttribute('readonly');
+    expect(username).toHaveValue('smtp-user');
+  });
+
   it('a change keeps the password unless one is typed', async () => {
     const { calls } = show(<MailAccounts />, {
       [API]: { body: { accounts: [office] } },

@@ -4,7 +4,8 @@ Everybody with a portal account is in it, members or not -- and so are the
 people carried over from the old forum who have not come back yet: a former
 member is somebody the association still has a record of, and reconnecting
 one is done from their account page like anything else. They are shown only
-when asked for, though (``DEFAULT_KIND``).
+when asked for, though (``DEFAULT_KIND``) -- and so are erased accounts (the
+account filter *Erased*).
 
 Moved here from app.py with the list's move to the new front end
 (api/admin_accounts.py). What is new is the membership *state*, one word per
@@ -176,6 +177,11 @@ def _narrow(query, *, search="", role="all", account="all", kind=DEFAULT_KIND):
         query = query.where(User.disabled_at.is_not(None), User.deleted_at.is_(None))
     elif account == "erased":
         query = query.where(User.deleted_at.is_not(None))
+    else:
+        # An erased account stays a row (the bookkeeping and the log refer to
+        # it), but like the old forum's people it is shown only when asked for:
+        # in no other list, count or chip.
+        query = query.where(User.deleted_at.is_(None))
     return query
 
 

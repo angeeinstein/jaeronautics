@@ -95,3 +95,25 @@ export function SaveBar({
 export function secretHint(isSet: boolean): string {
   return isSet ? 'One is set. Leave empty to keep it.' : 'None set yet.';
 }
+
+/**
+ * A field for another service's login (an SMTP account, the forum's API
+ * user, Stripe's keys): the browser must not fill in this portal's own
+ * saved login. A text field before a password field looks like a login form
+ * to it, and Chrome ignores ``autocomplete="off"`` -- so the field is also
+ * read-only until it is focused (browsers fill only fields they could type
+ * into), and password managers are told to leave it alone.
+ */
+export function useNotMyLogin(password = false) {
+  const [locked, setLocked] = useState(true);
+  return {
+    autoComplete: password ? 'new-password' : 'off',
+    readOnly: locked,
+    onFocus: () => {
+      setLocked(false);
+    },
+    'data-1p-ignore': true,
+    'data-lpignore': 'true',
+    'data-form-type': 'other',
+  } as const;
+}

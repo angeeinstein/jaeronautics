@@ -6,9 +6,11 @@
  * /api/v1/admin/settings/credit.
  */
 import { Alert, Checkbox, NumberInput, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api, call, type Schemas } from '../../../api/client';
+import { meQuery } from '../../../api/session';
 import { Panel } from '../../../components/Panel';
 import { SaveBar, SettingsPage, useSectionSave } from './shared';
 
@@ -43,8 +45,12 @@ function Form({ data }: { data: CreditSettingsOut }) {
   const [most, setMost] = useState<number | string>(data.max_balance_cents / 100);
   const [suggested, setSuggested] = useState(data.suggested_cents.map(euros).join(', '));
   const [eps, setEps] = useState(data.eps);
-  const { save, errors, clear } = useSectionSave(creditSettingsQuery.queryKey, (body: CreditSettingsIn) =>
-    call(api.PUT('/api/v1/admin/settings/credit', { body })),
+  const client = useQueryClient();
+  const { save, errors, clear } = useSectionSave(
+    creditSettingsQuery.queryKey,
+    (body: CreditSettingsIn) => call(api.PUT('/api/v1/admin/settings/credit', { body })),
+    // The menus (My Account's and the admin's) follow the switch at once.
+    () => void client.invalidateQueries({ queryKey: meQuery.queryKey }),
   );
   const amounts = parseAmounts(suggested);
   const submit = () => {

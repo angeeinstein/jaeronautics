@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Schemas } from '../../../api/client';
+import { useMe } from '../../../api/session';
 import { makeMe } from '../../../test/fixtures';
 import { type Answers, mockFetch, renderPage } from '../../../test/render';
 import { CreditSettings, parseAmounts } from '../settings/CreditSettings';
@@ -198,7 +199,12 @@ describe('settings: credit', () => {
       '/api/v1/admin/settings/credit': { body: settings },
       'PUT /api/v1/admin/settings/credit': { body: { changed: ['credit_enabled'] } },
     });
-    renderPage(<CreditSettings />);
+    // The frame reads who is signed in; the save asks it again.
+    function Frame() {
+      useMe();
+      return <CreditSettings />;
+    }
+    renderPage(<Frame />);
 
     await userEvent.click(await screen.findByRole('checkbox', { name: /Credit is on/ }));
     await userEvent.type(screen.getByLabelText('Stripe product'), 'prod_123');
@@ -206,6 +212,10 @@ describe('settings: credit', () => {
 
     await waitFor(() => {
       expect(calls.some((call) => call.method === 'PUT')).toBe(true);
+    });
+    // The menus follow the switch: who may see credit is asked again.
+    await waitFor(() => {
+      expect(calls.filter((call) => new URL(call.url).pathname === '/api/v1/me').length).toBeGreaterThan(1);
     });
     const sent = calls.find((call) => call.method === 'PUT');
     expect(await sent?.clone().json()).toEqual({
