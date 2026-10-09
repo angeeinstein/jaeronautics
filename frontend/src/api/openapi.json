@@ -1072,6 +1072,95 @@
         "title": "AdminCreditEntryOut",
         "type": "object"
       },
+      "AnnouncementIn": {
+        "additionalProperties": false,
+        "properties": {
+          "assembly_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Assembly At"
+          },
+          "audience": {
+            "$ref": "#/components/schemas/AudienceIn"
+          },
+          "body": {
+            "maxLength": 40000,
+            "title": "Body",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "news",
+              "notice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "late_ok": {
+            "default": false,
+            "title": "Late Ok",
+            "type": "boolean"
+          },
+          "subject": {
+            "maxLength": 300,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "audience",
+          "subject",
+          "body"
+        ],
+        "title": "AnnouncementIn",
+        "type": "object"
+      },
+      "AnnouncementsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/MemberKindOut"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LimitsOut"
+          },
+          "teams": {
+            "items": {
+              "$ref": "#/components/schemas/TeamChoiceOut"
+            },
+            "title": "Teams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "kinds",
+          "teams",
+          "limits"
+        ],
+        "title": "AnnouncementsOut",
+        "type": "object"
+      },
       "ApplicationOut": {
         "additionalProperties": false,
         "properties": {
@@ -1352,6 +1441,42 @@
           "transfers"
         ],
         "title": "Attention",
+        "type": "object"
+      },
+      "AudienceIn": {
+        "additionalProperties": false,
+        "properties": {
+          "kinds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "scope": {
+            "enum": [
+              "all",
+              "kinds",
+              "teams",
+              "leads"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "teams": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Teams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "title": "AudienceIn",
         "type": "object"
       },
       "BackupDeletedOut": {
@@ -2635,6 +2760,52 @@
         "title": "ConnectionOut",
         "type": "object"
       },
+      "ContactFormOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "signed_in": {
+            "title": "Signed In",
+            "type": "boolean"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicOut"
+            },
+            "title": "Topics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "topics",
+          "signed_in",
+          "name",
+          "email"
+        ],
+        "title": "ContactFormOut",
+        "type": "object"
+      },
       "ContactIn": {
         "additionalProperties": false,
         "properties": {
@@ -2723,6 +2894,246 @@
           "email_private"
         ],
         "title": "ContactIn",
+        "type": "object"
+      },
+      "ContactMessageIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Email"
+          },
+          "message": {
+            "maxLength": 10000,
+            "title": "Message",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Seconds"
+          },
+          "subject": {
+            "maxLength": 300,
+            "title": "Subject",
+            "type": "string"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Website"
+          }
+        },
+        "required": [
+          "topic",
+          "subject",
+          "message"
+        ],
+        "title": "ContactMessageIn",
+        "type": "object"
+      },
+      "ContactMessageOut": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered": {
+            "title": "Delivered",
+            "type": "boolean"
+          },
+          "done_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Done At"
+          },
+          "done_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Done By"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "membership": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Membership"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "sender_email": {
+            "title": "Sender Email",
+            "type": "string"
+          },
+          "sender_name": {
+            "title": "Sender Name",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic"
+          },
+          "topic_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Label"
+          }
+        },
+        "required": [
+          "id",
+          "topic",
+          "topic_label",
+          "sender_name",
+          "sender_email",
+          "account_id",
+          "membership",
+          "page",
+          "subject",
+          "body",
+          "created_at",
+          "delivered",
+          "done_at",
+          "done_by"
+        ],
+        "title": "ContactMessageOut",
+        "type": "object"
+      },
+      "ContactMessagesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContactMessageOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "open_count": {
+            "title": "Open Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "open_count"
+        ],
+        "title": "ContactMessagesOut",
         "type": "object"
       },
       "ContactOut": {
@@ -2874,10 +3285,56 @@
         "title": "CorrectionIn",
         "type": "object"
       },
+      "CountIn": {
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "$ref": "#/components/schemas/AudienceIn"
+          },
+          "kind": {
+            "enum": [
+              "news",
+              "notice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "audience"
+        ],
+        "title": "CountIn",
+        "type": "object"
+      },
+      "CountOut": {
+        "additionalProperties": false,
+        "properties": {
+          "recipients": {
+            "title": "Recipients",
+            "type": "integer"
+          },
+          "unsubscribed": {
+            "title": "Unsubscribed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recipients",
+          "unsubscribed"
+        ],
+        "title": "CountOut",
+        "type": "object"
+      },
       "Counts": {
         "additionalProperties": false,
         "description": "Numbers shown beside menu entries; 0 when there is nothing, or nothing the person may see.",
         "properties": {
+          "messages_open": {
+            "default": 0,
+            "title": "Messages Open",
+            "type": "integer"
+          },
           "reviews_waiting": {
             "title": "Reviews Waiting",
             "type": "integer"
@@ -3604,6 +4061,36 @@
         "title": "DoneOut",
         "type": "object"
       },
+      "DraftIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 40000,
+            "title": "Body",
+            "type": "string"
+          },
+          "kind": {
+            "default": "news",
+            "enum": [
+              "news",
+              "notice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 300,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "body"
+        ],
+        "title": "DraftIn",
+        "type": "object"
+      },
       "EmailAddressOut": {
         "additionalProperties": false,
         "properties": {
@@ -3845,6 +4332,32 @@
           "password"
         ],
         "title": "ExportIn",
+        "type": "object"
+      },
+      "FailedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "required": [
+          "email",
+          "error"
+        ],
+        "title": "FailedOut",
         "type": "object"
       },
       "Fee": {
@@ -6127,6 +6640,30 @@
         "title": "LegalTextsOut",
         "type": "object"
       },
+      "LimitsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "per_day": {
+            "title": "Per Day",
+            "type": "integer"
+          },
+          "per_hour": {
+            "title": "Per Hour",
+            "type": "integer"
+          },
+          "sender": {
+            "title": "Sender",
+            "type": "string"
+          }
+        },
+        "required": [
+          "per_hour",
+          "per_day",
+          "sender"
+        ],
+        "title": "LimitsOut",
+        "type": "object"
+      },
       "LinkOut": {
         "additionalProperties": false,
         "properties": {
@@ -6500,6 +7037,334 @@
         "title": "MailOut",
         "type": "object"
       },
+      "MailingDetailOut": {
+        "additionalProperties": false,
+        "properties": {
+          "assembly_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly At"
+          },
+          "audience_label": {
+            "title": "Audience Label",
+            "type": "string"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "failed_addresses": {
+            "items": {
+              "$ref": "#/components/schemas/FailedOut"
+            },
+            "title": "Failed Addresses",
+            "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_label": {
+            "title": "Kind Label",
+            "type": "string"
+          },
+          "recipient_count": {
+            "title": "Recipient Count",
+            "type": "integer"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "sending",
+              "sent",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "integer"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "unsubscribed_count": {
+            "title": "Unsubscribed Count",
+            "type": "integer"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "kind_label",
+          "audience_label",
+          "subject",
+          "body",
+          "assembly_at",
+          "author",
+          "created_at",
+          "status",
+          "finished_at",
+          "recipient_count",
+          "unsubscribed_count",
+          "sent",
+          "failed",
+          "waiting",
+          "stopped",
+          "failed_addresses"
+        ],
+        "title": "MailingDetailOut",
+        "type": "object"
+      },
+      "MailingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "assembly_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly At"
+          },
+          "audience_label": {
+            "title": "Audience Label",
+            "type": "string"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_label": {
+            "title": "Kind Label",
+            "type": "string"
+          },
+          "recipient_count": {
+            "title": "Recipient Count",
+            "type": "integer"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "sending",
+              "sent",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "integer"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "unsubscribed_count": {
+            "title": "Unsubscribed Count",
+            "type": "integer"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "kind_label",
+          "audience_label",
+          "subject",
+          "body",
+          "assembly_at",
+          "author",
+          "created_at",
+          "status",
+          "finished_at",
+          "recipient_count",
+          "unsubscribed_count",
+          "sent",
+          "failed",
+          "waiting",
+          "stopped"
+        ],
+        "title": "MailingOut",
+        "type": "object"
+      },
+      "MailingSettingsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "per_day": {
+            "minimum": 1,
+            "title": "Per Day",
+            "type": "integer"
+          },
+          "per_hour": {
+            "minimum": 1,
+            "title": "Per Hour",
+            "type": "integer"
+          },
+          "sender": {
+            "default": "",
+            "title": "Sender",
+            "type": "string"
+          }
+        },
+        "required": [
+          "per_hour",
+          "per_day"
+        ],
+        "title": "MailingSettingsIn",
+        "type": "object"
+      },
+      "MailingSettingsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "default_sender": {
+            "title": "Default Sender",
+            "type": "string"
+          },
+          "per_day": {
+            "title": "Per Day",
+            "type": "integer"
+          },
+          "per_hour": {
+            "title": "Per Hour",
+            "type": "integer"
+          },
+          "sender": {
+            "title": "Sender",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sender",
+          "default_sender",
+          "accounts",
+          "per_hour",
+          "per_day"
+        ],
+        "title": "MailingSettingsOut",
+        "type": "object"
+      },
+      "MailingSettingsSavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "MailingSettingsSavedOut",
+        "type": "object"
+      },
       "MakeIn": {
         "additionalProperties": false,
         "properties": {
@@ -6562,7 +7427,8 @@
                 "team.edit_bank_details",
                 "team.appoint_treasurer",
                 "team.appoint_leads",
-                "team.edit_prices"
+                "team.edit_prices",
+                "team.messages"
               ],
               "type": "string"
             },
@@ -6671,12 +7537,14 @@
                 "accounts.privacy",
                 "accounts.view",
                 "admin.access",
+                "announcements.send",
                 "approvals.review",
                 "credit.manage",
                 "forum.admin",
                 "forum.moderate",
                 "forum.moderator",
                 "logs.view",
+                "messages.receive",
                 "notifications.manage",
                 "notifications.receive",
                 "roles.manage",
@@ -6889,6 +7757,25 @@
           "joinable"
         ],
         "title": "MemberCategoryOut",
+        "type": "object"
+      },
+      "MemberKindOut": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "MemberKindOut",
         "type": "object"
       },
       "MemberOut": {
@@ -7551,6 +8438,20 @@
         "title": "MembershipOut",
         "type": "object"
       },
+      "MessageDoneIn": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "done"
+        ],
+        "title": "MessageDoneIn",
+        "type": "object"
+      },
       "MessageOut": {
         "additionalProperties": false,
         "properties": {
@@ -7575,6 +8476,20 @@
         "title": "MessageOut",
         "type": "object"
       },
+      "MessageSentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "MessageSentOut",
+        "type": "object"
+      },
       "MessagesOut": {
         "additionalProperties": false,
         "properties": {
@@ -7590,6 +8505,23 @@
           "messages"
         ],
         "title": "MessagesOut",
+        "type": "object"
+      },
+      "MessagesQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "default": "open",
+            "enum": [
+              "open",
+              "done",
+              "all"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "title": "MessagesQuery",
         "type": "object"
       },
       "Mismatch": {
@@ -7914,6 +8846,51 @@
           "name"
         ],
         "title": "NewTeamIn",
+        "type": "object"
+      },
+      "NewsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "subscribed": {
+            "title": "Subscribed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "subscribed"
+        ],
+        "title": "NewsIn",
+        "type": "object"
+      },
+      "NewsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "subscribed": {
+            "title": "Subscribed",
+            "type": "boolean"
+          },
+          "unsubscribed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unsubscribed At"
+          }
+        },
+        "required": [
+          "email",
+          "subscribed",
+          "unsubscribed_at"
+        ],
+        "title": "NewsOut",
         "type": "object"
       },
       "NoteIn": {
@@ -11045,6 +12022,25 @@
         "title": "TeamCardOut",
         "type": "object"
       },
+      "TeamChoiceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "TeamChoiceOut",
+        "type": "object"
+      },
       "TeamDetailsIn": {
         "additionalProperties": false,
         "description": "The association's part of a team besides its fee. How people join and\nhow many it takes are its leads' (team_manage.py, applying); every team\nhas an access list.",
@@ -11072,6 +12068,27 @@
           "name"
         ],
         "title": "TeamDetailsIn",
+        "type": "object"
+      },
+      "TeamDraftIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 40000,
+            "title": "Body",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 300,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "body"
+        ],
+        "title": "TeamDraftIn",
         "type": "object"
       },
       "TeamFundsOut": {
@@ -11267,6 +12284,28 @@
         "title": "TeamLabels",
         "type": "object"
       },
+      "TeamMailingsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailingOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "recipients": {
+            "title": "Recipients",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "recipients"
+        ],
+        "title": "TeamMailingsOut",
+        "type": "object"
+      },
       "TeamMembership": {
         "additionalProperties": false,
         "properties": {
@@ -11456,6 +12495,52 @@
           "why_not"
         ],
         "title": "TeamMembershipOut",
+        "type": "object"
+      },
+      "TeamMessageIn": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "maxLength": 10000,
+            "title": "Message",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Seconds"
+          },
+          "subject": {
+            "maxLength": 300,
+            "title": "Subject",
+            "type": "string"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Website"
+          }
+        },
+        "required": [
+          "subject",
+          "message"
+        ],
+        "title": "TeamMessageIn",
         "type": "object"
       },
       "TeamMoneyOut": {
@@ -11818,6 +12903,11 @@
             ],
             "title": "Logo Url"
           },
+          "may_message": {
+            "default": false,
+            "title": "May Message",
+            "type": "boolean"
+          },
           "member_count": {
             "title": "Member Count",
             "type": "integer"
@@ -11839,6 +12929,18 @@
           "membership": {
             "$ref": "#/components/schemas/TeamMembershipOut"
           },
+          "messages_open": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Messages Open"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -11857,7 +12959,8 @@
                 "team.edit_bank_details",
                 "team.appoint_treasurer",
                 "team.appoint_leads",
-                "team.edit_prices"
+                "team.edit_prices",
+                "team.messages"
               ],
               "type": "string"
             },
@@ -12541,6 +13644,20 @@
         "title": "TestEmailOut",
         "type": "object"
       },
+      "TestSentOut": {
+        "additionalProperties": false,
+        "properties": {
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to"
+        ],
+        "title": "TestSentOut",
+        "type": "object"
+      },
       "TextQuery": {
         "additionalProperties": false,
         "properties": {
@@ -12634,6 +13751,25 @@
           "max_balance_cents"
         ],
         "title": "TopUpOut",
+        "type": "object"
+      },
+      "TopicOut": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "TopicOut",
         "type": "object"
       },
       "Totals": {
@@ -13903,6 +15039,96 @@
           }
         },
         "summary": "A membership for this login, then on to paying.",
+        "tags": [
+          "Account"
+        ]
+      }
+    },
+    "/api/v1/account/news": {
+      "get": {
+        "operationId": "account_news",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          }
+        },
+        "summary": "Whether the association's news reaches me by email.",
+        "tags": [
+          "Account"
+        ]
+      },
+      "put": {
+        "operationId": "account_news_set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Switch the association's news by email on or off.",
         "tags": [
           "Account"
         ]
@@ -15278,6 +16504,408 @@
         ]
       }
     },
+    "/api/v1/admin/announcements": {
+      "get": {
+        "operationId": "admin_announcements",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "What was sent, newest first, and what can be chosen for a new one.",
+        "tags": [
+          "Mailings"
+        ],
+        "x-permissions": [
+          "announcements.send"
+        ]
+      },
+      "post": {
+        "operationId": "admin_announcement_send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailingOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Send an announcement: queued, and sent within the hour's and the day's limits.",
+        "tags": [
+          "Mailings"
+        ],
+        "x-permissions": [
+          "announcements.send"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/count": {
+      "post": {
+        "operationId": "admin_announcement_count",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CountOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "How many an announcement to this audience would reach.",
+        "tags": [
+          "Mailings"
+        ],
+        "x-permissions": [
+          "announcements.send"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/test": {
+      "post": {
+        "operationId": "admin_announcement_test",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The announcement as it would arrive, sent to oneself only.",
+        "tags": [
+          "Mailings"
+        ],
+        "x-permissions": [
+          "announcements.send"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/{mailing_id}": {
+      "get": {
+        "operationId": "admin_announcement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mailing_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailingDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One announcement: its text, and how far it is.",
+        "tags": [
+          "Mailings"
+        ],
+        "x-permissions": [
+          "announcements.send"
+        ]
+      }
+    },
+    "/api/v1/admin/announcements/{mailing_id}/stop": {
+      "post": {
+        "operationId": "admin_announcement_stop",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mailing_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailingDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Stop an announcement: what has not gone out yet does not.",
+        "tags": [
+          "Mailings"
+        ],
+        "x-permissions": [
+          "announcements.send"
+        ]
+      }
+    },
     "/api/v1/admin/credit": {
       "get": {
         "operationId": "admin_credit",
@@ -16468,6 +18096,171 @@
         ],
         "x-permissions": [
           "logs.view"
+        ]
+      }
+    },
+    "/api/v1/admin/messages": {
+      "get": {
+        "operationId": "admin_messages",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "enum": [
+                "open",
+                "done",
+                "all"
+              ],
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactMessagesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The contact form's messages, newest first.",
+        "tags": [
+          "Messages"
+        ],
+        "x-permissions": [
+          "messages.receive"
+        ]
+      }
+    },
+    "/api/v1/admin/messages/{message_id}": {
+      "put": {
+        "operationId": "admin_message_done",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageDoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactMessageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Mark a message done (answered), or open again.",
+        "tags": [
+          "Messages"
+        ],
+        "x-permissions": [
+          "messages.receive"
         ]
       }
     },
@@ -19229,6 +21022,122 @@
         ]
       }
     },
+    "/api/v1/admin/settings/mailings": {
+      "get": {
+        "operationId": "admin_settings_mailings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailingSettingsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The account mailings and messages are sent from, and how many an hour and a day.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      },
+      "put": {
+        "operationId": "admin_settings_mailings_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailingSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailingSettingsSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Choose the account mailings are sent from, and the provider's limits.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "settings.general"
+        ]
+      }
+    },
     "/api/v1/admin/settings/notifications": {
       "get": {
         "operationId": "admin_settings_notifications",
@@ -20365,6 +22274,76 @@
         ]
       }
     },
+    "/api/v1/contact": {
+      "get": {
+        "operationId": "contact_form",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactFormOut"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "The contact form's topics, and who is writing when somebody is signed in.",
+        "tags": [
+          "Messages"
+        ]
+      },
+      "post": {
+        "operationId": "contact_send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactMessageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageSentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Send a message to the association's admins.",
+        "tags": [
+          "Messages"
+        ]
+      }
+    },
     "/api/v1/forms/options": {
       "get": {
         "operationId": "form_options",
@@ -20546,6 +22525,160 @@
         "summary": "What a Flask route said before sending the browser to one of the app's pages -- an",
         "tags": [
           "Session"
+        ]
+      }
+    },
+    "/api/v1/news/unsubscribe/{token}": {
+      "post": {
+        "operationId": "news_unsubscribe_one_click",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The one-click unsubscribe a mail program sends (List-Unsubscribe-Post). Answers nothing.",
+        "tags": [
+          "Mailings"
+        ]
+      }
+    },
+    "/api/v1/news/{token}": {
+      "get": {
+        "operationId": "news_by_token",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "Whether the news reaches the address an email's link was for.",
+        "tags": [
+          "Mailings"
+        ]
+      },
+      "put": {
+        "operationId": "news_by_token_set",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Switch the news off, or on again, from an email's link.",
+        "tags": [
+          "Mailings"
         ]
       }
     },
@@ -22022,6 +24155,345 @@
         ]
       }
     },
+    "/api/v1/teams/{slug}/manage/mailings": {
+      "get": {
+        "operationId": "team_mailings",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMailingsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "What the team sent its members, and how many a mailing would reach now.",
+        "tags": [
+          "Mailings"
+        ]
+      },
+      "post": {
+        "operationId": "team_mailing_send",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamDraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailingOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Write to the team's active members; answers come back to whoever wrote it.",
+        "tags": [
+          "Mailings"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/mailings/test": {
+      "post": {
+        "operationId": "team_mailing_test",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamDraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "The team's mailing as it would arrive, sent to oneself only.",
+        "tags": [
+          "Mailings"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/mailings/{mailing_id}": {
+      "get": {
+        "operationId": "team_mailing",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mailing_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailingDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "One of the team's mailings: its text, and how far it is.",
+        "tags": [
+          "Mailings"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/mailings/{mailing_id}/stop": {
+      "post": {
+        "operationId": "team_mailing_stop",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "mailing_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailingDetailOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Stop one of the team's mailings.",
+        "tags": [
+          "Mailings"
+        ]
+      }
+    },
     "/api/v1/teams/{slug}/manage/members": {
       "get": {
         "operationId": "team_members",
@@ -22386,6 +24858,171 @@
         "summary": "Remove somebody from the team now.",
         "tags": [
           "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/messages": {
+      "get": {
+        "operationId": "team_messages",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "enum": [
+                "open",
+                "done",
+                "all"
+              ],
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactMessagesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "The messages written to the team's leads, newest first.",
+        "tags": [
+          "Messages"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/messages/{message_id}": {
+      "put": {
+        "operationId": "team_message_done",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageDoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactMessageOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Mark a message to the team done, or open again.",
+        "tags": [
+          "Messages"
         ]
       }
     },
@@ -23719,6 +26356,87 @@
         "summary": "No longer the team's treasurer.",
         "tags": [
           "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/message": {
+      "post": {
+        "operationId": "team_message_send",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamMessageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageSentOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Send a message to a team's leads.",
+        "tags": [
+          "Messages"
         ]
       }
     },

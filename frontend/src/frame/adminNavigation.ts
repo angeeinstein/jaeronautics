@@ -6,6 +6,8 @@
 import {
   IconChecklist,
   IconCoins,
+  IconMail,
+  IconSpeakerphone,
   IconCurrencyEuro,
   IconFlag,
   IconLayoutDashboard,
@@ -27,6 +29,7 @@ function settingsChildren(me: Me): NavItem[] {
     page('General', 'general'),
     page('Notifications', 'notifications'),
     page('Credit', 'credit'),
+    page('Mailings', 'mailings'),
   ];
   if (can(me, 'settings.credentials')) {
     children.push(page('Membership fee', 'billing'), page('Forum', 'forum'), page('Mail accounts', 'mail'));
@@ -58,6 +61,17 @@ export function adminSidebar(me: Me): SidebarContent {
               }
             : null,
           me.credit_admin ? { label: 'Credit', to: '/admin/credit', icon: IconCoins } : null,
+        ],
+      },
+      {
+        label: 'Messages',
+        items: [
+          can(me, 'messages.receive')
+            ? { label: 'Messages', to: '/admin/messages', icon: IconMail, count: me.counts.messages_open }
+            : null,
+          can(me, 'announcements.send')
+            ? { label: 'Announcements', to: '/admin/announcements', icon: IconSpeakerphone }
+            : null,
         ],
       },
       {

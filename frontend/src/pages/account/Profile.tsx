@@ -11,6 +11,7 @@ import { ErrorState, LoadingState } from '../../components/States';
 import { NoMembership } from './Account';
 import { ContactCard } from './Contact';
 import { IdentityCard } from './Identity';
+import { NewsCard } from './NewsCard';
 import { useAccount, useFormOptions } from './shared';
 
 export function Profile() {
@@ -71,6 +72,7 @@ export function Profile() {
                   : 'University or company email',
           }}
         />
+        <NewsCard />
         <IdentityCard
           key={member.change_request?.id ?? 'form'}
           identity={member.identity}

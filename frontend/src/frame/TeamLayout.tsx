@@ -20,6 +20,7 @@ import {
   IconLayout,
   IconLayoutDashboard,
   IconListCheck,
+  IconMail,
   IconReceipt,
   IconTag,
   IconUserShield,
@@ -83,6 +84,14 @@ export function teamSidebar(team: Team): SidebarContent {
             : null,
           people ? { label: 'Members', to: `${base}/manage/members`, icon: IconUsers } : null,
           people ? { label: 'Former members', to: `${base}/manage/former`, icon: IconHistory } : null,
+          may(team, 'team.messages')
+            ? {
+                label: 'Messages',
+                to: `${base}/manage/messages`,
+                icon: IconMail,
+                count: team.messages_open ?? 0,
+              }
+            : null,
         ],
       },
       {

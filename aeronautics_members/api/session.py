@@ -65,6 +65,8 @@ class Counts(Model):
     """Numbers shown beside menu entries; 0 when there is nothing, or nothing the person may see."""
 
     reviews_waiting: int
+    #: Contact messages not marked done, for whoever receives them.
+    messages_open: int = 0
 
 
 class TeamLabels(Model):
@@ -139,6 +141,14 @@ def _forum_ready(member):
     return bool(build_forum_context(member)["can_enter_forum"])
 
 
+def _messages_open():
+    if not current_user.can(Permission.MESSAGES_RECEIVE):
+        return 0
+    from ..services.messages import open_count
+
+    return open_count()
+
+
 def _credit_area():
     from ..services import credit
     from ..services.teams import is_active_association_member
@@ -177,6 +187,6 @@ def me():
         credit_area=_credit_area(),
         credit_admin=_credit_admin(),
         team_labels=TeamLabels(singular=singular, plural=plural),
-        counts=Counts(reviews_waiting=waiting_for_review_count(current_user)),
+        counts=Counts(reviews_waiting=waiting_for_review_count(current_user), messages_open=_messages_open()),
         admin_notices=_admin_notices() if admin_area else [],
     )
