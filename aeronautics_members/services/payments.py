@@ -268,6 +268,35 @@ def retrieve_invoice(invoice_id):
     return stripe.Invoice.retrieve(invoice_id)
 
 
+def stripe_fee(payment_intent_id=None, invoice_id=None):
+    """Stripe's fee for a payment, in cents; None while it is not known (the
+    money not arrived yet) or Stripe cannot be asked -- asked again later."""
+    apply_runtime_stripe_config()
+    try:
+        if not payment_intent_id and invoice_id:
+            invoice = stripe.Invoice.retrieve(invoice_id)
+            payment_intent_id = _id_of(invoice.get("payment_intent"))
+            if not payment_intent_id:
+                listing = stripe.InvoicePayment.list(invoice=invoice_id, limit=1)
+                found = (listing.get("data") or [None])[0]
+                payment_intent_id = _id_of(((found or {}).get("payment") or {}).get("payment_intent"))
+        if not payment_intent_id:
+            return None
+        intent = stripe.PaymentIntent.retrieve(payment_intent_id, expand=["latest_charge.balance_transaction"])
+    except stripe.StripeError as exc:
+        current_app.logger.info("Stripe's fee for %s not known yet: %s", payment_intent_id or invoice_id, exc)
+        return None
+    charge = intent.get("latest_charge") or {}
+    balance = charge.get("balance_transaction") if isinstance(charge, dict) or hasattr(charge, "get") else None
+    if not balance or isinstance(balance, str):
+        return None
+    return int(balance.get("fee") or 0)
+
+
+def _id_of(value):
+    return value if isinstance(value, str) else (value or {}).get("id") if value else None
+
+
 def refund(payment_intent_id, amount_cents, *, idempotency_key, metadata=None):
     """Give back part or all of one payment, to the card or account it came from.
 

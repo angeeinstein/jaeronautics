@@ -967,6 +967,11 @@ class Payment(db.Model):
     status = db.Column(db.String(20), nullable=False, default="paid")
     # Given back in Stripe, in part or in full.
     refunded_cents = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Stripe's fee for it, once Stripe has said (services/team_money.py
+    # fills it in); and whether a team's share carries it -- as the money
+    # settings were when it was paid, so changing them changes nothing paid.
+    fee_cents = db.Column(db.Integer, nullable=True)
+    team_bears_fee = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     user = db.relationship("User")
@@ -1037,14 +1042,45 @@ class CreditEntry(db.Model):
     description = db.Column(db.String(140), nullable=False)
     # The Stripe payment a top-up, refund or reversal belongs to.
     payment_id = db.Column(db.Integer, db.ForeignKey("payments.id"), nullable=True, index=True)
-    # What something bought was for, where it was a team's.
+    # Who sold it: a team, or the association itself (none).
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
+    # A sale: what from the price list, and how it was made ("booked" by
+    # somebody in the portal; a card reader, later).
+    item_id = db.Column(db.Integer, db.ForeignKey("credit_items.id"), nullable=True, index=True)
+    channel = db.Column(db.String(20), nullable=True)
+    # A sale taken back: the sale it undoes. Once each.
+    reverses_id = db.Column(db.Integer, db.ForeignKey("credit_entries.id"), nullable=True, unique=True)
+    # Of a team's sale, what the association keeps (its share, as the money
+    # settings were then); negative on the sale taken back.
+    kept_cents = db.Column(db.Integer, nullable=True)
     booked_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
 
     user = db.relationship("User", foreign_keys=[user_id])
     booked_by = db.relationship("User", foreign_keys=[booked_by_user_id])
     payment = db.relationship("Payment")
+    team = db.relationship("Team")
+    item = db.relationship("CreditItem")
+    reverses = db.relationship("CreditEntry", remote_side=[id], uselist=False)
+
+
+class CreditItem(db.Model):
+    """Something sold for credit, at its price: the association's own (no
+    team) or a team's. Never deleted once sold -- switched off instead, so
+    the sales still name it.
+    """
+
+    __tablename__ = "credit_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
+    name = db.Column(db.String(60), nullable=False)
+    price_cents = db.Column(db.Integer, nullable=False)
+    active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
     team = db.relationship("Team")
 
 

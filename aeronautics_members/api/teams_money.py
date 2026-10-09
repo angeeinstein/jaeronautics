@@ -22,7 +22,7 @@ from ..services import team_money as money
 from ..services import teams as teams_service
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, endpoint
-from .admin_money import Period, TeamPayment, Transfer
+from .admin_money import CreditSales, Period, TeamPayment, Transfer, credit_sales_out, team_payment_out
 from .team_manage import _may
 from .teams import _team
 
@@ -40,7 +40,12 @@ class TeamBankOut(Model):
 class TeamFundsOut(Model):
     slug: str
     name: str
+    #: Fees and credit sales together.
     earned: int
+    fees: int
+    sales: CreditSales
+    #: Paid, but carrying a Stripe fee not known yet: counted once Stripe says (overnight).
+    waiting_for_fee: int
     paid_out: int
     open: int
     last_transfer_on: date | None
@@ -72,7 +77,9 @@ def _funds_out(team):
     may_edit = teams_service.can_in_team(current_user, team, P.EDIT_BANK_DETAILS)
     last = found.get("last_payout")
     return TeamFundsOut(
-        slug=team.slug, name=team.name, earned=found["earned"], paid_out=found["paid_out"], open=found["open"],
+        slug=team.slug, name=team.name, earned=found["earned"], fees=found["fees"],
+        sales=credit_sales_out(found), waiting_for_fee=found["waiting_for_fee"],
+        paid_out=found["paid_out"], open=found["open"],
         last_transfer_on=last.paid_on if last else None,
         bank=TeamBankOut(account_holder=team.bank_account_holder,
                          iban=team.bank_iban if may_edit else (money.masked_iban(team.bank_iban) or None),
@@ -82,11 +89,7 @@ def _funds_out(team):
         transfers=[Transfer(id=payout.id, paid_on=payout.paid_on, amount=payout.amount_cents,
                             reference=payout.reference, to=money.masked_iban(payout.iban) or None)
                    for payout in found["payouts"]],
-        payments=[TeamPayment(id=payment.id, paid_at=payment.paid_at, name=money.payer_name(payment) or None,
-                              paid_until=payment.covers_until, amount=payment.amount_cents,
-                              refunded=payment.refunded_cents or 0, disputed=payment.status == "disputed",
-                              counts=money.counts(payment))
-                  for payment in found["payments"]],
+        payments=[team_payment_out(payment) for payment in found["payments"]],
         export_url=url_for("teams.team_money_export", slug=team.slug),
     )
 

@@ -997,7 +997,8 @@
               "purchase",
               "refund",
               "reversal",
-              "correction"
+              "correction",
+              "taken_back"
             ],
             "title": "Kind",
             "type": "string"
@@ -1005,6 +1006,11 @@
           "kind_label": {
             "title": "Kind Label",
             "type": "string"
+          },
+          "may_take_back": {
+            "default": false,
+            "title": "May Take Back",
+            "type": "boolean"
           },
           "name": {
             "title": "Name",
@@ -1020,6 +1026,18 @@
               }
             ],
             "title": "Receipt Url"
+          },
+          "seller": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Seller"
           },
           "team_name": {
             "anyOf": [
@@ -2902,7 +2920,8 @@
               "purchase",
               "refund",
               "reversal",
-              "correction"
+              "correction",
+              "taken_back"
             ],
             "title": "Kind",
             "type": "string"
@@ -2921,6 +2940,18 @@
               }
             ],
             "title": "Receipt Url"
+          },
+          "seller": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Seller"
           },
           "team_name": {
             "anyOf": [
@@ -2988,6 +3019,13 @@
             "title": "Erased",
             "type": "boolean"
           },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SaleItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
           "max_balance_cents": {
             "title": "Max Balance Cents",
             "type": "integer"
@@ -3031,7 +3069,8 @@
           "refundable_cents",
           "max_balance_cents",
           "entries",
-          "account_url"
+          "account_url",
+          "items"
         ],
         "title": "CreditHolderOut",
         "type": "object"
@@ -3064,6 +3103,13 @@
             "title": "Recent",
             "type": "array"
           },
+          "sellers": {
+            "items": {
+              "$ref": "#/components/schemas/SellerOut"
+            },
+            "title": "Sellers",
+            "type": "array"
+          },
           "totals": {
             "$ref": "#/components/schemas/CreditTotalsOut"
           }
@@ -3071,6 +3117,7 @@
         "required": [
           "enabled",
           "totals",
+          "sellers",
           "people",
           "recent",
           "mismatched"
@@ -3117,6 +3164,34 @@
           "erased"
         ],
         "title": "CreditPersonOut",
+        "type": "object"
+      },
+      "CreditSales": {
+        "additionalProperties": false,
+        "description": "What the team sold for credit, less what was taken back and the association's share.",
+        "properties": {
+          "by_item": {
+            "items": {
+              "$ref": "#/components/schemas/SoldItem"
+            },
+            "title": "By Item",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "earned",
+          "count",
+          "by_item"
+        ],
+        "title": "CreditSales",
         "type": "object"
       },
       "CreditSettingsIn": {
@@ -6486,7 +6561,8 @@
                 "team.view_money",
                 "team.edit_bank_details",
                 "team.appoint_treasurer",
-                "team.appoint_leads"
+                "team.appoint_leads",
+                "team.edit_prices"
               ],
               "type": "string"
             },
@@ -7660,6 +7736,48 @@
           "account"
         ],
         "title": "MoneyRow",
+        "type": "object"
+      },
+      "MoneySettings": {
+        "additionalProperties": false,
+        "properties": {
+          "credit_share_bps": {
+            "maximum": 2000,
+            "minimum": 0,
+            "title": "Credit Share Bps",
+            "type": "integer"
+          },
+          "fee_payer": {
+            "enum": [
+              "association",
+              "team"
+            ],
+            "title": "Fee Payer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fee_payer",
+          "credit_share_bps"
+        ],
+        "title": "MoneySettings",
+        "type": "object"
+      },
+      "MoneySettingsSavedOut": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed"
+        ],
+        "title": "MoneySettingsSavedOut",
         "type": "object"
       },
       "MyAccountOut": {
@@ -8868,6 +8986,137 @@
         "title": "PreviewOut",
         "type": "object"
       },
+      "PriceItemChangeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Active"
+          },
+          "move": {
+            "anyOf": [
+              {
+                "enum": [
+                  -1,
+                  1
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Move"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "price_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Price Cents"
+          }
+        },
+        "title": "PriceItemChangeIn",
+        "type": "object"
+      },
+      "PriceItemIn": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          },
+          "price_cents": {
+            "title": "Price Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "price_cents"
+        ],
+        "title": "PriceItemIn",
+        "type": "object"
+      },
+      "PriceItemOut": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_cents": {
+            "title": "Price Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price_cents",
+          "active"
+        ],
+        "title": "PriceItemOut",
+        "type": "object"
+      },
+      "PriceListOut": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PriceItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "items"
+        ],
+        "title": "PriceListOut",
+        "type": "object"
+      },
       "PriceOut": {
         "additionalProperties": false,
         "properties": {
@@ -9180,6 +9429,13 @@
             "title": "Erased",
             "type": "boolean"
           },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SaleItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
           "left_cents": {
             "title": "Left Cents",
             "type": "integer"
@@ -9232,6 +9488,7 @@
           "max_balance_cents",
           "entries",
           "account_url",
+          "items",
           "refunded_cents",
           "left_cents"
         ],
@@ -9854,6 +10111,49 @@
         "title": "SaidOut",
         "type": "object"
       },
+      "SaleIn": {
+        "additionalProperties": false,
+        "properties": {
+          "item_id": {
+            "title": "Item Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "title": "SaleIn",
+        "type": "object"
+      },
+      "SaleItemOut": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_cents": {
+            "title": "Price Cents",
+            "type": "integer"
+          },
+          "seller": {
+            "title": "Seller",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "price_cents",
+          "seller"
+        ],
+        "title": "SaleItemOut",
+        "type": "object"
+      },
       "SchemaOut": {
         "additionalProperties": false,
         "properties": {
@@ -9914,6 +10214,47 @@
           "level"
         ],
         "title": "SectionOut",
+        "type": "object"
+      },
+      "SellerOut": {
+        "additionalProperties": false,
+        "properties": {
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          },
+          "earned_30_days": {
+            "title": "Earned 30 Days",
+            "type": "integer"
+          },
+          "items": {
+            "title": "Items",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "team_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Slug"
+          }
+        },
+        "required": [
+          "name",
+          "team_slug",
+          "earned_30_days",
+          "earned",
+          "items"
+        ],
+        "title": "SellerOut",
         "type": "object"
       },
       "SentOut": {
@@ -10214,6 +10555,30 @@
         "title": "SiteOut",
         "type": "object"
       },
+      "SoldItem": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "count",
+          "earned"
+        ],
+        "title": "SoldItem",
+        "type": "object"
+      },
       "StepOut": {
         "additionalProperties": false,
         "properties": {
@@ -10299,6 +10664,26 @@
           "last_synced_at"
         ],
         "title": "SyncProblem",
+        "type": "object"
+      },
+      "TakeBackIn": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Note"
+          }
+        },
+        "title": "TakeBackIn",
         "type": "object"
       },
       "TeamBankIn": {
@@ -10578,6 +10963,10 @@
             "title": "Export Url",
             "type": "string"
           },
+          "fees": {
+            "title": "Fees",
+            "type": "integer"
+          },
           "last_transfer_on": {
             "anyOf": [
               {
@@ -10617,6 +11006,9 @@
             "title": "Records Transfers",
             "type": "boolean"
           },
+          "sales": {
+            "$ref": "#/components/schemas/CreditSales"
+          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -10627,12 +11019,19 @@
             },
             "title": "Transfers",
             "type": "array"
+          },
+          "waiting_for_fee": {
+            "title": "Waiting For Fee",
+            "type": "integer"
           }
         },
         "required": [
           "slug",
           "name",
           "earned",
+          "fees",
+          "sales",
+          "waiting_for_fee",
           "paid_out",
           "open",
           "last_transfer_on",
@@ -10948,6 +11347,10 @@
             "title": "Export Url",
             "type": "string"
           },
+          "fees": {
+            "title": "Fees",
+            "type": "integer"
+          },
           "open": {
             "title": "Open",
             "type": "integer"
@@ -10967,6 +11370,9 @@
             "title": "Reference",
             "type": "string"
           },
+          "sales": {
+            "$ref": "#/components/schemas/CreditSales"
+          },
           "team": {
             "$ref": "#/components/schemas/TeamRef"
           },
@@ -10981,11 +11387,18 @@
             },
             "title": "Transfers",
             "type": "array"
+          },
+          "waiting_for_fee": {
+            "title": "Waiting For Fee",
+            "type": "integer"
           }
         },
         "required": [
           "team",
           "earned",
+          "fees",
+          "sales",
+          "waiting_for_fee",
           "paid_out",
           "open",
           "bank",
@@ -11311,7 +11724,8 @@
                 "team.view_money",
                 "team.edit_bank_details",
                 "team.appoint_treasurer",
-                "team.appoint_leads"
+                "team.appoint_leads",
+                "team.edit_prices"
               ],
               "type": "string"
             },
@@ -11409,12 +11823,31 @@
             "type": "integer"
           },
           "counts": {
-            "title": "Counts",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counts"
           },
           "disputed": {
             "title": "Disputed",
             "type": "boolean"
+          },
+          "fee": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fee"
           },
           "id": {
             "title": "Id",
@@ -14752,6 +15185,216 @@
         ]
       }
     },
+    "/api/v1/admin/credit/items": {
+      "get": {
+        "operationId": "admin_credit_items",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The association's own price list: coffee in the student area, say.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      },
+      "post": {
+        "operationId": "admin_credit_item_add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Add an item to the association's price list, at the end.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/credit/items/{item_id}": {
+      "put": {
+        "operationId": "admin_credit_item_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceItemChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Rename, reprice, switch off or on, or move one place.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
     "/api/v1/admin/credit/{user_id}": {
       "get": {
         "operationId": "admin_credit_holder",
@@ -15004,6 +15647,108 @@
         ]
       }
     },
+    "/api/v1/admin/credit/{user_id}/entries/{entry_id}/take-back": {
+      "post": {
+        "operationId": "admin_credit_take_back",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeBackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditHolderOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Give a sale back: the credit returns, and the seller no longer counts it.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
     "/api/v1/admin/credit/{user_id}/refund": {
       "post": {
         "operationId": "admin_credit_refund",
@@ -15070,6 +15815,100 @@
           }
         },
         "summary": "Give the credit back to the payments it came from, newest first.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/credit/{user_id}/sale": {
+      "post": {
+        "operationId": "admin_credit_sale",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreditHolderOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Book a sale by hand: the item's price off their credit, for whoever sells it.",
         "tags": [
           "Credit"
         ],
@@ -15623,6 +16462,122 @@
           }
         },
         "summary": "The money on Stripe for a period, by what it was for, checked invoice by invoice",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.money"
+        ]
+      }
+    },
+    "/api/v1/admin/money/settings": {
+      "get": {
+        "operationId": "admin_money_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySettings"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Who carries Stripe's fees. Each payment and sale keeps how it was when it was made.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.money"
+        ]
+      },
+      "put": {
+        "operationId": "admin_money_settings_save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoneySettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneySettingsSavedOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Change them, from now on: what was paid and sold before stays as it was counted.",
         "tags": [
           "Admin"
         ],
@@ -22090,6 +23045,225 @@
         "summary": "A note about somebody, for the leads and the admins. Not shown to them, but part of their data.",
         "tags": [
           "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/prices": {
+      "get": {
+        "operationId": "team_prices",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "The team's price list, for what it sells for credit (a beer from its fridge).",
+        "tags": [
+          "Credit"
+        ]
+      },
+      "post": {
+        "operationId": "team_price_add",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Add an item to the team's price list, at the end.",
+        "tags": [
+          "Credit"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/prices/{item_id}": {
+      "put": {
+        "operationId": "team_price_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceItemChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceListOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Rename, reprice, switch off or on, or move one place.",
+        "tags": [
+          "Credit"
         ]
       }
     },

@@ -515,6 +515,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/credit/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The association's own price list: coffee in the student area, say. */
+        get: operations["admin_credit_items"];
+        put?: never;
+        /** Add an item to the association's price list, at the end. */
+        post: operations["admin_credit_item_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Rename, reprice, switch off or on, or move one place. */
+        put: operations["admin_credit_item_change"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/credit/{user_id}": {
         parameters: {
             query?: never;
@@ -566,6 +601,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/credit/{user_id}/entries/{entry_id}/take-back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Give a sale back: the credit returns, and the seller no longer counts it. */
+        post: operations["admin_credit_take_back"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/credit/{user_id}/refund": {
         parameters: {
             query?: never;
@@ -577,6 +629,23 @@ export interface paths {
         put?: never;
         /** Give the credit back to the payments it came from, newest first. */
         post: operations["admin_credit_refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/{user_id}/sale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Book a sale by hand: the item's price off their credit, for whoever sells it. */
+        post: operations["admin_credit_sale"];
         delete?: never;
         options?: never;
         head?: never;
@@ -712,6 +781,24 @@ export interface paths {
         /** The money on Stripe for a period, by what it was for, checked invoice by invoice */
         get: operations["admin_money_overview"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/money/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who carries Stripe's fees. Each payment and sale keeps how it was when it was made. */
+        get: operations["admin_money_settings"];
+        /** Change them, from now on: what was paid and sold before stays as it was counted. */
+        put: operations["admin_money_settings_save"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2066,6 +2153,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's price list, for what it sells for credit (a beer from its fridge). */
+        get: operations["team_prices"];
+        put?: never;
+        /** Add an item to the team's price list, at the end. */
+        post: operations["team_price_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/prices/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Rename, reprice, switch off or on, or move one place. */
+        put: operations["team_price_change"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/roles": {
         parameters: {
             query?: never;
@@ -2544,13 +2666,23 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "top_up" | "cash_in" | "cash_out" | "purchase" | "refund" | "reversal" | "correction";
+            kind: "top_up" | "cash_in" | "cash_out" | "purchase" | "refund" | "reversal" | "correction" | "taken_back";
             /** Kind Label */
             kind_label: string;
+            /**
+             * May Take Back
+             * @default false
+             */
+            may_take_back?: boolean;
             /** Name */
             name: string;
             /** Receipt Url */
             receipt_url: string | null;
+            /**
+             * Seller
+             * @default null
+             */
+            seller?: string | null;
             /** Team Name */
             team_name: string | null;
             /** User Id */
@@ -3113,11 +3245,16 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "top_up" | "cash_in" | "cash_out" | "purchase" | "refund" | "reversal" | "correction";
+            kind: "top_up" | "cash_in" | "cash_out" | "purchase" | "refund" | "reversal" | "correction" | "taken_back";
             /** Kind Label */
             kind_label: string;
             /** Receipt Url */
             receipt_url: string | null;
+            /**
+             * Seller
+             * @default null
+             */
+            seller?: string | null;
             /** Team Name */
             team_name: string | null;
         };
@@ -3133,6 +3270,8 @@ export interface components {
             entries: components["schemas"]["AdminCreditEntryOut"][];
             /** Erased */
             erased: boolean;
+            /** Items */
+            items: components["schemas"]["SaleItemOut"][];
             /** Max Balance Cents */
             max_balance_cents: number;
             /** Member */
@@ -3156,6 +3295,8 @@ export interface components {
             people: components["schemas"]["CreditPersonOut"][];
             /** Recent */
             recent: components["schemas"]["AdminCreditEntryOut"][];
+            /** Sellers */
+            sellers: components["schemas"]["SellerOut"][];
             totals: components["schemas"]["CreditTotalsOut"];
         };
         /** CreditPersonOut */
@@ -3170,6 +3311,18 @@ export interface components {
             picture_url: string | null;
             /** User Id */
             user_id: number;
+        };
+        /**
+         * CreditSales
+         * @description What the team sold for credit, less what was taken back and the association's share.
+         */
+        CreditSales: {
+            /** By Item */
+            by_item: components["schemas"]["SoldItem"][];
+            /** Count */
+            count: number;
+            /** Earned */
+            earned: number;
         };
         /** CreditSettingsIn */
         CreditSettingsIn: {
@@ -4326,7 +4479,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices")[];
             /** Slug */
             slug: string;
         };
@@ -4687,6 +4840,21 @@ export interface components {
             /** Paid Out */
             paid_out: number;
             team: components["schemas"]["TeamRef"];
+        };
+        /** MoneySettings */
+        MoneySettings: {
+            /** Credit Share Bps */
+            credit_share_bps: number;
+            /**
+             * Fee Payer
+             * @enum {string}
+             */
+            fee_payer: "association" | "team";
+        };
+        /** MoneySettingsSavedOut */
+        MoneySettingsSavedOut: {
+            /** Changed */
+            changed: string[];
         };
         /** MyAccountOut */
         MyAccountOut: {
@@ -5062,6 +5230,54 @@ export interface components {
             /** Html */
             html: string | null;
         };
+        /** PriceItemChangeIn */
+        PriceItemChangeIn: {
+            /**
+             * Active
+             * @default null
+             */
+            active?: boolean | null;
+            /**
+             * Move
+             * @default null
+             */
+            move?: (-1 | 1) | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * Price Cents
+             * @default null
+             */
+            price_cents?: number | null;
+        };
+        /** PriceItemIn */
+        PriceItemIn: {
+            /** Name */
+            name: string;
+            /** Price Cents */
+            price_cents: number;
+        };
+        /** PriceItemOut */
+        PriceItemOut: {
+            /** Active */
+            active: boolean;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Price Cents */
+            price_cents: number;
+        };
+        /** PriceListOut */
+        PriceListOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Items */
+            items: components["schemas"]["PriceItemOut"][];
+        };
         /** PriceOut */
         PriceOut: {
             /** Annual Fee */
@@ -5164,6 +5380,8 @@ export interface components {
             entries: components["schemas"]["AdminCreditEntryOut"][];
             /** Erased */
             erased: boolean;
+            /** Items */
+            items: components["schemas"]["SaleItemOut"][];
             /** Left Cents */
             left_cents: number;
             /** Max Balance Cents */
@@ -5383,6 +5601,22 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** SaleIn */
+        SaleIn: {
+            /** Item Id */
+            item_id: number;
+        };
+        /** SaleItemOut */
+        SaleItemOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Price Cents */
+            price_cents: number;
+            /** Seller */
+            seller: string;
+        };
         /** SchemaOut */
         SchemaOut: {
             /** Applied */
@@ -5400,6 +5634,19 @@ export interface components {
             label: string;
             /** Level */
             level: number;
+        };
+        /** SellerOut */
+        SellerOut: {
+            /** Earned */
+            earned: number;
+            /** Earned 30 Days */
+            earned_30_days: number;
+            /** Items */
+            items: number;
+            /** Name */
+            name: string;
+            /** Team Slug */
+            team_slug: string | null;
         };
         /** SentOut */
         SentOut: {
@@ -5503,6 +5750,15 @@ export interface components {
             /** Teams Label */
             teams_label: string | null;
         };
+        /** SoldItem */
+        SoldItem: {
+            /** Count */
+            count: number;
+            /** Earned */
+            earned: number;
+            /** Name */
+            name: string;
+        };
         /** StepOut */
         StepOut: {
             /** Key */
@@ -5525,6 +5781,14 @@ export interface components {
             last_synced_at: string | null;
             /** User Id */
             user_id: number | null;
+        };
+        /** TakeBackIn */
+        TakeBackIn: {
+            /**
+             * Note
+             * @default null
+             */
+            note?: string | null;
         };
         /** TeamBankIn */
         TeamBankIn: {
@@ -5612,6 +5876,8 @@ export interface components {
             earned: number;
             /** Export Url */
             export_url: string;
+            /** Fees */
+            fees: number;
             /** Last Transfer On */
             last_transfer_on: string | null;
             /** May Edit Bank */
@@ -5626,10 +5892,13 @@ export interface components {
             payments: components["schemas"]["TeamPayment"][];
             /** Records Transfers */
             records_transfers: boolean;
+            sales: components["schemas"]["CreditSales"];
             /** Slug */
             slug: string;
             /** Transfers */
             transfers: components["schemas"]["Transfer"][];
+            /** Waiting For Fee */
+            waiting_for_fee: number;
         };
         /** TeamHistoryOut */
         TeamHistoryOut: {
@@ -5704,6 +5973,8 @@ export interface components {
             earned: number;
             /** Export Url */
             export_url: string;
+            /** Fees */
+            fees: number;
             /** Open */
             open: number;
             /** Paid Out */
@@ -5712,6 +5983,7 @@ export interface components {
             payments: components["schemas"]["TeamPayment"][];
             /** Reference */
             reference: string;
+            sales: components["schemas"]["CreditSales"];
             team: components["schemas"]["TeamRef"];
             /**
              * Today
@@ -5720,6 +5992,8 @@ export interface components {
             today: string;
             /** Transfers */
             transfers: components["schemas"]["Transfer"][];
+            /** Waiting For Fee */
+            waiting_for_fee: number;
         };
         /** TeamNoteIn */
         TeamNoteIn: {
@@ -5812,7 +6086,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
@@ -5835,9 +6109,14 @@ export interface components {
             /** Amount */
             amount: number;
             /** Counts */
-            counts: number;
+            counts: number | null;
             /** Disputed */
             disputed: boolean;
+            /**
+             * Fee
+             * @default null
+             */
+            fee?: number | null;
             /** Id */
             id: number;
             /** Name */
@@ -7826,6 +8105,175 @@ export interface operations {
             };
         };
     };
+    admin_credit_items: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceListOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit_item_add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceItemIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceListOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit_item_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceItemChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceListOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_credit_holder: {
         parameters: {
             query?: never;
@@ -8017,6 +8465,78 @@ export interface operations {
             };
         };
     };
+    admin_credit_take_back: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+                entry_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeBackIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditHolderOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_credit_refund: {
         parameters: {
             query?: never;
@@ -8035,6 +8555,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefundOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_credit_sale: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaleIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditHolderOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
                 };
             };
             /** @description Not signed in. */
@@ -8454,6 +9045,104 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_money_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneySettings"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_money_settings_save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneySettings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneySettingsSavedOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -13467,6 +14156,171 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeamPersonOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceListOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_price_add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceItemIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceListOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_price_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceItemChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceListOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

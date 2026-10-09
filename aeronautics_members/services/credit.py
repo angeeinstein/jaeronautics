@@ -53,7 +53,9 @@ PURCHASE = "purchase"
 REFUND = "refund"
 REVERSAL = "reversal"
 CORRECTION = "correction"
-KINDS = (TOP_UP, CASH_IN, CASH_OUT, PURCHASE, REFUND, REVERSAL, CORRECTION)
+#: A sale given back: the credit returns, and the seller no longer counts it.
+TAKEN_BACK = "taken_back"
+KINDS = (TOP_UP, CASH_IN, CASH_OUT, PURCHASE, REFUND, REVERSAL, CORRECTION, TAKEN_BACK)
 
 SETTING_ENABLED = "credit_enabled"
 SETTING_PRODUCT = "credit_stripe_product_id"
@@ -247,19 +249,24 @@ def _euros(cents):
 # --- Booking ---------------------------------------------------------------------------
 
 
-def _book(account, kind, amount_cents, description, *, payment=None, team=None, by=None):
+def _book(account, kind, amount_cents, description, *, payment=None, team=None, by=None, item=None, channel=None,
+          reverses=None):
     account.balance_cents += amount_cents
     account.updated_at = get_now_utc()
     entry = CreditEntry(
         user_id=account.user_id, kind=kind, amount_cents=amount_cents,
         balance_after_cents=account.balance_cents, description=description[:140],
-        payment=payment, team=team, booked_by=by, created_at=get_now_utc(),
+        payment=payment, team=team, booked_by=by, item=item, channel=channel, reverses=reverses,
+        created_at=get_now_utc(),
     )
     db.session.add(entry)
+    db.session.flush()  # its id, and a sale taken back twice refused here (reverses_id is unique)
     log_audit_event("credit", f"credit_{kind}", actor_user=by, target_user=account.user, metadata={
         "amount_cents": amount_cents, "balance_cents": account.balance_cents,
         "payment_id": payment.id if payment is not None and payment.id else None,
         "team_id": team.id if team is not None else None,
+        "item_id": item.id if item is not None else None,
+        "channel": channel,
     })
     return entry
 
@@ -315,10 +322,11 @@ def correct(actor, user, amount_cents, *, note):
     return _book(account, CORRECTION, amount, reason, by=actor)
 
 
-def spend(user, amount_cents, description, *, team=None, by=None):
+def spend(user, amount_cents, description, *, team=None, by=None, item=None, channel=None):
     """Take something bought off the credit; refused when there is not enough.
 
-    Nothing calls this yet: it is what a coffee machine or a shop will.
+    Sales from a price list go through services/credit_sales.py, which calls
+    this with the item; ``team`` is who sold it (none: the association).
     """
     if not enabled():
         raise ConflictError("Credit is switched off.", code="credit_off")
@@ -327,7 +335,7 @@ def spend(user, amount_cents, description, *, team=None, by=None):
     if account.balance_cents < amount:
         raise ConflictError(f"Not enough credit: {_euros(max(account.balance_cents, 0))} left.",
                             code="credit_not_enough")
-    return _book(account, PURCHASE, -amount, description, team=team, by=by)
+    return _book(account, PURCHASE, -amount, description, team=team, by=by, item=item, channel=channel)
 
 
 # --- Topping up ------------------------------------------------------------------------
@@ -659,7 +667,7 @@ def totals():
     ).scalar()
     spent = db.session.execute(
         db.select(db.func.coalesce(db.func.sum(CreditEntry.amount_cents), 0))
-        .where(CreditEntry.kind == PURCHASE, CreditEntry.created_at >= since)
+        .where(CreditEntry.kind.in_((PURCHASE, TAKEN_BACK)), CreditEntry.created_at >= since)
     ).scalar()
     people = db.session.execute(
         db.select(db.func.count()).select_from(CreditAccount).where(CreditAccount.balance_cents != 0)
@@ -703,6 +711,7 @@ KIND_LABELS = {
     REFUND: "Refund",
     REVERSAL: "Chargeback",
     CORRECTION: "Correction",
+    TAKEN_BACK: "Taken back",
 }
 
 

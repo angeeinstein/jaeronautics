@@ -3883,6 +3883,7 @@ def create_app(config_overrides=None):
         from .services.team_payments import (
             end_finished_team_memberships, follow_association_ends, send_renewal_notices,
         )
+        from .services.team_money import fill_in_fees
         from .services.teams import end_lapsed_team_memberships, lapse_unpaid_approvals, send_due_access_lists
 
         team_steps = (
@@ -3900,6 +3901,8 @@ def create_app(config_overrides=None):
             (end_finished_team_memberships, "Ended {} team membership(s) that ran out or were not paid."),
             # Then the access lists due today, now that the teams are current.
             (send_due_access_lists, "Sent {} team access list(s)."),
+            # Stripe's fees of team payments that carry theirs (Admin › Money).
+            (fill_in_fees, "Filled in Stripe's fee for {} team payment(s)."),
         )
         for step, done_text in team_steps:
             try:
