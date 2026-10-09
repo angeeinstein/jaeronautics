@@ -1,3 +1,4 @@
+# ruff: noqa: F811 -- the fixtures imported below are taken as arguments
 """Admin errors that resolved themselves are not emailed.
 
 Seen live (2026-10-09): the forum in read-only mode for a backup made forum
