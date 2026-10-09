@@ -9,6 +9,13 @@ is in their pull requests and in git history (`git log -- docs/todo.md`).
 
 ## Open
 
+### Messages: contact form, announcements, team mailings
+
+- **Added:** 2026-10-09
+- **What, where, why, decided:** `docs/messages-plan.md`.
+- **Built now** ("please implement them just like you proposed"), in the
+  batch on `claude/messages`.
+
 ### Admin error emails: drop what has resolved itself before it is sent
 
 - **Added:** 2026-10-09
@@ -72,6 +79,10 @@ is in their pull requests and in git history (`git log -- docs/todo.md`).
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
+- **Answering contact messages from inside the portal** -- 2026-10-09. A
+  reply written in Admin › Messages and sent as a formatted HTML email, with
+  the conversation kept together. "Would be nice … but I think we can stay at
+  the normal email reply for now." See `docs/messages-plan.md`.
 - **The association's Odoo website** -- 2026-10-07. People confuse it with the
   portal and try to sign in there. No decision.
 - **Rounded corners** -- 2026-10-07. Discussed what switching the square look
