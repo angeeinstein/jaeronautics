@@ -21,6 +21,7 @@ import {
   IconLayoutDashboard,
   IconListCheck,
   IconReceipt,
+  IconTag,
   IconUserShield,
   IconUsers,
 } from '@tabler/icons-react';
@@ -88,6 +89,9 @@ export function teamSidebar(team: Team): SidebarContent {
         label: 'Money',
         items: [
           may(team, 'team.view_money') ? { label: 'Money', to: `${base}/money`, icon: IconCoin } : null,
+          team.sells_for_credit && may(team, 'team.edit_prices')
+            ? { label: 'Prices', to: `${base}/manage/prices`, icon: IconTag }
+            : null,
         ],
       },
       {

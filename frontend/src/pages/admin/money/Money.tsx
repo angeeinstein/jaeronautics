@@ -22,6 +22,7 @@ import { formatDate, formatEuros } from '../../../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import classes from './Money.module.css';
 import { type MoneyOut, moneyQuery } from './shared';
+import { FeeSettings } from './FeeSettings';
 import { Overview } from './Overview';
 
 function TeamsTable({ money }: { money: MoneyOut }) {
@@ -89,11 +90,14 @@ function TeamsTable({ money }: { money: MoneyOut }) {
 /** The period to check: two days and the usual choices. */
 function PeriodForm({
   today,
+  start,
   since,
   until,
   onCheck,
 }: {
   today: string;
+  /** The day the portal took over: no check reaches further back. */
+  start: string | null;
   since: string;
   until: string;
   onCheck: (since: string, until: string) => void;
@@ -101,11 +105,14 @@ function PeriodForm({
   const [from, setFrom] = useState(since);
   const [to, setTo] = useState(until || today);
   const year = Number(today.slice(0, 4));
-  const choices: [label: string, from: string, to: string][] = [
-    ['Since the start', '', today],
-    [String(year), `${String(year)}-01-01`, today],
-    [String(year - 1), `${String(year - 1)}-01-01`, `${String(year - 1)}-12-31`],
-  ];
+  // Only the years the portal has records of.
+  const choices = (
+    [
+      ['Since the start', '', today],
+      [String(year), `${String(year)}-01-01`, today],
+      [String(year - 1), `${String(year - 1)}-01-01`, `${String(year - 1)}-12-31`],
+    ] as [label: string, from: string, to: string][]
+  ).filter(([, , choiceTo]) => !start || choiceTo >= start);
 
   function submit(event: SyntheticEvent) {
     event.preventDefault();
@@ -116,8 +123,23 @@ function PeriodForm({
     <Stack gap="xs">
       <form onSubmit={submit}>
         <Group gap="sm" align="flex-end">
-          <DayInput label="From" maxDate={today} clearable value={from} onChange={setFrom} w={160} />
-          <DayInput label="Until" maxDate={today} value={to} onChange={setTo} w={160} />
+          <DayInput
+            label="From"
+            minDate={start ?? undefined}
+            maxDate={today}
+            clearable
+            value={from}
+            onChange={setFrom}
+            w={160}
+          />
+          <DayInput
+            label="Until"
+            minDate={start ?? undefined}
+            maxDate={today}
+            value={to}
+            onChange={setTo}
+            w={160}
+          />
           <Button type="submit">Check against Stripe</Button>
         </Group>
       </form>
@@ -137,7 +159,9 @@ function PeriodForm({
           </Button>
         ))}
         <Text size="sm" c="dimmed">
-          Leave “From” empty for everything from the start.
+          {start
+            ? `Leave “From” empty for everything since ${formatDate(start)}, when the portal took over.`
+            : 'Leave “From” empty for everything from the start.'}
         </Text>
       </Group>
     </Stack>
@@ -183,14 +207,21 @@ export function Money() {
             }
           >
             <Text size="sm" c="dimmed" className={classes.note}>
-              Teams get exactly what their members paid, less refunds. Stripe&apos;s fees are paid by the
-              association.
+              What teams are owed: what their members paid, less refunds, and what they sold for credit; less
+              Stripe&apos;s fees where they carry them (below).
             </Text>
             <TeamsTable money={money.data} />
           </Panel>
+          <FeeSettings />
           <Panel title="On Stripe">
             <Stack gap="md">
-              <PeriodForm today={money.data.today} since={since} until={until} onCheck={check} />
+              <PeriodForm
+                today={money.data.today}
+                start={money.data.records_since ?? null}
+                since={since}
+                until={until}
+                onCheck={check}
+              />
               {checking ? (
                 <Overview since={since || null} until={until || null} />
               ) : (

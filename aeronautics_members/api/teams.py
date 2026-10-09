@@ -176,6 +176,8 @@ class TeamPageOut(Model):
     #: For whoever sees its people: applications waiting.
     applications_waiting: int | None
     access_list_enabled: bool
+    #: Credit is on: the team can keep a price list and sell for credit.
+    sells_for_credit: bool = False
     #: Said to whoever runs it: no lead in force.
     lead_missing: bool
     #: A site admin: the team's admin settings (details, fee, archiving) are
@@ -212,6 +214,12 @@ def _team(slug):
     if team.status != teams_service.STATUS_ACTIVE and not may_set_up:
         abort(404)
     return team
+
+
+def _credit_on():
+    from ..services import credit
+
+    return credit.enabled()
 
 
 def _labels():
@@ -444,6 +452,7 @@ def _team_out(team, just_paid=None):
         can_manage=_manages_people(team), can_edit_page=P.EDIT_SETTINGS in held, can_see_money=_sees_money(team),
         permissions=sorted(held), role=teams_service.role_label(current_user, team),
         applications_waiting=_waiting(team), access_list_enabled=bool(team.access_list_enabled),
+        sells_for_credit=_credit_on(),
         lead_missing=_manages_people(team) and not teams_service.has_lead_in_force(team),
         administers=current_user.can(Permission.TEAMS_MANAGE), status=team.status,
         rules=_rules(team, current), joining=_joining(team) if current is None else None,

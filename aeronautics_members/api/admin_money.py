@@ -58,6 +58,8 @@ class MoneyOut(Model):
     teams: list[MoneyRow]
     total_open: int
     today: date
+    #: The check against Stripe reaches no further back: the day the portal took over.
+    records_since: date | None = None
 
 
 @endpoint("GET", "/admin/money", response=MoneyOut, permissions=PERMISSIONS, tag=TAG)
@@ -69,7 +71,8 @@ def admin_money():
                  account=money.masked_iban(row["team"].bank_iban) or None)
         for row in money.all_teams_money()
     ]
-    return MoneyOut(teams=rows, total_open=sum(row.open for row in rows), today=get_membership_today())
+    return MoneyOut(teams=rows, total_open=sum(row.open for row in rows), today=get_membership_today(),
+                    records_since=overview_service.records_since())
 
 
 # --- On Stripe ---------------------------------------------------------------------------

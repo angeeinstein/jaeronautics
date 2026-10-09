@@ -32,9 +32,10 @@ as paid has an invoice Stripe shows as paid.
 Read-only, and on request: it pages through Stripe and takes a few seconds.
 """
 
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import stripe
+from flask import current_app
 
 from ..config import MEMBERSHIP_TIMEZONE
 from ..db_models import MembershipPeriod, Payment, TeamPayout, db
@@ -281,12 +282,28 @@ def owed_to_teams_on(until):
     return earned - passed_on
 
 
+#: The day the portal took over the association's payments (it went live
+#: then). Stripe's earlier bookings were the old site's and are no part of
+#: the portal's records, so a check never reaches before it. The tests set
+#: ``MONEY_RECORDS_SINCE`` to look further back.
+PORTAL_STARTED_ON = date(2026, 10, 1)
+
+
+def records_since():
+    return current_app.config.get("MONEY_RECORDS_SINCE", PORTAL_STARTED_ON)
+
+
 def period_asked(since, until, today):
     """The period asked for: from ``since`` (None: the start) to ``until`` (None: today).
-    Never past today; a start after the end, or before 2000, counts as none."""
+    Never past today, and never before the portal's records begin; a start
+    after the end, or before 2000, counts as none (the start)."""
     until = min(until or today, today)
     if since is not None and (since > until or since.year < 2000):
         since = None
+    start = records_since()
+    if start is not None:
+        since = max(since or start, start)
+        until = max(until, since)
     return since, until
 
 

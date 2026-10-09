@@ -7660,6 +7660,19 @@
       "MoneyOut": {
         "additionalProperties": false,
         "properties": {
+          "records_since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Records Since"
+          },
           "teams": {
             "items": {
               "$ref": "#/components/schemas/MoneyRow"
@@ -11773,6 +11786,11 @@
           },
           "sees_team_page": {
             "title": "Sees Team Page",
+            "type": "boolean"
+          },
+          "sells_for_credit": {
+            "default": false,
+            "title": "Sells For Credit",
             "type": "boolean"
           },
           "slug": {

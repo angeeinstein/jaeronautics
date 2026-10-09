@@ -21,6 +21,7 @@ import { arrivedClass, useArrivals } from '../../../lib/arrivals';
 import { formatDate, formatDayOf, formatEuros } from '../../../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
+import { Counts, feeNote, SalesPanel } from '../../admin/money/sales';
 import { useSlug } from './shared';
 
 type Funds = Schemas['TeamFundsOut'];
@@ -129,7 +130,13 @@ function Body({ funds }: { funds: Funds }) {
   return (
     <Stack gap="lg">
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-        <StatTile value={formatEuros(funds.earned)} label="Paid by members" note="Less refunds" />
+        <StatTile
+          value={formatEuros(funds.earned)}
+          label="Earned"
+          note={
+            funds.sales.earned ? `${formatEuros(funds.sales.earned)} of it sold for credit` : 'Less refunds'
+          }
+        />
         <StatTile
           value={formatEuros(funds.paid_out)}
           label="Transferred to the team"
@@ -138,7 +145,7 @@ function Body({ funds }: { funds: Funds }) {
         <StatTile value={formatEuros(funds.open)} label="Open" note="Still to be transferred" />
       </SimpleGrid>
       <Text size="sm" c="dimmed">
-        The team gets exactly what its members paid, less refunds. Stripe's fees are paid by the association.
+        {feeNote(funds.payments, funds.waiting_for_fee)}
       </Text>
       <Bank
         key={`${funds.bank.account_holder ?? ''}|${funds.bank.iban ?? ''}|${funds.bank.bic ?? ''}`}
@@ -214,6 +221,7 @@ function Body({ funds }: { funds: Funds }) {
           </Stack>
         )}
       </Panel>
+      {funds.sales.count || funds.sales.by_item.length ? <SalesPanel sales={funds.sales} /> : null}
       <Panel
         title="Payments"
         flush
@@ -249,14 +257,7 @@ function Body({ funds }: { funds: Funds }) {
                       {formatEuros(payment.amount)}
                     </Table.Td>
                     <Table.Td ta="right">
-                      <span className="ja-figures">{formatEuros(payment.counts)}</span>
-                      {payment.disputed ? (
-                        <Text size="xs" c="var(--ja-warning)">
-                          Taken back (chargeback)
-                        </Text>
-                      ) : payment.refunded ? (
-                        <Text size="xs" c="dimmed">{`${formatEuros(payment.refunded)} refunded`}</Text>
-                      ) : null}
+                      <Counts payment={payment} />
                     </Table.Td>
                   </Table.Tr>
                 ))}

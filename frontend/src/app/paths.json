@@ -41,6 +41,7 @@
     "/teams/:slug/manage/applying",
     "/teams/:slug/manage/access-list",
     "/teams/:slug/manage/roles",
+    "/teams/:slug/manage/prices",
     "/teams/:slug/manage/details",
     "/teams/:slug/manage/fee",
     "/teams/:slug/manage/archive",

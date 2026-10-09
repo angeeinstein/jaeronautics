@@ -4817,6 +4817,11 @@ export interface components {
         };
         /** MoneyOut */
         MoneyOut: {
+            /**
+             * Records Since
+             * @default null
+             */
+            records_since?: string | null;
             /** Teams */
             teams: components["schemas"]["MoneyRow"][];
             /**
@@ -6096,6 +6101,11 @@ export interface components {
             rules: components["schemas"]["RulesOut"] | null;
             /** Sees Team Page */
             sees_team_page: boolean;
+            /**
+             * Sells For Credit
+             * @default false
+             */
+            sells_for_credit?: boolean;
             /** Slug */
             slug: string;
             /**

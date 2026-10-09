@@ -12,6 +12,7 @@ import {
   Group,
   NumberInput,
   SegmentedControl,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -34,15 +35,17 @@ import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import { Balance, History } from '../../account/Credit';
 import { type CreditHolder, holderQuery, initialsOf } from './shared';
 
-type Booking = 'cash_in' | 'cash_out' | 'correction';
+type Booking = 'sale' | 'cash_in' | 'cash_out' | 'correction';
 
 const BOOKINGS: { label: string; value: Booking }[] = [
+  { label: 'Sale', value: 'sale' },
   { label: 'Cash in', value: 'cash_in' },
   { label: 'Paid out', value: 'cash_out' },
   { label: 'Correction', value: 'correction' },
 ];
 
 const HINTS: Record<Booking, string> = {
+  sale: 'Something from a price list, at its price; it counts for whoever sells it.',
   cash_in: 'Money handed over, added to the credit.',
   cash_out: 'Credit given back in cash or by transfer.',
   correction: 'Above zero adds, below zero takes off. Say why.',
@@ -58,7 +61,9 @@ function useHolderChange(userId: number) {
 
 function Book({ holder }: { holder: CreditHolder }) {
   const userId = holder.user_id;
+  const sells = holder.items.length > 0;
   const [kind, setKind] = useState<Booking>('cash_in');
+  const [itemId, setItemId] = useState<string | null>(null);
   const [amount, setAmount] = useState<number | ''>('');
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -67,6 +72,13 @@ function Book({ holder }: { holder: CreditHolder }) {
     mutationFn: () => {
       const cents = Math.round(Number(amount) * 100);
       const path = { user_id: userId };
+      if (kind === 'sale')
+        return call(
+          api.POST('/api/v1/admin/credit/{user_id}/sale', {
+            params: { path },
+            body: { item_id: Number(itemId) },
+          }),
+        );
       if (kind === 'correction')
         return call(
           api.POST('/api/v1/admin/credit/{user_id}/correction', {
@@ -85,6 +97,7 @@ function Book({ holder }: { holder: CreditHolder }) {
       take(out);
       setAmount('');
       setNote('');
+      setItemId(null);
       setErrors({});
       notifyDone('Booked.');
     },
@@ -93,12 +106,15 @@ function Book({ holder }: { holder: CreditHolder }) {
       else notifyFailed(error);
     },
   });
-  const ready = amount !== '' && amount !== 0 && (kind !== 'correction' || note.trim() !== '');
+  const ready =
+    kind === 'sale'
+      ? itemId !== null
+      : amount !== '' && amount !== 0 && (kind !== 'correction' || note.trim() !== '');
   return (
     <Panel title="Book by hand">
       <Stack gap="md">
         <SegmentedControl
-          data={BOOKINGS}
+          data={sells ? BOOKINGS : BOOKINGS.filter((booking) => booking.value !== 'sale')}
           value={kind}
           onChange={(value) => {
             setKind(value);
@@ -109,31 +125,49 @@ function Book({ holder }: { holder: CreditHolder }) {
         <Text size="sm" c="dimmed">
           {HINTS[kind]}
         </Text>
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-          <NumberInput
-            label="Amount"
-            prefix="€"
-            decimalScale={2}
-            allowNegative={kind === 'correction'}
-            value={amount}
-            error={errors.amount_cents}
+        {kind === 'sale' ? (
+          <Select
+            label="Item"
+            placeholder="Choose what was sold"
+            searchable
+            data={holder.items.map((item) => ({
+              value: String(item.id),
+              label: `${item.name} · ${formatEuros(item.price_cents)} · ${item.seller}`,
+            }))}
+            value={itemId}
+            error={errors.item_id}
             onChange={(value) => {
-              setAmount(typeof value === 'number' ? value : value === '' ? '' : Number(value));
+              setItemId(value);
               setErrors({});
             }}
           />
-          <TextInput
-            label={kind === 'correction' ? 'Why' : 'Note'}
-            placeholder={kind === 'cash_in' ? 'Cash top-up' : kind === 'cash_out' ? 'Paid out' : ''}
-            maxLength={140}
-            value={note}
-            error={errors.note}
-            onChange={(event) => {
-              setNote(event.currentTarget.value);
-              setErrors({});
-            }}
-          />
-        </SimpleGrid>
+        ) : (
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <NumberInput
+              label="Amount"
+              prefix="€"
+              decimalScale={2}
+              allowNegative={kind === 'correction'}
+              value={amount}
+              error={errors.amount_cents}
+              onChange={(value) => {
+                setAmount(typeof value === 'number' ? value : value === '' ? '' : Number(value));
+                setErrors({});
+              }}
+            />
+            <TextInput
+              label={kind === 'correction' ? 'Why' : 'Note'}
+              placeholder={kind === 'cash_in' ? 'Cash top-up' : kind === 'cash_out' ? 'Paid out' : ''}
+              maxLength={140}
+              value={note}
+              error={errors.note}
+              onChange={(event) => {
+                setNote(event.currentTarget.value);
+                setErrors({});
+              }}
+            />
+          </SimpleGrid>
+        )}
         <Group justify="flex-end">
           <Button
             disabled={!ready || (holder.erased && kind !== 'cash_out')}
@@ -201,6 +235,24 @@ function Refund({ holder }: { holder: CreditHolder }) {
 }
 
 function Body({ holder }: { holder: CreditHolder }) {
+  const take = useHolderChange(holder.user_id);
+  const back = useMutation({
+    mutationFn: (entryId: number) =>
+      call(
+        api.POST('/api/v1/admin/credit/{user_id}/entries/{entry_id}/take-back', {
+          params: { path: { user_id: holder.user_id, entry_id: entryId } },
+          body: { note: null },
+        }),
+      ),
+    onSuccess: (out) => {
+      take(out);
+      notifyDone('Taken back.');
+    },
+    onError: notifyFailed,
+  });
+  const takeBack = (entryId: number) => {
+    back.mutate(entryId);
+  };
   return (
     <Stack gap="lg">
       {holder.erased ? (
@@ -220,7 +272,7 @@ function Body({ holder }: { holder: CreditHolder }) {
       />
       <Book holder={holder} />
       <Refund holder={holder} />
-      <History entries={holder.entries} />
+      <History entries={holder.entries} onTakeBack={takeBack} />
     </Stack>
   );
 }

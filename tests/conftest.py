@@ -91,6 +91,8 @@ def app(tmp_path):
             "BACKUP_DIR": str(tmp_path / "backups"),
             "LEGAL_PDF_DIR": str(tmp_path / "legal_pdf"),
             "FRONTEND_DIST_DIR": str(frontend),
+            # The Stripe check reaches back as far as a test asks (live: 01.10.2026).
+            "MONEY_RECORDS_SINCE": None,
         }
     )
     with application.app_context():

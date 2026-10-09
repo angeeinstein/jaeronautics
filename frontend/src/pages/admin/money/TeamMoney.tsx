@@ -24,6 +24,7 @@ import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import classes from './Money.module.css';
 import { amountText, centsOf, type TeamMoneyOut, teamMoneyQuery } from './shared';
+import { Counts, feeNote, SalesPanel } from './sales';
 
 /** AT61 1904 3002 3457 3201, as it is read out and typed. */
 function grouped(iban: string): string {
@@ -53,7 +54,7 @@ function Balance({ money }: { money: TeamMoneyOut }) {
         <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md">
           {(
             [
-              ['Paid by members', money.earned],
+              ['Earned', money.earned],
               ['Transferred to the team', money.paid_out],
               ['Open', money.open],
             ] as const
@@ -69,8 +70,7 @@ function Balance({ money }: { money: TeamMoneyOut }) {
           ))}
         </SimpleGrid>
         <Text size="sm" c="dimmed">
-          The team gets exactly what its members paid, less refunds. Stripe&apos;s fees are paid by the
-          association.
+          {feeNote(money.payments, money.waiting_for_fee)}
           {last ? ` Last transfer: ${formatDate(last.paid_on)}.` : ''}
         </Text>
       </Stack>
@@ -387,17 +387,8 @@ function Payments({ money }: { money: TeamMoneyOut }) {
                   <Table.Td className={`${classes.amount} ja-figures`}>
                     {formatEuros(payment.amount)}
                   </Table.Td>
-                  <Table.Td className={`${classes.amount} ja-figures`}>
-                    {formatEuros(payment.counts)}
-                    {payment.disputed ? (
-                      <Text size="xs" c="var(--ja-warning)">
-                        Taken back (chargeback)
-                      </Text>
-                    ) : payment.refunded ? (
-                      <Text size="xs" c="dimmed">
-                        {formatEuros(payment.refunded)} refunded
-                      </Text>
-                    ) : null}
+                  <Table.Td className={classes.amount}>
+                    <Counts payment={payment} />
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -441,6 +432,9 @@ export function TeamMoney() {
           <BankPanel key={JSON.stringify(money.data.bank)} money={money.data} />
           <Periods money={money.data} />
           <Transfers money={money.data} />
+          {money.data.sales.count || money.data.sales.by_item.length ? (
+            <SalesPanel sales={money.data.sales} />
+          ) : null}
           <Payments money={money.data} />
         </Stack>
       )}

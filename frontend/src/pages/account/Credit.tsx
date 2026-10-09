@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
 import { api, call } from '../../api/client';
+import { ConfirmButton } from '../../components/ConfirmButton';
 import { PageHeader } from '../../components/PageHeader';
 import { Panel } from '../../components/Panel';
 import { ErrorState, LoadingState } from '../../components/States';
@@ -152,9 +153,12 @@ function TopUp({ credit }: { credit: MyCredit }) {
 export function History({
   entries,
   exportUrl,
+  onTakeBack,
 }: {
-  entries: (CreditEntry & { booked_by?: string | null })[];
+  entries: (CreditEntry & { booked_by?: string | null; may_take_back?: boolean })[];
   exportUrl?: string;
+  /** The admin's page: a sale can be taken back from its row. */
+  onTakeBack?: (entryId: number) => void;
 }) {
   return (
     <Panel
@@ -198,7 +202,9 @@ export function History({
                       {entry.description !== entry.kind_label ? (
                         <span className={classes.muted}>{entry.description}</span>
                       ) : null}
-                      {entry.team_name ? <span className={classes.muted}>{entry.team_name}</span> : null}
+                      {(entry.seller ?? entry.team_name) ? (
+                        <span className={classes.muted}>{entry.seller ?? entry.team_name}</span>
+                      ) : null}
                       {entry.booked_by ? (
                         <span className={classes.muted}>{`Booked by ${entry.booked_by}`}</span>
                       ) : null}
@@ -206,6 +212,19 @@ export function History({
                         <Anchor href={entry.receipt_url} size="sm" className={classes.receipt}>
                           <IconReceipt size={14} aria-hidden /> Receipt
                         </Anchor>
+                      ) : null}
+                      {onTakeBack && entry.may_take_back ? (
+                        <ConfirmButton
+                          size="compact-xs"
+                          variant="subtle"
+                          w="fit-content"
+                          confirmLabel="Yes, take it back"
+                          onConfirm={() => {
+                            onTakeBack(entry.id);
+                          }}
+                        >
+                          Take back
+                        </ConfirmButton>
                       ) : null}
                     </span>
                   </Table.Td>
