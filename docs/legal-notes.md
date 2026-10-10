@@ -102,6 +102,14 @@ urgent.
   with before/after values where something was changed. No IP addresses.
 - Emails sent and queued (recipient, type, status, errors).
 - Stripe webhook events processed (IDs, for not processing one twice).
+- Contact messages (`docs/messages-plan.md`): name, address, topic, subject,
+  message; for somebody signed in their account number, whether the
+  membership is active, and the page they wrote from. Seen by the admins
+  (messages.receive), not the treasurer; a team's by its leads only.
+- Announcements and team mailings: the text, who wrote it, and per recipient
+  the address and whether it was delivered. Whether somebody switched the
+  association's news off (`users.news_unsubscribed_at`). In the privacy
+  policy draft 2026-10-08, § 27, § 31, § 40, § 41.
 - Presence (`docs/presence.md`): per open browser tab in use, a random id,
   signed in or not, the page as an address pattern, and when -- nothing about
   who, gone 15 minutes after the tab went quiet. Shown to admins as counts
@@ -153,6 +161,8 @@ under Stripe's privacy policy.
 | Audit log | Kept indefinitely (setting `AUDIT_LOG_RETENTION_DAYS`, default 0 = forever). On erasure, entries about the person lose their before/after values. **To-do:** decide a period. |
 | Email and notification records | 1 year (monthly clean-up). |
 | Leads' notes, team bank details history | Notes: deleted with the account. Bank-detail changes: in the audit log. |
+| Contact messages, messages to a team's leads | A year after marked done, two years at most; deleted with the sender's account (`services/messages.py`). |
+| Mailing recipients (address, delivered or not) | A year; the mailing keeps its text and counts. The address leaves them at erasure (`services/mailings.py`). |
 | Encrypted backups (Backup & Restore page) | The last 5, on the server; AES-256 encrypted with a passphrase that is not stored. |
 | Database copies made by each update | In `/var/backups` on the same server, the newest few kept; protected like the database itself. |
 | Web server log (nginx, IP addresses) | System default rotation (typically 14 days). |

@@ -4,12 +4,14 @@ What is agreed but not built yet. How this list works -- when it is worked
 through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
 The last batches (2026-10-08 and 2026-10-09) built everything that was on
-the list, credit and selling for credit (`docs/credit-plan.md`); what it was
-is in their pull requests and in git history (`git log -- docs/todo.md`).
+the list -- credit and selling for credit (`docs/credit-plan.md`); messages,
+announcements and team mailings (`docs/messages-plan.md`); admin error emails
+that resolved themselves left out. What it was is in their pull requests and
+in git history (`git log -- docs/todo.md`).
 
 ## Open
 
-### Legal texts: publish the 2026-10-08 drafts (pictures, credit)
+### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
 - **Where:** `legal/privacy-policy/{de,en}/2026-10-08.md`, `status: "draft"`.
@@ -21,6 +23,9 @@ is in their pull requests and in git history (`git log -- docs/todo.md`).
   the credit balance (§ 20, § 41), and a new draft of the membership terms,
   `legal/membership-terms/{de,en}/2026-10-08.md`, adds § 31 "Credit" (the
   later sections move up by one). See `docs/credit-plan.md`.
+- **Also (added 2026-10-09, with messages):** the privacy policy draft names
+  the contact form, messages to team leads, announcements and team mailings
+  (§ 27, § 31, § 40, § 41). See `docs/messages-plan.md`.
 - **Waiting for:** the maintainer reading the wording (shown under Admin ›
   Legal texts, *Not in force yet*). Once approved: `status: "published"` in
   all four files (the day stays, or the day it is published), nothing else.
@@ -38,6 +43,10 @@ is in their pull requests and in git history (`git log -- docs/todo.md`).
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
+- **Answering contact messages from inside the portal** -- 2026-10-09. A
+  reply written in Admin › Messages and sent as a formatted HTML email, with
+  the conversation kept together. "Would be nice … but I think we can stay at
+  the normal email reply for now." See `docs/messages-plan.md`.
 - **The association's Odoo website** -- 2026-10-07. People confuse it with the
   portal and try to sign in there. No decision.
 - **Rounded corners** -- 2026-10-07. Discussed what switching the square look
@@ -55,6 +64,20 @@ Talked about, not agreed as work. Not built unless the maintainer brings them up
 What the maintainer did not want, and why -- a record, not a ban. Any of it
 may be suggested again, saying what has changed since. Only what the
 maintainer explicitly says must never change is marked so.
+
+- **Handling the forum's read-only mode in the portal** (2026-10-09).
+  - The proposal had two parts:
+    - while Discourse is read-only, *Forum* would show a short portal page
+      ("read-only for maintenance, you can read but not sign in") instead
+      of Discourse's dead end;
+    - syncs Discourse refuses for read-only would count as "try again
+      later", not as errors.
+  - Discourse marks its answers in read-only mode, so this can be detected.
+  - The maintainer: not worth the complexity for now, since read-only only
+    happens when they switch it on by hand for a short time during a backup
+    or update.
+  - The spurious emails it causes are handled by the to-do item above
+    ("Admin error emails").
 
 - **A short code for staff and company members like the year group**
   (2026-10-08). The year group feeds forum usernames (`_L25`), the forum's

@@ -532,6 +532,56 @@ not a second price under the membership's product. A payment link made in the
 dashboard carries no metadata, so for those the separate product is what tells
 them apart.
 
+## Messages, announcements and team mailings
+
+The plan and what was decided: `docs/messages-plan.md`. Code:
+`services/messages.py`, `services/mailings.py`, `api/messages.py`,
+`api/mailings.py`.
+
+- **The contact form** (`/contact`, the footer's *Contact*) and *Message the
+  leads* on a team's pages.
+  - Each message is emailed to everybody with `messages.receive` (admins and
+    super admins, not the treasurer), or to the team's leads in force (with
+    none: the admins). The sender is the Reply-To, so answering the email
+    answers them.
+  - Messages are kept on Admin › Messages or the team's Messages page, to be
+    marked done.
+  - An email that could not be sent is tried again by the notification
+    timer, up to six times.
+- **Spam:** a hidden field, a form sent within three seconds refused, and
+  rate limits (`RATELIMIT_CONTACT`, 5 an hour per person or address;
+  `RATELIMIT_CONTACT_PER_IP`, 30 an hour per network address).
+- **Announcements** (Admin › Announcements, `announcements.send`) and **team
+  mailings** (a team's Messages page, `team.messages`) go to active, paying
+  members only, a team's to its active members.
+  - Each recipient is a row in `mailing_recipients`, sent by the
+    notification timer (every two minutes) within Settings › Mailings'
+    limits -- per hour and per day, at most 40 a run.
+  - A send that fails is tried three times, then counted as failed and
+    listed on the announcement's page.
+  - Three failures in a row end the run: the server is refusing, and the
+    next run tries again.
+- **The mail account** for all of these is chosen on Settings › Mailings. It
+  can be a different provider from the notifications'. Its limits belong
+  there: Brevo's free plan sends 300 a day, so an invitation to more members
+  takes more than a day -- send it early.
+- **News and notices.**
+  - News carries a "No more news by email" link and the `List-Unsubscribe`
+    headers. The one-click POST (`/api/v1/news/unsubscribe/<token>`) is
+    exempt from CSRF: the token is the authority.
+  - Subscribing again is on the link's page and in My Account › Profile.
+  - Notices, the general assembly's invitation among them, and team mailings
+    ignore the setting.
+- **The general assembly's invitation** is a notice to all members. Under
+  two weeks before the date the server refuses it unless "send anyway" is
+  ticked (statutes § 10 (3)).
+- **Kept:**
+  - messages a year after done (two years at most);
+  - mailing recipients a year.
+
+  Both are deleted by the nightly job. Erasure deletes what somebody wrote
+  and takes their address off the recipient rows.
+
 ## Credit
 
 A balance members top up and spend with the association (coffee, drinks),

@@ -77,6 +77,20 @@ def legal_text_pdf(slug, version=None):
     )
 
 
+@public_bp.route("/contact", methods=["GET"])
+def contact():
+    """The contact form (frontend/src/pages/public/Contact.tsx)."""
+    return app_shell()
+
+
+@public_bp.route("/unsubscribe/<token>", methods=["GET"])
+def unsubscribe(token):
+    """Switching the association's news off from an email's link, and on
+    again (frontend/src/pages/public/Unsubscribe.tsx). Nothing changes until
+    the page's button is pressed: mail scanners open links."""
+    return app_shell()
+
+
 @public_bp.route("/__health", methods=["GET"])
 def health_check():
     checks = {"app": "ok", "database": "ok"}

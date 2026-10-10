@@ -77,6 +77,14 @@ export const routes: RouteObject[] = [
             path: '/reset-password/:token',
             lazy: async () => ({ Component: (await import('../pages/public/ResetPassword')).ResetPassword }),
           },
+          {
+            path: '/contact',
+            lazy: async () => ({ Component: (await import('../pages/public/Contact')).Contact }),
+          },
+          {
+            path: '/unsubscribe/:token',
+            lazy: async () => ({ Component: (await import('../pages/public/Unsubscribe')).Unsubscribe }),
+          },
           // Any address that is no page: in the public frame, signed in or not.
           { path: '*', element: <NotFound /> },
         ],
@@ -213,6 +221,10 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Settings')).RolesPage }),
           },
           {
+            path: 'manage/messages',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Messages')).Messages }),
+          },
+          {
             path: 'manage/prices',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Prices')).Prices }),
           },
@@ -252,6 +264,22 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/admin/reviews/Reviews')).Reviews }),
           },
           {
+            path: 'messages',
+            lazy: async () => ({ Component: (await import('../pages/admin/Messages')).Messages }),
+          },
+          {
+            path: 'announcements',
+            lazy: async () => ({
+              Component: (await import('../pages/admin/announcements/Announcements')).Announcements,
+            }),
+          },
+          {
+            path: 'announcements/:mailingId',
+            lazy: async () => ({
+              Component: (await import('../pages/admin/announcements/Announcement')).Announcement,
+            }),
+          },
+          {
             path: 'teams',
             lazy: async () => ({ Component: (await import('../pages/admin/teams/Teams')).Teams }),
           },
@@ -287,6 +315,12 @@ export const routes: RouteObject[] = [
             path: 'settings/credit',
             lazy: async () => ({
               Component: (await import('../pages/admin/settings/CreditSettings')).CreditSettings,
+            }),
+          },
+          {
+            path: 'settings/mailings',
+            lazy: async () => ({
+              Component: (await import('../pages/admin/settings/MailingSettings')).MailingSettings,
             }),
           },
           {

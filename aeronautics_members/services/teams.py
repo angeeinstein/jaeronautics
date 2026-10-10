@@ -88,11 +88,13 @@ class TeamPermission:
     APPOINT_LEADS = "team.appoint_leads"
     #: The team's price list for what it sells for credit.
     EDIT_PRICES = "team.edit_prices"
+    #: Read the messages written to the team's leads, and write to its members.
+    MESSAGES = "team.messages"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
-        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS, EDIT_PRICES,
+        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS, EDIT_PRICES, MESSAGES,
     })
     #: The team's money, the account it is paid to, and its prices -- nothing about people.
     MONEY = frozenset({VIEW_MONEY, EDIT_BANK_DETAILS, EDIT_PRICES})

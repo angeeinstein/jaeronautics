@@ -93,7 +93,7 @@ class TestTheFooter:
         links = {link["label"]: link for link in client.get("/api/v1/site").get_json()["footer"]}
 
         assert links["Impressum"] == {"label": "Impressum", "url": "/legal/legal-notice", "external": False}
-        assert links["Contact"]["url"].startswith("mailto:")
+        assert links["Contact"]["url"] == "/contact"
         assert links["Website"]["external"] is True
 
     def test_or_an_address_elsewhere(self, app, client, monkeypatch):

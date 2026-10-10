@@ -6,7 +6,7 @@
  * team is about. Asked again every minute, so somebody who joins appears.
  * Data: GET /api/v1/teams/<slug>.
  */
-import { Anchor, Avatar, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Anchor, Avatar, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { IconChevronRight } from '@tabler/icons-react';
 import { Navigate, useParams } from 'react-router';
 
@@ -18,6 +18,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/States';
 import { useArrivals } from '../../lib/arrivals';
 import { useLiveRefresh } from '../../lib/live';
 import { RulesLine } from './Rules';
+import { MessageLeads } from './MessageLeads';
 import { MembershipBlock, type Team, teamQuery, useTeam } from './shared';
 import { TeamHero } from './TeamHero';
 import classes from './Teams.module.css';
@@ -125,6 +126,11 @@ export function TeamPage() {
         </Panel>
       </SimpleGrid>
       <Members team={data} />
+      {data.may_message ? (
+        <Group>
+          <MessageLeads slug={slug} teamName={data.name} />
+        </Group>
+      ) : null}
     </Stack>
   );
 }

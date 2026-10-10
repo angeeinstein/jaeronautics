@@ -58,6 +58,7 @@ describe('the admin sidebar', () => {
       'General',
       'Notifications',
       'Credit',
+      'Mailings',
       'Test email',
     ]);
   });
@@ -70,6 +71,7 @@ describe('the admin sidebar', () => {
       '/admin/settings/general',
       '/admin/settings/notifications',
       '/admin/settings/credit',
+      '/admin/settings/mailings',
       '/admin/settings/billing',
       '/admin/settings/forum',
       '/admin/settings/mail',

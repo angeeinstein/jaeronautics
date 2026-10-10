@@ -11,6 +11,8 @@ from .permissions import Permission, roles_with
 
 try:
     from .db_models import (
+        EmailDeliveryJob,
+        ForumAccount,
         ForumAvatarSubmission,
         MailAccount,
         MemberProfileChangeRequest,
@@ -26,6 +28,8 @@ try:
     from .security_utils import build_public_url
 except ImportError:
     from db_models import (
+        EmailDeliveryJob,
+        ForumAccount,
         ForumAvatarSubmission,
         MailAccount,
         MemberProfileChangeRequest,
@@ -184,6 +188,43 @@ def ensure_utc_datetime(value):
     if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+
+def _forum_sync_resolved(event):
+    """The account's forum sync went through since: it holds no error any more."""
+    if event.object_type != "forum_account" or not event.object_id:
+        return False
+    account = db.session.get(ForumAccount, event.object_id)
+    return account is None or not account.last_error
+
+
+def _welcome_email_resolved(event):
+    """The member's welcome email was sent after all, after this was reported."""
+    if not event.target_member_id:
+        return False
+    queued = ensure_utc_datetime(event.queued_at)
+    sent = db.session.execute(
+        db.select(EmailDeliveryJob.sent_at).where(
+            EmailDeliveryJob.target_member_id == event.target_member_id,
+            EmailDeliveryJob.email_type == "welcome_email",
+            EmailDeliveryJob.status == "sent",
+        )
+    ).scalars().all()
+    return any(ensure_utc_datetime(moment) and (queued is None or ensure_utc_datetime(moment) >= queued)
+               for moment in sent)
+
+
+# An admin error that has gone away by the time its email is due is not sent:
+# a summary an hour later about a forum that has long been back helps nobody.
+# One check per kind, reading the data the error was about; a kind without a
+# check is sent as before. A resolved event stays in the table, marked so.
+RESOLVED_WHEN = {
+    "forum_sync_failed": _forum_sync_resolved,
+    "welcome_email_failed": _welcome_email_resolved,
+    "welcome_email_retry_exhausted": _welcome_email_resolved,
+}
+EVENT_STATUS_RESOLVED = "resolved"
 
 
 class NotificationService:
@@ -346,6 +387,9 @@ class NotificationService:
         pending_events = self._get_pending_events(channel)
         if not pending_events or not self.is_enabled(channel):
             return {}
+        pending_events, resolved = self._set_aside_resolved(pending_events, now)
+        if not pending_events:
+            return {"resolved_events": resolved} if resolved else {}
 
         # The channel's own gate is only a mail server that just failed.
         state, next_gate = self._refresh_channel_state(channel, now)
@@ -379,6 +423,7 @@ class NotificationService:
         )
         db.session.add(batch)
         subject, template_vars = self._build_admin_digest_message(channel, pending_events, now)
+        template_vars["resolved_count"] = resolved
         batch.subject = subject
 
         success, error = self._send_admin_digest_mail(recipients, subject, template_vars)
@@ -404,6 +449,26 @@ class NotificationService:
         self._record_failure(state, channel, now, error)
         db.session.commit()
         return {"failed_batches": 1, "failed_events": len(pending_events)}
+
+    def _set_aside_resolved(self, events, now):
+        """Mark the events whose problem has gone away; the rest, and how many went."""
+        still, resolved = [], 0
+        for event in events:
+            check = RESOLVED_WHEN.get(event.event_type)
+            try:
+                gone = bool(check and check(event))
+            except Exception as exc:  # a check must never stop the email
+                current_app.logger.warning("Could not check whether %s resolved itself: %s", event.event_type, exc)
+                gone = False
+            if gone:
+                event.status = EVENT_STATUS_RESOLVED
+                event.processed_at = now
+                resolved += 1
+            else:
+                still.append(event)
+        if resolved:
+            db.session.commit()
+        return still, resolved
 
     def _deliver_user_status_events(self, now):
         if not self.is_enabled(USER_STATUS_CHANNEL):
@@ -585,8 +650,9 @@ class NotificationService:
                         _("An administrator of Joanneum Aeronautics changed the email address of your account "
                           "to %(new)s, at the request of somebody who said the account was theirs.",
                           new=payload.get("new_email_masked")),
-                        _("If that was you, there is nothing to do. If it was not, please write to %(contact)s "
-                          "at once.", contact=payload.get("contact_email")),
+                        _("If that was you, there is nothing to do. If it was not, please tell us at once "
+                          "through the contact form: %(contact)s",
+                          contact=payload.get("contact_url") or payload.get("contact_email")),
                     ],
                 },
             )

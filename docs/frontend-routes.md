@@ -73,6 +73,15 @@ Status: `[ ]` to do, `[x]` done.
 - [x] new: `GET /admin/money/<slug>` (page: a team's money, the association's side) → `GET /api/v1/admin/money/<slug>`; `POST .../transfers`, `PUT .../bank`
 - `GET /admin/money/<slug>/transfer-code.svg?amount=&reference=` (image: the GiroCode for the amount and reference typed) -- stays
 
+### 4.5b Messages (new, 2026-10-09; docs/messages-plan.md)
+- [x] `GET /contact` (page) → `GET|POST /api/v1/contact`
+- [x] `GET /unsubscribe/<token>` (page) → `GET|PUT /api/v1/news/<token>`; `POST /api/v1/news/unsubscribe/<token>` (one-click, from mail programs)
+- [x] `GET /admin/messages` (page) → `GET /api/v1/admin/messages`, `PUT .../<id>`
+- [x] `GET /admin/announcements`, `/admin/announcements/<id>` (pages) → `GET|POST /api/v1/admin/announcements`, `POST .../count`, `.../test`, `GET .../<id>`, `POST .../<id>/stop`
+- [x] `GET /admin/settings/mailings` (page) → `GET|PUT /api/v1/admin/settings/mailings`
+- [x] `GET /teams/<slug>/manage/messages` (page) → `GET /api/v1/teams/<slug>/manage/messages`, `PUT .../<id>`; `GET|POST .../manage/mailings`, `POST .../test`, `GET .../<id>`, `POST .../<id>/stop`
+- [x] `POST /api/v1/teams/<slug>/message` (Message the leads); `GET|PUT /api/v1/account/news`
+
 ### 4.5a Credit (new, 2026-10-08)
 - [x] `GET /admin/credit` (page) → `GET /api/v1/admin/credit`
 - [x] `GET /admin/credit/<user_id>` (page: one person's credit) → `GET /api/v1/admin/credit/<user_id>`; `POST .../cash`, `.../correction`, `.../refund`

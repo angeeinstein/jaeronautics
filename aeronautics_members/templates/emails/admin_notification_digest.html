@@ -32,6 +32,10 @@
         </div>
     {% endfor %}
 
+    {% if resolved_count %}
+        <p class="muted" style="color:#aab4bb;">{{ _('%(count)s more resolved themselves before this email and are left out.', count=resolved_count) }}</p>
+    {% endif %}
+
     {% if omitted_count %}
         <p class="muted" style="color:#aab4bb;">{{ _('%(count)s more not shown here.', count=omitted_count) }}</p>
     {% endif %}

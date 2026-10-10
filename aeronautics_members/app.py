@@ -3884,6 +3884,8 @@ def create_app(config_overrides=None):
             end_finished_team_memberships, follow_association_ends, send_renewal_notices,
         )
         from .services.team_money import fill_in_fees
+        from .services.mailings import forget_old as forget_old_mailing_recipients
+        from .services.messages import forget_old as forget_old_messages
         from .services.teams import end_lapsed_team_memberships, lapse_unpaid_approvals, send_due_access_lists
 
         team_steps = (
@@ -3903,6 +3905,10 @@ def create_app(config_overrides=None):
             (send_due_access_lists, "Sent {} team access list(s)."),
             # Stripe's fees of team payments that carry theirs (Admin › Money).
             (fill_in_fees, "Filled in Stripe's fee for {} team payment(s)."),
+            # Messages done a year ago, and mailings' recipients after a year
+            # (docs/messages-plan.md).
+            (forget_old_messages, "Forgot {} old message(s)."),
+            (forget_old_mailing_recipients, "Forgot {} mailing recipient(s) older than a year."),
         )
         for step, done_text in team_steps:
             try:
@@ -4173,6 +4179,21 @@ def create_app(config_overrides=None):
         email_summary = process_email_delivery_jobs(app)
         db.session.commit()
         summary = get_notification_service().deliver_pending_notifications()
+        # Contact messages whose email has not gone out yet, and the
+        # mailings' queue, within the provider's limits (services/mailings.py).
+        from .services import mailings as mailings_service
+        from .services import messages as messages_service
+
+        for step, done_text in ((messages_service.deliver_waiting, "Delivered {} waiting message(s)."),
+                                (mailings_service.process, "Sent {} mailing email(s).")):
+            try:
+                count = step()
+            except Exception:  # noqa: BLE001 -- logged; tried again on the next run
+                db.session.rollback()
+                app.logger.exception("Notification step %s failed.", step.__name__)
+                continue
+            if count:
+                click.echo(done_text.format(count))
         click.echo(
             click.style(
                 "Notification delivery summary: "

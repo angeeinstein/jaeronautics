@@ -23,6 +23,7 @@ import { formatDate } from '../../lib/format';
 import { notifyDone } from '../../lib/notify';
 import classes from './About.module.css';
 import { Gallery } from './Gallery';
+import { MessageLeads } from './MessageLeads';
 import { RulesDialog, RulesLine } from './Rules';
 import { MembershipBlock, type Team, teamsKey, useTeam } from './shared';
 import { canJoin, TeamHero } from './TeamHero';
@@ -237,6 +238,11 @@ export function About() {
           </div>
         ) : null}
       </div>
+      {data.may_message ? (
+        <Group mt="xl">
+          <MessageLeads slug={slug} teamName={data.name} />
+        </Group>
+      ) : null}
     </>
   );
 }

@@ -7,7 +7,7 @@ on. Public. Drawn by frontend/src/frame/Footer.tsx.
 
 from flask import url_for
 
-from ..config import ASSOCIATION_WEBSITE_URL, CONTACT_EMAIL, IMPRESSUM_URL, PRIVACY_URL, STATUTES_URL
+from ..config import ASSOCIATION_WEBSITE_URL, IMPRESSUM_URL, PRIVACY_URL, STATUTES_URL
 from ..services.clock import get_membership_today
 from ..services.teams import team_labels, teams_enabled
 from ._core import Model, endpoint
@@ -42,7 +42,7 @@ def site():
             _legal("Privacy", PRIVACY_URL, "privacy-policy"),
             _legal("Statutes", STATUTES_URL, "statutes"),
             FooterLinkOut(label="Legal texts", url=url_for("public.legal_texts"), external=False),
-            FooterLinkOut(label="Contact", url=f"mailto:{CONTACT_EMAIL}", external=False),
+            FooterLinkOut(label="Contact", url=url_for("public.contact"), external=False),
             FooterLinkOut(label="Website", url=ASSOCIATION_WEBSITE_URL, external=True),
         ],
         copyright=f"© {get_membership_today().year} Joanneum Aeronautics",

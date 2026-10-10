@@ -168,6 +168,23 @@ def admin_reviews():
     return app_shell()
 
 
+@admin_bp.route("/admin/messages", methods=["GET"])
+@login_required
+@requires(Permission.MESSAGES_RECEIVE)
+def admin_messages():
+    """The contact form's messages (frontend/src/pages/admin/Messages.tsx)."""
+    return app_shell()
+
+
+@admin_bp.route("/admin/announcements", methods=["GET"])
+@admin_bp.route("/admin/announcements/<int:mailing_id>", methods=["GET"])
+@login_required
+@requires(Permission.ANNOUNCEMENTS_SEND)
+def admin_announcements(mailing_id=None):
+    """Writing to the members, and what was sent (frontend/src/pages/admin/announcements/)."""
+    return app_shell()
+
+
 @admin_bp.route("/admin/settings", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
@@ -179,14 +196,15 @@ def admin_settings():
 
 #: A section of the settings, and what it needs beyond the general settings permission.
 SETTINGS_SECTIONS = {
-    "general": None, "notifications": None, "credit": None, "billing": Permission.SETTINGS_CREDENTIALS,
+    "general": None, "notifications": None, "credit": None, "mailings": None, "billing": Permission.SETTINGS_CREDENTIALS,
     "forum": Permission.SETTINGS_CREDENTIALS, "mail": Permission.SETTINGS_CREDENTIALS,
     "test-email": Permission.NOTIFICATIONS_MANAGE,
     "health": Permission.SYSTEM_UPDATE, "updates": Permission.SYSTEM_UPDATE, "backup": Permission.SYSTEM_BACKUP,
 }
 
 
-@admin_bp.route("/admin/settings/<any(general, notifications, billing, credit, forum, mail, 'test-email', health, updates, backup)"
+@admin_bp.route("/admin/settings/<any(general, notifications, billing, credit, mailings, forum, mail, 'test-email', health, updates, "
+                "backup)"
                 ":section>", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)

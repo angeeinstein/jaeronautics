@@ -193,13 +193,18 @@ def html_to_text(html):
     return parser.text()
 
 
-def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, files=None, **template_vars):
+def send_mail(from_account, to_email, subject, template_name=None, body=None, attachments=None, bcc_emails=None, return_error=False, cc_emails=None, files=None, reply_to=None, headers=None, from_name=None, **template_vars):
     """
     Sends an email using pre-configured SMTP accounts.
 
     ``attachments`` are images shown in the body (``{"path", "cid"}``);
     ``files`` are documents attached to it (``{"filename", "data", "mimetype"}``),
     such as the legal texts' PDFs.
+
+    ``reply_to`` is where an answer goes (the person who wrote a contact
+    message, the lead who wrote to a team); ``headers`` are further headers
+    (List-Unsubscribe); ``from_name`` replaces the account's sender name
+    ("Rocket Team via Joanneum Aeronautics").
 
     When ``return_error`` is True, the function returns ``(success, error_message)``.
     Otherwise it preserves the legacy ``True``/``False`` return value.
@@ -243,8 +248,13 @@ def send_mail(from_account, to_email, subject, template_name=None, body=None, at
         body_part = MIMEMultipart("related")
         message = MIMEMultipart("mixed") if files else body_part
         message["Subject"] = subject
-        message["From"] = formataddr((config["from_name"], sender)) if config.get("from_name") else sender
+        shown_name = from_name or config.get("from_name")
+        message["From"] = formataddr((shown_name, sender)) if shown_name else sender
         message["To"] = primary_recipient
+        if reply_to:
+            message["Reply-To"] = reply_to
+        for header, value in (headers or {}).items():
+            message[header] = value
         if cc_list:
             message["Cc"] = ", ".join(dict.fromkeys(cc_list))
 
