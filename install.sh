@@ -2445,6 +2445,14 @@ migrate_database_for_update() {
     info "Visitors see the maintenance page until the portal starts again, usually within a minute."
     UNDO_STATE=1
     systemctl stop "${SERVICE_NAME}"
+    # The jobs as well, not only their timers: one still running after the
+    # pause's wait would write past the dump -- lost, or in the way, if it is
+    # loaded back. systemctl stop returns once each has ended; a job cut short
+    # is taken up again by its next run, as after any restart.
+    local job
+    for job in "${BACKGROUND_JOBS[@]}"; do
+        systemctl stop "${SERVICE_NAME}-${job}.service" 2>/dev/null || true
+    done
 
     # Both in an if, so a failure comes here rather than to on_error.
     if ! dump_database_before_migration; then

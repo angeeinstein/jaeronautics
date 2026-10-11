@@ -143,8 +143,9 @@ whether it brings migrations the database has not had (`flask db-pending`).
 If not, the update runs as described below. If so (or if that cannot be
 told):
 
-1. the portal is stopped -- visitors see the maintenance page (below), usually
-   for under a minute;
+1. the portal is stopped, and its background jobs with it (not only their
+   timers: one still running would write past the dump) -- visitors see the
+   maintenance page (below), usually for under a minute;
 2. the database is dumped (`/var/backups/jaeronautics/jaeronautics-db-before-migration-*.sql`,
    checked for completeness, with every table's row count);
 3. the migration runs.
@@ -182,7 +183,9 @@ a few seconds, longer when new packages are installed. Meanwhile:
   cannot show when the whole server or the Cloudflare tunnel is down: then
   Cloudflare shows its own error page. A page already open, whose requests
   get that answer, says "Update in progress" instead of an error and loads
-  again by itself every five seconds (`ErrorState`, `components/States.tsx`).
+  again by itself every five seconds (`ErrorState`, `components/States.tsx`;
+  a part with no way to ask again reloads the whole page, which then is
+  nginx's page until the portal is back).
 
 **Before starting one**, the Install panel says whether anybody else is using
 the portal right now, on which pages, and whether somebody is typing

@@ -94,7 +94,8 @@ schema_migration_pending() { echo yes; }
 initialize_database_schema() { echo "migrate" >> "${CALLS}"; mariadb undo_test -e "UPDATE alembic_version SET version_num='after'"; }
 ( migrate_database_for_update ) >/dev/null 2>&1
 check "it ends well"               "$?" "0"
-check "the portal was stopped"     "$(called 'systemctl stop undo-test')" "1"
+check "the portal was stopped"     "$(called 'systemctl stop undo-test$')" "1"
+check "and its jobs, not only their timers" "$(called 'systemctl stop undo-test-.*\.service$')" "${#BACKGROUND_JOBS[@]}"
 check "a backup was taken first"   "$(ls "${BACKUP_DIR}"/*-db-before-migration-*.sql 2>/dev/null | wc -l)" "1"
 check "the backup is 0600"         "$(stat -c %a "${BACKUP_DIR}"/*-db-before-migration-*.sql)" "600"
 check "nothing is rolled back"     "$(called rollback)" "0"

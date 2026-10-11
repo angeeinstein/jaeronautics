@@ -37,15 +37,22 @@ function messageOf(error: unknown): string {
 /** How often a page waiting out an update asks again. */
 export const UPDATING_RETRY_MS = 5000;
 
+/** Without a way to ask again, the whole page: nginx's own page while the portal is down. */
+function reloadPage() {
+  window.location.reload();
+}
+
 /** The portal is down for an update for a minute at most: say so, and load again by itself. */
 function Updating({ onRetry }: { onRetry?: () => void }) {
   // The latest one, without starting the wait over whenever the page renders.
-  const retry = useRef(onRetry);
+  const retry = useRef(onRetry ?? reloadPage);
   useEffect(() => {
-    retry.current = onRetry;
+    retry.current = onRetry ?? reloadPage;
   });
   useEffect(() => {
-    const timer = window.setInterval(() => retry.current?.(), UPDATING_RETRY_MS);
+    const timer = window.setInterval(() => {
+      retry.current();
+    }, UPDATING_RETRY_MS);
     return () => {
       window.clearInterval(timer);
     };

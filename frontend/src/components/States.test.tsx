@@ -16,6 +16,7 @@ function show(error: unknown, onRetry = vi.fn()) {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe('a page that could not be loaded', () => {
@@ -36,5 +37,25 @@ describe('a page that could not be loaded', () => {
     expect(retry).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(UPDATING_RETRY_MS);
     expect(retry).toHaveBeenCalledTimes(2);
+  });
+
+  it('without a way to ask again, loads the whole page again', () => {
+    vi.useFakeTimers();
+    const reload = vi.fn();
+    vi.stubGlobal('location', {
+      origin: window.location.origin,
+      pathname: '/',
+      search: '',
+      hash: '',
+      reload,
+    });
+    render(
+      <Providers env="test">
+        <ErrorState error={new ApiError(503, UPDATING, 'The portal is being updated.')} />
+      </Providers>,
+    );
+
+    vi.advanceTimersByTime(UPDATING_RETRY_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });
