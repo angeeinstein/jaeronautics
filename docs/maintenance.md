@@ -669,9 +669,12 @@ top-up already paid is still added.
 
 **Erasing an account** refunds its credit to the payments it came from,
 newest first. What cannot go back through Stripe -- cash, or a payment too
-old to refund -- the admins are emailed about (`credit_left_at_erasure`);
-pay it out and book it as *Paid out* on the person's credit page. If Stripe
-cannot be reached, nothing is erased; try again.
+old to refund -- the admins are emailed about (`credit_left_at_erasure`,
+with the person's name and address, taken before the erasure: nothing else
+says whom to pay); pay it out and book it as *Paid out* on the person's
+credit page. If Stripe cannot be reached, nothing is erased; try again. A
+top-up page still open is closed, and a top-up paid on one anyway is
+refunded at once (`credit_paid_after_erasure` if Stripe refuses).
 
 ## Stripe's fees
 

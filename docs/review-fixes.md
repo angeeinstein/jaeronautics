@@ -37,8 +37,21 @@ whether it still holds, and what was done.
    both lookups raise instead ("try again later"); ended subscriptions are
    not asked about.
 5. **Asynchronous credit top-ups release their reservation too early** (#24/27).
+   Not done: it cannot happen with what is offered. Top-ups are paid by card
+   or EPS, and Stripe confirms both at once; SEPA, which arrives later, was
+   left out on purpose (`docs/credit-plan.md`). Worth doing if a delayed
+   method is ever added.
 6. **A top-up arriving after the account was erased is credited to it** (#24/28).
+   Held: a Checkout page open in a tab stays payable for a day. Done: the
+   erasure closes an open top-up page, and a top-up paid on one anyway is
+   refunded at once (admins told if Stripe refuses).
 7. **Cash credit at erasure: no payout details for the admins** (#24/29).
+   Held: the notice carried only the account's number, and the erasure
+   blanks everything that would say whom to pay -- while the privacy policy
+   promises that cash credit is paid out. Done: the notice names the person
+   and their address, taken before the erasure; it is not tied to the
+   account, so it stays. (A privacy choice: say if it should rather be
+   e.g. the person being told to contact the treasurer.)
 8. **A team debit that bounced and was collected again reads as a difference** (#30/41).
 9. **A request for work already under way is lost** (#30/43).
 

@@ -480,6 +480,16 @@ def _paid(session, account):
     db.session.add(payment)
     db.session.flush()
     _book(account, TOP_UP, amount, "Top-up", payment=payment)
+    if account.user is not None and account.user.deleted_at is not None:
+        # Paid on a page still open when the account was erased: nobody can
+        # spend it, so it goes straight back. Stripe out of reach raises, and
+        # the event is delivered again.
+        _refunded, left = refund_balance(account.user)
+        if left > 0:
+            _tell_admins("credit_paid_after_erasure",
+                         f"A credit top-up of {_euros(amount)} was paid after its account was erased and could not be "
+                         "refunded automatically. Refund it in Stripe.",
+                         payment_intent=payment_intent, left_cents=left)
 
 
 def _payment_of_charge(charge, payment_intent=None):
@@ -621,15 +631,31 @@ def refund_balance(user, *, by=None):
 
 
 def before_erasure(user, actor=None):
-    """An account being erased gets its credit back; what cannot go back through Stripe the admins hear of."""
+    """An account being erased gets its credit back; what cannot go back through Stripe the admins hear of.
+
+    The notice names the person and their address, taken before they are
+    erased: paying cash out is the association's promise (privacy policy), and
+    afterwards nothing else says whom to pay. It is not tied to the account,
+    so the erasure does not blank it.
+    """
     if not has_credit(user):
         return 0, 0
+    account = _account(user.id)
+    if account.stripe_checkout_session_id:
+        # A top-up page still open would take money nobody can spend.
+        payments.expire_checkout_session(account.stripe_checkout_session_id)
+        account.stripe_checkout_session_id = None
+        account.checkout_amount_cents = None
     refunded, left = refund_balance(user, by=actor)
     if left > 0:
+        member = getattr(user, "member", None)
+        name = f"{member.first_name} {member.last_name}".strip() if member is not None else ""
+        email = (getattr(member, "email_private", None) or user.email) if member is not None else user.email
+        who = f"{name} <{email}>" if name else email
         _tell_admins("credit_left_at_erasure",
-                     f"An erased account still had {_euros(left)} of credit that could not be refunded through Stripe "
-                     "(cash, or too old). Pay it out by hand and book it under Admin › Credit.",
-                     user_id=user.id, left_cents=left)
+                     f"The account of {who} was erased with {_euros(left)} of credit that could not be refunded "
+                     "through Stripe (cash, or too old). Pay it out by hand and book it under Admin › Credit.",
+                     user_id=user.id, left_cents=left, name=name, email=email)
     return refunded, left
 
 
