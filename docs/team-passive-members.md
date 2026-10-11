@@ -82,6 +82,24 @@ So a penalty such as "no return this semester" makes little sense here.
   - The maintainer: "This is definitely something that feels right and that
     we could build."
 
+## Keeping it general (2026-10-11)
+
+The maintainer may offer the portal to other associations, e.g. Aerospace Team
+Graz, whose "teams" are departments of one association (propulsion, avionics),
+not separate teams with their own fees:
+> "I don't want to add lots of very specific options that only our
+> association and teams can use. And that would just confuse other people."
+
+**Proposed, not decided yet:**
+- Build only the rejoin setting (above). Other associations can use it too:
+  any team that approves applications may want people it already accepted
+  back without a second review. It shows only for teams that approve
+  applications.
+- Do not build "become passive", a passive label or mailings to former
+  members (the proposal below). They serve TDT's rules alone.
+- TDT can still use the word: in its rules, "passive" can mean "left within
+  the last 12 months, may rejoin without approval".
+
 ## Leading proposal (2026-10-11, the maintainer's idea) -- pending TDT
 
 **"Become passive" on the leave page,** beside "Leave" (wording later), when
