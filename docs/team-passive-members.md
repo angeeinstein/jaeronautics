@@ -1,0 +1,107 @@
+# Passive team members, rejoining, and staying informed
+
+**Status:** in discussion (2026-10-11). Partly agreed; see "Decided" and
+"Open". Nothing built yet.
+
+## The request
+
+Team Drone Tech (TDT) asked for **active and passive members**:
+- passive members pay no team fee;
+- they are still part of the team and hear its news, e.g. during a
+  semester abroad;
+- somebody who does not pay, or whose renewal fails, becomes passive for a
+  semester.
+
+The maintainer wants it **optional and as general as possible**: "if I use
+this membership portal software for another association at some point, I'm
+not sure if this feature wouldn't cause more confusion than help."
+
+## What TDT's own rules say
+
+`legal/teams/tdt/team-rules/de/2026-03-19.md`, § 3, § 4, § 5, § 11. The rules
+do not say *why* there is a passive status; this is what follows from them:
+
+1. **The place in the team is kept without a new admission.**
+   - Joining needs the lead's approval, which may be refused without reasons
+     (§ 4 iii).
+   - A passive member becomes active again just by paying (§ 11 ii (iii)).
+2. **Not paying is a grace period, not an exit.**
+   - A missed deadline makes somebody passive for the semester (§ 11 iii).
+   - Only after two semesters passive may the lead exclude them (§ 5 iv,
+     § 11 iv).
+3. **Communication continues**, through their WhatsApp community and channel
+   (outside the portal).
+4. **Passive means no active rights:** no room (SimLab card), no drones, no
+   events, no votes (§ 6, § 11). Their votes are held in Microsoft Forms
+   (§ 12).
+5. **Manual procedures the rules assume:**
+   - declaring oneself passive in a WhatsApp poll before the payment
+     deadline;
+   - after not paying, no return within the same semester (§ 11 iii (iii)).
+
+## What the portal already does
+
+- **A subscription whose payment fails:** Stripe retries for weeks, and the
+  person sees "update payment method". Only when all retries failed (at the
+  latest 35 days after the paid period) does the team membership end; the
+  person and the leads are told.
+- **One payment per period:** a reminder 14 days before the end. Unpaid at the
+  end, the team membership ends (14 more days for a debit on its way).
+- **Somebody not in the team:** not on the room access list, pays nothing.
+  The leads see who was in the team and when, on "Former members".
+
+## The maintainer's view
+
+> "they gain rather little by having a member listed as passive compared to
+> not being listed as an active member at all."
+
+A failed payment in an automated system is rarely deliberate:
+> "an expired payment method or similar"
+
+So a penalty such as "no return this semester" makes little sense here.
+
+> "they also spend a lot of time creating this rule set … So I don't want to
+> tell them that they need to redo everything … but … if there are some
+> points that just don't make sense for an automated system … it doesn't
+> really help anyone if we just make weird workarounds."
+
+## Decided (2026-10-11)
+
+- **Team members are always association members.** It is a general rule:
+  without the association membership there is no account. Already so today.
+- **Rejoining without approval**, as a team setting, off by default:
+  "Former members can rejoin without approval".
+  - It has a time limit in **months** (12 for TDT), not semesters: teams
+    without payment periods (free, or a Stripe subscription) have no
+    semesters.
+  - It counts from the day the team membership ended.
+  - It needs an active association membership, as joining does.
+  - It covers the semester abroad and a missed or failed payment: the team
+    membership ends as today; the person comes back by paying, without
+    applying.
+  - The maintainer: "This is definitely something that feels right and that
+    we could build."
+
+## Open -- to be discussed with TDT first
+
+- **"Keep me informed":** still to be scoped, and its name too.
+  - The idea: offered when somebody leaves, when a lead removes them, and in
+    the email saying a team membership ended.
+  - It is shown on "Former members".
+  - A team mailing can include those people (association members only).
+  - They can switch it off from the team page or a link in each team email.
+- **Naming, and fitting TDT's word "passive":** a proposal for that
+  conversation.
+  - The rejoin window *is* a passive phase: somebody whose team membership
+    ended within the last N months may come back without a new admission.
+  - The team could name that phase itself (a label setting, e.g. "Passive"),
+    shown on "Former members" with the date until which they can rejoin.
+    Another association leaves the label empty.
+  - TDT's rules would keep the concept and most of the wording. Only the
+    manual parts would go: the WhatsApp poll before the deadline, and "no
+    return within the same semester" after not paying.
+- **A separate passive status in the portal** (listed among members, fee
+  paused, a Stripe subscription paused) and **becoming passive automatically
+  when a payment fails**: not wanted for now. The maintainer doubts they add
+  anything over the above, and pausing subscriptions at Stripe is complex.
+  Not built unless the conversation with TDT shows a need.

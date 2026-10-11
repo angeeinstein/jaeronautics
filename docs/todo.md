@@ -11,6 +11,25 @@ in git history (`git log -- docs/todo.md`).
 
 ## Open
 
+### Teams: former members can rejoin without approval (a team setting)
+
+- **Added:** 2026-10-11
+- **What:** a team setting, off by default: "Former members can rejoin
+  without approval", with a time limit in months (12 for TDT), counted from
+  the day the team membership ended.
+  - Within it, a former member joins again by paying, without an
+    application or a lead's approval.
+  - As always, it needs an active association membership.
+- **Where:** the team's Joining settings (`manage/applying`); the join step on
+  the team's page (`services/teams.py`, `join_or_apply`).
+- **Why:** Team Drone Tech's "passive members" (semester abroad, a missed or
+  failed payment), without a separate passive status. Full context,
+  decisions and the open points: `docs/team-passive-members.md`.
+- **Open:** whether "Keep me informed" and a team-chosen label for the
+  rejoin phase (e.g. "Passive") come with it. The maintainer discusses them
+  with TDT first. Build the setting itself without them unless decided by
+  then.
+
 ### "Nothing sent yet." sits against the panel's edge
 
 - **Added:** 2026-10-11
