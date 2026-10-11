@@ -315,6 +315,42 @@ export function Members() {
   );
 }
 
+function FormerTable({ rows, slug }: { rows: Schemas['FormerOut'][]; slug: string }) {
+  // Only while somebody may come back without applying (the team's rejoin
+  // months, or soon after a membership ended unpaid).
+  const rejoin = rows.some((row) => row.rejoin_until);
+  return (
+    <Table.ScrollContainer minWidth={rejoin ? 760 : 620} type="native">
+      <Table verticalSpacing="sm" aria-label="Former members">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th scope="col">Name</Table.Th>
+            <Table.Th scope="col">In the team</Table.Th>
+            <Table.Th scope="col">Last active</Table.Th>
+            <Table.Th scope="col">Why it ended</Table.Th>
+            {rejoin ? <Table.Th scope="col">Can rejoin until</Table.Th> : null}
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((row) => (
+            <Table.Tr key={row.user_id}>
+              <Table.Td>
+                <Anchor component={AppLink} to={personLink(slug, row.user_id)}>
+                  {row.name}
+                </Anchor>
+              </Table.Td>
+              <Table.Td>{row.periods}</Table.Td>
+              <Table.Td>{row.last_active ? formatDayOf(row.last_active) : '–'}</Table.Td>
+              <Table.Td>{row.why ?? '–'}</Table.Td>
+              {rejoin ? <Table.Td>{row.rejoin_until ? formatDate(row.rejoin_until) : '–'}</Table.Td> : null}
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
+  );
+}
+
 export function FormerMembers() {
   const slug = useSlug();
   const former = useQuery({
@@ -333,32 +369,7 @@ export function FormerMembers() {
         ) : former.isError ? (
           <ErrorState error={former.error} onRetry={() => void former.refetch()} />
         ) : former.data.former.length ? (
-          <Table.ScrollContainer minWidth={620} type="native">
-            <Table verticalSpacing="sm" aria-label="Former members">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th scope="col">Name</Table.Th>
-                  <Table.Th scope="col">In the team</Table.Th>
-                  <Table.Th scope="col">Last active</Table.Th>
-                  <Table.Th scope="col">Why it ended</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {former.data.former.map((row) => (
-                  <Table.Tr key={row.user_id}>
-                    <Table.Td>
-                      <Anchor component={AppLink} to={personLink(slug, row.user_id)}>
-                        {row.name}
-                      </Anchor>
-                    </Table.Td>
-                    <Table.Td>{row.periods}</Table.Td>
-                    <Table.Td>{row.last_active ? formatDayOf(row.last_active) : '–'}</Table.Td>
-                    <Table.Td>{row.why ?? '–'}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
+          <FormerTable rows={former.data.former} slug={slug} />
         ) : (
           <Stack px="md">
             <EmptyState>None.</EmptyState>

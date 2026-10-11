@@ -237,6 +237,19 @@ def _clean_max_members(max_members):
     return max_members
 
 
+def _clean_rejoin_months(months):
+    """Empty for off, else a number of months from 1 to REJOIN_MONTHS_MAX."""
+    if months in (None, ""):
+        return None
+    try:
+        months = int(months)
+    except (TypeError, ValueError):
+        raise ValidationError("The months must be a number.", code="team_rejoin_months_invalid") from None
+    if not 1 <= months <= REJOIN_MONTHS_MAX:
+        raise ValidationError(f"Between 1 and {REJOIN_MONTHS_MAX} months.", code="team_rejoin_months_invalid")
+    return months
+
+
 def _clean_team_fields(*, name, admission_mode, max_members, forum_group,
                        description=KEEP, applications_open=KEEP, application_prompt=KEEP):
     name = (name or "").strip()
@@ -302,6 +315,7 @@ def _snapshot(team):
         "applications_open": team.applications_open,
         "application_prompt": team.application_prompt,
         "max_members": team.max_members,
+        "rejoin_months": team.rejoin_months,
         "forum_group": team.forum_group,
         "payment_mode": team.payment_mode,
     }
@@ -1045,6 +1059,11 @@ APPROVAL_PROCESSING_DAYS = 45
 
 #: Whoever's membership ended unpaid may rejoin by paying, for about one period.
 REJOIN_DAYS = 183
+#: With the team's setting on (``Team.rejoin_months``), whoever's membership
+#: ended for one of these reasons comes back without applying -- not somebody
+#: a lead removed.
+REJOIN_REASONS = frozenset({END_LEFT, END_PAYMENT_FAILED, END_NOT_RENEWED, END_MEMBERSHIP_ENDED})
+REJOIN_MONTHS_MAX = 36
 
 #: What applicants and members see for each state.
 STATUS_LABELS = {
@@ -1212,15 +1231,16 @@ def join_or_apply(user, team, application_text=None, accepted_terms=False):
     if rules is not None and not accepted_terms:
         raise ValidationError(f"Please accept the rules of {team.name}.", code="team_terms_not_accepted")
 
+    rejoining = may_rejoin(user, team)  # asked before the new membership exists
     now = get_now_utc()
     membership = TeamMembership(team=team, user=user, applied_at=now)
     if rules is not None:
         membership.terms_accepted_at = now
         membership.terms_version = rules.stamp
-    if team.admission_mode == ADMISSION_OPEN or may_rejoin_by_paying(user, team):
+    if team.admission_mode == ADMISSION_OPEN or rejoining:
         # Joining an open team is being approved at once; the payment step
         # comes next, as after any approval. So is coming back soon after a
-        # payment did not go through: paying again is all it takes.
+        # payment did not go through, or within the team's rejoin months.
         membership.status = APPROVED
         membership.approved_at = now
     else:
@@ -1375,30 +1395,65 @@ def stop_charging(membership, why):
 _stop_charging = stop_charging
 
 
-def rejoin_by_paying_until(user, team, today=None):
-    """The last day the person may come back by paying, without applying --
-    their last membership here ended unpaid not long ago -- or None."""
+def _months_after(day, months):
+    """The same day ``months`` later; the month's last day where it is shorter."""
+    import calendar
+
+    month_index = day.month - 1 + months
+    year, month = day.year + month_index // 12, month_index % 12 + 1
+    return day.replace(year=year, month=month, day=min(day.day, calendar.monthrange(year, month)[1]))
+
+
+def rejoin_window_end(team, membership):
+    """The last day somebody whose ``membership`` ended may come back without
+    applying, by paying where the team charges; None if they apply anew.
+
+    Two rules, the later day counting:
+    - a membership that ended unpaid: about one period (REJOIN_DAYS), in every
+      team that charges;
+    - the team's own setting (``rejoin_months``, teams that approve their
+      members): left, not paid, or the association membership ended -- not
+      removed by a lead.
+    """
     from datetime import timedelta
 
-    from .clock import get_membership_today
-
-    if user is None or team.payment_mode == PAYMENT_NONE:
+    if membership is None or membership.status != ENDED or membership.ended_at is None:
         return None
-    today = today or get_membership_today()
-    last = db.session.execute(
-        db.select(TeamMembership).filter_by(team_id=team.id, user_id=user.id, status=ENDED)
+    ended = membership.ended_at.date()
+    ends = []
+    if team.payment_mode != PAYMENT_NONE and membership.end_reason in (END_PAYMENT_FAILED, END_NOT_RENEWED):
+        ends.append(ended + timedelta(days=REJOIN_DAYS))
+    if team.rejoin_months and team.admission_mode == ADMISSION_APPROVAL and membership.end_reason in REJOIN_REASONS:
+        ends.append(_months_after(ended, team.rejoin_months))
+    return max(ends, default=None)
+
+
+def _last_decided(user, team):
+    """The person's last membership here that ended, or a later application
+    the leads turned down -- which closes the way back."""
+    return db.session.execute(
+        db.select(TeamMembership)
+        .filter(TeamMembership.team_id == team.id, TeamMembership.user_id == user.id,
+                TeamMembership.status.in_((ENDED, REJECTED)))
         .order_by(TeamMembership.id.desc())
     ).scalars().first()
-    if last is None or last.end_reason not in (END_PAYMENT_FAILED, END_NOT_RENEWED) or last.ended_at is None:
+
+
+def rejoin_until(user, team, today=None):
+    """The last day the person may come back without applying -- by paying,
+    where the team charges -- or None."""
+    from .clock import get_membership_today
+
+    if user is None or not getattr(user, "id", None):
         return None
-    until = last.ended_at.date() + timedelta(days=REJOIN_DAYS)
-    return until if today <= until else None
+    until = rejoin_window_end(team, _last_decided(user, team))
+    today = today or get_membership_today()
+    return until if until is not None and today <= until else None
 
 
-def may_rejoin_by_paying(user, team, today=None):
-    """Whether the person's last membership here ended unpaid recently enough
-    to come back by paying, without applying."""
-    return rejoin_by_paying_until(user, team, today) is not None
+def may_rejoin(user, team, today=None):
+    """Whether the person comes back without applying (``rejoin_until``)."""
+    return rejoin_until(user, team, today) is not None
 
 
 def invite(actor, team, membership_id, meeting_details):
@@ -1541,6 +1596,7 @@ def former_members(team):
             "last_active": last.ended_at,
             "last_active_shown": format_date_display(last.ended_at) if last.ended_at else "",
             "end_reason": last.end_reason,
+            "rejoin_until": rejoin_until(last.user, team),
         })
     return sorted(rows, key=lambda row: row["last_active"] or row["user_id"], reverse=True)
 
@@ -1576,7 +1632,7 @@ def add_note(actor, team, user, body):
 
 
 def update_team_by_lead(actor, team, *, description=KEEP, application_prompt=KEEP, applications_open=KEEP,
-                        admission_mode=KEEP, max_members=KEEP):
+                        admission_mode=KEEP, max_members=KEEP, rejoin_months=KEEP):
     """The part of a team's settings that belongs to its leads -- everything
     but its name, its fee, its forum group and archiving it, which are the
     association's; what is not given stays as it is."""
@@ -1585,6 +1641,8 @@ def update_team_by_lead(actor, team, *, description=KEEP, application_prompt=KEE
         team.admission_mode = _clean_admission_mode(admission_mode)
     if max_members is not KEEP:
         team.max_members = _clean_max_members(max_members)
+    if rejoin_months is not KEEP:
+        team.rejoin_months = _clean_rejoin_months(rejoin_months)
     if description is not KEEP:
         team.description = (description or "").strip() or None
     if application_prompt is not KEEP:

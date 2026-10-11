@@ -206,6 +206,9 @@ class FormerOut(Model):
     periods: str
     last_active: UtcDateTime | None
     why: str | None
+    #: Until this day they come back without applying: the team's rejoin
+    #: months, or not long after their membership ended unpaid.
+    rejoin_until: date | None
 
 
 class FormerMembersOut(Model):
@@ -218,7 +221,7 @@ def team_former_members(slug):
     team = _managed(slug)
     return FormerMembersOut(former=[
         FormerOut(user_id=row["user_id"], name=row["name"], periods=row["periods"], last_active=row["last_active"],
-                  why=teams_service.END_REASON_LABELS.get(row["end_reason"]))
+                  why=teams_service.END_REASON_LABELS.get(row["end_reason"]), rejoin_until=row["rejoin_until"])
         for row in teams_service.former_members(team)
     ])
 
@@ -545,6 +548,10 @@ class ApplyingOut(Model):
     applications_open: bool
     #: Asked of applicants; none: they are not asked to write anything.
     application_prompt: str | None
+    #: With approval: for this many months after their membership ended,
+    #: former members come back without applying; none: they apply.
+    rejoin_months: int | None
+    rejoin_months_max: int
     #: Kept by the association with its legal texts; read-only here.
     rules: RulesInfoOut | None
 
@@ -556,12 +563,15 @@ class ApplyingIn(Model):
     admission_mode: Literal["approval", "open"] | None = None
     #: Left out: as it is; null: no limit.
     max_members: int | None = Field(None, ge=1)
+    #: Left out: as it is; null: off.
+    rejoin_months: int | None = Field(None, ge=1, le=teams_service.REJOIN_MONTHS_MAX)
 
 
 def _applying_out(team):
     rules = teams_service.team_rules(team)
     return ApplyingOut(
         admission_mode=team.admission_mode, max_members=team.max_members,
+        rejoin_months=team.rejoin_months, rejoin_months_max=teams_service.REJOIN_MONTHS_MAX,
         applications_open=bool(team.applications_open), application_prompt=team.application_prompt,
         rules=RulesInfoOut(version=rules.day, page_url=url_for("teams.team_rules_text", slug=team.slug),
                            pdf_url=url_for("teams.team_rules_pdf", slug=team.slug)) if rules else None,
@@ -583,6 +593,7 @@ def team_applying_save(slug, body):
         current_user, team, applications_open=body.applications_open, application_prompt=body.application_prompt,
         admission_mode=body.admission_mode if body.admission_mode is not None else teams_service.KEEP,
         max_members=body.max_members if "max_members" in given else teams_service.KEEP,
+        rejoin_months=body.rejoin_months if "rejoin_months" in given else teams_service.KEEP,
     )
     _commit()
     return _applying_out(team)

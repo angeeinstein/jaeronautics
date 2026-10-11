@@ -813,6 +813,10 @@ class Team(db.Model):
     # The question applicants are asked. Without one, no text is asked for.
     application_prompt = db.Column(db.String(255), nullable=True)
     max_members = db.Column(db.Integer, nullable=True)
+    # For a team that approves its members: for this many months after their
+    # team membership ended, former members come back without applying.
+    # None: they apply like anybody else (docs/team-passive-members.md).
+    rejoin_months = db.Column(db.Integer, nullable=True)
     forum_group = db.Column(db.String(100), nullable=True)
     # Optional. The file as stored, and the unguessable name it is served under.
     logo_path = db.Column(db.String(500), nullable=True)

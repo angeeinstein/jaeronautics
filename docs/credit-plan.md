@@ -233,6 +233,22 @@ How it fits what is built:
   - Whether a coffee machine's relay needs a separate "dispense" step after
     the sale.
 
+### Access control with the same readers (raised 2026-10-11, in discussion)
+
+The maintainer: "I also thought about using our server and the account
+systems for basic access control. If we already implement some sort of card
+readers that talk to our server, this shouldn't be too different from the
+payment card readers."
+- Same device, same linked cards, same reader keys; a door reader asks
+  "may this card open this door now?" instead of "sell this item".
+- Who may enter would come from what the portal already knows: an active
+  association membership, a team's active members (the team's access list),
+  roles.
+- Differs from selling: a door must still open when the server cannot be
+  reached (a list cached on the reader), it needs a lock and its wiring, and
+  rooms belong to the FH, whose own card system may already govern them.
+- Nothing decided; options in the conversation of 2026-10-11.
+
 ## Legal texts (drafts, waiting for approval)
 
 - **Privacy policy 2026-10-08** (already a draft for the pictures): credit

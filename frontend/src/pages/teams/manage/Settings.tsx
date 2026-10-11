@@ -15,6 +15,7 @@ import {
   Avatar,
   Button,
   Checkbox,
+  Collapse,
   FileInput,
   Group,
   List,
@@ -530,6 +531,8 @@ function ApplyingForm({
   const [prompt, setPrompt] = useState(applying.application_prompt ?? '');
   const [mode, setMode] = useState(applying.admission_mode);
   const [max, setMax] = useState<number | null>(applying.max_members);
+  const [rejoin, setRejoin] = useState(applying.rejoin_months !== null);
+  const [months, setMonths] = useState<number | null>(applying.rejoin_months ?? 12);
   const save = useManageChange(
     applyingKey,
     () =>
@@ -541,6 +544,7 @@ function ApplyingForm({
             application_prompt: prompt || null,
             admission_mode: mode === 'open' ? 'open' : 'approval',
             max_members: max,
+            rejoin_months: rejoin ? months : null,
           },
         }),
       ),
@@ -581,6 +585,35 @@ function ApplyingForm({
               setOpen(event.currentTarget.checked);
             }}
           />
+          {mode === 'approval' ? (
+            <Stack gap="xs">
+              <Checkbox
+                label="Former members can rejoin without approval"
+                description="For a time after they left or did not pay; not after being removed."
+                checked={rejoin}
+                onChange={(event) => {
+                  setRejoin(event.currentTarget.checked);
+                }}
+              />
+              <Collapse expanded={rejoin}>
+                <NumberInput
+                  label="For how many months"
+                  description="Counted from the day their membership ended."
+                  inputWrapperOrder={['label', 'input', 'description', 'error']}
+                  maw={220}
+                  pl={32}
+                  min={1}
+                  max={applying.rejoin_months_max}
+                  allowDecimal={false}
+                  value={months ?? ''}
+                  error={save.errors.rejoin_months ?? null}
+                  onChange={(value) => {
+                    setMonths(typeof value === 'number' ? value : null);
+                  }}
+                />
+              </Collapse>
+            </Stack>
+          ) : null}
           <TextInput
             label="Question for applicants"
             description="Optional. Without one, applicants are not asked to write anything."

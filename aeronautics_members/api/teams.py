@@ -119,7 +119,8 @@ class JoiningOut(Model):
     """The form for somebody not in the team, or why there is none."""
 
     mode: Literal["open", "approval"]
-    #: Ended unpaid not long ago: back by paying again, without applying, until this day.
+    #: Back without applying -- by paying, where the team charges -- until this day: ended unpaid
+    #: not long ago, or within the team's rejoin months.
     rejoin_until: date | None
     #: The question the leads ask, when applying.
     prompt: str | None
@@ -253,7 +254,7 @@ def _sees_money(team):
 
 
 def _join_label(team):
-    if teams_service.rejoin_by_paying_until(current_user, team):
+    if teams_service.rejoin_until(current_user, team):
         return "Rejoin"
     return "Apply" if team.admission_mode == teams_service.ADMISSION_APPROVAL else "Join"
 
@@ -385,7 +386,7 @@ def _admission(team):
 
 def _card(team, latest, just_paid, is_member):
     membership = _membership(team, latest, just_paid, is_member)
-    rejoin = teams_service.rejoin_by_paying_until(current_user, team)
+    rejoin = teams_service.rejoin_until(current_user, team)
     member = membership.status == "active" and membership.ongoing
     return TeamCardOut(
         slug=team.slug, name=team.name, description=team.description, logo_url=_logo_url(team),
@@ -428,14 +429,15 @@ def _rules(team, current):
 
 
 def _joining(team):
-    back_until = teams_service.rejoin_by_paying_until(current_user, team)
+    back_until = teams_service.rejoin_until(current_user, team)
     approval = team.admission_mode == teams_service.ADMISSION_APPROVAL
     return JoiningOut(
         mode=team.admission_mode,
         rejoin_until=back_until,
         prompt=team.application_prompt if approval and team.application_prompt and not back_until else None,
         why_not=teams_service.why_not_joinable(current_user, team),
-        submit_label="Rejoin and pay" if back_until else ("Apply" if approval else "Join"),
+        submit_label=(("Rejoin and pay" if team.payment_mode != teams_service.PAYMENT_NONE else "Rejoin")
+                      if back_until else ("Apply" if approval else "Join")),
     )
 
 

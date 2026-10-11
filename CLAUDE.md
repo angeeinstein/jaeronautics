@@ -111,5 +111,10 @@ words: it will not be there later.
   can do (live updates, animation) where it helps -- every animation off when
   the device asks for less motion.
 - Square, flat look (`docs/design.md`).
+- Features stay general where it costs this association nothing. Other
+  associations may use the portal one day, so no options only this
+  association or one of its teams would use ("that would just confuse other
+  people"). But nothing is made worse for this association for that
+  possibility; it is kept in mind, not designed for.
 - No model names, credentials or members' personal data in commits, code or
   documents.

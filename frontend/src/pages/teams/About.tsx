@@ -158,7 +158,9 @@ function Joining({ team }: { team: Team }) {
       <Stack gap="md">
         {joining?.rejoin_until ? (
           <Text size="sm">
-            {`Your membership ended because it was not paid. Until ${formatDate(joining.rejoin_until)} you can come back by paying again — no new application needed.`}
+            {team.fee
+              ? `Until ${formatDate(joining.rejoin_until)} you can come back by paying again — no new application needed.`
+              : `Until ${formatDate(joining.rejoin_until)} you can come back without a new application.`}
           </Text>
         ) : joining?.mode === 'approval' ? (
           <Text size="sm" c="dimmed">
