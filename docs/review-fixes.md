@@ -53,7 +53,17 @@ whether it still holds, and what was done.
    account, so it stays. (A privacy choice: say if it should rather be
    e.g. the person being told to contact the treasurer.)
 8. **A team debit that bounced and was collected again reads as a difference** (#30/41).
+   Held (reproduced in a test): team fees can be paid by SEPA, and the
+   bounced first debit showed as "taken back in Stripe". Done: as for
+   memberships, a charge taken back is no difference when another charge
+   paid the same invoice.
 9. **A request for work already under way is lost** (#30/43).
+   Held, and likely: forum work starts at once, and Stripe sends a payment's
+   events milliseconds apart, so the second change could fold into a sync
+   already reading the old state and be marked done with it. Done: such a
+   request marks the item (`asked_again`, a new column), and finishing puts
+   it back in the queue instead; the lookup locks the row, so a run ending
+   in the same moment cannot miss it.
 
 ## Accounts and mail
 
