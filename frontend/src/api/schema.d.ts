@@ -3126,6 +3126,11 @@ export interface components {
              * @default null
              */
             max_members?: number | null;
+            /**
+             * Rejoin Months
+             * @default null
+             */
+            rejoin_months?: number | null;
         };
         /** ApplyingOut */
         ApplyingOut: {
@@ -3137,6 +3142,10 @@ export interface components {
             applications_open: boolean;
             /** Max Members */
             max_members: number | null;
+            /** Rejoin Months */
+            rejoin_months: number | null;
+            /** Rejoin Months Max */
+            rejoin_months_max: number;
             rules: components["schemas"]["RulesInfoOut"] | null;
         };
         /** ArchivedIn */
@@ -4217,6 +4226,8 @@ export interface components {
             name: string;
             /** Periods */
             periods: string;
+            /** Rejoin Until */
+            rejoin_until: string | null;
             /** User Id */
             user_id: number;
             /** Why */

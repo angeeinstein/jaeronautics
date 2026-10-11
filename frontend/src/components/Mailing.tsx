@@ -161,7 +161,14 @@ export function MailingComposer({
 
 /** What was sent, newest first; each a way to its page when ``linkTo`` gives one. */
 export function MailingTable({ items, linkTo }: { items: Mailing[]; linkTo?: (mailing: Mailing) => string }) {
-  if (!items.length) return <EmptyState>Nothing sent yet.</EmptyState>;
+  if (!items.length) {
+    // Inside a flush panel, like the other flush panels' empty states.
+    return (
+      <Stack px="md">
+        <EmptyState>Nothing sent yet.</EmptyState>
+      </Stack>
+    );
+  }
   return (
     <Table.ScrollContainer minWidth={560} type="native">
       <Table verticalSpacing="sm" aria-label="Sent">

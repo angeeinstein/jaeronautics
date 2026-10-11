@@ -1070,7 +1070,8 @@ their team page says the rules have changed.
 *Applications* (invite with the meeting details, approve, not accept),
 *Members*, *Former members*, *Team page* (descriptions, cover, logo, photos),
 *Joining* (by approval or open, the most members, open for applications or
-not, the question; the rules in force, read-only), *Access list* and *Roles*. Each settings section is saved on its own.
+not, the question, whether former members can rejoin without approval and
+for how many months; the rules in force, read-only), *Access list* and *Roles*. Each settings section is saved on its own.
 Also: notes about a person (not shown to them, but in their data export,
 without the author), removing somebody (immediately, with a reason that stays
 in the record), and an export of the current members. Leads appoint the
@@ -1124,7 +1125,12 @@ makes them a member. *Leave* runs to the end of what is paid (no refund), *Stay
 after all* takes it back. Removal by a lead, the association membership ending
 and erasure cancel a subscription at once, without refund. For six months
 after a membership ended unpaid the person may come back by paying, without
-applying. Payments are listed in the `payments` table and on the team's Money
+applying. A team that approves its members can also let former members back
+without applying for up to 36 months (its *Joining* settings, off by default):
+after leaving, not paying or the association membership ending -- not after
+being removed by a lead, nor after a later application was turned down. The
+later of the two days counts; *Former members* shows it ("Can rejoin until").
+See `docs/team-passive-members.md`. Payments are listed in the `payments` table and on the team's Money
 page.
 
 - **Subscription**: Stripe charges at each period start; joining in the last 3

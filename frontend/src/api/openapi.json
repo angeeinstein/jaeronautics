@@ -1285,6 +1285,20 @@
             ],
             "default": null,
             "title": "Max Members"
+          },
+          "rejoin_months": {
+            "anyOf": [
+              {
+                "maximum": 36,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rejoin Months"
           }
         },
         "required": [
@@ -1326,6 +1340,21 @@
             ],
             "title": "Max Members"
           },
+          "rejoin_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejoin Months"
+          },
+          "rejoin_months_max": {
+            "title": "Rejoin Months Max",
+            "type": "integer"
+          },
           "rules": {
             "anyOf": [
               {
@@ -1342,6 +1371,8 @@
           "max_members",
           "applications_open",
           "application_prompt",
+          "rejoin_months",
+          "rejoin_months_max",
           "rules"
         ],
         "title": "ApplyingOut",
@@ -4701,6 +4732,18 @@
             "title": "Periods",
             "type": "string"
           },
+          "rejoin_until": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejoin Until"
+          },
           "user_id": {
             "title": "User Id",
             "type": "integer"
@@ -4722,7 +4765,8 @@
           "name",
           "periods",
           "last_active",
-          "why"
+          "why",
+          "rejoin_until"
         ],
         "title": "FormerOut",
         "type": "object"

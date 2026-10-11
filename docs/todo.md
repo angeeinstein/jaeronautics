@@ -6,47 +6,12 @@ through, how an item is written -- is in `CLAUDE.md` at the repository root.
 The last batches (2026-10-08 and 2026-10-09) built everything that was on
 the list -- credit and selling for credit (`docs/credit-plan.md`); messages,
 announcements and team mailings (`docs/messages-plan.md`); admin error emails
-that resolved themselves left out. What it was is in their pull requests and
-in git history (`git log -- docs/todo.md`).
+that resolved themselves left out. The batch of 2026-10-11 built the teams'
+rejoin setting (`docs/team-passive-members.md`) and a spacing fix. What it
+was is in their pull requests and in git history (`git log -- docs/todo.md`).
+The legal drafts and the card readers below were put off by the maintainer.
 
 ## Open
-
-### Teams: former members can rejoin without approval (a team setting)
-
-- **Added:** 2026-10-11
-- **What:** a team setting, off by default: "Former members can rejoin
-  without approval", with a time limit in months (12 for TDT), counted from
-  the day the team membership ended.
-  - Within it, a former member joins again by paying, without an
-    application or a lead's approval.
-  - As always, it needs an active association membership.
-- **Where:** the team's Joining settings (`manage/applying`); the join step on
-  the team's page (`services/teams.py`, `join_or_apply`).
-  - The setting shows only for teams that approve applications.
-  - With it on, the team's *Former members* table shows until when each
-    person can rejoin this way.
-- **Why:** Team Drone Tech's "passive members" (semester abroad, a missed or
-  failed payment), without a separate passive status. Full context:
-  `docs/team-passive-members.md`.
-- **Decided (2026-10-11):** only this setting. No "become passive", passive
-  label or mailings to former members: "if they want to see people who just
-  left, they can always look in the former members page". The maintainer
-  talks to TDT's leads about the rest.
-
-### "Nothing sent yet." sits against the panel's edge
-
-- **Added:** 2026-10-11
-- **Where:** the *Sent* panel on Admin › Announcements and on a team's
-  Messages page; `frontend/src/components/Mailing.tsx`, `MailingTable`.
-- **What:** with nothing sent, "Nothing sent yet." stands flush against the
-  panel's left edge, with no space above or below it. The maintainer's
-  screenshot of Admin › Announcements: "The spacing here is a bit broken at
-  the bottom." The panel is `flush` (for the table), so the empty state gets
-  none of the panel's padding.
-- **How:** give the empty state the padding the other flush panels give
-  their contents (Admin › Credit wraps its tables in `.inset`: `0 md xs`),
-  or the panel's usual padding while it is empty. Check the screenshots of
-  both pages.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
@@ -63,10 +28,13 @@ in git history (`git log -- docs/todo.md`).
 - **Also (added 2026-10-09, with messages):** the privacy policy draft names
   the contact form, messages to team leads, announcements and team mailings
   (§ 27, § 31, § 40, § 41). See `docs/messages-plan.md`.
-- **Waiting for:** the maintainer reading the wording (shown under Admin ›
-  Legal texts, *Not in force yet*). Once approved: `status: "published"` in
-  all four files (the day stays, or the day it is published), nothing else.
-- **Open:** whether the board wants to see it first.
+- **Waiting for (2026-10-11):** the maintainer discusses them with the
+  association's board, the credit feature above all ("I haven't really
+  discussed with them if they like it"). Shown under Admin › Legal texts,
+  *Not in force yet*.
+- **Once approved:** `status: "published"` in all four files, with the day
+  of publishing as `version`/`effective_from` (and the file names); check
+  that nothing refers to the old § 31-36 of the membership terms.
 
 ### Card readers for credit (later)
 

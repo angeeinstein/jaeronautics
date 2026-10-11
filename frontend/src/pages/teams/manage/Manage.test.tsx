@@ -322,6 +322,8 @@ describe('joining', () => {
       max_members: null,
       applications_open: true,
       application_prompt: null,
+      rejoin_months: null,
+      rejoin_months_max: 36,
       rules: null,
     };
     const { calls } = show(
@@ -334,11 +336,42 @@ describe('joining', () => {
     await userEvent.click(await screen.findByRole('combobox', { name: 'How people join' }));
     await userEvent.click(screen.getByRole('option', { name: 'Open to every member' }));
     await userEvent.type(screen.getByRole('textbox', { name: 'Most members' }), '12');
+    expect(screen.queryByRole('checkbox', { name: /rejoin without approval/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(async () => {
       const sent = calls.find((call) => call.method === 'PUT');
       expect(await sent?.clone().json()).toMatchObject({ admission_mode: 'open', max_members: 12 });
+    });
+  });
+
+  it('with approval, former members may rejoin for some months', async () => {
+    const applying: Schemas['ApplyingOut'] = {
+      admission_mode: 'approval',
+      max_members: null,
+      applications_open: true,
+      application_prompt: null,
+      rejoin_months: null,
+      rejoin_months_max: 36,
+      rules: null,
+    };
+    const { calls } = show(
+      <Applying />,
+      { [`${API}/applying`]: { body: applying }, [`PUT ${API}/applying`]: { body: applying } },
+      '/teams/rocket/manage/applying',
+      '/teams/:slug/manage/applying',
+    );
+
+    await userEvent.click(await screen.findByRole('checkbox', { name: /rejoin without approval/ }));
+    const months = await screen.findByRole('textbox', { name: 'For how many months' });
+    expect(months).toHaveValue('12');
+    await userEvent.clear(months);
+    await userEvent.type(months, '6');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(async () => {
+      const sent = calls.find((call) => call.method === 'PUT');
+      expect(await sent?.clone().json()).toMatchObject({ rejoin_months: 6 });
     });
   });
 });

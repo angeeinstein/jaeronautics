@@ -1,7 +1,7 @@
 # Passive team members, rejoining, and staying informed
 
-**Status:** decided for now (2026-10-11): only the rejoin setting is built
-(`docs/todo.md`). The rest of passive membership waits for the maintainer's
+**Status:** the rejoin setting is built (2026-10-11, the team's *Joining*
+settings; `services/teams.py`, `rejoin_until`). The rest of passive membership waits for the maintainer's
 conversation with TDT's leads; the proposal and open points below are kept
 for it.
 
