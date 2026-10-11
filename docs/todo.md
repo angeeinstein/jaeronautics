@@ -28,6 +28,28 @@ The legal drafts and the card readers below were put off by the maintainer.
 - **Not small:** a feature of its own, built once the open questions are
   answered.
 
+### Forum changes start at once, not on the next 2-minute run
+
+- **Added:** 2026-10-11
+- **What:** work queued for the forum starts right away in the background
+  once the change that queued it is saved. That covers access after paying,
+  team groups, renames, and access ending. The 2-minute
+  `process-external-work` timer stays as the safety net for retries and
+  anything missed.
+- **Where:** `services/outbox.py` (`enqueue`, `process_pending`); the places
+  that enqueue (`blueprints/webhook.py`, `services/teams.py`,
+  `services/workflows.py`). Two places already do it for one person:
+  `try_now_for`, and renames in `services/reviews.py`.
+- **Why:** after paying or joining a team, a person may find their forum
+  access or group missing for up to 2 minutes. The maintainer agreed: "doing
+  something immediately is way better".
+- **Decided:** never at the cost of the forum's rate limits: "make sure that
+  we don't" run into them.
+  - A burst of changes (e.g. a team's members) is worked through by one
+    background run, with the queue's usual pacing.
+  - A rate-limit answer from the forum leaves the rest for the timer.
+  - The page never waits for the forum.
+
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
