@@ -135,7 +135,21 @@ def stripe_webhook():
     else:
         # Only a handler that ran to completion may suppress redeliveries.
         complete_stripe_event(event_id)
+        _fetch_the_books(event_type)
     return body, status
+
+
+def _fetch_the_books(event_type):
+    """Stripe's books changed: a fetch, started at once (services/stripe_books.py).
+    Never at the cost of the webhook's answer."""
+    from ..services import stripe_books
+
+    try:
+        stripe_books.after_webhook(event_type)
+        db.session.commit()
+    except Exception:  # noqa: BLE001 -- the hourly fetch catches up
+        db.session.rollback()
+        current_app.logger.exception("Could not queue a fetch of Stripe's books after %s.", event_type)
 
 
 def _stop_charging_after_lost_dispute(member, charge_id):

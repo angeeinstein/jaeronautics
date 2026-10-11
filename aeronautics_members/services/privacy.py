@@ -553,6 +553,10 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
 
     forget_sender(user)
     forget_mailing_recipient(user)
+    # A difference between Stripe and the portal names who paid; the name goes.
+    from .money_checks import forget_person
+
+    forget_person(user)
 
     # Somebody from the old forum -- still archived, or a returning student
     # who reclaimed the account -- also has what that board knew about them.

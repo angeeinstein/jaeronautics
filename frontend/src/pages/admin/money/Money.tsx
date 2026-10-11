@@ -1,16 +1,19 @@
 /**
  * Money, the association's side (docs/frontend-structure.md, 4): what each
  * team is owed and what was passed on, each team opening its own page; then
- * the money on Stripe for a period, fetched only when asked, as it pages
- * through Stripe. The period is in the address (?check=1&since=&until=), so
- * a check can be linked to. Data: GET /api/v1/admin/money and
- * /api/v1/admin/money/overview (aeronautics_members/api/admin_money.py).
+ * the money on Stripe for a period, read from the portal's copy of Stripe's
+ * book (docs/money-ledger-plan.md) -- at once, kept current after every
+ * payment -- with a way to fetch from Stripe now. The period is in the
+ * address (?since=&until=), so it can be linked to. Data: GET
+ * /api/v1/admin/money, /api/v1/admin/money/overview and POST
+ * /api/v1/admin/money/fetch (aeronautics_members/api/admin_money.py).
  */
 import { Button, Group, Stack, Table, Text } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type SyntheticEvent, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
+import { api, call } from '../../../api/client';
 import { AppLink } from '../../../app/AppLink';
 import { DayInput } from '../../../components/DayInput';
 import { PageHeader } from '../../../components/PageHeader';
@@ -20,10 +23,11 @@ import { EmptyState, ErrorState, LoadingState } from '../../../components/States
 import { TeamMark } from '../../../components/TeamMark';
 import { formatDate, formatEuros } from '../../../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
+import { notifyFailed } from '../../../lib/notify';
 import classes from './Money.module.css';
-import { type MoneyOut, moneyQuery } from './shared';
+import { type MoneyOut, moneyQuery, overviewQuery } from './shared';
 import { FeeSettings } from './FeeSettings';
-import { Overview } from './Overview';
+import { FetchState, Overview } from './Overview';
 
 function TeamsTable({ money }: { money: MoneyOut }) {
   if (!money.teams.length) {
@@ -87,7 +91,7 @@ function TeamsTable({ money }: { money: MoneyOut }) {
   );
 }
 
-/** The period to check: two days and the usual choices. */
+/** The period shown: two days and the usual choices. */
 function PeriodForm({
   today,
   start,
@@ -96,7 +100,7 @@ function PeriodForm({
   onCheck,
 }: {
   today: string;
-  /** The day the portal took over: no check reaches further back. */
+  /** The day the portal took over: nothing is shown from further back. */
   start: string | null;
   since: string;
   until: string;
@@ -140,7 +144,9 @@ function PeriodForm({
             onChange={setTo}
             w={160}
           />
-          <Button type="submit">Check against Stripe</Button>
+          <Button type="submit" variant="default">
+            Show
+          </Button>
         </Group>
       </form>
       <Group gap="md">
@@ -168,21 +174,65 @@ function PeriodForm({
   );
 }
 
-export function Money() {
-  const money = useQuery(moneyQuery);
-  // Not the check against Stripe (Overview.tsx): that one is asked for.
-  useLiveRefresh(moneyQuery.queryKey, EVERY_MINUTE);
-  const [params, setParams] = useSearchParams();
-  const checking = params.get('check') === '1';
-  const since = params.get('since') ?? '';
-  const until = params.get('until') ?? '';
+function FetchNow({ since, until }: { since: string | null; until: string | null }) {
+  const client = useQueryClient();
+  const fetchNow = useMutation({
+    mutationFn: () =>
+      call(
+        api.POST('/api/v1/admin/money/fetch', {
+          params: { query: { since: since ?? undefined, until: until ?? undefined } },
+        }),
+      ),
+    onSuccess: async (overview) => {
+      client.setQueryData(overviewQuery(since, until).queryKey, overview);
+      // The teams' figures may have changed too; the overview is the answer itself.
+      await client.invalidateQueries({ queryKey: moneyQuery.queryKey, exact: true });
+    },
+    onError: notifyFailed,
+  });
+  return (
+    <Button
+      size="xs"
+      variant="default"
+      loading={fetchNow.isPending}
+      onClick={() => {
+        fetchNow.mutate();
+      }}
+    >
+      Fetch from Stripe now
+    </Button>
+  );
+}
 
-  function check(from: string, to: string) {
-    const next = new URLSearchParams({ check: '1' });
+function OnStripe({ today, start }: { today: string; start: string | null }) {
+  const [params, setParams] = useSearchParams();
+  const since = params.get('since') ?? null;
+  const until = params.get('until') ?? null;
+  const overview = useQuery(overviewQuery(since, until));
+  // Kept current by the server after every payment: read again now and then.
+  useLiveRefresh(overviewQuery(since, until).queryKey, EVERY_MINUTE);
+
+  function show(from: string, to: string) {
+    const next = new URLSearchParams();
     if (from) next.set('since', from);
     if (to) next.set('until', to);
     setParams(next);
   }
+
+  return (
+    <Panel title="On Stripe" actions={<FetchNow since={since} until={until} />}>
+      <Stack gap="md">
+        {overview.data ? <FetchState overview={overview.data} /> : null}
+        <PeriodForm today={today} start={start} since={since ?? ''} until={until ?? ''} onCheck={show} />
+        <Overview since={since} until={until} />
+      </Stack>
+    </Panel>
+  );
+}
+
+export function Money() {
+  const money = useQuery(moneyQuery);
+  useLiveRefresh(moneyQuery.queryKey, EVERY_MINUTE);
 
   return (
     <>
@@ -208,31 +258,13 @@ export function Money() {
           >
             <Text size="sm" c="dimmed" className={classes.note}>
               What teams are owed: what their members paid, less refunds, and what they sold for credit; less
-              Stripe&apos;s fees where they carry them (below).
+              Stripe&apos;s fees where they carry them (below). Each team&apos;s page shows how its figure
+              adds up.
             </Text>
             <TeamsTable money={money.data} />
           </Panel>
           <FeeSettings />
-          <Panel title="On Stripe">
-            <Stack gap="md">
-              <PeriodForm
-                today={money.data.today}
-                start={money.data.records_since ?? null}
-                since={since}
-                until={until}
-                onCheck={check}
-              />
-              {checking ? (
-                <Overview since={since || null} until={until || null} />
-              ) : (
-                <Text size="sm" c="dimmed">
-                  The totals come from Stripe, where all the association&apos;s payments land: the membership,
-                  the teams, and the webshop and events too. They are fetched when you ask, together with a
-                  check of every payment against the portal&apos;s records.
-                </Text>
-              )}
-            </Stack>
-          </Panel>
+          <OnStripe today={money.data.today} start={money.data.records_since ?? null} />
         </Stack>
       )}
     </>

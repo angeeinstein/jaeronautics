@@ -3,52 +3,14 @@
 What is agreed but not built yet. How this list works -- when it is worked
 through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
-The last batches (2026-10-08 and 2026-10-09) built everything that was on
-the list -- credit and selling for credit (`docs/credit-plan.md`); messages,
-announcements and team mailings (`docs/messages-plan.md`); admin error emails
-that resolved themselves left out. The batch of 2026-10-11 built the teams'
-rejoin setting (`docs/team-passive-members.md`) and a spacing fix. What it
+The last batches built everything that was on the list -- most recently
+(2026-10-11) Stripe's book kept in the portal, with every team figure shown
+line by line and the credit's top-up fees followed to each sale
+(`docs/money-ledger-plan.md`), and forum changes started at once. What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
 The legal drafts and the card readers below were put off by the maintainer.
 
 ## Open
-
-### Money: Stripe's books kept in the portal (fees, credit, automatic check)
-
-- **Added:** 2026-10-11
-- **What:** keep Stripe's bookings in the database instead of fetching all
-  of them on every check. The check runs on its own. Stripe's fees come off
-  what a team is owed when the team carries them. Credit is counted too,
-  including the top-up fees.
-- **Where:** Admin › Money; `services/money_overview.py`,
-  `services/team_money.py`, `services/credit_sales.py`,
-  `services/money_settings.py`; the nightly steps.
-- **Why, what was said, the proposal and the open questions:**
-  `docs/money-ledger-plan.md`.
-- **Not small:** a feature of its own, built once the open questions are
-  answered.
-
-### Forum changes start at once, not on the next 2-minute run
-
-- **Added:** 2026-10-11
-- **What:** work queued for the forum starts right away in the background
-  once the change that queued it is saved. That covers access after paying,
-  team groups, renames, and access ending. The 2-minute
-  `process-external-work` timer stays as the safety net for retries and
-  anything missed.
-- **Where:** `services/outbox.py` (`enqueue`, `process_pending`); the places
-  that enqueue (`blueprints/webhook.py`, `services/teams.py`,
-  `services/workflows.py`). Two places already do it for one person:
-  `try_now_for`, and renames in `services/reviews.py`.
-- **Why:** after paying or joining a team, a person may find their forum
-  access or group missing for up to 2 minutes. The maintainer agreed: "doing
-  something immediately is way better".
-- **Decided:** never at the cost of the forum's rate limits: "make sure that
-  we don't" run into them.
-  - A burst of changes (e.g. a team's members) is worked through by one
-    background run, with the queue's usual pacing.
-  - A rate-limit answer from the forum leaves the rest for the timer.
-  - The page never waits for the forum.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
@@ -65,6 +27,11 @@ The legal drafts and the card readers below were put off by the maintainer.
 - **Also (added 2026-10-09, with messages):** the privacy policy draft names
   the contact form, messages to team leads, announcements and team mailings
   (§ 27, § 31, § 40, § 41). See `docs/messages-plan.md`.
+- **Also (added 2026-10-11, with Stripe's book):** the privacy policy draft
+  says that the portal keeps a copy of the Stripe account's bookings without
+  names, and that a difference with Stripe names the payer's address and is
+  kept a year after it is resolved (§ 20, § 40). See
+  `docs/money-ledger-plan.md`.
 - **Waiting for (2026-10-11):** the maintainer discusses them with the
   association's board, the credit feature above all ("I haven't really
   discussed with them if they like it"). Shown under Admin › Legal texts,

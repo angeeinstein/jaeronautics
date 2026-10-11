@@ -1,23 +1,39 @@
 /**
- * The money on Stripe for a period (services/money_overview.py): by what it
- * was for, what of it is the teams', what Stripe holds, and the check of
- * every paid invoice against the portal's records.
+ * The money on Stripe for a period, read from the portal's copy of Stripe's
+ * book (services/money_overview.py) -- at once, without asking Stripe: by
+ * what it was for, what Stripe holds and whose it is, and where Stripe and the
+ * portal's records differ (services/money_checks.py), with the switch for
+ * emailing those differences.
  */
-import { Button, Collapse, List, SimpleGrid, Stack, Table, Text, Title, VisuallyHidden } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
+import {
+  Button,
+  Checkbox,
+  Collapse,
+  List,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  Title,
+  VisuallyHidden,
+} from '@mantine/core';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { api, call } from '../../../api/client';
 import { ErrorState, LoadingState } from '../../../components/States';
 import { formatDate, formatDateTime, formatEuros } from '../../../lib/format';
+import { notifyFailed } from '../../../lib/notify';
 import classes from './Money.module.css';
 import { type OverviewOut, overviewQuery } from './shared';
 
 type Totals = OverviewOut['books']['total'];
-type Mismatch = OverviewOut['mismatches'][number];
+type Difference = OverviewOut['differences'][number];
 
 const PRODUCTS = [
   ['membership', 'Membership'],
   ['team', 'Teams'],
+  ['credit', 'Credit'],
   ['other', 'Other'],
   ['total', 'Total'],
 ] as const;
@@ -51,14 +67,14 @@ function Row({
 function Books({ overview }: { overview: OverviewOut }) {
   const { books } = overview;
   const title = overview.since
-    ? `${formatDate(overview.since)} to ${formatDate(overview.until)} on Stripe`
-    : `From the start to ${formatDate(overview.until)} on Stripe`;
+    ? `${formatDate(overview.since)} to ${formatDate(overview.until)}`
+    : `From the start to ${formatDate(overview.until)}`;
   return (
     <Stack gap="xs">
       <Title order={3} size="h5">
         {title}
       </Title>
-      <Table.ScrollContainer minWidth={620} type="native">
+      <Table.ScrollContainer minWidth={700} type="native">
         <Table verticalSpacing={6} aria-label="By what it was for">
           <Table.Thead>
             <Table.Tr>
@@ -82,7 +98,7 @@ function Books({ overview }: { overview: OverviewOut }) {
             <Row books={books} label="Stripe's fees" field="fees" sign={-1} />
             {books.other_bookings ? (
               <Table.Tr>
-                <Table.Th scope="row" colSpan={4}>
+                <Table.Th scope="row" colSpan={PRODUCTS.length}>
                   Other bookings
                 </Table.Th>
                 <Table.Td className={`${classes.amount} ja-figures`}>
@@ -91,39 +107,26 @@ function Books({ overview }: { overview: OverviewOut }) {
               </Table.Tr>
             ) : null}
             <Row books={books} label="Net" field="net" strong />
-            <Table.Tr>
-              <Table.Th scope="row" colSpan={4} className={classes.indent}>
-                of which the teams&apos; (what their members paid)
-              </Table.Th>
-              <Table.Td className={`${classes.amount} ja-figures`}>
-                {formatEuros(overview.teams_share)}
-              </Table.Td>
-            </Table.Tr>
-            <Table.Tr className={classes.strong}>
-              <Table.Th scope="row" colSpan={4} className={classes.indent}>
-                of which the association&apos;s own
-              </Table.Th>
-              <Table.Td className={`${classes.amount} ja-figures`}>
-                {formatEuros(overview.association_own)}
-              </Table.Td>
-            </Table.Tr>
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>
-      <Text size="sm" c="dimmed">
-        Other is everything paid without a membership or team invoice: the webshop, events, payment links.
-        {books.stripe_fees
-          ? ` Stripe's fees include ${formatEuros(books.stripe_fees)} Stripe billed on its own.`
-          : ''}
-      </Text>
+      {books.stripe_fees ? (
+        <Text size="sm" c="dimmed">
+          {`Stripe's fees include ${formatEuros(books.stripe_fees)} Stripe billed on its own.`}
+        </Text>
+      ) : null}
     </Stack>
   );
 }
 
 function Holdings({ overview }: { overview: OverviewOut }) {
   const { books } = overview;
-  const now = overview.in_stripe_now;
-  const nowTotal = now ? now.available + now.pending : null;
+  const rows: [string, number, boolean][] = [
+    ['In Stripe', books.balance_at_end, true],
+    ["of which the teams' (still to be transferred)", -overview.owed_to_teams, false],
+    ["of which members' credit (topped up through Stripe)", -overview.credit_held.top_ups, false],
+    ["The association's own", overview.association_own, true],
+  ];
   return (
     <Stack gap="xs">
       <Title order={3} size="h5">
@@ -131,123 +134,173 @@ function Holdings({ overview }: { overview: OverviewOut }) {
       </Title>
       <Table verticalSpacing={6} aria-label={`On ${formatDate(overview.until)}`}>
         <Table.Tbody>
-          <Table.Tr className={classes.strong}>
-            <Table.Th scope="row">In Stripe</Table.Th>
-            <Table.Td className={`${classes.amount} ja-figures`}>
-              {formatEuros(books.balance_at_end)}
-            </Table.Td>
-          </Table.Tr>
-          {now ? (
-            <Table.Tr>
-              <Table.Th scope="row" className={classes.indent}>
-                available now / on its way
+          {rows.map(([label, cents, strong]) => (
+            <Table.Tr key={label} className={strong ? classes.strong : undefined}>
+              <Table.Th scope="row" className={strong ? undefined : classes.indent}>
+                {label}
               </Table.Th>
-              <Table.Td className={`${classes.amount} ja-figures`}>
-                {formatEuros(now.available)} / {formatEuros(now.pending)}
-              </Table.Td>
+              <Table.Td className={`${classes.amount} ja-figures`}>{formatEuros(cents)}</Table.Td>
             </Table.Tr>
-          ) : null}
+          ))}
           <Table.Tr>
             <Table.Th scope="row">Paid out to the bank account in the period</Table.Th>
             <Table.Td className={`${classes.amount} ja-figures`}>{formatEuros(books.paid_out)}</Table.Td>
           </Table.Tr>
-          <Table.Tr>
-            <Table.Th scope="row">Still owed to the teams</Table.Th>
-            <Table.Td className={`${classes.amount} ja-figures`}>
-              {formatEuros(overview.owed_to_teams)}
-            </Table.Td>
-          </Table.Tr>
         </Table.Tbody>
       </Table>
-      {nowTotal === null ? null : nowTotal === books.balance_at_end ? (
-        <Text size="sm" c="var(--ja-success-text)">
-          Stripe&apos;s bookings add up to the balance Stripe holds now.
+      {overview.credit_held.cash ? (
+        <Text size="sm" c="dimmed">
+          {`Members also hold ${formatEuros(overview.credit_held.cash)} of credit handed over in cash or booked by hand: not in Stripe.`}
         </Text>
-      ) : (
-        <Text size="sm" c="var(--ja-warning)">
-          Stripe&apos;s bookings add up to {formatEuros(books.balance_at_end)}, but Stripe holds{' '}
-          {formatEuros(nowTotal)} now. A booking in another currency, or one made this very moment, can
-          explain it.
-        </Text>
-      )}
+      ) : null}
     </Stack>
   );
 }
 
-function mismatchLine(mismatch: Mismatch): string {
-  const amounts =
-    mismatch.amount === null
-      ? ''
-      : `, ${formatEuros(mismatch.amount)}${mismatch.stripe_amount === null ? '' : ` / ${formatEuros(mismatch.stripe_amount)}`}`;
-  return `${mismatch.what}: ${mismatch.invoice ?? '–'}${amounts}${mismatch.who ? `, ${mismatch.who}` : ''}`;
+function differenceLine(difference: Difference): string {
+  const amounts = [
+    difference.amount === null ? null : `portal ${formatEuros(difference.amount)}`,
+    difference.stripe_amount === null ? null : `Stripe ${formatEuros(difference.stripe_amount)}`,
+  ].filter(Boolean);
+  return [difference.what, difference.reference ?? '–', amounts.join(', '), difference.who]
+    .filter(Boolean)
+    .join(' · ');
 }
 
-const SHOWN = 10;
+function EmailSwitch({ on }: { on: boolean }) {
+  const client = useQueryClient();
+  const save = useMutation({
+    mutationFn: async (next: boolean) => {
+      const current = await call(api.GET('/api/v1/admin/money/settings'));
+      return call(api.PUT('/api/v1/admin/money/settings', { body: { ...current, difference_emails: next } }));
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: ['admin', 'money'] }),
+    onError: notifyFailed,
+  });
+  return (
+    <Checkbox
+      label="Email differences to the admins and the treasurer"
+      description="Once each, when one has lasted an hour."
+      checked={save.isPending ? save.variables : on}
+      disabled={save.isPending}
+      onChange={(event) => {
+        save.mutate(event.currentTarget.checked);
+      }}
+    />
+  );
+}
 
-function Check({ overview }: { overview: OverviewOut }) {
-  const [all, setAll] = useState(false);
-  const { mismatches } = overview;
+function Differences({ overview }: { overview: OverviewOut }) {
+  const [resolved, setResolved] = useState(false);
+  const { differences } = overview;
   return (
     <Stack gap="xs">
       <Title order={3} size="h5">
-        Check against the portal
+        Against the portal
       </Title>
-      {mismatches.length ? (
+      {differences.length ? (
         <>
-          <Text c="var(--ja-warning)">{mismatches.length} payment(s) do not match:</Text>
+          <Text c="var(--ja-warning)">
+            {`${String(differences.length)} ${differences.length === 1 ? 'difference' : 'differences'}:`}
+          </Text>
           <List size="sm" spacing={4}>
-            {mismatches.slice(0, SHOWN).map((mismatch, index) => (
-              <List.Item key={`${mismatch.invoice ?? ''}-${String(index)}`}>
-                {mismatchLine(mismatch)}
+            {differences.map((difference) => (
+              <List.Item key={difference.id}>
+                {differenceLine(difference)}
+                <Text size="xs" c="dimmed">
+                  {`Since ${formatDateTime(difference.first_seen_at)}${difference.emailed_at ? ', emailed' : ''}`}
+                </Text>
               </List.Item>
             ))}
           </List>
-          {mismatches.length > SHOWN ? (
-            <>
-              <Collapse expanded={all}>
-                <List size="sm" spacing={4}>
-                  {mismatches.slice(SHOWN).map((mismatch, index) => (
-                    <List.Item key={`${mismatch.invoice ?? ''}-more-${String(index)}`}>
-                      {mismatchLine(mismatch)}
-                    </List.Item>
-                  ))}
-                </List>
-              </Collapse>
-              <Button
-                variant="subtle"
-                size="compact-sm"
-                onClick={() => {
-                  setAll(!all);
-                }}
-              >
-                {all ? 'Show fewer' : `${String(mismatches.length - SHOWN)} more`}
-              </Button>
-            </>
-          ) : null}
         </>
       ) : (
         <Text c="var(--ja-success-text)">
-          Every paid membership and team invoice of the period matches the portal&apos;s records.
+          Every payment in Stripe matches the portal&apos;s records, and the other way round.
         </Text>
       )}
-      <Text size="sm" c="dimmed">
-        Checked {formatDateTime(overview.checked_at)}.
-      </Text>
+      {overview.resolved.length ? (
+        <>
+          <Collapse expanded={resolved}>
+            <List size="sm" spacing={4} c="dimmed">
+              {overview.resolved.map((difference) => (
+                <List.Item key={difference.id}>
+                  {`${differenceLine(difference)} — resolved ${difference.resolved_at ? formatDateTime(difference.resolved_at) : ''}`}
+                </List.Item>
+              ))}
+            </List>
+          </Collapse>
+          <Button
+            variant="subtle"
+            size="compact-sm"
+            w="fit-content"
+            aria-expanded={resolved}
+            onClick={() => {
+              setResolved(!resolved);
+            }}
+          >
+            {resolved
+              ? 'Hide resolved'
+              : `Resolved in the last 30 days (${String(overview.resolved.length)})`}
+          </Button>
+        </>
+      ) : null}
+      {overview.checked_at ? (
+        <Text size="sm" c="dimmed">
+          Checked {formatDateTime(overview.checked_at)}, after each fetch.
+        </Text>
+      ) : null}
+      <EmailSwitch on={overview.emails} />
     </Stack>
   );
 }
 
 export function Overview({ since, until }: { since: string | null; until: string | null }) {
   const overview = useQuery(overviewQuery(since, until));
-  if (overview.isPending) return <LoadingState label="Asking Stripe…" />;
+  if (overview.isPending) return <LoadingState />;
   if (overview.isError) return <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />;
   return (
     <Stack gap="lg">
       <Books overview={overview.data} />
       <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="xl">
         <Holdings overview={overview.data} />
-        <Check overview={overview.data} />
+        <Differences overview={overview.data} />
       </SimpleGrid>
+    </Stack>
+  );
+}
+
+/** When the book was fetched, whether it adds up to what Stripe holds, and a way to fetch now. */
+export function FetchState({ overview }: { overview: OverviewOut }) {
+  const balanced =
+    overview.stripe_balance !== null &&
+    overview.books_balance !== null &&
+    overview.stripe_balance === overview.books_balance;
+  if (!overview.fetched_at) {
+    return (
+      <Text size="sm" c="dimmed">
+        Stripe&apos;s book has not been fetched yet. The first fetch reads all of it and takes a minute.
+      </Text>
+    );
+  }
+  return (
+    <Stack gap={2}>
+      <Text size="sm" c="dimmed">
+        {`Fetched from Stripe ${formatDateTime(overview.fetched_at)}: after every payment, and at least hourly.`}
+      </Text>
+      {overview.last_error ? (
+        <Text size="sm" c="var(--ja-warning)">
+          {`The last fetch failed: ${overview.last_error}`}
+        </Text>
+      ) : balanced ? (
+        <Text size="sm" c="var(--ja-success-text)">
+          Its bookings add up to what Stripe holds.
+        </Text>
+      ) : (
+        <Text size="sm" c="var(--ja-warning)">
+          {`Its bookings add up to ${formatEuros(overview.books_balance ?? 0)}, but Stripe held ${formatEuros(overview.stripe_balance ?? 0)}. A booking in another currency, or one made that very moment, can explain it.`}
+        </Text>
+      )}
     </Stack>
   );
 }

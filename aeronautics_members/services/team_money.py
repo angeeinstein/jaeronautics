@@ -1,62 +1,88 @@
 """A team's money: what its members paid, and what the association passed on.
 
-All of it lands on the association's Stripe account. A team is owed exactly
-what its members paid for it -- Stripe's fees are the association's, a
-sponsorship on top -- less what was refunded or taken back by a lost
-chargeback. The association transfers it to the team's own account whenever
-suits, and records each transfer; what is still open is what was earned less
-what was transferred. No cut-off dates: the open balance is simply everything
-not passed on yet, shown by the period it paid for.
+All of it lands on the association's Stripe account. A team is owed what its
+members paid for it, less what was refunded or taken back by a lost
+chargeback; and what it sold for credit (services/credit_sales.py), less what
+was taken back and the association's share where it keeps one. When the
+teams carry Stripe's fees (the money setting, for every payment past and
+future), Stripe's fee comes off each payment -- and what Stripe keeps
+afterwards, on a chargeback -- and each credit sale carries its share of the
+fee of the top-up that paid for it (services/credit_fees.py). The
+association transfers what is owed to the team's own account whenever
+suits, and records each transfer; what is still open is what was earned
+less what was transferred.
 
-What a team sold for credit (services/credit_sales.py: a beer from its
-fridge) adds to what it earned in the same way, less what was taken back;
-the payouts and the balance stay as they are.
+**Every figure shows how it came about.** :func:`statement` lists each line
+-- a payment, a refund, Stripe's fee, a sale, its fee share, a transfer --
+and :func:`summary` adds them up the same way, so the totals are the sum of
+the lines the pages show (docs/money-ledger-plan.md). A line whose fee
+Stripe has not said yet is held back, shown as waiting, until it has.
 """
 
 import re
+from dataclasses import dataclass, field
 from datetime import date
 
-from ..db_models import Payment, TeamPayout, db
+from ..db_models import CreditEntry, Payment, TeamPayout, db
 from . import ValidationError
 from .audit import log_audit_event
 from .clock import get_membership_today
 from .membership import format_date_display, format_membership_date_display
 # Who carries Stripe's fees: its own module (selling for credit reads it too).
-from .money_settings import credit_share_bps, save_money_settings, teams_bear_fees  # noqa: F401
+from .money_settings import (  # noqa: F401
+    credit_share_bps, difference_emails, save_money_settings, teams_bear_fees,
+)
+
+# What a line is, for the pages to group and explain them.
+FEE_PAID = "fee_paid"
+REFUNDED = "refunded"
+TAKEN_BACK = "taken_back"
+STRIPE_FEE = "stripe_fee"
+STRIPE_LATER_FEE = "stripe_later_fee"
+SOLD = "sold"
+SALE_TAKEN_BACK = "sale_taken_back"
+KEPT = "kept"
+TOP_UP_FEE = "top_up_fee"
+TRANSFER = "transfer"
+
+#: The summary's rows, in order: the lines of each kind added up.
+SUMMARY_ROWS = (
+    (FEE_PAID, "Fees paid"),
+    (REFUNDED, "Refunded"),
+    (TAKEN_BACK, "Taken back by the bank"),
+    (STRIPE_FEE, "Stripe's fees on fees"),
+    (STRIPE_LATER_FEE, "Stripe's chargeback fees"),
+    (SOLD, "Sold for credit"),
+    (SALE_TAKEN_BACK, "Sales taken back"),
+    (KEPT, "Kept by the association"),
+    (TOP_UP_FEE, "Stripe's fees on top-ups"),
+)
 
 
-def _earned(payment):
-    """What of a payment the team is owed; None while Stripe's fee it carries is not known yet."""
-    if payment.status == "disputed":
-        return 0
-    net = max(payment.amount_cents - (payment.refunded_cents or 0), 0)
-    if not payment.team_bears_fee:
-        return net
-    if payment.fee_cents is None:
-        return None
-    # Stripe keeps its fee on a refund too: a refunded payment can cost the team.
-    return net - payment.fee_cents
+@dataclass
+class Line:
+    day: date | None
+    kind: str
+    text: str
+    amount: int
+    #: A payment or a sale this line belongs to, to keep its lines together.
+    group: str
+    detail: str = ""
+    #: Held back until Stripe says the fee it carries.
+    waiting: bool = False
 
 
-def fill_in_fees(limit=100):
-    """Every night: ask Stripe for the fee of the team payments that carry theirs and lack it.
+@dataclass
+class _Group:
+    key: str
+    lines: list = field(default_factory=list)
+    waiting: bool = False
 
-    A fee is known once the money has arrived at Stripe; a SEPA debit takes days.
-    Returns how many were filled in.
-    """
-    from . import payments
 
-    waiting = db.session.execute(
-        db.select(Payment).filter_by(purpose="team", team_bears_fee=True, fee_cents=None)
-        .order_by(Payment.id).limit(limit)
-    ).scalars().all()
-    filled = 0
-    for payment in waiting:
-        fee = payments.stripe_fee(payment.stripe_payment_intent_id, payment.stripe_invoice_id)
-        if fee is not None:
-            payment.fee_cents = fee
-            filled += 1
-    return filled
+def _day(moment):
+    from .clock import datetime_to_membership_date
+
+    return datetime_to_membership_date(moment)
 
 
 def team_payments(team):
@@ -71,30 +97,185 @@ def team_payouts(team):
     ).scalars().all()
 
 
-def summary(team):
-    """Earned (fees and credit sales), paid out and open, in cents; the fees by the period they paid for."""
-    from .credit_sales import sales_summary
+def _team_sales(team):
+    from . import credit
 
+    return db.session.execute(
+        db.select(CreditEntry).where(CreditEntry.team_id == team.id,
+                                     CreditEntry.kind.in_((credit.PURCHASE, credit.TAKEN_BACK)))
+        .order_by(CreditEntry.created_at, CreditEntry.id)
+    ).scalars().all()
+
+
+def _payment_groups(payments, carry):
+    from .stripe_books import fees_of_payments
+
+    stripe_fees = fees_of_payments([payment.id for payment in payments])
+    groups = []
+    for payment in sorted(payments, key=lambda found: (found.paid_at, found.id)):
+        group = _Group(key=f"payment:{payment.id}")
+        day = _day(payment.paid_at)
+        name = payer_name(payment) or "a former member"
+        until = f", paid until {format_membership_date_display(payment.covers_until)}" if payment.covers_until else ""
+        group.lines.append(Line(day, FEE_PAID, f"Fee paid by {name}{until}", payment.amount_cents, group.key))
+        refunded = min(payment.refunded_cents or 0, payment.amount_cents)
+        if refunded:
+            group.lines.append(Line(day, REFUNDED, "Refunded", -refunded, group.key))
+        if payment.status == "disputed":
+            group.lines.append(Line(day, TAKEN_BACK, "Taken back by the bank (chargeback)",
+                                    -(payment.amount_cents - refunded), group.key))
+        if carry:
+            found = stripe_fees.get(payment.id) or {}
+            fee = found.get("fee") if found.get("fee") is not None else payment.fee_cents
+            if fee is None:
+                group.waiting = True
+                group.lines.append(Line(day, STRIPE_FEE, "Stripe's fee: not known yet", 0, group.key, waiting=True))
+            else:
+                group.lines.append(Line(day, STRIPE_FEE, "Stripe's fee", -fee, group.key,
+                                        detail="kept by Stripe also when the payment is refunded" if refunded else ""))
+            later = found.get("later_fees") or 0
+            if later:
+                group.lines.append(Line(day, STRIPE_LATER_FEE, "Stripe's fee on the chargeback", -later, group.key))
+        if group.waiting:
+            for line in group.lines:
+                line.waiting = True
+        groups.append(group)
+    return groups
+
+
+def _sale_groups(team, carry):
+    from . import credit
+    from .credit_fees import parts_for_people
+
+    sales = _team_sales(team)
+    parts = parts_for_people({entry.user_id for entry in sales}) if carry else {}
+    top_ups = {}
+    if carry:
+        ids = {part.source_id for entry in sales for part in parts.get(entry.id, []) if part.payment_id}
+        if ids:
+            top_ups = {entry.id: entry for entry in db.session.execute(
+                db.select(CreditEntry).where(CreditEntry.id.in_(list(ids)))
+            ).scalars()}
+    groups = []
+    for entry in sales:
+        group = _Group(key=f"sale:{entry.id}")
+        day = _day(entry.created_at)
+        name = entry.item.name if entry.item is not None else entry.description
+        price = -entry.amount_cents  # a sale takes credit (negative); taken back gives it again
+        if entry.kind == credit.PURCHASE:
+            group.lines.append(Line(day, SOLD, f"{name} sold", price, group.key))
+        else:
+            group.lines.append(Line(day, SALE_TAKEN_BACK, f"{name} taken back", price, group.key))
+        if entry.kept_cents:
+            share = credit_share_text(entry.kept_cents, abs(price))
+            group.lines.append(Line(day, KEPT, f"Kept by the association{share}", -entry.kept_cents, group.key))
+        if carry:
+            for part in parts.get(entry.id, []):
+                if part.payment_id is None:
+                    continue  # paid from cash: no fee
+                top_up = top_ups.get(part.source_id)
+                about = (f"the top-up of {format_date_display(top_up.created_at)} "
+                         f"({euros(top_up.amount_cents)}") if top_up is not None else "a top-up ("
+                if part.fee is None:
+                    group.waiting = True
+                    group.lines.append(Line(day, TOP_UP_FEE, f"Share of Stripe's fee on {about}): not known yet",
+                                            0, group.key, waiting=True))
+                    continue
+                fee_total = _top_up_fee(top_up)
+                about += f", fee {euros(fee_total)})" if fee_total is not None else ")"
+                group.lines.append(Line(day, TOP_UP_FEE, f"Share of Stripe's fee on {about}", -part.fee, group.key,
+                                        detail=f"{euros(abs(part.amount))} of it paid for this"))
+        if group.waiting:
+            for line in group.lines:
+                line.waiting = True
+        groups.append(group)
+    return groups
+
+
+def _top_up_fee(top_up):
+    if top_up is None or top_up.payment is None:
+        return None
+    return top_up.payment.fee_cents
+
+
+def credit_share_text(kept, price):
+    if not price:
+        return ""
+    return f" ({kept * 100 / price:.1f} %)".replace(".0 %", " %")
+
+
+def statement(team):
+    """Every line of the team's money, oldest first, and the totals they add up to."""
+    carry = teams_bear_fees()
     payments = team_payments(team)
     payouts = team_payouts(team)
-    sales = sales_summary(team)
-    counted = [(payment, _earned(payment)) for payment in payments]
-    fees = sum(cents for _payment, cents in counted if cents is not None)
-    # Paid, carrying Stripe's fee, and the fee not known yet: counted once it is.
-    waiting = [payment for payment, cents in counted if cents is None]
-    earned = fees + sales["earned"]
-    paid_out = sum(payout.amount_cents for payout in payouts)
-    by_period = {}
-    for payment, cents in counted:
-        if cents is not None:
-            by_period[payment.covers_until] = by_period.get(payment.covers_until, 0) + cents
+    groups = _payment_groups(payments, carry) + _sale_groups(team, carry)
+    for payout in sorted(payouts, key=lambda found: (found.paid_on, found.id)):
+        key = f"transfer:{payout.id}"
+        groups.append(_Group(key=key, lines=[Line(payout.paid_on, TRANSFER, "Transferred to the team",
+                                                  -payout.amount_cents, key, detail=payout.reference or "")]))
+    lines = sorted((line for group in groups for line in group.lines),
+                   key=lambda line: (line.day or date.min, line.group))
+    totals = {kind: 0 for kind, _label in SUMMARY_ROWS}
+    waiting = 0
+    for group in groups:
+        if group.waiting:
+            waiting += sum(line.amount for line in group.lines if line.kind in (FEE_PAID, SOLD, SALE_TAKEN_BACK))
+            continue
+        for line in group.lines:
+            if line.kind in totals:
+                totals[line.kind] += line.amount
+    earned = sum(totals.values())
+    transferred = sum(payout.amount_cents for payout in payouts)
     return {
+        "lines": lines,
+        "rows": [(kind, label, totals[kind]) for kind, label in SUMMARY_ROWS if totals[kind]],
         "earned": earned,
+        "waiting": waiting,
+        "transferred": transferred,
+        "open": earned - transferred,
+        "carry": carry,
+        "groups": {group.key: group for group in groups},
+    }
+
+
+def counts(payment, groups=None):
+    """What of ``payment`` the team is owed, in cents; None while Stripe's fee it carries is not known."""
+    if groups is None:
+        groups = {group.key: group for group in _payment_groups([payment], teams_bear_fees())}
+    group = groups.get(f"payment:{payment.id}")
+    if group is None or group.waiting:
+        return None
+    return sum(line.amount for line in group.lines)
+
+
+def summary(team):
+    """The statement's totals, as the pages use them: earned, of it from fees and from credit
+    sales, waiting, paid out and open; the fees by the period they paid for."""
+    from .credit_sales import sales_summary
+
+    found = statement(team)
+    payments = team_payments(team)
+    payouts = team_payouts(team)
+    groups = found["groups"]
+    by_period = {}
+    fees = 0
+    for payment in payments:
+        cents = counts(payment, groups)
+        if cents is None:
+            continue
+        fees += cents
+        by_period[payment.covers_until] = by_period.get(payment.covers_until, 0) + cents
+    sales = sales_summary(team)
+    sales["earned"] = found["earned"] - fees
+    return {
+        "earned": found["earned"],
         "fees": fees,
         "sales": sales,
-        "waiting_for_fee": sum(max(payment.amount_cents - (payment.refunded_cents or 0), 0) for payment in waiting),
-        "paid_out": paid_out,
-        "open": earned - paid_out,
+        "waiting_for_fee": found["waiting"],
+        "paid_out": found["transferred"],
+        "open": found["open"],
+        "statement": found,
         "by_period": sorted(by_period.items(), key=lambda item: item[0] or date.min, reverse=True),
         "payments": payments,
         "payouts": payouts,
@@ -115,17 +296,13 @@ def payer_name(payment):
     return f"{member.first_name or ''} {member.last_name or ''}".strip() if member is not None else ""
 
 
-def counts(payment):
-    """What of ``payment`` the team is owed, in cents; None while Stripe's fee it carries is not known."""
-    return _earned(payment)
-
-
 EXPORT_COLUMNS = ("Paid on", "Name", "Paid until", "Amount", "Refunded", "Counts", "Status")
 
 
 def export_rows(team):
     from .teams import csv_cell
 
+    groups = statement(team)["groups"]
     for payment in team_payments(team):
         yield (
             format_date_display(payment.paid_at) if payment.paid_at else "",
@@ -133,7 +310,7 @@ def export_rows(team):
             format_membership_date_display(payment.covers_until) if payment.covers_until else "",
             f"{payment.amount_cents / 100:.2f}",
             f"{(payment.refunded_cents or 0) / 100:.2f}",
-            f"{_earned(payment) / 100:.2f}" if _earned(payment) is not None else "",
+            f"{counts(payment, groups) / 100:.2f}" if counts(payment, groups) is not None else "",
             payment.status,
         )
 

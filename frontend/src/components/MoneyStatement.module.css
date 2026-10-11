@@ -1,0 +1,27 @@
+.amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.total th,
+.total td {
+  border-top: 1px solid var(--ja-border);
+  font-weight: 700;
+}
+
+.day {
+  white-space: nowrap;
+  color: var(--ja-muted);
+}
+
+.groupStart td {
+  border-top: 1px solid var(--ja-border);
+}
+
+.follow {
+  padding-left: 1.5rem;
+}
+
+.waiting td {
+  color: var(--ja-muted);
+}

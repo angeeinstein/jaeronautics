@@ -1,8 +1,8 @@
 /**
  * What both sides of a team's money show alike (the team's page and Admin ›
- * Money › a team): what the team sold for credit, by item; what of a
- * payment counts for the team, with Stripe's fee where the payment carries
- * it; and the sentence saying who carries the fees.
+ * Money › a team): what the team sold for credit, by item, and what of a
+ * payment counts for the team, with Stripe's fee where the teams carry it.
+ * How it all adds up: components/MoneyStatement.tsx.
  */
 import { Stack, Table, Text } from '@mantine/core';
 
@@ -36,18 +36,6 @@ export function Counts({ payment }: { payment: Payment }) {
       ) : null}
     </>
   );
-}
-
-/** Who carries Stripe's fees, as these payments were made; and what waits for its fee. */
-export function feeNote(payments: Payment[], waitingForFee: number): string {
-  const carried = payments.some((payment) => payment.counts === null || payment.fee != null);
-  const who = carried
-    ? "Payments made since the team carries Stripe's fee count less that fee."
-    : "Stripe's fees are paid by the association.";
-  const waiting = waitingForFee
-    ? ` ${formatEuros(waitingForFee)} counts once Stripe has said its fee (overnight).`
-    : '';
-  return `The team gets what its members paid, less refunds, and what it sold for credit. ${who}${waiting}`;
 }
 
 /** What the team sold for credit, by item: sales that stand, less the association's share where it keeps one. */

@@ -1,8 +1,8 @@
 # Stripe's books in the portal: fees, credit and the teams' share
 
-**Status:** decided (2026-10-11), see "Decided"; further ideas offered, not
-built yet. To-do item: "Money:
-Stripe's books kept in the portal" in `docs/todo.md`.
+**Status:** built (2026-10-11, `claude/money-check`); see "How it is built".
+Running it: `docs/maintenance.md`, "Stripe's fees" and "The association's
+money".
 
 ## What the maintainer wants
 
@@ -156,7 +156,29 @@ Either a or b could replace the "kept" percentage, or sit beside it.
     for later in `docs/todo.md`);
   - splitting *Other*: it stays "Other", no explaining sentence.
 
-## Open (none blocking)
+## How it is built
 
-- The privacy policy: the copy holds payment references without names (the
-  portal already keeps those for its own payments). Probably a line in § 20.
+- **The copy:** `services/stripe_books.py`, table `stripe_bookings` (one row
+  per balance transaction; no names), `stripe_books_state` (how far fetched,
+  Stripe's balance then). Fetched after webhooks through the outbox (item
+  `stripe_books`, started at once), hourly by the external-work worker, and
+  on *Fetch from Stripe now*. A booking is sorted by the portal's own record
+  (payment or invoice), then by what Stripe says (`stripe_scope`); one not
+  told yet is tried again for 14 days after it was fetched.
+- **Fees:** `Payment.fee_cents` is filled from the booking; the per-payment
+  `team_bears_fee` is gone -- the setting decides for all money.
+- **Credit:** `services/credit_fees.py` works out, from the credit's entries,
+  which top-up paid for what (oldest first) and each part's fee share. Not
+  stored: the entries and fees never change, so the result never does.
+- **The statement:** `services/team_money.py`, `statement()`: every line and
+  the sums; `summary()` and the pages read it. The open amount is the sum of
+  the lines.
+- **The check:** `services/money_checks.py` after every fetch, on the copy;
+  `money_differences` keeps what differs; emailed once after an hour (switch
+  in the money settings); resolved ones forgotten after a year.
+- **The overview:** `services/money_overview.py` reads the copy: totals per
+  product for any period, the balance on a day, of it the teams' and the
+  members' credit, the association's own.
+- **Privacy:** the copy holds payment references and amounts, no names; a
+  difference names who paid (an email address), cleared when the account is
+  erased. The privacy policy draft says so (§ 20, § 40).

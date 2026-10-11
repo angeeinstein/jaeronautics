@@ -909,6 +909,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/money/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fetch what is new in Stripe's book now, check it, and answer with the overview. */
+        post: operations["admin_money_fetch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/money/overview": {
         parameters: {
             query?: never;
@@ -916,7 +933,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The money on Stripe for a period, by what it was for, checked invoice by invoice */
+        /** The money on Stripe for a period, by what it was for, from the portal's copy of Stripe's */
         get: operations["admin_money_overview"];
         put?: never;
         post?: never;
@@ -933,9 +950,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Who carries Stripe's fees. Each payment and sale keeps how it was when it was made. */
+        /** Who carries Stripe's fees, the share kept of credit sales, and the emails about differences. */
         get: operations["admin_money_settings"];
-        /** Change them, from now on: what was paid and sold before stays as it was counted. */
+        /** Change them. Who carries the fees counts for all money at once; the share kept, for sales from now on. */
         put: operations["admin_money_settings_save"];
         post?: never;
         delete?: never;
@@ -3336,6 +3353,7 @@ export interface components {
         Books: {
             /** Balance At End */
             balance_at_end: number;
+            credit: components["schemas"]["Totals"];
             membership: components["schemas"]["Totals"];
             other: components["schemas"]["Totals"];
             /** Other Bookings */
@@ -3785,6 +3803,13 @@ export interface components {
             /** Team Name */
             team_name: string | null;
         };
+        /** CreditHeld */
+        CreditHeld: {
+            /** Cash */
+            cash: number;
+            /** Top Ups */
+            top_ups: number;
+        };
         /** CreditHolderOut */
         CreditHolderOut: {
             /** Account Url */
@@ -3969,6 +3994,35 @@ export interface components {
             private_email: string | null;
             /** University Email */
             university_email: string | null;
+        };
+        /**
+         * Difference
+         * @description Where Stripe's books and the portal's records disagree (services/money_checks.py).
+         */
+        Difference: {
+            /** Amount */
+            amount: number | null;
+            /** Emailed At */
+            emailed_at: string | null;
+            /** First Seen At */
+            first_seen_at: string;
+            /** Id */
+            id: number;
+            /**
+             * Product
+             * @enum {string}
+             */
+            product: "membership" | "team" | "credit" | "other";
+            /** Reference */
+            reference: string | null;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Stripe Amount */
+            stripe_amount: number | null;
+            /** What */
+            what: string;
+            /** Who */
+            who: string;
         };
         /** DisabledIn */
         DisabledIn: {
@@ -4653,13 +4707,6 @@ export interface components {
              * Format: date
              */
             version: string;
-        };
-        /** InStripeNow */
-        InStripeNow: {
-            /** Available */
-            available: number;
-            /** Pending */
-            pending: number;
         };
         /** InviteIn */
         InviteIn: {
@@ -5490,27 +5537,6 @@ export interface components {
              */
             state?: "open" | "done" | "all";
         };
-        /**
-         * Mismatch
-         * @description A paid invoice and the portal's records that do not agree.
-         */
-        Mismatch: {
-            /** Amount */
-            amount: number | null;
-            /** Invoice */
-            invoice: string | null;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "team" | "membership";
-            /** Stripe Amount */
-            stripe_amount: number | null;
-            /** What */
-            what: string;
-            /** Who */
-            who: string;
-        };
         /** MoneyOut */
         MoneyOut: {
             /**
@@ -5546,6 +5572,11 @@ export interface components {
         MoneySettings: {
             /** Credit Share Bps */
             credit_share_bps: number;
+            /**
+             * Difference Emails
+             * @default true
+             */
+            difference_emails?: boolean;
             /**
              * Fee Payer
              * @enum {string}
@@ -5742,17 +5773,27 @@ export interface components {
             /** Association Own */
             association_own: number;
             books: components["schemas"]["Books"];
+            /** Books Balance */
+            books_balance: number | null;
             /** Checked At */
-            checked_at: string;
-            in_stripe_now: components["schemas"]["InStripeNow"] | null;
-            /** Mismatches */
-            mismatches: components["schemas"]["Mismatch"][];
+            checked_at: string | null;
+            credit_held: components["schemas"]["CreditHeld"];
+            /** Differences */
+            differences: components["schemas"]["Difference"][];
+            /** Emails */
+            emails: boolean;
+            /** Fetched At */
+            fetched_at: string | null;
+            /** Last Error */
+            last_error: string | null;
             /** Owed To Teams */
             owed_to_teams: number;
+            /** Resolved */
+            resolved: components["schemas"]["Difference"][];
             /** Since */
             since: string | null;
-            /** Teams Share */
-            teams_share: number;
+            /** Stripe Balance */
+            stripe_balance: number | null;
             /**
              * Until
              * Format: date
@@ -6518,6 +6559,59 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * Statement
+         * @description How the team's figures come about: each kind of line added up, then every line.
+         */
+        Statement: {
+            /** Earned */
+            earned: number;
+            /** Lines */
+            lines: components["schemas"]["StatementLine"][];
+            /** Open */
+            open: number;
+            /** Rows */
+            rows: components["schemas"]["StatementRow"][];
+            /** Teams Carry Fees */
+            teams_carry_fees: boolean;
+            /** Transferred */
+            transferred: number;
+            /** Waiting */
+            waiting: number;
+        };
+        /**
+         * StatementLine
+         * @description One line of a team's money: a payment, a refund, Stripe's fee, a sale, its share of a
+         *     top-up's fee, a transfer. Lines of one payment or sale share their ``group``.
+         */
+        StatementLine: {
+            /** Amount */
+            amount: number;
+            /** Day */
+            day: string | null;
+            /** Detail */
+            detail: string;
+            /** Group */
+            group: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "fee_paid" | "refunded" | "taken_back" | "stripe_fee" | "stripe_later_fee" | "sold" | "sale_taken_back" | "kept" | "top_up_fee" | "transfer";
+            /** Text */
+            text: string;
+            /** Waiting */
+            waiting: boolean;
+        };
+        /** StatementRow */
+        StatementRow: {
+            /** Amount */
+            amount: number;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+        };
         /** StepOut */
         StepOut: {
             /** Key */
@@ -6668,6 +6762,7 @@ export interface components {
             sales: components["schemas"]["CreditSales"];
             /** Slug */
             slug: string;
+            statement: components["schemas"]["Statement"];
             /** Transfers */
             transfers: components["schemas"]["Transfer"][];
             /** Waiting For Fee */
@@ -6781,6 +6876,7 @@ export interface components {
             /** Reference */
             reference: string;
             sales: components["schemas"]["CreditSales"];
+            statement: components["schemas"]["Statement"];
             team: components["schemas"]["TeamRef"];
             /**
              * Today
@@ -10344,6 +10440,65 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_money_fetch: {
+        parameters: {
+            query?: {
+                since?: string | null;
+                until?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -82,12 +82,14 @@ describe('who carries Stripe’s fees', () => {
   it('sends the share in hundredths of a percent', async () => {
     const { calls } = mockFetch({
       ...base,
-      '/api/v1/admin/money/settings': { body: { fee_payer: 'association', credit_share_bps: 0 } },
+      '/api/v1/admin/money/settings': {
+        body: { fee_payer: 'association', credit_share_bps: 0, difference_emails: true },
+      },
       'PUT /api/v1/admin/money/settings': { body: { changed: ['team_fees_stripe_fee_payer'] } },
     });
     renderPage(<FeeSettings />);
 
-    await userEvent.click(await screen.findByText('Taken from the team'));
+    await userEvent.click(await screen.findByText('The teams'));
     await userEvent.type(screen.getByLabelText('Kept of what teams sell for credit'), '3');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -102,6 +104,7 @@ describe('who carries Stripe’s fees', () => {
     ).toEqual({
       fee_payer: 'team',
       credit_share_bps: 300,
+      difference_emails: true,
     });
   });
 });

@@ -10,6 +10,8 @@ test.describe('money', () => {
     await table.getByRole('link', { name: 'Rocket Team' }).click();
 
     await expect(page).toHaveURL(/\/admin\/money\/rocket-team$/);
+    const sums = page.getByRole('table', { name: 'How it adds up' });
+    await expect(sums.getByRole('row', { name: /^Open/ })).toContainText('€12.00');
     const code = page.getByRole('img', { name: 'Transfer code for €12.00' });
     await expect(code).toBeVisible();
     expect(await code.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);

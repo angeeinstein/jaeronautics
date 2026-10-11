@@ -15,6 +15,7 @@ import { api, ApiError, call } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
 import { DayInput } from '../../../components/DayInput';
 import { Details } from '../../../components/Details';
+import { MoneyStatement } from '../../../components/MoneyStatement';
 import { PageHeader } from '../../../components/PageHeader';
 import { Panel } from '../../../components/Panel';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
@@ -24,7 +25,7 @@ import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import classes from './Money.module.css';
 import { amountText, centsOf, type TeamMoneyOut, teamMoneyQuery } from './shared';
-import { Counts, feeNote, SalesPanel } from './sales';
+import { Counts, SalesPanel } from './sales';
 
 /** AT61 1904 3002 3457 3201, as it is read out and typed. */
 function grouped(iban: string): string {
@@ -70,8 +71,10 @@ function Balance({ money }: { money: TeamMoneyOut }) {
           ))}
         </SimpleGrid>
         <Text size="sm" c="dimmed">
-          {feeNote(money.payments, money.waiting_for_fee)}
-          {last ? ` Last transfer: ${formatDate(last.paid_on)}.` : ''}
+          {last ? `Last transfer: ${formatDate(last.paid_on)}.` : 'Nothing transferred yet.'}
+          {money.waiting_for_fee
+            ? ` ${formatEuros(money.waiting_for_fee)} counts once Stripe has said its fee.`
+            : ''}
         </Text>
       </Stack>
     </Panel>
@@ -424,6 +427,7 @@ export function TeamMoney() {
       ) : (
         <Stack gap="lg">
           <Balance money={money.data} />
+          <MoneyStatement statement={money.data.statement} />
           {/* Keyed by what was recorded, so the form starts afresh from the new balance. */}
           <TransferPanel
             key={`${String(money.data.open)}-${String(money.data.transfers.length)}`}

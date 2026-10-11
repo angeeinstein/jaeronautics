@@ -283,6 +283,7 @@ from .services.forum_content import (  # noqa: E402
     restore_site_settings,
     what_to_do_about_settings,
 )
+from .services import stripe_books as _stripe_books  # noqa: E402,F401 -- registers its queue handler
 from .services.workflows import (  # noqa: E402
     process_email_delivery_jobs,
     refresh_member_billing_state,
@@ -3883,9 +3884,9 @@ def create_app(config_overrides=None):
         from .services.team_payments import (
             end_finished_team_memberships, follow_association_ends, send_renewal_notices,
         )
-        from .services.team_money import fill_in_fees
         from .services.mailings import forget_old as forget_old_mailing_recipients
         from .services.messages import forget_old as forget_old_messages
+        from .services.money_checks import forget_old as forget_old_money_differences
         from .services.teams import end_lapsed_team_memberships, lapse_unpaid_approvals, send_due_access_lists
 
         team_steps = (
@@ -3903,12 +3904,12 @@ def create_app(config_overrides=None):
             (end_finished_team_memberships, "Ended {} team membership(s) that ran out or were not paid."),
             # Then the access lists due today, now that the teams are current.
             (send_due_access_lists, "Sent {} team access list(s)."),
-            # Stripe's fees of team payments that carry theirs (Admin › Money).
-            (fill_in_fees, "Filled in Stripe's fee for {} team payment(s)."),
             # Messages done a year ago, and mailings' recipients after a year
             # (docs/messages-plan.md).
             (forget_old_messages, "Forgot {} old message(s)."),
             (forget_old_mailing_recipients, "Forgot {} mailing recipient(s) older than a year."),
+            # Differences with Stripe resolved more than a year ago (services/money_checks.py).
+            (forget_old_money_differences, "Forgot {} resolved money difference(s)."),
         )
         for step, done_text in team_steps:
             try:
@@ -4309,6 +4310,9 @@ def create_app(config_overrides=None):
         """
         if _stand_down_while_paused("external-work"):
             return
+        # Stripe's books, fetched at least hourly even when no webhook said so.
+        if _stripe_books.request_sync_if_due() is not None:
+            db.session.commit()
         completed, failed = process_pending(limit=limit)
         outstanding = pending_count()
         click.echo(f"External work: {completed} completed, {failed} failed, {outstanding} still queued.")

@@ -22,9 +22,6 @@ export function overviewQuery(since: string | null, until: string | null) {
           params: { query: { since: since ?? undefined, until: until ?? undefined } },
         }),
       ),
-    // Each check pages through Stripe: asked for, not refreshed behind the reader's back.
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
   };
 }
 

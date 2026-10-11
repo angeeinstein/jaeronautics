@@ -19,7 +19,9 @@ from pydantic import Field
 from ..db_models import db
 from ..permissions import Permission
 from ..services import ExternalServiceError
+from ..services import money_checks
 from ..services import money_overview as overview_service
+from ..services import stripe_books
 from ..services import team_money as money
 from ..services import teams as teams_service
 from ..services.clock import get_membership_today
@@ -93,7 +95,8 @@ class Totals(Model):
 class Books(Model):
     membership: Totals
     team: Totals
-    #: Everything paid without a membership or team invoice: the webshop, events, payment links.
+    credit: Totals
+    #: Everything else paid into the account: the webshop, events, payment links.
     other: Totals
     total: Totals
     #: Of the total fees, what Stripe billed on its own.
@@ -106,21 +109,28 @@ class Books(Model):
     balance_at_end: int
 
 
-class InStripeNow(Model):
-    available: int
-    pending: int
+class CreditHeld(Model):
+    #: Topped up through Stripe: in the balance above.
+    top_ups: int
+    #: Handed over in cash or booked by hand: not in Stripe.
+    cash: int
 
 
-class Mismatch(Model):
-    """A paid invoice and the portal's records that do not agree."""
+class Difference(Model):
+    """Where Stripe's books and the portal's records disagree (services/money_checks.py)."""
 
-    kind: Literal["team", "membership"]
+    id: int
+    product: Literal["membership", "team", "credit", "other"]
     what: str
-    invoice: str | None
+    #: The invoice, payment or charge to look up in Stripe.
+    reference: str | None
     amount: int | None
     #: Stripe's amount, where it differs from the portal's.
     stripe_amount: int | None
     who: str
+    first_seen_at: UtcDateTime
+    emailed_at: UtcDateTime | None
+    resolved_at: UtcDateTime | None
 
 
 class OverviewOut(Model):
@@ -128,14 +138,24 @@ class OverviewOut(Model):
     since: date | None
     until: date
     books: Books
-    #: What Stripe says it holds now; only for a period up to today.
-    in_stripe_now: InStripeNow | None
-    #: Of the net, what the teams' members paid.
-    teams_share: int
-    association_own: int
+    #: At the end of the period.
     owed_to_teams: int
-    mismatches: list[Mismatch]
-    checked_at: UtcDateTime
+    credit_held: CreditHeld
+    #: What is left in Stripe once the teams and the members have what is theirs.
+    association_own: int
+    #: When Stripe's book was last fetched; ``None``: never yet.
+    fetched_at: UtcDateTime | None
+    #: What Stripe said it holds then, and what the copy's bookings add up to.
+    stripe_balance: int | None
+    books_balance: int | None
+    #: Why the last fetch failed, if it did.
+    last_error: str | None
+    checked_at: UtcDateTime | None
+    differences: list[Difference]
+    #: Resolved in the last 30 days.
+    resolved: list[Difference]
+    #: Whether differences are emailed to the admins and the treasurer.
+    emails: bool
 
 
 class OverviewQuery(Model):
@@ -149,42 +169,61 @@ def _totals(values):
     return Totals(**{key: values[key] for key in ("received", "returned", "refunded", "taken_back", "fees", "net")})
 
 
-def _mismatches(kind, problems):
-    return [Mismatch(kind=kind, what=problem["what"], invoice=problem.get("invoice"), amount=problem.get("amount"),
-                     stripe_amount=problem.get("stripe_amount"), who=problem.get("who") or "")
-            for problem in problems]
+def _difference_out(row):
+    return Difference(id=row.id, product=row.product, what=row.what, reference=row.reference,
+                      amount=row.amount_cents, stripe_amount=row.stripe_amount_cents, who=row.who or "",
+                      first_seen_at=row.first_seen_at, emailed_at=row.emailed_at, resolved_at=row.resolved_at)
+
+
+def _overview_out(since, until):
+    found = overview_service.overview(since, until)
+    books = found["books"]
+    by_product = books["by_product"]
+    return OverviewOut(
+        since=found["since"], until=found["until"],
+        books=Books(
+            membership=_totals(by_product["membership"]), team=_totals(by_product["team"]),
+            credit=_totals(by_product["credit"]), other=_totals(by_product["other"]), total=_totals(books["total"]),
+            stripe_fees=books["account"]["stripe_fees"], other_bookings=books["account"]["other"],
+            paid_out=books["paid_out"], balance_at_end=books["balance_at_end"],
+        ),
+        owed_to_teams=found["owed_to_teams"], credit_held=CreditHeld(**found["credit_held"]),
+        association_own=found["association_own"], fetched_at=found["fetched_at"],
+        stripe_balance=found["stripe_balance"], books_balance=found["books_balance"],
+        last_error=found["last_error"], checked_at=found["checked_at"],
+        differences=[_difference_out(row) for row in money_checks.open_differences()],
+        resolved=[_difference_out(row) for row in money_checks.recently_resolved()],
+        emails=money.difference_emails(),
+    )
 
 
 @endpoint("GET", "/admin/money/overview", response=OverviewOut, query=OverviewQuery, permissions=PERMISSIONS,
           tag=TAG)
 def admin_money_overview(query):
-    """The money on Stripe for a period, by what it was for, checked invoice by invoice
-    against the portal's records. Asks Stripe, which takes a few seconds."""
+    """The money on Stripe for a period, by what it was for, from the portal's copy of Stripe's
+    book -- at once; and where Stripe and the portal's records differ."""
     since, until = overview_service.period_asked(query.since, query.until, get_membership_today())
-    try:
-        found = overview_service.overview(since, until)
-    except stripe.StripeError as exc:
-        current_app.logger.warning("Money overview: Stripe could not be asked: %s", exc)
-        raise ExternalServiceError("Stripe could not be asked. Please try again in a few minutes.",
-                                   code="stripe_unavailable") from exc
-    books = found["books"]
-    by_product = books["by_product"]
-    now = found["in_stripe_now"]
-    return OverviewOut(
-        since=found["since"], until=found["until"],
-        books=Books(
-            membership=_totals(by_product[overview_service.MEMBERSHIP]), team=_totals(by_product[overview_service.TEAM]),
-            other=_totals(by_product[overview_service.OTHER]), total=_totals(books["total"]),
-            stripe_fees=books["account"]["stripe_fees"], other_bookings=books["account"]["other"],
-            paid_out=books["paid_out"], balance_at_end=books["balance_at_end"],
-        ),
-        in_stripe_now=InStripeNow(**now) if now else None,
-        teams_share=found["teams_share"], association_own=found["association_own"],
-        owed_to_teams=found["owed_to_teams"],
-        mismatches=_mismatches("team", found["checks"]["teams"])
-        + _mismatches("membership", found["checks"]["membership"]),
-        checked_at=found["checked_at"],
-    )
+    return _overview_out(since, until)
+
+
+@endpoint("POST", "/admin/money/fetch", response=OverviewOut, query=OverviewQuery, permissions=PERMISSIONS,
+          tag=TAG)
+def admin_money_fetch(query):
+    """Fetch what is new in Stripe's book now, check it, and answer with the overview.
+    The very first fetch reads the whole book and runs in the background instead."""
+    if stripe_books.state().fetched_through is None:
+        stripe_books.request_sync("The first fetch, asked for on Admin › Money")
+        db.session.commit()
+    else:
+        try:
+            stripe_books.fetch_now()
+        except stripe.StripeError as exc:
+            current_app.logger.warning("Money: Stripe's book could not be fetched: %s", exc)
+            raise ExternalServiceError("Stripe could not be asked. Please try again in a few minutes.",
+                                       code="stripe_unavailable") from exc
+        db.session.commit()
+    since, until = overview_service.period_asked(query.since, query.until, get_membership_today())
+    return _overview_out(since, until)
 
 
 # --- One team ------------------------------------------------------------------------------
@@ -248,11 +287,58 @@ def credit_sales_out(found):
                        by_item=[SoldItem(**row) for row in sales["by_item"]])
 
 
-def team_payment_out(payment):
+def team_payment_out(payment, found):
     return TeamPayment(id=payment.id, paid_at=payment.paid_at, name=money.payer_name(payment) or None,
                        paid_until=payment.covers_until, amount=payment.amount_cents,
                        refunded=payment.refunded_cents or 0, disputed=payment.status == "disputed",
-                       fee=payment.fee_cents if payment.team_bears_fee else None, counts=money.counts(payment))
+                       fee=payment.fee_cents if found["statement"]["carry"] else None,
+                       counts=money.counts(payment, found["statement"]["groups"]))
+
+
+class StatementLine(Model):
+    """One line of a team's money: a payment, a refund, Stripe's fee, a sale, its share of a
+    top-up's fee, a transfer. Lines of one payment or sale share their ``group``."""
+
+    day: date | None
+    kind: Literal["fee_paid", "refunded", "taken_back", "stripe_fee", "stripe_later_fee", "sold",
+                  "sale_taken_back", "kept", "top_up_fee", "transfer"]
+    text: str
+    amount: int
+    group: str
+    detail: str
+    #: Held back until Stripe says the fee it carries.
+    waiting: bool
+
+
+class StatementRow(Model):
+    kind: str
+    label: str
+    amount: int
+
+
+class Statement(Model):
+    """How the team's figures come about: each kind of line added up, then every line."""
+
+    #: Whether the teams carry Stripe's fees (Admin › Money, the settings).
+    teams_carry_fees: bool
+    rows: list[StatementRow]
+    earned: int
+    #: Held back until Stripe says a fee: counted once it has.
+    waiting: int
+    transferred: int
+    open: int
+    lines: list[StatementLine]
+
+
+def statement_out(found):
+    st = found["statement"]
+    return Statement(
+        teams_carry_fees=st["carry"], earned=st["earned"], waiting=st["waiting"], transferred=st["transferred"],
+        open=st["open"],
+        rows=[StatementRow(kind=kind, label=label, amount=amount) for kind, label, amount in st["rows"]],
+        lines=[StatementLine(day=line.day, kind=line.kind, text=line.text, amount=line.amount, group=line.group,
+                             detail=line.detail, waiting=line.waiting) for line in st["lines"]],
+    )
 
 
 class TeamMoneyOut(Model):
@@ -262,10 +348,11 @@ class TeamMoneyOut(Model):
     #: Of it, from fees.
     fees: int
     sales: CreditSales
-    #: Paid, but carrying a Stripe fee not known yet: counted once Stripe says (overnight).
+    #: Paid, but carrying a Stripe fee not known yet: counted once Stripe says (seconds, for a card).
     waiting_for_fee: int
     paid_out: int
     open: int
+    statement: Statement
     bank: Bank
     #: The reference a transfer gets unless another is typed.
     reference: str
@@ -287,13 +374,14 @@ def _team_money_out(team):
     return TeamMoneyOut(
         team=_team_ref(team), earned=found["earned"], fees=found["fees"], sales=credit_sales_out(found),
         waiting_for_fee=found["waiting_for_fee"], paid_out=found["paid_out"], open=found["open"],
+        statement=statement_out(found),
         bank=Bank(account_holder=team.bank_account_holder, iban=team.bank_iban, bic=team.bank_bic),
         reference=money.default_reference(team), today=get_membership_today(),
         by_period=[Period(paid_until=until, earned=cents) for until, cents in found["by_period"]],
         transfers=[Transfer(id=payout.id, paid_on=payout.paid_on, amount=payout.amount_cents,
                             reference=payout.reference, to=money.masked_iban(payout.iban) or None)
                    for payout in found["payouts"]],
-        payments=[team_payment_out(payment) for payment in found["payments"]],
+        payments=[team_payment_out(payment, found) for payment in found["payments"]],
         export_url=url_for("teams.team_money_export", slug=team.slug),
     )
 
@@ -341,14 +429,17 @@ def admin_team_money_bank(slug, body):
     return _team_money_out(team)
 
 
-# --- Who carries Stripe's fees ----------------------------------------------------------
+# --- Who carries Stripe's fees -------------------------------------------------------------
 
 
 class MoneySettings(Model):
-    #: Stripe's fee on a team fee: paid by the association, or taken from what the team is owed.
+    #: Stripe's fees -- on team fees, and on the top-ups behind teams' credit sales: carried by
+    #: the association, or taken from what the teams are owed. For every payment, past and future.
     fee_payer: Literal["association", "team"]
     #: Of what a team sells for credit, the association keeps this share, in hundredths of a percent.
     credit_share_bps: int = Field(ge=0, le=2000)
+    #: Differences between Stripe and the portal emailed to the admins and the treasurer.
+    difference_emails: bool = True
 
 
 class MoneySettingsSavedOut(Model):
@@ -357,16 +448,17 @@ class MoneySettingsSavedOut(Model):
 
 @endpoint("GET", "/admin/money/settings", response=MoneySettings, permissions=PERMISSIONS, tag=TAG)
 def admin_money_settings():
-    """Who carries Stripe's fees. Each payment and sale keeps how it was when it was made."""
+    """Who carries Stripe's fees, the share kept of credit sales, and the emails about differences."""
     return MoneySettings(fee_payer="team" if money.teams_bear_fees() else "association",
-                         credit_share_bps=money.credit_share_bps())
+                         credit_share_bps=money.credit_share_bps(), difference_emails=money.difference_emails())
 
 
 @endpoint("PUT", "/admin/money/settings", response=MoneySettingsSavedOut, body=MoneySettings,
           permissions=PERMISSIONS, tag=TAG)
 def admin_money_settings_save(body):
-    """Change them, from now on: what was paid and sold before stays as it was counted."""
+    """Change them. Who carries the fees counts for all money at once; the share kept, for sales from now on."""
     changed = money.save_money_settings(current_user, fee_payer=body.fee_payer,
-                                        credit_share_bps=body.credit_share_bps)
+                                        credit_share_bps=body.credit_share_bps,
+                                        difference_emails=body.difference_emails)
     db.session.commit()
     return MoneySettingsSavedOut(changed=changed)

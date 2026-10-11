@@ -2001,6 +2001,9 @@
             "title": "Balance At End",
             "type": "integer"
           },
+          "credit": {
+            "$ref": "#/components/schemas/Totals"
+          },
           "membership": {
             "$ref": "#/components/schemas/Totals"
           },
@@ -2029,6 +2032,7 @@
         "required": [
           "membership",
           "team",
+          "credit",
           "other",
           "total",
           "stripe_fees",
@@ -3467,6 +3471,25 @@
         "title": "CreditEntryOut",
         "type": "object"
       },
+      "CreditHeld": {
+        "additionalProperties": false,
+        "properties": {
+          "cash": {
+            "title": "Cash",
+            "type": "integer"
+          },
+          "top_ups": {
+            "title": "Top Ups",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "top_ups",
+          "cash"
+        ],
+        "title": "CreditHeld",
+        "type": "object"
+      },
       "CreditHolderOut": {
         "additionalProperties": false,
         "properties": {
@@ -4019,6 +4042,107 @@
           "cohort"
         ],
         "title": "DetailsOut",
+        "type": "object"
+      },
+      "Difference": {
+        "additionalProperties": false,
+        "description": "Where Stripe's books and the portal's records disagree (services/money_checks.py).",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "emailed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emailed At"
+          },
+          "first_seen_at": {
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "product": {
+            "enum": [
+              "membership",
+              "team",
+              "credit",
+              "other"
+            ],
+            "title": "Product",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "stripe_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Amount"
+          },
+          "what": {
+            "title": "What",
+            "type": "string"
+          },
+          "who": {
+            "title": "Who",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "product",
+          "what",
+          "reference",
+          "amount",
+          "stripe_amount",
+          "who",
+          "first_seen_at",
+          "emailed_at",
+          "resolved_at"
+        ],
+        "title": "Difference",
         "type": "object"
       },
       "DisabledIn": {
@@ -6032,25 +6156,6 @@
           "pdf_url"
         ],
         "title": "InForce",
-        "type": "object"
-      },
-      "InStripeNow": {
-        "additionalProperties": false,
-        "properties": {
-          "available": {
-            "title": "Available",
-            "type": "integer"
-          },
-          "pending": {
-            "title": "Pending",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "available",
-          "pending"
-        ],
-        "title": "InStripeNow",
         "type": "object"
       },
       "InviteIn": {
@@ -8568,71 +8673,6 @@
         "title": "MessagesQuery",
         "type": "object"
       },
-      "Mismatch": {
-        "additionalProperties": false,
-        "description": "A paid invoice and the portal's records that do not agree.",
-        "properties": {
-          "amount": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Amount"
-          },
-          "invoice": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Invoice"
-          },
-          "kind": {
-            "enum": [
-              "team",
-              "membership"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "stripe_amount": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stripe Amount"
-          },
-          "what": {
-            "title": "What",
-            "type": "string"
-          },
-          "who": {
-            "title": "Who",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "what",
-          "invoice",
-          "amount",
-          "stripe_amount",
-          "who"
-        ],
-        "title": "Mismatch",
-        "type": "object"
-      },
       "MoneyOut": {
         "additionalProperties": false,
         "properties": {
@@ -8735,6 +8775,11 @@
             "minimum": 0,
             "title": "Credit Share Bps",
             "type": "integer"
+          },
+          "difference_emails": {
+            "default": true,
+            "title": "Difference Emails",
+            "type": "boolean"
           },
           "fee_payer": {
             "enum": [
@@ -9353,30 +9398,74 @@
           "books": {
             "$ref": "#/components/schemas/Books"
           },
-          "checked_at": {
-            "title": "Checked At",
-            "type": "string"
-          },
-          "in_stripe_now": {
+          "books_balance": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/InStripeNow"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Books Balance"
           },
-          "mismatches": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "credit_held": {
+            "$ref": "#/components/schemas/CreditHeld"
+          },
+          "differences": {
             "items": {
-              "$ref": "#/components/schemas/Mismatch"
+              "$ref": "#/components/schemas/Difference"
             },
-            "title": "Mismatches",
+            "title": "Differences",
             "type": "array"
+          },
+          "emails": {
+            "title": "Emails",
+            "type": "boolean"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
           },
           "owed_to_teams": {
             "title": "Owed To Teams",
             "type": "integer"
+          },
+          "resolved": {
+            "items": {
+              "$ref": "#/components/schemas/Difference"
+            },
+            "title": "Resolved",
+            "type": "array"
           },
           "since": {
             "anyOf": [
@@ -9390,9 +9479,16 @@
             ],
             "title": "Since"
           },
-          "teams_share": {
-            "title": "Teams Share",
-            "type": "integer"
+          "stripe_balance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Balance"
           },
           "until": {
             "format": "date",
@@ -9404,12 +9500,17 @@
           "since",
           "until",
           "books",
-          "in_stripe_now",
-          "teams_share",
-          "association_own",
           "owed_to_teams",
-          "mismatches",
-          "checked_at"
+          "credit_held",
+          "association_own",
+          "fetched_at",
+          "stripe_balance",
+          "books_balance",
+          "last_error",
+          "checked_at",
+          "differences",
+          "resolved",
+          "emails"
         ],
         "title": "OverviewOut",
         "type": "object"
@@ -11732,6 +11833,146 @@
         "title": "SoldItem",
         "type": "object"
       },
+      "Statement": {
+        "additionalProperties": false,
+        "description": "How the team's figures come about: each kind of line added up, then every line.",
+        "properties": {
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/StatementLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/StatementRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "teams_carry_fees": {
+            "title": "Teams Carry Fees",
+            "type": "boolean"
+          },
+          "transferred": {
+            "title": "Transferred",
+            "type": "integer"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "teams_carry_fees",
+          "rows",
+          "earned",
+          "waiting",
+          "transferred",
+          "open",
+          "lines"
+        ],
+        "title": "Statement",
+        "type": "object"
+      },
+      "StatementLine": {
+        "additionalProperties": false,
+        "description": "One line of a team's money: a payment, a refund, Stripe's fee, a sale, its share of a\ntop-up's fee, a transfer. Lines of one payment or sale share their ``group``.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "day": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Day"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "fee_paid",
+              "refunded",
+              "taken_back",
+              "stripe_fee",
+              "stripe_later_fee",
+              "sold",
+              "sale_taken_back",
+              "kept",
+              "top_up_fee",
+              "transfer"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "day",
+          "kind",
+          "text",
+          "amount",
+          "group",
+          "detail",
+          "waiting"
+        ],
+        "title": "StatementLine",
+        "type": "object"
+      },
+      "StatementRow": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "amount"
+        ],
+        "title": "StatementRow",
+        "type": "object"
+      },
       "StepOut": {
         "additionalProperties": false,
         "properties": {
@@ -12206,6 +12447,9 @@
             "title": "Slug",
             "type": "string"
           },
+          "statement": {
+            "$ref": "#/components/schemas/Statement"
+          },
           "transfers": {
             "items": {
               "$ref": "#/components/schemas/Transfer"
@@ -12227,6 +12471,7 @@
           "waiting_for_fee",
           "paid_out",
           "open",
+          "statement",
           "last_transfer_on",
           "bank",
           "may_edit_bank",
@@ -12634,6 +12879,9 @@
           "sales": {
             "$ref": "#/components/schemas/CreditSales"
           },
+          "statement": {
+            "$ref": "#/components/schemas/Statement"
+          },
           "team": {
             "$ref": "#/components/schemas/TeamRef"
           },
@@ -12662,6 +12910,7 @@
           "waiting_for_fee",
           "paid_out",
           "open",
+          "statement",
           "bank",
           "reference",
           "today",
@@ -18352,6 +18601,108 @@
         ]
       }
     },
+    "/api/v1/admin/money/fetch": {
+      "post": {
+        "operationId": "admin_money_fetch",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Until"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Fetch what is new in Stripe's book now, check it, and answer with the overview.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "teams.money"
+        ]
+      }
+    },
     "/api/v1/admin/money/overview": {
       "get": {
         "operationId": "admin_money_overview",
@@ -18435,7 +18786,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "The money on Stripe for a period, by what it was for, checked invoice by invoice",
+        "summary": "The money on Stripe for a period, by what it was for, from the portal's copy of Stripe's",
         "tags": [
           "Admin"
         ],
@@ -18479,7 +18830,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "Who carries Stripe's fees. Each payment and sale keeps how it was when it was made.",
+        "summary": "Who carries Stripe's fees, the share kept of credit sales, and the emails about differences.",
         "tags": [
           "Admin"
         ],
@@ -18551,7 +18902,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Change them, from now on: what was paid and sold before stays as it was counted.",
+        "summary": "Change them. Who carries the fees counts for all money at once; the share kept, for sales from now on.",
         "tags": [
           "Admin"
         ],

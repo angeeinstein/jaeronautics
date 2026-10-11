@@ -51,28 +51,80 @@ const overview: OverviewOut = {
   books: {
     membership: { ...zero, received: 500000, fees: 7000, net: 493000 },
     team: { ...zero, received: 30000, refunded: 1000, fees: 500, net: 28500 },
+    credit: { ...zero, received: 4000, fees: 110, net: 3890 },
     other: zero,
-    total: { ...zero, received: 530000, refunded: 1000, fees: 7500, net: 521500 },
+    total: { ...zero, received: 534000, refunded: 1000, fees: 7610, net: 525390 },
     stripe_fees: 0,
     other_bookings: 0,
     paid_out: 400000,
-    balance_at_end: 121500,
+    balance_at_end: 125390,
   },
-  in_stripe_now: { available: 100000, pending: 21500 },
-  teams_share: 29000,
-  association_own: 492500,
   owed_to_teams: 24450,
-  mismatches: [
+  credit_held: { top_ups: 2500, cash: 700 },
+  association_own: 98440,
+  fetched_at: '2026-10-06T09:58:00Z',
+  stripe_balance: 125390,
+  books_balance: 125390,
+  last_error: null,
+  checked_at: '2026-10-06T09:58:00Z',
+  differences: [
     {
-      kind: 'team',
+      id: 1,
+      product: 'team',
       what: 'Paid in Stripe, missing in the portal',
-      invoice: 'in_123',
-      amount: 1000,
-      stripe_amount: null,
+      reference: 'in_123',
+      amount: null,
+      stripe_amount: 1000,
       who: 'payer@example.org',
+      first_seen_at: '2026-10-06T08:00:00Z',
+      emailed_at: null,
+      resolved_at: null,
     },
   ],
-  checked_at: '2026-10-06T10:00:00Z',
+  resolved: [],
+  emails: true,
+};
+
+const statement: TeamMoneyOut['statement'] = {
+  teams_carry_fees: true,
+  rows: [
+    { kind: 'fee_paid', label: 'Fees paid', amount: 1000 },
+    { kind: 'refunded', label: 'Refunded', amount: -400 },
+    { kind: 'stripe_fee', label: "Stripe's fees on fees", amount: -35 },
+  ],
+  earned: 565,
+  waiting: 0,
+  transferred: 0,
+  open: 565,
+  lines: [
+    {
+      day: '2026-10-01',
+      kind: 'fee_paid',
+      text: 'Fee paid by Lena Lead, paid until 31.03.2027',
+      amount: 1000,
+      group: 'payment:1',
+      detail: '',
+      waiting: false,
+    },
+    {
+      day: '2026-10-01',
+      kind: 'refunded',
+      text: 'Refunded',
+      amount: -400,
+      group: 'payment:1',
+      detail: '',
+      waiting: false,
+    },
+    {
+      day: '2026-10-01',
+      kind: 'stripe_fee',
+      text: "Stripe's fee",
+      amount: -35,
+      group: 'payment:1',
+      detail: 'kept by Stripe also when the payment is refunded',
+      waiting: false,
+    },
+  ],
 };
 
 function team(overrides: Partial<TeamMoneyOut> = {}): TeamMoneyOut {
@@ -84,6 +136,7 @@ function team(overrides: Partial<TeamMoneyOut> = {}): TeamMoneyOut {
     waiting_for_fee: 0,
     paid_out: 0,
     open: 3100,
+    statement,
     bank: { account_holder: 'Rocket Team', iban: 'AT611904300234573201', bic: null },
     reference: 'Teambeiträge Rocket Team bis 06.10.2026',
     today: '2026-10-06',
@@ -138,34 +191,56 @@ describe('the list', () => {
     expect(screen.getByText('€244.50')).toBeInTheDocument();
   });
 
-  it('asks Stripe only when asked', async () => {
+  it('the money on Stripe is shown at once, by period', async () => {
     const { calls } = show(<Money />, '/admin/money', '/admin/money');
 
-    await userEvent.click(await screen.findByRole('button', { name: '2026' }));
+    expect(await screen.findByText(/^Fetched from Stripe/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '2026' }));
 
-    expect(await screen.findByText('01.01.2026 to 06.10.2026 on Stripe')).toBeInTheDocument();
-    const [request] = asked(calls, `${API}/overview`);
-    expect(request && new URL(request.url).search).toBe('?since=2026-01-01&until=2026-10-06');
+    await waitFor(() => {
+      const searches = asked(calls, `${API}/overview`).map((request) => new URL(request.url).search);
+      expect(searches).toContain('?since=2026-01-01&until=2026-10-06');
+    });
   });
 
-  it('the totals, what Stripe holds, and what does not match', async () => {
-    show(<Money />, '/admin/money?check=1&since=2026-01-01', '/admin/money');
+  it('the totals, whose the money is, and what differs', async () => {
+    show(<Money />, '/admin/money?since=2026-01-01', '/admin/money');
 
     const books = await screen.findByRole('table', { name: 'By what it was for' });
     expect(within(books).getByRole('row', { name: /^Net/ })).toHaveTextContent(
-      '€4,930.00€285.00€0.00€5,215.00',
+      '€4,930.00€285.00€38.90€0.00€5,253.90',
     );
     expect(within(books).getByRole('row', { name: /^Refunded/ })).toHaveTextContent('-€10.00');
-    expect(screen.getByText("Stripe's bookings add up to the balance Stripe holds now.")).toBeInTheDocument();
-    expect(screen.getByText('1 payment(s) do not match:')).toBeInTheDocument();
+    expect(screen.getByText('Its bookings add up to what Stripe holds.')).toBeInTheDocument();
+    const held = screen.getByRole('table', { name: 'On 06.10.2026' });
+    expect(within(held).getByRole('row', { name: /association's own/ })).toHaveTextContent('€984.40');
+    expect(screen.getByText(/€7.00 of credit handed over in cash/)).toBeInTheDocument();
+    expect(screen.getByText('1 difference:')).toBeInTheDocument();
     expect(
-      screen.getByText('Paid in Stripe, missing in the portal: in_123, €10.00, payer@example.org'),
+      screen.getByText(/Paid in Stripe, missing in the portal · in_123 · Stripe €10.00 · payer@example.org/),
+    ).toBeInTheDocument();
+  });
+
+  it('fetching now answers with the overview', async () => {
+    const { calls } = show(<Money />, '/admin/money', '/admin/money', {
+      [`POST ${API}/fetch`]: { body: { ...overview, differences: [] } },
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Fetch from Stripe now' }));
+
+    await waitFor(() => {
+      expect(asked(calls, `${API}/fetch`)).toHaveLength(1);
+    });
+    expect(
+      await screen.findByText(
+        "Every payment in Stripe matches the portal's records, and the other way round.",
+      ),
     ).toBeInTheDocument();
   });
 
   it('Stripe out of reach is said so', async () => {
-    show(<Money />, '/admin/money?check=1', '/admin/money', {
-      [`${API}/overview`]: {
+    show(<Money />, '/admin/money', '/admin/money', {
+      [`POST ${API}/fetch`]: {
         status: 502,
         body: {
           error: {
@@ -177,6 +252,8 @@ describe('the list', () => {
         },
       },
     });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Fetch from Stripe now' }));
 
     expect(
       await screen.findByText('Stripe could not be asked. Please try again in a few minutes.'),
@@ -195,6 +272,16 @@ describe('one team', () => {
       '01.10.2026Lena Lead31.03.2027€10.00€6.00€4.00 refunded',
     );
     expect(screen.getByRole('link', { name: 'Export' })).toHaveAttribute('href', '/teams/rocket/money.csv');
+  });
+
+  it('how the figure adds up, every line on request', async () => {
+    show(<TeamMoney />, ...route);
+
+    const sums = await screen.findByRole('table', { name: 'How it adds up' });
+    expect(within(sums).getByRole('row', { name: /^Stripe's fees on fees/ })).toHaveTextContent('-€0.35');
+    expect(within(sums).getByRole('row', { name: /^Open/ })).toHaveTextContent('€5.65');
+    await userEvent.click(screen.getByRole('button', { name: 'Every line (3)' }));
+    expect(await screen.findByText('kept by Stripe also when the payment is refunded')).toBeInTheDocument();
   });
 
   it('a transfer is recorded after a second click, with the amount as typed', async () => {

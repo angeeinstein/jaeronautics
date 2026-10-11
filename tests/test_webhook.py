@@ -783,7 +783,10 @@ class TestExternalWorkIsQueued:
 
         assert post_event(client, monkeypatch, event).status_code == 200
 
-        queued = db.session.execute(db.select(ExternalWorkItem)).scalars().all()
+        # Beside it, the fetch of Stripe's book a paid invoice always asks for.
+        queued = db.session.execute(
+            db.select(ExternalWorkItem).where(ExternalWorkItem.kind != ExternalWorkItem.KIND_STRIPE_BOOKS)
+        ).scalars().all()
         assert [i.kind for i in queued] == [ExternalWorkItem.KIND_FORUM_SYNC]
         assert queued[0].member_id == member.id
         assert queued[0].status == ExternalWorkItem.STATUS_PENDING
@@ -805,12 +808,14 @@ class TestExternalWorkIsQueued:
             outbox._HANDLERS, ExternalWorkItem.KIND_FORUM_SYNC,
             lambda item: (_ for _ in ()).throw(RuntimeError("discourse down")),
         )
-        completed, failed = outbox.process_pending()
+        completed, failed = outbox.process_pending(kinds=[ExternalWorkItem.KIND_FORUM_SYNC])
         assert (completed, failed) == (0, 1)
 
         # The payment still landed, and the sync is still owed.
         assert db.session.get(Member, member.id).payment_status == "paid"
-        item = db.session.execute(db.select(ExternalWorkItem)).scalars().one()
+        item = db.session.execute(
+            db.select(ExternalWorkItem).filter_by(kind=ExternalWorkItem.KIND_FORUM_SYNC)
+        ).scalars().one()
         assert item.status == ExternalWorkItem.STATUS_PENDING
 
         # When the forum comes back, the same item is picked up and finishes.
@@ -818,7 +823,7 @@ class TestExternalWorkIsQueued:
         monkeypatch.setitem(outbox._HANDLERS, ExternalWorkItem.KIND_FORUM_SYNC, lambda i: ran.append(i.id))
         item.not_before = None
         db.session.commit()
-        assert outbox.process_pending() == (1, 0)
+        assert outbox.process_pending(kinds=[ExternalWorkItem.KIND_FORUM_SYNC]) == (1, 0)
         assert ran == [item.id]
 
 
