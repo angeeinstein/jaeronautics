@@ -22,13 +22,16 @@ in git history (`git log -- docs/todo.md`).
   - As always, it needs an active association membership.
 - **Where:** the team's Joining settings (`manage/applying`); the join step on
   the team's page (`services/teams.py`, `join_or_apply`).
+  - The setting shows only for teams that approve applications.
+  - With it on, the team's *Former members* table shows until when each
+    person can rejoin this way.
 - **Why:** Team Drone Tech's "passive members" (semester abroad, a missed or
-  failed payment), without a separate passive status. Full context,
-  decisions and the open points: `docs/team-passive-members.md`.
-- **Open:** whether "Keep me informed" and a team-chosen label for the
-  rejoin phase (e.g. "Passive") come with it. The maintainer discusses them
-  with TDT first. Build the setting itself without them unless decided by
-  then.
+  failed payment), without a separate passive status. Full context:
+  `docs/team-passive-members.md`.
+- **Decided (2026-10-11):** only this setting. No "become passive", passive
+  label or mailings to former members: "if they want to see people who just
+  left, they can always look in the former members page". The maintainer
+  talks to TDT's leads about the rest.
 
 ### "Nothing sent yet." sits against the panel's edge
 

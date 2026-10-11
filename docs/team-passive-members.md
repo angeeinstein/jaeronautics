@@ -1,7 +1,9 @@
 # Passive team members, rejoining, and staying informed
 
-**Status:** in discussion (2026-10-11). Partly agreed; see "Decided" and
-"Open". Nothing built yet.
+**Status:** decided for now (2026-10-11): only the rejoin setting is built
+(`docs/todo.md`). The rest of passive membership waits for the maintainer's
+conversation with TDT's leads; the proposal and open points below are kept
+for it.
 
 ## The request
 
@@ -90,15 +92,21 @@ not separate teams with their own fees:
 > "I don't want to add lots of very specific options that only our
 > association and teams can use. And that would just confuse other people."
 
-**Proposed, not decided yet:**
-- Build only the rejoin setting (above). Other associations can use it too:
-  any team that approves applications may want people it already accepted
-  back without a second review. It shows only for teams that approve
-  applications.
-- Do not build "become passive", a passive label or mailings to former
-  members (the proposal below). They serve TDT's rules alone.
+**Decided:**
+- Only the rejoin setting (above) is built. Other associations can use it
+  too: any team that approves applications may want people it already
+  accepted back without a second review. It shows only for teams that
+  approve applications.
+- Not now: "become passive", a passive label, mailings to former members
+  (the proposal below). The maintainer: "if they want to see people who just
+  left, they can always look in the former members page and see the time
+  when they left."
 - TDT can still use the word: in its rules, "passive" can mean "left within
   the last 12 months, may rejoin without approval".
+- The balance, in the maintainer's words: "I don't want to make any features
+  or things we implement worse for our association just because of this
+  slight possibility that other associations might use this. But I still
+  want to keep this possibility in mind."
 
 ## Leading proposal (2026-10-11, the maintainer's idea) -- pending TDT
 
