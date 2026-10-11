@@ -57,7 +57,7 @@ function Row({
       <Table.Th scope="row">{label}</Table.Th>
       {PRODUCTS.map(([key]) => (
         <Table.Td key={key} className={`${classes.amount} ja-figures`}>
-          {formatEuros(sign * books[key][field])}
+          {formatEuros(sign * books[key][field] || 0)}
         </Table.Td>
       ))}
     </Table.Tr>
