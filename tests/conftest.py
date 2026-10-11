@@ -93,6 +93,8 @@ def app(tmp_path):
             "FRONTEND_DIST_DIR": str(frontend),
             # The Stripe check reaches back as far as a test asks (live: 01.10.2026).
             "MONEY_RECORDS_SINCE": None,
+            # Queued work runs when a test runs it, not in a thread of its own.
+            "OUTBOX_START_AT_ONCE": False,
         }
     )
     with application.app_context():

@@ -152,28 +152,22 @@ What the maintainer asked for (2026-10-09):
 - **The association's sales** stay with it. Admin › Credit › *Sold* shows
   each seller's last 30 days and total.
 
-## Who carries Stripe's fees (built 2026-10-09)
+## Who carries Stripe's fees (built 2026-10-09, changed 2026-10-11)
 
 The board had not decided ("they were not fully convinced that … the
 association would pay for the Stripe fees"), so it is a setting on Admin ›
-Money, kept by the treasurer and admins:
+Money, kept by the treasurer and admins. Since 2026-10-11
+(`docs/money-ledger-plan.md`):
 
-- **Team fees.** Either the association pays (the default, as before) or
-  the fee is "taken from the team". In the second case each team fee paid
-  from then on counts for the team less Stripe's actual fee for that
-  payment.
-  - The fee is asked from Stripe overnight (`fill_in_fees` in the nightly
-    jobs).
-  - Until it is known, the payment shows as "waiting for Stripe's fee" and
-    does not count yet.
-  - Stripe keeps its fee on a refund too.
-- **Credit.** A top-up's fee is spread over whatever it buys, possibly from
-  several sellers, so there is no one fee per sale. Instead the association
-  may keep a share of what teams sell, 0–20 % (default 0). The share is
-  stored on each sale.
-- **Changing either setting** counts from then on. Each payment
-  (`team_bears_fee`) and each sale (`kept_cents`) keeps how it was when it
-  was made. No transfer to a team had been made yet when this was built.
+- **Who carries them:** the association (the default) or the teams. With the
+  teams, each team fee counts less Stripe's fee for it (from the portal's
+  copy of Stripe's book), and each credit sale less its share of the fee of
+  the top-up that paid for it -- oldest top-up first, cash carrying none
+  (`services/credit_fees.py`).
+- **For all money at once**, past and future: no payment keeps how it was.
+- **Nothing kept** of what teams sell: the share the association could keep
+  went on 2026-10-11, the exact top-up fee replacing it. A sale that kept one
+  before still counts it (`kept_cents`).
 
 ## Card readers (designed, not built -- "not something we need to build now")
 

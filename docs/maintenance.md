@@ -646,25 +646,33 @@ cannot be reached, nothing is erased; try again.
 
 ## Stripe's fees
 
-Admin › Money › *Stripe's fees* (treasurer and admins):
+Admin › Money › *Stripe's fees* (treasurer and admins); docs/money-ledger-plan.md:
 
-- **On team fees:** *The association pays* (the default) or *Taken from the
-  team*. Taken from the team, every team fee paid from then on counts for
-  the team less Stripe's actual fee for it. The nightly job asks Stripe for
-  the fee (`fill_in_fees`, "Filled in Stripe's fee for N team payment(s)");
-  until then the payment shows "Waiting for Stripe's fee" and does not
-  count, so nothing is transferred before the fee is known. A SEPA debit's
-  fee is known only once the money has arrived, days later.
-- **Kept of what teams sell for credit:** 0–20 %, default 0. Covers the
-  association's Stripe fee on top-ups, which cannot be split per sale.
+- **Who carries them:** *The association* (the default) or *The teams*. With
+  the teams, every team fee counts for its team less Stripe's fee for it,
+  and every credit sale less its share of the fee of the top-up that paid
+  for it -- oldest top-up first, credit handed over in cash carrying none
+  (`services/credit_fees.py`). It counts for **all** money, past and future:
+  switching changes what every team is owed at once. What Stripe keeps
+  afterwards -- its fee on a refunded payment, a chargeback's fee -- comes
+  off too, each as a line of its own.
+- A fee comes from the copy of Stripe's book (below), seconds after the
+  payment for a card; until it is known, the payment or sale shows as
+  waiting and does not count, so nothing is transferred before the fee is
+  known. A SEPA debit's fee is known once the money has arrived, days later.
+- **Email differences** (on *On Stripe*): differences between Stripe and
+  the portal are emailed to the admins and the treasurer, once each, when
+  one has lasted an hour. On by default.
 
-Both count from the moment they are saved; earlier payments and sales stay
-as they were counted (each keeps `team_bears_fee` / `kept_cents`).
+Every team's figure shows how it adds up (*How it adds up*, on the team's
+Money page and on Admin › Money › the team): each kind of line added up,
+then every line -- payment, refund, fee, sale, its fee share with the
+top-up it came from, transfer.
 
 The check against Stripe (Admin › Money › *On Stripe*) never reaches before
 01.10.2026, the day the portal took over the association's payments:
 Stripe's earlier bookings were the old site's (`PORTAL_STARTED_ON` in
-`services/money_overview.py`; the tests set `MONEY_RECORDS_SINCE`).
+`services/money_checks.py`; the tests set `MONEY_RECORDS_SINCE`).
 
 ## Renaming Somebody on the Forum
 
@@ -691,6 +699,16 @@ way a membership *changes* is an event somebody causes, and each of those syncs
 the forum where it happens: a payment lands, an administrator switches an
 account off, a photograph is approved, an email address changes. Those are
 immediate and need nothing.
+
+"Immediate" means: the change is saved together with a work item on the
+outbox (`external_work_items`), and the moment the request or webhook that
+saved it commits, a thread of the web process starts working through the
+queue -- seconds, and no page waits for the forum (`services/outbox.py`,
+"Started at once"). One pass handles at most 25 items and stops at the first
+failure, so a forum that is down or asks us to slow down is left to the
+retries. The `process-external-work` timer (every 2 minutes) stays behind it:
+it retries, and does what work queued outside a request (the nightly jobs)
+asks for. Not while background jobs are paused.
 
 One thing is not an event at all. A membership ends because its last day has
 passed — nobody clicks anything, nothing is written, no code runs. The portal
@@ -1213,8 +1231,9 @@ breaking the delete. One log entry records how many went. Run by hand with
 `flask cleanup-pending-signups`.
 
 **Money** (Teams → Money, or the button on the management page). What the
-team's members paid -- exactly that: Stripe's fees are the association's --
-less refunds and lost chargebacks, what was transferred to the team, and what
+team's members paid and what it sold for credit, less refunds and lost
+chargebacks, and less Stripe's fees where the teams carry them (above), each
+line shown under *How it adds up*; what was transferred to the team, and what
 is still open, also by the period it paid for, with a CSV export. Seen by the
 team's leads and its **treasurer** (a team role, given like the lead role, that
 sees the money but not the people), and by the association's **Treasurer**
@@ -1248,30 +1267,41 @@ can show:
    meet: the team subscription is set to stop on the association's last day;
    check what Stripe bills at the renewal in between.
 
-**The association's money** (Admin → Money → *Check against Stripe*, for a
-period, or with *From* left empty everything from the start up to a day;
-site admins and the Treasurer). Fetched from Stripe on request, since all
-payments land there -- membership, teams, and the webshop and events, which the
-portal knows nothing of. Money that never went through Stripe (cash, bank
-transfers) is not in it.
+**The association's money** (Admin → Money → *On Stripe*; site admins and
+the Treasurer), from the portal's **copy of Stripe's book**
+(`services/stripe_books.py`, table `stripe_bookings`): every balance
+transaction -- payment, refund, bounced debit, chargeback, Stripe's own fee,
+transfer to the bank -- sorted by what it was for (membership, team, credit,
+other: the webshop and events). Stripe never changes a booking's amounts, so
+the copy is only added to.
 
-- Every booking in Stripe's books (balance transactions) sorted by product:
-  membership and team by the invoice the payment paid (sorted as the webhook
-  sorts it), a team's one-time payment also by the payment the portal recorded;
-  a refund, bounced SEPA debit or chargeback goes with the payment it takes
-  back. Everything else is *Other* (webshop, events, payment links).
-- For each: received, bounced, refunded, taken back, Stripe's fees, net. Of
-  the net, the teams' share (what their members paid) and the association's
-  own (the rest; Stripe's fees are all the association's).
-- On the last day: what was in Stripe (the sum of every booking up to it --
-  up to today it must equal what Stripe holds now, and the page says whether
-  it does), what went to the bank account in the period, and what the teams
-  were still owed.
-- The check: every paid team invoice of the period is a team payment in the
-  portal with the same amount and the other way round; every paid membership
-  invoice has a membership period, and every period counted as paid has an
-  invoice Stripe shows as paid. Whatever does not match is listed with its
-  invoice id, to look up in Stripe. Read-only: it changes nothing.
+- **Fetched** right after every Stripe webhook that changes the book (one
+  queued item, `stripe_books`, started at once -- several webhooks make one
+  fetch), at least hourly by the external-work worker, and on *Fetch from
+  Stripe now*. Each fetch asks for what is new since the last, with three
+  days' overlap; the very first reads the whole book, in the background.
+  The copy's sum is compared with what Stripe says it holds -- available,
+  incoming, and the Issuing balance (money moved there is a booking too);
+  the page says whether they match, and shows a failed fetch's reason. When
+  they do not, `flask stripe-books-explain` reads the whole book once more
+  (read-only) and lists Stripe's balance by part, the bookings by type, and
+  any booking only one side has.
+- **The overview**, for any period, at once: received, bounced, refunded,
+  taken back, Stripe's fees and net, per product; Stripe's own fees and
+  transfers to the bank; on the last day what was in Stripe, of which the
+  teams' (still to be transferred) and members' credit topped up through
+  Stripe, and the association's own -- the rest. Credit handed over in cash
+  is said separately: it is not in Stripe.
+- **The check** (`services/money_checks.py`) runs after every fetch, on the
+  copy, asking Stripe nothing: every team fee and credit top-up in Stripe is
+  the portal's record with the same amount and refunds, and the other way
+  round; every membership payment paid an invoice the portal counts as a
+  period, and every period counted as paid was paid; what Stripe took back
+  the portal took off too. Each difference is listed with its reference to
+  look up in Stripe, kept (`money_differences`) until a check no longer
+  finds it, then shown as resolved for 30 days and forgotten after a year
+  (nightly). Emailed once each after it has lasted an hour, unless switched
+  off. Read-only: it changes nothing in the portal's records.
 
 **How payments are built.** `services/payments.py` is the one place that talks
 to Stripe for anything sold: the connection, the person's Stripe customer (one

@@ -22,6 +22,15 @@ const funds: Schemas['TeamFundsOut'] = {
   waiting_for_fee: 0,
   paid_out: 8000,
   open: 4000,
+  statement: {
+    teams_carry_fees: false,
+    rows: [{ kind: 'fee_paid', label: 'Fees paid', amount: 12000 }],
+    earned: 12000,
+    waiting: 0,
+    transferred: 8000,
+    open: 4000,
+    lines: [],
+  },
   last_transfer_on: '2026-09-01',
   bank: { account_holder: 'Rocket Team', iban: 'AT611904300234573201', bic: null },
   may_edit_bank: true,
@@ -58,7 +67,7 @@ describe("a team's money", () => {
   it('the balance, the transfers and the payments', async () => {
     show();
 
-    expect(await screen.findByText('€40.00')).toBeInTheDocument();
+    expect((await screen.findAllByText('€40.00')).length).toBeGreaterThan(0);
     const transfers = screen.getByRole('table', { name: 'Transfers' });
     expect(within(transfers).getByText('Rocket 2026')).toBeInTheDocument();
     const payments = screen.getByRole('table', { name: 'Payments' });

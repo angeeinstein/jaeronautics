@@ -3,11 +3,10 @@
 What is agreed but not built yet. How this list works -- when it is worked
 through, how an item is written -- is in `CLAUDE.md` at the repository root.
 
-The last batches (2026-10-08 and 2026-10-09) built everything that was on
-the list -- credit and selling for credit (`docs/credit-plan.md`); messages,
-announcements and team mailings (`docs/messages-plan.md`); admin error emails
-that resolved themselves left out. The batch of 2026-10-11 built the teams'
-rejoin setting (`docs/team-passive-members.md`) and a spacing fix. What it
+The last batches built everything that was on the list -- most recently
+(2026-10-11) Stripe's book kept in the portal, with every team figure shown
+line by line and the credit's top-up fees followed to each sale
+(`docs/money-ledger-plan.md`), and forum changes started at once. What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
 The legal drafts and the card readers below were put off by the maintainer.
 
@@ -28,6 +27,11 @@ The legal drafts and the card readers below were put off by the maintainer.
 - **Also (added 2026-10-09, with messages):** the privacy policy draft names
   the contact form, messages to team leads, announcements and team mailings
   (§ 27, § 31, § 40, § 41). See `docs/messages-plan.md`.
+- **Also (added 2026-10-11, with Stripe's book):** the privacy policy draft
+  says that the portal keeps a copy of the Stripe account's bookings without
+  names, and that a difference with Stripe names the payer's address and is
+  kept a year after it is resolved (§ 20, § 40). See
+  `docs/money-ledger-plan.md`.
 - **Waiting for (2026-10-11):** the maintainer discusses them with the
   association's board, the credit feature above all ("I haven't really
   discussed with them if they like it"). Shown under Admin › Legal texts,
@@ -48,6 +52,12 @@ The legal drafts and the card readers below were put off by the maintainer.
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
+- **An export of Stripe's bookings for the yearly accounts** -- 2026-10-11.
+  A period's bookings by membership, teams, credit and other, with fees.
+  "Could be useful at some time, but I don't need this now." Builds on the
+  copy of Stripe's books (`docs/money-ledger-plan.md`).
+- **Stripe's transfers to the bank, matched to their bookings** --
+  2026-10-11. Not needed while nothing has been transferred to the bank.
 - **Answering contact messages from inside the portal** -- 2026-10-09. A
   reply written in Admin › Messages and sent as a formatted HTML email, with
   the conversation kept together. "Would be nice … but I think we can stay at

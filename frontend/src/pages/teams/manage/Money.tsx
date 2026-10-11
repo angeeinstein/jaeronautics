@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { useMe } from '../../../api/session';
 import { AppLink } from '../../../app/AppLink';
+import { MoneyStatement } from '../../../components/MoneyStatement';
 import { PageHeader } from '../../../components/PageHeader';
 import { Panel } from '../../../components/Panel';
 import { StatTile } from '../../../components/StatTile';
@@ -21,7 +22,7 @@ import { arrivedClass, useArrivals } from '../../../lib/arrivals';
 import { formatDate, formatDayOf, formatEuros } from '../../../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
-import { Counts, feeNote, SalesPanel } from '../../admin/money/sales';
+import { Fee, ForTheTeam, SalesPanel } from '../../admin/money/sales';
 import { useSlug } from './shared';
 
 type Funds = Schemas['TeamFundsOut'];
@@ -144,9 +145,7 @@ function Body({ funds }: { funds: Funds }) {
         />
         <StatTile value={formatEuros(funds.open)} label="Open" note="Still to be transferred" />
       </SimpleGrid>
-      <Text size="sm" c="dimmed">
-        {feeNote(funds.payments, funds.waiting_for_fee)}
-      </Text>
+      <MoneyStatement statement={funds.statement} />
       <Bank
         key={`${funds.bank.account_holder ?? ''}|${funds.bank.iban ?? ''}|${funds.bank.bic ?? ''}`}
         funds={funds}
@@ -232,7 +231,7 @@ function Body({ funds }: { funds: Funds }) {
         }
       >
         {funds.payments.length ? (
-          <Table.ScrollContainer minWidth={640} type="native">
+          <Table.ScrollContainer minWidth={760} type="native">
             <Table verticalSpacing="sm" aria-label="Payments">
               <Table.Thead>
                 <Table.Tr>
@@ -240,10 +239,13 @@ function Body({ funds }: { funds: Funds }) {
                   <Table.Th scope="col">Name</Table.Th>
                   <Table.Th scope="col">Paid until</Table.Th>
                   <Table.Th scope="col" ta="right">
-                    Amount
+                    Paid
                   </Table.Th>
                   <Table.Th scope="col" ta="right">
-                    Counts
+                    Stripe&apos;s fee
+                  </Table.Th>
+                  <Table.Th scope="col" ta="right">
+                    For the team
                   </Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -257,7 +259,10 @@ function Body({ funds }: { funds: Funds }) {
                       {formatEuros(payment.amount)}
                     </Table.Td>
                     <Table.Td ta="right">
-                      <Counts payment={payment} />
+                      <Fee payment={payment} />
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      <ForTheTeam payment={payment} />
                     </Table.Td>
                   </Table.Tr>
                 ))}

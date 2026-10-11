@@ -22,9 +22,9 @@ export function overviewQuery(since: string | null, until: string | null) {
           params: { query: { since: since ?? undefined, until: until ?? undefined } },
         }),
       ),
-    // Each check pages through Stripe: asked for, not refreshed behind the reader's back.
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
+    // While a fetch from Stripe runs, read again every few seconds: the figures follow it.
+    refetchInterval: (query: { state: { data?: OverviewOut } }) =>
+      query.state.data?.fetching ? 3000 : false,
   };
 }
 

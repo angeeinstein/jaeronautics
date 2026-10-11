@@ -45,7 +45,7 @@ strike, add or mark something urgent.
 - **While working**, after each change: the quick checks of what was touched
   (type check, lint, that part's unit tests). Seconds, not minutes.
 - **Once per batch, at the end**: everything below, then one commit (or a few
-  for unrelated parts), one push, one pull request.
+  for unrelated parts), one push -- the pull request comes later (below).
 
 ```sh
 ruff check .
@@ -65,14 +65,19 @@ frontend/src/api/openapi.json`, then `npm run api:types` in `frontend/`.
 - Never push to `main`; it is protected (pull request, CI green).
 - A branch per feature or batch, from the current `main`, named after what it
   holds (`claude/credit`, `claude/account-overview-fixes`) -- at least roughly:
-  a batch of small items is named after its main theme. One pull request; the
-  maintainer tests on the test server and merges; the branch is deleted
-  (GitHub does it at the merge). The next feature or batch gets a new branch.
+  a batch of small items is named after its main theme. The branch is pushed
+  and the maintainer tests it on the test server (the command below); small
+  changes found there go onto the same branch. **The pull request is opened
+  only when the maintainer says the branch is ready** (or asks for one) --
+  "Maybe there are some small changes I still want to make after having a
+  look at the new features." One pull request per branch; the maintainer
+  merges; the branch is deleted (GitHub does it at the merge). The next
+  feature or batch gets a new branch.
 - The to-do list is pushed on the branch of the next batch: the first item
   written after a merge opens that branch.
 - The live server installs from `main`; the test server from the branch under
-  test. Each pull request says the one command that points the test server
-  at its branch:
+  test. Once a branch is pushed, the maintainer is given the one command that
+  points the test server at it (and the pull request says it again):
   `sudo bash /var/www/jaeronautics/install.sh --mode update --branch <branch>`.
 
 ## Not losing context
@@ -111,6 +116,13 @@ words: it will not be there later.
   can do (live updates, animation) where it helps -- every animation off when
   the device asks for less motion.
 - Square, flat look (`docs/design.md`).
+- Now rather than later: what can happen at once happens at once (on the
+  event, a webhook, a live update), not at a scheduled time. A schedule is
+  for what must not run too often -- emails, many requests to Stripe or the
+  forum -- and as a safety net behind the immediate path. At once means
+  started right away in the background, not making a page wait for Stripe
+  or the forum. Steps tied to a date stay at 03:15 on purpose: it gives
+  Stripe's own around-midnight changes time to arrive.
 - Features stay general where it costs this association nothing. Other
   associations may use the portal one day, so no options only this
   association or one of its teams would use ("that would just confuse other

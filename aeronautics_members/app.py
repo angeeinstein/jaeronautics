@@ -283,6 +283,7 @@ from .services.forum_content import (  # noqa: E402
     restore_site_settings,
     what_to_do_about_settings,
 )
+from .services import stripe_books as _stripe_books  # noqa: E402,F401 -- registers its queue handler
 from .services.workflows import (  # noqa: E402
     process_email_delivery_jobs,
     refresh_member_billing_state,
@@ -3883,9 +3884,9 @@ def create_app(config_overrides=None):
         from .services.team_payments import (
             end_finished_team_memberships, follow_association_ends, send_renewal_notices,
         )
-        from .services.team_money import fill_in_fees
         from .services.mailings import forget_old as forget_old_mailing_recipients
         from .services.messages import forget_old as forget_old_messages
+        from .services.money_checks import forget_old as forget_old_money_differences
         from .services.teams import end_lapsed_team_memberships, lapse_unpaid_approvals, send_due_access_lists
 
         team_steps = (
@@ -3903,12 +3904,12 @@ def create_app(config_overrides=None):
             (end_finished_team_memberships, "Ended {} team membership(s) that ran out or were not paid."),
             # Then the access lists due today, now that the teams are current.
             (send_due_access_lists, "Sent {} team access list(s)."),
-            # Stripe's fees of team payments that carry theirs (Admin › Money).
-            (fill_in_fees, "Filled in Stripe's fee for {} team payment(s)."),
             # Messages done a year ago, and mailings' recipients after a year
             # (docs/messages-plan.md).
             (forget_old_messages, "Forgot {} old message(s)."),
             (forget_old_mailing_recipients, "Forgot {} mailing recipient(s) older than a year."),
+            # Differences with Stripe resolved more than a year ago (services/money_checks.py).
+            (forget_old_money_differences, "Forgot {} resolved money difference(s)."),
         )
         for step, done_text in team_steps:
             try:
@@ -4297,6 +4298,57 @@ def create_app(config_overrides=None):
         if failed:
             raise click.ClickException(f"{failed} PDF(s) could not be made.")
 
+    @app.cli.command("stripe-books-explain")
+    @with_appcontext
+    def stripe_books_explain():
+        """Why the copy of Stripe's book and Stripe's balance differ: both, part by part.
+
+        Reads the whole book from Stripe once more (read-only), and says which
+        bookings Stripe lists that the copy lacks, which the copy has that Stripe
+        no longer lists, and what Stripe's balance is made of.
+        """
+        import stripe as stripe_api
+
+        from .db_models import StripeBooking
+        from .services import payments as payments_service
+
+        payments_service.apply_runtime_stripe_config()
+        balance = stripe_api.Balance.retrieve()
+        click.echo("Stripe's balance, by part (EUR, cents):")
+        def eur(entries):
+            return sum(int(entry.get("amount") or 0) for entry in entries if entry.get("currency") == "eur")
+
+        for part in sorted(balance.keys()):
+            entries = balance.get(part)
+            if isinstance(entries, list):
+                click.echo(f"  {part}: {eur(entries)}")
+            elif hasattr(entries, "get") and isinstance(entries.get("available"), list):
+                click.echo(f"  {part} (available): {eur(entries.get('available'))}")
+        listed = {}
+        for txn in stripe_api.BalanceTransaction.list(limit=100).auto_paging_iter():
+            listed[txn["id"]] = txn
+        copy = {booking.stripe_id: booking for booking in db.session.execute(db.select(StripeBooking)).scalars()}
+        eur = {key: txn for key, txn in listed.items() if (txn.get("currency") or "eur") == "eur"}
+        click.echo(f"Bookings Stripe lists: {len(listed)} ({len(eur)} in EUR), "
+                   f"sum of net in EUR: {sum(int(txn.get('net') or 0) for txn in eur.values())}")
+        click.echo(f"Bookings in the copy: {len(copy)}, sum of net: {sum(b.net_cents for b in copy.values())}")
+        by_type = {}
+        for txn in eur.values():
+            row = by_type.setdefault(txn.get("type"), [0, 0, set()])
+            row[0] += 1
+            row[1] += int(txn.get("net") or 0)
+            row[2].add(txn.get("status"))
+        click.echo("Stripe's EUR bookings by type (count, sum of net, statuses):")
+        for kind, (count, net, statuses) in sorted(by_type.items()):
+            click.echo(f"  {kind}: {count}, {net}, {', '.join(sorted(str(s) for s in statuses))}")
+        missing = [key for key in eur if key not in copy]
+        extra = [key for key in copy if key not in listed]
+        click.echo(f"In Stripe, not in the copy: {len(missing)} {missing[:20]}")
+        click.echo(f"In the copy, not listed by Stripe: {len(extra)} {extra[:20]}")
+        other = [key for key, txn in listed.items() if key not in eur]
+        if other:
+            click.echo(f"Bookings in other currencies: {len(other)}")
+
     @app.cli.command("process-external-work")
     @click.option("--limit", default=50, show_default=True, type=int,
                   help="Maximum number of work items to process in this run.")
@@ -4309,6 +4361,9 @@ def create_app(config_overrides=None):
         """
         if _stand_down_while_paused("external-work"):
             return
+        # Stripe's books, fetched at least hourly even when no webhook said so.
+        if _stripe_books.request_sync_if_due() is not None:
+            db.session.commit()
         completed, failed = process_pending(limit=limit)
         outstanding = pending_count()
         click.echo(f"External work: {completed} completed, {failed} failed, {outstanding} still queued.")

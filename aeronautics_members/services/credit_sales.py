@@ -6,7 +6,9 @@ item's price off the member's credit and names the item and the seller. What
 a team sold counts towards what the team is owed, exactly like its fees
 (services/team_money.py), and is passed on with the next transfer; what the
 association sold stays with it. Stripe's fee on the top-up is the
-association's, as for fees.
+association's -- unless the teams carry Stripe's fees: then each team sale
+carries its share of the fee of the top-up that paid for it
+(services/credit_fees.py).
 
 How a sale is made is left open on purpose (docs/credit-plan.md, "Card
 readers"): today an admin or the treasurer books one by hand; later a card
@@ -132,12 +134,7 @@ def sell(user, item, *, by=None, channel=BOOKED):
         raise ConflictError(f"{item.name} is not sold any more.", code="credit_item_inactive")
     if item.team is not None and item.team.status != "active":
         raise ConflictError(f"{item.team.name} is archived.", code="credit_seller_archived")
-    entry = credit.spend(user, item.price_cents, item.name, team=item.team, by=by, item=item, channel=channel)
-    if item.team is not None:
-        from .money_settings import credit_share_bps
-
-        entry.kept_cents = item.price_cents * credit_share_bps() // 10000
-    return entry
+    return credit.spend(user, item.price_cents, item.name, team=item.team, by=by, item=item, channel=channel)
 
 
 def take_back(actor, entry, *, note=None):
@@ -178,6 +175,17 @@ def _sales_query(team, since=None):
     return query
 
 
+def _fee_shares(team, entries):
+    """{sale id: its share of top-up fees} for a team's sales, when the teams carry Stripe's fees."""
+    from .credit_fees import fee_of, parts_for_people
+    from .money_settings import teams_bear_fees
+
+    if team is None or not entries or not teams_bear_fees():
+        return {}
+    parts = parts_for_people({entry.user_id for entry in entries})
+    return {entry.id: fee_of(parts.get(entry.id, [])) or 0 for entry in entries}
+
+
 def sales_summary(team=None, since=None):
     """What a seller earned with credit, in cents, and by item: sales less what was taken back,
     and for a team less the association's share where it keeps one.
@@ -186,6 +194,7 @@ def sales_summary(team=None, since=None):
     ``count`` is the sales that stand (a sale taken back counts for neither).
     """
     entries = db.session.execute(_sales_query(team, since)).scalars().all()
+    fee_shares = _fee_shares(team, entries)
     by_item = {}
     earned = 0
     count = 0
@@ -193,8 +202,9 @@ def sales_summary(team=None, since=None):
         key = entry.item_id or f"name:{entry.description}"
         row = by_item.setdefault(key, {"name": entry.item.name if entry.item else entry.description,
                                        "count": 0, "earned": 0})
-        # The seller's part: the price, less the association's share where it keeps one.
-        cents = -entry.amount_cents - (entry.kept_cents or 0)
+        # The seller's part: the price, less the association's share where it keeps one,
+        # and the top-up fee's share where the teams carry Stripe's fees.
+        cents = -entry.amount_cents - (entry.kept_cents or 0) - fee_shares.get(entry.id, 0)
         row["earned"] += cents
         earned += cents
         step = 1 if entry.kind == credit.PURCHASE else -1

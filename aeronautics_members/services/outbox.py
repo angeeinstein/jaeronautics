@@ -16,9 +16,10 @@ the queue mechanics independent of the forum, the mailer, or whatever comes
 next -- and lets a test drive the whole loop with a handler of its own.
 """
 
+import threading
 from datetime import timedelta
 
-from flask import current_app
+from flask import current_app, has_request_context
 
 from ..db_models import ExternalWorkItem, db
 from .clock import get_now_utc
@@ -38,6 +39,10 @@ RETRY_DELAYS = (
 )
 
 _HANDLERS = {}
+
+#: How many items one start at once works through; the rest wait for the
+#: worker's next run. Small, so a burst never hits the forum's rate limits.
+KICK_LIMIT = 25
 
 
 def register_handler(kind, handler):
@@ -78,6 +83,7 @@ def enqueue(kind, *, member=None, user=None, payload=None, dedupe_key=None, reas
                 # change would be folded into an item nothing ever runs again,
                 # and this member's forum would stop hearing about them.
                 revive(existing)
+            _start_after_commit()
             return existing
 
     item = ExternalWorkItem(
@@ -90,6 +96,7 @@ def enqueue(kind, *, member=None, user=None, payload=None, dedupe_key=None, reas
         reason=(reason or "")[:255] or None,
     )
     db.session.add(item)
+    _start_after_commit()
     return item
 
 
@@ -276,10 +283,12 @@ def fail(item, error):
     db.session.commit()
 
 
-def process_pending(limit=25, kinds=None, now=None, user_id=None):
+def process_pending(limit=25, kinds=None, now=None, user_id=None, stop_on_failure=False):
     """Run due work items. Returns (completed, failed).
 
     Safe to run concurrently with itself: each item is claimed before it runs.
+    ``stop_on_failure``: the first failure ends the run -- the remote end is
+    down or asks us to slow down, and the worker's retries take it from there.
     """
     completed = failed = 0
     for _ in range(limit):
@@ -300,10 +309,85 @@ def process_pending(limit=25, kinds=None, now=None, user_id=None):
             )
             fail(item, exc)
             failed += 1
+            if stop_on_failure:
+                break
         else:
             complete(item)
             completed += 1
     return completed, failed
+
+
+# --- Started at once --------------------------------------------------------------
+#
+# Work queued by a request -- a payment's webhook, a lead's click -- starts
+# the moment that request's change is committed, in a thread of its own, so
+# nobody waits for the worker's next run and no page waits for the forum. The
+# worker (``flask process-external-work``, every 2 minutes) stays: it retries,
+# and picks up whatever a start at once left. One thread per process at a
+# time; work queued while it runs makes it go round once more.
+
+_kick_lock = threading.Lock()
+_kick_running = False
+_kick_again = False
+
+
+def _start_after_commit():
+    """Mark the session: once it commits, start the queue (outside requests: the worker does)."""
+    if has_request_context() and current_app.config.get("OUTBOX_START_AT_ONCE", True):
+        db.session.info["outbox_start"] = current_app._get_current_object()
+
+
+def after_commit(session):
+    """SQLAlchemy's after-commit hook (registered in app.py)."""
+    app = session.info.pop("outbox_start", None)
+    if app is not None:
+        start_now(app)
+
+
+def after_rollback(session):
+    session.info.pop("outbox_start", None)
+
+
+def start_now(app):
+    global _kick_running, _kick_again
+    with _kick_lock:
+        if _kick_running:
+            _kick_again = True
+            return False
+        _kick_running = True
+    threading.Thread(target=_work_at_once, args=(app,), name="outbox-at-once", daemon=True).start()
+    return True
+
+
+def _work_at_once(app):
+    global _kick_running, _kick_again
+    try:
+        while True:
+            run_at_once(app)
+            with _kick_lock:
+                if not _kick_again:
+                    _kick_running = False
+                    return
+                _kick_again = False
+    except BaseException:
+        with _kick_lock:
+            _kick_running = False
+        raise
+
+
+def run_at_once(app):
+    """One pass over the due work, stopping at the first failure; not while jobs are paused."""
+    from .background_jobs import is_paused
+
+    with app.app_context():
+        try:
+            if not is_paused():
+                process_pending(limit=KICK_LIMIT, stop_on_failure=True)
+        except Exception:  # noqa: BLE001 -- the worker retries on its next run
+            db.session.rollback()
+            current_app.logger.exception("Queued work started at once failed; the worker takes it from here.")
+        finally:
+            db.session.remove()
 
 
 def try_now_for(user_id, kinds):
@@ -377,3 +461,15 @@ def failed_items(limit=50):
         .order_by(ExternalWorkItem.id.desc())
         .limit(limit)
     ).scalars().all()
+
+
+def _listen():
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    if not event.contains(Session, "after_commit", after_commit):
+        event.listen(Session, "after_commit", after_commit)
+        event.listen(Session, "after_rollback", after_rollback)
+
+
+_listen()

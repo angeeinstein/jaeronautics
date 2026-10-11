@@ -22,7 +22,9 @@ from ..services import team_money as money
 from ..services import teams as teams_service
 from ..services.notifications import flush_marked_notification_channels
 from ._core import Model, endpoint
-from .admin_money import CreditSales, Period, TeamPayment, Transfer, credit_sales_out, team_payment_out
+from .admin_money import (
+    CreditSales, Period, Statement, TeamPayment, Transfer, credit_sales_out, statement_out, team_payment_out,
+)
 from .team_manage import _may
 from .teams import _team
 
@@ -44,10 +46,11 @@ class TeamFundsOut(Model):
     earned: int
     fees: int
     sales: CreditSales
-    #: Paid, but carrying a Stripe fee not known yet: counted once Stripe says (overnight).
+    #: Paid, but carrying a Stripe fee not known yet: counted once Stripe says (seconds, for a card).
     waiting_for_fee: int
     paid_out: int
     open: int
+    statement: Statement
     last_transfer_on: date | None
     bank: TeamBankOut
     may_edit_bank: bool
@@ -79,7 +82,7 @@ def _funds_out(team):
     return TeamFundsOut(
         slug=team.slug, name=team.name, earned=found["earned"], fees=found["fees"],
         sales=credit_sales_out(found), waiting_for_fee=found["waiting_for_fee"],
-        paid_out=found["paid_out"], open=found["open"],
+        paid_out=found["paid_out"], open=found["open"], statement=statement_out(found),
         last_transfer_on=last.paid_on if last else None,
         bank=TeamBankOut(account_holder=team.bank_account_holder,
                          iban=team.bank_iban if may_edit else (money.masked_iban(team.bank_iban) or None),
@@ -89,7 +92,7 @@ def _funds_out(team):
         transfers=[Transfer(id=payout.id, paid_on=payout.paid_on, amount=payout.amount_cents,
                             reference=payout.reference, to=money.masked_iban(payout.iban) or None)
                    for payout in found["payouts"]],
-        payments=[team_payment_out(payment) for payment in found["payments"]],
+        payments=[team_payment_out(payment, found) for payment in found["payments"]],
         export_url=url_for("teams.team_money_export", slug=team.slug),
     )
 

@@ -69,7 +69,7 @@ Status: `[ ]` to do, `[x]` done.
 - [x] `POST /admin/teams/<slug>/roles`, `/roles/revoke` (action) → `POST /api/v1/admin/teams/<slug>/roles`, `/roles/revoke` (kept in the API; the pages appoint leads at `POST|DELETE /api/v1/teams/<slug>/manage/leads`, chosen from `GET .../manage/lead-candidates`)
 
 ### 4.5 Money
-- [x] `GET /admin/money` (page) → `GET /api/v1/admin/money`; the check against Stripe `GET /api/v1/admin/money/overview?since=&until=` (the page keeps `?check=1&since=&until=`)
+- [x] `GET /admin/money` (page) → `GET /api/v1/admin/money`; the money on Stripe from the portal's copy `GET /api/v1/admin/money/overview?since=&until=`, fetched now `POST /api/v1/admin/money/fetch` (the page keeps `?since=&until=`)
 - [x] new: `GET /admin/money/<slug>` (page: a team's money, the association's side) → `GET /api/v1/admin/money/<slug>`; `POST .../transfers`, `PUT .../bank`
 - `GET /admin/money/<slug>/transfer-code.svg?amount=&reference=` (image: the GiroCode for the amount and reference typed) -- stays
 

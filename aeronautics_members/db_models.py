@@ -725,6 +725,10 @@ class ExternalWorkItem(db.Model):
     # The email about that new fee, due some days before the renewal it takes
     # effect at: ``not_before`` holds it until then.
     KIND_FEE_CHANGE_NOTICE = "fee_change_notice"
+    # Fetch what is new in Stripe's books (services/stripe_books.py), and check
+    # it against the portal's records. One outstanding at a time: several
+    # webhooks in a row make one fetch.
+    KIND_STRIPE_BOOKS = "stripe_books"
 
     STATUS_PENDING = "pending"
     STATUS_PROCESSING = "processing"
@@ -975,16 +979,90 @@ class Payment(db.Model):
     status = db.Column(db.String(20), nullable=False, default="paid")
     # Given back in Stripe, in part or in full.
     refunded_cents = db.Column(db.Integer, nullable=False, default=0, server_default="0")
-    # Stripe's fee for it, once Stripe has said (services/team_money.py
-    # fills it in); and whether a team's share carries it -- as the money
-    # settings were when it was paid, so changing them changes nothing paid.
+    # Stripe's fee for it, from its booking in Stripe's books once fetched
+    # (services/stripe_books.py). Whether a team carries it is the money
+    # setting as it is now, for every payment (docs/money-ledger-plan.md).
     fee_cents = db.Column(db.Integer, nullable=True)
-    team_bears_fee = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     user = db.relationship("User")
     team = db.relationship("Team")
     team_membership = db.relationship("TeamMembership")
+
+
+class StripeBooking(db.Model):
+    """One booking in Stripe's books -- a balance transaction -- as fetched
+    (services/stripe_books.py). Stripe never changes a booking's amounts: a
+    refund, a returned debit or a chargeback is a booking of its own that
+    names the payment it takes back. So these rows are only ever added to;
+    what they belong to may be filled in later, once it is known.
+
+    No names or addresses: what a booking was for, and the portal's record of
+    it where there is one.
+    """
+
+    __tablename__ = "stripe_bookings"
+
+    id = db.Column(db.Integer, primary_key=True)
+    stripe_id = db.Column(db.String(100), nullable=False, unique=True)
+    # Stripe's type: charge, payment, refund, payment_refund,
+    # payment_failure_refund, adjustment, stripe_fee, payout, ...
+    type = db.Column(db.String(40), nullable=False, index=True)
+    amount_cents = db.Column(db.Integer, nullable=False)
+    fee_cents = db.Column(db.Integer, nullable=False, default=0)
+    net_cents = db.Column(db.Integer, nullable=False)
+    currency = db.Column(db.String(3), nullable=False)
+    booked_at = db.Column(db.DateTime, nullable=False, index=True)
+    # The payment it is or takes back, and what that was for: membership,
+    # team, credit or other -- None until it could be told.
+    charge_id = db.Column(db.String(100), nullable=True, index=True)
+    payment_intent_id = db.Column(db.String(100), nullable=True, index=True)
+    invoice_id = db.Column(db.String(100), nullable=True, index=True)
+    product = db.Column(db.String(20), nullable=True, index=True)
+    payment_id = db.Column(db.Integer, db.ForeignKey("payments.id"), nullable=True, index=True)
+    fetched_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    payment = db.relationship("Payment")
+
+
+class StripeBooksState(db.Model):
+    """How far Stripe's books were fetched, and what Stripe said it holds then (one row)."""
+
+    __tablename__ = "stripe_books_state"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # Every booking up to this moment is here (fetched again with some overlap).
+    fetched_through = db.Column(db.DateTime, nullable=True)
+    fetched_at = db.Column(db.DateTime, nullable=True)
+    # What Stripe said it holds at ``fetched_at``, and the copy's sum then.
+    stripe_balance_cents = db.Column(db.Integer, nullable=True)
+    books_balance_cents = db.Column(db.Integer, nullable=True)
+    last_error = db.Column(db.String(500), nullable=True)
+    checked_at = db.Column(db.DateTime, nullable=True)
+
+
+class MoneyDifference(db.Model):
+    """Something where Stripe's books and the portal's records disagree,
+    found by the check after each fetch (services/money_checks.py). Kept
+    while it lasts; marked resolved when a later check no longer finds it.
+    """
+
+    __tablename__ = "money_differences"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # What and where, as one key: "team:missing_in_portal:ch_...".
+    key = db.Column(db.String(200), nullable=False, unique=True)
+    product = db.Column(db.String(20), nullable=False)
+    what = db.Column(db.String(200), nullable=False)
+    # The Stripe object to look up: an invoice, a payment or a charge.
+    reference = db.Column(db.String(100), nullable=True)
+    amount_cents = db.Column(db.Integer, nullable=True)
+    stripe_amount_cents = db.Column(db.Integer, nullable=True)
+    who = db.Column(db.String(255), nullable=True)
+    first_seen_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    last_seen_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    resolved_at = db.Column(db.DateTime, nullable=True, index=True)
+    emailed_at = db.Column(db.DateTime, nullable=True)
 
 
 class TeamPayout(db.Model):

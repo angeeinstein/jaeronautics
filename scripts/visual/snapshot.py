@@ -69,6 +69,8 @@ def build_app(db_path):
         "BACKUP_STORAGE_DIR": str(Path(db_path).parent / "storage"),
         # In this process, against the throwaway database -- not a second one.
         "BACKUP_RUN_INLINE": True,
+        # No forum or Stripe to reach: queued work stays queued.
+        "OUTBOX_START_AT_ONCE": False,
     })
     # Who is using the portal (Settings › Updates) is whoever the screenshots
     # themselves happen to be: one fixed answer, so both colour schemes and
@@ -414,6 +416,32 @@ def seed(app, app_module, subscriptions):
     credit_sales.sell(active.user, coffee, by=admin_user)
     credit.book_cash(admin_user, carla, 1500)
     credit_sales.sell(carla, beer, by=admin_user)
+    db.session.commit()
+
+    # Stripe's book, as fetched (services/stripe_books.py): the payments above,
+    # a membership, the webshop, Stripe's own fee -- and one difference.
+    from aeronautics_members.db_models import MoneyDifference, StripeBooking, StripeBooksState
+
+    fixed = datetime(2026, 10, 6, 7, 58, tzinfo=timezone.utc)  # the same in every run
+    books = [("membership", 6000, 115, None), ("other", 2500, 63, None), ("credit", 1000, 30, top_up.id)]
+    books += [("team", payment.amount_cents, 35, payment.id) for payment in Payment.query.filter_by(purpose="team")]
+    for index, (product, amount, fee, payment_id) in enumerate(books):
+        db.session.add(StripeBooking(stripe_id=f"txn_example_{index}", type="charge", amount_cents=amount,
+                                     fee_cents=fee, net_cents=amount - fee, currency="eur",
+                                     booked_at=fixed - timedelta(days=index + 1), charge_id=f"ch_example_{index}",
+                                     product=product, payment_id=payment_id, fetched_at=fixed))
+        if payment_id is not None:
+            db.session.get(Payment, payment_id).fee_cents = fee
+    db.session.add(StripeBooking(stripe_id="txn_example_fee", type="stripe_fee", amount_cents=-20, fee_cents=0,
+                                 net_cents=-20, currency="eur", booked_at=fixed - timedelta(days=2),
+                                 fetched_at=fixed))
+    balance = sum(amount - fee for _product, amount, fee, _payment in books) - 20
+    db.session.add(StripeBooksState(id=1, fetched_through=fixed, fetched_at=fixed, stripe_balance_cents=balance,
+                                    books_balance_cents=balance, checked_at=fixed))
+    db.session.add(MoneyDifference(key="team:missing:ch_example_gone", product="team",
+                                   what="Paid in Stripe, missing in the portal", reference="in_example_gone",
+                                   stripe_amount_cents=1000, who="payer@example.org",
+                                   first_seen_at=fixed - timedelta(hours=3), last_seen_at=fixed))
     db.session.commit()
 
     # Messages: two to the admins (one answered), one to the Rocket Team's
