@@ -339,8 +339,7 @@ class TestTheCheck:
         _portal_records()
         _staff("money@example.org", "treasurer").email_verified_at = datetime.now(timezone.utc)
         monkeypatch.setattr("aeronautics_members.mail_utils.send_mail", lambda **kwargs: pytest.fail("emailed"))
-        money_settings.save_money_settings(None, fee_payer="association", credit_share_bps=0,
-                                           difference_emails=False)
+        money_settings.save_money_settings(None, fee_payer="association", difference_emails=False)
         stripe_books.sync()
         money_checks.run()
 

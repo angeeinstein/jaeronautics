@@ -30,7 +30,7 @@ from .clock import get_membership_today
 from .membership import format_date_display, format_membership_date_display
 # Who carries Stripe's fees: its own module (selling for credit reads it too).
 from .money_settings import (  # noqa: F401
-    credit_share_bps, difference_emails, save_money_settings, teams_bear_fees,
+    difference_emails, save_money_settings, teams_bear_fees,
 )
 
 # What a line is, for the pages to group and explain them.
@@ -167,6 +167,8 @@ def _sale_groups(team, carry):
         else:
             group.lines.append(Line(day, SALE_TAKEN_BACK, f"{name} taken back", price, group.key))
         if entry.kept_cents:
+            # A share the association could once keep of each sale; no longer set, but
+            # a sale that kept one still counts it.
             share = credit_share_text(entry.kept_cents, abs(price))
             group.lines.append(Line(day, KEPT, f"Kept by the association{share}", -entry.kept_cents, group.key))
         if carry:

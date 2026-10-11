@@ -8770,12 +8770,6 @@
       "MoneySettings": {
         "additionalProperties": false,
         "properties": {
-          "credit_share_bps": {
-            "maximum": 2000,
-            "minimum": 0,
-            "title": "Credit Share Bps",
-            "type": "integer"
-          },
           "difference_emails": {
             "default": true,
             "title": "Difference Emails",
@@ -8791,8 +8785,7 @@
           }
         },
         "required": [
-          "fee_payer",
-          "credit_share_bps"
+          "fee_payer"
         ],
         "title": "MoneySettings",
         "type": "object"
@@ -18844,7 +18837,7 @@
             "description": "Signed in, without the permission."
           }
         },
-        "summary": "Who carries Stripe's fees, the share kept of credit sales, and the emails about differences.",
+        "summary": "Who carries Stripe's fees, and the emails about differences.",
         "tags": [
           "Admin"
         ],
@@ -18916,7 +18909,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Change them. Who carries the fees counts for all money at once; the share kept, for sales from now on.",
+        "summary": "Change them. Who carries the fees counts for all money at once.",
         "tags": [
           "Admin"
         ],

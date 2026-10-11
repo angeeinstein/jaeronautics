@@ -3,7 +3,9 @@
 A copy of Stripe's balance transactions, what was fetched when, and what the
 check found to differ. ``payments.team_bears_fee`` goes: whether a team
 carries Stripe's fee is the money setting as it is now, for every payment.
-See docs/money-ledger-plan.md.
+The share the association could keep of team credit sales goes too: each
+sale now carries its exact share of the top-up's fee instead (sales that kept
+a share keep ``kept_cents``). See docs/money-ledger-plan.md.
 
 Revision ID: e2b7c4f9a1d3
 Revises: d7a3e9c2f5b1
@@ -71,6 +73,7 @@ def upgrade():
 
     with op.batch_alter_table("payments") as batch_op:
         batch_op.drop_column("team_bears_fee")
+    op.execute("DELETE FROM setting WHERE key = 'team_credit_sales_share_bps'")
 
 
 def downgrade():

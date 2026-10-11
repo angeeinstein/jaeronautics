@@ -79,18 +79,17 @@ describe('what a team sold', () => {
 });
 
 describe('who carries Stripe’s fees', () => {
-  it('sends the share in hundredths of a percent', async () => {
+  it('sends who carries them, leaving the email switch as it is', async () => {
     const { calls } = mockFetch({
       ...base,
       '/api/v1/admin/money/settings': {
-        body: { fee_payer: 'association', credit_share_bps: 0, difference_emails: true },
+        body: { fee_payer: 'association', difference_emails: false },
       },
       'PUT /api/v1/admin/money/settings': { body: { changed: ['team_fees_stripe_fee_payer'] } },
     });
     renderPage(<FeeSettings />);
 
     await userEvent.click(await screen.findByText('The teams'));
-    await userEvent.type(screen.getByLabelText('Kept of what teams sell for credit'), '3');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => {
@@ -101,10 +100,6 @@ describe('who carries Stripe’s fees', () => {
         .find((call) => call.method === 'PUT')
         ?.clone()
         .json(),
-    ).toEqual({
-      fee_payer: 'team',
-      credit_share_bps: 300,
-      difference_emails: true,
-    });
+    ).toEqual({ fee_payer: 'team', difference_emails: false });
   });
 });

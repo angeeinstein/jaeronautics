@@ -660,9 +660,6 @@ Admin › Money › *Stripe's fees* (treasurer and admins); docs/money-ledger-pl
   payment for a card; until it is known, the payment or sale shows as
   waiting and does not count, so nothing is transferred before the fee is
   known. A SEPA debit's fee is known once the money has arrived, days later.
-- **Kept of what teams sell for credit:** 0–20 %, default 0 -- a share for
-  the association on top of any fee. It counts for sales from when it is
-  saved; each sale keeps it (`kept_cents`).
 - **Email differences** (on *On Stripe*): differences between Stripe and
   the portal are emailed to the admins and the treasurer, once each, when
   one has lasted an hour. On by default.

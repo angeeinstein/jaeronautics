@@ -21,8 +21,8 @@ def rocket(app, switched_on):  # noqa: F811
     return _led()
 
 
-def _teams_pay(share_bps=0):
-    team_money.save_money_settings(None, fee_payer="team", credit_share_bps=share_bps)
+def _teams_pay():
+    team_money.save_money_settings(None, fee_payer="team")
     db.session.commit()
 
 
@@ -71,7 +71,7 @@ class TestTeamFees:
         _in_the_book(after, fee=63)
 
         assert team_money.summary(team)["earned"] == 2 * (2500 - 63)
-        team_money.save_money_settings(None, fee_payer="association", credit_share_bps=0)
+        team_money.save_money_settings(None, fee_payer="association")
         assert team_money.summary(team)["earned"] == 5000
 
     def test_a_fee_not_known_yet_waits(self, rocket):
@@ -114,9 +114,7 @@ class TestTeamFees:
 
     def test_settings_refused(self, app):
         with pytest.raises(ValidationError):
-            team_money.save_money_settings(None, fee_payer="nobody", credit_share_bps=0)
-        with pytest.raises(ValidationError):
-            team_money.save_money_settings(None, fee_payer="team", credit_share_bps=2500)
+            team_money.save_money_settings(None, fee_payer="nobody")
 
 
 class TestCreditFees:
@@ -212,22 +210,23 @@ class TestCreditFees:
 
         assert (money["earned"], money["waiting_for_fee"]) == (0, 200)
 
-    def test_the_association_keeps_its_share_of_a_teams_sale(self, credit_on, rocket):  # noqa: F811
+    def test_a_share_kept_before_still_counts(self, credit_on, rocket):  # noqa: F811
         team, lead = rocket
         anna = _person()
         credit.book_cash(None, anna, 1000)
         beer = credit_sales.add_item(lead, team=team, name="Beer", price_cents=200)
-        credit_sales.sell(anna, beer)
-        _teams_pay(share_bps=300)
         sold = credit_sales.sell(anna, beer)
+        assert sold.kept_cents is None
+        sold.kept_cents = 6  # kept while the association could still set a share
         db.session.commit()
 
-        assert sold.kept_cents == 6
-        assert team_money.summary(team)["sales"]["earned"] == 200 + 194
+        found = team_money.statement(team)
+        assert [line.amount for line in found["lines"] if line.kind == "kept"] == [-6]
+        assert team_money.summary(team)["sales"]["earned"] == 194
 
         credit_sales.take_back(lead, sold)
         db.session.commit()
-        assert team_money.summary(team)["sales"]["earned"] == 200
+        assert team_money.summary(team)["sales"]["earned"] == 0
 
 
 class TestThroughTheApi:
@@ -235,11 +234,11 @@ class TestThroughTheApi:
         signed_in(client, _treasurer())
 
         saved = send(client, "PUT", "/api/v1/admin/money/settings",
-                     {"fee_payer": "team", "credit_share_bps": 250, "difference_emails": False})
+                     {"fee_payer": "team", "difference_emails": False})
 
         assert saved.status_code == 200 and saved.get_json()["changed"]
         assert client.get("/api/v1/admin/money/settings").get_json() == {
-            "fee_payer": "team", "credit_share_bps": 250, "difference_emails": False}
+            "fee_payer": "team", "difference_emails": False}
 
     def test_the_team_money_page_shows_the_statement(self, client, rocket):
         team, lead = rocket

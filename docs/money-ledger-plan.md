@@ -144,6 +144,11 @@ Either a or b could replace the "kept" percentage, or sit beside it.
   - Transfers themselves stay plain: the treasurer may transfer any amount,
     which counts against the open amount. The breakdown belongs to the
     amounts, not to a transfer.
+- **No share kept of team credit sales** (the maintainer, 2026-10-11, after
+  testing): the "Kept of what teams sell for credit" percentage goes. It
+  stood in for the top-up fees, which each sale now carries exactly, and
+  "the association doesn't want to make money from the teams". A sale that
+  kept a share before keeps it (`kept_cents`) and shows it as a line.
 - **No preview** before changing the fee setting. Nobody but the maintainer
   has used the money pages yet. On the live server so far there are only
   association and team signups, and leads' texts, logos and pictures, so

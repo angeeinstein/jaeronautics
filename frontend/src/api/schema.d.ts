@@ -950,9 +950,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Who carries Stripe's fees, the share kept of credit sales, and the emails about differences. */
+        /** Who carries Stripe's fees, and the emails about differences. */
         get: operations["admin_money_settings"];
-        /** Change them. Who carries the fees counts for all money at once; the share kept, for sales from now on. */
+        /** Change them. Who carries the fees counts for all money at once. */
         put: operations["admin_money_settings_save"];
         post?: never;
         delete?: never;
@@ -5570,8 +5570,6 @@ export interface components {
         };
         /** MoneySettings */
         MoneySettings: {
-            /** Credit Share Bps */
-            credit_share_bps: number;
             /**
              * Difference Emails
              * @default true

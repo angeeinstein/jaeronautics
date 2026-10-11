@@ -2,11 +2,10 @@
  * Admin › Money › Stripe's fees: who carries them -- the association, or the
  * teams: then Stripe's fee comes off each team fee, and each credit sale
  * carries its share of the fee of the top-up that paid for it. It counts for
- * all money at once, past and future (docs/money-ledger-plan.md). Apart from
- * that, a share the association keeps of what teams sell for credit, kept
- * with each sale from then on. Data: GET|PUT /api/v1/admin/money/settings.
+ * all money at once, past and future (docs/money-ledger-plan.md).
+ * Data: GET|PUT /api/v1/admin/money/settings.
  */
-import { Group, NumberInput, SegmentedControl, Stack, Text } from '@mantine/core';
+import { SegmentedControl, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -23,8 +22,7 @@ const settingsQuery = {
 
 function Form({ data }: { data: MoneySettings }) {
   const [payer, setPayer] = useState(data.fee_payer);
-  const [share, setShare] = useState<number | string>(data.credit_share_bps / 100);
-  const { save, errors, clear } = useSectionSave(['admin', 'money'], (body: MoneySettings) =>
+  const { save } = useSectionSave(['admin', 'money'], (body: MoneySettings) =>
     call(api.PUT('/api/v1/admin/money/settings', { body })),
   );
   return (
@@ -45,37 +43,14 @@ function Form({ data }: { data: MoneySettings }) {
         />
         <Text size="sm" c="dimmed">
           {payer === 'team'
-            ? "Each team fee counts less Stripe's fee for it, and each credit sale less its share of the fee of the top-up that paid for it. For all money, also what was paid before."
+            ? "Stripe's fee comes off each team fee, and off each credit sale its share of the top-up's fee."
             : 'Teams get what their members paid and what they sold, less refunds.'}
         </Text>
       </Stack>
-      <Group align="flex-end" gap="md">
-        <NumberInput
-          label="Kept of what teams sell for credit"
-          description="A share for the association, on top of any fee. For sales from now on."
-          inputWrapperOrder={['label', 'input', 'description', 'error']}
-          suffix=" %"
-          decimalScale={2}
-          min={0}
-          max={20}
-          allowNegative={false}
-          value={share}
-          error={errors.credit_share_bps}
-          onChange={(value) => {
-            setShare(value);
-            clear('credit_share_bps');
-          }}
-          maw={360}
-        />
-      </Group>
       <SaveBar
         busy={save.isPending}
         onSave={() => {
-          save.mutate({
-            fee_payer: payer,
-            credit_share_bps: Math.round(Number(share || 0) * 100),
-            difference_emails: data.difference_emails,
-          });
+          save.mutate({ fee_payer: payer, difference_emails: data.difference_emails });
         }}
       />
     </Stack>

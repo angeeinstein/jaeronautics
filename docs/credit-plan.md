@@ -165,8 +165,9 @@ Money, kept by the treasurer and admins. Since 2026-10-11
   the top-up that paid for it -- oldest top-up first, cash carrying none
   (`services/credit_fees.py`).
 - **For all money at once**, past and future: no payment keeps how it was.
-- **Kept of what teams sell for credit**, 0–20 % (default 0): a share for the
-  association on top, stored on each sale (`kept_cents`) from when it is set.
+- **Nothing kept** of what teams sell: the share the association could keep
+  went on 2026-10-11, the exact top-up fee replacing it. A sale that kept one
+  before still counts it (`kept_cents`).
 
 ## Card readers (designed, not built -- "not something we need to build now")
 

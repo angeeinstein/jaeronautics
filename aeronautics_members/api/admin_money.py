@@ -441,8 +441,6 @@ class MoneySettings(Model):
     #: Stripe's fees -- on team fees, and on the top-ups behind teams' credit sales: carried by
     #: the association, or taken from what the teams are owed. For every payment, past and future.
     fee_payer: Literal["association", "team"]
-    #: Of what a team sells for credit, the association keeps this share, in hundredths of a percent.
-    credit_share_bps: int = Field(ge=0, le=2000)
     #: Differences between Stripe and the portal emailed to the admins and the treasurer.
     difference_emails: bool = True
 
@@ -453,17 +451,16 @@ class MoneySettingsSavedOut(Model):
 
 @endpoint("GET", "/admin/money/settings", response=MoneySettings, permissions=PERMISSIONS, tag=TAG)
 def admin_money_settings():
-    """Who carries Stripe's fees, the share kept of credit sales, and the emails about differences."""
+    """Who carries Stripe's fees, and the emails about differences."""
     return MoneySettings(fee_payer="team" if money.teams_bear_fees() else "association",
-                         credit_share_bps=money.credit_share_bps(), difference_emails=money.difference_emails())
+                         difference_emails=money.difference_emails())
 
 
 @endpoint("PUT", "/admin/money/settings", response=MoneySettingsSavedOut, body=MoneySettings,
           permissions=PERMISSIONS, tag=TAG)
 def admin_money_settings_save(body):
-    """Change them. Who carries the fees counts for all money at once; the share kept, for sales from now on."""
+    """Change them. Who carries the fees counts for all money at once."""
     changed = money.save_money_settings(current_user, fee_payer=body.fee_payer,
-                                        credit_share_bps=body.credit_share_bps,
                                         difference_emails=body.difference_emails)
     db.session.commit()
     return MoneySettingsSavedOut(changed=changed)
