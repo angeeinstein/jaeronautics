@@ -82,6 +82,30 @@ So a penalty such as "no return this semester" makes little sense here.
   - The maintainer: "This is definitely something that feels right and that
     we could build."
 
+## Leading proposal (2026-10-11, the maintainer's idea) -- pending TDT
+
+**"Become passive" on the leave page,** beside "Leave" (wording later), when
+the team has the setting on.
+- **Both choices** end the subscription at the end of the paid period, as
+  leaving does today: nothing is paused at Stripe.
+  - With one payment per period there is nothing to cancel. Not paying
+    already ends the team membership with the period.
+- **When the paid period ends:** the team membership ends, marked passive
+  (no new active-like status).
+- **While passive**, until the rejoin limit (N months):
+  - shown on "Former members" as "Passive until <date>";
+  - gets the team's mailings when the team includes passive members;
+  - rejoins by paying, without applying;
+  - not on the access list, no team role in force, no fee.
+- **After the limit:** an ordinary former member -- no more team mailings, a
+  normal application to come back.
+- **Also possible:**
+  - a lead sets somebody passive from their page (TDT's rules allow it);
+  - the email saying a team membership ended (not paid, payment failed)
+    offers "become passive" as a link -- the person's choice, not automatic.
+- **This replaces "Keep me informed".** Becoming passive is the same thing
+  plus the right to come back.
+
 ## Open -- to be discussed with TDT first
 
 - **"Keep me informed":** still to be scoped, and its name too.
