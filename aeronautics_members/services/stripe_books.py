@@ -223,7 +223,11 @@ def _compare_balance(current):
     def eur(entries):
         return sum(int(entry.get("amount") or 0) for entry in entries or [] if entry.get("currency") == CURRENCY)
 
-    current.stripe_balance_cents = eur(balance.get("available")) + eur(balance.get("pending"))
+    # Available and incoming, and what was moved to the Issuing balance (cards
+    # Stripe issues): moving it there is a booking of the book, so it counts.
+    issuing = balance.get("issuing") or {}
+    current.stripe_balance_cents = (eur(balance.get("available")) + eur(balance.get("pending"))
+                                    + eur(issuing.get("available")))
     current.books_balance_cents = int(db.session.execute(
         db.select(db.func.coalesce(db.func.sum(StripeBooking.net_cents), 0))
     ).scalar() or 0)

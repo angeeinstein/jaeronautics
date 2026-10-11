@@ -1283,8 +1283,12 @@ the copy is only added to.
   fetch), at least hourly by the external-work worker, and on *Fetch from
   Stripe now*. Each fetch asks for what is new since the last, with three
   days' overlap; the very first reads the whole book, in the background.
-  The copy's sum is compared with what Stripe says it holds; the page says
-  whether they match, and shows a failed fetch's reason.
+  The copy's sum is compared with what Stripe says it holds -- available,
+  incoming, and the Issuing balance (money moved there is a booking too);
+  the page says whether they match, and shows a failed fetch's reason. When
+  they do not, `flask stripe-books-explain` reads the whole book once more
+  (read-only) and lists Stripe's balance by part, the bookings by type, and
+  any booking only one side has.
 - **The overview**, for any period, at once: received, bounced, refunded,
   taken back, Stripe's fees and net, per product; Stripe's own fees and
   transfers to the bank; on the last day what was in Stripe, of which the

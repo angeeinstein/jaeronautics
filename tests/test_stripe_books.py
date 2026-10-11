@@ -168,6 +168,15 @@ class TestFetching:
         assert stripe_books.sync()["added"] == 1
         assert db.session.query(StripeBooking).count() == len(stripe_account["txns"])
 
+    def test_the_issuing_balance_counts_too(self, app, stripe_account):
+        # €90 moved to the Issuing balance: booked in the book, held apart by Stripe.
+        stripe_account["balance"]["pending"][0]["amount"] -= 9000
+        stripe_account["balance"]["issuing"] = {"available": [{"amount": 9000, "currency": "eur"}]}
+
+        stripe_books.sync()
+
+        assert stripe_books.state().stripe_balance_cents == stripe_books.state().books_balance_cents
+
     def test_the_balance_is_compared_with_stripes(self, app, stripe_account):
         stripe_books.sync()
         state = stripe_books.state()
@@ -451,3 +460,15 @@ def test_a_bounced_debit_paid_again_is_one_invoice_and_no_difference(app, stripe
 
     assert (money_checks.TAKEN_BACK_IN_STRIPE, "in_m1") not in found
     assert not stripe_books.fetching()
+
+
+def test_the_explanation_compares_the_copy_with_stripe(app, stripe_account):
+    stripe_books.sync()
+    db.session.commit()
+    stripe_account["txns"].append(_txn("txn_late", "adjustment", -9000, "du_late"))
+
+    result = app.test_cli_runner().invoke(args=["stripe-books-explain"])
+
+    assert result.exit_code == 0, result.output
+    assert "In Stripe, not in the copy: 1 ['txn_late']" in result.output
+    assert "available: 1000" in result.output and "adjustment: 1, -9000" in result.output

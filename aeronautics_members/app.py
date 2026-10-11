@@ -4298,6 +4298,57 @@ def create_app(config_overrides=None):
         if failed:
             raise click.ClickException(f"{failed} PDF(s) could not be made.")
 
+    @app.cli.command("stripe-books-explain")
+    @with_appcontext
+    def stripe_books_explain():
+        """Why the copy of Stripe's book and Stripe's balance differ: both, part by part.
+
+        Reads the whole book from Stripe once more (read-only), and says which
+        bookings Stripe lists that the copy lacks, which the copy has that Stripe
+        no longer lists, and what Stripe's balance is made of.
+        """
+        import stripe as stripe_api
+
+        from .db_models import StripeBooking
+        from .services import payments as payments_service
+
+        payments_service.apply_runtime_stripe_config()
+        balance = stripe_api.Balance.retrieve()
+        click.echo("Stripe's balance, by part (EUR, cents):")
+        def eur(entries):
+            return sum(int(entry.get("amount") or 0) for entry in entries if entry.get("currency") == "eur")
+
+        for part in sorted(balance.keys()):
+            entries = balance.get(part)
+            if isinstance(entries, list):
+                click.echo(f"  {part}: {eur(entries)}")
+            elif hasattr(entries, "get") and isinstance(entries.get("available"), list):
+                click.echo(f"  {part} (available): {eur(entries.get('available'))}")
+        listed = {}
+        for txn in stripe_api.BalanceTransaction.list(limit=100).auto_paging_iter():
+            listed[txn["id"]] = txn
+        copy = {booking.stripe_id: booking for booking in db.session.execute(db.select(StripeBooking)).scalars()}
+        eur = {key: txn for key, txn in listed.items() if (txn.get("currency") or "eur") == "eur"}
+        click.echo(f"Bookings Stripe lists: {len(listed)} ({len(eur)} in EUR), "
+                   f"sum of net in EUR: {sum(int(txn.get('net') or 0) for txn in eur.values())}")
+        click.echo(f"Bookings in the copy: {len(copy)}, sum of net: {sum(b.net_cents for b in copy.values())}")
+        by_type = {}
+        for txn in eur.values():
+            row = by_type.setdefault(txn.get("type"), [0, 0, set()])
+            row[0] += 1
+            row[1] += int(txn.get("net") or 0)
+            row[2].add(txn.get("status"))
+        click.echo("Stripe's EUR bookings by type (count, sum of net, statuses):")
+        for kind, (count, net, statuses) in sorted(by_type.items()):
+            click.echo(f"  {kind}: {count}, {net}, {', '.join(sorted(str(s) for s in statuses))}")
+        missing = [key for key in eur if key not in copy]
+        extra = [key for key in copy if key not in listed]
+        click.echo(f"In Stripe, not in the copy: {len(missing)} {missing[:20]}")
+        click.echo(f"In the copy, not listed by Stripe: {len(extra)} {extra[:20]}")
+        other = [key for key, txn in listed.items() if key not in eur]
+        if other:
+            click.echo(f"Bookings in other currencies: {len(other)}")
+
     @app.cli.command("process-external-work")
     @click.option("--limit", default=50, show_default=True, type=int,
                   help="Maximum number of work items to process in this run.")

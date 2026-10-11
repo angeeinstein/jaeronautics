@@ -46,7 +46,7 @@ function Sums({ statement }: { statement: Statement }) {
           <Table.Th scope="row" fw={400}>
             Transferred to the team
           </Table.Th>
-          <Amount cents={-statement.transferred} />
+          <Amount cents={-statement.transferred || 0} />
         </Table.Tr>
         <Table.Tr className={classes.total}>
           <Table.Th scope="row">Open</Table.Th>
