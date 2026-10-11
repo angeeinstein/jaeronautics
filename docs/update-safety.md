@@ -1,8 +1,7 @@
 # Updates that undo a failed migration
 
 Agreed 2026-10-11, after the update to pull request #30 failed on the live
-server. To build: `docs/todo.md`, "Updates: a failed migration undoes itself".
-Built already: CI runs every migration on MariaDB (job `migrations-mariadb`,
+server. Built: the undo (below), and CI runs every migration on MariaDB (job `migrations-mariadb`,
 `docs/maintenance.md`, "Continuous Integration"), which would have stopped
 that migration before `main`.
 
@@ -43,37 +42,56 @@ undone. `--rollback` restores the code only and leaves the schema.
   message. They do: nginx already shows `static/maintenance.html` with a 503
   whenever the app does not answer, and Stripe resends its webhooks.
 
-## The change
+## How it works (built 2026-10-11)
 
-**Only when the new code brings a migration** (the database's Alembic
-revision differs from the new code's head, checked after step 5 with the new
-code's `flask db current`/`heads`). Otherwise the update runs exactly as
-today.
+`install.sh`, `migrate_database_for_update` (called by `install_or_update`
+for an update; a fresh install and a database move migrate as before):
 
-1. Stop the app and its timers (the maintenance page shows), then take a
-   database dump *now*, so nothing written since is lost if it has to be
-   restored. The dump from step 2 stays as it is.
-2. Run `db-init`.
-3. If it fails:
-   - load that dump back into the database (drop and recreate it first:
-     a half-run migration leaves tables the dump does not drop);
-   - put the code back at the rollback point (`git checkout` of the recorded
-     revision, its Python packages, its front end build -- the installer
-     keeps earlier builds for a rollback);
-   - start the app and its timers, check `/__health`;
-   - say in the log and on the Updates page what failed and that the
-     previous version runs again, with the failing migration's message.
-4. If it succeeds: as today.
+- `flask db-pending` -- the new code's migration heads against the
+  database's -- says yes or no. **No:** `db-init` as before, no stop.
+  **Yes, or it cannot tell:** the careful way.
+- Stop the app (the timers are paused already), dump the database
+  (`dump_database_before_migration`: verified like any dump here, row counts
+  kept), run `db-init`.
+- **It fails:** drop every table, load the dump, compare the row counts
+  (`restore_database_before_migration`); then `roll_back_installation` -- the
+  rollback point's revision checked out, its packages, its front end (kept in
+  `/var/cache/jaeronautics/frontend`), units, restart -- and the update ends
+  failed, saying it was undone. If the previous version is this same code (an
+  update run again after a failure), it is only started again.
+- **The dump fails:** nothing migrated; the previous code put back the same way.
+- **Putting back fails:** `on_error` says so and leaves the portal stopped
+  behind the maintenance page, naming the dump.
+- **A later step fails after a migration that went through:** the portal is
+  started again on the new code, which fits the migrated database.
 
-If the undo itself fails, stop with the app down, the maintenance page
-showing, and the dump's path in the log -- not half-updated.
+The decision how to undo lives in the installer of the version being
+installed (the update re-runs the new `install.sh`), so it takes effect from
+the first update *after* the one that brings it.
 
-## Open
+Tested by `tests/test_install_update_undo.sh` against a real MariaDB, with a
+migration that stops part way as the live one did: a table made, a column
+dropped, a row changed, then an error. The database comes back exactly
+(every table's definition and rows). In CI: `installer-mariadb`.
 
-- The check for "brings a migration" needs the new code's packages installed
-  (step 6 comes before it), or a lighter look at `migrations/versions`.
-- Whether the test server should get a branch with a migration that fails on
-  purpose, for the maintainer to watch the undo once (proposed: yes, not
-  merged).
-- `tests/test_install_*.sh` style shell test for the undo, or only the run on
-  the test server.
+## Trying it on the test server
+
+Branch `claude/update-undo-trial` adds a migration that fails on purpose --
+only on a server that has the file `/etc/jaeronautics/undo-trial`; anywhere
+else it does nothing, so its CI passes. On the test server:
+
+1. Update to `claude/update-undo` first (the undo has to be in the installed
+   version, see above).
+2. `sudo touch /etc/jaeronautics/undo-trial`, then update to
+   `claude/update-undo-trial`. Expected: the maintenance page for about a
+   minute, the update failing with "The update was undone", the portal back
+   on `claude/update-undo` with its data as before.
+3. `sudo rm /etc/jaeronautics/undo-trial`, and update to the branch to be
+   used next. The trial branch is not merged.
+
+**Tried 2026-10-11** on the test server, twice. The migration failed after
+making its table; the database came back with identical row counts; the
+previous version was put back and verified; the portal was down for about 8
+seconds. The second time also showed the two changes that came of the
+first: an open page said "Update in progress" and loaded again by itself, and
+the update ended with its own message only.

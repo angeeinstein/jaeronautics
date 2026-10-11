@@ -5,6 +5,7 @@ leaves its earlier steps done while the database still counts as before it.
 The first run of e2b7c4f9a1d3 on the live server stopped that way, at its last
 step; the next update runs it again over what it had already done.
 """
+from alembic.script import ScriptDirectory
 from flask_migrate import stamp, upgrade
 from sqlalchemy import inspect, text
 
@@ -24,8 +25,23 @@ def test_the_stripe_books_migration_finishes_after_stopping_at_its_last_step(tmp
 
         upgrade()
 
-        assert db.session.execute(text("SELECT version_num FROM alembic_version")).scalar() == "e2b7c4f9a1d3"
+        head = ScriptDirectory.from_config(app_module.migrate.get_config()).get_current_head()
+        assert db.session.execute(text("SELECT version_num FROM alembic_version")).scalar() == head
         assert db.session.execute(text("SELECT COUNT(*) FROM setting")).scalar() == 0
         inspector = inspect(db.engine)
         assert {"stripe_bookings", "stripe_books_state", "money_differences"} <= set(inspector.get_table_names())
         assert "team_bears_fee" not in {column["name"] for column in inspector.get_columns("payments")}
+
+
+def test_db_pending_says_whether_the_code_brings_migrations(tmp_path):
+    """install.sh asks it before an update: only one that migrates stops the portal."""
+    app = app_module.create_app(config_overrides={
+        "TESTING": True, "SECRET_KEY": "x", "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path}/pending.db"})
+    runner = app.test_cli_runner()
+    assert runner.invoke(args=["db-pending"]).output.strip() == "yes"  # no schema yet
+    with app.app_context():
+        upgrade()
+    assert runner.invoke(args=["db-pending"]).output.strip() == "no"
+    with app.app_context():
+        stamp(revision="d7a3e9c2f5b1")
+    assert runner.invoke(args=["db-pending"]).output.strip() == "yes"

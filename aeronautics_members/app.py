@@ -1269,6 +1269,23 @@ def create_app(config_overrides=None):
             click.echo(f"Error preparing database: {e}", err=True)
             sys.exit(1)
 
+    @app.cli.command("db-pending")
+    @with_appcontext
+    def db_pending():
+        """Whether this code brings migrations the database has not had: prints yes or no.
+
+        Asked by install.sh before an update migrates, so that only an update
+        that changes the schema stops the portal and backs up the database first
+        (docs/update-safety.md). A database with no schema yet counts as yes.
+        """
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+
+        heads = set(ScriptDirectory.from_config(migrate.get_config()).get_heads())
+        with db.engine.connect() as connection:
+            current = set(MigrationContext.configure(connection).get_current_heads())
+        click.echo("no" if current == heads else "yes")
+
     @app.cli.command("i18n-init")
     def i18n_init():
         """Initializes or updates the translation files."""

@@ -227,6 +227,18 @@ on_error() {
     local line="$1"
     local command="$2"
     error "Installer failed at line ${line}: ${command}"
+    if [[ "${UNDO_STATE:-0}" == "2" ]]; then
+        # Putting the previous version back failed: the portal stays stopped,
+        # behind the maintenance page, rather than run half updated.
+        error "This happened while undoing an update whose database migration had failed."
+        error "The portal is stopped and visitors see the maintenance page. The backup taken"
+        error "before the migration is ${UNDO_DUMP_FILE:-missing}; see docs/update-safety.md."
+    elif [[ "${UNDO_STATE:-0}" == "1" ]]; then
+        # Stopped for the migration, which went through; a later step failed.
+        # The new code fits the migrated database, so it is started again.
+        warn "Starting the portal again: its database migration had gone through."
+        systemctl start "${SERVICE_NAME}" 2>/dev/null || true
+    fi
     # Never leave billing, notifications and forum syncs switched off because
     # an update stopped halfway.
     resume_background_jobs_after_failure || true
@@ -1377,6 +1389,7 @@ bootstrap_self_update() {
     chmod +x "${bootstrap_target}/install.sh"
 
     step "Re-running installer from the latest repository copy"
+    local status=0
     env \
         SELF_REEXEC_MARKER=1 \
         BOOTSTRAP_MODE="${MODE}" \
@@ -1396,8 +1409,13 @@ bootstrap_self_update() {
         BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
         BOOTSTRAP_NONINTERACTIVE="${NONINTERACTIVE}" \
         BOOTSTRAP_PRE_UPDATE_REVISION="${PRE_UPDATE_REVISION}" \
-        bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}"
-    exit $?
+        bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}" || status=$?
+    # An update that undid itself has said all there is to say; any other
+    # failure gets its diagnostics here, as before.
+    if (( status != 0 && status != UPDATE_UNDONE_STATUS )); then
+        (exit "${status}")
+    fi
+    exit "${status}"
 }
 
 detect_db_service_name() {
@@ -2323,6 +2341,140 @@ verify_migrated_database() {
 initialize_database_schema() {
     step "Initializing database schema"
     run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/flask" --app aeronautics_members.app:create_app db-init
+}
+
+# --- An update whose migration fails undoes itself (docs/update-safety.md) ---
+#
+# MariaDB commits each table change at once, so a migration that fails part
+# way leaves its earlier steps done: once that left the live server with new
+# code on disk, the old app running and a half-migrated database. So an update
+# that brings a migration stops the portal (nginx shows its maintenance page),
+# dumps the database, then migrates -- and if that fails, loads the dump back,
+# returns to the rollback point's code and starts it again. An update without
+# a migration runs as before, with no downtime beyond the restart.
+UNDO_DUMP_FILE=""
+UNDO_TABLE_COUNTS=""
+# The exit status of an update that failed and undid itself: failed, but
+# explained, so the installer that started it adds no diagnostics.
+UPDATE_UNDONE_STATUS=3
+# 1 from the stop until the app runs again; 2 while the undo itself runs.
+UNDO_STATE=0
+
+# Whether the checked-out code brings migrations the database has not had:
+# yes, no, or unknown -- which is treated like yes.
+schema_migration_pending() {
+    local answer
+    answer="$(run_as_app_user env PYTHONPATH="${INSTALL_DIR}" "${INSTALL_DIR}/.venv/bin/flask" \
+        --app aeronautics_members.app:create_app db-pending 2>/dev/null | tail -n 1 || true)"
+    case "${answer}" in
+        yes|no) printf '%s\n' "${answer}" ;;
+        *) printf 'unknown\n' ;;
+    esac
+}
+
+# A dump taken with the portal stopped, so nothing written after it is lost
+# if it has to be loaded back; and its tables' row counts, to check that.
+dump_database_before_migration() {
+    step "Backing up the database before the migration"
+    local dump_client
+    if ! dump_client="$(db_dump_client)"; then
+        error "Neither mariadb-dump nor mysqldump is installed."
+        return 1
+    fi
+    mkdir -p "${BACKUP_DIR}"
+    chmod 700 "${BACKUP_DIR}" 2>/dev/null || true
+    UNDO_DUMP_FILE="${BACKUP_DIR}/${APP_NAME}-db-before-migration-$(date +%Y%m%d%H%M%S).sql"
+    set_db_conn_args "${DB_HOST}" "${DB_PORT}" "${DB_USER}" "${DB_PASSWORD}"
+    if ! "${dump_client}" "${DB_CONN_ARGS[@]}" --single-transaction --quick --skip-lock-tables \
+         --routines --triggers --default-character-set=utf8mb4 "${DB_NAME}" > "${UNDO_DUMP_FILE}"; then
+        rm -f "${UNDO_DUMP_FILE}"
+        return 1
+    fi
+    chmod 600 "${UNDO_DUMP_FILE}"
+    verify_sql_dump "${UNDO_DUMP_FILE}" || return 1
+    UNDO_TABLE_COUNTS="$(db_table_row_counts "${DB_NAME}")"
+    [[ -n "${UNDO_TABLE_COUNTS}" ]]
+}
+
+# Every table dropped -- a half-run migration leaves tables the dump knows
+# nothing of -- then the dump loaded, and checked table by table.
+restore_database_before_migration() {
+    step "Putting the database back as it was before the migration"
+    local client table counts drops=""
+    client="$(db_client)"
+    set_db_conn_args "${DB_HOST}" "${DB_PORT}" "${DB_USER}" "${DB_PASSWORD}"
+    while IFS= read -r table; do
+        [[ -n "${table}" ]] && drops+="DROP TABLE IF EXISTS \`${table}\`;"
+    done < <("${client}" "${DB_CONN_ARGS[@]}" -N -B -e "
+        SELECT table_name FROM information_schema.tables
+         WHERE table_schema = '$(sql_escape "${DB_NAME}")' AND table_type = 'BASE TABLE'")
+    "${client}" "${DB_CONN_ARGS[@]}" "${DB_NAME}" -e "SET FOREIGN_KEY_CHECKS=0; ${drops} SET FOREIGN_KEY_CHECKS=1;"
+    "${client}" "${DB_CONN_ARGS[@]}" --default-character-set=utf8mb4 "${DB_NAME}" < "${UNDO_DUMP_FILE}"
+    counts="$(db_table_row_counts "${DB_NAME}")"
+    if [[ "${counts}" != "${UNDO_TABLE_COUNTS}" ]]; then
+        error "The database does not match the backup after loading it back. Differences (< backup, > now):"
+        diff <(printf '%s\n' "${UNDO_TABLE_COUNTS}") <(printf '%s\n' "${counts}") | sed 's/^/    /' >&2 || true
+        return 1
+    fi
+    success "Database back as before the update: $(printf '%s' "${counts}" | grep -c .) tables, row counts identical."
+}
+
+# The rollback point's code, its packages and front end, started again. If the
+# previous version is this very code -- an update run again after one that
+# failed -- there is nothing to go back to, and it is only started again.
+undo_update_code() {
+    roll_back_installation
+    if ! systemctl is-active --quiet "${SERVICE_NAME}"; then
+        reload_services
+    fi
+    UNDO_STATE=0
+}
+
+migrate_database_for_update() {
+    local pending
+    pending="$(schema_migration_pending)"
+    if [[ "${pending}" == "no" ]]; then
+        initialize_database_schema
+        return 0
+    fi
+    if [[ "${pending}" == "unknown" ]]; then
+        warn "Could not tell whether this update changes the database; treating it as one that does."
+    fi
+
+    step "Stopping the portal for the database migration"
+    info "Visitors see the maintenance page until the portal starts again, usually within a minute."
+    UNDO_STATE=1
+    systemctl stop "${SERVICE_NAME}"
+    # The jobs as well, not only their timers: one still running after the
+    # pause's wait would write past the dump -- lost, or in the way, if it is
+    # loaded back. systemctl stop returns once each has ended; a job cut short
+    # is taken up again by its next run, as after any restart.
+    local job
+    for job in "${BACKGROUND_JOBS[@]}"; do
+        systemctl stop "${SERVICE_NAME}-${job}.service" 2>/dev/null || true
+    done
+
+    # Both in an if, so a failure comes here rather than to on_error.
+    if ! dump_database_before_migration; then
+        UNDO_STATE=2
+        error "The database could not be backed up, so nothing was migrated. Putting the previous version back."
+        undo_update_code
+        update_undone "The update was undone before migrating: the database could not be backed up first (above). The previous version runs again; nothing in the database was changed."
+    fi
+    if initialize_database_schema; then
+        return 0
+    fi
+
+    UNDO_STATE=2
+    error "The database migration failed (above). Putting the database and the previous version back."
+    restore_database_before_migration
+    undo_update_code
+    update_undone "The update was undone: its database migration failed, so the database is as it was before the update and the previous version runs again. Fix the migration and update again. The backup taken before the migration: ${UNDO_DUMP_FILE}"
+}
+
+update_undone() {
+    error "$*"
+    exit "${UPDATE_UNDONE_STATUS}"
 }
 
 count_admin_accounts() {
@@ -3301,6 +3453,10 @@ reload_services() {
     # the app runs the freshly deployed code.
     systemctl enable "${SERVICE_NAME}"
     systemctl restart "${SERVICE_NAME}"
+    # Running again: no longer stopped for a migration (migrate_database_for_update).
+    if [[ "${UNDO_STATE:-0}" == "1" ]]; then
+        UNDO_STATE=0
+    fi
     # Timers restarted for the same reason, and one more: a timer stuck
     # "elapsed" with no next trigger stays stuck under enable --now, because it
     # counts as running. Restarting re-arms it from its new definition.
@@ -3504,7 +3660,12 @@ install_or_update() {
     if [[ "${MIGRATE_DB_DATA}" == "1" ]]; then
         import_migrated_database
     fi
-    initialize_database_schema
+    if [[ "${INSTALLATION_EXISTS}" == "1" && "${MIGRATE_DB_DATA}" != "1" ]]; then
+        # An update: one that brings a migration undoes itself if it fails.
+        migrate_database_for_update
+    else
+        initialize_database_schema
+    fi
     ensure_admin_account
     render_service_file
     render_billing_reconcile_timer_files

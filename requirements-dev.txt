@@ -1,7 +1,7 @@
 # Development and test dependencies.
 # Install with:  pip install -r requirements.txt -r requirements-dev.txt
 -r requirements.txt
-pytest==8.3.4
+pytest==9.0.3
 # Runs the tests on every core: python -m pytest -n auto
 pytest-xdist==3.8.0
 ruff==0.15.22

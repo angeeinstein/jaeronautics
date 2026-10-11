@@ -281,10 +281,35 @@ jobs:
       - name: Again, with nothing to do
         run: python -m flask --app aeronautics_members.app:create_app db-init
 
+  installer-mariadb:
+    # install.sh's own database steps against a real MariaDB: moving a
+    # database, and an update whose migration fails undoing itself
+    # (tests/test_install_*.sh). In a plain Ubuntu 24.04 with Ubuntu's
+    # MariaDB, as on the servers; as root, as the installer runs.
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
+    runs-on: ubuntu-24.04
+    container: ubuntu:24.04
+    steps:
+      - name: MariaDB, as on the servers
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
+            mariadb-server mariadb-client git ca-certificates
+          service mariadb start
+
+      - uses: actions/checkout@v7
+
+      - name: Moving a database
+        run: bash tests/test_install_db_migration.sh
+
+      - name: An update whose migration fails
+        run: bash tests/test_install_update_undo.sh
+
   passed:
     # Everything above passed on these files: the mark job "tested" looks for.
     # Every job that tests belongs in "needs" here.
-    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb]
+    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb, installer-mariadb]
     if: needs.tested.outputs.already != 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -307,7 +332,7 @@ jobs:
     # Also when the tests were skipped because these files passed already;
     # never when one of them failed.
     if: github.event_name == 'push' && !failure() && !cancelled()
-    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb]
+    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb, installer-mariadb]
     runs-on: ubuntu-24.04
     # A build that could not be published is not a failed commit: the
     # installer then builds it itself.

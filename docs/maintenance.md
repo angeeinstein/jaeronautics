@@ -137,9 +137,34 @@ after the update therefore stays. If you also need the data as it was, the
 rollback point names the dump taken just before the update, and you restore it
 by hand.
 
+**An update that changes the database undoes itself if that fails**
+(`docs/update-safety.md`). Before migrating, the installer asks the new code
+whether it brings migrations the database has not had (`flask db-pending`).
+If not, the update runs as described below. If so (or if that cannot be
+told):
+
+1. the portal is stopped, and its background jobs with it (not only their
+   timers: one still running would write past the dump) -- visitors see the
+   maintenance page (below), usually for under a minute;
+2. the database is dumped (`/var/backups/jaeronautics/jaeronautics-db-before-migration-*.sql`,
+   checked for completeness, with every table's row count);
+3. the migration runs.
+
+If the migration fails, every table is dropped (a migration that stopped part
+way leaves its earlier steps done: MariaDB commits each table change at once),
+the dump is loaded back and checked table by table, the rollback point's code
+is put back with its packages and front end, and the portal starts again. The
+update then ends as failed, saying it was undone (exit status 3, which the
+installer that started it passes on without a page of diagnostics); the
+Updates page shows the migration's error above. If the dump cannot be taken, nothing is migrated and
+the previous code is put back the same way. If putting things back fails
+itself, the portal stays stopped behind the maintenance page rather than run
+half updated, and the log names the dump. Tested against MariaDB by
+`tests/test_install_update_undo.sh` (in CI: `installer-mariadb`).
+
 **While an update runs**, the portal keeps serving the old code until the
-restart at the end; usually that is a few seconds, longer when new packages
-are installed. Meanwhile:
+restart at the end -- unless it changes the database (above); usually that is
+a few seconds, longer when new packages are installed. Meanwhile:
 
 - **Background jobs are paused** (billing reconcile, notifications, log
   cleanup, forum drift, external work): their timers stop before the new code
@@ -156,7 +181,11 @@ are installed. Meanwhile:
   Stripe's checkout page is not affected; if they come back during the
   restart, they see this page and are told their payment is not lost. It
   cannot show when the whole server or the Cloudflare tunnel is down: then
-  Cloudflare shows its own error page.
+  Cloudflare shows its own error page. A page already open, whose requests
+  get that answer, says "Update in progress" instead of an error and loads
+  again by itself every five seconds (`ErrorState`, `components/States.tsx`;
+  a part with no way to ask again reloads the whole page, which then is
+  nginx's page until the portal is back).
 
 **Before starting one**, the Install panel says whether anybody else is using
 the portal right now, on which pages, and whether somebody is typing
@@ -2155,6 +2184,11 @@ The jobs run side by side:
   `flask db-init` as an install or update runs them; then once more, with
   nothing to do. The tests use SQLite, which accepts SQL MariaDB refuses
   (`docs/update-safety.md`).
+- **installer-mariadb** -- `install.sh`'s own database steps against a real
+  MariaDB, in a plain Ubuntu 24.04 container: moving a database
+  (`tests/test_install_db_migration.sh`), and an update whose migration fails
+  undoing itself (`tests/test_install_update_undo.sh`). Both also run on any
+  machine with MariaDB, as root.
 - **passed** -- once all of the above passed: leaves the mark (an artifact
   `ci-passed-<tree>`, kept 30 days).
 - **publish-frontend** -- on a push, once the tests passed or were skipped

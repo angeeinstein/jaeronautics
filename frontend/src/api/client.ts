@@ -142,12 +142,25 @@ export async function call<T>(request: Promise<Answer<T>>): Promise<T> {
       body.error.details,
     );
   }
+  // nginx's own answer while the portal restarts -- an update -- rather than one
+  // of the portal's: ErrorState waits it out and loads again by itself.
+  if (UPDATING_STATUSES.has(response.status)) {
+    throw new ApiError(
+      response.status,
+      UPDATING,
+      'The portal is being updated. This loads again by itself in a moment.',
+    );
+  }
   throw new ApiError(
     response.status,
     'unexpected',
     'Something went wrong on our side. Please try again later.',
   );
 }
+
+/** The code of an ApiError raised while the portal is down for an update or restart. */
+export const UPDATING = 'updating';
+const UPDATING_STATUSES = new Set([502, 503, 504]);
 
 /** For tests: forget the token, as a new page load would. */
 export function resetCsrfToken(): void {
