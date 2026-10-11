@@ -13,33 +13,20 @@ The legal drafts and the card readers below were put off by the maintainer.
 
 ## Open
 
-### Money: the check against Stripe runs on its own
+### Money: Stripe's books kept in the portal (fees, credit, automatic check)
 
 - **Added:** 2026-10-11
-- **What:** the check on Admin › Money (*Check against Stripe*,
-  `services/money_overview.py`, `overview()`) also runs by itself. Today it
-  runs only when somebody presses the button. The maintainer: "this could
-  also happen automatically ... once a day or once a week at least".
-- **Proposed** (to confirm with the maintainer):
-  - **Every night**, as one more step of `reconcile-billing` (`app.py`, the
-    nightly steps in `docs/maintenance.md`).
-  - **Only the invoice-by-invoice check, over the last 40 days** -- long
-    enough for SEPA debits and Stripe's retries. Not the totals: they page
-    through Stripe's whole history, and stay on the button.
-  - **A difference is emailed** to the admins and the treasurer, once per
-    invoice. One that disappears later counts as resolved itself, like the
-    admin error emails (`RESOLVED_WHEN` in `notification_service.py`).
-  - **Admin › Money** shows the last automatic check: when it ran, and "all
-    match" or the differences.
-- **Found while looking:** credit top-ups are not part of it. Stripe's
-  top-ups land under *Other* with the webshop and events, and nothing checks
-  them against the portal's credit payments (`Payment.purpose == "credit"`).
-  Proposed: a *Credit* row of their own in the totals, and a check that each
-  top-up in Stripe is a credit payment in the portal and the other way round.
-- **Open:**
-  - every night, or once a week;
-  - who gets the email (admins and the treasurer, or the treasurer only);
-  - whether credit goes in the same change.
+- **What:** keep Stripe's bookings in the database instead of fetching all
+  of them on every check. The check runs on its own. Stripe's fees come off
+  what a team is owed when the team carries them. Credit is counted too,
+  including the top-up fees.
+- **Where:** Admin › Money; `services/money_overview.py`,
+  `services/team_money.py`, `services/credit_sales.py`,
+  `services/money_settings.py`; the nightly steps.
+- **Why, what was said, the proposal and the open questions:**
+  `docs/money-ledger-plan.md`.
+- **Not small:** a feature of its own, built once the open questions are
+  answered.
 
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
