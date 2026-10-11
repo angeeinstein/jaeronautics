@@ -126,11 +126,32 @@ Either a or b could replace the "kept" percentage, or sit beside it.
 - **Emails about differences:** to the admins and the treasurer, with a
   switch to turn them off.
 
+- **Every figure shows how it came about** (the maintainer, 2026-10-11,
+  extending idea 6):
+  - What Stripe keeps -- a fee on a refunded payment, a top-up fee on credit
+    refunded unused, a chargeback fee -- always appears as its own line in
+    the calculation, never folded silently into a total.
+  - A team's **earned** and **open** amounts each get a detailed breakdown
+    ending in the total:
+    - payments, with Stripe's fee where the team carries it;
+    - refunds and chargebacks;
+    - credit sales, with their share of the top-up fee and which top-up
+      paid them;
+    - transfers.
+
+    "So that it's really easy to understand how this number came into
+    existence."
+  - Transfers themselves stay plain: the treasurer may transfer any amount,
+    which counts against the open amount. The breakdown belongs to the
+    amounts, not to a transfer.
+- **No preview** before changing the fee setting. Nobody but the maintainer
+  has used the money pages yet. On the live server so far there are only
+  association and team signups, and leads' texts, logos and pictures, so
+  nothing to protect retroactively.
+
 ## Open (none blocking)
 
-- Further ideas offered on 2026-10-11, waiting for the maintainer's choice:
-  - a preview of the effect before the fee setting is changed;
-  - each payment and sale broken down on the teams' Money pages;
+- Further ideas offered on 2026-10-11, not answered yet:
   - Stripe's transfers to the bank matched to their bookings;
   - an export for the accounts;
   - splitting *Other* into webshop and events.
