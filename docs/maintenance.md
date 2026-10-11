@@ -2135,7 +2135,8 @@ versions the servers run (Ubuntu 24.04, pinned; Python 3.12; Node.js 24).
 The jobs run side by side:
 
 - **tested** -- first, seconds: whether these very files passed CI already
-  (below). If so, the next four are skipped.
+  (below). Only if so are the tests skipped -- if this job itself fails,
+  they all run.
 - **test** -- `ruff check` and the pytest suite. The tests use SQLite, so CI
   needs no database or other services.
 - **frontend** -- whether the API's types are current, the type check, ESLint,
@@ -2144,7 +2145,11 @@ The jobs run side by side:
   sample data (Playwright), in three parts on three runners
   (`--shard=1/3` ...). Each part starts its own server on a fresh database,
   so no part sees what another saved; together they are every test once.
-  Traces of failed tests are kept for a week.
+  Traces of failed tests are kept for a week. The parts are `e2e (1/3)` …;
+  the check the branch rules require, `e2e`, is a job of its own that is
+  green only if all three passed (or none ran, the files having passed
+  already) -- GitHub counts a skipped required check as passed, so it is
+  never skipped.
 - **migrations-mariadb** -- every migration on an empty MariaDB 10.11 (Ubuntu
   24.04's, as on the servers), created as `install.sh` creates it, through
   `flask db-init` as an install or update runs them; then once more, with

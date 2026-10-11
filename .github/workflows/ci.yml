@@ -60,7 +60,7 @@ jobs:
 
   test:
     needs: tested
-    if: needs.tested.outputs.already != 'true'
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -90,7 +90,7 @@ jobs:
 
   frontend:
     needs: tested
-    if: needs.tested.outputs.already != 'true'
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -142,12 +142,13 @@ jobs:
       - name: Build
         run: npm run build
 
-  e2e:
+  e2e-parts:
     # Beside the other jobs rather than after them, in three parts. Each part
     # starts its own server on a fresh database (playwright.config.ts), so no
     # part sees what another one saved; all three together are every test.
+    name: e2e (${{ matrix.shard }}/3)
     needs: tested
-    if: needs.tested.outputs.already != 'true'
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -195,6 +196,28 @@ jobs:
           path: frontend/test-results/
           retention-days: 7
 
+  e2e:
+    # The one check the branch rules ask for: green only if all three parts
+    # passed -- or none ran because these very files passed already. GitHub
+    # counts a skipped check as passed, so this one is never skipped.
+    needs: [tested, e2e-parts]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: All three parts
+        env:
+          PARTS: ${{ needs.e2e-parts.result }}
+          ALREADY: ${{ needs.tested.outputs.already }}
+        run: |
+          if [[ "${PARTS}" == "success" ]]; then
+            echo "All three parts passed."
+          elif [[ "${PARTS}" == "skipped" && "${ALREADY}" == "true" ]]; then
+            echo "Not run: these files passed CI already."
+          else
+            echo "The end-to-end tests did not pass (${PARTS})."
+            exit 1
+          fi
+
   migrations-mariadb:
     # Every migration, run as an install or update runs them (flask db-init),
     # on an empty MariaDB like the server's. The tests use SQLite, which
@@ -202,7 +225,7 @@ jobs:
     # server that way (docs/update-safety.md). Run twice: the second time
     # there is nothing to do, as in an update without a migration.
     needs: tested
-    if: needs.tested.outputs.already != 'true'
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
     runs-on: ubuntu-24.04
     services:
       mariadb:
@@ -261,7 +284,7 @@ jobs:
   passed:
     # Everything above passed on these files: the mark job "tested" looks for.
     # Every job that tests belongs in "needs" here.
-    needs: [tested, test, frontend, e2e, migrations-mariadb]
+    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb]
     if: needs.tested.outputs.already != 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -284,7 +307,7 @@ jobs:
     # Also when the tests were skipped because these files passed already;
     # never when one of them failed.
     if: github.event_name == 'push' && !failure() && !cancelled()
-    needs: [tested, test, frontend, e2e, migrations-mariadb]
+    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb]
     runs-on: ubuntu-24.04
     # A build that could not be published is not a failed commit: the
     # installer then builds it itself.
