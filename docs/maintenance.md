@@ -2145,6 +2145,11 @@ The jobs run side by side:
   (`--shard=1/3` ...). Each part starts its own server on a fresh database,
   so no part sees what another saved; together they are every test once.
   Traces of failed tests are kept for a week.
+- **migrations-mariadb** -- every migration on an empty MariaDB 10.11 (Ubuntu
+  24.04's, as on the servers), created as `install.sh` creates it, through
+  `flask db-init` as an install or update runs them; then once more, with
+  nothing to do. The tests use SQLite, which accepts SQL MariaDB refuses
+  (`docs/update-safety.md`).
 - **passed** -- once all of the above passed: leaves the mark (an artifact
   `ci-passed-<tree>`, kept 30 days).
 - **publish-frontend** -- on a push, once the tests passed or were skipped

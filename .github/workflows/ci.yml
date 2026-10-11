@@ -195,10 +195,73 @@ jobs:
           path: frontend/test-results/
           retention-days: 7
 
+  migrations-mariadb:
+    # Every migration, run as an install or update runs them (flask db-init),
+    # on an empty MariaDB like the server's. The tests use SQLite, which
+    # accepts SQL MariaDB refuses: an update once stopped half done on the live
+    # server that way (docs/update-safety.md). Run twice: the second time
+    # there is nothing to do, as in an update without a migration.
+    needs: tested
+    if: needs.tested.outputs.already != 'true'
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        # Ubuntu 24.04's MariaDB, the one install.sh installs.
+        image: mariadb:10.11
+        env:
+          # A database that lives for this job only, reachable from the runner
+          # alone. The portal's own user gets a password made in the job (no
+          # password is written in this file).
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_NAME: jaeronautics
+      DB_USER: jaeronautics
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        # What a server installs.
+        run: pip install --require-hashes -r requirements.lock
+
+      - name: The database, as install.sh makes it
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::${password}"
+          echo "DB_PASSWORD=${password}" >> "$GITHUB_ENV"
+          DB_PASSWORD="${password}" python - <<'PY'
+          import os
+          import pymysql
+          connection = pymysql.connect(host="127.0.0.1", port=3306, user="root", password="")
+          with connection.cursor() as cursor:
+              cursor.execute("CREATE DATABASE jaeronautics CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+              cursor.execute("CREATE USER 'jaeronautics'@'%%' IDENTIFIED BY %s", (os.environ["DB_PASSWORD"],))
+              cursor.execute("GRANT ALL PRIVILEGES ON jaeronautics.* TO 'jaeronautics'@'%'")
+              cursor.execute("FLUSH PRIVILEGES")
+          PY
+
+      - name: Every migration
+        run: python -m flask --app aeronautics_members.app:create_app db-init
+
+      - name: Again, with nothing to do
+        run: python -m flask --app aeronautics_members.app:create_app db-init
+
   passed:
     # Everything above passed on these files: the mark job "tested" looks for.
     # Every job that tests belongs in "needs" here.
-    needs: [tested, test, frontend, e2e]
+    needs: [tested, test, frontend, e2e, migrations-mariadb]
     if: needs.tested.outputs.already != 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -221,7 +284,7 @@ jobs:
     # Also when the tests were skipped because these files passed already;
     # never when one of them failed.
     if: github.event_name == 'push' && !failure() && !cancelled()
-    needs: [tested, test, frontend, e2e]
+    needs: [tested, test, frontend, e2e, migrations-mariadb]
     runs-on: ubuntu-24.04
     # A build that could not be published is not a failed commit: the
     # installer then builds it itself.

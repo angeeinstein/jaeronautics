@@ -1,8 +1,10 @@
 # Updates that undo a failed migration
 
 Agreed 2026-10-11, after the update to pull request #30 failed on the live
-server. To build: `docs/todo.md`, "Updates: a failed migration undoes itself"
-and "CI: run the migrations on MariaDB".
+server. To build: `docs/todo.md`, "Updates: a failed migration undoes itself".
+Built already: CI runs every migration on MariaDB (job `migrations-mariadb`,
+`docs/maintenance.md`, "Continuous Integration"), which would have stopped
+that migration before `main`.
 
 ## What happened
 

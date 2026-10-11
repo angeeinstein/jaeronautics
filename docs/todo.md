@@ -48,25 +48,6 @@ The legal drafts and the card readers below were put off by the maintainer.
   base it builds on is done: price lists, `credit_sales.sell(...)`, the
   accounting for teams and the association.
 
-### CI: run the migrations on MariaDB
-
-- **Added:** 2026-10-11
-- **What:** a CI job (`.github/workflows/ci.yml`) with a MariaDB service
-  that runs the whole migration chain on an empty database (`flask db
-  upgrade`), so a migration that works on SQLite but not on MariaDB fails
-  before it reaches `main`.
-- **Why:** the update to the merged money batch (pull request #30) failed
-  on the live server: migration `e2b7c4f9a1d3` deleted a setting with raw
-  SQL naming the column `key`, a reserved word in MariaDB. The tests run on
-  SQLite, which accepts it. MariaDB commits each table change at once, so
-  the migration stopped half done; it is now safe to run again
-  (`tests/test_migration_rerun.py`).
-- **Decided:** not in the urgent fix, to get that live quickly. Agreed
-  again with the update plan (`docs/update-safety.md`): "definitely a good
-  idea". Built together with the next item, on one branch.
-- **Open:** the MariaDB version to match the server's (Ubuntu's package);
-  whether to also run `downgrade` to the baseline and up again.
-
 ### Updates: a failed migration undoes itself
 
 - **Added:** 2026-10-11
@@ -77,7 +58,9 @@ The legal drafts and the card readers below were put off by the maintainer.
   it again. Without a migration the update runs exactly as today.
 - **Why:** the update to pull request #30 left the live server half-updated
   (new code on disk, old app running on a half-migrated database) until the
-  fix was merged.
+  fix was merged. Since then CI runs every migration on MariaDB
+  (`migrations-mariadb`), which would have caught that one before `main`;
+  this is the safety net behind it.
 - **Decided:** the in-place update stays ("never change a running system");
   about a minute of downtime with a message is fine for an update with a
   migration. No new maintenance page: nginx already shows
