@@ -48,6 +48,18 @@ The legal drafts and the card readers below were put off by the maintainer.
   base it builds on is done: price lists, `credit_sales.sell(...)`, the
   accounting for teams and the association.
 
+### Codex's review comments: fix what still holds
+
+- **Added:** 2026-10-11
+- **What, where:** `docs/review-fixes.md` -- 17 points from Codex's comments on
+  pull requests #2 to #30 that still hold in today's code (payments and
+  memberships, accounts and mail, the installer).
+- **Decided:** "only if you are really sure that this is something that's
+  first of all necessary and a real problem in our current code" -- each
+  checked for necessity, side effects and clashes with the others before it is
+  built; the plan says per point what was done or why not.
+- **Branch:** `claude/review-fixes`.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
