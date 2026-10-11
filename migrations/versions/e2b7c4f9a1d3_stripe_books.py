@@ -7,6 +7,10 @@ The share the association could keep of team credit sales goes too: each
 sale now carries its exact share of the top-up's fee instead (sales that kept
 a share keep ``kept_cents``). See docs/money-ledger-plan.md.
 
+Safe to run again after it stopped part-way: MariaDB commits each table
+change at once, so a failure late in it (as the first run on the live server
+did, at the setting row) leaves the earlier steps done.
+
 Revision ID: e2b7c4f9a1d3
 Revises: d7a3e9c2f5b1
 Create Date: 2026-10-11
@@ -22,7 +26,37 @@ branch_labels = None
 depends_on = None
 
 
+def _have():
+    inspector = sa.inspect(op.get_bind())
+    tables = set(inspector.get_table_names())
+    indexes = {index["name"] for table in tables for index in inspector.get_indexes(table)}
+    payments = {column["name"] for column in inspector.get_columns("payments")}
+    return tables, indexes, payments
+
+
 def upgrade():
+    tables, indexes, payments = _have()
+    if "stripe_bookings" not in tables:
+        _create_bookings()
+    for column in ("type", "booked_at", "charge_id", "payment_intent_id", "invoice_id", "product", "payment_id"):
+        if f"ix_stripe_bookings_{column}" not in indexes:
+            op.create_index(f"ix_stripe_bookings_{column}", "stripe_bookings", [column])
+    if "stripe_books_state" not in tables:
+        _create_state()
+    if "money_differences" not in tables:
+        _create_differences()
+    if "ix_money_differences_resolved_at" not in indexes:
+        op.create_index("ix_money_differences_resolved_at", "money_differences", ["resolved_at"])
+
+    if "team_bears_fee" in payments:
+        with op.batch_alter_table("payments") as batch_op:
+            batch_op.drop_column("team_bears_fee")
+    # ``key`` is a reserved word in MariaDB: built with SQLAlchemy so it is quoted.
+    setting = sa.table("setting", sa.column("key", sa.String))
+    op.execute(setting.delete().where(setting.c.key == "team_credit_sales_share_bps"))
+
+
+def _create_bookings():
     op.create_table(
         "stripe_bookings",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -40,9 +74,9 @@ def upgrade():
         sa.Column("payment_id", sa.Integer(), sa.ForeignKey("payments.id"), nullable=True),
         sa.Column("fetched_at", sa.DateTime(), nullable=False),
     )
-    for column in ("type", "booked_at", "charge_id", "payment_intent_id", "invoice_id", "product", "payment_id"):
-        op.create_index(f"ix_stripe_bookings_{column}", "stripe_bookings", [column])
 
+
+def _create_state():
     op.create_table(
         "stripe_books_state",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -54,6 +88,8 @@ def upgrade():
         sa.Column("checked_at", sa.DateTime(), nullable=True),
     )
 
+
+def _create_differences():
     op.create_table(
         "money_differences",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -69,11 +105,6 @@ def upgrade():
         sa.Column("resolved_at", sa.DateTime(), nullable=True),
         sa.Column("emailed_at", sa.DateTime(), nullable=True),
     )
-    op.create_index("ix_money_differences_resolved_at", "money_differences", ["resolved_at"])
-
-    with op.batch_alter_table("payments") as batch_op:
-        batch_op.drop_column("team_bears_fee")
-    op.execute("DELETE FROM setting WHERE key = 'team_credit_sales_share_bps'")
 
 
 def downgrade():
