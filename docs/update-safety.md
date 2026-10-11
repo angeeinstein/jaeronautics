@@ -88,3 +88,10 @@ else it does nothing, so its CI passes. On the test server:
    on `claude/update-undo` with its data as before.
 3. `sudo rm /etc/jaeronautics/undo-trial`, and update to the branch to be
    used next. The trial branch is not merged.
+
+**Tried 2026-10-11** on the test server, twice. The migration failed after
+making its table; the database came back with identical row counts; the
+previous version was put back and verified; the portal was down for about 8
+seconds. The second time also showed the two changes that came of the
+first: an open page said "Update in progress" and loaded again by itself, and
+the update ended with its own message only.
