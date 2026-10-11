@@ -161,6 +161,56 @@ def test_a_failed_update_starts_them_again(installer):
     assert "resume_background_jobs_after_failure" in _function(installer, "on_error")
 
 
+def test_the_bootstrap_never_moves_the_live_checkout(installer):
+    """It fetches into a copy of its own; the live one moves after the pause,
+    so waiting for CI, or CI failing, leaves the running code alone."""
+    body = _function(installer, "bootstrap_self_update")
+    assert 'bootstrap_target="${INSTALL_DIR}"' not in body
+    assert 'sync_repo_to_dir "${bootstrap_target}"' in body and 'bootstrap_target="${BOOTSTRAP_DIR}"' in body
+    assert 'BOOTSTRAP_TARGET_REVISION="${TARGET_REVISION}"' in body
+    # and the live checkout is moved to exactly the revision CI was asked about
+    assert 'reset --hard "${TARGET_REVISION}"' in _function(installer, "ensure_repo_present")
+
+
+def test_a_failure_before_the_database_step_puts_the_code_back_first(installer):
+    for handler in ("on_error", "on_exit"):
+        calls = [line.strip() for line in _function(installer, handler).splitlines()]
+        undo = next(i for i, call in enumerate(calls) if call.startswith("undo_code_after_early_failure"))
+        resume = next(i for i, call in enumerate(calls) if call.startswith("resume_background_jobs_after_failure"))
+        assert undo < resume, handler
+        assert calls[undo] == "undo_code_after_early_failure", "not in an || list: the undo must stop at a failure"
+
+
+@pytest.mark.parametrize("undo, expected", [
+    ("undo_update_code(){ echo undone; }", ["undone", "paused=0", "keep=0"]),
+    # a failure inside stops the undo there, and the jobs stay paused
+    ("undo_update_code(){ false; echo went-on; }", ["paused=1", "keep=1", "stay-paused"]),
+])
+def test_the_undo_after_an_early_failure(tmp_path, undo, expected):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-q", "--allow-empty", "-m", "new"], check=True)
+    text = INSTALLER.read_text(encoding="utf-8")
+    functions = text[text.index("# The jobs the timers run"):text.index("usage() {")]
+    git_in_dir = _function(text, "git_in_dir")
+    script = (
+        "set -Eeuo pipefail\nstep(){ :; }; info(){ :; }; warn(){ :; }; error(){ :; }; success(){ :; }\n"
+        "systemctl(){ :; }\n" + git_in_dir + functions + undo + "\n"
+        + f"INSTALL_DIR={repo}\nSERVICE_NAME=portal\nUNDO_STATE=0\nBACKGROUND_JOBS_PAUSED=1\n"
+        + "ROLLBACK_POINT_REVISION=0123456789abcdef\n"
+        + "undo_code_after_early_failure\necho paused=$BACKGROUND_JOBS_PAUSED\necho keep=$KEEP_JOBS_PAUSED\n"
+        + "warn(){ echo stay-paused; }\nresume_background_jobs_after_failure\n"
+    )
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60,
+                            env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)})
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == expected
+
+
 def test_pausing_waits_for_a_running_job_and_a_failure_resumes(tmp_path):
     """The functions themselves, with a systemctl that reports one job still running."""
     import subprocess
@@ -306,3 +356,24 @@ def test_the_page_needs_nothing_from_the_portal():
     assert "<script" not in page and "style=" not in page and "<style" not in page  # the CSP forbids both
     for asset in re.findall(r'(?:href|src)="(/static/[^"]+)"', page):
         assert (STATIC / asset[len("/static/"):]).is_file(), asset
+
+
+def test_a_larger_connection_tracking_table_is_kept_and_uninstall_removes_the_setting(installer):
+    body = _function(installer, "configure_connection_tracking")
+    assert "nf_conntrack_max = ${size}" in body and "(( current > size ))" in body
+    uninstall = _function(installer, "uninstall_everything")
+    assert '"/etc/modules-load.d/${SERVICE_NAME}-conntrack.conf"' in uninstall
+    assert '"/etc/sysctl.d/60-${SERVICE_NAME}-conntrack.conf"' in uninstall
+
+
+def test_the_example_settings_match_the_defaults():
+    """Copied as they are, the example limits would undo the raise for intake evenings."""
+    from aeronautics_members import config
+
+    example = dict(
+        line.split("=", 1) for line in (INSTALLER.parent / ".env.example").read_text().splitlines()
+        if line.startswith("RATELIMIT_") and "=" in line
+    )
+    for name, value in example.items():
+        if name != "RATELIMIT_STORAGE_URI":
+            assert value == getattr(config, name), name

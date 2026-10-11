@@ -96,9 +96,22 @@ whether it still holds, and what was done.
 ## Installer
 
 15. **A job can start on the new code before the jobs are paused** (#18/20).
+    Held, and worse: the bootstrap moved the live checkout before the wait
+    for CI (up to 25 minutes), so the jobs ran the new code on the old
+    packages and database, and a failed CI left it on disk for the portal's
+    next restart. Done: the bootstrap fetches into its own copy; the live
+    checkout moves after the pause, to exactly the revision CI was checked
+    for. The bootstrap runs in the installer already installed, so this
+    works from the update after the one that brings it.
 16. **A failed update starts the jobs again on a half-installed checkout** (#18/21).
+    Held (a package or the front end failing after the code moved). Done: a
+    failure between the code moving and the database step puts the previous
+    version back first, as a failed migration does; if that fails too, the
+    jobs stay paused and the error says so. Works from this update on.
 17. **Smaller:** a larger conntrack limit is lowered; uninstall leaves the
     conntrack files; `.env.example` has the old rate limits (#6/6, 7; #7/8).
+    All three held. Done: a larger table is kept; uninstall removes the two
+    files; the example has the defaults, and a test keeps them equal.
 
 ## Not done, and why
 
