@@ -48,6 +48,23 @@ The legal drafts and the card readers below were put off by the maintainer.
   base it builds on is done: price lists, `credit_sales.sell(...)`, the
   accounting for teams and the association.
 
+### CI: run the migrations on MariaDB
+
+- **Added:** 2026-10-11
+- **What:** a CI job (`.github/workflows/ci.yml`) with a MariaDB service
+  that runs the whole migration chain on an empty database (`flask db
+  upgrade`), so a migration that works on SQLite but not on MariaDB fails
+  before it reaches `main`.
+- **Why:** the update to the merged money batch (pull request #30) failed
+  on the live server: migration `e2b7c4f9a1d3` deleted a setting with raw
+  SQL naming the column `key`, a reserved word in MariaDB. The tests run on
+  SQLite, which accepts it. MariaDB commits each table change at once, so
+  the migration stopped half done; it is now safe to run again
+  (`tests/test_migration_rerun.py`).
+- **Decided:** not in the urgent fix, to get that live quickly.
+- **Open:** the MariaDB version to match the server's (Ubuntu's package);
+  whether to also run `downgrade` to the baseline and up again.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
