@@ -99,6 +99,29 @@ class TestJoining:
         assert "payment could not be started" in said(client)
 
 
+    def test_the_confirmation_link_works_even_when_paying_cannot_start(self, app, client, stripe_ok, monkeypatch):
+        """Its nonce is made when it is sent; Stripe failing rolls back, so it is saved before."""
+        from aeronautics_members.services.identity import build_email_verification_claims
+
+        linked = []
+
+        def send(app_, user):
+            linked.append(build_email_verification_claims(user)["nonce"])
+            return True
+
+        def broken(member):
+            raise stripe.APIConnectionError("down")
+
+        monkeypatch.setattr(signup_service, "send_email_verification_email", send)
+        monkeypatch.setattr(signup_service, "create_checkout_session_for_member", broken)
+
+        client.post("/api/v1/signup", json={**FORM, "member_category": "partner", "email_work": None,
+                                            "company_name": "Example Aero GmbH"})
+
+        db.session.expire_all()
+        assert linked and _member().user.email_verification_nonce == linked[0]
+
+
 class TestTheFormIsChecked:
     def test_each_refused_field_by_name(self, app, client, stripe_ok):
         response = client.post("/api/v1/signup", json={

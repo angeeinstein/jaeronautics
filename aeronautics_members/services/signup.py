@@ -74,7 +74,11 @@ def begin_membership(member, payment_method, *, what, sent=None):
         if user is not None and not user.email_is_verified:
             if send_email_verification_email(app, user):
                 sent("verify-email", user.email)
+            # The link carries a nonce made for it just now: saved before
+            # Stripe is asked, whose failure rolls back, or the link is dead.
+            db.session.commit()
     except Exception as email_exc:  # noqa: BLE001 -- the membership stands
+        db.session.rollback()
         current_app.logger.warning(
             "Could not send verification email for user_id=%s: %s",
             getattr(user, "id", None), email_exc,

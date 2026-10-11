@@ -68,10 +68,30 @@ whether it still holds, and what was done.
 ## Accounts and mail
 
 10. **A disabled administrator counts as another one** (#2/2).
+    Held: erasing the last working administrator was allowed while a
+    switched-off one existed. Done: the erasure uses the same count as role
+    changes, which leaves switched-off accounts out.
 11. **Queued news reaches somebody who unsubscribed meanwhile** (#28/35).
+    Held: news goes out within the hour's and day's limits (100 and 300 by
+    default), so it can take days. Done: whether they still want it is
+    checked again as each one is sent; somebody who unsubscribed is left out
+    and counted with those who had before.
 12. **Unsubscribe links are not bound to the address** (#28/36).
+    Held, in a way that matters: the link's page shows the account's address
+    -- so a mail sent to an old address revealed the new one. Done: links
+    carry the address they were sent to and stop working when it changes
+    (the switch stays in My Account). Links in news already sent, which do
+    not carry one, go on working.
 13. **The contact form's limit is per network; its bot check can be skipped** (#28/38, 39).
+    The limit held: five messages an hour was shared by everybody behind one
+    address, a whole campus. Done: counted per account, or per network and
+    typed address (the loose per-network limit stays). The bot check: left.
+    The page is a React app, and a bot writing to the API directly can send
+    any timing it likes; requiring the field would stop nothing.
 14. **A new account's confirmation link breaks if Stripe fails during signup** (#2/3).
+    Held, for somebody without a university address: the link's nonce is
+    made when it is sent, and Stripe failing rolled it back. Done: saved
+    before Stripe is asked.
 
 ## Installer
 

@@ -51,7 +51,6 @@ from ..db_models import (
     ForumAccount,
     MembershipPeriod,
     NotificationEvent,
-    User,
     db,
 )
 from . import ConflictError, ExternalServiceError, ValidationError
@@ -366,14 +365,14 @@ def describe_deletion_impact(user, actor_user=None):
         "member_id": member.id if member else None,
         "already_erased": is_erased(user),
         "is_admin": is_admin,
-        "is_last_admin": is_admin and _count_active_holders(Permission.ADMIN_ACCESS) <= 1,
+        "is_last_admin": is_admin and _nobody_else_holds(Permission.ADMIN_ACCESS, user),
         "is_superadmin": user.can(Permission.SYSTEM_UPDATE),
         # Losing the last account that can install an update is worse than
         # losing the last administrator: the installation cannot then deploy the
         # fix for whatever went wrong. Recovering needs a shell on the server.
         "is_last_superadmin": (
             user.can(Permission.SYSTEM_UPDATE)
-            and _count_active_holders(Permission.SYSTEM_UPDATE) <= 1
+            and _nobody_else_holds(Permission.SYSTEM_UPDATE, user)
         ),
         "is_self": bool(actor_user is not None and actor_user.id == user.id),
         "has_forum_account": user.forum_account is not None,
@@ -434,24 +433,12 @@ def _credit_of(user):
     return max(balance_of(user), 0)
 
 
-def _count_active_holders(permission):
-    """Accounts that could still do this and can still sign in.
+def _nobody_else_holds(permission, user):
+    """Whether no other account that can still sign in could do this: a
+    switched-off one is no cover (the same count as for role changes)."""
+    from .access import _active_holders_excluding
 
-    Asks about the capability rather than about a role, so a role added to
-    permissions.py with one of the protected permissions immediately counts
-    towards "somebody else can still do this" without these guards changing.
-    """
-    from ..db_models import Role
-    from ..permissions import roles_with
-
-    slugs = roles_with(permission)
-    if not slugs:
-        return 0
-    return db.session.scalar(
-        db.select(db.func.count())
-        .select_from(User)
-        .where(User.roles.any(Role.slug.in_(slugs)), User.deleted_at.is_(None))
-    ) or 0
+    return _active_holders_excluding(permission, user.id) == 0
 
 
 def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, note=None):

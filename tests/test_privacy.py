@@ -11,7 +11,7 @@ from datetime import date
 import pytest
 
 from api_helpers import send
-from conftest import app_module, db, make_member, privacy
+from conftest import app_module, clock, db, make_member, privacy
 from aeronautics_members.db_models import (
     AuditLog,
     EmailDeliveryJob,
@@ -648,6 +648,17 @@ class TestGuards:
         db.session.commit()
 
         assert admin.deleted_at is not None
+
+    def test_a_switched_off_admin_is_no_second_one(self, app):
+        """They cannot sign in, so nobody could administer the site afterwards."""
+        admin = _make_admin(email="working@example.com")
+        other = _make_admin(email="switched-off@example.com")
+        other.disabled_at = clock.get_now_utc()
+        db.session.commit()
+
+        with pytest.raises(ConflictError) as excinfo:
+            privacy.erase_account(admin, initiated_by=privacy.INITIATED_BY_MEMBER)
+        assert excinfo.value.code == "last_admin"
 
     def test_an_admin_cannot_erase_themselves_from_the_admin_page(self, app):
         admin = _make_admin(email="self@example.com")

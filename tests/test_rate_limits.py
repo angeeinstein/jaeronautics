@@ -123,6 +123,20 @@ def test_many_signups_from_one_address_are_let_through(limited_app, monkeypatch)
     assert 429 in again
 
 
+def test_the_contact_form_counts_per_person_not_per_campus(limited_app):
+    """Five messages an hour is one person's budget, not a lecture hall's."""
+    client = limited_app.test_client()
+
+    def send(email):
+        # Refused as a bot (the hidden field filled in), so nothing is sent -- but counted all the same.
+        return client.post("/api/v1/contact", json={"topic": "other", "name": "Anna", "email": email, "subject": "Hello",
+                                                    "message": "A question.", "website": "x"},
+                           environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
+
+    assert 429 not in [send(f"person{n}@example.com") for n in range(10)]
+    assert 429 in [send("same@example.com") for _ in range(10)]
+
+
 def test_signed_in_limits_count_per_account(limited_app):
     """Resending a confirmation from a shared campus address is counted per person."""
     first = make_member(email="first@example.com")
