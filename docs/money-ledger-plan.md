@@ -1,6 +1,7 @@
 # Stripe's books in the portal: fees, credit and the teams' share
 
-**Status:** in discussion (2026-10-11). Nothing built. To-do item: "Money:
+**Status:** decided (2026-10-11), see "Decided"; further ideas offered, not
+built yet. To-do item: "Money:
 Stripe's books kept in the portal" in `docs/todo.md`.
 
 ## What the maintainer wants
@@ -100,13 +101,38 @@ Either a or b could replace the "kept" percentage, or sit beside it.
 - **or apply it to everything not yet transferred.** Simplest to read, but a
   team's past earnings would change after the fact.
 
-## Open
+## Decided (2026-10-11)
 
-- Hourly, or with each webhook, for the new bookings? Nightly or weekly for
-  the invoice check?
-- Credit fee: FIFO, an average, or the fixed share? Keep the share?
-- The fee setting: from now on, from a start day, or for all money not yet
-  transferred?
-- Who gets the emails about differences?
+- **The fee setting applies to all team money, past and future**, not per
+  payment from the day it was set.
+  - The maintainer: "apply it to all transactions that ever happened on this
+    server and then going forward as well".
+  - Nothing has been transferred to a team yet; the server has run for about
+    a week.
+  - `Payment.team_bears_fee` stops deciding it; the setting does.
+- **Credit fee: oldest top-up first (FIFO)**, as proposed.
+  - The maintainer would accept an average "as long as it is somehow
+    transparent where the money numbers came from. So it shouldn't be just a
+    random amount that is deducted from the team without anybody knowing how
+    this happened."
+  - So each sale shows which top-up paid it and its share of that fee.
+- **How often:** "as often as possible and useful without overloading our
+  server or Stripe API". A general rule now (`CLAUDE.md`, standing
+  preferences). For these bookings:
+  - fetched right after each Stripe webhook (several webhooks in a row make
+    one fetch);
+  - an hourly run as a safety net;
+  - the invoice check over the last 40 days every night.
+- **Emails about differences:** to the admins and the treasurer, with a
+  switch to turn them off.
+
+## Open (none blocking)
+
+- Further ideas offered on 2026-10-11, waiting for the maintainer's choice:
+  - a preview of the effect before the fee setting is changed;
+  - each payment and sale broken down on the teams' Money pages;
+  - Stripe's transfers to the bank matched to their bookings;
+  - an export for the accounts;
+  - splitting *Other* into webshop and events.
 - The privacy policy: the copy holds payment references without names (the
   portal already keeps those for its own payments). Probably a line in § 20.

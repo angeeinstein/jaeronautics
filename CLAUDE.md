@@ -111,6 +111,10 @@ words: it will not be there later.
   can do (live updates, animation) where it helps -- every animation off when
   the device asks for less motion.
 - Square, flat look (`docs/design.md`).
+- Now rather than later: what can happen at once happens at once (on the
+  event, a webhook, a live update), not at a scheduled time. A schedule is
+  for what must not run too often -- emails, many requests to Stripe or the
+  forum -- and as a safety net behind the immediate path.
 - Features stay general where it costs this association nothing. Other
   associations may use the portal one day, so no options only this
   association or one of its teams would use ("that would just confuse other
