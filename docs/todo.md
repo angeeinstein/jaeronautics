@@ -11,6 +11,21 @@ in git history (`git log -- docs/todo.md`).
 
 ## Open
 
+### "Nothing sent yet." sits against the panel's edge
+
+- **Added:** 2026-10-11
+- **Where:** the *Sent* panel on Admin › Announcements and on a team's
+  Messages page; `frontend/src/components/Mailing.tsx`, `MailingTable`.
+- **What:** with nothing sent, "Nothing sent yet." stands flush against the
+  panel's left edge, with no space above or below it. The maintainer's
+  screenshot of Admin › Announcements: "The spacing here is a bit broken at
+  the bottom." The panel is `flush` (for the table), so the empty state gets
+  none of the panel's padding.
+- **How:** give the empty state the padding the other flush panels give
+  their contents (Admin › Credit wraps its tables in `.inset`: `0 md xs`),
+  or the panel's usual padding while it is empty. Check the screenshots of
+  both pages.
+
 ### Legal texts: publish the 2026-10-08 drafts (pictures, credit, messages)
 
 - **Added:** 2026-10-08
