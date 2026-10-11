@@ -153,8 +153,9 @@ If the migration fails, every table is dropped (a migration that stopped part
 way leaves its earlier steps done: MariaDB commits each table change at once),
 the dump is loaded back and checked table by table, the rollback point's code
 is put back with its packages and front end, and the portal starts again. The
-update then ends as failed, saying it was undone; the Updates page shows the
-migration's error above. If the dump cannot be taken, nothing is migrated and
+update then ends as failed, saying it was undone (exit status 3, which the
+installer that started it passes on without a page of diagnostics); the
+Updates page shows the migration's error above. If the dump cannot be taken, nothing is migrated and
 the previous code is put back the same way. If putting things back fails
 itself, the portal stays stopped behind the maintenance page rather than run
 half updated, and the log names the dump. Tested against MariaDB by
@@ -179,7 +180,9 @@ a few seconds, longer when new packages are installed. Meanwhile:
   Stripe's checkout page is not affected; if they come back during the
   restart, they see this page and are told their payment is not lost. It
   cannot show when the whole server or the Cloudflare tunnel is down: then
-  Cloudflare shows its own error page.
+  Cloudflare shows its own error page. A page already open, whose requests
+  get that answer, says "Update in progress" instead of an error and loads
+  again by itself every five seconds (`ErrorState`, `components/States.tsx`).
 
 **Before starting one**, the Install panel says whether anybody else is using
 the portal right now, on which pages, and whether somebody is typing

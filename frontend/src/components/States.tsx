@@ -3,8 +3,9 @@
  * none, and when it could not be loaded (docs/frontend-structure.md, 7).
  */
 import { Alert, Button, Center, Group, Loader, Text } from '@mantine/core';
+import { useEffect, useRef } from 'react';
 
-import { ApiError } from '../api/client';
+import { ApiError, UPDATING } from '../api/client';
 
 export function LoadingState({ label = 'Loading…' }: { label?: string }) {
   return (
@@ -33,7 +34,34 @@ function messageOf(error: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+/** How often a page waiting out an update asks again. */
+export const UPDATING_RETRY_MS = 5000;
+
+/** The portal is down for an update for a minute at most: say so, and load again by itself. */
+function Updating({ onRetry }: { onRetry?: () => void }) {
+  // The latest one, without starting the wait over whenever the page renders.
+  const retry = useRef(onRetry);
+  useEffect(() => {
+    retry.current = onRetry;
+  });
+  useEffect(() => {
+    const timer = window.setInterval(() => retry.current?.(), UPDATING_RETRY_MS);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+  return (
+    <Alert color="brand" variant="light" title="Update in progress" role="status" maw={640} w="100%">
+      <Group gap="sm" wrap="nowrap">
+        <Loader size="xs" />
+        <Text size="sm">The portal is being updated. This loads again by itself in a moment.</Text>
+      </Group>
+    </Alert>
+  );
+}
+
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  if (error instanceof ApiError && error.code === UPDATING) return <Updating onRetry={onRetry} />;
   return (
     <Alert color="red" variant="light" title="This could not be loaded" role="alert" maw={640} w="100%">
       <Text size="sm" mb={onRetry ? 'sm' : 0}>

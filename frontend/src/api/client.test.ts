@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { mockFetch } from '../test/render';
-import { api, ApiError, call } from './client';
+import { api, ApiError, call, UPDATING } from './client';
 
 const SESSION = { '/api/v1/session': { body: { signed_in: true, csrf_token: 'token-1' } } };
 
@@ -30,6 +30,18 @@ describe('calling the API', () => {
       message: 'Taken.',
       fields: { name: 'In use.' },
     });
+  });
+
+  it('tells an update apart: nginx answering for the portal while it restarts', async () => {
+    mockFetch({ '/api/v1/me': { status: 503 } });
+    await expect(call(api.GET('/api/v1/me'))).rejects.toMatchObject({ code: UPDATING, status: 503 });
+  });
+
+  it("keeps the portal's own 503 as it is", async () => {
+    mockFetch({
+      '/api/v1/me': { status: 503, body: { error: { code: 'forum_down', message: 'The forum is down.' } } },
+    });
+    await expect(call(api.GET('/api/v1/me'))).rejects.toMatchObject({ code: 'forum_down' });
   });
 
   it('says so when the portal cannot be reached', async () => {

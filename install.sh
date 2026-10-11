@@ -1389,6 +1389,7 @@ bootstrap_self_update() {
     chmod +x "${bootstrap_target}/install.sh"
 
     step "Re-running installer from the latest repository copy"
+    local status=0
     env \
         SELF_REEXEC_MARKER=1 \
         BOOTSTRAP_MODE="${MODE}" \
@@ -1408,8 +1409,13 @@ bootstrap_self_update() {
         BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
         BOOTSTRAP_NONINTERACTIVE="${NONINTERACTIVE}" \
         BOOTSTRAP_PRE_UPDATE_REVISION="${PRE_UPDATE_REVISION}" \
-        bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}"
-    exit $?
+        bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}" || status=$?
+    # An update that undid itself has said all there is to say; any other
+    # failure gets its diagnostics here, as before.
+    if (( status != 0 && status != UPDATE_UNDONE_STATUS )); then
+        (exit "${status}")
+    fi
+    exit "${status}"
 }
 
 detect_db_service_name() {
@@ -2348,6 +2354,9 @@ initialize_database_schema() {
 # a migration runs as before, with no downtime beyond the restart.
 UNDO_DUMP_FILE=""
 UNDO_TABLE_COUNTS=""
+# The exit status of an update that failed and undid itself: failed, but
+# explained, so the installer that started it adds no diagnostics.
+UPDATE_UNDONE_STATUS=3
 # 1 from the stop until the app runs again; 2 while the undo itself runs.
 UNDO_STATE=0
 
@@ -2442,7 +2451,7 @@ migrate_database_for_update() {
         UNDO_STATE=2
         error "The database could not be backed up, so nothing was migrated. Putting the previous version back."
         undo_update_code
-        die "The update was undone before migrating: the database could not be backed up first (above). The previous version runs again; nothing in the database was changed."
+        update_undone "The update was undone before migrating: the database could not be backed up first (above). The previous version runs again; nothing in the database was changed."
     fi
     if initialize_database_schema; then
         return 0
@@ -2452,7 +2461,12 @@ migrate_database_for_update() {
     error "The database migration failed (above). Putting the database and the previous version back."
     restore_database_before_migration
     undo_update_code
-    die "The update was undone: its database migration failed, so the database is as it was before the update and the previous version runs again. Fix the migration and update again. The backup taken before the migration: ${UNDO_DUMP_FILE}"
+    update_undone "The update was undone: its database migration failed, so the database is as it was before the update and the previous version runs again. Fix the migration and update again. The backup taken before the migration: ${UNDO_DUMP_FILE}"
+}
+
+update_undone() {
+    error "$*"
+    exit "${UPDATE_UNDONE_STATUS}"
 }
 
 count_admin_accounts() {
