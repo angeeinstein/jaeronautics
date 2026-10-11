@@ -48,27 +48,36 @@ The legal drafts and the card readers below were put off by the maintainer.
   base it builds on is done: price lists, `credit_sales.sell(...)`, the
   accounting for teams and the association.
 
-### CI: run the migrations on MariaDB
+### Updates: a failed migration undoes itself
 
 - **Added:** 2026-10-11
-- **What:** a CI job (`.github/workflows/ci.yml`) with a MariaDB service
-  that runs the whole migration chain on an empty database (`flask db
-  upgrade`), so a migration that works on SQLite but not on MariaDB fails
-  before it reaches `main`.
-- **Why:** the update to the merged money batch (pull request #30) failed
-  on the live server: migration `e2b7c4f9a1d3` deleted a setting with raw
-  SQL naming the column `key`, a reserved word in MariaDB. The tests run on
-  SQLite, which accepts it. MariaDB commits each table change at once, so
-  the migration stopped half done; it is now safe to run again
-  (`tests/test_migration_rerun.py`).
-- **Decided:** not in the urgent fix, to get that live quickly.
-- **Open:** the MariaDB version to match the server's (Ubuntu's package);
-  whether to also run `downgrade` to the baseline and up again.
+- **What, where, decided:** `docs/update-safety.md`. In short: in
+  `install.sh`, only when the new code brings a migration -- stop the app
+  (the existing maintenance page shows), dump the database, migrate; if that
+  fails, load the dump back, return to the rollback point's code and start
+  it again. Without a migration the update runs exactly as today.
+- **Why:** the update to pull request #30 left the live server half-updated
+  (new code on disk, old app running on a half-migrated database) until the
+  fix was merged. Since then CI runs every migration on MariaDB
+  (`migrations-mariadb`), which would have caught that one before `main`;
+  this is the safety net behind it.
+- **Decided:** the in-place update stays ("never change a running system");
+  about a minute of downtime with a message is fine for an update with a
+  migration. No new maintenance page: nginx already shows
+  `static/maintenance.html` whenever the app does not answer.
+- **Open:** see the plan's "Open".
 
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
+- **Each version in its own folder, built beside the running one** --
+  2026-10-11. As `angeeinstein/study-helper` does: a folder per version with
+  its own Python environment, switched to only once healthy, the previous one
+  kept for an instant rollback. Put off: "never change a running system"; the
+  in-place update works, and the case that failed is covered by the item
+  above. Worth it if an update ever fails in a way that does not (a package
+  install, an app that does not start). `docs/update-safety.md`.
 - **An export of Stripe's bookings for the yearly accounts** -- 2026-10-11.
   A period's bookings by membership, teams, credit and other, with fees.
   "Could be useful at some time, but I don't need this now." Builds on the

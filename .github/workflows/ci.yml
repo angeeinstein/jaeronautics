@@ -5,8 +5,18 @@ on:
     branches: ["**"]
   pull_request:
 
-# The versions the servers run: Ubuntu 24.04's Python, and the Node.js
+# The versions the servers run: Ubuntu 24.04 (pinned, not ubuntu-latest, so
+# CI does not move to another release on its own), its Python, and the Node.js
 # long-term-support release install.sh installs.
+#
+# How long it takes, without testing less (docs/maintenance.md, "CI"):
+# - the jobs run side by side, the end-to-end tests in three parts, each on
+#   its own runner with its own fresh server -- as isolated as one run was;
+# - files that passed already are not tested again: every run that passes
+#   leaves a mark named after its files' git tree hash (job "passed"), and a
+#   run on the very same files -- above all on main after merging a pull
+#   request, whose run tested exactly the merged files -- finds it and skips
+#   the tests (job "tested"). Any other change, even a byte, runs everything.
 env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "24"
@@ -16,13 +26,47 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  tested:
+    # Whether these very files passed CI already. Only a mark left by a run in
+    # this repository counts (not one from a fork's pull request), and when
+    # GitHub cannot be asked, everything runs.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      already: ${{ steps.look.outputs.already }}
+      tree: ${{ steps.look.outputs.tree }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Passed already?
+        id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          echo "tree=${tree}" >> "$GITHUB_OUTPUT"
+          found="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=ci-passed-${tree}&per_page=100" \
+            --jq '[.artifacts[] | select(.expired | not)
+                   | select(.workflow_run.head_repository_id == ${{ github.repository_id }})] | length' \
+            2>/dev/null || echo 0)"
+          if [[ "${found}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "These files (tree ${tree}) passed CI already: the tests are not run again."
+          else
+            echo "Not tested yet (tree ${tree}): everything runs."
+          fi
+
+  test:
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -45,22 +89,24 @@ jobs:
         run: python -m pytest -q -n auto
 
   frontend:
-    runs-on: ubuntu-latest
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -96,21 +142,30 @@ jobs:
       - name: Build
         run: npm run build
 
-  e2e:
-    runs-on: ubuntu-latest
-    needs: [test, frontend]
+  e2e-parts:
+    # Beside the other jobs rather than after them, in three parts. Each part
+    # starts its own server on a fresh database (playwright.config.ts), so no
+    # part sees what another one saved; all three together are every test.
+    name: e2e (${{ matrix.shard }}/3)
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -127,19 +182,121 @@ jobs:
         run: npm run build
         working-directory: frontend
 
-      - name: End-to-end tests (Playwright)
-        run: npm run e2e
+      - name: End-to-end tests (Playwright), part ${{ matrix.shard }} of 3
+        run: npm run e2e -- --shard=${{ matrix.shard }}/3
         working-directory: frontend
         env:
           PYTHON: python
 
       - name: Keep the traces of failed tests
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: playwright-traces
+          name: playwright-traces-${{ matrix.shard }}
           path: frontend/test-results/
           retention-days: 7
+
+  e2e:
+    # The one check the branch rules ask for: green only if all three parts
+    # passed -- or none ran because these very files passed already. GitHub
+    # counts a skipped check as passed, so this one is never skipped.
+    needs: [tested, e2e-parts]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: All three parts
+        env:
+          PARTS: ${{ needs.e2e-parts.result }}
+          ALREADY: ${{ needs.tested.outputs.already }}
+        run: |
+          if [[ "${PARTS}" == "success" ]]; then
+            echo "All three parts passed."
+          elif [[ "${PARTS}" == "skipped" && "${ALREADY}" == "true" ]]; then
+            echo "Not run: these files passed CI already."
+          else
+            echo "The end-to-end tests did not pass (${PARTS})."
+            exit 1
+          fi
+
+  migrations-mariadb:
+    # Every migration, run as an install or update runs them (flask db-init),
+    # on an empty MariaDB like the server's. The tests use SQLite, which
+    # accepts SQL MariaDB refuses: an update once stopped half done on the live
+    # server that way (docs/update-safety.md). Run twice: the second time
+    # there is nothing to do, as in an update without a migration.
+    needs: tested
+    if: ${{ !cancelled() && needs.tested.outputs.already != 'true' }}
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        # Ubuntu 24.04's MariaDB, the one install.sh installs.
+        image: mariadb:10.11
+        env:
+          # A database that lives for this job only, reachable from the runner
+          # alone. The portal's own user gets a password made in the job (no
+          # password is written in this file).
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: "yes"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_NAME: jaeronautics
+      DB_USER: jaeronautics
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        # What a server installs.
+        run: pip install --require-hashes -r requirements.lock
+
+      - name: The database, as install.sh makes it
+        run: |
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::${password}"
+          echo "DB_PASSWORD=${password}" >> "$GITHUB_ENV"
+          DB_PASSWORD="${password}" python - <<'PY'
+          import os
+          import pymysql
+          connection = pymysql.connect(host="127.0.0.1", port=3306, user="root", password="")
+          with connection.cursor() as cursor:
+              cursor.execute("CREATE DATABASE jaeronautics CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+              cursor.execute("CREATE USER 'jaeronautics'@'%%' IDENTIFIED BY %s", (os.environ["DB_PASSWORD"],))
+              cursor.execute("GRANT ALL PRIVILEGES ON jaeronautics.* TO 'jaeronautics'@'%'")
+              cursor.execute("FLUSH PRIVILEGES")
+          PY
+
+      - name: Every migration
+        run: python -m flask --app aeronautics_members.app:create_app db-init
+
+      - name: Again, with nothing to do
+        run: python -m flask --app aeronautics_members.app:create_app db-init
+
+  passed:
+    # Everything above passed on these files: the mark job "tested" looks for.
+    # Every job that tests belongs in "needs" here.
+    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb]
+    if: needs.tested.outputs.already != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Which files passed
+        run: echo "${{ needs.tested.outputs.tree }}" > "$RUNNER_TEMP/tree"
+
+      - name: Leave the mark
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-passed-${{ needs.tested.outputs.tree }}
+          path: ${{ runner.temp }}/tree
+          retention-days: 30
 
   publish-frontend:
     # The built front end for the servers: install.sh downloads it instead of
@@ -147,9 +304,11 @@ jobs:
     # passed, to the "frontend-builds" pre-release, as one file per version of
     # frontend/ -- named by its git tree hash, so a commit that changes only
     # Python reuses the build before it.
-    if: github.event_name == 'push'
-    needs: [test, frontend, e2e]
-    runs-on: ubuntu-latest
+    # Also when the tests were skipped because these files passed already;
+    # never when one of them failed.
+    if: github.event_name == 'push' && !failure() && !cancelled()
+    needs: [tested, test, frontend, e2e-parts, e2e, migrations-mariadb]
+    runs-on: ubuntu-24.04
     # A build that could not be published is not a failed commit: the
     # installer then builds it itself.
     continue-on-error: true
@@ -164,7 +323,7 @@ jobs:
       RELEASE: frontend-builds
       KEEP: 200
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Which build this is
         id: build
@@ -184,7 +343,7 @@ jobs:
 
       - name: Set up Node.js
         if: steps.published.outputs.yes != '1'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm

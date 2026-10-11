@@ -2131,18 +2131,48 @@ ruff check .
 ## Continuous Integration
 
 `.github/workflows/ci.yml` runs on every push and pull request, with the
-versions the servers run (Python 3.12, Node.js 24):
+versions the servers run (Ubuntu 24.04, pinned; Python 3.12; Node.js 24).
+The jobs run side by side:
 
+- **tested** -- first, seconds: whether these very files passed CI already
+  (below). Only if so are the tests skipped -- if this job itself fails,
+  they all run.
 - **test** -- `ruff check` and the pytest suite. The tests use SQLite, so CI
   needs no database or other services.
 - **frontend** -- whether the API's types are current, the type check, ESLint,
   Prettier, the component tests (Vitest) and the build (`frontend/README.md`).
 - **e2e** -- the built front end in Chromium against the real Flask app with
-  sample data (Playwright); traces of failed tests are kept for a week.
-- **publish-frontend** -- after the three above pass, on a push: the built
-  front end for the servers, on the Front-end builds pre-release (see The Front
-  End). The only job that may write to the repository; one that fails does not
-  fail the commit — the installer then builds it itself.
+  sample data (Playwright), in three parts on three runners
+  (`--shard=1/3` ...). Each part starts its own server on a fresh database,
+  so no part sees what another saved; together they are every test once.
+  Traces of failed tests are kept for a week. The parts are `e2e (1/3)` …;
+  the check the branch rules require, `e2e`, is a job of its own that is
+  green only if all three passed (or none ran, the files having passed
+  already) -- GitHub counts a skipped required check as passed, so it is
+  never skipped.
+- **migrations-mariadb** -- every migration on an empty MariaDB 10.11 (Ubuntu
+  24.04's, as on the servers), created as `install.sh` creates it, through
+  `flask db-init` as an install or update runs them; then once more, with
+  nothing to do. The tests use SQLite, which accepts SQL MariaDB refuses
+  (`docs/update-safety.md`).
+- **passed** -- once all of the above passed: leaves the mark (an artifact
+  `ci-passed-<tree>`, kept 30 days).
+- **publish-frontend** -- on a push, once the tests passed or were skipped
+  as passed already: the built front end for the servers, on the Front-end
+  builds pre-release (see The Front End). The only job that may write to the
+  repository; one that fails does not fail the commit — the installer then
+  builds it itself.
+
+**Files tested once.** Git names a commit's files by a hash of all of them
+(`git rev-parse HEAD^{tree}`); the same files, byte for byte, have the same
+hash. A run that passes leaves a mark with it, and a run on the same files
+finds it and skips the tests -- they would test exactly what was tested.
+This is what makes the run on `main` after merging a pull request take about
+a minute: the pull request's run tested the files as merged. If `main`
+changed in between, the merged files differ and everything runs. Only marks
+from runs in this repository count -- not from a fork's pull request -- and
+if GitHub cannot be asked, everything runs. A new job that tests belongs in
+`passed`'s `needs`.
 
 ## Send a Welcome Email Manually
 

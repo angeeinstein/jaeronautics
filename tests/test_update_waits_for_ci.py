@@ -42,6 +42,7 @@ def github(app, monkeypatch, tmp_path):
     monkeypatch.setattr(system_update, "get_local_version", lambda: {
         "revision": LOCAL, "short_revision": LOCAL[:8], "branch": "main", "committed_at": None, "subject": None})
     monkeypatch.setattr(system_update, "get_remote_version", lambda force=False: REMOTE)
+    monkeypatch.setattr(system_update, "tracked_branch", lambda: "main")
     system_update._ci_cache.clear()
     system_update._typical_cache.update(checked_at=None, value=None)
     yield GitHub
@@ -68,6 +69,8 @@ def test_not_while_ci_runs_and_with_how_long_it_usually_takes(app, github):
     assert state["newer_version"] is True and state["update_available"] is False
     assert state["remote_ci"]["state"] == "running"
     assert state["remote_ci"]["typical_minutes"] == 12
+    # From the pushes to the branch an update waits for, not every branch's runs.
+    assert "status=success&event=push&branch=main&" in github.asked[-1]
 
 
 def test_not_before_ci_has_started(app, github):
