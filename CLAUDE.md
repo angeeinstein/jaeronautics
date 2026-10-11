@@ -114,7 +114,10 @@ words: it will not be there later.
 - Now rather than later: what can happen at once happens at once (on the
   event, a webhook, a live update), not at a scheduled time. A schedule is
   for what must not run too often -- emails, many requests to Stripe or the
-  forum -- and as a safety net behind the immediate path.
+  forum -- and as a safety net behind the immediate path. At once means
+  started right away in the background, not making a page wait for Stripe
+  or the forum. Steps tied to a date stay at 03:15 on purpose: it gives
+  Stripe's own around-midnight changes time to arrive.
 - Features stay general where it costs this association nothing. Other
   associations may use the portal one day, so no options only this
   association or one of its teams would use ("that would just confuse other

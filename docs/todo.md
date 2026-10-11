@@ -63,6 +63,12 @@ The legal drafts and the card readers below were put off by the maintainer.
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
 
+- **An export of Stripe's bookings for the yearly accounts** -- 2026-10-11.
+  A period's bookings by membership, teams, credit and other, with fees.
+  "Could be useful at some time, but I don't need this now." Builds on the
+  copy of Stripe's books (`docs/money-ledger-plan.md`).
+- **Stripe's transfers to the bank, matched to their bookings** --
+  2026-10-11. Not needed while nothing has been transferred to the bank.
 - **Answering contact messages from inside the portal** -- 2026-10-09. A
   reply written in Admin › Messages and sent as a formatted HTML email, with
   the conversation kept together. "Would be nice … but I think we can stay at

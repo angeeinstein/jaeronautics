@@ -149,11 +149,14 @@ Either a or b could replace the "kept" percentage, or sit beside it.
   association and team signups, and leads' texts, logos and pictures, so
   nothing to protect retroactively.
 
+- **Not now** (2026-10-11):
+  - matching Stripe's transfers to the bank: none has happened yet in over a
+    year, everything is still in Stripe;
+  - an export for the yearly accounts: "could be useful at some time" (ideas
+    for later in `docs/todo.md`);
+  - splitting *Other*: it stays "Other", no explaining sentence.
+
 ## Open (none blocking)
 
-- Further ideas offered on 2026-10-11, not answered yet:
-  - Stripe's transfers to the bank matched to their bookings;
-  - an export for the accounts;
-  - splitting *Other* into webshop and events.
 - The privacy policy: the copy holds payment references without names (the
   portal already keeps those for its own payments). Probably a line in § 20.
