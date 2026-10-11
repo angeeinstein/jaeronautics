@@ -63,6 +63,7 @@ const overview: OverviewOut = {
   credit_held: { top_ups: 2500, cash: 700 },
   association_own: 98440,
   fetched_at: '2026-10-06T09:58:00Z',
+  fetching: false,
   stripe_balance: 125390,
   books_balance: 125390,
   last_error: null,
@@ -151,6 +152,8 @@ function team(overrides: Partial<TeamMoneyOut> = {}): TeamMoneyOut {
         amount: 1000,
         refunded: 400,
         disputed: false,
+        fee: 35,
+        fee_carried_by: 'association',
         counts: 600,
       },
     ],
@@ -221,6 +224,15 @@ describe('the list', () => {
     ).toBeInTheDocument();
   });
 
+  it('while the first fetch runs, no figures but what is happening', async () => {
+    show(<Money />, '/admin/money', '/admin/money', {
+      [`${API}/overview`]: { body: { ...overview, fetched_at: null, fetching: true } },
+    });
+
+    expect(await screen.findByText(/Fetching Stripe’s book for the first time/)).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'By what it was for' })).toBeNull();
+  });
+
   it('fetching now answers with the overview', async () => {
     const { calls } = show(<Money />, '/admin/money', '/admin/money', {
       [`POST ${API}/fetch`]: { body: { ...overview, differences: [] } },
@@ -269,7 +281,7 @@ describe('one team', () => {
 
     expect(await screen.findByRole('heading', { name: 'Rocket Team', level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('table', { name: 'Payments' })).toHaveTextContent(
-      '01.10.2026Lena Lead31.03.2027€10.00€6.00€4.00 refunded',
+      '01.10.2026Lena Lead31.03.2027€10.00€0.35carried by the association€6.00€4.00 refunded',
     );
     expect(screen.getByRole('link', { name: 'Export' })).toHaveAttribute('href', '/teams/rocket/money.csv');
   });

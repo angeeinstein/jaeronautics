@@ -101,6 +101,10 @@ def find(now=None):
     ).scalars().all()
     period_of = {period.stripe_invoice_id: period for period in periods}
     paid_invoices = set()
+    group_of_invoice = {}
+    for booking in bookings:
+        if booking.invoice_id and booking.type in RECEIVED and booking.amount_cents > 0:
+            group_of_invoice.setdefault(booking.invoice_id, []).append(booking)
 
     for charge_id, group in by_charge.items():
         paid = [booking for booking in group if booking.type in RECEIVED and booking.amount_cents > 0]
@@ -119,10 +123,13 @@ def find(now=None):
             if payment_booking.invoice_id:
                 paid_invoices.add(payment_booking.invoice_id)
             period = period_of.get(payment_booking.invoice_id)
-            if period is None:
-                add(f"membership:no_period:{charge_id}", MEMBERSHIP, NO_PERIOD, reference, stripe_amount=received)
-            elif (returned or taken_back) and period.revoked_at is None:
-                add(f"membership:taken_back:{charge_id}", MEMBERSHIP, TAKEN_BACK_IN_STRIPE, reference,
+            # By invoice: one paid by a second try after a bounced debit is one difference, not two.
+            key = payment_booking.invoice_id or charge_id
+            if period is None and f"membership:no_period:{key}" not in found:
+                add(f"membership:no_period:{key}", MEMBERSHIP, NO_PERIOD, reference, stripe_amount=received)
+            elif period is not None and (returned or taken_back) and period.revoked_at is None \
+                    and not _paid_by_another(group_of_invoice.get(payment_booking.invoice_id, []), charge_id):
+                add(f"membership:taken_back:{key}", MEMBERSHIP, TAKEN_BACK_IN_STRIPE, reference,
                     stripe_amount=returned + taken_back)
             continue
         payment = payment_booking.payment
@@ -165,6 +172,11 @@ def find(now=None):
         add(f"membership:not_paid:{period.stripe_invoice_id}", MEMBERSHIP, PERIOD_NOT_PAID,
             period.stripe_invoice_id, who=member.email_private if member is not None else "")
     return found
+
+
+def _paid_by_another(paid, charge_id):
+    """Another charge paid the same invoice: the one taken back was retried, and the period stands."""
+    return any(booking.charge_id != charge_id for booking in paid)
 
 
 def _paid_before(invoice_id):

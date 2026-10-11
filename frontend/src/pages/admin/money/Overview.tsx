@@ -259,6 +259,12 @@ export function Overview({ since, until }: { since: string | null; until: string
   const overview = useQuery(overviewQuery(since, until));
   if (overview.isPending) return <LoadingState />;
   if (overview.isError) return <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />;
+  if (!overview.data.fetched_at) {
+    // Nothing fetched yet: no figures rather than zeros.
+    return (
+      <LoadingState label={overview.data.fetching ? "Fetching Stripe's book…" : 'Nothing fetched yet.'} />
+    );
+  }
   return (
     <Stack gap="lg">
       <Books overview={overview.data} />
@@ -279,7 +285,9 @@ export function FetchState({ overview }: { overview: OverviewOut }) {
   if (!overview.fetched_at) {
     return (
       <Text size="sm" c="dimmed">
-        Stripe&apos;s book has not been fetched yet. The first fetch reads all of it and takes a minute.
+        {overview.fetching
+          ? 'Fetching Stripe’s book for the first time. It reads all of it and takes a few minutes; the figures appear when it is done.'
+          : 'Stripe’s book has not been fetched yet. The first fetch reads all of it and takes a few minutes.'}
       </Text>
     );
   }
@@ -287,6 +295,7 @@ export function FetchState({ overview }: { overview: OverviewOut }) {
     <Stack gap={2}>
       <Text size="sm" c="dimmed">
         {`Fetched from Stripe ${formatDateTime(overview.fetched_at)}: after every payment, and at least hourly.`}
+        {overview.fetching ? ' Fetching again now…' : ''}
       </Text>
       {overview.last_error ? (
         <Text size="sm" c="var(--ja-warning)">

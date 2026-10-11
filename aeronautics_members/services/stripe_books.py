@@ -112,6 +112,16 @@ def request_sync_if_due(now=None):
     return request_sync("Hourly fetch of Stripe's books")
 
 
+def fetching():
+    """Whether a fetch is waiting or under way."""
+    return db.session.execute(
+        db.select(ExternalWorkItem.id).where(
+            ExternalWorkItem.kind == ExternalWorkItem.KIND_STRIPE_BOOKS,
+            ExternalWorkItem.status.in_((ExternalWorkItem.STATUS_PENDING, ExternalWorkItem.STATUS_PROCESSING)),
+        )
+    ).first() is not None
+
+
 def payments_configured():
     from .settings import get_stripe_settings_map
     from ..config import STRIPE_SECRET_KEY
@@ -153,8 +163,29 @@ def sync(full=False, now=None):
         params["created"] = {"gte": int((through - OVERLAP).timestamp())}
     known = set(db.session.execute(db.select(StripeBooking.stripe_id)).scalars())
     sorter = _Sorter()
+    added, newest = _fetch(params, known, sorter, now, through)
+    # A long fetch (the first reads the whole book) misses what Stripe booked
+    # meanwhile: one more short pass for that, right before the balance is
+    # compared, so the two describe the same moment.
+    if newest is not None:
+        late, newest = _fetch({"limit": 100, "expand": ["data.source"],
+                               "created": {"gte": int((newest - timedelta(minutes=1)).timestamp())}},
+                              known, sorter, now, newest)
+        added += late
+    db.session.flush()
+    resorted = _sort_again(sorter, now)
+    _fill_in_fees()
+    current.fetched_through = newest or now
+    current.last_error = None
+    _compare_balance(current)
+    # When it finished: what the page says it was fetched at.
+    current.fetched_at = get_now_utc()
+    return {"added": added, "sorted": resorted}
+
+
+def _fetch(params, known, sorter, now, newest):
+    """Add every booking Stripe lists for ``params`` not in the copy yet. Returns (added, newest)."""
     added = 0
-    newest = through
     for txn in stripe.BalanceTransaction.list(**params).auto_paging_iter():
         booked = datetime.fromtimestamp(int(txn.get("created") or 0), timezone.utc)
         newest = booked if newest is None or booked > newest else newest
@@ -168,14 +199,7 @@ def sync(full=False, now=None):
         if added % SAVE_EVERY == 0:
             # The first fetch reads the whole book: what is fetched stays fetched if it stops halfway.
             db.session.commit()
-    db.session.flush()
-    resorted = _sort_again(sorter, now)
-    _fill_in_fees()
-    current.fetched_through = newest or now
-    current.fetched_at = now
-    current.last_error = None
-    _compare_balance(current)
-    return {"added": added, "sorted": resorted}
+    return added, newest
 
 
 def _booking(txn, booked, now):

@@ -145,6 +145,8 @@ class OverviewOut(Model):
     association_own: int
     #: When Stripe's book was last fetched; ``None``: never yet.
     fetched_at: UtcDateTime | None
+    #: A fetch is waiting or under way: the figures change when it is done.
+    fetching: bool
     #: What Stripe said it holds then, and what the copy's bookings add up to.
     stripe_balance: int | None
     books_balance: int | None
@@ -189,6 +191,7 @@ def _overview_out(since, until):
         ),
         owed_to_teams=found["owed_to_teams"], credit_held=CreditHeld(**found["credit_held"]),
         association_own=found["association_own"], fetched_at=found["fetched_at"],
+        fetching=stripe_books.fetching(),
         stripe_balance=found["stripe_balance"], books_balance=found["books_balance"],
         last_error=found["last_error"], checked_at=found["checked_at"],
         differences=[_difference_out(row) for row in money_checks.open_differences()],
@@ -260,8 +263,9 @@ class TeamPayment(Model):
     refunded: int
     #: Taken back by a chargeback: counts nothing.
     disputed: bool
-    #: Stripe's fee, where this payment carries it (Admin › Money, "Stripe's fees").
+    #: Stripe's fee for it; ``None`` while Stripe has not said. Who carries it: ``fee_carried_by``.
     fee: int | None = None
+    fee_carried_by: Literal["team", "association"] = "association"
     #: What the team is owed of it; None while the fee it carries is not known yet.
     counts: int | None
 
@@ -291,7 +295,8 @@ def team_payment_out(payment, found):
     return TeamPayment(id=payment.id, paid_at=payment.paid_at, name=money.payer_name(payment) or None,
                        paid_until=payment.covers_until, amount=payment.amount_cents,
                        refunded=payment.refunded_cents or 0, disputed=payment.status == "disputed",
-                       fee=payment.fee_cents if found["statement"]["carry"] else None,
+                       fee=payment.fee_cents,
+                       fee_carried_by="team" if found["statement"]["carry"] else "association",
                        counts=money.counts(payment, found["statement"]["groups"]))
 
 

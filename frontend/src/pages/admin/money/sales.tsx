@@ -1,7 +1,7 @@
 /**
  * What both sides of a team's money show alike (the team's page and Admin ›
- * Money › a team): what the team sold for credit, by item, and what of a
- * payment counts for the team, with Stripe's fee where the teams carry it.
+ * Money › a team): what the team sold for credit, by item; a payment's
+ * Stripe fee, and what of the payment goes to the team.
  * How it all adds up: components/MoneyStatement.tsx.
  */
 import { Stack, Table, Text } from '@mantine/core';
@@ -14,8 +14,32 @@ import { formatEuros, plural } from '../../../lib/format';
 type Payment = Schemas['TeamPayment'];
 type Sales = Schemas['CreditSales'];
 
-/** What of a payment counts for the team: less refunds, and less Stripe's fee where it carries it. */
-export function Counts({ payment }: { payment: Payment }) {
+/** Stripe's fee for a payment: taken off where the teams carry it, else carried by the association. */
+export function Fee({ payment }: { payment: Payment }) {
+  if (payment.fee === null || payment.fee === undefined) {
+    return (
+      <Text span size="sm" c="dimmed">
+        not known yet
+      </Text>
+    );
+  }
+  if (payment.fee_carried_by === 'team') {
+    return <span className="ja-figures">{formatEuros(-payment.fee)}</span>;
+  }
+  return (
+    <>
+      <Text span size="sm" c="dimmed" className="ja-figures">
+        {formatEuros(payment.fee)}
+      </Text>
+      <Text size="xs" c="dimmed">
+        carried by the association
+      </Text>
+    </>
+  );
+}
+
+/** What of a payment goes to the team: less refunds, and less Stripe's fee where the teams carry it. */
+export function ForTheTeam({ payment }: { payment: Payment }) {
   return (
     <>
       <span className="ja-figures">{payment.counts === null ? '–' : formatEuros(payment.counts)}</span>
@@ -31,8 +55,6 @@ export function Counts({ payment }: { payment: Payment }) {
         <Text size="xs" c="dimmed">
           Waiting for Stripe&apos;s fee
         </Text>
-      ) : payment.fee !== null && payment.fee !== undefined ? (
-        <Text size="xs" c="dimmed">{`${formatEuros(payment.fee)} Stripe fee`}</Text>
       ) : null}
     </>
   );
@@ -60,7 +82,7 @@ export function SalesPanel({ sales }: { sales: Sales }) {
                   Sold
                 </Table.Th>
                 <Table.Th scope="col" ta="right">
-                  Counts
+                  For the team
                 </Table.Th>
               </Table.Tr>
             </Table.Thead>

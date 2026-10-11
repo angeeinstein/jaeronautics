@@ -25,7 +25,7 @@ import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import classes from './Money.module.css';
 import { amountText, centsOf, type TeamMoneyOut, teamMoneyQuery } from './shared';
-import { Counts, SalesPanel } from './sales';
+import { Fee, ForTheTeam, SalesPanel } from './sales';
 
 /** AT61 1904 3002 3457 3201, as it is read out and typed. */
 function grouped(iban: string): string {
@@ -366,7 +366,7 @@ function Payments({ money }: { money: TeamMoneyOut }) {
       }
     >
       {money.payments.length ? (
-        <Table.ScrollContainer minWidth={640} type="native">
+        <Table.ScrollContainer minWidth={760} type="native">
           <Table verticalSpacing="sm" aria-label="Payments">
             <Table.Thead>
               <Table.Tr>
@@ -374,10 +374,13 @@ function Payments({ money }: { money: TeamMoneyOut }) {
                 <Table.Th scope="col">Name</Table.Th>
                 <Table.Th scope="col">Paid until</Table.Th>
                 <Table.Th scope="col" className={classes.amount}>
-                  Amount
+                  Paid
                 </Table.Th>
                 <Table.Th scope="col" className={classes.amount}>
-                  Counts
+                  Stripe&apos;s fee
+                </Table.Th>
+                <Table.Th scope="col" className={classes.amount}>
+                  For the team
                 </Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -391,7 +394,10 @@ function Payments({ money }: { money: TeamMoneyOut }) {
                     {formatEuros(payment.amount)}
                   </Table.Td>
                   <Table.Td className={classes.amount}>
-                    <Counts payment={payment} />
+                    <Fee payment={payment} />
+                  </Table.Td>
+                  <Table.Td className={classes.amount}>
+                    <ForTheTeam payment={payment} />
                   </Table.Td>
                 </Table.Tr>
               ))}

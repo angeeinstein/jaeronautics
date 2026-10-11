@@ -5784,6 +5784,8 @@ export interface components {
             emails: boolean;
             /** Fetched At */
             fetched_at: string | null;
+            /** Fetching */
+            fetching: boolean;
             /** Last Error */
             last_error: string | null;
             /** Owed To Teams */
@@ -7025,6 +7027,12 @@ export interface components {
              * @default null
              */
             fee?: number | null;
+            /**
+             * Fee Carried By
+             * @default association
+             * @enum {string}
+             */
+            fee_carried_by?: "team" | "association";
             /** Id */
             id: number;
             /** Name */

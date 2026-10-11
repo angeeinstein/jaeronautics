@@ -22,6 +22,9 @@ export function overviewQuery(since: string | null, until: string | null) {
           params: { query: { since: since ?? undefined, until: until ?? undefined } },
         }),
       ),
+    // While a fetch from Stripe runs, read again every few seconds: the figures follow it.
+    refetchInterval: (query: { state: { data?: OverviewOut } }) =>
+      query.state.data?.fetching ? 3000 : false,
   };
 }
 

@@ -433,3 +433,21 @@ def test_an_erased_account_leaves_no_name_and_old_ones_are_forgotten(app):
     assert money_checks.forget_person(anna) == 1
     assert money_checks.forget_old() == 1
     assert [row.who for row in db.session.query(MoneyDifference)] == [""]
+
+
+@pytest.mark.usefixtures("this_year_only")
+def test_a_bounced_debit_paid_again_is_one_invoice_and_no_difference(app, stripe_account):
+    _portal_records()
+    # The first debit for in_m1 bounced; a second charge paid the same invoice.
+    stripe_account["txns"] += [
+        _txn("txn_m1b", "payment", 1500, _charge("py_m1b", "pi_m1b")),
+        _txn("txn_m1b_back", "payment_failure_refund", -1500, {"id": "pfr_2", "object": "refund",
+                                                               "charge": "py_m1b", "payment_intent": "pi_m1b"}),
+    ]
+    stripe_account["paid_by"]["pi_m1b"] = "in_m1"
+    stripe_books.sync()
+
+    found = [(row.what, row.reference) for row in money_checks.run()]
+
+    assert (money_checks.TAKEN_BACK_IN_STRIPE, "in_m1") not in found
+    assert not stripe_books.fetching()

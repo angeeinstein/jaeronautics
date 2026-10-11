@@ -9445,6 +9445,10 @@
             ],
             "title": "Fetched At"
           },
+          "fetching": {
+            "title": "Fetching",
+            "type": "boolean"
+          },
           "last_error": {
             "anyOf": [
               {
@@ -9504,6 +9508,7 @@
           "credit_held",
           "association_own",
           "fetched_at",
+          "fetching",
           "stripe_balance",
           "books_balance",
           "last_error",
@@ -13381,6 +13386,15 @@
             ],
             "default": null,
             "title": "Fee"
+          },
+          "fee_carried_by": {
+            "default": "association",
+            "enum": [
+              "team",
+              "association"
+            ],
+            "title": "Fee Carried By",
+            "type": "string"
           },
           "id": {
             "title": "Id",
