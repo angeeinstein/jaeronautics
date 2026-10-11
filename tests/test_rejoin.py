@@ -89,6 +89,10 @@ class TestWhoIsOfferedIt:
     def test_one_stripe_gave_up_on(self, app):
         assert billing.can_rejoin(_ended(payment_status="failed")) is True
 
+    def test_one_ended_by_a_lost_chargeback(self, app):
+        """The subscription was cancelled with it; coming back is paying again."""
+        assert billing.can_rejoin(_ended(payment_status="dispute_lost")) is True
+
     def test_not_while_the_membership_still_runs(self, app):
         member = _ended(payment_status="paid", is_active=True,
                         membership_ends_on=date(TODAY.year, 12, 31))

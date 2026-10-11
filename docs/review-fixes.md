@@ -13,9 +13,29 @@ whether it still holds, and what was done.
 ## Payments and memberships
 
 1. **A late webhook for an old subscription overwrites the current one** (#2/0).
+   Held: after a rejoin, Stripe's "deleted" for the old subscription (Stripe
+   ends it after failed payments) marked the member failed and inactive.
+   Done: an event about a subscription other than the one held is checked --
+   the one Stripe made later is the current one (`is_earlier_subscription`).
+   Events about an earlier one are left (a payment on it is still recorded,
+   with its own subscription); a later one is followed as before. When Stripe
+   cannot be asked, the event fails and Stripe delivers it again.
 2. **A lost dispute about an older payment cancels the current subscription** (#13/13).
+   Held. Done: the disputed invoice's subscription (from the year it paid
+   for, else Stripe) is the one revoked and cancelled; the current one only
+   when it is that one or it cannot be told. Works with 1: Stripe's
+   "deleted" for the old one is then left alone.
 3. **After a lost dispute the member cannot rejoin** (#13/14).
+   Held: the code says "coming back is a decision to rejoin", but
+   "dispute_lost" was not among the rejoinable states. Done: it is; rejoining
+   is a new subscription, paid again. (Say if that should rather go through
+   an admin.)
 4. **"Cannot tell" taken for "the membership" in the subscription lookup** (#8/10).
+   Held: when Stripe could not say what a running subscription was for, the
+   lookup before a rejoin (and the admin's refresh) took it for the
+   membership -- a team's fee would have been written onto the member. Done:
+   both lookups raise instead ("try again later"); ended subscriptions are
+   not asked about.
 5. **Asynchronous credit top-ups release their reservation too early** (#24/27).
 6. **A top-up arriving after the account was erased is credited to it** (#24/28).
 7. **Cash credit at erasure: no payout details for the admins** (#24/29).

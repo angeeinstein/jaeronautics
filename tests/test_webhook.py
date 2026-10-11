@@ -934,6 +934,137 @@ class TestALostDisputeEndsTheSubscription:
         assert refreshed.is_active is False
 
 
+class TestEarlierSubscriptions:
+    """A member who rejoined has a new subscription; Stripe's late events about
+    the old one must not end, fail or replace the new one."""
+
+    OLD_CREATED = 1_700_000_000
+    NEW_CREATED = 1_760_000_000
+
+    def _rejoined(self, monkeypatch, email):
+        member = make_member(email=email, stripe_customer_id="cus_rj", stripe_subscription_id="sub_new",
+                             payment_status="paid", is_active=True, membership_ends_on=YEAR_END)
+        periods.grant_calendar_year(member, TODAY.year, "paid", stripe_invoice_id="in_new",
+                                    stripe_subscription_id="sub_new")
+        db.session.commit()
+        created = {"sub_new": self.NEW_CREATED, "sub_old": self.OLD_CREATED, "sub_newer": self.NEW_CREATED + 1}
+        monkeypatch.setattr(webhook_module.stripe.Subscription, "retrieve",
+                            staticmethod(lambda sub_id, **_: {"id": sub_id, "created": created[sub_id]}))
+        return member
+
+    def _deleted(self, sub_id, created, reason="payment_failed", event_id="evt_old_del"):
+        return {"id": event_id, "type": "customer.subscription.deleted",
+                "data": {"object": {"id": sub_id, "customer": "cus_rj", "status": "canceled",
+                                    "created": created, "metadata": {"purpose": "membership"},
+                                    "cancellation_details": {"reason": reason}}}}
+
+    def test_the_old_ones_end_leaves_the_new_one_alone(self, client, monkeypatch, stub_side_effects):
+        member = self._rejoined(monkeypatch, "rejoined1@example.com")
+
+        response = post_event(client, monkeypatch, self._deleted("sub_old", self.OLD_CREATED))
+
+        assert response.status_code == 200
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.stripe_subscription_id == "sub_new"
+        assert refreshed.payment_status == "paid"
+        assert refreshed.is_active is True
+
+    def test_a_failed_payment_on_the_old_one_leaves_the_new_one_alone(self, client, monkeypatch, stub_side_effects):
+        member = self._rejoined(monkeypatch, "rejoined2@example.com")
+        event = {"id": "evt_old_failed", "type": "invoice.payment_failed",
+                 "data": {"object": {"id": "in_old_failed", "customer": "cus_rj",
+                                     "parent": {"subscription_details": {
+                                         "subscription": "sub_old", "metadata": {"purpose": "membership"}}}}}}
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert (refreshed.stripe_subscription_id, refreshed.payment_status) == ("sub_new", "paid")
+
+    def test_a_payment_on_the_old_one_is_recorded_but_not_made_the_current(
+            self, client, monkeypatch, stub_side_effects):
+        member = self._rejoined(monkeypatch, "rejoined3@example.com")
+        paid_at = int(datetime(TODAY.year - 1, 3, 1, 12, tzinfo=timezone.utc).timestamp())
+        event = {"id": "evt_old_paid", "type": "invoice.paid",
+                 "data": {"object": {"id": "in_old", "customer": "cus_rj",
+                                     "parent": {"subscription_details": {
+                                         "subscription": "sub_old", "metadata": {"purpose": "membership"}}},
+                                     "status_transitions": {"paid_at": paid_at}, "created": paid_at}}}
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert refreshed.stripe_subscription_id == "sub_new"
+        by_invoice = {p.stripe_invoice_id: p for p in refreshed.membership_periods}
+        assert by_invoice["in_old"].stripe_subscription_id == "sub_old"
+
+    def test_a_later_one_is_still_followed(self, client, monkeypatch, stub_side_effects):
+        """One the portal missed being made: Stripe's word stands."""
+        member = self._rejoined(monkeypatch, "rejoined4@example.com")
+
+        response = post_event(client, monkeypatch, self._deleted("sub_newer", self.NEW_CREATED + 1))
+
+        assert response.status_code == 200
+        assert db.session.get(Member, member.id).payment_status == "failed"
+
+    def test_when_the_one_held_is_gone_the_event_is_followed(self, client, monkeypatch, stub_side_effects):
+        import stripe
+
+        member = self._rejoined(monkeypatch, "rejoined5@example.com")
+
+        def gone(sub_id, **_):
+            raise stripe.InvalidRequestError("No such subscription", "id", code="resource_missing")
+
+        monkeypatch.setattr(webhook_module.stripe.Subscription, "retrieve", staticmethod(gone))
+
+        assert post_event(client, monkeypatch, self._deleted("sub_old", self.OLD_CREATED)).status_code == 200
+        assert db.session.get(Member, member.id).payment_status == "failed"
+
+    def test_when_stripe_cannot_be_asked_it_delivers_again(self, client, monkeypatch, stub_side_effects):
+        import stripe
+
+        self._rejoined(monkeypatch, "rejoined6@example.com")
+
+        def down(sub_id, **_):
+            raise stripe.APIConnectionError("Stripe is down")
+
+        monkeypatch.setattr(webhook_module.stripe.Subscription, "retrieve", staticmethod(down))
+
+        with pytest.raises(stripe.APIConnectionError):
+            post_event(client, monkeypatch, self._deleted("sub_old", self.OLD_CREATED, event_id="evt_down"))
+        assert webhook_inbox.stripe_event_already_processed("evt_down") is False
+
+    def test_a_lost_dispute_over_the_old_one_ends_only_the_old_one(self, client, monkeypatch, stub_side_effects):
+        member = self._rejoined(monkeypatch, "rejoined7@example.com")
+        periods.grant_calendar_year(member, TODAY.year - 1, "paid", stripe_invoice_id="in_old",
+                                    stripe_subscription_id="sub_old")
+        db.session.commit()
+        cancelled = []
+        monkeypatch.setattr(webhook_module, "cancel_subscription",
+                            lambda sub_id, reason=None: cancelled.append(sub_id) or True)
+        monkeypatch.setattr(webhook_module, "cancel_member_subscription",
+                            lambda *a, **k: pytest.fail("the current subscription must stay"))
+        monkeypatch.setattr(webhook_module.stripe.Charge, "retrieve",
+                            staticmethod(lambda *a, **k: {"customer": "cus_rj", "payment_intent": "pi_old"}))
+        monkeypatch.setattr(
+            webhook_module.stripe.InvoicePayment, "list",
+            staticmethod(lambda **_: {"data": [{"invoice": {
+                "id": "in_old", "parent": {"subscription_details": {"metadata": {"purpose": "membership"}}},
+            }}]}),
+        )
+        event = {"id": "evt_old_dispute", "type": "charge.dispute.closed",
+                 "data": {"object": {"status": "lost", "charge": "ch_old", "payment_intent": "pi_old"}}}
+
+        assert post_event(client, monkeypatch, event).status_code == 200
+
+        refreshed = db.session.get(Member, member.id)
+        assert cancelled == ["sub_old"]
+        assert refreshed.stripe_subscription_id == "sub_new"
+        by_invoice = {p.stripe_invoice_id: p for p in refreshed.membership_periods}
+        assert by_invoice["in_old"].is_revoked and not by_invoice["in_new"].is_revoked
+        assert refreshed.payment_status == "paid"
+
+
 class TestSepaEventsOutOfOrder:
     """Found with Stripe's SEPA dispute IBAN: invoice.paid arrived before
     checkout.session.completed, which for SEPA still says "unpaid" -- and the

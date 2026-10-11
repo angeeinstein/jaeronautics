@@ -240,6 +240,34 @@ def backfill_member_stripe_references(member, customer_id=None, subscription_id=
     return changed
 
 
+def is_earlier_subscription(member, subscription_id, created=None):
+    """Whether ``subscription_id`` is an earlier subscription of this member, replaced since
+    by the one the portal holds, rather than the current one.
+
+    A member who rejoined has a new subscription under the same Stripe customer, and
+    Stripe goes on reporting on the old one -- its last failed renewal, its cancellation
+    when the reminders run out -- days or weeks later. Found by the customer, those must
+    not be taken for the membership's. A different id alone proves nothing: Stripe does
+    not keep events in order, and a new subscription's first ones can arrive before the
+    checkout that records it. The one Stripe made later is the current one. ``created``
+    is the event's subscription's, when the event carries it. Stripe is asked only when
+    the ids differ, and raises StripeError when it cannot be.
+    """
+    current = getattr(member, "stripe_subscription_id", None)
+    if not subscription_id or not current or subscription_id == current:
+        return False
+    apply_runtime_stripe_config()
+    try:
+        held = stripe.Subscription.retrieve(current)
+    except stripe.InvalidRequestError as exc:
+        if getattr(exc, "code", None) == "resource_missing":
+            return False  # the one held is gone: this one is all there is
+        raise
+    if created is None:
+        created = stripe.Subscription.retrieve(subscription_id).get("created")
+    return int(created or 0) < int(held.get("created") or 0)
+
+
 def get_member_by_stripe_or_email(
     customer_id=None,
     subscription_id=None,
@@ -319,15 +347,29 @@ def get_latest_stripe_subscription_for_member(member):
     subscriptions = subscription_list.get("data", []) if hasattr(subscription_list, "get") else []
     # Newest first. A team fee on the same customer is not the membership.
     for subscription in subscriptions:
-        if not scope_of_subscription(subscription).is_foreign:
+        if not _membership_or_raise(subscription).is_foreign:
             return subscription
     return None
 
 
+def _membership_or_raise(subscription):
+    """The scope of one of a customer's subscriptions, raising StripeError when
+    Stripe could not be asked what it is: "could not tell" must not be taken for
+    the membership -- a team's fee would be written onto the member."""
+    scope = scope_of_subscription(subscription)
+    if scope.is_unreachable:
+        raise stripe.APIConnectionError(
+            f"Could not tell whether subscription {subscription.get('id')} is the membership: {scope.reason}"
+        )
+    return scope
+
+
 # A membership has ended, rather than never started or still running: the
 # subscription was cancelled ("canceled"), Stripe gave up on its payments
-# ("failed"), or the coverage simply ran out ("expired").
-REJOINABLE_MEMBER_STATUSES = {"canceled", "expired", "failed"}
+# ("failed"), the coverage simply ran out ("expired"), or a chargeback was lost
+# and the subscription cancelled with it ("dispute_lost") -- coming back is
+# then a new subscription, paid again.
+REJOINABLE_MEMBER_STATUSES = {"canceled", "expired", "failed", "dispute_lost"}
 
 # Stripe subscription statuses for a subscription Stripe is still running, and
 # might still charge. Anything else -- "canceled", "incomplete_expired" -- is
@@ -395,10 +437,11 @@ def find_live_stripe_subscription(member):
             return None  # the customer itself is gone, and everything with it
         raise
     for subscription in listing.get("data", []) if hasattr(listing, "get") else []:
-        if scope_of_subscription(subscription).is_foreign:
+        if subscription.get("status") not in LIVE_SUBSCRIPTION_STATUSES:
+            continue
+        if _membership_or_raise(subscription).is_foreign:
             continue  # a team fee running is not the membership running
-        if subscription.get("status") in LIVE_SUBSCRIPTION_STATUSES:
-            return subscription
+        return subscription
     return None
 
 
