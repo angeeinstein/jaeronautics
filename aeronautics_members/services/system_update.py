@@ -29,6 +29,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import current_app
 
@@ -131,6 +132,19 @@ def get_local_version():
     }
 
 
+def tracked_branch():
+    """The branch this installation follows, or None."""
+    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"])
+    if branch == "HEAD":
+        # A rollback checks the old revision out detached, so there is no
+        # current branch to compare against. Falling back to the branch the
+        # installer recorded matters here more than anywhere else: having just
+        # gone back a version, the administrator most needs to be told that a
+        # newer one exists and they can go forward again.
+        branch = (read_rollback_point() or {}).get("branch")
+    return branch or None
+
+
 def get_remote_version(force=False):
     """The newest revision on the deployed branch, or None if unreachable.
 
@@ -142,14 +156,7 @@ def get_remote_version(force=False):
     if not force and cached_at and (now - cached_at).total_seconds() < REMOTE_CHECK_TTL_SECONDS:
         return _remote_cache["value"]
 
-    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"])
-    if branch == "HEAD":
-        # A rollback checks the old revision out detached, so there is no
-        # current branch to compare against. Falling back to the branch the
-        # installer recorded matters here more than anywhere else: having just
-        # gone back a version, the administrator most needs to be told that a
-        # newer one exists and they can go forward again.
-        branch = (read_rollback_point() or {}).get("branch")
+    branch = tracked_branch()
     if not branch:
         return None
 
@@ -231,13 +238,20 @@ def ci_state(revision, force=False):
     return result
 
 
-def typical_ci_minutes():
-    """How long CI usually takes, from its last successful runs; None when unknown."""
+def typical_ci_minutes(branch=None):
+    """How long CI usually takes on ``branch``, from its last successful runs there; None when unknown.
+
+    Only the pushes to that branch, which are what an update waits for: a run on
+    ``main`` after a merge usually finds the same files passed already in the
+    pull request and takes a minute, a run on a working branch the full time.
+    """
     now = get_now_utc()
     if _typical_cache["checked_at"] and (now - _typical_cache["checked_at"]).total_seconds() < CI_TYPICAL_TTL_SECONDS:
         return _typical_cache["value"]
     slug = github_slug() if _asks_github() else None
-    answer = _github_json(f"/repos/{slug}/actions/workflows/ci.yml/runs?status=success&per_page=10") if slug else None
+    where = f"&branch={quote(branch, safe='')}" if branch else ""
+    answer = (_github_json(f"/repos/{slug}/actions/workflows/ci.yml/runs?status=success&event=push{where}&per_page=10")
+              if slug else None)
     minutes = []
     for run in (answer or {}).get("workflow_runs") or []:
         started, finished = parse_time(run.get("run_started_at")), parse_time(run.get("updated_at"))
@@ -567,7 +581,7 @@ def describe_update_state(force_remote_check=False):
     # cannot say, as before: the installer then asks again itself.
     ci = ci_state(remote, force=force_remote_check) if newer else None
     if ci and ci["state"] in ("running", "none"):
-        ci["typical_minutes"] = typical_ci_minutes()
+        ci["typical_minutes"] = typical_ci_minutes(tracked_branch())
     update_available = newer and ci["state"] in ("success", "unknown")
     in_progress = update_is_in_progress()
 

@@ -5,8 +5,18 @@ on:
     branches: ["**"]
   pull_request:
 
-# The versions the servers run: Ubuntu 24.04's Python, and the Node.js
+# The versions the servers run: Ubuntu 24.04 (pinned, not ubuntu-latest, so
+# CI does not move to another release on its own), its Python, and the Node.js
 # long-term-support release install.sh installs.
+#
+# How long it takes, without testing less (docs/maintenance.md, "CI"):
+# - the jobs run side by side, the end-to-end tests in three parts, each on
+#   its own runner with its own fresh server -- as isolated as one run was;
+# - files that passed already are not tested again: every run that passes
+#   leaves a mark named after its files' git tree hash (job "passed"), and a
+#   run on the very same files -- above all on main after merging a pull
+#   request, whose run tested exactly the merged files -- finds it and skips
+#   the tests (job "tested"). Any other change, even a byte, runs everything.
 env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "24"
@@ -16,13 +26,47 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  tested:
+    # Whether these very files passed CI already. Only a mark left by a run in
+    # this repository counts (not one from a fork's pull request), and when
+    # GitHub cannot be asked, everything runs.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      already: ${{ steps.look.outputs.already }}
+      tree: ${{ steps.look.outputs.tree }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Passed already?
+        id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          echo "tree=${tree}" >> "$GITHUB_OUTPUT"
+          found="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=ci-passed-${tree}&per_page=100" \
+            --jq '[.artifacts[] | select(.expired | not)
+                   | select(.workflow_run.head_repository_id == ${{ github.repository_id }})] | length' \
+            2>/dev/null || echo 0)"
+          if [[ "${found}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "These files (tree ${tree}) passed CI already: the tests are not run again."
+          else
+            echo "Not tested yet (tree ${tree}): everything runs."
+          fi
+
+  test:
+    needs: tested
+    if: needs.tested.outputs.already != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -45,22 +89,24 @@ jobs:
         run: python -m pytest -q -n auto
 
   frontend:
-    runs-on: ubuntu-latest
+    needs: tested
+    if: needs.tested.outputs.already != 'true'
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -97,20 +143,28 @@ jobs:
         run: npm run build
 
   e2e:
-    runs-on: ubuntu-latest
-    needs: [test, frontend]
+    # Beside the other jobs rather than after them, in three parts. Each part
+    # starts its own server on a fresh database (playwright.config.ts), so no
+    # part sees what another one saved; all three together are every test.
+    needs: tested
+    if: needs.tested.outputs.already != 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -127,19 +181,36 @@ jobs:
         run: npm run build
         working-directory: frontend
 
-      - name: End-to-end tests (Playwright)
-        run: npm run e2e
+      - name: End-to-end tests (Playwright), part ${{ matrix.shard }} of 3
+        run: npm run e2e -- --shard=${{ matrix.shard }}/3
         working-directory: frontend
         env:
           PYTHON: python
 
       - name: Keep the traces of failed tests
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: playwright-traces
+          name: playwright-traces-${{ matrix.shard }}
           path: frontend/test-results/
           retention-days: 7
+
+  passed:
+    # Everything above passed on these files: the mark job "tested" looks for.
+    # Every job that tests belongs in "needs" here.
+    needs: [tested, test, frontend, e2e]
+    if: needs.tested.outputs.already != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Which files passed
+        run: echo "${{ needs.tested.outputs.tree }}" > "$RUNNER_TEMP/tree"
+
+      - name: Leave the mark
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-passed-${{ needs.tested.outputs.tree }}
+          path: ${{ runner.temp }}/tree
+          retention-days: 30
 
   publish-frontend:
     # The built front end for the servers: install.sh downloads it instead of
@@ -147,9 +218,11 @@ jobs:
     # passed, to the "frontend-builds" pre-release, as one file per version of
     # frontend/ -- named by its git tree hash, so a commit that changes only
     # Python reuses the build before it.
-    if: github.event_name == 'push'
-    needs: [test, frontend, e2e]
-    runs-on: ubuntu-latest
+    # Also when the tests were skipped because these files passed already;
+    # never when one of them failed.
+    if: github.event_name == 'push' && !failure() && !cancelled()
+    needs: [tested, test, frontend, e2e]
+    runs-on: ubuntu-24.04
     # A build that could not be published is not a failed commit: the
     # installer then builds it itself.
     continue-on-error: true
@@ -164,7 +237,7 @@ jobs:
       RELEASE: frontend-builds
       KEEP: 200
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Which build this is
         id: build
@@ -184,7 +257,7 @@ jobs:
 
       - name: Set up Node.js
         if: steps.published.outputs.yes != '1'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
