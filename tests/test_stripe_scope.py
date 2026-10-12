@@ -311,6 +311,15 @@ class TestLookingUpTheMembershipsSubscription:
         with pytest.raises(stripe.StripeError):
             billing.get_latest_stripe_subscription_for_member(student)
 
+    def test_one_with_nothing_to_tell_it_by_is_not_taken_for_the_membership(self, app, monkeypatch, student):
+        """No mark, not known, no price: the membership's subscriptions always have one of those."""
+        monkeypatch.setattr(stripe.Subscription, "list", self._listing(
+            {"id": "sub_unmarked", "status": "active", "metadata": {}},
+        ))
+
+        assert billing.find_live_stripe_subscription(student) is None
+        assert billing.get_latest_stripe_subscription_for_member(student) is None
+
     def test_an_ended_one_is_not_asked_about(self, app, monkeypatch, student):
         self._outage(monkeypatch)
         monkeypatch.setattr(stripe.Subscription, "list", self._listing(

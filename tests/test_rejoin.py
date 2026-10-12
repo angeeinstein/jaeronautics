@@ -194,7 +194,8 @@ class TestRejoining:
     def test_a_subscription_still_running_is_not_doubled(self, app, client, stripe_stub):
         """On Jan 1 the portal can read "expired" while Stripe collects the renewal."""
         stripe_stub["state"]["subscriptions"] = [
-            {"id": "sub_running", "status": "past_due", "customer": "cus_old", "metadata": {}},
+            {"id": "sub_running", "status": "past_due", "customer": "cus_old",
+             "metadata": {"purpose": "membership"}},
         ]
         member = _ended(payment_status="expired")
         _sign_in(client, member)

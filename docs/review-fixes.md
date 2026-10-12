@@ -35,7 +35,9 @@ whether it still holds, and what was done.
    lookup before a rejoin (and the admin's refresh) took it for the
    membership -- a team's fee would have been written onto the member. Done:
    both lookups raise instead ("try again later"); ended subscriptions are
-   not asked about.
+   not asked about. On #35 Codex added the same for one with nothing to tell
+   it by ("unclear"): the lookups now take only what is recognisably the
+   membership, as the webhook does (`services/stripe_scope.py`).
 5. **Asynchronous credit top-ups release their reservation too early** (#24/27).
    Not done: it cannot happen with what is offered. Top-ups are paid by card
    or EPS, and Stripe confirms both at once; SEPA, which arrives later, was

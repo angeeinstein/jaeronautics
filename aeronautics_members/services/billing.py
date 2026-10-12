@@ -347,21 +347,25 @@ def get_latest_stripe_subscription_for_member(member):
     subscriptions = subscription_list.get("data", []) if hasattr(subscription_list, "get") else []
     # Newest first. A team fee on the same customer is not the membership.
     for subscription in subscriptions:
-        if not _membership_or_raise(subscription).is_foreign:
+        if _is_the_membership(subscription):
             return subscription
     return None
 
 
-def _membership_or_raise(subscription):
-    """The scope of one of a customer's subscriptions, raising StripeError when
-    Stripe could not be asked what it is: "could not tell" must not be taken for
-    the membership -- a team's fee would be written onto the member."""
+def _is_the_membership(subscription):
+    """Whether one of a customer's subscriptions is recognisably the membership.
+
+    Only then: a team's fee, or one with nothing to tell it by, taken for it
+    would be written onto the member (services/stripe_scope.py: only "ours"
+    is acted on). Raises StripeError when Stripe could not be asked what it
+    is, because "could not tell" is not "no".
+    """
     scope = scope_of_subscription(subscription)
     if scope.is_unreachable:
         raise stripe.APIConnectionError(
             f"Could not tell whether subscription {subscription.get('id')} is the membership: {scope.reason}"
         )
-    return scope
+    return scope.is_ours
 
 
 # A membership has ended, rather than never started or still running: the
@@ -439,7 +443,7 @@ def find_live_stripe_subscription(member):
     for subscription in listing.get("data", []) if hasattr(listing, "get") else []:
         if subscription.get("status") not in LIVE_SUBSCRIPTION_STATUSES:
             continue
-        if _membership_or_raise(subscription).is_foreign:
+        if not _is_the_membership(subscription):
             continue  # a team fee running is not the membership running
         return subscription
     return None
