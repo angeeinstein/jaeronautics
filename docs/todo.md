@@ -54,6 +54,44 @@ The legal drafts and the card readers below were put off by the maintainer.
   `claude/devices`, `docs/devices-plan.md`. Which uses come next is decided
   later; the maintainer writes the ESP32 firmware (ESP-IDF) separately.
 
+### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
+
+- **Added:** 2026-10-12
+- **What:** before Stripe's payment page opens, a choice the person has to
+  click: **Card, Apple Pay or Google Pay** ("your membership starts right
+  away") or **SEPA Direct Debit** ("your membership starts once the debit
+  clears, in a few days", the wording `Payment.tsx` already uses). For a team
+  fee: "your team membership". Both answers open **the same** Stripe page,
+  with both methods as now.
+- **Where:**
+  - joining (`frontend/src/pages/public/MembershipForm.tsx`): its last step,
+    "How do you want to pay?";
+  - starting a membership from an existing account, rejoining, "Resume
+    payment" (`pages/account/`), and paying a team fee (`pages/teams/`): a
+    small dialog when the pay button is pressed.
+
+  One shared component, the same wording everywhere.
+- **Why:** SEPA takes days, which is "most of all annoying for them, because
+  they have to wait some time before they can use their account, or before
+  they can become a team member". The maintainer wants people who do not care
+  to choose card, and SEPA kept for those who have no card or prefer it. Text
+  above or below a button is not read ("nobody reads such fine prints"); a
+  choice they have to click is.
+- **Decided:**
+  - Both answers lead to the same Stripe page with card and SEPA. Somebody who
+    picked card and did not find their method there might abandon and "plan to
+    complete it later"; better they pick SEPA there. They have read the notice,
+    so changing their mind is fine.
+  - SEPA stays switched on in Stripe. The portal names the methods itself
+    (`services/billing.py`, `services/payments.py`: card and `sepa_debit`),
+    and members renewing by SEPA keep their mandate.
+- **Ruled out:**
+  - switching SEPA off in Stripe: it would probably break the portal's
+    checkouts, and existing SEPA renewals;
+  - a line of text near the pay button or on Stripe's page alone;
+  - offering SEPA only on the cancel page;
+  - opening Stripe's page with only the chosen method.
+
 ## Ideas for later (not scheduled)
 
 Talked about, not agreed as work. Not built unless the maintainer brings them up.
