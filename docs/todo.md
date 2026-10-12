@@ -49,6 +49,10 @@ The legal drafts and the card readers below were put off by the maintainer.
 - **What, how, open questions:** `docs/credit-plan.md`, "Card readers". The
   base it builds on is done: price lists, `credit_sales.sell(...)`, the
   accounting for teams and the association.
+- **Since 2026-10-12:** the devices themselves are built first, for every
+  use (readers, doors, attendance): their management, keys and API, branch
+  `claude/devices`, `docs/devices-plan.md`. Which uses come next is decided
+  later; the maintainer writes the ESP32 firmware (ESP-IDF) separately.
 
 ## Ideas for later (not scheduled)
 

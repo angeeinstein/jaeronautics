@@ -676,6 +676,37 @@ credit page. If Stripe cannot be reached, nothing is erased; try again. A
 top-up page still open is closed, and a top-up paid on one anyway is
 refunded at once (`credit_paid_after_erasure` if Stripe refuses).
 
+## Devices
+
+Card readers and other devices that talk to the portal: Admin › Settings ›
+Devices (admins: `devices.manage`). The plan, and what is decided:
+`docs/devices-plan.md`; the code: `services/devices.py`,
+`services/device_types.py`, `api/devices.py`.
+
+- **Adding one** shows its key once, with *Copy key* and *Download
+  configuration* (a JSON file: the portal's address, the device's number,
+  its type, the key). Only a SHA-256 hash of the key is kept. Lost: *New
+  key* on the device's page, which stops the old one at once.
+- **Switching one off** refuses it whatever key it has. *Remove* deletes it,
+  its key and its events.
+- **Its page** shows when it last spoke (written at most every 30 seconds),
+  from where, its firmware (`X-Device-Firmware`), its recent events (kept 90
+  days, by the nightly `cleanup-logs`), *Try it* -- what it would be answered,
+  without counting as seen -- and example requests for writing firmware.
+- **The device API** (`/api/v1/device`), with `Authorization: Bearer <key>`
+  over HTTPS, no session, no CSRF token:
+  - `GET /api/v1/device`: its sign of life;
+  - `GET /api/v1/device/resources/<name>`: what its type offers;
+  - `POST /api/v1/device/events` with `{event_id, kind, data}`: what it
+    reports. The same `event_id` again gets the first answer.
+  - Refused: 401 (unknown key), 403 (switched off), 404 (not of its type),
+    429 (`RATELIMIT_DEVICE`, 120 a minute per device;
+    `RATELIMIT_DEVICE_PER_IP`, 600 a minute per address).
+- **A new kind of device** is a type registered in
+  `services/device_types.py`: its settings, what it may fetch, what it may
+  report and the answers. Step 1 has only *Test*, which answers what it is
+  sent.
+
 ## Stripe's fees
 
 Admin › Money › *Stripe's fees* (treasurer and admins); docs/money-ledger-plan.md:

@@ -479,6 +479,16 @@ def seed(app, app_module, subscriptions):
     db.session.commit()
     assert MailingRecipient.query.count()
 
+    # Devices: one that spoke a moment ago, one never seen, one switched off.
+    from aeronautics_members.services import devices as devices_service
+
+    fridge, _key = devices_service.add(admin_user, name="Fridge reader", type="test", place="Workshop, beside the fridge")
+    devices_service.seen(fridge, address="10.0.0.21", firmware="0.3.1", now=now)
+    devices_service.report(fridge, event_id="boot-1", name="ping", data={"n": 1})
+    devices_service.add(admin_user, name="Coffee machine", type="test")
+    door, _key = devices_service.add(admin_user, name="Tool cabinet", type="test", place="Hangar")
+    devices_service.change(admin_user, door, enabled=False)
+
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
     db.session.commit()
@@ -575,6 +585,9 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--announcement", "user": "admin@example.org",
          "path": f"/admin/announcements/{announcement.id}"},
         {"name": "admin--settings-mailings", "user": "admin@example.org", "path": "/admin/settings/mailings"},
+        {"name": "admin--settings-devices", "user": "admin@example.org", "path": "/admin/settings/devices"},
+        {"name": "admin--settings-device", "user": "admin@example.org",
+         "path": f"/admin/settings/devices/{fridge.id}"},
         {"name": "teams--messages", "user": "active@example.org", "path": "/teams/rocket-team/manage/messages"},
     ]
 

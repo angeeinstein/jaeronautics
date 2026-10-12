@@ -206,3 +206,16 @@ def test_events_are_kept_90_days(app, client, admin):
     db.session.commit()
 
     assert devices.forget_old() == 1
+
+
+def test_the_pages_are_the_apps_for_admins_only(app, client, admin):
+    added = _add(client, admin)
+    assert client.get("/admin/settings/devices").status_code == 200
+    assert client.get(f"/admin/settings/devices/{added['device']['id']}").status_code == 200
+
+    from flask import g
+
+    member = make_member(email="nosy@example.com")
+    g.pop("_login_user", None)  # Flask-Login keeps the first one on the open app context
+    other = signed_in(app.test_client(), member.user)
+    assert other.get("/admin/settings/devices").status_code in (302, 403)

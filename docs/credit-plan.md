@@ -171,6 +171,10 @@ Money, kept by the treasurer and admins. Since 2026-10-11
 
 ## Card readers (designed, not built -- "not something we need to build now")
 
+The devices themselves -- their management, keys and API -- are built first,
+for every use alike (2026-10-12): `docs/devices-plan.md`. A sales reader
+would be a device type there.
+
 The maintainer's idea: an NFC reader on an ESP32 beside the beer fridge (or
 the coffee machine).
 - A member taps their student card. The reader asks the portal whether the
