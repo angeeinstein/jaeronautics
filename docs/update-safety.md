@@ -17,20 +17,33 @@ disk, the old app still running and reading the dropped column, until the fix
 
 ## How an update runs today (`install.sh`, `install_or_update`)
 
+0. `bootstrap_self_update` -- the installer fetches the branch into a copy of
+   its own (`/tmp/jaeronautics-installer-bootstrap`) and runs the new
+   `install.sh` from there. Until 2026-10-11 it moved the live checkout here
+   already -- before the wait for CI and before the jobs were paused, so the
+   jobs ran the new code on the old packages and database, and a failed CI
+   left it on disk (Codex's review, `docs/review-fixes.md` 15). That part runs
+   in the installer already installed, so the change works from the update
+   after the one that brings it.
 1. `prepare_frontend` -- waits for CI's build; nothing touched yet.
 2. `backup_runtime_state` -- environment, state, a database dump
    (`LAST_DB_BACKUP_FILE`, taken while the app still runs), uploads.
 3. `record_rollback_point` -- the revision being replaced, the schema revision
    and the dump (`rollback.conf`).
 4. `pause_background_jobs`.
-5. `ensure_repo_present` -- the code is replaced in place; the running app
-   keeps the old code in memory.
+5. `ensure_repo_present` -- the code is replaced in place, with exactly the
+   revision CI was checked for; the running app keeps the old code in memory.
 6. Python packages, front end, `initialize_database_schema` (`flask db-init`:
    migrations, then seeding) -- still with the old app serving.
 7. `reload_services` -- the app restarts on the new code.
 
-`on_error` resumes the background jobs and collects diagnostics; nothing is
-undone. `--rollback` restores the code only and leaves the schema.
+A failure between 5 and the database step (a package that will not install,
+a front end that will not build) puts the rollback point's code back
+(`undo_code_after_early_failure`, the same `undo_update_code` as below), and
+only then are the jobs started again; if that fails too, they stay paused
+and the error says so. Otherwise `on_error` resumes the background jobs and
+collects diagnostics. `--rollback` restores the code only and leaves the
+schema.
 
 ## Decided
 

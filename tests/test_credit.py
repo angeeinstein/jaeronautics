@@ -364,6 +364,43 @@ class TestRefunds:
         assert db.session.query(NotificationEvent).filter_by(event_type="credit_left_at_erasure").count() == 1
         assert db.session.query(CreditEntry).filter_by(user_id=anna.id).count() == 3  # kept: the bookkeeping
 
+    def test_the_admins_are_told_whom_to_pay(self, client, monkeypatch, credit_on):
+        """After the erasure nothing else says who handed over the cash."""
+        anna = _person()
+        email = anna.email
+        credit.book_cash(None, anna, 300)
+        db.session.commit()
+
+        privacy.erase_account(anna, initiated_by=privacy.INITIATED_BY_MEMBER)
+        db.session.commit()
+
+        notice = db.session.query(NotificationEvent).filter_by(event_type="credit_left_at_erasure").one()
+        assert email in notice.summary and notice.payload["email"] == email
+
+    def test_erasing_closes_a_top_up_page_still_open(self, client, monkeypatch, credit_on):
+        anna = _person()
+        credit.book_cash(None, anna, 100)
+        credit.start_top_up(anna, 1000)
+        db.session.commit()
+
+        privacy.erase_account(anna, initiated_by=privacy.INITIATED_BY_MEMBER)
+
+        assert [call[1] for call in credit_on.named("session.expire")] == ["cs_1"]
+
+    def test_a_top_up_paid_after_the_erasure_goes_back(self, client, monkeypatch, credit_on):
+        """Paid on a page that was open when the account was erased."""
+        anna = _person()
+        credit.book_cash(None, anna, 100)
+        db.session.commit()
+        privacy.erase_account(anna, initiated_by=privacy.INITIATED_BY_MEMBER)
+        db.session.commit()
+
+        assert post_event(client, monkeypatch, _paid_session(anna, 1000, number=7)).status_code == 200
+
+        refunds = [(params["payment_intent"], params["amount"]) for _n, _k, params in credit_on.named("refund")]
+        assert refunds == [("pi_7", 1000)]
+        assert credit.balance_of(anna) == 100  # the cash, still the treasurer's to pay out
+
 
 class TestPages:
     def test_my_credit(self, client, monkeypatch, credit_on):

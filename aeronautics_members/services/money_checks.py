@@ -144,7 +144,8 @@ def find(now=None):
             add(f"{product}:refund:{charge_id}", product, REFUND_DIFFERS, reference,
                 amount=payment.refunded_cents or 0, stripe_amount=refunded, who=who)
         if (returned or taken_back) and payment.status != "disputed" \
-                and (payment.refunded_cents or 0) < payment.amount_cents:
+                and (payment.refunded_cents or 0) < payment.amount_cents \
+                and not _paid_by_another(group_of_invoice.get(payment_booking.invoice_id, []), charge_id):
             add(f"{product}:taken_back:{charge_id}", product, TAKEN_BACK_IN_STRIPE, reference,
                 stripe_amount=returned + taken_back, who=who)
 

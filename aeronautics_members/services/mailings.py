@@ -344,8 +344,10 @@ def stop(actor, mailing):
 # --- The email ------------------------------------------------------------------------------
 
 
-def unsubscribe_token(user):
-    return generate_token(UNSUBSCRIBE_PURPOSE, user_id=user.id)
+def unsubscribe_token(user, email=None):
+    """For the address the email goes to: the link's page shows the account's
+    address, which an email to an address since changed must not reveal."""
+    return generate_token(UNSUBSCRIBE_PURPOSE, user_id=user.id, email=(email or user.email or "").lower())
 
 
 def user_for_token(token):
@@ -354,8 +356,11 @@ def user_for_token(token):
         user = db.session.get(User, int(data.get("user_id")))
     except Exception:  # noqa: BLE001 -- any bad token is the same answer
         user = None
-    if user is None or user.deleted_at is not None:
-        raise NotFoundError("This link is not valid.")
+    # Links in news sent before they carried the address go on working.
+    if user is None or user.deleted_at is not None \
+            or ("email" in data and data["email"] != (user.email or "").lower()):
+        # The address changed since: the switch is in My Account.
+        raise NotFoundError("This link is not valid. News by email can be switched off in My Account.")
     return user
 
 
@@ -377,21 +382,21 @@ def _from_name(mailing):
     return f"{mailing.team.name} via Joanneum Aeronautics" if mailing.team_id else None
 
 
-def _why(mailing, user):
+def _why(mailing, user, to_email):
     if mailing.kind == TEAM:
         return f"You receive this as a member of {mailing.team.name} at Joanneum Aeronautics.", None
     if mailing.kind == NOTICE:
         return ("A notice to the members of Joanneum Aeronautics. It reaches every member, whatever their "
                 "news setting."), None
-    url = build_public_url("public.unsubscribe", token=unsubscribe_token(user))
+    url = build_public_url("public.unsubscribe", token=unsubscribe_token(user, to_email))
     return "You receive this as a member of Joanneum Aeronautics.", url
 
 
 def _send(mailing, user, to_email, *, subject_prefix=""):
-    why, unsubscribe_url = _why(mailing, user)
+    why, unsubscribe_url = _why(mailing, user, to_email)
     headers = {}
     if unsubscribe_url:
-        one_click = build_public_url("api.news_unsubscribe_one_click", token=unsubscribe_token(user))
+        one_click = build_public_url("api.news_unsubscribe_one_click", token=unsubscribe_token(user, to_email))
         headers = {"List-Unsubscribe": f"<{one_click}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
     return send_mail(
         from_account=sender_account(),
@@ -457,6 +462,16 @@ def process(now=None):
         ).scalars().all()
         failures_in_a_row = 0
         for recipient in waiting:
+            mailing = recipient.mailing
+            if mailing.kind == NEWS and recipient.user is not None \
+                    and recipient.user.news_unsubscribed_at is not None:
+                # Unsubscribed while it waited its turn -- news can take days
+                # to go out within the limits: counted as at the start.
+                mailing.unsubscribed_count = (mailing.unsubscribed_count or 0) + 1
+                mailing.recipient_count = max((mailing.recipient_count or 1) - 1, 0)
+                db.session.delete(recipient)
+                db.session.commit()
+                continue
             recipient.attempts += 1
             ok, error = _send(recipient.mailing, recipient.user, recipient.email)
             if ok:

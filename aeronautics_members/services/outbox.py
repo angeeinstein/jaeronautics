@@ -23,6 +23,7 @@ from flask import current_app, has_request_context
 
 from ..db_models import ExternalWorkItem, db
 from .clock import get_now_utc
+from .locking import locked
 
 # How long a claimed item stays reserved before another worker may take it over.
 # Generous relative to a remote call's own timeout, so a slow handler is not
@@ -68,8 +69,11 @@ def enqueue(kind, *, member=None, user=None, payload=None, dedupe_key=None, reas
     outcome only need doing once.
     """
     if dedupe_key:
+        # Locked: a run finishing in the same moment then either sees the
+        # request below (and runs again) or has already freed the key (and
+        # this finds nothing and queues anew).
         existing = db.session.execute(
-            db.select(ExternalWorkItem).filter_by(dedupe_key=dedupe_key)
+            locked(db.select(ExternalWorkItem).filter_by(dedupe_key=dedupe_key))
         ).scalar_one_or_none()
         if existing is not None:
             # Already queued (or in flight): fold this request into it, and make
@@ -77,6 +81,10 @@ def enqueue(kind, *, member=None, user=None, payload=None, dedupe_key=None, reas
             existing.not_before = None
             if reason:
                 existing.reason = reason[:255]
+            if existing.status == ExternalWorkItem.STATUS_PROCESSING:
+                # Running now, perhaps on what was true before this change:
+                # once it finishes, it runs again (see complete()).
+                existing.asked_again = True
             if existing.status == ExternalWorkItem.STATUS_FAILED:
                 # It gave up earlier -- the forum was down, most likely -- but
                 # there is a new reason to do it now. Left failed, the new
@@ -243,6 +251,8 @@ def claim_next(kinds=None, now=None, user_id=None):
                 status=ExternalWorkItem.STATUS_PROCESSING,
                 claimed_at=now,
                 attempts=ExternalWorkItem.attempts + 1,
+                # This run reads what is true from now on.
+                asked_again=False,
             )
         )
         db.session.commit()
@@ -253,13 +263,34 @@ def claim_next(kinds=None, now=None, user_id=None):
 
 
 def complete(item):
-    item.status = ExternalWorkItem.STATUS_COMPLETED
-    item.completed_at = get_now_utc()
-    item.claimed_at = None
-    item.last_error = None
-    # Free the key so a later change can queue fresh work for the same member.
-    item.dedupe_key = None
+    """Mark it done -- unless it was asked for again while it ran, when it goes
+    back in the queue to run once more on what is true now.
+
+    One conditional UPDATE decides, so a request committed in the same moment
+    is either seen here or finds the item done and queues a new one.
+    """
+    db.session.flush()  # whatever the handler changed on the item
+    done = db.session.execute(
+        db.update(ExternalWorkItem)
+        .where(ExternalWorkItem.id == item.id, ExternalWorkItem.asked_again.is_(False))
+        .values(
+            status=ExternalWorkItem.STATUS_COMPLETED,
+            completed_at=get_now_utc(),
+            claimed_at=None,
+            last_error=None,
+            # Free the key so a later change can queue fresh work for the same member.
+            dedupe_key=None,
+        )
+    ).rowcount
+    if not done:
+        db.session.execute(
+            db.update(ExternalWorkItem)
+            .where(ExternalWorkItem.id == item.id)
+            .values(status=ExternalWorkItem.STATUS_PENDING, claimed_at=None, last_error=None,
+                    not_before=None, attempts=0, asked_again=False)
+        )
     db.session.commit()
+    db.session.refresh(item)
 
 
 def fail(item, error):

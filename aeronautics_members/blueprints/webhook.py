@@ -20,6 +20,7 @@ from ..services.billing import (
     backfill_member_stripe_references,
     cancel_member_subscription,
     get_member_by_stripe_or_email,
+    is_earlier_subscription,
     is_free_period_trial_invoice,
     sync_member_subscription_state_from_subscription,
 )
@@ -52,7 +53,7 @@ from ..services.membership import (
 from ..services.notifications import (
     queue_curated_admin_notification,
 )
-from ..services.payments import handler_for
+from ..services.payments import cancel_subscription, handler_for
 from ..services.settings import (
     get_stripe_settings_map,
 )
@@ -152,7 +153,37 @@ def _fetch_the_books(event_type):
         current_app.logger.exception("Could not queue a fetch of Stripe's books after %s.", event_type)
 
 
-def _stop_charging_after_lost_dispute(member, charge_id):
+def _earlier_subscription(member, subscription_id, event_type, created=None):
+    """Whether this event is about one of the member's earlier subscriptions (logged if so)."""
+    if not is_earlier_subscription(member, subscription_id, created=created):
+        return False
+    current_app.logger.info(
+        "Stripe %s for subscription %s, an earlier one of member_id=%s (now %s): "
+        "the current membership is left as it is.",
+        event_type, subscription_id, member.id, member.stripe_subscription_id,
+    )
+    return True
+
+
+def _subscription_of_invoice(invoice_id):
+    """The subscription an invoice was for: from the year it paid for, else from
+    Stripe. None when neither can tell -- the caller then assumes the current one."""
+    if not invoice_id:
+        return None
+    period = MembershipPeriod.query.filter(
+        MembershipPeriod.stripe_invoice_id == invoice_id,
+        MembershipPeriod.stripe_subscription_id.isnot(None),
+    ).first()
+    if period is not None:
+        return period.stripe_subscription_id
+    try:
+        return invoice_subscription_id(stripe.Invoice.retrieve(invoice_id))
+    except Exception as exc:  # noqa: BLE001 -- the current subscription is assumed, as before
+        current_app.logger.warning("Could not ask Stripe which subscription invoice %s was for: %s", invoice_id, exc)
+        return None
+
+
+def _stop_charging_after_lost_dispute(member, charge_id, disputed_subscription_id=None):
     """Cancel the subscription of somebody who lost a chargeback.
 
     A lost dispute takes the year's access away, but the subscription went on:
@@ -164,11 +195,20 @@ def _stop_charging_after_lost_dispute(member, charge_id):
     revocation is what matters and is done. If Stripe cannot be reached, an
     admin is told to cancel it by hand instead of the event being processed
     again.
+
+    A dispute over a payment to an earlier subscription -- one the member
+    rejoined after -- ends that one (Stripe has normally ended it already) and
+    leaves the current one alone. When it is not known which subscription the
+    payment was for, the current one is cancelled, as before.
     """
-    if not member.stripe_subscription_id:
+    target = disputed_subscription_id or member.stripe_subscription_id
+    if not target:
         return
     try:
-        cancel_member_subscription(member, reason="dispute_lost")
+        if target == member.stripe_subscription_id:
+            cancel_member_subscription(member, reason="dispute_lost")
+        else:
+            cancel_subscription(target, reason=f"member_id={member.id}: dispute_lost")
         db.session.commit()
     except Exception as exc:  # noqa: BLE001 -- reported, never retried here
         db.session.rollback()
@@ -179,8 +219,7 @@ def _stop_charging_after_lost_dispute(member, charge_id):
             ADMIN_ERROR_CHANNEL,
             "dispute_subscription_not_cancelled",
             _("A chargeback was lost, but the subscription could not be cancelled. Cancel it in Stripe."),
-            payload={"member_id": member.id, "charge_id": charge_id,
-                     "subscription_id": member.stripe_subscription_id},
+            payload={"member_id": member.id, "charge_id": charge_id, "subscription_id": target},
             target_member=member,
             commit=True,
         )
@@ -430,11 +469,17 @@ def process_stripe_event(event):
             email=customer_email,
             fetch_customer_email=True,
         )
+        # A payment on an earlier subscription is still money paid, recorded
+        # below with the subscription it paid; only the member's reference
+        # stays on the current one.
+        reference_id = subscription_id
+        if member and _earlier_subscription(member, subscription_id, event_type):
+            reference_id = None
         if member and event_type.startswith("invoice") and is_free_period_trial_invoice(data_object, member):
             # The EUR 0 invoice that opens an October joiner's free period. The
             # free period itself is recorded at signup, and checkout completing
             # is what activates it; this is not a payment and records none.
-            backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
+            backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=reference_id)
             db.session.commit()
             current_app.logger.info(
                 "Free-period opening invoice %s for member_id=%s left as a free period, not a payment.",
@@ -442,7 +487,7 @@ def process_stripe_event(event):
             )
         elif member:
             previous_status = member.payment_status
-            backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
+            backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=reference_id)
 
             paid_timestamp = None
             coverage_year = None
@@ -520,6 +565,8 @@ def process_stripe_event(event):
             subscription_id=subscription_id,
             fetch_customer_email=True,
         )
+        if member and _earlier_subscription(member, subscription_id, event_type, subscription.get("created")):
+            return "An earlier subscription of this member", 200
         if member:
             sync_member_subscription_state_from_subscription(member, subscription)
             enqueue_forum_sync(member, reason="Subscription updated.")
@@ -556,6 +603,8 @@ def process_stripe_event(event):
             email=customer_email,
             fetch_customer_email=True,
         )
+        if member and _earlier_subscription(member, subscription_id, event_type):
+            return "An earlier subscription of this member", 200
         if member:
             backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
             member.payment_status = "failed"
@@ -582,6 +631,8 @@ def process_stripe_event(event):
             subscription_id=subscription_id,
             fetch_customer_email=True,
         )
+        if member and _earlier_subscription(member, subscription_id, event_type, subscription.get("created")):
+            return "An earlier subscription of this member", 200
         if member:
             backfill_member_stripe_references(member, customer_id=customer_id, subscription_id=subscription_id)
             backfill_member_coverage_from_subscription(member, subscription)
@@ -644,10 +695,12 @@ def process_stripe_event(event):
             if customer_id:
                 member = Member.query.filter_by(stripe_customer_id=customer_id).first()
                 if member:
+                    # And which subscription: the member may have rejoined since.
+                    disputed_subscription_id = _subscription_of_invoice(disputed_invoice_id)
                     # The payment was reversed, so revoke the coverage it bought
                     # rather than leaving an unsupported grant on the record.
                     revoke_periods_for_payment(
-                        member, disputed_invoice_id, member.stripe_subscription_id,
+                        member, disputed_invoice_id, disputed_subscription_id or member.stripe_subscription_id,
                         reason=f"Chargeback lost for charge {charge_id}.",
                     )
                     # A dispute over an earlier year's payment leaves the year
@@ -668,7 +721,7 @@ def process_stripe_event(event):
                     # so a forum outage cannot leave the revocation undone.
                     enqueue_forum_sync(member, reason="Chargeback lost.")
                     db.session.commit()
-                    _stop_charging_after_lost_dispute(member, charge_id)
+                    _stop_charging_after_lost_dispute(member, charge_id, disputed_subscription_id)
                 else:
                     current_app.logger.warning(
                         "Lost dispute for Stripe customer %s, but no member holds that reference.",

@@ -161,6 +161,56 @@ def test_a_failed_update_starts_them_again(installer):
     assert "resume_background_jobs_after_failure" in _function(installer, "on_error")
 
 
+def test_the_bootstrap_never_moves_the_live_checkout(installer):
+    """It fetches into a copy of its own; the live one moves after the pause,
+    so waiting for CI, or CI failing, leaves the running code alone."""
+    body = _function(installer, "bootstrap_self_update")
+    assert 'bootstrap_target="${INSTALL_DIR}"' not in body
+    assert 'sync_repo_to_dir "${bootstrap_target}"' in body and 'bootstrap_target="${BOOTSTRAP_DIR}"' in body
+    assert 'BOOTSTRAP_TARGET_REVISION="${TARGET_REVISION}"' in body
+    # and the live checkout is moved to exactly the revision CI was asked about
+    assert 'reset --hard "${TARGET_REVISION}"' in _function(installer, "ensure_repo_present")
+
+
+def test_a_failure_before_the_database_step_puts_the_code_back_first(installer):
+    for handler in ("on_error", "on_exit"):
+        calls = [line.strip() for line in _function(installer, handler).splitlines()]
+        undo = next(i for i, call in enumerate(calls) if call.startswith("undo_code_after_early_failure"))
+        resume = next(i for i, call in enumerate(calls) if call.startswith("resume_background_jobs_after_failure"))
+        assert undo < resume, handler
+        assert calls[undo] == "undo_code_after_early_failure", "not in an || list: the undo must stop at a failure"
+
+
+@pytest.mark.parametrize("undo, expected", [
+    ("undo_update_code(){ echo undone; }", ["undone", "paused=0", "keep=0"]),
+    # a failure inside stops the undo there, and the jobs stay paused
+    ("undo_update_code(){ false; echo went-on; }", ["paused=1", "keep=1", "stay-paused"]),
+])
+def test_the_undo_after_an_early_failure(tmp_path, undo, expected):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-q", "--allow-empty", "-m", "new"], check=True)
+    text = INSTALLER.read_text(encoding="utf-8")
+    functions = text[text.index("# The jobs the timers run"):text.index("usage() {")]
+    git_in_dir = _function(text, "git_in_dir")
+    script = (
+        "set -Eeuo pipefail\nstep(){ :; }; info(){ :; }; warn(){ :; }; error(){ :; }; success(){ :; }\n"
+        "systemctl(){ :; }\n" + git_in_dir + functions + undo + "\n"
+        + f"INSTALL_DIR={repo}\nSERVICE_NAME=portal\nUNDO_STATE=0\nBACKGROUND_JOBS_PAUSED=1\n"
+        + "ROLLBACK_POINT_REVISION=0123456789abcdef\n"
+        + "undo_code_after_early_failure\necho paused=$BACKGROUND_JOBS_PAUSED\necho keep=$KEEP_JOBS_PAUSED\n"
+        + "warn(){ echo stay-paused; }\nresume_background_jobs_after_failure\n"
+    )
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60,
+                            env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)})
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == expected
+
+
 def test_pausing_waits_for_a_running_job_and_a_failure_resumes(tmp_path):
     """The functions themselves, with a systemctl that reports one job still running."""
     import subprocess
@@ -306,3 +356,90 @@ def test_the_page_needs_nothing_from_the_portal():
     assert "<script" not in page and "style=" not in page and "<style" not in page  # the CSP forbids both
     for asset in re.findall(r'(?:href|src)="(/static/[^"]+)"', page):
         assert (STATIC / asset[len("/static/"):]).is_file(), asset
+
+
+def test_a_larger_connection_tracking_table_is_kept_and_uninstall_removes_the_setting(installer):
+    body = _function(installer, "configure_connection_tracking")
+    assert "nf_conntrack_max = ${size}" in body and "(( current > size ))" in body
+    uninstall = _function(installer, "uninstall_everything")
+    assert '"/etc/modules-load.d/${SERVICE_NAME}-conntrack.conf"' in uninstall
+    assert '"/etc/sysctl.d/60-${SERVICE_NAME}-conntrack.conf"' in uninstall
+
+
+def test_the_example_settings_match_the_defaults():
+    """Copied as they are, the example limits would undo the raise for intake evenings."""
+    from aeronautics_members import config
+
+    example = dict(
+        line.split("=", 1) for line in (INSTALLER.parent / ".env.example").read_text().splitlines()
+        if line.startswith("RATELIMIT_") and "=" in line
+    )
+    for name, value in example.items():
+        if name != "RATELIMIT_STORAGE_URI":
+            assert value == getattr(config, name), name
+
+
+def test_an_update_leaves_the_live_checkout_alone_until_it_moves_it_to_the_checked_revision(tmp_path):
+    """The real bootstrap and ensure_repo_present, against local repositories."""
+    import subprocess
+
+    def git(*args, cwd=None):
+        return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args], cwd=cwd,
+                              check=True, capture_output=True, text=True).stdout.strip()
+
+    origin = tmp_path / "origin.git"
+    work = tmp_path / "work"
+    git("init", "-q", "--bare", "-b", "main", str(origin))
+    git("clone", "-q", str(origin), str(work))
+    (work / "install.sh").write_text("echo old\n")
+    git("add", ".", cwd=work)
+    git("commit", "-q", "-m", "old", cwd=work)
+    git("push", "-q", "origin", "HEAD:main", cwd=work)
+    old = git("rev-parse", "HEAD", cwd=work)
+    live = tmp_path / "live"
+    git("clone", "-q", str(origin), str(live))
+    # The new version: an installer that reports what it was given.
+    (work / "install.sh").write_text(
+        'echo "target=${BOOTSTRAP_TARGET_REVISION} live=$(git -C "$BOOTSTRAP_INSTALL_DIR" rev-parse HEAD)"\n')
+    git("commit", "-q", "-am", "new", cwd=work)
+    git("push", "-q", "origin", "HEAD:main", cwd=work)
+    new = git("rev-parse", "HEAD", cwd=work)
+
+    lib = tmp_path / "lib.sh"
+    lib.write_text(INSTALLER.read_text(encoding="utf-8").replace('\nmain "$@"\n', "\n: disabled\n"))
+    script = f"""
+source {lib}
+trap - ERR EXIT
+step(){{ :; }}; info(){{ :; }}; warn(){{ :; }}
+detect_package_manager(){{ :; }}; bootstrap_packages(){{ :; }}; install_packages(){{ :; }}
+ensure_writable_directories(){{ :; }}; chown(){{ :; }}
+REPO_URL={origin}; BRANCH=main; INSTALL_DIR={live}; BOOTSTRAP_DIR={tmp_path}/bootstrap
+ORIGINAL_ARGS=()
+( bootstrap_self_update )
+echo "live-after-bootstrap=$(git -C {live} rev-parse HEAD)"
+"""
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=120,
+                            env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.split()
+    assert f"target={new}" in lines and f"live={old}" in lines, "the new installer runs with the live code untouched"
+    assert f"live-after-bootstrap={old}" in lines
+
+    # Meanwhile the branch moves on; the update still installs what CI checked.
+    (work / "later.txt").write_text("later\n")
+    git("add", ".", cwd=work)
+    git("commit", "-q", "-m", "later", cwd=work)
+    git("push", "-q", "origin", "HEAD:main", cwd=work)
+    script = f"""
+source {lib}
+trap - ERR EXIT
+step(){{ :; }}; info(){{ :; }}; warn(){{ :; }}
+ensure_writable_directories(){{ :; }}; chown(){{ :; }}
+REPO_URL={origin}; BRANCH=main; INSTALL_DIR={live}; TARGET_REVISION={new}
+ensure_repo_present
+git -C {live} rev-parse HEAD
+"""
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=120,
+                            env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split()[-1] == new

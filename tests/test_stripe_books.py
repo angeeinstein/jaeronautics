@@ -461,6 +461,23 @@ def test_a_bounced_debit_paid_again_is_one_invoice_and_no_difference(app, stripe
     assert not stripe_books.fetching()
 
 
+@pytest.mark.usefixtures("this_year_only")
+def test_a_team_debit_that_bounced_and_was_paid_again_is_no_difference(app, stripe_account):
+    _portal_records()
+    # The first debit for in_t1 bounced; ch_t1 paid the same invoice.
+    stripe_account["txns"] += [
+        _txn("txn_t1b", "payment", 1000, _charge("py_t1b", "pi_t1b")),
+        _txn("txn_t1b_back", "payment_failure_refund", -1000, {"id": "pfr_3", "object": "refund",
+                                                               "charge": "py_t1b", "payment_intent": "pi_t1b"}),
+    ]
+    stripe_account["paid_by"]["pi_t1b"] = "in_t1"
+    stripe_books.sync()
+
+    found = [(row.what, row.reference) for row in money_checks.run()]
+
+    assert (money_checks.TAKEN_BACK_IN_STRIPE, "in_t1") not in found
+
+
 def test_the_explanation_compares_the_copy_with_stripe(app, stripe_account):
     stripe_books.sync()
     db.session.commit()

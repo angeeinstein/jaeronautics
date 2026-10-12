@@ -6,7 +6,9 @@ through, how an item is written -- is in `CLAUDE.md` at the repository root.
 The last batches built everything that was on the list -- most recently
 (2026-10-11) Stripe's book kept in the portal, with every team figure shown
 line by line and the credit's top-up fees followed to each sale
-(`docs/money-ledger-plan.md`), and forum changes started at once. What it
+(`docs/money-ledger-plan.md`), and forum changes started at once; then
+Codex's review comments that still held (`docs/review-fixes.md`, branch
+`claude/review-fixes`). What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
 The legal drafts and the card readers below were put off by the maintainer.
 

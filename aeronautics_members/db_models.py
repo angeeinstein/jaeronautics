@@ -749,6 +749,9 @@ class ExternalWorkItem(db.Model):
     reason = db.Column(db.String(255), nullable=True)
 
     attempts = db.Column(db.Integer, nullable=False, default=0)
+    # Asked for again while it ran: what it did may already be out of date, so
+    # finishing puts it back in the queue rather than marking it done.
+    asked_again = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     # Honoured by the worker so a failing item backs off instead of spinning.
     not_before = db.Column(db.DateTime, nullable=True)
     claimed_at = db.Column(db.DateTime, nullable=True)

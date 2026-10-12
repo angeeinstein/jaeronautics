@@ -128,6 +128,29 @@ class TestProcessing:
         # Key released, so a later change can queue fresh work for this member.
         assert row.dedupe_key is None
 
+    def test_a_request_while_it_runs_makes_it_run_once_more(self, app, monkeypatch):
+        """The run may have read what was true before the new change; folded
+        into it and then marked done, the change would never reach the forum."""
+        member = make_member(email="again@example.com")
+        runs = []
+
+        def handler(item):
+            runs.append(item.id)
+            if len(runs) == 1:
+                outbox.enqueue("test_kind", member=member, dedupe_key="k_again", reason="changed meanwhile")
+                db.session.commit()
+
+        monkeypatch.setitem(outbox._HANDLERS, "test_kind", handler)
+        item = outbox.enqueue("test_kind", member=member, dedupe_key="k_again")
+        db.session.commit()
+
+        outbox.process_pending()
+
+        assert runs == [item.id, item.id]
+        row = _item(item.id)
+        assert row.status == ExternalWorkItem.STATUS_COMPLETED and row.dedupe_key is None
+        assert row.asked_again is False
+
     def test_failure_is_retried_with_backoff(self, app, monkeypatch):
         def boom(item):
             raise RuntimeError("discourse unreachable")

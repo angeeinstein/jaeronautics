@@ -436,6 +436,14 @@ def rate_limit_network_and_address():
     return f"{rate_limit_network()}|{digest}"
 
 
+def rate_limit_person():
+    """The account for somebody signed in, else the network address plus the
+    address typed into the form: one person's budget, not a lecture hall's."""
+    if current_user and current_user.is_authenticated:
+        return f"user:{current_user.get_id()}"
+    return rate_limit_network_and_address()
+
+
 def rate_limit_network_and_path():
     """The network address plus the page -- for a reset link, the link itself."""
     return f"{rate_limit_network()}|{request.path}"

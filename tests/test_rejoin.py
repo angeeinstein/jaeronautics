@@ -89,6 +89,10 @@ class TestWhoIsOfferedIt:
     def test_one_stripe_gave_up_on(self, app):
         assert billing.can_rejoin(_ended(payment_status="failed")) is True
 
+    def test_one_ended_by_a_lost_chargeback(self, app):
+        """The subscription was cancelled with it; coming back is paying again."""
+        assert billing.can_rejoin(_ended(payment_status="dispute_lost")) is True
+
     def test_not_while_the_membership_still_runs(self, app):
         member = _ended(payment_status="paid", is_active=True,
                         membership_ends_on=date(TODAY.year, 12, 31))
@@ -190,7 +194,8 @@ class TestRejoining:
     def test_a_subscription_still_running_is_not_doubled(self, app, client, stripe_stub):
         """On Jan 1 the portal can read "expired" while Stripe collects the renewal."""
         stripe_stub["state"]["subscriptions"] = [
-            {"id": "sub_running", "status": "past_due", "customer": "cus_old", "metadata": {}},
+            {"id": "sub_running", "status": "past_due", "customer": "cus_old",
+             "metadata": {"purpose": "membership"}},
         ]
         member = _ended(payment_status="expired")
         _sign_in(client, member)

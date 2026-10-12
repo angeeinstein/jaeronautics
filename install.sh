@@ -38,10 +38,13 @@ USE_CLOUDFLARE_TUNNEL="${BOOTSTRAP_USE_CLOUDFLARE_TUNNEL:-0}"
 CLOUDFLARE_ORIGIN_HOST="${BOOTSTRAP_CLOUDFLARE_ORIGIN_HOST:-}"
 ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-}"
 ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-}"
-# The revision that was running before bootstrap_self_update replaced the
-# checkout. Carried across the re-exec because by then HEAD is already the new
-# revision, and the rollback point has to name the one being replaced.
+# The revision that was running before the update. Carried across the
+# re-exec: installers before 2026-10 moved the checkout in the bootstrap, so by
+# then HEAD was already the new revision.
 PRE_UPDATE_REVISION="${BOOTSTRAP_PRE_UPDATE_REVISION:-}"
+# The revision the bootstrap fetched -- the one CI is asked about, and the one
+# the live checkout is moved to, once the background jobs are paused.
+TARGET_REVISION="${BOOTSTRAP_TARGET_REVISION:-}"
 NONINTERACTIVE="${BOOTSTRAP_NONINTERACTIVE:-0}"
 # --restore FILE: a backup made on the Backup & Restore page, and optionally a
 # file holding its passphrase (for a run without a terminal).
@@ -239,6 +242,9 @@ on_error() {
         warn "Starting the portal again: its database migration had gone through."
         systemctl start "${SERVICE_NAME}" 2>/dev/null || true
     fi
+    # Stopped between the new code arriving and the database step: the
+    # previous version back, then its jobs.
+    undo_code_after_early_failure
     # Never leave billing, notifications and forum syncs switched off because
     # an update stopped halfway.
     resume_background_jobs_after_failure || true
@@ -260,6 +266,9 @@ on_exit() {
     cleanup_migration_temp_files
     remove_build_swap || true
     if (( status != 0 )); then
+        # die() comes here without on_error. Not "|| true": that would keep
+        # the undo from stopping at its first failure.
+        undo_code_after_early_failure
         resume_background_jobs_after_failure || true
     fi
 }
@@ -309,12 +318,48 @@ pause_background_jobs() {
 
 resume_background_jobs_after_failure() {
     [[ "${BACKGROUND_JOBS_PAUSED:-0}" == "1" ]] || return 0
+    if [[ "${KEEP_JOBS_PAUSED:-0}" == "1" ]]; then
+        warn "The background jobs stay paused: the code on disk is half updated (above)."
+        return 0
+    fi
     warn "Starting the background jobs again after the failed update."
     local job
     for job in "${BACKGROUND_JOBS[@]}"; do
         systemctl start "${SERVICE_NAME}-${job}.timer" 2>/dev/null || true
     done
     BACKGROUND_JOBS_PAUSED=0
+}
+
+# Set by record_rollback_point, cleared at the database step: in between, the
+# new code may be on disk without its packages or front end, and an update
+# that stops there puts the previous version back rather than leaving the
+# jobs -- and the portal at its next restart -- to run on it.
+ROLLBACK_POINT_REVISION=""
+KEEP_JOBS_PAUSED=0
+
+undo_code_after_early_failure() {
+    [[ -n "${ROLLBACK_POINT_REVISION}" && "${UNDO_STATE:-0}" == "0" ]] || return 0
+    local revision="${ROLLBACK_POINT_REVISION}" head status
+    ROLLBACK_POINT_REVISION=""
+    head="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || true)"
+    [[ -n "${head}" && "${head}" != "${revision}" ]] || return 0
+    warn "The update stopped before its database step, with the new code already on disk."
+    warn "Putting the previous version (${revision:0:8}) back."
+    # In a subshell of its own, stopping at its first failure, and without
+    # this handler's trap: whatever happens there must not end this one.
+    set +e
+    ( trap - ERR; set -e; undo_update_code )
+    status=$?
+    set -e
+    if (( status == 0 )); then
+        # It started the portal and the timers again on the previous code.
+        BACKGROUND_JOBS_PAUSED=0
+        success "The previous version runs again."
+    else
+        KEEP_JOBS_PAUSED=1
+        error "The previous version could not be put back. The portal keeps running the code it"
+        error "started with until it restarts; update again, or roll back from the Updates page."
+    fi
 }
 
 usage() {
@@ -1241,6 +1286,9 @@ EOF
     chown "root:${APP_GROUP}" "${ROLLBACK_FILE}" 2>/dev/null || true
     chmod 640 "${ROLLBACK_FILE}"
     info "Recorded rollback point at ${revision:0:8}."
+    # Until the database step, a failure puts this code back
+    # (undo_code_after_early_failure).
+    ROLLBACK_POINT_REVISION="${revision}"
 }
 
 current_schema_revision() {
@@ -1365,28 +1413,21 @@ bootstrap_self_update() {
     mapfile -t bootstrap_pkg_list < <(bootstrap_packages)
     install_packages "${bootstrap_pkg_list[@]}"
 
+    # Always a copy of its own, never the live checkout: the running portal
+    # and its background jobs use the code in INSTALL_DIR, and moving it here
+    # -- before the wait for CI, and before the jobs are paused -- had them
+    # run the new code on the old packages and database, and left it there
+    # when CI failed. ensure_repo_present moves INSTALL_DIR, after the pause.
     local bootstrap_target="${BOOTSTRAP_DIR}"
-    local existing_remote=""
-    if [[ -d "${INSTALL_DIR}/.git" ]]; then
-        existing_remote="$(git_in_dir "${INSTALL_DIR}" config --get remote.origin.url || true)"
-    fi
-    if [[ -f "${STATE_FILE}" || ( -n "${existing_remote}" && "$(normalize_repo_url "${existing_remote}")" == "$(normalize_repo_url "${REPO_URL}")" ) ]]; then
-        bootstrap_target="${INSTALL_DIR}"
-    fi
+    rm -rf "${BOOTSTRAP_DIR}" 2>/dev/null || true
 
-    if [[ "${bootstrap_target}" == "${BOOTSTRAP_DIR}" ]]; then
-        rm -rf "${BOOTSTRAP_DIR}" 2>/dev/null || true
-    fi
-
-    # Read HEAD before syncing. This is the last moment the old revision is
-    # still checked out: sync_repo_to_dir moves it, and everything after the
-    # re-exec below sees only the new one.
     if [[ -z "${PRE_UPDATE_REVISION}" && -d "${INSTALL_DIR}/.git" ]]; then
         PRE_UPDATE_REVISION="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || printf '')"
     fi
 
     sync_repo_to_dir "${bootstrap_target}" "${REPO_URL}" "${BRANCH}"
     chmod +x "${bootstrap_target}/install.sh"
+    TARGET_REVISION="$(git_in_dir "${bootstrap_target}" rev-parse HEAD 2>/dev/null || printf '')"
 
     step "Re-running installer from the latest repository copy"
     local status=0
@@ -1409,6 +1450,7 @@ bootstrap_self_update() {
         BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
         BOOTSTRAP_NONINTERACTIVE="${NONINTERACTIVE}" \
         BOOTSTRAP_PRE_UPDATE_REVISION="${PRE_UPDATE_REVISION}" \
+        BOOTSTRAP_TARGET_REVISION="${TARGET_REVISION}" \
         bash "${bootstrap_target}/install.sh" "${ORIGINAL_ARGS[@]}" || status=$?
     # An update that undid itself has said all there is to say; any other
     # failure gets its diagnostics here, as before.
@@ -1483,6 +1525,13 @@ detect_existing_installation() {
 
 ensure_repo_present() {
     sync_repo_to_dir "${INSTALL_DIR}" "${REPO_URL}" "${BRANCH}"
+    # The revision CI was checked for, even if the branch has moved on since.
+    if [[ -n "${TARGET_REVISION}" \
+          && "$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || true)" != "${TARGET_REVISION}" ]]; then
+        info "The branch has moved on since this update began; installing ${TARGET_REVISION:0:8}, the version checked."
+        retry 3 git_in_dir "${INSTALL_DIR}" fetch origin "${TARGET_REVISION}"
+        git_in_dir "${INSTALL_DIR}" reset --hard "${TARGET_REVISION}"
+    fi
     ensure_writable_directories
     chown -R "${APP_USER}:${APP_GROUP}" "${INSTALL_DIR}"
 }
@@ -1704,15 +1753,21 @@ wait_for_ci() {
     done
 }
 
-# Gets the front end for the revision checked out in INSTALL_DIR ready:
+# Gets the front end for the revision being installed ready:
 # FRONTEND_ARCHIVE is CI's build, downloaded -- or empty, and it is built
 # here. Run for an update before anything is stopped, so waiting for CI, or
 # CI having failed, costs the running portal nothing.
 prepare_frontend() {
     FRONTEND_PREPARED=1
     FRONTEND_ARCHIVE=""
-    FRONTEND_TREE="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD:frontend 2>/dev/null || true)"
-    [[ -f "${INSTALL_DIR}/frontend/package.json" && -n "${FRONTEND_TREE}" ]] || return 0
+    # The version being installed: the bootstrap's copy, as INSTALL_DIR is
+    # only moved to it later.
+    local checkout="${INSTALL_DIR}"
+    if [[ -n "${TARGET_REVISION}" && -d "${SCRIPT_DIR}/.git" ]]; then
+        checkout="${SCRIPT_DIR}"
+    fi
+    FRONTEND_TREE="$(git_in_dir "${checkout}" rev-parse HEAD:frontend 2>/dev/null || true)"
+    [[ -f "${checkout}/frontend/package.json" && -n "${FRONTEND_TREE}" ]] || return 0
     if [[ "${BUILD_LOCALLY}" == "1" ]]; then
         info "The front end is built on this server, as asked (--build-locally)."
         return 0
@@ -1720,7 +1775,7 @@ prepare_frontend() {
 
     local slug sha
     slug="$(github_repo_slug)"
-    sha="$(git_in_dir "${INSTALL_DIR}" rev-parse HEAD 2>/dev/null || true)"
+    sha="$(git_in_dir "${checkout}" rev-parse HEAD 2>/dev/null || true)"
     if [[ -z "${slug}" || -z "${sha}" ]]; then
         warn "This repository is not on GitHub, so there is no build from CI to fetch; the front end is built on this server."
         return 0
@@ -2431,6 +2486,9 @@ undo_update_code() {
 }
 
 migrate_database_for_update() {
+    # The packages and the front end are in; from here a failure is handled
+    # by the steps below and on_error's UNDO_STATE, not by putting code back.
+    ROLLBACK_POINT_REVISION=""
     local pending
     pending="$(schema_migration_pending)"
     if [[ "${pending}" == "no" ]]; then
@@ -3434,10 +3492,17 @@ configure_connection_tracking() {
         return
     fi
     step "Sizing the connection-tracking table"
+    # At least 65,536; a server sized larger already keeps its own.
+    local size current
+    size=65536
+    current="$(cat /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null || printf '0')"
+    if [[ "${current}" =~ ^[0-9]+$ ]] && (( current > size )); then
+        size="${current}"
+    fi
     printf '%s\n' "nf_conntrack" > "/etc/modules-load.d/${SERVICE_NAME}-conntrack.conf"
     cat > "/etc/sysctl.d/60-${SERVICE_NAME}-conntrack.conf" <<EOF
 # Written by the ${APP_NAME} installer. See configure_connection_tracking.
-net.netfilter.nf_conntrack_max = 65536
+net.netfilter.nf_conntrack_max = ${size}
 net.netfilter.nf_conntrack_tcp_timeout_time_wait = 30
 EOF
     sysctl -p "/etc/sysctl.d/60-${SERVICE_NAME}-conntrack.conf" >/dev/null \
@@ -3841,6 +3906,9 @@ uninstall_everything() {
     if [[ -f "${UPDATE_COMMAND_PATH}" ]] && grep -q "jaeronautics-update-command" "${UPDATE_COMMAND_PATH}" 2>/dev/null; then
         rm -f "${UPDATE_COMMAND_PATH}"
     fi
+    # The connection-tracking size (configure_connection_tracking): the values
+    # set stay until the next reboot, which then uses the system's own.
+    rm -f "/etc/modules-load.d/${SERVICE_NAME}-conntrack.conf" "/etc/sysctl.d/60-${SERVICE_NAME}-conntrack.conf"
 
     if [[ -n "${NGINX_ENABLED_PATH}" ]]; then
         rm -f "${NGINX_ENABLED_PATH}"

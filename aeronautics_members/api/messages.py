@@ -12,7 +12,7 @@ from typing import Literal
 from flask_login import current_user
 from pydantic import Field
 
-from ..app import limiter, rate_limit_network
+from ..app import limiter, rate_limit_network, rate_limit_person
 from ..config import RATELIMIT_CONTACT, RATELIMIT_CONTACT_PER_IP
 from ..permissions import Permission
 from ..services import messages as messages_service
@@ -141,7 +141,7 @@ def contact_form():
 
 
 @endpoint("POST", "/contact", response=MessageSentOut, body=ContactMessageIn, public=True, tag="Messages")
-@limiter.limit(RATELIMIT_CONTACT)
+@limiter.limit(RATELIMIT_CONTACT, key_func=rate_limit_person)
 @limiter.limit(RATELIMIT_CONTACT_PER_IP, key_func=rate_limit_network)
 def contact_send(body):
     """Send a message to the association's admins."""

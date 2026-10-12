@@ -185,6 +185,37 @@ class TestUnsubscribing:
                                data="List-Unsubscribe=One-Click", content_type="application/x-www-form-urlencoded")
         assert response.status_code == 204 and anna.news_unsubscribed_at is not None
 
+    def test_a_link_for_an_address_changed_since_shows_nothing(self, client, people):
+        """Its page would show the new address to whoever reads the old one."""
+        anna, _ben = people
+        token = mailings.unsubscribe_token(anna)
+        anna.email = "anna.new@example.com"
+        db.session.commit()
+
+        assert client.get(f"/api/v1/news/{token}").status_code == 404
+        assert client.get(f"/api/v1/news/{mailings.unsubscribe_token(anna)}").status_code == 200
+
+    def test_links_from_before_the_address_was_in_them_still_work(self, client, people):
+        from aeronautics_members.services.identity import generate_token
+
+        anna, _ben = people
+        token = generate_token(mailings.UNSUBSCRIBE_PURPOSE, user_id=anna.id)
+        assert client.get(f"/api/v1/news/{token}").status_code == 200
+
+    def test_somebody_who_unsubscribes_while_the_news_waits_is_left_out(self, admin, people, outbox, monkeypatch):
+        """News goes out within the hour's limits and can take days."""
+        anna, ben = people
+        monkeypatch.setattr(mailings, "settings", lambda: {"sender": "", "per_hour": 1, "per_day": 300})
+        mailing = mailings.announce(admin, kind="news", audience=ALL, subject="Hello", body="x")
+        assert mailings.process() == 1
+        waiting = next(r for r in mailing.recipients if r.status == mailings.PENDING)
+        mailings.set_news(waiting.user, False, how="account")
+        monkeypatch.setattr(mailings, "settings", lambda: {"sender": "", "per_hour": 100, "per_day": 300})
+
+        assert mailings.process() == 0
+        assert len(outbox) == 1 and mailing.status == "sent"
+        assert (mailing.recipient_count, mailing.unsubscribed_count) == (1, 1)
+
     def test_a_bad_link(self, client, app):
         assert client.get("/api/v1/news/not-a-token").status_code == 404
 

@@ -291,6 +291,44 @@ class TestLookingUpTheMembershipsSubscription:
 
         assert billing.get_latest_stripe_subscription_for_member(student)["id"] == "sub_membership"
 
+    def _outage(self, monkeypatch):
+        def unreachable(*a, **k):
+            raise stripe.APIConnectionError("Stripe is down")
+
+        monkeypatch.setattr(stripe.Price, "retrieve", staticmethod(unreachable))
+
+    def test_a_running_subscription_that_cannot_be_told_is_not_taken_for_the_membership(
+            self, app, monkeypatch, student):
+        """Taken for it, a rejoin would write a team's fee onto the member."""
+        self._outage(monkeypatch)
+        monkeypatch.setattr(stripe.Subscription, "list", self._listing(
+            {"id": "sub_other", "status": "active",
+             "items": {"data": [{"price": {"id": "price_other", "product": "prod_other"}}]}},
+        ))
+
+        with pytest.raises(stripe.StripeError):
+            billing.find_live_stripe_subscription(student)
+        with pytest.raises(stripe.StripeError):
+            billing.get_latest_stripe_subscription_for_member(student)
+
+    def test_one_with_nothing_to_tell_it_by_is_not_taken_for_the_membership(self, app, monkeypatch, student):
+        """No mark, not known, no price: the membership's subscriptions always have one of those."""
+        monkeypatch.setattr(stripe.Subscription, "list", self._listing(
+            {"id": "sub_unmarked", "status": "active", "metadata": {}},
+        ))
+
+        assert billing.find_live_stripe_subscription(student) is None
+        assert billing.get_latest_stripe_subscription_for_member(student) is None
+
+    def test_an_ended_one_is_not_asked_about(self, app, monkeypatch, student):
+        self._outage(monkeypatch)
+        monkeypatch.setattr(stripe.Subscription, "list", self._listing(
+            {"id": "sub_other", "status": "canceled",
+             "items": {"data": [{"price": {"id": "price_other", "product": "prod_other"}}]}},
+        ))
+
+        assert billing.find_live_stripe_subscription(student) is None
+
 
 def test_the_membership_checkout_marks_what_it_sells(app):
     member = make_member(email="marked@example.com")

@@ -669,9 +669,12 @@ top-up already paid is still added.
 
 **Erasing an account** refunds its credit to the payments it came from,
 newest first. What cannot go back through Stripe -- cash, or a payment too
-old to refund -- the admins are emailed about (`credit_left_at_erasure`);
-pay it out and book it as *Paid out* on the person's credit page. If Stripe
-cannot be reached, nothing is erased; try again.
+old to refund -- the admins are emailed about (`credit_left_at_erasure`,
+with the person's name and address, taken before the erasure: nothing else
+says whom to pay); pay it out and book it as *Paid out* on the person's
+credit page. If Stripe cannot be reached, nothing is erased; try again. A
+top-up page still open is closed, and a top-up paid on one anyway is
+refunded at once (`credit_paid_after_erasure` if Stripe refuses).
 
 ## Stripe's fees
 
@@ -737,7 +740,9 @@ queue -- seconds, and no page waits for the forum (`services/outbox.py`,
 failure, so a forum that is down or asks us to slow down is left to the
 retries. The `process-external-work` timer (every 2 minutes) stays behind it:
 it retries, and does what work queued outside a request (the nightly jobs)
-asks for. Not while background jobs are paused.
+asks for. Not while background jobs are paused. The same work asked for
+twice is one item; asked for again while it runs, it runs once more when it
+finishes, so a change made in the meantime is not lost.
 
 One thing is not an event at all. A membership ends because its last day has
 passed — nobody clicks anything, nothing is written, no code runs. The portal
