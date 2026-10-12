@@ -12,6 +12,7 @@ again. The secret is 32 random bytes, so a slow hash would add nothing.
 
 import hashlib
 import hmac
+import json
 import secrets
 from datetime import timedelta, timezone
 
@@ -239,10 +240,17 @@ def resource(device, name):
     return fetch(device)
 
 
+#: What one report may carry, as JSON: it is kept with the event.
+REPORT_DATA_MAX = 4096
+
+
 def report(device, *, event_id, name, data):
     """Something the device reports, answered by its type. The same ``event_id``
     again -- sent after a network error -- gets the first answer, and nothing is
     done twice."""
+    if len(json.dumps(data or {}, separators=(",", ":"))) > REPORT_DATA_MAX:
+        raise ValidationError(f"A report carries at most {REPORT_DATA_MAX} bytes of data.",
+                              code="device_report_too_large")
     earlier = _earlier(device, event_id)
     if earlier is not None:
         return earlier.answer

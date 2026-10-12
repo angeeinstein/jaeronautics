@@ -72,7 +72,8 @@ Every request carries `Authorization: Bearer <key>`, and may carry
   the device's own (a counter or random), so a request sent again after a
   network error gets the first answer and is not counted twice.
 - **Refusals:** `401` for an unknown key, `403` for a device switched off,
-  `404` for what its type does not offer, `429` above the limit (per device).
+  `404` for what its type does not offer, `429` above the limit (per device),
+  `400` for a report carrying more than 4 KB of data.
   The body is the API's usual error, with a stable `code` for the firmware
   to act on.
 - **The Test type:**

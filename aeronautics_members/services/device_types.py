@@ -40,7 +40,13 @@ class Setting:
 class Report:
     """Something a device may report. ``answer(device, data)`` decides and
     returns what the device is told, a dict. ``tryable``: harmless enough for
-    an admin to send it as the device from its page (never a sale)."""
+    an admin to send it as the device from its page (never a sale).
+
+    A report sent again is answered from the first one, but two copies
+    arriving at the same moment can both reach ``answer`` before either is
+    recorded: one that changes something (a sale) keys that change by the
+    report's event id as well, so it happens once.
+    """
 
     answer: Callable[[Any, dict], dict]
     tryable: bool = False

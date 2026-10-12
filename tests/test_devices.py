@@ -167,6 +167,13 @@ class TestTheDeviceApi:
         assert again == first, "the first answer, not a second one"
         assert db.session.query(DeviceEvent).filter_by(kind="reported").count() == 1
 
+    def test_a_report_carries_little_data(self, app, client, admin):
+        added = _add(client, admin)
+        device_client, headers = _as_device(app, added["key"])
+        answer = device_client.post("/api/v1/device/events", headers=headers,
+                                    json={"event_id": "big", "kind": "ping", "data": {"x": "y" * 5000}})
+        assert answer.status_code == 400 and answer.get_json()["error"]["code"] == "device_report_too_large"
+
     def test_a_report_its_type_does_not_know(self, app, client, admin):
         added = _add(client, admin)
         device_client, headers = _as_device(app, added["key"])
