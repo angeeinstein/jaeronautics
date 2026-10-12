@@ -1149,6 +1149,11 @@ def create_app(config_overrides=None):
     from .api import api_bp
 
     csrf.exempt(webhook_bp)
+    # Devices sign in with their key, never a session (api/devices.py).
+    from .api.devices import DEVICE_VIEWS
+
+    for view in DEVICE_VIEWS:
+        csrf.exempt(f"{view.__module__}.{view.__name__}")
     app.register_blueprint(api_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(public_bp)
@@ -4433,10 +4438,15 @@ def create_app(config_overrides=None):
                 ~NotificationBatch.events.any(),
             ).delete(synchronize_session=False)
 
+        # Devices' events: 90 days (docs/devices-plan.md).
+        from .services.devices import forget_old as forget_old_device_events
+
+        device_events_deleted = forget_old_device_events()
+
         db.session.commit()
         click.echo(click.style(
             f"Deleted {audit_deleted} audit log(s), {events_deleted} notification event(s), "
-            f"{batches_deleted} notification batch(es).",
+            f"{batches_deleted} notification batch(es), {device_events_deleted} device event(s).",
             fg="green",
         ))
 

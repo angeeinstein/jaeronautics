@@ -21,6 +21,7 @@ from . import (  # noqa: F401 -- registers their endpoints
     admin_system,
     admin_teams,
     credit,
+    devices,
     form_options,
     legal,
     mailings,

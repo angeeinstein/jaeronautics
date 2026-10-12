@@ -76,6 +76,9 @@ class Permission:
     MESSAGES_RECEIVE = "messages.receive"
     # Emails to many members: Admin › Announcements (docs/messages-plan.md).
     ANNOUNCEMENTS_SEND = "announcements.send"
+    # Card readers and other devices, and their keys: Admin › Settings ›
+    # Devices (docs/devices-plan.md). Technical, so admins only.
+    DEVICES_MANAGE = "devices.manage"
 
 
 # Roles, and what each one may do. This is the whole access model.
@@ -100,6 +103,7 @@ ROLE_PERMISSIONS = {
         Permission.CREDIT_MANAGE,
         Permission.MESSAGES_RECEIVE,
         Permission.ANNOUNCEMENTS_SEND,
+        Permission.DEVICES_MANAGE,
         # Somebody trusted to administer the members here is trusted to keep
         # order on the forum -- decided 2026-09-26. Nobody is made an admin
         # here who would not be trusted with that.
@@ -125,6 +129,7 @@ ROLE_PERMISSIONS = {
         Permission.CREDIT_MANAGE,
         Permission.MESSAGES_RECEIVE,
         Permission.ANNOUNCEMENTS_SEND,
+        Permission.DEVICES_MANAGE,
         Permission.FORUM_MODERATOR,
         # Everything on the forum as well. A Discourse admin can change any
         # site setting and make API keys, which is the forum's equivalent of
@@ -204,6 +209,7 @@ PERMISSION_LABELS = {
     Permission.CREDIT_MANAGE: "See everybody's credit, book cash, corrections and refunds",
     Permission.MESSAGES_RECEIVE: "Receive and read the contact form's messages",
     Permission.ANNOUNCEMENTS_SEND: "Send announcements to the members",
+    Permission.DEVICES_MANAGE: "Add card readers and other devices, and manage their keys",
 }
 
 

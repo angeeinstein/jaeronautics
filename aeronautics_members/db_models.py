@@ -1374,3 +1374,63 @@ class MailAccount(db.Model):
             config["from_name"] = self.from_name
         return config
 
+
+
+class Device(db.Model):
+    """A device that talks to the portal: a card reader, a dispenser, a door
+    (services/devices.py, docs/devices-plan.md). Its type decides what it may
+    ask for and report; its firmware is written for that type.
+
+    It signs in with a key, of which only the hash is kept: ``key_id`` is the
+    part that finds the device, ``key_hash`` the SHA-256 of the secret part.
+    """
+
+    __tablename__ = "devices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), nullable=False, unique=True)
+    #: A type registered in services/device_types.py.
+    type = db.Column(db.String(40), nullable=False)
+    #: Where it is, in words: "Workshop, beside the fridge".
+    place = db.Column(db.String(120), nullable=True)
+    #: The settings its type has, as the admin set them.
+    settings = db.Column(db.JSON, nullable=False, default=dict)
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    #: How it signs in: "key" (a bearer key over HTTPS) for now.
+    auth_method = db.Column(db.String(20), nullable=False, default="key")
+    key_id = db.Column(db.String(16), nullable=False, unique=True)
+    key_hash = db.Column(db.String(64), nullable=False)
+    key_created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    last_seen_at = db.Column(db.DateTime, nullable=True)
+    last_address = db.Column(db.String(45), nullable=True)
+    firmware = db.Column(db.String(60), nullable=True)
+
+    events = db.relationship("DeviceEvent", backref="device", cascade="all, delete-orphan",
+                             passive_deletes=True, order_by="DeviceEvent.id.desc()", lazy="dynamic")
+
+
+class DeviceEvent(db.Model):
+    """Something that happened with a device: a refused sign-in, what it
+    reported and was answered, a new key. Kept 90 days.
+
+    ``event_id`` is the device's own id for what it reported, so the same
+    report sent again after a network error is answered as the first time
+    (``answer``) and not counted twice.
+    """
+
+    __tablename__ = "device_events"
+    __table_args__ = (UniqueConstraint("device_id", "event_id", name="uq_device_events_device_event"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    #: "reported", "refused", "error", "key", "tried", ...
+    kind = db.Column(db.String(30), nullable=False)
+    #: For a report: what was reported ("ping", "tap").
+    name = db.Column(db.String(40), nullable=True)
+    event_id = db.Column(db.String(64), nullable=True)
+    detail = db.Column(db.String(255), nullable=True)
+    data = db.Column(db.JSON, nullable=True)
+    answer = db.Column(db.JSON, nullable=True)
