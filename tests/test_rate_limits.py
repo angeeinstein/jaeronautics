@@ -215,3 +215,21 @@ def test_going_to_the_forum_in_a_loop_is_stopped_per_account(limited_app):
     assert 429 not in statuses[:20]
     assert statuses[20] == 429
     assert 429 not in clicks_as(other, 3)
+
+
+def test_a_device_has_a_budget_of_its_own(limited_app):
+    """One device asking too often is held back; another on the same network is not."""
+    from aeronautics_members.services import devices
+
+    _first, first_key = devices.add(None, name="Busy reader", type="test")
+    _second, second_key = devices.add(None, name="Quiet reader", type="test")
+    db.session.commit()
+    client = limited_app.test_client()
+
+    def hello(key):
+        return client.get("/api/v1/device", headers={"Authorization": f"Bearer {key}"},
+                          environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
+
+    statuses = [hello(first_key) for _ in range(125)]
+    assert statuses[:120] == [200] * 120 and 429 in statuses[120:]
+    assert hello(second_key) == 200
