@@ -4115,6 +4115,13 @@
             "title": "Events",
             "type": "array"
           },
+          "requests": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceRequestOut"
+            },
+            "title": "Requests",
+            "type": "array"
+          },
           "server": {
             "title": "Server",
             "type": "string"
@@ -4123,6 +4130,7 @@
         "required": [
           "device",
           "events",
+          "requests",
           "server"
         ],
         "title": "DeviceDetailOut",
@@ -4371,8 +4379,37 @@
             "type": "string"
           },
           "key_hint": {
-            "title": "Key Hint",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Hint"
+          },
+          "key_last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Last Used At"
+          },
+          "key_revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Revoked At"
           },
           "last_address": {
             "anyOf": [
@@ -4443,6 +4480,8 @@
           "firmware",
           "key_hint",
           "key_created_at",
+          "key_last_used_at",
+          "key_revoked_at",
           "created_at"
         ],
         "title": "DeviceOut",
@@ -4495,6 +4534,64 @@
           "answer"
         ],
         "title": "DeviceReportOut",
+        "type": "object"
+      },
+      "DeviceRequestOut": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "method",
+          "path",
+          "status",
+          "code",
+          "address"
+        ],
+        "title": "DeviceRequestOut",
         "type": "object"
       },
       "DeviceResourceOut": {
@@ -19043,6 +19140,78 @@
       }
     },
     "/api/v1/admin/devices/{device_id}/key": {
+      "delete": {
+        "operationId": "admin_device_key_revoke",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Revoke the key without a new one: the device stays, and cannot sign in until it gets one.",
+        "tags": [
+          "Admin"
+        ],
+        "x-permissions": [
+          "devices.manage"
+        ]
+      },
       "post": {
         "operationId": "admin_device_key",
         "parameters": [

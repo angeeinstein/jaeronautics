@@ -1400,7 +1400,11 @@ class Device(db.Model):
     auth_method = db.Column(db.String(20), nullable=False, default="key")
     key_id = db.Column(db.String(16), nullable=False, unique=True)
     key_hash = db.Column(db.String(64), nullable=False)
+    #: The key's last four characters, to tell keys apart; none for keys made before they were kept.
+    key_tail = db.Column(db.String(8), nullable=True)
     key_created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    #: Revoked, and no new one made yet: the device cannot sign in.
+    key_revoked_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     last_seen_at = db.Column(db.DateTime, nullable=True)
@@ -1409,6 +1413,23 @@ class Device(db.Model):
 
     events = db.relationship("DeviceEvent", backref="device", cascade="all, delete-orphan",
                              passive_deletes=True, order_by="DeviceEvent.id.desc()", lazy="dynamic")
+
+
+class DeviceRequest(db.Model):
+    """One request a device made, and what it was answered: the last 100 of
+    each device, for watching it while its firmware is written."""
+
+    __tablename__ = "device_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    method = db.Column(db.String(8), nullable=False)
+    path = db.Column(db.String(200), nullable=False)
+    status = db.Column(db.Integer, nullable=False)
+    #: The error's code, for an answer that refused.
+    code = db.Column(db.String(60), nullable=True)
+    address = db.Column(db.String(45), nullable=True)
 
 
 class DeviceEvent(db.Model):

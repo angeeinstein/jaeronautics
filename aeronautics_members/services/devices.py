@@ -7,7 +7,9 @@ A device signs in with a key sent as a bearer token over HTTPS:
 
 The key id finds the device; only the SHA-256 of the secret is kept, so the
 key is shown once -- when the device is added or given a new one -- and never
-again. The secret is 32 random bytes, so a slow hash would add nothing.
+again. The secret is 32 random bytes, so a slow hash would add nothing. Its
+last four characters are kept to tell keys apart (``jadev_<key id>_…AbCd``),
+which tells nothing useful about the other 39.
 """
 
 import hashlib
@@ -18,7 +20,7 @@ from datetime import timedelta, timezone
 
 from sqlalchemy.exc import IntegrityError
 
-from ..db_models import Device, DeviceEvent, db
+from ..db_models import Device, DeviceEvent, DeviceRequest, db
 from . import ConflictError, NotFoundError, ServiceError, ValidationError
 from . import device_types
 from .audit import log_audit_event
@@ -32,15 +34,22 @@ ONLINE = timedelta(minutes=5)
 #: "last seen" is written at most this often, so a device asking every few
 #: seconds does not write a row each time.
 SEEN_EVERY = timedelta(seconds=30)
+#: Each device's requests kept, the newest.
+REQUESTS_KEPT = 100
+TAIL = 4
 NAME_MAX = 80
 PLACE_MAX = 120
 
 
 class DeviceRefused(ServiceError):
     """A request a device is not let in with: an unknown key (401), a device
-    switched off (403)."""
+    switched off (403). ``device`` is the device, when the key named one."""
 
     http_status = 401
+
+    def __init__(self, message, *, device=None, **kwargs):
+        super().__init__(message, **kwargs)
+        self.device = device
 
 
 def _aware(moment):
@@ -52,10 +61,18 @@ def _hash(secret):
 
 
 def _new_key():
-    """``(key, key_id, hash)``: a new key, the part that finds the device, the hash kept."""
+    """``(key, key_id, hash, tail)``: a new key, the part that finds the device,
+    the hash kept, and its last characters."""
     key_id = secrets.token_hex(6)
     secret = secrets.token_urlsafe(32)
-    return f"{KEY_PREFIX}_{key_id}_{secret}", key_id, _hash(secret)
+    return f"{KEY_PREFIX}_{key_id}_{secret}", key_id, _hash(secret), secret[-TAIL:]
+
+
+def key_hint(device):
+    """The key as it may be shown: its start, and its end where that is kept. None when revoked."""
+    if device.key_revoked_at is not None:
+        return None
+    return f"{KEY_PREFIX}_{device.key_id}_…{device.key_tail or ''}"
 
 
 def _type_of(slug):
@@ -114,12 +131,12 @@ def device_of(device_id):
 def add(actor, *, name, type, place=None, settings=None):
     """A new device, and its key -- the only time the key can be read. ``(device, key)``."""
     device_type = _type_of(type)
-    key, key_id, key_hash = _new_key()
+    key, key_id, key_hash, key_tail = _new_key()
     now = get_now_utc()
     device = Device(
         name=_clean_name(name), type=device_type.slug, place=_clean_place(place),
         settings=device_types.clean_settings(device_type, settings), enabled=True, auth_method="key",
-        key_id=key_id, key_hash=key_hash, key_created_at=now, created_at=now,
+        key_id=key_id, key_hash=key_hash, key_tail=key_tail, key_created_at=now, created_at=now,
         created_by_user_id=actor.id if actor is not None else None,
     )
     db.session.add(device)
@@ -151,23 +168,65 @@ def change(actor, device, *, name=None, place=None, enabled=None, settings=None)
 
 def new_key(actor, device):
     """A new key for the device; the old one stops working at once. Returns the key."""
-    key, key_id, key_hash = _new_key()
-    device.key_id, device.key_hash, device.key_created_at = key_id, key_hash, get_now_utc()
+    key, key_id, key_hash, key_tail = _new_key()
+    device.key_id, device.key_hash, device.key_tail = key_id, key_hash, key_tail
+    device.key_created_at, device.key_revoked_at = get_now_utc(), None
     _record(device, "key", detail="New key; the old one no longer works")
     log_audit_event("devices", "device_key_replaced", actor_user=actor, metadata={"device_id": device.id})
     return key
 
 
+def revoke_key(actor, device):
+    """The key stops working, and none replaces it: the device stays, with its
+    settings and history, until it is given a new key."""
+    if device.key_revoked_at is not None:
+        return device
+    # Its hash stays, so the old key is answered "revoked" rather than "unknown";
+    # authenticate() refuses it either way.
+    device.key_revoked_at = get_now_utc()
+    _record(device, "key", detail="Key revoked; no key works until a new one is made")
+    log_audit_event("devices", "device_key_revoked", actor_user=actor, metadata={"device_id": device.id})
+    return device
+
+
+def key_last_used(device):
+    """When the present key was last used: the device's last sign of life since the key was made."""
+    seen, made = _aware(device.last_seen_at), _aware(device.key_created_at)
+    return seen if seen is not None and made is not None and seen >= made else None
+
+
 def remove(actor, device):
     log_audit_event("devices", "device_removed", actor_user=actor,
                     metadata={"device_id": device.id, "name": device.name, "type": device.type})
-    # Its events first, by hand: SQLite, which the tests use, does not cascade.
+    # Its events and requests first, by hand: SQLite, which the tests use, does not cascade.
     db.session.execute(db.delete(DeviceEvent).where(DeviceEvent.device_id == device.id))
+    db.session.execute(db.delete(DeviceRequest).where(DeviceRequest.device_id == device.id))
     db.session.delete(device)
 
 
 def recent_events(device, limit=50):
     return device.events.limit(limit).all()
+
+
+def recent_requests(device, limit=REQUESTS_KEPT):
+    return db.session.execute(
+        db.select(DeviceRequest).filter_by(device_id=device.id).order_by(DeviceRequest.id.desc()).limit(limit)
+    ).scalars().all()
+
+
+def record_request(device, *, method, path, status, code=None, address=None, now=None):
+    """A request the device made and its answer; only the last 100 are kept."""
+    db.session.add(DeviceRequest(device_id=device.id, at=now or get_now_utc(), method=method[:8],
+                                 path=(path or "")[:200], status=status, code=(code or None) and code[:60],
+                                 address=(address or "")[:45] or None))
+    db.session.flush()
+    oldest_kept = db.session.execute(
+        db.select(DeviceRequest.id).filter_by(device_id=device.id)
+        .order_by(DeviceRequest.id.desc()).offset(REQUESTS_KEPT - 1).limit(1)
+    ).scalar_one_or_none()
+    if oldest_kept is not None:
+        db.session.execute(db.delete(DeviceRequest).where(DeviceRequest.device_id == device.id,
+                                                          DeviceRequest.id < oldest_kept))
 
 
 def is_online(device, now=None):
@@ -187,7 +246,8 @@ def authenticate(authorization):
     """The device a request's ``Authorization: Bearer <key>`` belongs to.
 
     Raises DeviceRefused: 401 for no key or a wrong one, 403 for a device
-    switched off. A wrong secret for a known key id is recorded on that device.
+    switched off -- with the device, when the key named one, for the caller
+    to record (``refused``).
     """
     scheme, _, key = (authorization or "").partition(" ")
     parts = key.strip().split("_", 2) if scheme.lower() == "bearer" else []
@@ -197,12 +257,18 @@ def authenticate(authorization):
     if device is None:
         raise DeviceRefused("This key is not known.", code="device_key_unknown")
     if not hmac.compare_digest(device.key_hash, _hash(parts[2])):
-        _record(device, "refused", detail="A wrong key")
-        db.session.commit()
-        raise DeviceRefused("This key is not known.", code="device_key_unknown")
+        raise DeviceRefused("This key is not known.", code="device_key_unknown", device=device)
+    if device.key_revoked_at is not None:
+        raise DeviceRefused("This device's key was revoked.", code="device_key_revoked", device=device)
     if not device.enabled:
-        raise DeviceRefused("This device is switched off.", code="device_off", http_status=403)
+        raise DeviceRefused("This device is switched off.", code="device_off", http_status=403, device=device)
     return device
+
+
+def refused(device, exc):
+    """A request turned away for a wrong key: an event on the device it named."""
+    if exc.code == "device_key_unknown":
+        _record(device, "refused", detail="A wrong key")
 
 
 def seen(device, *, address=None, firmware=None, now=None):

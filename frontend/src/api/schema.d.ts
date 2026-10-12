@@ -821,7 +821,8 @@ export interface paths {
         put?: never;
         /** A new key; the old one stops working at once. Shown this once. */
         post: operations["admin_device_key"];
-        delete?: never;
+        /** Revoke the key without a new one: the device stays, and cannot sign in until it gets one. */
+        delete: operations["admin_device_key_revoke"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4147,6 +4148,8 @@ export interface components {
             device: components["schemas"]["DeviceOut"];
             /** Events */
             events: components["schemas"]["DeviceEventOut"][];
+            /** Requests */
+            requests: components["schemas"]["DeviceRequestOut"][];
             /** Server */
             server: string;
         };
@@ -4233,7 +4236,11 @@ export interface components {
             /** Key Created At */
             key_created_at: string;
             /** Key Hint */
-            key_hint: string;
+            key_hint: string | null;
+            /** Key Last Used At */
+            key_last_used_at: string | null;
+            /** Key Revoked At */
+            key_revoked_at: string | null;
             /** Last Address */
             last_address: string | null;
             /** Last Seen At */
@@ -4272,6 +4279,23 @@ export interface components {
             };
             /** Event Id */
             event_id: string;
+        };
+        /** DeviceRequestOut */
+        DeviceRequestOut: {
+            /** Address */
+            address: string | null;
+            /** At */
+            at: string;
+            /** Code */
+            code: string | null;
+            /** Id */
+            id: number;
+            /** Method */
+            method: string;
+            /** Path */
+            path: string;
+            /** Status */
+            status: number;
         };
         /** DeviceResourceOut */
         DeviceResourceOut: {
@@ -10686,6 +10710,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceKeyOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_key_revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
                 };
             };
             /** @description Not signed in. */

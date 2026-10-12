@@ -1,8 +1,9 @@
 /**
- * Settings -> Devices -> one device (docs/devices-plan.md): its state,
- * refreshed while the page is open; its name, place and settings; switching
- * it off; a new key; trying what it would be answered; how a device talks to
- * the portal, for writing its firmware; its recent events; removing it.
+ * Settings -> Devices -> one device (docs/devices-plan.md): its state; its
+ * name, place and settings; switching it off; its key on one line (rotate,
+ * revoke); trying what it would be answered; its recent requests and events,
+ * refreshed every few seconds while the page is open; how a device talks to
+ * the portal, for writing its firmware; removing it.
  * Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
  */
 import {
@@ -29,14 +30,14 @@ import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
 import { EmptyState, ErrorState, LoadingState } from '../../../components/States';
 import { formatDateTime } from '../../../lib/format';
-import { EVERY_30_SECONDS, useLiveRefresh } from '../../../lib/live';
+import { EVERY_5_SECONDS, useLiveRefresh } from '../../../lib/live';
 import { notifyDone, notifyFailed, notifyNote } from '../../../lib/notify';
 import {
   type Device,
   type DeviceKey,
   devicesKey,
   type DeviceType,
-  KeyShown,
+  KeyReveal,
   type Settings,
   statusOf,
   TypeSettingsFields,
@@ -74,7 +75,6 @@ function State({ device }: { device: Device }) {
           ['Last seen', device.last_seen_at ? formatDateTime(device.last_seen_at) : 'Never'],
           ['From', device.last_address ?? '–'],
           ['Firmware', device.firmware ?? '–'],
-          ['Key', `${device.key_hint}…, since ${formatDateTime(device.key_created_at)}`],
           ['Added', formatDateTime(device.created_at)],
         ]}
       />
@@ -321,18 +321,148 @@ function Events({ events }: { events: Detail['events'] }) {
   );
 }
 
-function KeyAndRemove({ device, onKey }: { device: Device; onKey: (key: DeviceKey) => void }) {
+/** Its key on one line -- shortened, when made, when last used -- with what can be done to it. */
+function KeyCard({ device }: { device: Device }) {
   const client = useQueryClient();
-  const navigate = useNavigate();
+  const [shown, setShown] = useState<DeviceKey | null>(null);
+  const path = { params: { path: { device_id: device.id } } };
+  const done = async () => {
+    await client.invalidateQueries({ queryKey: devicesKey });
+  };
   const newKey = useMutation({
-    mutationFn: () =>
-      call(api.POST('/api/v1/admin/devices/{device_id}/key', { params: { path: { device_id: device.id } } })),
+    mutationFn: () => call(api.POST('/api/v1/admin/devices/{device_id}/key', path)),
     onSuccess: async (result) => {
-      onKey(result);
-      await client.invalidateQueries({ queryKey: devicesKey });
+      setShown(result);
+      await done();
     },
     onError: notifyFailed,
   });
+  const revoke = useMutation({
+    mutationFn: () => call(api.DELETE('/api/v1/admin/devices/{device_id}/key', path)),
+    onSuccess: async () => {
+      notifyDone('Key revoked: the device cannot sign in until it has a new one.');
+      await done();
+    },
+    onError: notifyFailed,
+  });
+
+  return (
+    <Panel title="Key">
+      {shown ? (
+        <KeyReveal
+          result={shown}
+          onDone={() => {
+            setShown(null);
+          }}
+        />
+      ) : device.key_hint ? (
+        <Group justify="space-between" gap="md" align="center">
+          <Stack gap={4} miw={0}>
+            <Code style={{ wordBreak: 'break-all' }} aria-label="Key">
+              {device.key_hint}
+            </Code>
+            <Text size="sm" c="dimmed">
+              Made {formatDateTime(device.key_created_at)} ·{' '}
+              {device.key_last_used_at
+                ? `last used ${formatDateTime(device.key_last_used_at)}`
+                : 'not used yet'}
+            </Text>
+          </Stack>
+          <Group gap="sm" wrap="nowrap">
+            <ConfirmButton
+              variant="default"
+              confirmLabel="Yes, rotate"
+              loading={newKey.isPending}
+              onConfirm={() => {
+                newKey.mutate();
+              }}
+            >
+              Rotate
+            </ConfirmButton>
+            <ConfirmButton
+              variant="default"
+              confirmLabel="Yes, revoke"
+              loading={revoke.isPending}
+              onConfirm={() => {
+                revoke.mutate();
+              }}
+            >
+              Revoke
+            </ConfirmButton>
+          </Group>
+        </Group>
+      ) : (
+        <Group justify="space-between" gap="md" align="center">
+          <Text size="sm" c="dimmed">
+            No key: revoked {device.key_revoked_at ? formatDateTime(device.key_revoked_at) : ''}. The device
+            cannot sign in.
+          </Text>
+          <Button
+            loading={newKey.isPending}
+            onClick={() => {
+              newKey.mutate();
+            }}
+          >
+            Make a key
+          </Button>
+        </Group>
+      )}
+      {!shown && device.key_hint ? (
+        <Text size="xs" c="dimmed" mt="sm">
+          Rotate: a new key works at once, and this one stops. Revoke: no key works until a new one is made.
+        </Text>
+      ) : null}
+    </Panel>
+  );
+}
+
+function Requests({ requests }: { requests: Detail['requests'] }) {
+  return (
+    <Panel title="Recent requests" flush>
+      {requests.length ? (
+        <Table.ScrollContainer minWidth={560} type="native">
+          <Table verticalSpacing="xs" aria-label="Recent requests">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th scope="col">When</Table.Th>
+                <Table.Th scope="col">Request</Table.Th>
+                <Table.Th scope="col">Answer</Table.Th>
+                <Table.Th scope="col">From</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {requests.map((request) => (
+                <Table.Tr key={request.id}>
+                  <Table.Td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(request.at)}</Table.Td>
+                  <Table.Td>
+                    <Code>
+                      {request.method} {request.path.replace(/^\/api\/v1/, '')}
+                    </Code>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm" c={request.status < 400 ? undefined : 'red.4'}>
+                      {request.status}
+                      {request.code ? ` ${request.code}` : ''}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>{request.address ?? '–'}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      ) : (
+        <Stack px="md">
+          <EmptyState>None yet.</EmptyState>
+        </Stack>
+      )}
+    </Panel>
+  );
+}
+
+function RemoveDevice({ device }: { device: Device }) {
+  const client = useQueryClient();
+  const navigate = useNavigate();
   const remove = useMutation({
     mutationFn: () =>
       call(api.DELETE('/api/v1/admin/devices/{device_id}', { params: { path: { device_id: device.id } } })),
@@ -345,52 +475,30 @@ function KeyAndRemove({ device, onKey }: { device: Device; onKey: (key: DeviceKe
     onError: notifyFailed,
   });
   return (
-    <Panel title="Key and removal">
-      <Stack gap="md">
+    <Panel title="Remove the device">
+      <Group justify="space-between" gap="md" align="center">
         <Text size="sm" c="dimmed">
-          A new key works at once, and the device&apos;s current one stops working. Removing the device
-          deletes it, its key and its events.
+          Deletes the device, its key, its requests and its events.
         </Text>
-        <Group gap="sm">
-          <ConfirmButton
-            variant="default"
-            confirmLabel="Yes, a new key"
-            loading={newKey.isPending}
-            onConfirm={() => {
-              newKey.mutate();
-            }}
-          >
-            New key
-          </ConfirmButton>
-          <ConfirmButton
-            confirmLabel="Yes, remove it"
-            loading={remove.isPending}
-            onConfirm={() => {
-              remove.mutate();
-            }}
-          >
-            Remove
-          </ConfirmButton>
-        </Group>
-      </Stack>
+        <ConfirmButton
+          confirmLabel="Yes, remove it"
+          loading={remove.isPending}
+          onConfirm={() => {
+            remove.mutate();
+          }}
+        >
+          Remove
+        </ConfirmButton>
+      </Group>
     </Panel>
   );
 }
 
 function DevicePage({ detail, types }: { detail: Detail; types: DeviceType[] }) {
-  const [shown, setShown] = useState<DeviceKey | null>(null);
   const { device } = detail;
   const type = types.find((item) => item.slug === device.type);
   return (
     <Stack gap="lg">
-      {shown ? (
-        <KeyShown
-          result={shown}
-          onDone={() => {
-            setShown(null);
-          }}
-        />
-      ) : null}
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
         <State device={device} />
         {/* Keyed by what was saved, so it starts afresh after a save, not after every refresh. */}
@@ -400,10 +508,12 @@ function DevicePage({ detail, types }: { detail: Detail; types: DeviceType[] }) 
           type={type}
         />
       </SimpleGrid>
+      <KeyCard device={device} />
       <TryIt device={device} type={type} />
-      <HowItTalks server={detail.server} type={type} />
+      <Requests requests={detail.requests} />
       <Events events={detail.events} />
-      <KeyAndRemove device={device} onKey={setShown} />
+      <HowItTalks server={detail.server} type={type} />
+      <RemoveDevice device={device} />
     </Stack>
   );
 }
@@ -422,7 +532,8 @@ export function DeviceDetail() {
     queryKey: devicesKey,
     queryFn: () => call(api.GET('/api/v1/admin/devices')),
   });
-  useLiveRefresh(key, EVERY_30_SECONDS);
+  // Every few seconds: watching a device while its firmware is written.
+  useLiveRefresh(key, EVERY_5_SECONDS);
   const title = detail.data?.device.name ?? 'Device';
   return (
     <>

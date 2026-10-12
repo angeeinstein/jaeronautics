@@ -42,6 +42,10 @@ test.describe('devices', () => {
     await expect(page.getByRole('region', { name: 'State' })).toContainText('Online');
     await expect(page.getByRole('region', { name: 'State' })).toContainText('0.1.0');
     await expect(page.getByRole('table', { name: 'Recent events' })).toContainText('Reported “ping”');
+    const requests = page.getByRole('table', { name: 'Recent requests' });
+    await expect(requests).toContainText('POST /device/events');
+    await expect(requests).toContainText('GET /device');
+    await expect(page.getByRole('region', { name: 'Key' })).toContainText(key.slice(-4));
 
     // Removed again, so the list stays as it was.
     await page.getByRole('button', { name: 'Remove' }).click();

@@ -485,6 +485,10 @@ def seed(app, app_module, subscriptions):
     fridge, _key = devices_service.add(admin_user, name="Fridge reader", type="test", place="Workshop, beside the fridge")
     devices_service.seen(fridge, address="10.0.0.21", firmware="0.3.1", now=now)
     devices_service.report(fridge, event_id="boot-1", name="ping", data={"n": 1})
+    for path, status, code in (("/api/v1/device", 200, None), ("/api/v1/device/resources/hello", 200, None),
+                               ("/api/v1/device/resources/items", 404, "device_resource_unknown")):
+        devices_service.record_request(fridge, method="GET", path=path, status=status, code=code,
+                                       address="10.0.0.21", now=now)
     devices_service.add(admin_user, name="Coffee machine", type="test")
     door, _key = devices_service.add(admin_user, name="Tool cabinet", type="test", place="Hangar")
     devices_service.change(admin_user, door, enabled=False)

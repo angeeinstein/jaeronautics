@@ -52,8 +52,16 @@ version and its address.
   file with the portal's address, the device's id and its key.
 - **One device's page:**
   - its settings and the switch;
-  - *New key* (the old one stops working at once) and *Delete*;
-  - its recent events: refused sign-ins, errors, what it reported;
+  - its key on one line, shortened (`jadev_<key id>_…AbCd`: the last four
+    characters are kept for that), when it was made and last used, with
+    *Rotate* (a new key works at once, the old one stops; the new one is
+    shown in the same card) and *Revoke* (no key works until a new one is
+    made; the device stays) -- asked for after testing, 2026-10-12;
+  - its last 100 requests, each with its answer (`200`, `403 device_off`,
+    ...), and its recent events: refused sign-ins, errors, what it reported.
+    Both refresh every 5 seconds while the page is open, for watching a
+    device while its firmware is written;
+  - *Remove* the device, apart from the key;
   - *Try it*: what the device would be answered, without it being marked as
     seen;
   - an example of the requests, for writing firmware.
@@ -71,7 +79,7 @@ Every request carries `Authorization: Bearer <key>`, and may carry
   the device reports. The type's module decides and answers. `event_id` is
   the device's own (a counter or random), so a request sent again after a
   network error gets the first answer and is not counted twice.
-- **Refusals:** `401` for an unknown key, `403` for a device switched off,
+- **Refusals:** `401` for an unknown or revoked key, `403` for a device switched off,
   `404` for what its type does not offer, `429` above the limit (per device),
   `400` for a report carrying more than 4 KB of data.
   The body is the API's usual error, with a stable `code` for the firmware

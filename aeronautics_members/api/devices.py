@@ -20,7 +20,7 @@ from ..config import RATELIMIT_DEVICE, RATELIMIT_DEVICE_PER_IP
 from ..db_models import db
 from ..permissions import Permission
 from ..security_utils import build_public_url
-from ..services import device_types
+from ..services import ServiceError, device_types
 from ..services import devices as devices_service
 from ._core import Model, UtcDateTime, endpoint
 
@@ -34,11 +34,39 @@ def device_rate_key():
     return f"device-unknown:{rate_limit_network()}"
 
 
-def _signed_in_device():
-    """The device of this request, marked as seen; refused (401/403) otherwise."""
-    device = devices_service.authenticate(request.headers.get("Authorization"))
-    devices_service.seen(device, address=request.remote_addr, firmware=request.headers.get("X-Device-Firmware"))
-    return device
+def _as_device(answer):
+    """Sign the request's device in, answer it with ``answer(device)``, and
+    record the request and its answer on the device -- a refusal too, when
+    the key named a device -- for watching it from its page."""
+    device = None
+    try:
+        device = devices_service.authenticate(request.headers.get("Authorization"))
+        devices_service.seen(device, address=request.remote_addr,
+                             firmware=request.headers.get("X-Device-Firmware"))
+        result = answer(device)
+        _record_request(device, 200)
+        db.session.commit()
+        return result
+    except ServiceError as exc:
+        db.session.rollback()
+        device = device or getattr(exc, "device", None)
+        if device is not None:
+            if isinstance(exc, devices_service.DeviceRefused):
+                devices_service.refused(device, exc)
+            _record_request(device, exc.http_status, exc.code)
+            db.session.commit()
+        raise
+    except Exception:
+        db.session.rollback()
+        if device is not None:
+            _record_request(device, 500, "internal_error")
+            db.session.commit()
+        raise
+
+
+def _record_request(device, status, code=None):
+    devices_service.record_request(device, method=request.method, path=request.path, status=status, code=code,
+                                   address=request.remote_addr)
 
 
 # --- The device API ---------------------------------------------------------------------------
@@ -93,30 +121,24 @@ def _limited(view):
 @_limited
 def device_hello():
     """A device's sign of life: who it is, its settings, the time. Bearer key."""
-    device = _signed_in_device()
-    answer = devices_service.hello(device)
-    db.session.commit()
-    return DeviceHelloOut(**answer)
+    return _as_device(lambda device: DeviceHelloOut(**devices_service.hello(device)))
 
 
 @endpoint("GET", "/device/resources/<name>", response=DeviceResourceOut, public=True, tag="Device")
 @_limited
 def device_resource(name):
     """Something the device's type offers it, such as a dispenser's items. Bearer key."""
-    device = _signed_in_device()
-    data = devices_service.resource(device, name)
-    db.session.commit()
-    return DeviceResourceOut(resource=name, data=data)
+    return _as_device(lambda device: DeviceResourceOut(resource=name, data=devices_service.resource(device, name)))
 
 
 @endpoint("POST", "/device/events", response=DeviceReportOut, body=DeviceReportIn, public=True, tag="Device")
 @_limited
 def device_report(body):
     """Something the device reports, answered by its type. Bearer key."""
-    device = _signed_in_device()
-    answer = devices_service.report(device, event_id=body.event_id, name=body.kind, data=body.data)
-    db.session.commit()
-    return DeviceReportOut(event_id=body.event_id, answer=answer)
+    return _as_device(lambda device: DeviceReportOut(
+        event_id=body.event_id,
+        answer=devices_service.report(device, event_id=body.event_id, name=body.kind, data=body.data),
+    ))
 
 
 #: The device API's views, exempt from CSRF in app.py: devices have no session.
@@ -161,9 +183,12 @@ class DeviceOut(Model):
     last_seen_at: UtcDateTime | None
     last_address: str | None
     firmware: str | None
-    #: The start of its key, to tell keys apart: "jadev_3f9a1c2b7d10".
-    key_hint: str
+    #: Its key as it may be shown: "jadev_3f9a1c2b7d10_…AbCd"; none when revoked.
+    key_hint: str | None
     key_created_at: UtcDateTime
+    #: When the present key was last used (its last sign of life since the key was made).
+    key_last_used_at: UtcDateTime | None
+    key_revoked_at: UtcDateTime | None
     created_at: UtcDateTime
 
 
@@ -178,6 +203,17 @@ class DeviceEventOut(Model):
     answer: dict[str, Any] | None
 
 
+class DeviceRequestOut(Model):
+    id: int
+    at: UtcDateTime
+    method: str
+    path: str
+    status: int
+    #: The error's code, for an answer that refused.
+    code: str | None
+    address: str | None
+
+
 class DevicesOut(Model):
     items: list[DeviceOut]
     types: list[DeviceTypeOut]
@@ -188,6 +224,8 @@ class DevicesOut(Model):
 class DeviceDetailOut(Model):
     device: DeviceOut
     events: list[DeviceEventOut]
+    #: Its last 100 requests and their answers, the newest first.
+    requests: list[DeviceRequestOut]
     server: str
 
 
@@ -246,7 +284,8 @@ def device_out(device):
         place=device.place, settings=device.settings or {}, enabled=device.enabled,
         online=devices_service.is_online(device), last_seen_at=device.last_seen_at,
         last_address=device.last_address, firmware=device.firmware,
-        key_hint=f"{devices_service.KEY_PREFIX}_{device.key_id}", key_created_at=device.key_created_at,
+        key_hint=devices_service.key_hint(device), key_created_at=device.key_created_at,
+        key_last_used_at=devices_service.key_last_used(device), key_revoked_at=device.key_revoked_at,
         created_at=device.created_at,
     )
 
@@ -285,8 +324,13 @@ def admin_device_add(body):
 def admin_device(device_id):
     """One device and its recent events."""
     device = devices_service.device_of(device_id)
-    return DeviceDetailOut(device=device_out(device),
-                           events=[_event_out(e) for e in devices_service.recent_events(device)], server=_server())
+    return DeviceDetailOut(
+        device=device_out(device),
+        events=[_event_out(e) for e in devices_service.recent_events(device)],
+        requests=[DeviceRequestOut(id=r.id, at=r.at, method=r.method, path=r.path, status=r.status, code=r.code,
+                                   address=r.address) for r in devices_service.recent_requests(device)],
+        server=_server(),
+    )
 
 
 @endpoint("PATCH", "/admin/devices/<int:device_id>", response=DeviceOut, body=DeviceChangeIn,
@@ -306,6 +350,14 @@ def admin_device_key(device_id):
     key = devices_service.new_key(current_user, device)
     db.session.commit()
     return _key_out(device, key)
+
+
+@endpoint("DELETE", "/admin/devices/<int:device_id>/key", response=DeviceOut, permissions=MANAGE, tag="Admin")
+def admin_device_key_revoke(device_id):
+    """Revoke the key without a new one: the device stays, and cannot sign in until it gets one."""
+    device = devices_service.revoke_key(current_user, devices_service.device_of(device_id))
+    db.session.commit()
+    return device_out(device)
 
 
 @endpoint("DELETE", "/admin/devices/<int:device_id>", permissions=MANAGE, tag="Admin")

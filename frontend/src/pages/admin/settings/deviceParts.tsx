@@ -32,6 +32,8 @@ export const devicesKey = ['admin', 'devices'] as const;
 /** Off, online (spoke in the last five minutes), seen before, or never. */
 export function statusOf(device: Device): { tone: Tone; label: string; detail: string } {
   if (!device.enabled) return { tone: 'neutral', label: 'Off', detail: 'Switched off: its key is refused.' };
+  if (device.key_revoked_at)
+    return { tone: 'neutral', label: 'No key', detail: 'Its key was revoked: it cannot sign in.' };
   if (device.online) return { tone: 'active', label: 'Online', detail: 'Spoke in the last five minutes.' };
   if (device.last_seen_at)
     return { tone: 'pending', label: 'Quiet', detail: `Last seen ${formatDateTime(device.last_seen_at)}.` };
@@ -111,44 +113,51 @@ function fileName(name: string): string {
   return `device-${slug || 'configuration'}.json`;
 }
 
-/** A key, the one time it can be read. */
+/** A key, the one time it can be read: to copy, or to download as the device's configuration. */
+export function KeyReveal({ result, onDone }: { result: DeviceKey; onDone: () => void }) {
+  return (
+    <Stack gap="md">
+      <Alert color="amber" variant="light">
+        Shown this once: the portal keeps only a hash of it. Put it on the device now. If it is lost, rotate
+        the key.
+      </Alert>
+      <Code block style={{ wordBreak: 'break-all', whiteSpace: 'pre-wrap' }} data-testid="device-key">
+        {result.key}
+      </Code>
+      <Group gap="sm">
+        <CopyButton value={result.key}>
+          {({ copied, copy }) => (
+            <Button variant="default" onClick={copy}>
+              {copied ? 'Copied' : 'Copy key'}
+            </Button>
+          )}
+        </CopyButton>
+        <Button
+          variant="default"
+          onClick={() => {
+            const file = new Blob([`${JSON.stringify(result.configuration, null, 2)}\n`], {
+              type: 'application/json',
+            });
+            saveFile(file, fileName(result.device.name));
+          }}
+        >
+          Download configuration
+        </Button>
+        <Button onClick={onDone}>Done</Button>
+      </Group>
+      <Text size="sm" c="dimmed">
+        The configuration file holds the portal&apos;s address, the device&apos;s number, its type and this
+        key.
+      </Text>
+    </Stack>
+  );
+}
+
+/** A new device's key, where the form to add it was. */
 export function KeyShown({ result, onDone }: { result: DeviceKey; onDone: () => void }) {
   return (
     <Panel title={`The key of ${result.device.name}`}>
-      <Stack gap="md">
-        <Alert color="amber" variant="light">
-          Shown this once: the portal keeps only a hash of it. Put it on the device now. If it is lost, give
-          the device a new key.
-        </Alert>
-        <Code block style={{ wordBreak: 'break-all', whiteSpace: 'pre-wrap' }} data-testid="device-key">
-          {result.key}
-        </Code>
-        <Group gap="sm">
-          <CopyButton value={result.key}>
-            {({ copied, copy }) => (
-              <Button variant="default" onClick={copy}>
-                {copied ? 'Copied' : 'Copy key'}
-              </Button>
-            )}
-          </CopyButton>
-          <Button
-            variant="default"
-            onClick={() => {
-              const file = new Blob([`${JSON.stringify(result.configuration, null, 2)}\n`], {
-                type: 'application/json',
-              });
-              saveFile(file, fileName(result.device.name));
-            }}
-          >
-            Download configuration
-          </Button>
-          <Button onClick={onDone}>Done</Button>
-        </Group>
-        <Text size="sm" c="dimmed">
-          The configuration file holds the portal&apos;s address, the device&apos;s number, its type and this
-          key.
-        </Text>
-      </Stack>
+      <KeyReveal result={result} onDone={onDone} />
     </Panel>
   );
 }

@@ -48,7 +48,9 @@ const reader: Schemas['DeviceOut'] = {
   last_seen_at: '2026-10-12T07:00:00Z',
   last_address: '10.0.0.5',
   firmware: '0.1.0',
-  key_hint: 'jadev_3f9a1c2b7d10',
+  key_hint: 'jadev_3f9a1c2b7d10_…AbCd',
+  key_last_used_at: '2026-10-12T07:00:00Z',
+  key_revoked_at: null,
   key_created_at: '2026-10-12T06:00:00Z',
   created_at: '2026-10-12T06:00:00Z',
 };
@@ -109,7 +111,64 @@ describe('devices', () => {
 });
 
 describe('one device', () => {
-  const detail = { device: reader, events: [], server: SERVER };
+  const detail = {
+    device: reader,
+    events: [],
+    requests: [
+      {
+        id: 2,
+        at: '2026-10-12T07:00:05Z',
+        method: 'GET',
+        path: '/api/v1/device/resources/items',
+        status: 404,
+        code: 'device_resource_unknown',
+        address: '10.0.0.5',
+      },
+    ],
+    server: SERVER,
+  };
+  const route = { route: '/admin/settings/devices/3', path: '/admin/settings/devices/:deviceId' };
+
+  it('its key on one line: shortened, made, last used, with rotate and revoke beside it', async () => {
+    show(<DeviceDetail />, { [`${API}/3`]: { body: detail } }, route);
+
+    const card = await screen.findByRole('region', { name: 'Key' });
+    expect(within(card).getByLabelText('Key')).toHaveTextContent('jadev_3f9a1c2b7d10_…AbCd');
+    expect(card).toHaveTextContent('last used');
+    expect(within(card).getByRole('button', { name: 'Rotate' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  });
+
+  it('a rotated key is shown in the key card itself', async () => {
+    show(
+      <DeviceDetail />,
+      {
+        [`${API}/3`]: { body: detail },
+        [`POST ${API}/3/key`]: {
+          body: {
+            device: reader,
+            key: 'jadev_3f9a1c2b7d10_newsecret',
+            configuration: { server: SERVER, device_id: 3, name: reader.name, type: 'test', key: 'x' },
+          },
+        },
+      },
+      route,
+    );
+
+    const card = await screen.findByRole('region', { name: 'Key' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Rotate' }));
+    await userEvent.click(within(card).getByRole('button', { name: 'Yes, rotate' }));
+    expect(await within(card).findByTestId('device-key')).toHaveTextContent('jadev_3f9a1c2b7d10_newsecret');
+  });
+
+  it('every request with its answer', async () => {
+    show(<DeviceDetail />, { [`${API}/3`]: { body: detail } }, route);
+
+    const table = await screen.findByRole('table', { name: 'Recent requests' });
+    expect(within(table).getAllByRole('row')[1]).toHaveTextContent(
+      'GET /device/resources/items404 device_resource_unknown10.0.0.5',
+    );
+  });
 
   it('tries what the device would be answered', async () => {
     show(

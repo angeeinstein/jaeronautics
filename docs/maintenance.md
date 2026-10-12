@@ -685,14 +685,19 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
 
 - **Adding one** shows its key once, with *Copy key* and *Download
   configuration* (a JSON file: the portal's address, the device's number,
-  its type, the key). Only a SHA-256 hash of the key is kept. Lost: *New
-  key* on the device's page, which stops the old one at once.
+  its type, the key). Only a SHA-256 hash of the key is kept, and its last
+  four characters to tell keys apart. On the device's page: *Rotate* (a new
+  key; the old one stops at once) and *Revoke* (no key works until a new one
+  is made).
 - **Switching one off** refuses it whatever key it has. *Remove* deletes it,
   its key and its events.
 - **Its page** shows when it last spoke (written at most every 30 seconds),
-  from where, its firmware (`X-Device-Firmware`), its recent events (kept 90
-  days, by the nightly `cleanup-logs`), *Try it* -- what it would be answered,
-  without counting as seen -- and example requests for writing firmware.
+  from where, its firmware (`X-Device-Firmware`), its last 100 requests with
+  their answers, its recent events (kept 90 days, by the nightly
+  `cleanup-logs`) -- both refreshed every 5 seconds while open -- *Try it*
+  (what it would be answered, without counting as seen) and example requests
+  for writing firmware. Requests refused by the rate limit (429) or as
+  malformed (400 before the device is known) are not in the list.
 - **The device API** (`/api/v1/device`), with `Authorization: Bearer <key>`
   over HTTPS, no session, no CSRF token:
   - `GET /api/v1/device`: its sign of life;

@@ -10,7 +10,7 @@ import pytest
 
 from api_helpers import send, signed_in
 from conftest import db, make_member
-from aeronautics_members.db_models import AuditLog, Device, DeviceEvent
+from aeronautics_members.db_models import AuditLog, Device, DeviceEvent, DeviceRequest
 from aeronautics_members.services import devices
 from aeronautics_members.services.clock import get_now_utc
 from test_admin_reviews import _staff
@@ -47,7 +47,8 @@ class TestManaging:
         assert added["configuration"]["server"] == "https://members.test/api/v1/device"
         stored = db.session.get(Device, added["device"]["id"])
         assert key.split("_", 2)[2] not in (stored.key_hash, stored.key_id)
-        assert added["device"]["key_hint"] == f"jadev_{stored.key_id}"
+        # Shown shortened: its start and its last four characters, to tell keys apart.
+        assert added["device"]["key_hint"] == f"jadev_{stored.key_id}_…{key[-4:]}"
         listed = client.get("/api/v1/admin/devices").get_json()
         assert "key" not in listed["items"][0] and listed["types"][0]["slug"] == "test"
         assert db.session.query(AuditLog).filter_by(event_type="device_added").count() == 1
@@ -88,6 +89,32 @@ class TestManaging:
         device_client, headers = _as_device(app, added["key"])
         answer = device_client.get("/api/v1/device", headers=headers)
         assert answer.status_code == 403 and answer.get_json()["error"]["code"] == "device_off"
+
+    def test_a_revoked_key_works_no_more_and_the_device_stays(self, app, client, admin):
+        added = _add(client, admin)
+        url = f"/api/v1/admin/devices/{added['device']['id']}/key"
+        revoked = send(client, "DELETE", url).get_json()
+        assert revoked["key_hint"] is None and revoked["key_revoked_at"] is not None
+
+        device_client, headers = _as_device(app, added["key"])
+        answer = device_client.get("/api/v1/device", headers=headers)
+        assert answer.status_code == 401 and answer.get_json()["error"]["code"] == "device_key_revoked"
+
+        fresh = send(client, "POST", url).get_json()
+        assert fresh["device"]["key_revoked_at"] is None
+        device_client, headers = _as_device(app, fresh["key"])
+        assert device_client.get("/api/v1/device", headers=headers).status_code == 200
+
+    def test_a_keys_last_use_is_its_own_not_the_old_ones(self, app, client, admin):
+        added = _add(client, admin)
+        device_client, headers = _as_device(app, added["key"])
+        device_client.get("/api/v1/device", headers=headers)
+        detail = client.get(f"/api/v1/admin/devices/{added['device']['id']}").get_json()["device"]
+        assert detail["key_last_used_at"] is not None
+
+        send(client, "POST", f"/api/v1/admin/devices/{added['device']['id']}/key")
+        detail = client.get(f"/api/v1/admin/devices/{added['device']['id']}").get_json()["device"]
+        assert detail["key_last_used_at"] is None
 
     def test_removing_takes_its_events_with_it(self, app, client, admin):
         added = _add(client, admin)
@@ -190,6 +217,34 @@ class TestTheDeviceApi:
         assert device.last_seen_at == now
         devices.seen(device, address="10.0.0.5", now=now + timedelta(seconds=40))
         assert device.last_seen_at == now + timedelta(seconds=40)
+
+
+class TestItsRequests:
+    def test_every_request_and_its_answer_refusals_too(self, app, client, admin):
+        added = _add(client, admin)
+        device_id = added["device"]["id"]
+        device_client, headers = _as_device(app, added["key"])
+        device_client.get("/api/v1/device", headers=headers)
+        device_client.get("/api/v1/device/resources/items", headers=headers)
+        send(client, "PATCH", f"/api/v1/admin/devices/{device_id}", {"enabled": False})
+        device_client.get("/api/v1/device", headers=headers)
+
+        requests = client.get(f"/api/v1/admin/devices/{device_id}").get_json()["requests"]
+        assert [(r["method"], r["path"], r["status"], r["code"]) for r in requests] == [
+            ("GET", "/api/v1/device", 403, "device_off"),
+            ("GET", "/api/v1/device/resources/items", 404, "device_resource_unknown"),
+            ("GET", "/api/v1/device", 200, None),
+        ]
+
+    def test_only_the_last_100_are_kept(self, app, client, admin):
+        added = _add(client, admin)
+        device = db.session.get(Device, added["device"]["id"])
+        for n in range(105):
+            devices.record_request(device, method="GET", path=f"/api/v1/device?n={n}", status=200)
+        db.session.commit()
+        kept = devices.recent_requests(device)
+        assert len(kept) == 100 and kept[0].path.endswith("n=104") and kept[-1].path.endswith("n=5")
+        assert db.session.query(DeviceRequest).count() == 100
 
 
 class TestTryingFromItsPage:
