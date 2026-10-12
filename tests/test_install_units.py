@@ -377,3 +377,69 @@ def test_the_example_settings_match_the_defaults():
     for name, value in example.items():
         if name != "RATELIMIT_STORAGE_URI":
             assert value == getattr(config, name), name
+
+
+def test_an_update_leaves_the_live_checkout_alone_until_it_moves_it_to_the_checked_revision(tmp_path):
+    """The real bootstrap and ensure_repo_present, against local repositories."""
+    import subprocess
+
+    def git(*args, cwd=None):
+        return subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args], cwd=cwd,
+                              check=True, capture_output=True, text=True).stdout.strip()
+
+    origin = tmp_path / "origin.git"
+    work = tmp_path / "work"
+    git("init", "-q", "--bare", "-b", "main", str(origin))
+    git("clone", "-q", str(origin), str(work))
+    (work / "install.sh").write_text("echo old\n")
+    git("add", ".", cwd=work)
+    git("commit", "-q", "-m", "old", cwd=work)
+    git("push", "-q", "origin", "HEAD:main", cwd=work)
+    old = git("rev-parse", "HEAD", cwd=work)
+    live = tmp_path / "live"
+    git("clone", "-q", str(origin), str(live))
+    # The new version: an installer that reports what it was given.
+    (work / "install.sh").write_text(
+        'echo "target=${BOOTSTRAP_TARGET_REVISION} live=$(git -C "$BOOTSTRAP_INSTALL_DIR" rev-parse HEAD)"\n')
+    git("commit", "-q", "-am", "new", cwd=work)
+    git("push", "-q", "origin", "HEAD:main", cwd=work)
+    new = git("rev-parse", "HEAD", cwd=work)
+
+    lib = tmp_path / "lib.sh"
+    lib.write_text(INSTALLER.read_text(encoding="utf-8").replace('\nmain "$@"\n', "\n: disabled\n"))
+    script = f"""
+source {lib}
+trap - ERR EXIT
+step(){{ :; }}; info(){{ :; }}; warn(){{ :; }}
+detect_package_manager(){{ :; }}; bootstrap_packages(){{ :; }}; install_packages(){{ :; }}
+ensure_writable_directories(){{ :; }}; chown(){{ :; }}
+REPO_URL={origin}; BRANCH=main; INSTALL_DIR={live}; BOOTSTRAP_DIR={tmp_path}/bootstrap
+ORIGINAL_ARGS=()
+( bootstrap_self_update )
+echo "live-after-bootstrap=$(git -C {live} rev-parse HEAD)"
+"""
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=120,
+                            env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.split()
+    assert f"target={new}" in lines and f"live={old}" in lines, "the new installer runs with the live code untouched"
+    assert f"live-after-bootstrap={old}" in lines
+
+    # Meanwhile the branch moves on; the update still installs what CI checked.
+    (work / "later.txt").write_text("later\n")
+    git("add", ".", cwd=work)
+    git("commit", "-q", "-m", "later", cwd=work)
+    git("push", "-q", "origin", "HEAD:main", cwd=work)
+    script = f"""
+source {lib}
+trap - ERR EXIT
+step(){{ :; }}; info(){{ :; }}; warn(){{ :; }}
+ensure_writable_directories(){{ :; }}; chown(){{ :; }}
+REPO_URL={origin}; BRANCH=main; INSTALL_DIR={live}; TARGET_REVISION={new}
+ensure_repo_present
+git -C {live} rev-parse HEAD
+"""
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=120,
+                            env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split()[-1] == new
