@@ -6,7 +6,9 @@ through, how an item is written -- is in `CLAUDE.md` at the repository root.
 The last batches built everything that was on the list -- most recently
 (2026-10-11) Stripe's book kept in the portal, with every team figure shown
 line by line and the credit's top-up fees followed to each sale
-(`docs/money-ledger-plan.md`), and forum changes started at once. What it
+(`docs/money-ledger-plan.md`), and forum changes started at once; then
+Codex's review comments that still held (`docs/review-fixes.md`, branch
+`claude/review-fixes`). What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
 The legal drafts and the card readers below were put off by the maintainer.
 
@@ -47,18 +49,6 @@ The legal drafts and the card readers below were put off by the maintainer.
 - **What, how, open questions:** `docs/credit-plan.md`, "Card readers". The
   base it builds on is done: price lists, `credit_sales.sell(...)`, the
   accounting for teams and the association.
-
-### Codex's review comments: fix what still holds
-
-- **Added:** 2026-10-11
-- **What, where:** `docs/review-fixes.md` -- 17 points from Codex's comments on
-  pull requests #2 to #30 that still hold in today's code (payments and
-  memberships, accounts and mail, the installer).
-- **Decided:** "only if you are really sure that this is something that's
-  first of all necessary and a real problem in our current code" -- each
-  checked for necessity, side effects and clashes with the others before it is
-  built; the plan says per point what was done or why not.
-- **Branch:** `claude/review-fixes`.
 
 ## Ideas for later (not scheduled)
 

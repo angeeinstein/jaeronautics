@@ -36,4 +36,5 @@ def test_the_connection_tracking_table_is_sized_on_install_and_update():
     body = INSTALL.split("install_or_update() {", 1)[1].split("\n}\n", 1)[0]
 
     assert "configure_connection_tracking" in body
-    assert "net.netfilter.nf_conntrack_max = 65536" in INSTALL
+    # At least 65,536 -- a server sized larger keeps its own.
+    assert "size=65536" in INSTALL and "net.netfilter.nf_conntrack_max = ${size}" in INSTALL
