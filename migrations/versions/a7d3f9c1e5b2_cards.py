@@ -8,7 +8,7 @@ and reader a sale was made with (docs/cards-plan.md).
 Safe to run again after it stopped part-way.
 
 Revision ID: a7d3f9c1e5b2
-Revises: e7b2d5a8c3f0
+Revises: b5e1c8d4a2f7
 Create Date: 2026-10-13
 
 """
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 
 revision = "a7d3f9c1e5b2"
-down_revision = "e7b2d5a8c3f0"
+down_revision = "b5e1c8d4a2f7"
 branch_labels = None
 depends_on = None
 
