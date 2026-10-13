@@ -61,10 +61,17 @@ version and its address.
     ...), and its recent events: refused sign-ins, errors, what it reported.
     Both refresh every 5 seconds while the page is open, for watching a
     device while its firmware is written;
-  - *Remove* the device, apart from the key;
-  - *Try it*: what the device would be answered, without it being marked as
-    seen;
-  - an example of the requests, for writing firmware.
+  - *What the device can send*: every request a device of its type can
+    send -- the sign of life, each resource, each report -- one per row, with
+    what it is for (the type describes its resources and reports), its
+    `curl` command, and *Send*: sent from the page as the device, the answer
+    shown under it exactly as the device would get it, without the device
+    being marked as seen. A report that would really change something (a
+    sale) has no *Send*. When the device itself would be refused (off, no
+    key), the card says so. This replaced a "Try it" card whose buttons
+    ("Sign of life", "Fetch …") did not say what they did, and a separate
+    card with the example commands -- after testing, 2026-10-12;
+  - *Remove* the device, apart from the key.
 
 ### The device API (`/api/v1/device`)
 

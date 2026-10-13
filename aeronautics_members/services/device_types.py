@@ -37,10 +37,20 @@ class Setting:
 
 
 @dataclass(frozen=True)
+class Resource:
+    """Something a device may fetch: ``fetch(device)`` returns it, a dict.
+    ``description`` says what it is, on the device's page."""
+
+    fetch: Callable[[Any], dict]
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class Report:
     """Something a device may report. ``answer(device, data)`` decides and
     returns what the device is told, a dict. ``tryable``: harmless enough for
     an admin to send it as the device from its page (never a sale).
+    ``description`` says what it is, on the device's page.
 
     A report sent again is answered from the first one, but two copies
     arriving at the same moment can both reach ``answer`` before either is
@@ -50,6 +60,7 @@ class Report:
 
     answer: Callable[[Any, dict], dict]
     tryable: bool = False
+    description: str = ""
 
 
 @dataclass(frozen=True)
@@ -58,8 +69,7 @@ class DeviceType:
     label: str
     description: str
     settings: tuple[Setting, ...] = ()
-    #: name -> ``fetch(device)``, returning a dict.
-    resources: dict[str, Callable[[Any], dict]] = field(default_factory=dict)
+    resources: dict[str, Resource] = field(default_factory=dict)
     reports: dict[str, Report] = field(default_factory=dict)
 
 
@@ -141,6 +151,7 @@ register(DeviceType(
     description="For trying a device out: answers what it is sent. Fetch \"hello\"; report \"ping\".",
     settings=(Setting("greeting", "Greeting", default="Hello", max_length=60,
                       help="Sent back with every answer, to see a change arrive."),),
-    resources={"hello": _hello},
-    reports={"ping": Report(_ping, tryable=True)},
+    resources={"hello": Resource(_hello, "The greeting and the device's name.")},
+    reports={"ping": Report(_ping, tryable=True,
+                            description="Answered with the greeting and the data it was sent.")},
 ))

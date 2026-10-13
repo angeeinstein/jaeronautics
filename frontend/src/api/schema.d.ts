@@ -837,7 +837,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** What the device would be answered, without it being marked as seen. */
+        /** What the device would be answered -- the body exactly as the device API */
         post: operations["admin_device_try"];
         delete?: never;
         options?: never;
@@ -4271,6 +4271,15 @@ export interface components {
             /** Kind */
             kind: string;
         };
+        /** DeviceReportInfoOut */
+        DeviceReportInfoOut: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Tryable */
+            tryable: boolean;
+        };
         /** DeviceReportOut */
         DeviceReportOut: {
             /** Answer */
@@ -4296,6 +4305,13 @@ export interface components {
             path: string;
             /** Status */
             status: number;
+        };
+        /** DeviceResourceInfoOut */
+        DeviceResourceInfoOut: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
         };
         /** DeviceResourceOut */
         DeviceResourceOut: {
@@ -4359,15 +4375,13 @@ export interface components {
             /** Label */
             label: string;
             /** Reports */
-            reports: string[];
+            reports: components["schemas"]["DeviceReportInfoOut"][];
             /** Resources */
-            resources: string[];
+            resources: components["schemas"]["DeviceResourceInfoOut"][];
             /** Settings */
             settings: components["schemas"]["DeviceSettingOut"][];
             /** Slug */
             slug: string;
-            /** Tryable */
-            tryable: string[];
         };
         /** DevicesOut */
         DevicesOut: {

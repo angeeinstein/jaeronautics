@@ -4516,6 +4516,30 @@
         "title": "DeviceReportIn",
         "type": "object"
       },
+      "DeviceReportInfoOut": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tryable": {
+            "title": "Tryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "tryable"
+        ],
+        "title": "DeviceReportInfoOut",
+        "type": "object"
+      },
       "DeviceReportOut": {
         "additionalProperties": false,
         "properties": {
@@ -4592,6 +4616,25 @@
           "address"
         ],
         "title": "DeviceRequestOut",
+        "type": "object"
+      },
+      "DeviceResourceInfoOut": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "DeviceResourceInfoOut",
         "type": "object"
       },
       "DeviceResourceOut": {
@@ -4746,14 +4789,14 @@
           },
           "reports": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/DeviceReportInfoOut"
             },
             "title": "Reports",
             "type": "array"
           },
           "resources": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/DeviceResourceInfoOut"
             },
             "title": "Resources",
             "type": "array"
@@ -4768,13 +4811,6 @@
           "slug": {
             "title": "Slug",
             "type": "string"
-          },
-          "tryable": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Tryable",
-            "type": "array"
           }
         },
         "required": [
@@ -4783,8 +4819,7 @@
           "description",
           "settings",
           "resources",
-          "reports",
-          "tryable"
+          "reports"
         ],
         "title": "DeviceTypeOut",
         "type": "object"
@@ -19370,7 +19405,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "What the device would be answered, without it being marked as seen.",
+        "summary": "What the device would be answered -- the body exactly as the device API",
         "tags": [
           "Admin"
         ],

@@ -1,9 +1,9 @@
 /**
  * Settings -> Devices -> one device (docs/devices-plan.md): its state; its
  * name, place and settings; switching it off; its key on one line (rotate,
- * revoke); trying what it would be answered; its recent requests and events,
- * refreshed every few seconds while the page is open; how a device talks to
- * the portal, for writing its firmware; removing it.
+ * revoke); every request a device of its type can send -- described, as a
+ * command, and sent from here to see the answer; its recent requests and
+ * events, refreshed every few seconds while the page is open; removing it.
  * Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
  */
 import {
@@ -48,7 +48,7 @@ type Detail = Schemas['DeviceDetailOut'];
 const EVENT_LABELS: Record<string, string> = {
   added: 'Added',
   switched: 'Switched',
-  key: 'New key',
+  key: 'Key',
   first: 'First contact',
   firmware: 'Firmware',
   refused: 'Refused',
@@ -162,121 +162,186 @@ function SettingsForm({ device, type }: { device: Device; type: DeviceType | und
   );
 }
 
-function TryIt({ device, type }: { device: Device; type: DeviceType | undefined }) {
+/** One request a device can send: what it is, the command to send it, and -- sent from here -- its answer. */
+interface DeviceRequest {
+  id: string;
+  method: 'GET' | 'POST';
+  path: string;
+  title: string;
+  description: string;
+  curl: string;
+  /** What the page sends to try it; none: not sent from here. */
+  tryBody: ((data: Record<string, unknown>) => Schemas['DeviceTryIn']) | null;
+  /** A report: it carries data. */
+  report: boolean;
+}
+
+function requestsOf(server: string, type: DeviceType | undefined): DeviceRequest[] {
+  const bearer = `-H "Authorization: Bearer <key>"`;
+  return [
+    {
+      id: 'hello',
+      method: 'GET',
+      path: '/device',
+      title: 'Sign of life',
+      description: 'Who the device is, its settings and the time. Sent at start and every few minutes.',
+      curl: `curl ${bearer} -H "X-Device-Firmware: 1.0.0" ${server}`,
+      tryBody: () => ({ what: 'hello' }),
+      report: false,
+    },
+    ...(type?.resources ?? []).map((resource): DeviceRequest => ({
+      id: `resource-${resource.name}`,
+      method: 'GET',
+      path: `/device/resources/${resource.name}`,
+      title: `Fetch “${resource.name}”`,
+      description: resource.description,
+      curl: `curl ${bearer} ${server}/resources/${resource.name}`,
+      tryBody: () => ({ what: 'resource', name: resource.name }),
+      report: false,
+    })),
+    ...(type?.reports ?? []).map((report): DeviceRequest => ({
+      id: `report-${report.name}`,
+      method: 'POST',
+      path: '/device/events',
+      title: `Report “${report.name}”`,
+      description: report.description,
+      curl: [
+        `curl ${bearer} -H "Content-Type: application/json" \\`,
+        `     -d '{"event_id": "boot-1", "kind": "${report.name}", "data": {}}' ${server}/events`,
+      ].join('\n'),
+      tryBody: report.tryable ? (data) => ({ what: 'report', name: report.name, data }) : null,
+      report: true,
+    })),
+  ];
+}
+
+/** Why the device itself would be refused now, if it would. */
+function refusedNow(device: Device) {
+  if (!device.enabled) return 'it is switched off (403 device_off)';
+  if (!device.key_hint) return 'it has no key (401 device_key_revoked)';
+  return null;
+}
+
+function DeviceApi({
+  device,
+  server,
+  type,
+}: {
+  device: Device;
+  server: string;
+  type: DeviceType | undefined;
+}) {
   const client = useQueryClient();
-  const [data, setData] = useState('{}');
-  const [answer, setAnswer] = useState<string | null>(null);
-  const tryIt = useMutation({
-    mutationFn: (body: Schemas['DeviceTryIn']) =>
+  const [data, setData] = useState<Record<string, string>>({});
+  const [answer, setAnswer] = useState<{ id: string; text: string } | null>(null);
+  const send = useMutation({
+    mutationFn: ({ body }: { id: string; body: Schemas['DeviceTryIn'] }) =>
       call(
         api.POST('/api/v1/admin/devices/{device_id}/try', {
           params: { path: { device_id: device.id } },
           body,
         }),
       ),
-    onSuccess: async (result) => {
-      setAnswer(JSON.stringify(result.answer, null, 2));
+    onSuccess: async (result, { id }) => {
+      setAnswer({ id, text: JSON.stringify(result.answer, null, 2) });
       await client.invalidateQueries({ queryKey: [...devicesKey, device.id] });
     },
     onError: notifyFailed,
   });
-  const report = (name: string) => {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(data || '{}') as Record<string, unknown>;
-    } catch {
-      notifyNote('The data is not JSON.');
-      return;
+  const refused = refusedNow(device);
+
+  const sendRequest = (request: DeviceRequest) => {
+    if (!request.tryBody) return;
+    let parsed: Record<string, unknown> = {};
+    if (request.report) {
+      try {
+        const text = (data[request.id] ?? '').trim();
+        parsed = JSON.parse(text === '' ? '{}' : text) as Record<string, unknown>;
+      } catch {
+        notifyNote('The data is not JSON.');
+        return;
+      }
     }
-    tryIt.mutate({ what: 'report', name, data: parsed });
+    send.mutate({ id: request.id, body: request.tryBody(parsed) });
   };
 
   return (
-    <Panel title="Try it">
-      <Stack gap="md">
-        <Text size="sm" c="dimmed">
-          What the device would be answered. It is not counted as the device being seen.
+    <Panel title="What the device can send" flush>
+      <Stack gap={0}>
+        <Text size="sm" c="dimmed" p="md">
+          Every request a device of this type can send, with the command to send it from a computer.{' '}
+          <b>Send</b> sends it from here as the device and shows the answer; the device is not counted as
+          seen.
+          {refused ? ` The device itself would be refused now: ${refused}.` : ''}
         </Text>
-        <Group gap="sm">
-          <Button
-            variant="default"
-            loading={tryIt.isPending}
-            onClick={() => {
-              tryIt.mutate({ what: 'hello' });
-            }}
+        {requestsOf(server, type).map((request) => (
+          <Stack
+            key={request.id}
+            gap="sm"
+            p="md"
+            style={{ borderTop: '1px solid var(--ja-border)' }}
+            aria-label={request.title}
+            role="group"
           >
-            Sign of life
-          </Button>
-          {type?.resources.map((name) => (
-            <Button
-              key={name}
-              variant="default"
-              onClick={() => {
-                tryIt.mutate({ what: 'resource', name });
-              }}
-            >
-              Fetch “{name}”
-            </Button>
-          ))}
-        </Group>
-        {type?.tryable.length ? (
-          <Stack gap="sm">
-            <Textarea
-              label="Data to report"
-              autosize
-              minRows={2}
-              styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
-              value={data}
-              onChange={(event) => {
-                setData(event.currentTarget.value);
-              }}
-            />
-            <Group gap="sm">
-              {type.tryable.map((name) => (
+            <Group justify="space-between" align="flex-start" gap="md">
+              <Stack gap={4} miw={0} style={{ flex: 1 }}>
+                <Group gap="sm">
+                  <Text fw={600}>{request.title}</Text>
+                  <Code>
+                    {request.method} {request.path}
+                  </Code>
+                </Group>
+                {request.description ? (
+                  <Text size="sm" c="dimmed">
+                    {request.description}
+                  </Text>
+                ) : null}
+              </Stack>
+              {request.tryBody ? (
                 <Button
-                  key={name}
                   variant="default"
+                  aria-label={`Send ${request.title}`}
+                  loading={send.isPending && send.variables.id === request.id}
                   onClick={() => {
-                    report(name);
+                    sendRequest(request);
                   }}
                 >
-                  Report “{name}”
+                  Send
                 </Button>
-              ))}
+              ) : (
+                <Text size="sm" c="dimmed">
+                  Not sent from here: it would really happen.
+                </Text>
+              )}
             </Group>
+            {request.report && request.tryBody ? (
+              <Textarea
+                label="Data"
+                autosize
+                minRows={1}
+                styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
+                value={data[request.id] ?? '{}'}
+                onChange={(event) => {
+                  setData({ ...data, [request.id]: event.currentTarget.value });
+                }}
+              />
+            ) : null}
+            <Code block>{request.curl}</Code>
+            {answer?.id === request.id ? (
+              <Stack gap={4}>
+                <Text size="sm" fw={600}>
+                  Answer
+                </Text>
+                <Code block aria-label="Answer">
+                  {answer.text}
+                </Code>
+              </Stack>
+            ) : null}
           </Stack>
-        ) : null}
-        {answer ? (
-          <Code block aria-label="Answer">
-            {answer}
-          </Code>
-        ) : null}
-      </Stack>
-    </Panel>
-  );
-}
-
-function HowItTalks({ server, type }: { server: string; type: DeviceType | undefined }) {
-  const report = type?.reports[0] ?? 'ping';
-  const resource = type?.resources[0] ?? 'hello';
-  const lines = [
-    `# Sign of life: who it is, its settings, the time`,
-    `curl -H "Authorization: Bearer <key>" -H "X-Device-Firmware: 1.0.0" ${server}`,
-    '',
-    `# What its type offers it`,
-    `curl -H "Authorization: Bearer <key>" ${server}/resources/${resource}`,
-    '',
-    `# Report something; the same event_id again gets the first answer`,
-    `curl -H "Authorization: Bearer <key>" -H "Content-Type: application/json" \\`,
-    `     -d '{"event_id": "boot-1", "kind": "${report}", "data": {}}' ${server}/events`,
-  ];
-  return (
-    <Panel title="How a device talks to the portal">
-      <Stack gap="sm">
-        <Code block>{lines.join('\n')}</Code>
-        <Text size="sm" c="dimmed">
-          HTTPS only, with the key as a bearer token: no session, no cookies. Refused: 401 for an unknown key,
-          403 when switched off, 404 for what its type does not offer, 429 when too often.
+        ))}
+        <Text size="sm" c="dimmed" p="md" style={{ borderTop: '1px solid var(--ja-border)' }}>
+          HTTPS only, with the key as a bearer token: no session, no cookies. Refused: 401 for an unknown or
+          revoked key, 403 when switched off, 404 for what its type does not offer, 429 when too often.
         </Text>
       </Stack>
     </Panel>
@@ -509,10 +574,9 @@ function DevicePage({ detail, types }: { detail: Detail; types: DeviceType[] }) 
         />
       </SimpleGrid>
       <KeyCard device={device} />
-      <TryIt device={device} type={type} />
+      <DeviceApi device={device} server={detail.server} type={type} />
       <Requests requests={detail.requests} />
       <Events events={detail.events} />
-      <HowItTalks server={detail.server} type={type} />
       <RemoveDevice device={device} />
     </Stack>
   );

@@ -694,9 +694,11 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
 - **Its page** shows when it last spoke (written at most every 30 seconds),
   from where, its firmware (`X-Device-Firmware`), its last 100 requests with
   their answers, its recent events (kept 90 days, by the nightly
-  `cleanup-logs`) -- both refreshed every 5 seconds while open -- *Try it*
-  (what it would be answered, without counting as seen) and example requests
-  for writing firmware. Requests refused by the rate limit (429) or as
+  `cleanup-logs`) -- both refreshed every 5 seconds while open -- and *What
+  the device can send*: each request of its type, described, as a `curl`
+  command, and with *Send* to send it from the page and see the device's
+  answer (not counted as seen; never for a report that would really change
+  something). Requests refused by the rate limit (429) or as
   malformed (400 before the device is known) are not in the list.
 - **The device API** (`/api/v1/device`), with `Authorization: Bearer <key>`
   over HTTPS, no session, no CSRF token:

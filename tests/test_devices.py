@@ -248,17 +248,29 @@ class TestItsRequests:
 
 
 class TestTryingFromItsPage:
+    def test_each_type_says_what_it_offers_and_what_may_be_tried(self, app, client, admin):
+        signed_in(client, admin)
+        types = client.get("/api/v1/admin/devices").get_json()["types"]
+        test = next(item for item in types if item["slug"] == "test")
+        assert test["resources"] == [{"name": "hello", "description": "The greeting and the device's name."}]
+        assert test["reports"][0]["name"] == "ping" and test["reports"][0]["tryable"] is True
+
+
     def test_what_the_device_would_be_answered_without_marking_it_seen(self, app, client, admin):
         added = _add(client, admin)
         url = f"/api/v1/admin/devices/{added['device']['id']}/try"
 
         hello = send(client, "POST", url, {"what": "hello"}).get_json()["answer"]
+        fetched = send(client, "POST", url, {"what": "resource", "name": "hello"}).get_json()["answer"]
         ping = send(client, "POST", url, {"what": "report", "name": "ping", "data": {"x": 1}}).get_json()["answer"]
 
-        assert hello["name"] == "Fridge reader" and ping["echo"] == {"x": 1}
+        # The bodies exactly as the device API sends them.
+        assert hello["name"] == "Fridge reader" and "server_time" in hello
+        assert fetched == {"resource": "hello", "data": {"greeting": "Hello", "device": "Fridge reader"}}
+        assert ping == {"event_id": "try", "answer": {"result": "ok", "message": "Hello", "echo": {"x": 1}}}
         assert db.session.get(Device, added["device"]["id"]).last_seen_at is None
         detail = client.get(f"/api/v1/admin/devices/{added['device']['id']}").get_json()
-        assert [event["kind"] for event in detail["events"]][:2] == ["tried", "tried"]
+        assert [event["kind"] for event in detail["events"]][:3] == ["tried", "tried", "tried"]
 
 
 def test_events_are_kept_90_days(app, client, admin):

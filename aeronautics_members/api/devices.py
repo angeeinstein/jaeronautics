@@ -159,15 +159,27 @@ class DeviceSettingOut(Model):
     maximum: int | None
 
 
+class DeviceResourceInfoOut(Model):
+    name: str
+    description: str
+
+
+class DeviceReportInfoOut(Model):
+    name: str
+    description: str
+    #: Harmless enough to be sent as the device from its page.
+    tryable: bool
+
+
 class DeviceTypeOut(Model):
     slug: str
     label: str
     description: str
     settings: list[DeviceSettingOut]
-    resources: list[str]
-    reports: list[str]
-    #: Reports that may be tried from a device's page.
-    tryable: list[str]
+    #: What a device of this type may fetch (GET /device/resources/<name>).
+    resources: list[DeviceResourceInfoOut]
+    #: What it may report (POST /device/events).
+    reports: list[DeviceReportInfoOut]
 
 
 class DeviceOut(Model):
@@ -251,6 +263,10 @@ class DeviceKeyOut(Model):
     configuration: dict[str, Any]
 
 
+#: The event id a report tried from the device's page is shown with.
+TRY_EVENT_ID = "try"
+
+
 class DeviceTryIn(Model):
     what: Literal["hello", "resource", "report"]
     name: str | None = Field(default=None, max_length=40)
@@ -271,8 +287,10 @@ def _type_out(device_type):
         settings=[DeviceSettingOut(name=s.name, label=s.label, kind=s.kind, default=s.default, help=s.help,
                                    max_length=s.max_length, minimum=s.minimum, maximum=s.maximum)
                   for s in device_type.settings],
-        resources=sorted(device_type.resources), reports=sorted(device_type.reports),
-        tryable=sorted(name for name, report in device_type.reports.items() if report.tryable),
+        resources=[DeviceResourceInfoOut(name=name, description=offered.description)
+                   for name, offered in sorted(device_type.resources.items())],
+        reports=[DeviceReportInfoOut(name=name, description=report.description, tryable=report.tryable)
+                 for name, report in sorted(device_type.reports.items())],
     )
 
 
@@ -370,8 +388,15 @@ def admin_device_remove(device_id):
 @endpoint("POST", "/admin/devices/<int:device_id>/try", response=DeviceTryOut, body=DeviceTryIn,
           permissions=MANAGE, tag="Admin")
 def admin_device_try(device_id, body):
-    """What the device would be answered, without it being marked as seen."""
+    """What the device would be answered -- the body exactly as the device API
+    sends it -- without it being marked as seen."""
     device = devices_service.device_of(device_id)
     answer = devices_service.try_out(current_user, device, what=body.what, name=body.name, data=body.data)
     db.session.commit()
-    return DeviceTryOut(answer=answer)
+    if body.what == "hello":
+        sent = DeviceHelloOut(**answer)
+    elif body.what == "resource":
+        sent = DeviceResourceOut(resource=body.name, data=answer)
+    else:
+        sent = DeviceReportOut(event_id=TRY_EVENT_ID, answer=answer)
+    return DeviceTryOut(answer=sent.model_dump(mode="json"))

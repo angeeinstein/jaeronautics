@@ -168,10 +168,11 @@ def change(actor, device, *, name=None, place=None, enabled=None, settings=None)
 
 def new_key(actor, device):
     """A new key for the device; the old one stops working at once. Returns the key."""
+    replaced = device.key_revoked_at is None
     key, key_id, key_hash, key_tail = _new_key()
     device.key_id, device.key_hash, device.key_tail = key_id, key_hash, key_tail
     device.key_created_at, device.key_revoked_at = get_now_utc(), None
-    _record(device, "key", detail="New key; the old one no longer works")
+    _record(device, "key", detail="New key; the old one no longer works" if replaced else "New key")
     log_audit_event("devices", "device_key_replaced", actor_user=actor, metadata={"device_id": device.id})
     return key
 
@@ -300,10 +301,10 @@ def hello(device, now=None):
 
 
 def resource(device, name):
-    fetch = _type_of(device.type).resources.get(name)
-    if fetch is None:
+    offered = _type_of(device.type).resources.get(name)
+    if offered is None:
         raise NotFoundError(f"A {device.type} device has no \"{name}\".", code="device_resource_unknown")
-    return fetch(device)
+    return offered.fetch(device)
 
 
 #: What one report may carry, as JSON: it is kept with the event.

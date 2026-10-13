@@ -31,9 +31,11 @@ const testType: Schemas['DeviceTypeOut'] = {
       maximum: null,
     },
   ],
-  resources: ['hello'],
-  reports: ['ping'],
-  tryable: ['ping'],
+  resources: [{ name: 'hello', description: 'The greeting and the device’s name.' }],
+  reports: [
+    { name: 'ping', description: 'Answered with what it was sent.', tryable: true },
+    { name: 'sale', description: 'A sale.', tryable: false },
+  ],
 };
 
 const reader: Schemas['DeviceOut'] = {
@@ -170,30 +172,60 @@ describe('one device', () => {
     );
   });
 
-  it('tries what the device would be answered', async () => {
-    show(
+  it('every request it can send, each sent from here as the device with its answer below it', async () => {
+    const { calls } = show(
       <DeviceDetail />,
       {
         [`${API}/3`]: { body: detail },
-        [`POST ${API}/3/try`]: { body: { answer: { result: 'ok', echo: {} } } },
+        [`POST ${API}/3/try`]: {
+          body: { answer: { event_id: 'try', answer: { result: 'ok', echo: { n: 1 } } } },
+        },
       },
-      { route: '/admin/settings/devices/3', path: '/admin/settings/devices/:deviceId' },
+      route,
     );
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Report “ping”' }));
-    expect(await screen.findByLabelText('Answer')).toHaveTextContent('"result": "ok"');
+    const ping = await screen.findByRole('group', { name: 'Report “ping”' });
+    expect(ping).toHaveTextContent('POST /device/events');
+    expect(ping).toHaveTextContent('Answered with what it was sent.');
+    const data = within(ping).getByRole('textbox', { name: 'Data' });
+    await userEvent.clear(data);
+    await userEvent.type(data, '{{"n": 1}');
+    await userEvent.click(within(ping).getByRole('button', { name: 'Send Report “ping”' }));
+
+    expect(await within(ping).findByLabelText('Answer')).toHaveTextContent('"result": "ok"');
+    const sent = calls.filter((call) => call.method === 'POST').at(-1);
+    expect(await sent?.clone().json()).toEqual({ what: 'report', name: 'ping', data: { n: 1 } });
   });
 
-  it('shows how a device talks to the portal, with its address', async () => {
+  it('lists the sign of life and what its type offers, each with its command', async () => {
+    show(<DeviceDetail />, { [`${API}/3`]: { body: detail } }, route);
+
+    const hello = await screen.findByRole('group', { name: 'Sign of life' });
+    expect(hello).toHaveTextContent('GET /device');
+    expect(hello).toHaveTextContent(`Authorization: Bearer <key>`);
+    expect(hello).toHaveTextContent(SERVER);
+    const fetch = screen.getByRole('group', { name: 'Fetch “hello”' });
+    expect(fetch).toHaveTextContent(`${SERVER}/resources/hello`);
+    expect(within(fetch).getByRole('button', { name: 'Send Fetch “hello”' })).toBeInTheDocument();
+  });
+
+  it('a report that would really happen is not sent from here', async () => {
+    show(<DeviceDetail />, { [`${API}/3`]: { body: detail } }, route);
+
+    const sale = await screen.findByRole('group', { name: 'Report “sale”' });
+    expect(within(sale).queryByRole('button')).not.toBeInTheDocument();
+    expect(sale).toHaveTextContent('Not sent from here');
+  });
+
+  it('says when the device itself would be refused', async () => {
     show(
       <DeviceDetail />,
-      { [`${API}/3`]: { body: detail } },
-      {
-        route: '/admin/settings/devices/3',
-        path: '/admin/settings/devices/:deviceId',
-      },
+      { [`${API}/3`]: { body: { ...detail, device: { ...reader, enabled: false } } } },
+      route,
     );
 
-    expect(await screen.findByText(/Authorization: Bearer <key>/)).toHaveTextContent(SERVER);
+    expect(
+      await screen.findByText(/The device itself would be refused now: it is switched off/),
+    ).toBeInTheDocument();
   });
 });
