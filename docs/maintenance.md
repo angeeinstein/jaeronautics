@@ -1419,6 +1419,15 @@ the copy is only added to.
   finds it, then shown as resolved for 30 days and forgotten after a year
   (nightly). Emailed once each after it has lasted an hour, unless switched
   off. Read-only: it changes nothing in the portal's records.
+- **A SEPA debit not cleared yet** is in Stripe's book from the day it is
+  announced, but the portal records a team fee or a membership period paid
+  by it only once it has cleared, days later. So such a booking is marked
+  *pending* (its charge is `pending` in Stripe), each fetch asks Stripe
+  about every pending one again -- the webhook of the debit clearing starts
+  a fetch -- and the check waits for it: no difference while it is pending,
+  nor when it failed and Stripe handed the money back. (2026-10-13: a team
+  fee paid by SEPA was listed as "Paid in Stripe, missing in the portal"
+  while its debit was still on its way.)
 
 **How payments are built.** `services/payments.py` is the one place that talks
 to Stripe for anything sold: the connection, the person's Stripe customer (one

@@ -29,6 +29,11 @@ the same at once.
 A booking that could not be told yet (Stripe out of reach, or the portal's
 record not written yet) is tried again on the next fetch.
 
+**Debits not cleared yet.** Stripe books a SEPA debit when it is announced,
+days before it clears; the portal records it only once it has cleared. Such
+a booking is marked *pending*, and looked at again on each fetch -- the
+webhook of the debit clearing starts one -- so the check waits for it.
+
 **The balance.** The sum of every booking is what Stripe holds; after each
 fetch the copy's sum is set beside Stripe's own figure, one request.
 """
@@ -173,6 +178,7 @@ def sync(full=False, now=None):
                               known, sorter, now, newest)
         added += late
     db.session.flush()
+    _check_pending()
     resorted = _sort_again(sorter, now)
     _fill_in_fees()
     current.fetched_through = newest or now
@@ -204,17 +210,32 @@ def _fetch(params, known, sorter, now, newest):
 
 def _booking(txn, booked, now):
     source = txn.get("source")
-    charge_id, payment_intent_id = None, None
+    charge_id, payment_intent_id, pending = None, None, False
     if txn.get("type") in OF_A_PAYMENT and source and not isinstance(source, str):
         kind = source.get("object")
         charge_id = source.get("id") if kind == "charge" else _id_of(source.get("charge"))
         payment_intent_id = _id_of(source.get("payment_intent"))
+        pending = txn.get("type") in RECEIVED and kind == "charge" and source.get("status") == "pending"
     return StripeBooking(
         stripe_id=txn.get("id"), type=txn.get("type") or "", amount_cents=int(txn.get("amount") or 0),
         fee_cents=int(txn.get("fee") or 0), net_cents=int(txn.get("net") or 0),
         currency=(txn.get("currency") or CURRENCY)[:3], booked_at=booked,
-        charge_id=charge_id, payment_intent_id=payment_intent_id, fetched_at=now,
+        charge_id=charge_id, payment_intent_id=payment_intent_id, pending=pending, fetched_at=now,
     )
+
+
+def _check_pending():
+    """Debits booked before they cleared: has each cleared, or failed, since? One request per payment,
+    and only while some are pending -- a SEPA debit clears within days. Stripe out of reach: next time."""
+    for booking in db.session.execute(
+        db.select(StripeBooking).where(StripeBooking.pending.is_(True))
+    ).scalars().all():
+        try:
+            charge = stripe.Charge.retrieve(booking.charge_id)
+        except stripe.StripeError as exc:
+            current_app.logger.info("Stripe's book: charge %s not looked at again: %s", booking.charge_id, exc)
+            continue
+        booking.pending = charge.get("status") == "pending"
 
 
 def _compare_balance(current):
