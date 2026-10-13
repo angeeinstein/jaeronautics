@@ -1,6 +1,6 @@
 # Devices: card readers and other things that talk to the portal
 
-Agreed 2026-10-12. Step 1 is being built on `claude/devices`.
+Agreed 2026-10-12. Step 1 built and merged (#36, `claude/devices`).
 
 ## What the maintainer wants
 
@@ -103,12 +103,14 @@ Events are kept 90 days (the nightly clean-up). A device's address is the
 device's, not a person's. Keys are stored only as SHA-256 hashes: they are
 long random strings, so a slow hash adds nothing.
 
-## Later (not decided)
+## Later
 
-- Linking cards to accounts.
-- The uses themselves: sales points, doors and cabinets (with a list kept on
-  the device for when the portal cannot be reached), attendance (needs the
-  privacy policy, and who may see it).
+- **Agreed 2026-10-13** (`docs/cards-plan.md`): cards linked to accounts, and
+  the first use, a "Sales point" type selling a fixed item; attendance around
+  January.
+- Not decided: doors and cabinets (with a list kept on the device for when
+  the portal cannot be reached), what attendance records and who may see it
+  (and the privacy policy for it).
 - Team leads managing their team's own devices.
 - A stronger sign-in, and cards that prove themselves cryptographically
   (NTAG 424 DNA, DESFire) as well as plain card ids.

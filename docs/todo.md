@@ -10,7 +10,8 @@ line by line and the credit's top-up fees followed to each sale
 Codex's review comments that still held (`docs/review-fixes.md`, branch
 `claude/review-fixes`). What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
-The legal drafts and the card readers below were put off by the maintainer.
+The legal drafts below wait for the board; cards and sales points are agreed
+and wait for the maintainer's go-ahead.
 
 ## Open
 
@@ -42,17 +43,20 @@ The legal drafts and the card readers below were put off by the maintainer.
   of publishing as `version`/`effective_from` (and the file names); check
   that nothing refers to the old § 31-36 of the membership terms.
 
-### Card readers for credit (later)
+### Cards and sales points: paying with a card at a reader
 
-- **Added:** 2026-10-09
-- **Put off by the maintainer:** "this is not something we need to build now".
-- **What, how, open questions:** `docs/credit-plan.md`, "Card readers". The
-  base it builds on is done: price lists, `credit_sales.sell(...)`, the
-  accounting for teams and the association.
-- **Since 2026-10-12:** the devices themselves are built first, for every
-  use (readers, doors, attendance): their management, keys and API, branch
-  `claude/devices`, `docs/devices-plan.md`. Which uses come next is decided
-  later; the maintainer writes the ESP32 firmware (ESP-IDF) separately.
+- **Added:** 2026-10-09 (as "Card readers for credit"); agreed 2026-10-13.
+- **What, how, why, what was ruled out:** `docs/cards-plan.md`. In short:
+  cards as records of their own, linked to a person (named, disabled by their
+  owner, blocked by an admin, removed); linked by their owner with Web NFC or
+  by an admin in person; a "Sales point" device type selling one fixed item
+  per reader, through the sale already built.
+- **Builds on:** the devices (#36, `docs/devices-plan.md`), credit and its
+  price lists (`docs/credit-plan.md`).
+- **Waiting for:** the maintainer's go-ahead -- discussed first, "let's not
+  build anything right now". A feature of its own, on this branch
+  (`claude/card-sales`), not part of a batch of small items.
+- **Next after it:** attendance with the same cards, needed around January.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
