@@ -230,6 +230,24 @@ def record_request(device, *, method, path, status, code=None, address=None, now
                                                           DeviceRequest.id < oldest_kept))
 
 
+#: A run of requests held back by the rate limit is listed once in this time.
+LIMITED_LISTED_EVERY = timedelta(minutes=1)
+
+
+def record_limited(device, *, method, path, address=None, now=None):
+    """A request held back by the rate limit (429): listed with the others, but
+    a run of them only once a minute, so a device asking far too often cannot
+    fill the database. Returns whether it was listed."""
+    now = now or get_now_utc()
+    last = db.session.execute(
+        db.select(DeviceRequest).filter_by(device_id=device.id).order_by(DeviceRequest.id.desc()).limit(1)
+    ).scalar_one_or_none()
+    if last is not None and last.status == 429 and now - _aware(last.at) < LIMITED_LISTED_EVERY:
+        return False
+    record_request(device, method=method, path=path, status=429, code="rate_limited", address=address, now=now)
+    return True
+
+
 def is_online(device, now=None):
     seen = _aware(device.last_seen_at)
     return seen is not None and (now or get_now_utc()) - seen <= ONLINE
@@ -315,7 +333,8 @@ def report(device, *, event_id, name, data):
     """Something the device reports, answered by its type. The same ``event_id``
     again -- sent after a network error -- gets the first answer, and nothing is
     done twice."""
-    if len(json.dumps(data or {}, separators=(",", ":"))) > REPORT_DATA_MAX:
+    # In UTF-8 bytes as sent, not as escaped ASCII: "é" is two bytes, not six.
+    if len(json.dumps(data or {}, separators=(",", ":"), ensure_ascii=False).encode()) > REPORT_DATA_MAX:
         raise ValidationError(f"A report carries at most {REPORT_DATA_MAX} bytes of data.",
                               code="device_report_too_large")
     earlier = _earlier(device, event_id)

@@ -698,8 +698,10 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
   the device can send*: each request of its type, described, as a `curl`
   command, and with *Send* to send it from the page and see the device's
   answer (not counted as seen; never for a report that would really change
-  something). Requests refused by the rate limit (429) or as
-  malformed (400 before the device is known) are not in the list.
+  something). A run of requests held back by the rate limit (429
+  `rate_limited`) is listed once a minute, so a device asking far too often
+  cannot fill the database; requests refused as malformed (400 before the
+  device is known) are not listed.
 - **The device API** (`/api/v1/device`), with `Authorization: Bearer <key>`
   over HTTPS, no session, no CSRF token:
   - `GET /api/v1/device`: its sign of life;

@@ -11,7 +11,7 @@ Two sides:
 
 from typing import Any, Literal
 
-from flask import request
+from flask import current_app, request
 from flask_login import current_user
 from pydantic import Field
 
@@ -62,6 +62,26 @@ def _as_device(answer):
             _record_request(device, 500, "internal_error")
             db.session.commit()
         raise
+
+
+def record_if_limited_device():
+    """Called for every 429: Flask-Limiter refuses before the view runs, so a
+    device held back by its limit would never reach ``_as_device``. The
+    request is listed on the device its key names (a run of them once a
+    minute); a key naming no device is not."""
+    if request.endpoint not in DEVICE_ENDPOINTS:
+        return
+    try:
+        try:
+            device = devices_service.authenticate(request.headers.get("Authorization"))
+        except devices_service.DeviceRefused as exc:
+            device = exc.device
+        if device is not None and devices_service.record_limited(
+                device, method=request.method, path=request.path, address=request.remote_addr):
+            db.session.commit()
+    except Exception:  # noqa: BLE001 -- the 429 is answered whatever happens here
+        db.session.rollback()
+        current_app.logger.exception("Could not list a rate-limited device request")
 
 
 def _record_request(device, status, code=None):
@@ -143,6 +163,7 @@ def device_report(body):
 
 #: The device API's views, exempt from CSRF in app.py: devices have no session.
 DEVICE_VIEWS = (device_hello, device_resource, device_report)
+DEVICE_ENDPOINTS = frozenset(f"api.{view.__name__}" for view in DEVICE_VIEWS)
 
 
 # --- Managing them ------------------------------------------------------------------------------

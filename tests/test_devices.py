@@ -201,6 +201,18 @@ class TestTheDeviceApi:
                                     json={"event_id": "big", "kind": "ping", "data": {"x": "y" * 5000}})
         assert answer.status_code == 400 and answer.get_json()["error"]["code"] == "device_report_too_large"
 
+    def test_report_data_is_measured_in_utf8_bytes(self, app, client, admin):
+        """"é" is two bytes as sent, not the six of its escaped form "\\u00e9"."""
+        added = _add(client, admin)
+        device_client, headers = _as_device(app, added["key"])
+
+        def report(event_id, text):
+            return device_client.post("/api/v1/device/events", headers=headers,
+                                      json={"event_id": event_id, "kind": "ping", "data": {"x": text}}).status_code
+
+        assert report("fits", "é" * 2000) == 200
+        assert report("too-big", "é" * 2100) == 400
+
     def test_a_report_its_type_does_not_know(self, app, client, admin):
         added = _add(client, admin)
         device_client, headers = _as_device(app, added["key"])

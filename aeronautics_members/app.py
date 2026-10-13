@@ -4530,6 +4530,10 @@ def create_app(config_overrides=None):
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
         if is_api_request():
+            # A device held back is listed on its page (api/devices.py).
+            from .api.devices import record_if_limited_device
+
+            record_if_limited_device()
             return api_error(429, "rate_limited", "Too many requests. Please wait a moment and try again.")
         # A page, not a redirect: browsers do not follow a Location header on a
         # 429, so a redirect left the member on an unstyled "Redirecting..." page.
