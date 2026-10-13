@@ -478,6 +478,80 @@ def test_a_team_debit_that_bounced_and_was_paid_again_is_no_difference(app, stri
     assert (money_checks.TAKEN_BACK_IN_STRIPE, "in_t1") not in found
 
 
+def _sepa_debit(stripe_account, name, **metadata):
+    """A SEPA debit Stripe has booked but not cleared: its charge is pending."""
+    charge = dict(_charge(f"py_{name}", f"pi_{name}", **metadata), status="pending")
+    stripe_account["txns"].append(_txn(f"txn_{name}", "payment", 4000, charge))
+    return charge
+
+
+@pytest.mark.usefixtures("this_year_only")
+class TestDebitsNotClearedYet:
+    def test_a_team_fee_still_being_debited_is_no_difference(self, app, stripe_account):
+        _portal_records()
+        _sepa_debit(stripe_account, "sepa", purpose="team")
+        stripe_books.sync()
+
+        found = [row.reference for row in money_checks.run()]
+
+        assert _booking("txn_sepa").pending
+        assert "pi_sepa" not in found
+
+    def test_once_cleared_the_portals_record_is_expected(self, app, stripe_account):
+        _portal_records()
+        charge = _sepa_debit(stripe_account, "sepa", purpose="team")
+        stripe_books.sync()
+        money_checks.run()
+
+        charge["status"] = "succeeded"
+        stripe_books.sync()
+        found = {row.reference: row.what for row in money_checks.run()}
+
+        assert not _booking("txn_sepa").pending
+        assert found["pi_sepa"] == money_checks.MISSING_IN_PORTAL
+
+        db.session.add(Payment(purpose="team", stripe_payment_intent_id="pi_sepa", amount_cents=4000,
+                               currency="eur", paid_at=datetime.now(timezone.utc)))
+        stripe_books.sync()
+        assert "pi_sepa" not in [row.reference for row in money_checks.run()]
+
+    def test_a_debit_that_failed_is_no_difference(self, app, stripe_account):
+        _portal_records()
+        charge = _sepa_debit(stripe_account, "sepa", purpose="team")
+        stripe_books.sync()
+
+        charge["status"] = "failed"
+        stripe_account["txns"].append(_txn("txn_sepa_back", "payment_failure_refund", -4000, {
+            "id": "pfr_sepa", "object": "refund", "charge": "py_sepa", "payment_intent": "pi_sepa"}))
+        stripe_books.sync()
+
+        assert not _booking("txn_sepa").pending
+        assert "pi_sepa" not in [row.reference for row in money_checks.run()]
+
+    def test_a_membership_still_being_debited_needs_no_period_yet(self, app, stripe_account):
+        _portal_records()
+        _sepa_debit(stripe_account, "msepa")
+        stripe_account["invoices"]["in_msepa"] = _invoice("in_msepa", 4000, "membership")
+        stripe_account["paid_by"]["pi_msepa"] = "in_msepa"
+        stripe_books.sync()
+
+        assert _booking("txn_msepa").product == stripe_books.MEMBERSHIP
+        assert "in_msepa" not in [row.reference for row in money_checks.run()]
+
+    def test_stripe_out_of_reach_keeps_it_pending(self, app, stripe_account, monkeypatch):
+        _portal_records()
+        _sepa_debit(stripe_account, "sepa", purpose="team")
+        stripe_books.sync()
+
+        def unreachable(charge_id, **kwargs):
+            raise stripe.APIConnectionError("Stripe out of reach")
+
+        monkeypatch.setattr(stripe.Charge, "retrieve", staticmethod(unreachable))
+        stripe_books.sync()
+
+        assert _booking("txn_sepa").pending
+
+
 def test_the_explanation_compares_the_copy_with_stripe(app, stripe_account):
     stripe_books.sync()
     db.session.commit()

@@ -13,6 +13,10 @@ What should hold:
 - what Stripe gave back -- a refund, a returned debit, a lost chargeback --
   the portal took off too.
 
+A SEPA debit is in Stripe's books from the day it is announced, but the
+portal records it only once it has cleared, days later: until then (the
+booking is *pending*), and when it failed, a missing record is no difference.
+
 Each difference is kept (:class:`MoneyDifference`) while it lasts, and
 marked resolved when a check no longer finds it. Stripe and the portal hear
 of a payment by different messages, seconds apart, so a difference is only
@@ -119,13 +123,16 @@ def find(now=None):
         returned = -sum(booking.amount_cents for booking in group if booking.type in RETURNED)
         taken_back = -sum(booking.amount_cents for booking in group if booking.type in TAKEN_BACK)
         reference = payment_booking.invoice_id or payment_booking.payment_intent_id or charge_id
+        # A debit not cleared yet (SEPA, a few days), or one that failed and was handed back:
+        # the portal records it only once it has cleared, so a missing record is no difference.
+        unsettled = any(booking.pending for booking in paid) or returned >= received
         if product == MEMBERSHIP:
             if payment_booking.invoice_id:
                 paid_invoices.add(payment_booking.invoice_id)
             period = period_of.get(payment_booking.invoice_id)
             # By invoice: one paid by a second try after a bounced debit is one difference, not two.
             key = payment_booking.invoice_id or charge_id
-            if period is None and f"membership:no_period:{key}" not in found:
+            if period is None and not unsettled and f"membership:no_period:{key}" not in found:
                 add(f"membership:no_period:{key}", MEMBERSHIP, NO_PERIOD, reference, stripe_amount=received)
             elif period is not None and (returned or taken_back) and period.revoked_at is None \
                     and not _paid_by_another(group_of_invoice.get(payment_booking.invoice_id, []), charge_id):
@@ -133,6 +140,8 @@ def find(now=None):
                     stripe_amount=returned + taken_back)
             continue
         payment = payment_booking.payment
+        if payment is None and unsettled:
+            continue
         if payment is None:
             add(f"{product}:missing:{charge_id}", product, MISSING_IN_PORTAL, reference, stripe_amount=received)
             continue

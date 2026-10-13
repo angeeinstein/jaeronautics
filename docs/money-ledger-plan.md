@@ -180,7 +180,11 @@ Either a or b could replace the "kept" percentage, or sit beside it.
   the lines.
 - **The check:** `services/money_checks.py` after every fetch, on the copy;
   `money_differences` keeps what differs; emailed once after an hour (switch
-  in the money settings); resolved ones forgotten after a year.
+  in the money settings); resolved ones forgotten after a year. A SEPA debit
+  is booked by Stripe when it is announced, but recorded by the portal only
+  once it has cleared: such a booking is marked `pending`, asked about again
+  on each fetch, and no difference while pending or when the debit failed
+  (added 2026-10-13, after a false "missing in the portal" on the live site).
 - **The overview:** `services/money_overview.py` reads the copy: totals per
   product for any period, the balance on a day, of it the teams' and the
   members' credit, the association's own.
