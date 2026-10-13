@@ -87,7 +87,7 @@ function DeviceCard({
         <Group gap="sm" wrap="wrap">
           <Pill tone={shown.tone}>{shown.label}</Pill>
           <Text size="sm" c="dimmed">
-            {`${shown.detail} ${device.type_label} · ${device.code}`}
+            {`${shown.detail} ${device.type_label}${device.name ? ` · ${device.code}` : ''}`}
           </Text>
         </Group>
         <form
