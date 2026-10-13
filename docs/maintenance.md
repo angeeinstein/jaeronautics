@@ -676,6 +676,46 @@ credit page. If Stripe cannot be reached, nothing is erased; try again. A
 top-up page still open is closed, and a top-up paid on one anyway is
 refunded at once (`credit_paid_after_erasure` if Stripe refuses).
 
+## Devices
+
+Card readers and other devices that talk to the portal: Admin › Settings ›
+Devices (admins: `devices.manage`). The plan, and what is decided:
+`docs/devices-plan.md`; the code: `services/devices.py`,
+`services/device_types.py`, `api/devices.py`.
+
+- **Adding one** shows its key once, with *Copy key* and *Download
+  configuration* (a JSON file: the portal's address, the device's number,
+  its type, the key). Only a SHA-256 hash of the key is kept, and its last
+  four characters to tell keys apart. On the device's page: *Rotate* (a new
+  key; the old one stops at once) and *Revoke* (no key works until a new one
+  is made).
+- **Switching one off** refuses it whatever key it has. *Remove* deletes it,
+  its key and its events.
+- **Its page** shows when it last spoke (written at most every 30 seconds),
+  from where, its firmware (`X-Device-Firmware`), its last 100 requests with
+  their answers, its recent events (kept 90 days, by the nightly
+  `cleanup-logs`) -- both refreshed every 5 seconds while open -- and *What
+  the device can send*: each request of its type, described, as a `curl`
+  command, and with *Send* to send it from the page and see the device's
+  answer (not counted as seen; never for a report that would really change
+  something). A run of requests held back by the rate limit (429
+  `rate_limited`) is listed once a minute, so a device asking far too often
+  cannot fill the database; requests refused as malformed (400 before the
+  device is known) are not listed.
+- **The device API** (`/api/v1/device`), with `Authorization: Bearer <key>`
+  over HTTPS, no session, no CSRF token:
+  - `GET /api/v1/device`: its sign of life;
+  - `GET /api/v1/device/resources/<name>`: what its type offers;
+  - `POST /api/v1/device/events` with `{event_id, kind, data}`: what it
+    reports. The same `event_id` again gets the first answer.
+  - Refused: 401 (unknown key), 403 (switched off), 404 (not of its type),
+    429 (`RATELIMIT_DEVICE`, 120 a minute per device;
+    `RATELIMIT_DEVICE_PER_IP`, 600 a minute per address).
+- **A new kind of device** is a type registered in
+  `services/device_types.py`: its settings, what it may fetch, what it may
+  report and the answers. Step 1 has only *Test*, which answers what it is
+  sent.
+
 ## Stripe's fees
 
 Admin › Money › *Stripe's fees* (treasurer and admins); docs/money-ledger-plan.md:

@@ -215,3 +215,72 @@ def test_going_to_the_forum_in_a_loop_is_stopped_per_account(limited_app):
     assert 429 not in statuses[:20]
     assert statuses[20] == 429
     assert 429 not in clicks_as(other, 3)
+
+
+def test_a_device_has_a_budget_of_its_own(limited_app):
+    """One device asking too often is held back; another on the same network is not."""
+    from aeronautics_members.services import devices
+
+    _first, first_key = devices.add(None, name="Busy reader", type="test")
+    _second, second_key = devices.add(None, name="Quiet reader", type="test")
+    db.session.commit()
+    client = limited_app.test_client()
+
+    def hello(key):
+        return client.get("/api/v1/device", headers={"Authorization": f"Bearer {key}"},
+                          environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
+
+    statuses = _until_held_back(lambda: hello(first_key))
+    assert len(statuses) > 120, "not before its 120 a minute"
+    assert hello(second_key) == 200
+
+
+def _until_held_back(ask, most=400):
+    """The answers up to the first 429. The limits count per minute on the
+    clock, so a run that crosses into the next minute needs more than 120."""
+    statuses = []
+    while len(statuses) < most and 429 not in statuses:
+        statuses.append(ask())
+    assert statuses[-1] == 429
+    return statuses
+
+
+def test_a_device_held_back_sees_it_on_its_page_once_a_minute(limited_app):
+    """The limit refuses before the view runs; the 429 is still listed with the
+    device's requests, but a run of them only once a minute."""
+    from datetime import timedelta
+
+    from aeronautics_members.services import devices
+    from aeronautics_members.services.clock import get_now_utc
+
+    device, key = devices.add(None, name="Busy reader", type="test")
+    db.session.commit()
+    client = limited_app.test_client()
+
+    def hello():
+        return client.get("/api/v1/device", headers={"Authorization": f"Bearer {key}"},
+                          environ_base={"REMOTE_ADDR": "203.0.113.7"}).status_code
+
+    _until_held_back(hello)
+    for _ in range(4):
+        hello()
+
+    def limited():
+        return [(r.status, r.code) for r in devices.recent_requests(device) if r.status == 429]
+
+    assert limited() == [(429, "rate_limited")]
+    # A minute later, the next one held back is listed again.
+    later = get_now_utc() + timedelta(minutes=2)
+    assert devices.record_limited(device, method="GET", path="/api/v1/device", now=later)
+    assert not devices.record_limited(device, method="GET", path="/api/v1/device", now=later)
+    assert len(limited()) == 2
+
+
+def test_a_key_naming_no_device_is_not_listed_when_held_back(limited_app):
+    from aeronautics_members.db_models import DeviceRequest
+
+    client = limited_app.test_client()
+    _until_held_back(lambda: client.get(
+        "/api/v1/device", headers={"Authorization": "Bearer jadev_nosuchkey000_secret"},
+        environ_base={"REMOTE_ADDR": "203.0.113.8"}).status_code)
+    assert db.session.query(DeviceRequest).count() == 0

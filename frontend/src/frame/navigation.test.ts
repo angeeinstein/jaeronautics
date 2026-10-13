@@ -76,6 +76,7 @@ describe('the admin sidebar', () => {
       '/admin/settings/forum',
       '/admin/settings/mail',
       '/admin/settings/test-email',
+      '/admin/settings/devices',
       '/admin/settings/health',
       '/admin/settings/updates',
       '/admin/settings/backup',

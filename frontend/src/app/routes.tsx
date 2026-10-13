@@ -338,6 +338,16 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/admin/settings/TestEmail')).TestEmail }),
           },
           {
+            path: 'settings/devices',
+            lazy: async () => ({ Component: (await import('../pages/admin/settings/Devices')).Devices }),
+          },
+          {
+            path: 'settings/devices/:deviceId',
+            lazy: async () => ({
+              Component: (await import('../pages/admin/settings/Device')).DeviceDetail,
+            }),
+          },
+          {
             path: 'settings/health',
             lazy: async () => ({ Component: (await import('../pages/admin/settings/Health')).Health }),
           },

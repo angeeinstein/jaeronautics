@@ -73,6 +73,8 @@
     "/admin/settings/forum",
     "/admin/settings/mail",
     "/admin/settings/test-email",
+    "/admin/settings/devices",
+    "/admin/settings/devices/:deviceId",
     "/admin/settings/health",
     "/admin/settings/updates",
     "/admin/settings/backup"

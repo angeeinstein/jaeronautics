@@ -1149,6 +1149,11 @@ def create_app(config_overrides=None):
     from .api import api_bp
 
     csrf.exempt(webhook_bp)
+    # Devices sign in with their key, never a session (api/devices.py).
+    from .api.devices import DEVICE_VIEWS
+
+    for view in DEVICE_VIEWS:
+        csrf.exempt(f"{view.__module__}.{view.__name__}")
     app.register_blueprint(api_bp)
     app.register_blueprint(webhook_bp)
     app.register_blueprint(public_bp)
@@ -4433,10 +4438,15 @@ def create_app(config_overrides=None):
                 ~NotificationBatch.events.any(),
             ).delete(synchronize_session=False)
 
+        # Devices' events: 90 days (docs/devices-plan.md).
+        from .services.devices import forget_old as forget_old_device_events
+
+        device_events_deleted = forget_old_device_events()
+
         db.session.commit()
         click.echo(click.style(
             f"Deleted {audit_deleted} audit log(s), {events_deleted} notification event(s), "
-            f"{batches_deleted} notification batch(es).",
+            f"{batches_deleted} notification batch(es), {device_events_deleted} device event(s).",
             fg="green",
         ))
 
@@ -4520,6 +4530,10 @@ def create_app(config_overrides=None):
     @app.errorhandler(RateLimitExceeded)
     def handle_rate_limit_error(e):
         if is_api_request():
+            # A device held back is listed on its page (api/devices.py).
+            from .api.devices import record_if_limited_device
+
+            record_if_limited_device()
             return api_error(429, "rate_limited", "Too many requests. Please wait a moment and try again.")
         # A page, not a redirect: browsers do not follow a Location header on a
         # 429, so a redirect left the member on an unstyled "Redirecting..." page.

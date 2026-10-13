@@ -11,6 +11,8 @@
 import { type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
+/** For a page somebody watches while testing something, such as a device's. */
+export const EVERY_5_SECONDS = 5_000;
 export const EVERY_30_SECONDS = 30_000;
 export const EVERY_MINUTE = 60_000;
 

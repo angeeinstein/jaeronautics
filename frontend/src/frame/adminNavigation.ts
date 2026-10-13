@@ -35,6 +35,7 @@ function settingsChildren(me: Me): NavItem[] {
     children.push(page('Membership fee', 'billing'), page('Forum', 'forum'), page('Mail accounts', 'mail'));
   }
   if (can(me, 'notifications.manage')) children.push(page('Test email', 'test-email'));
+  if (can(me, 'devices.manage')) children.push(page('Devices', 'devices'));
   if (can(me, 'system.update')) children.push(page('System health', 'health'), page('Updates', 'updates'));
   if (can(me, 'system.backup')) children.push(page('Backup and restore', 'backup'));
   return children;

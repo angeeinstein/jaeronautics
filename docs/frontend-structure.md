@@ -117,7 +117,8 @@ Entered with the **gear** at the right of the top bar; opens on the Dashboard.
 - *System* -- **Logs**, **Settings** ▸
   - Settings folds open in place (chevron) to its parts: **General**,
     **Notifications**, **Membership fee**, **Forum**, **Mail accounts**,
-    **Test email**, **System health**, **Updates**, **Backup and restore**.
+    **Test email**, **Devices** (and one device's page), **System health**,
+    **Updates**, **Backup and restore**.
     Clicking *Settings* opens it on General.
     (The forum's connection test is on the Forum page, beside what it tests.)
     While one is on a settings page it stays open.

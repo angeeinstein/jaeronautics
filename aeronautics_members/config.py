@@ -121,6 +121,10 @@ RATELIMIT_CONTACT_PER_IP = os.getenv("RATELIMIT_CONTACT_PER_IP", "30 per hour")
 # tab, so this only stops a flood. Somebody signed in counts as themselves; a
 # lecture hall of visitors behind one campus address shares it.
 RATELIMIT_PRESENCE = os.getenv("RATELIMIT_PRESENCE", "600 per 10 minute")
+# Devices (docs/devices-plan.md): per device, by its key, and a looser cap per
+# network address, where the workshop's devices share one.
+RATELIMIT_DEVICE = os.getenv("RATELIMIT_DEVICE", "120 per minute")
+RATELIMIT_DEVICE_PER_IP = os.getenv("RATELIMIT_DEVICE_PER_IP", "600 per minute")
 MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", str(20 * 1024 * 1024)))
 # A test server says so: a red bar under the header on every page and in
 # every email, and "[TEST]" before each email's subject and the tab title.

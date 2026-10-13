@@ -773,6 +773,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every device, the types there are, and where devices talk to. */
+        get: operations["admin_devices"];
+        put?: never;
+        /** Add a device. Its key is in the answer, the only time it can be read. */
+        post: operations["admin_device_add"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One device and its recent events. */
+        get: operations["admin_device"];
+        put?: never;
+        post?: never;
+        /** Remove a device, its key and its events. */
+        delete: operations["admin_device_remove"];
+        options?: never;
+        head?: never;
+        /** Change a device's name, place, settings, or switch it on or off. */
+        patch: operations["admin_device_change"];
+        trace?: never;
+    };
+    "/api/v1/admin/devices/{device_id}/key": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A new key; the old one stops working at once. Shown this once. */
+        post: operations["admin_device_key"];
+        /** Revoke the key without a new one: the device stays, and cannot sign in until it gets one. */
+        delete: operations["admin_device_key_revoke"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/devices/{device_id}/try": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What the device would be answered -- the body exactly as the device API */
+        post: operations["admin_device_try"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/legal": {
         parameters: {
             query?: never;
@@ -1716,6 +1788,57 @@ export interface paths {
         put?: never;
         /** Send a message to the association's admins. */
         post: operations["contact_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A device's sign of life: who it is, its settings, the time. Bearer key. */
+        get: operations["device_hello"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Something the device reports, answered by its type. Bearer key. */
+        post: operations["device_report"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/device/resources/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Something the device's type offers it, such as a dispenser's items. Bearer key. */
+        get: operations["device_resource"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3995,6 +4118,280 @@ export interface components {
             /** University Email */
             university_email: string | null;
         };
+        /** DeviceChangeIn */
+        DeviceChangeIn: {
+            /**
+             * Enabled
+             * @default null
+             */
+            enabled?: boolean | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * Place
+             * @default null
+             */
+            place?: string | null;
+            /**
+             * Settings
+             * @default null
+             */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** DeviceDetailOut */
+        DeviceDetailOut: {
+            device: components["schemas"]["DeviceOut"];
+            /** Events */
+            events: components["schemas"]["DeviceEventOut"][];
+            /** Requests */
+            requests: components["schemas"]["DeviceRequestOut"][];
+            /** Server */
+            server: string;
+        };
+        /** DeviceEventOut */
+        DeviceEventOut: {
+            /** Answer */
+            answer: {
+                [key: string]: unknown;
+            } | null;
+            /** At */
+            at: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            } | null;
+            /** Detail */
+            detail: string | null;
+            /** Event Id */
+            event_id: string | null;
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string | null;
+        };
+        /** DeviceHelloOut */
+        DeviceHelloOut: {
+            /** Device Id */
+            device_id: number;
+            /** Name */
+            name: string;
+            /** Place */
+            place: string | null;
+            /** Reports */
+            reports: string[];
+            /** Resources */
+            resources: string[];
+            /** Server Time */
+            server_time: string;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Type */
+            type: string;
+        };
+        /** DeviceIn */
+        DeviceIn: {
+            /** Name */
+            name: string;
+            /**
+             * Place
+             * @default null
+             */
+            place?: string | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** Type */
+            type: string;
+        };
+        /** DeviceKeyOut */
+        DeviceKeyOut: {
+            /** Configuration */
+            configuration: {
+                [key: string]: unknown;
+            };
+            device: components["schemas"]["DeviceOut"];
+            /** Key */
+            key: string;
+        };
+        /** DeviceOut */
+        DeviceOut: {
+            /** Created At */
+            created_at: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Firmware */
+            firmware: string | null;
+            /** Id */
+            id: number;
+            /** Key Created At */
+            key_created_at: string;
+            /** Key Hint */
+            key_hint: string | null;
+            /** Key Last Used At */
+            key_last_used_at: string | null;
+            /** Key Revoked At */
+            key_revoked_at: string | null;
+            /** Last Address */
+            last_address: string | null;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Name */
+            name: string;
+            /** Online */
+            online: boolean;
+            /** Place */
+            place: string | null;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Type */
+            type: string;
+            /** Type Label */
+            type_label: string;
+        };
+        /** DeviceReportIn */
+        DeviceReportIn: {
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            };
+            /** Event Id */
+            event_id: string;
+            /** Kind */
+            kind: string;
+        };
+        /** DeviceReportInfoOut */
+        DeviceReportInfoOut: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+            /** Tryable */
+            tryable: boolean;
+        };
+        /** DeviceReportOut */
+        DeviceReportOut: {
+            /** Answer */
+            answer: {
+                [key: string]: unknown;
+            };
+            /** Event Id */
+            event_id: string;
+        };
+        /** DeviceRequestOut */
+        DeviceRequestOut: {
+            /** Address */
+            address: string | null;
+            /** At */
+            at: string;
+            /** Code */
+            code: string | null;
+            /** Id */
+            id: number;
+            /** Method */
+            method: string;
+            /** Path */
+            path: string;
+            /** Status */
+            status: number;
+        };
+        /** DeviceResourceInfoOut */
+        DeviceResourceInfoOut: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+        };
+        /** DeviceResourceOut */
+        DeviceResourceOut: {
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /** Resource */
+            resource: string;
+        };
+        /** DeviceSettingOut */
+        DeviceSettingOut: {
+            /** Default */
+            default: unknown;
+            /** Help */
+            help: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "number" | "switch";
+            /** Label */
+            label: string;
+            /** Max Length */
+            max_length: number;
+            /** Maximum */
+            maximum: number | null;
+            /** Minimum */
+            minimum: number | null;
+            /** Name */
+            name: string;
+        };
+        /** DeviceTryIn */
+        DeviceTryIn: {
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * What
+             * @enum {string}
+             */
+            what: "hello" | "resource" | "report";
+        };
+        /** DeviceTryOut */
+        DeviceTryOut: {
+            /** Answer */
+            answer: {
+                [key: string]: unknown;
+            };
+        };
+        /** DeviceTypeOut */
+        DeviceTypeOut: {
+            /** Description */
+            description: string;
+            /** Label */
+            label: string;
+            /** Reports */
+            reports: components["schemas"]["DeviceReportInfoOut"][];
+            /** Resources */
+            resources: components["schemas"]["DeviceResourceInfoOut"][];
+            /** Settings */
+            settings: components["schemas"]["DeviceSettingOut"][];
+            /** Slug */
+            slug: string;
+        };
+        /** DevicesOut */
+        DevicesOut: {
+            /** Items */
+            items: components["schemas"]["DeviceOut"][];
+            /** Server */
+            server: string;
+            /** Types */
+            types: components["schemas"]["DeviceTypeOut"][];
+        };
         /**
          * Difference
          * @description Where Stripe's books and the portal's records disagree (services/money_checks.py).
@@ -5235,7 +5632,7 @@ export interface components {
             /** Last Name */
             last_name: string | null;
             /** Permissions */
-            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "credit.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "logs.view" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
+            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "credit.manage" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "logs.view" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
             /** Picture Url */
             picture_url: string | null;
             /** Roles */
@@ -10035,6 +10432,467 @@ export interface operations {
             };
         };
     };
+    admin_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevicesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_add: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceKeyOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceDetailOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceKeyOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_key_revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_device_try: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceTryIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceTryOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_legal: {
         parameters: {
             query?: never;
@@ -13723,6 +14581,99 @@ export interface operations {
             };
             /** @description Not possible in the current state. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    device_hello: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceHelloOut"];
+                };
+            };
+        };
+    };
+    device_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceReportIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceReportOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    device_resource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceResourceOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

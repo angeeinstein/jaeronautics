@@ -200,11 +200,12 @@ SETTINGS_SECTIONS = {
     "forum": Permission.SETTINGS_CREDENTIALS, "mail": Permission.SETTINGS_CREDENTIALS,
     "test-email": Permission.NOTIFICATIONS_MANAGE,
     "health": Permission.SYSTEM_UPDATE, "updates": Permission.SYSTEM_UPDATE, "backup": Permission.SYSTEM_BACKUP,
+    "devices": Permission.DEVICES_MANAGE,
 }
 
 
 @admin_bp.route("/admin/settings/<any(general, notifications, billing, credit, mailings, forum, mail, 'test-email', health, updates, "
-                "backup)"
+                "backup, devices)"
                 ":section>", methods=["GET"])
 @login_required
 @requires(Permission.SETTINGS_GENERAL)
@@ -213,6 +214,14 @@ def admin_settings_section(section):
     needed = SETTINGS_SECTIONS[section]
     if needed is not None and not current_user.can(needed):
         return redirect(url_for("admin.admin_settings_section", section="general"))
+    return app_shell()
+
+
+@admin_bp.route("/admin/settings/devices/<int:device_id>", methods=["GET"])
+@login_required
+@requires(Permission.DEVICES_MANAGE)
+def admin_settings_device(device_id):
+    """One device: drawn by the new front end (frontend/src/pages/admin/settings/Device.tsx)."""
     return app_shell()
 
 
