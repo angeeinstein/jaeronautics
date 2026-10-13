@@ -1023,6 +1023,9 @@ class StripeBooking(db.Model):
     invoice_id = db.Column(db.String(100), nullable=True, index=True)
     product = db.Column(db.String(20), nullable=True, index=True)
     payment_id = db.Column(db.Integer, db.ForeignKey("payments.id"), nullable=True, index=True)
+    # Its payment is still being debited: a SEPA debit is booked when it is
+    # announced, days before it clears. Looked at again on each fetch.
+    pending = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     fetched_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
     payment = db.relationship("Payment")
