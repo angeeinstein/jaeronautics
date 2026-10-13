@@ -39,6 +39,47 @@ this part ready then." Which uses come, and when, is decided later.
   of its own, `devices.manage`, which the admin and superadmin roles have.
 - **The menu name is "Devices"**, under Admin › Settings.
 
+## Owners (agreed 2026-10-13, not built yet)
+
+"An admin provisions the device and then just selects which team or the
+association it belongs to. Then in the management page of a team or the
+association the admins or leaders can use their device however they like."
+
+- **Admins** provision a device -- its key, its type (use), and its
+  **owner**: the association or one team -- and keep what is technical: the
+  key, the request log, removing it, linking cards at a reader.
+- **The owner** -- a team's leads and team treasurer on the team's
+  management page; for the association, admins and the treasurer on
+  Admin › Credit -- gets a *Devices* section: each of their devices, online
+  or not, the recent taps in plain words ("so that they can actually see
+  that this is working"), and freely its name, place, item and on/off.
+- **A reader sells only its owner's items**, so every sale counts for the
+  owner (today an admin could set a team's reader to an item of another
+  seller).
+
+## Direction: hardware once, its use set in the portal (discussed 2026-10-13)
+
+The maintainer would like to go "a bit at least in this direction" of
+ESPHome: provision a device once, change what it does in a central
+dashboard. Talked through:
+
+- **The firmware knows the hardware, the portal decides the use.** One
+  ESP-IDF project, what is fitted chosen at build time (Kconfig: reader
+  chip, LEDs, buzzer, relay, buttons, display driver); the device reports
+  what it has with its sign of life.
+- **Simple devices** -- a reader with LEDs, a buzzer, a relay, a button or
+  two -- can be driven by the portal: the device reports what happened (a
+  tap, a button), the answer says what to do (LED green, two beeps, relay
+  500 ms). The maintainer: "this definitely seems like a feasible and good
+  idea".
+- **Devices with a screen** keep their menus in the firmware: "development
+  of the menu on screen is definitely a lot more involved than just telling
+  the device to show a list". The portal gives them data (a price list) and
+  results, not screens.
+- Later, not decided: provisioning without copying the key (a new device
+  reports itself, an admin accepts it), firmware updates over the air, a key
+  bound to its chip.
+
 ## How it works
 
 ### In the portal
