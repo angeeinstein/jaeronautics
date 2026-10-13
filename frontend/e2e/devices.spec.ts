@@ -14,6 +14,8 @@ test.describe('devices', () => {
     await page.goto('/admin/settings/devices');
     const form = page.getByRole('region', { name: 'Add a device' });
     await form.getByRole('textbox', { name: 'Name' }).fill(name);
+    await form.getByRole('combobox', { name: 'Type' }).click();
+    await page.getByRole('option', { name: 'Test' }).click();
     await form.getByRole('button', { name: 'Add' }).click();
 
     const key = (await page.getByTestId('device-key').textContent())?.trim() ?? '';

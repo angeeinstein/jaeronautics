@@ -10,8 +10,9 @@ line by line and the credit's top-up fees followed to each sale
 Codex's review comments that still held (`docs/review-fixes.md`, branch
 `claude/review-fixes`). What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
-The legal drafts below wait for the board; cards and sales points are agreed
-and wait for the maintainer's go-ahead.
+The legal drafts below wait for the board. Cards and sales points
+(`docs/cards-plan.md`) are built on `claude/card-sales`; attendance with the
+same cards comes next, needed around January.
 
 ## Open
 
@@ -30,6 +31,10 @@ and wait for the maintainer's go-ahead.
 - **Also (added 2026-10-09, with messages):** the privacy policy draft names
   the contact form, messages to team leads, announcements and team mailings
   (§ 27, § 31, § 40, § 41). See `docs/messages-plan.md`.
+- **Also (added 2026-10-13, with cards):** the privacy policy draft names
+  the cards linked to accounts: a name, a keyed hash of the ID and its end,
+  when linked and last used, and that they go with the account (§ 20). See
+  `docs/cards-plan.md`.
 - **Also (added 2026-10-11, with Stripe's book):** the privacy policy draft
   says that the portal keeps a copy of the Stripe account's bookings without
   names, and that a difference with Stripe names the payer's address and is
@@ -43,20 +48,18 @@ and wait for the maintainer's go-ahead.
   of publishing as `version`/`effective_from` (and the file names); check
   that nothing refers to the old § 31-36 of the membership terms.
 
-### Cards and sales points: paying with a card at a reader
+### Attendance with the same cards (later)
 
-- **Added:** 2026-10-09 (as "Card readers for credit"); agreed 2026-10-13.
-- **What, how, why, what was ruled out:** `docs/cards-plan.md`. In short:
-  cards as records of their own, linked to a person (named, disabled by their
-  owner, blocked by an admin, removed); linked by their owner with Web NFC or
-  by an admin in person; a "Sales point" device type selling one fixed item
-  per reader, through the sale already built.
-- **Builds on:** the devices (#36, `docs/devices-plan.md`), credit and its
-  price lists (`docs/credit-plan.md`).
-- **Waiting for:** the maintainer's go-ahead -- discussed first, "let's not
-  build anything right now". A feature of its own, on this branch
-  (`claude/card-sales`), not part of a batch of small items.
-- **Next after it:** attendance with the same cards, needed around January.
+- **Added:** 2026-10-13
+- **Put off by the maintainer:** needed "in January, maybe a bit before ...
+  not something that we need to build now immediately".
+- **What:** the flight team's members earn ECTS and must be there for a
+  number of hours; members tap their card on a reader there. The cards and
+  the readers exist (`docs/cards-plan.md`, `docs/devices-plan.md`); this is
+  a device type of its own.
+- **Open questions:** what counts (tapping in and out, a forgotten tap-out,
+  a least time), who may see it (team leads, whoever handles ECTS), and the
+  privacy policy for it.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 

@@ -205,6 +205,11 @@ export function History({
                       {(entry.seller ?? entry.team_name) ? (
                         <span className={classes.muted}>{entry.seller ?? entry.team_name}</span>
                       ) : null}
+                      {entry.card || entry.reader ? (
+                        <span className={classes.muted}>
+                          {[entry.card, entry.reader].filter(Boolean).join(' at ')}
+                        </span>
+                      ) : null}
                       {entry.booked_by ? (
                         <span className={classes.muted}>{`Booked by ${entry.booked_by}`}</span>
                       ) : null}

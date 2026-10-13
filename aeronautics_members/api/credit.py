@@ -44,6 +44,9 @@ class CreditEntryOut(Model):
     team_name: str | None
     #: Who sold it, for a sale or a sale taken back: a team, or the association.
     seller: str | None = None
+    #: A sale at a card reader: the card it was paid with, and the reader.
+    card: str | None = None
+    reader: str | None = None
 
 
 def _entry(entry, receipt_endpoint="account.credit_receipt"):
@@ -57,6 +60,8 @@ def _entry(entry, receipt_endpoint="account.credit_receipt"):
         team_name=entry.team.name if entry.team is not None else None,
         seller=(credit_sales.seller_name(entry.team)
                 if entry.kind in (credit.PURCHASE, credit.TAKEN_BACK) else None),
+        card=entry.card.name if entry.card is not None else None,
+        reader=entry.device.name if entry.device is not None else None,
     )
 
 

@@ -228,4 +228,43 @@ describe('one device', () => {
       await screen.findByText(/The device itself would be refused now: it is switched off/),
     ).toBeInTheDocument();
   });
+
+  it('a sales point sells an item chosen from the price lists, under its seller', async () => {
+    const salesPoint: Schemas['DeviceTypeOut'] = {
+      slug: 'sales_point',
+      label: 'Sales point',
+      description: 'A card reader that sells one item.',
+      settings: [
+        {
+          name: 'item',
+          label: 'Item',
+          kind: 'choice',
+          default: null,
+          help: '',
+          max_length: 200,
+          minimum: null,
+          maximum: null,
+          choices: [
+            { value: 4, label: 'Beer, €1.50', group: 'Joanneum Aeronautics' },
+            { value: 9, label: 'Club-Mate, €2.00', group: 'Rocket' },
+          ],
+        },
+      ],
+      resources: [],
+      reports: [{ name: 'tap', description: 'A card tapped.', tryable: false }],
+    };
+    const fridge = { ...reader, type: 'sales_point', type_label: 'Sales point', settings: { item: 4 } };
+    show(
+      <DeviceDetail />,
+      {
+        [API]: { body: { items: [fridge], types: [testType, salesPoint], server: SERVER } },
+        [`${API}/3`]: { body: { ...detail, device: fridge } },
+      },
+      route,
+    );
+
+    expect(await screen.findByDisplayValue('Beer, €1.50')).toBeInTheDocument();
+    const report = screen.getByRole('group', { name: 'Report “tap”' });
+    expect(report).toHaveTextContent('Not sent from here');
+  });
 });

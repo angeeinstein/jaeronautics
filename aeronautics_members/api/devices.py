@@ -169,15 +169,24 @@ DEVICE_ENDPOINTS = frozenset(f"api.{view.__name__}" for view in DEVICE_VIEWS)
 # --- Managing them ------------------------------------------------------------------------------
 
 
+class DeviceChoiceOut(Model):
+    value: Any
+    label: str
+    #: The heading it is listed under: the seller of an item.
+    group: str
+
+
 class DeviceSettingOut(Model):
     name: str
     label: str
-    kind: Literal["text", "number", "switch"]
+    kind: Literal["text", "number", "switch", "choice"]
     default: Any
     help: str
     max_length: int
     minimum: int | None
     maximum: int | None
+    #: For a choice: what may be chosen now.
+    choices: list[DeviceChoiceOut] | None = None
 
 
 class DeviceResourceInfoOut(Model):
@@ -306,7 +315,9 @@ def _type_out(device_type):
     return DeviceTypeOut(
         slug=device_type.slug, label=device_type.label, description=device_type.description,
         settings=[DeviceSettingOut(name=s.name, label=s.label, kind=s.kind, default=s.default, help=s.help,
-                                   max_length=s.max_length, minimum=s.minimum, maximum=s.maximum)
+                                   max_length=s.max_length, minimum=s.minimum, maximum=s.maximum,
+                                   choices=[DeviceChoiceOut(value=c.value, label=c.label, group=c.group)
+                                            for c in s.choices()] if s.choices else None)
                   for s in device_type.settings],
         resources=[DeviceResourceInfoOut(name=name, description=offered.description)
                    for name, offered in sorted(device_type.resources.items())],

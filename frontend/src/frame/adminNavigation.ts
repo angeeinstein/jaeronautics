@@ -10,6 +10,7 @@ import {
   IconSpeakerphone,
   IconCurrencyEuro,
   IconFlag,
+  IconId,
   IconLayoutDashboard,
   IconListDetails,
   IconScale,
@@ -62,6 +63,7 @@ export function adminSidebar(me: Me): SidebarContent {
               }
             : null,
           me.credit_admin ? { label: 'Credit', to: '/admin/credit', icon: IconCoins } : null,
+          can(me, 'cards.manage') ? { label: 'Cards', to: '/admin/cards', icon: IconId } : null,
         ],
       },
       {

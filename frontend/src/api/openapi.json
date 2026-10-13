@@ -955,6 +955,140 @@
         "title": "Activity",
         "type": "object"
       },
+      "AdminCardChangeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Blocked"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          }
+        },
+        "title": "AdminCardChangeIn",
+        "type": "object"
+      },
+      "AdminCardOut": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "last_used_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used On"
+          },
+          "linked_at": {
+            "title": "Linked At",
+            "type": "string"
+          },
+          "linked_how": {
+            "title": "Linked How",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/CardOwnerOut"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "disabled",
+              "blocked",
+              "removed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tail": {
+            "title": "Tail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "tail",
+          "state",
+          "linked_at",
+          "linked_how",
+          "last_used_at",
+          "last_used_on",
+          "owner"
+        ],
+        "title": "AdminCardOut",
+        "type": "object"
+      },
+      "AdminCardsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminCardOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AdminCardsOut",
+        "type": "object"
+      },
       "AdminCreditEntryOut": {
         "additionalProperties": false,
         "properties": {
@@ -980,6 +1114,18 @@
               }
             ],
             "title": "Booked By"
+          },
+          "card": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Card"
           },
           "description": {
             "title": "Description",
@@ -1015,6 +1161,18 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "reader": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reader"
           },
           "receipt_url": {
             "anyOf": [
@@ -2189,6 +2347,234 @@
           }
         },
         "title": "CandidatesQuery",
+        "type": "object"
+      },
+      "CardChangeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          }
+        },
+        "title": "CardChangeIn",
+        "type": "object"
+      },
+      "CardLinkIn": {
+        "additionalProperties": false,
+        "properties": {
+          "card_id": {
+            "maxLength": 40,
+            "title": "Card Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          }
+        },
+        "required": [
+          "card_id"
+        ],
+        "title": "CardLinkIn",
+        "type": "object"
+      },
+      "CardOut": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "last_used_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used On"
+          },
+          "linked_at": {
+            "title": "Linked At",
+            "type": "string"
+          },
+          "linked_how": {
+            "title": "Linked How",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "disabled",
+              "blocked",
+              "removed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tail": {
+            "title": "Tail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "tail",
+          "state",
+          "linked_at",
+          "linked_how",
+          "last_used_at",
+          "last_used_on"
+        ],
+        "title": "CardOut",
+        "type": "object"
+      },
+      "CardOwnerOut": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picture Url"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "picture_url"
+        ],
+        "title": "CardOwnerOut",
+        "type": "object"
+      },
+      "CardReaderOut": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "place"
+        ],
+        "title": "CardReaderOut",
+        "type": "object"
+      },
+      "CardWaitIn": {
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "device_id"
+        ],
+        "title": "CardWaitIn",
+        "type": "object"
+      },
+      "CardWaitOut": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "reader": {
+            "$ref": "#/components/schemas/CardReaderOut"
+          }
+        },
+        "required": [
+          "reader",
+          "expires_at"
+        ],
+        "title": "CardWaitOut",
         "type": "object"
       },
       "CashIn": {
@@ -3396,6 +3782,18 @@
             "title": "Balance After Cents",
             "type": "integer"
           },
+          "card": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Card"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -3421,6 +3819,18 @@
           "kind_label": {
             "title": "Kind Label",
             "type": "string"
+          },
+          "reader": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reader"
           },
           "receipt_url": {
             "anyOf": [
@@ -4102,6 +4512,29 @@
         "title": "DeviceChangeIn",
         "type": "object"
       },
+      "DeviceChoiceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "label",
+          "group"
+        ],
+        "title": "DeviceChoiceOut",
+        "type": "object"
+      },
       "DeviceDetailOut": {
         "additionalProperties": false,
         "properties": {
@@ -4660,6 +5093,21 @@
       "DeviceSettingOut": {
         "additionalProperties": false,
         "properties": {
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DeviceChoiceOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Choices"
+          },
           "default": {
             "title": "Default"
           },
@@ -4671,7 +5119,8 @@
             "enum": [
               "text",
               "number",
-              "switch"
+              "switch",
+              "choice"
             ],
             "title": "Kind",
             "type": "string"
@@ -8426,6 +8875,11 @@
             "title": "Admin Notices",
             "type": "array"
           },
+          "cards_area": {
+            "default": false,
+            "title": "Cards Area",
+            "type": "boolean"
+          },
           "counts": {
             "$ref": "#/components/schemas/Counts"
           },
@@ -8498,6 +8952,7 @@
                 "admin.access",
                 "announcements.send",
                 "approvals.review",
+                "cards.manage",
                 "credit.manage",
                 "devices.manage",
                 "forum.admin",
@@ -9658,6 +10113,28 @@
         "title": "MyAccountOut",
         "type": "object"
       },
+      "MyCardsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CardOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "most": {
+            "title": "Most",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "most"
+        ],
+        "title": "MyCardsOut",
+        "type": "object"
+      },
       "MyCreditOut": {
         "additionalProperties": false,
         "properties": {
@@ -10633,6 +11110,52 @@
           "earned"
         ],
         "title": "Period",
+        "type": "object"
+      },
+      "PersonCardsOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CardOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "most": {
+            "title": "Most",
+            "type": "integer"
+          },
+          "readers": {
+            "items": {
+              "$ref": "#/components/schemas/CardReaderOut"
+            },
+            "title": "Readers",
+            "type": "array"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          },
+          "waiting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CardWaitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user_id",
+          "items",
+          "readers",
+          "waiting",
+          "most"
+        ],
+        "title": "PersonCardsOut",
         "type": "object"
       },
       "PhotoOut": {
@@ -15535,6 +16058,236 @@
         ]
       }
     },
+    "/api/v1/account/cards": {
+      "get": {
+        "operationId": "my_cards",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          }
+        },
+        "summary": "One's cards: their names, states and last use.",
+        "tags": [
+          "Cards"
+        ]
+      },
+      "post": {
+        "operationId": "my_cards_link",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardLinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Link a card one has just scanned with one's phone (Web NFC).",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
+    "/api/v1/account/cards/{card_id}": {
+      "delete": {
+        "operationId": "my_cards_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Remove one's card; it can be linked again later, by anybody.",
+        "tags": [
+          "Cards"
+        ]
+      },
+      "patch": {
+        "operationId": "my_cards_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Rename one's card, or switch it off or on.",
+        "tags": [
+          "Cards"
+        ]
+      }
+    },
     "/api/v1/account/change-request": {
       "post": {
         "operationId": "account_change_request",
@@ -16827,6 +17580,328 @@
         ]
       }
     },
+    "/api/v1/admin/accounts/{user_id}/cards": {
+      "get": {
+        "operationId": "admin_person_cards",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "A person's cards, and the readers one could be linked on.",
+        "tags": [
+          "Cards"
+        ],
+        "x-permissions": [
+          "cards.manage"
+        ]
+      },
+      "post": {
+        "operationId": "admin_person_cards_link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardLinkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Link a card to this person: scanned with the admin's phone, or its ID typed in.",
+        "tags": [
+          "Cards"
+        ],
+        "x-permissions": [
+          "cards.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/accounts/{user_id}/cards/wait": {
+      "delete": {
+        "operationId": "admin_person_cards_stop_waiting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Stop waiting for this person's card.",
+        "tags": [
+          "Cards"
+        ],
+        "x-permissions": [
+          "cards.manage"
+        ]
+      },
+      "post": {
+        "operationId": "admin_person_cards_wait",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardWaitIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Link the next unknown card tapped on this reader, within a minute, to this person.",
+        "tags": [
+          "Cards"
+        ],
+        "x-permissions": [
+          "cards.manage"
+        ]
+      }
+    },
     "/api/v1/admin/accounts/{user_id}/disabled": {
       "put": {
         "operationId": "admin_account_disabled",
@@ -18014,6 +19089,216 @@
         ],
         "x-permissions": [
           "announcements.send"
+        ]
+      }
+    },
+    "/api/v1/admin/cards": {
+      "get": {
+        "operationId": "admin_cards",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCardsOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "Every card linked now, the newest first, with whom it belongs to.",
+        "tags": [
+          "Cards"
+        ],
+        "x-permissions": [
+          "cards.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/cards/{card_id}": {
+      "delete": {
+        "operationId": "admin_cards_remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCardOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Remove anybody's card.",
+        "tags": [
+          "Cards"
+        ],
+        "x-permissions": [
+          "cards.manage"
+        ]
+      },
+      "patch": {
+        "operationId": "admin_cards_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCardChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCardOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Rename anybody's card, switch it off or on, block it or lift the block.",
+        "tags": [
+          "Cards"
+        ],
+        "x-permissions": [
+          "cards.manage"
         ]
       }
     },

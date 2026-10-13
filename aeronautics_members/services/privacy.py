@@ -250,6 +250,7 @@ def export_account_data(user):
 
     payload["teams"] = _team_data(user)
     payload["credit"] = _credit_data(user)
+    payload["cards"] = _card_data(user)
     from .messages import sent_by
 
     payload["messages"] = sent_by(user)
@@ -271,6 +272,19 @@ def _credit_data(user):
             for entry in reversed(history(user))
         ],
     }
+
+
+def _card_data(user):
+    """Every card linked to the person, removed ones too: its name, the end of
+    its ID (the ID itself is not kept), and when it was linked and last used."""
+    from .cards import LINKED_HOW, cards_of, state, tail
+
+    return [
+        {"name": card.name, "id_ends_with": tail(card), "state": state(card), "linked_at": card.linked_at,
+         "linked_how": LINKED_HOW.get(card.linked_how, card.linked_how), "last_used_at": card.last_used_at,
+         "removed_at": card.removed_at}
+        for card in cards_of(user, include_removed=True)
+    ]
 
 
 def _team_data(user):
@@ -522,7 +536,10 @@ def erase_account(user, *, actor_user=None, initiated_by=INITIATED_BY_ADMIN, not
         summary["forum_anonymised"] = anonymised
         summary["forum_deferred"] = deferred
 
-    # 3. Local data.
+    # 3. Local data. Cards first: what was paid with them is kept, nameless.
+    from .cards import forget_for_erasure
+
+    summary["cards_removed"] = forget_for_erasure(user, actor_user)
     if member is not None:
         summary["periods_retained"] = len(member.membership_periods)
         summary["avatar_files_deleted"] = _erase_member_rows(member)

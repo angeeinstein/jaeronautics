@@ -208,6 +208,13 @@ def collect_system_health(check_pages=True):
             f"{len(mismatched)} credit balance(s) are not the sum of their entries "
             f"(accounts {', '.join(f'#{user_id}' for user_id in mismatched[:10])})."
         )
+    from .cards import key_changed
+
+    if key_changed():
+        problems.append(
+            "The linked cards were linked under another SECRET_KEY, so no reader recognises them. "
+            "Put the old SECRET_KEY back in .env, or have every card linked again."
+        )
     if queues["external_work_pending"] > 20:
         warnings.append(
             f"{queues['external_work_pending']} background tasks are queued; the worker may not be running."

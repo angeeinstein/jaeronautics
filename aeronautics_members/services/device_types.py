@@ -24,7 +24,10 @@ from . import ValidationError
 
 @dataclass(frozen=True)
 class Setting:
-    """One setting of a type: ``kind`` is "text", "number" or "switch"."""
+    """One setting of a type: ``kind`` is "text", "number", "switch" or
+    "choice". A choice's ``choices()`` returns what may be chosen now, as
+    ``Choice``s; its value is the chosen one's ``value``, or None while
+    nothing is chosen."""
 
     name: str
     label: str
@@ -34,6 +37,15 @@ class Setting:
     max_length: int = 200
     minimum: int | None = None
     maximum: int | None = None
+    choices: Callable[[], list] | None = None
+
+
+@dataclass(frozen=True)
+class Choice:
+    value: Any
+    label: str
+    #: The heading it is listed under ("Joanneum Aeronautics", a team).
+    group: str = ""
 
 
 @dataclass(frozen=True)
@@ -47,20 +59,24 @@ class Resource:
 
 @dataclass(frozen=True)
 class Report:
-    """Something a device may report. ``answer(device, data)`` decides and
-    returns what the device is told, a dict. ``tryable``: harmless enough for
+    """Something a device may report. ``answer(device, data, event_id)``
+    decides and returns what the device is told, a dict (``event_id`` None
+    when tried from the device's page). ``tryable``: harmless enough for
     an admin to send it as the device from its page (never a sale).
     ``description`` says what it is, on the device's page.
 
     A report sent again is answered from the first one, but two copies
     arriving at the same moment can both reach ``answer`` before either is
-    recorded: one that changes something (a sale) keys that change by the
-    report's event id as well, so it happens once.
+    recorded: one that changes something (a sale) locks the device first and
+    then asks ``devices.earlier_answer``, so it happens once.
     """
 
     answer: Callable[[Any, dict], dict]
     tryable: bool = False
     description: str = ""
+    #: What of the data is kept with the event, for the device's page (a
+    #: card's ID is not: only its last characters). Default: all of it.
+    keep: Callable[[dict], dict] | None = None
 
 
 @dataclass(frozen=True)
@@ -71,6 +87,9 @@ class DeviceType:
     settings: tuple[Setting, ...] = ()
     resources: dict[str, Resource] = field(default_factory=dict)
     reports: dict[str, Report] = field(default_factory=dict)
+    #: Cards are tapped on it (services/cards.py): an admin can link a card
+    #: there, and members see My Account › Cards once one exists.
+    reads_cards: bool = False
 
 
 _TYPES: dict[str, DeviceType] = {}
@@ -101,6 +120,11 @@ def clean_settings(device_type, given, *, current=None):
     cleaned = {}
     for name, setting in known.items():
         value = given.get(name, current.get(name, setting.default))
+        if setting.kind == "choice" and name in current and value == current[name]:
+            # Kept as it was, even when it could not be chosen any more (an
+            # item switched off since): the type decides what that means.
+            cleaned[name] = value
+            continue
         cleaned[name] = _checked(setting, value)
     return cleaned
 
@@ -111,6 +135,12 @@ def _refuse(setting, message):
 
 
 def _checked(setting, value):
+    if setting.kind == "choice":
+        if value is None or value == "":
+            return None
+        if value not in {choice.value for choice in setting.choices()}:
+            _refuse(setting, f"{setting.label}: choose one of the list.")
+        return value
     if setting.kind == "switch":
         if not isinstance(value, bool):
             _refuse(setting, f"{setting.label}: on or off.")
@@ -141,7 +171,7 @@ def _hello(device):
     return {"greeting": (device.settings or {}).get("greeting") or "Hello", "device": device.name}
 
 
-def _ping(device, data):
+def _ping(device, data, _event_id=None):
     return {"result": "ok", "message": (device.settings or {}).get("greeting") or "Hello", "echo": data}
 
 
@@ -155,3 +185,7 @@ register(DeviceType(
     reports={"ping": Report(_ping, tryable=True,
                             description="Answered with the greeting and the data it was sent.")},
 ))
+
+
+# The types of the uses built so far, each in its own module.
+from . import sales_points  # noqa: E402,F401 -- registers "Sales point"

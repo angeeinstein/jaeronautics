@@ -10,6 +10,7 @@ import {
   CopyButton,
   Group,
   NumberInput,
+  Select,
   Stack,
   Switch,
   Text,
@@ -71,6 +72,36 @@ export function TypeSettingsFields({
               }}
             />
           );
+        if (setting.kind === 'choice') {
+          const choices = setting.choices ?? [];
+          // Grouped under their heading (an item's seller); the value kept as the server gave it.
+          const groups = [...new Set(choices.map((choice) => choice.group))];
+          const data = groups.map((group) => ({
+            group: group || setting.label,
+            items: choices
+              .filter((choice) => choice.group === group)
+              .map((choice) => ({ value: JSON.stringify(choice.value), label: choice.label })),
+          }));
+          const current = value === null || value === undefined ? null : JSON.stringify(value);
+          const known = choices.some((choice) => JSON.stringify(choice.value) === current);
+          return (
+            <Select
+              key={setting.name}
+              label={setting.label}
+              description={setting.help || undefined}
+              placeholder={choices.length ? 'Choose' : 'Nothing to choose yet'}
+              data={data}
+              value={known ? current : null}
+              error={error ?? (current !== null && !known ? 'No longer on sale: choose another.' : null)}
+              clearable
+              searchable
+              nothingFoundMessage="Nothing found"
+              onChange={(next) => {
+                onChange(setting.name, next === null ? null : (JSON.parse(next) as unknown));
+              }}
+            />
+          );
+        }
         if (setting.kind === 'number')
           return (
             <NumberInput

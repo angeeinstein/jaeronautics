@@ -1134,7 +1134,7 @@ class CreditEntry(db.Model):
     # Who sold it: a team, or the association itself (none).
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
     # A sale: what from the price list, and how it was made ("booked" by
-    # somebody in the portal; a card reader, later).
+    # somebody in the portal, "reader" at a card reader).
     item_id = db.Column(db.Integer, db.ForeignKey("credit_items.id"), nullable=True, index=True)
     channel = db.Column(db.String(20), nullable=True)
     # A sale taken back: the sale it undoes. Once each.
@@ -1143,6 +1143,10 @@ class CreditEntry(db.Model):
     # settings were then); negative on the sale taken back.
     kept_cents = db.Column(db.Integer, nullable=True)
     booked_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # A sale at a card reader: the card it was paid with, and the reader (none
+    # once the reader was removed; the description still names what was sold).
+    card_id = db.Column(db.Integer, db.ForeignKey("cards.id"), nullable=True, index=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
 
     user = db.relationship("User", foreign_keys=[user_id])
@@ -1150,6 +1154,8 @@ class CreditEntry(db.Model):
     payment = db.relationship("Payment")
     team = db.relationship("Team")
     item = db.relationship("CreditItem")
+    card = db.relationship("Card")
+    device = db.relationship("Device")
     reverses = db.relationship("CreditEntry", remote_side=[id], uselist=False)
 
 
@@ -1455,3 +1461,64 @@ class DeviceEvent(db.Model):
     detail = db.Column(db.String(255), nullable=True)
     data = db.Column(db.JSON, nullable=True)
     answer = db.Column(db.JSON, nullable=True)
+
+
+class Card(db.Model):
+    """A card -- a student card, a key fob -- linked to one person
+    (services/cards.py, docs/cards-plan.md). The card is its own record: the
+    person is who it belongs to, not what it is. Readers find it by its ID;
+    what a card may do there is each device type's business.
+
+    Its ID is never kept: ``id_hash`` is an HMAC of it under a key derived
+    from the server's secret, and ``id_tail`` its last characters, to tell
+    cards apart. Removing a card keeps the row (what was paid with it still
+    names it) but frees its ID: ``linked_hash`` is the hash while the card is
+    linked and empty after, and unique, so a card belongs to one person at a
+    time.
+    """
+
+    __tablename__ = "cards"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    name = db.Column(db.String(40), nullable=False)
+    id_hash = db.Column(db.String(64), nullable=True, index=True)
+    linked_hash = db.Column(db.String(64), nullable=True, unique=True)
+    id_tail = db.Column(db.String(8), nullable=False)
+    #: How it was linked: "phone" (scanned in the portal by its owner),
+    #: "admin_phone" (scanned by an admin), "reader" (tapped while an admin waited).
+    linked_how = db.Column(db.String(20), nullable=False)
+    linked_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    linked_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    #: Switched off by its owner, who can switch it on again.
+    disabled_at = db.Column(db.DateTime, nullable=True)
+    #: Blocked by an admin; only an admin lifts it.
+    blocked_at = db.Column(db.DateTime, nullable=True)
+    blocked_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    removed_at = db.Column(db.DateTime, nullable=True)
+    removed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+    last_used_device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+
+    user = db.relationship("User", foreign_keys=[user_id])
+    linked_by = db.relationship("User", foreign_keys=[linked_by_user_id])
+    blocked_by = db.relationship("User", foreign_keys=[blocked_by_user_id])
+    last_used_device = db.relationship("Device")
+
+
+class CardLinkWait(db.Model):
+    """An admin waiting at a reader for the next unknown card, to link it to
+    someone (services/cards.py). One per reader; it ends after a minute, or
+    with the card it linked."""
+
+    __tablename__ = "card_link_waits"
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    requested_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    device = db.relationship("Device")
+    user = db.relationship("User", foreign_keys=[user_id])

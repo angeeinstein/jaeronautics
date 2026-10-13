@@ -199,9 +199,16 @@ def key_last_used(device):
 def remove(actor, device):
     log_audit_event("devices", "device_removed", actor_user=actor,
                     metadata={"device_id": device.id, "name": device.name, "type": device.type})
-    # Its events and requests first, by hand: SQLite, which the tests use, does not cascade.
+    # By hand, as the database would: SQLite, which the tests use, does not
+    # cascade. Its events, requests and waits go; sales made on it and cards
+    # last used on it stay, without it.
+    from ..db_models import Card, CardLinkWait, CreditEntry
+
     db.session.execute(db.delete(DeviceEvent).where(DeviceEvent.device_id == device.id))
     db.session.execute(db.delete(DeviceRequest).where(DeviceRequest.device_id == device.id))
+    db.session.execute(db.delete(CardLinkWait).where(CardLinkWait.device_id == device.id))
+    db.session.execute(db.update(CreditEntry).where(CreditEntry.device_id == device.id).values(device_id=None))
+    db.session.execute(db.update(Card).where(Card.last_used_device_id == device.id).values(last_used_device_id=None))
     db.session.delete(device)
 
 
@@ -343,10 +350,11 @@ def report(device, *, event_id, name, data):
     handler = _type_of(device.type).reports.get(name)
     if handler is None:
         raise NotFoundError(f"A {device.type} device does not report \"{name}\".", code="device_report_unknown")
-    answer = handler.answer(device, data or {})
+    answer = handler.answer(device, data or {}, event_id)
+    kept = handler.keep(data or {}) if handler.keep else data
     try:
         with db.session.begin_nested():
-            _record(device, "reported", name=name, event_id=event_id, data=data, answer=answer)
+            _record(device, "reported", name=name, event_id=event_id, data=kept, answer=answer)
     except IntegrityError:
         # The same report arriving twice at once: the other one was first.
         earlier = _earlier(device, event_id)
@@ -360,6 +368,19 @@ def _earlier(device, event_id):
     return db.session.execute(
         db.select(DeviceEvent).filter_by(device_id=device.id, event_id=event_id, kind="reported")
     ).scalar_one_or_none()
+
+
+def earlier_answer(device, event_id):
+    """The answer a report with this event id was given already, read afresh
+    and locked: for a type whose report changes something, called after it
+    has locked the device, so a copy that arrived at the same moment waits
+    and then finds the first one's answer (device_types.Report)."""
+    from .locking import locked
+
+    earlier = db.session.execute(
+        locked(db.select(DeviceEvent).filter_by(device_id=device.id, event_id=event_id, kind="reported"))
+    ).scalar_one_or_none()
+    return earlier.answer if earlier is not None else None
 
 
 def try_out(actor, device, *, what, name=None, data=None):
@@ -378,7 +399,8 @@ def try_out(actor, device, *, what, name=None, data=None):
         if not handler.tryable:
             raise ConflictError(f"\"{name}\" cannot be tried from here: it would really happen.",
                                 code="device_report_not_tryable")
-        answer = handler.answer(device, data or {})
+        answer = handler.answer(device, data or {}, None)
+        data = handler.keep(data or {}) if handler.keep else data
     else:
         raise ValidationError("Try the sign of life, a resource or a report.")
     _record(device, "tried", name=name if what != "hello" else None,

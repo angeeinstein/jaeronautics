@@ -1,8 +1,12 @@
 # Cards and sales points: paying with a card at a reader
 
-Agreed 2026-10-13, not built yet. Branch `claude/card-sales`. It builds on
-the devices (`docs/devices-plan.md`, merged in #36) and on credit and its
-price lists (`docs/credit-plan.md`).
+Agreed and built 2026-10-13 (the first version), branch `claude/card-sales`.
+It builds on the devices (`docs/devices-plan.md`, merged in #36) and on
+credit and its price lists (`docs/credit-plan.md`). Setting it up and the
+reader's API: `docs/maintenance.md`, "Cards and sales points". Code:
+`services/cards.py`, `services/sales_points.py`, `api/cards.py`,
+`frontend/src/pages/account/Cards.tsx`, `frontend/src/pages/admin/Cards.tsx`,
+`frontend/src/pages/admin/account/CardsTab.tsx`.
 
 ## What the maintainer wants
 
@@ -126,7 +130,26 @@ later on we can expand this if this works and if this feels right."
   readers right now."
 - **Attendance**, around January, with the same cards.
 
-## Open
+## How it was built (decided while building)
 
-- The privacy policy: cards (their hashed IDs, names, last use) are personal
-  data; a line for the next draft.
+- **The key the card IDs are hashed with** is derived from the server's
+  `SECRET_KEY`, so a copy of the database alone does not give the IDs away
+  and a backup (which carries `SECRET_KEY`) restores working cards. A check
+  value kept at the first link lets System health say when `SECRET_KEY` has
+  changed since, which would make every card unknown.
+- **The item is the reader's only setting**; its seller is the item's. The
+  item is chosen from every price list, grouped by seller. An item switched
+  off later stays set, and the reader answers `item_off`.
+- **A card is sold to at most once in 5 seconds per reader**, and taps on
+  one reader are taken one at a time (a row lock on the device), so two
+  copies of one tap are one sale.
+- **The device's page keeps a tap without the card's ID** (its last four
+  characters only); a report type can say what of its data is kept.
+- **A known card tapped while an admin waits at that reader buys as usual**;
+  the wait goes on for the person's own, unknown card.
+- **Members see My Account › Cards** once a sales point exists, or when they
+  have a card. At most 10 cards per person.
+- **Admins see every card** under Admin › Cards (People), and manage one on
+  the owner's page, tab *Cards*.
+- **The privacy policy draft** of 2026-10-08 (§ 20) names the cards; it
+  waits for the board with the rest of that draft.

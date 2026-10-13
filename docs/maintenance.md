@@ -712,9 +712,41 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
     429 (`RATELIMIT_DEVICE`, 120 a minute per device;
     `RATELIMIT_DEVICE_PER_IP`, 600 a minute per address).
 - **A new kind of device** is a type registered in
-  `services/device_types.py`: its settings, what it may fetch, what it may
-  report and the answers. Step 1 has only *Test*, which answers what it is
-  sent.
+  `services/device_types.py` (or a module of its own it imports): its
+  settings, what it may fetch, what it may report and the answers. There
+  are *Test*, which answers what it is sent, and *Sales point* (below).
+
+## Cards and sales points
+
+Paying for a drink by tapping a card (docs/cards-plan.md). The code:
+`services/cards.py`, `services/sales_points.py`, `api/cards.py`.
+
+- **A reader at the fridge:** Admin › Settings › Devices › *Add*, type
+  *Sales point*, and the **item** a tap sells, chosen from any price list
+  (the association's on Admin › Credit, a team's on its Prices page). The
+  sale counts for the item's seller. The reader's firmware reports each tap:
+  `POST /api/v1/device/events` with
+  `{"event_id": "...", "kind": "tap", "data": {"card": "04A1B2C3D4E5F6"}}`,
+  and shows the answer: `sold` (item, price, what is left), `linked`, or
+  `refused` with a `reason` (`card_unknown`, `card_disabled`,
+  `card_blocked`, `account_off`, `not_enough`, `item_off`, `credit_off`,
+  `not_set_up`, `too_soon`). `GET /api/v1/device/resources/item` gives the
+  item and its price, for a label. A card is sold to at most once in 5
+  seconds per reader; the same `event_id` again gets the first answer.
+- **Cards:** members see theirs on My Account › Cards (once a sales point
+  exists) and link one by scanning it with an Android phone in Chrome (Web
+  NFC). Admins (`cards.manage`) see every card under Admin › Cards and
+  manage a person's on their account page, tab *Cards*: block and unblock,
+  remove, and link one -- scanned with their own phone, its ID typed in, or
+  *Wait for a tap* on a reader, which links the next unknown card tapped
+  there within a minute.
+- **The card IDs are not kept:** only an HMAC of each, under a key made
+  from `SECRET_KEY`, and its last four characters. **Changing `SECRET_KEY`
+  makes every card unknown** (System health says so); keep it, or have the
+  cards linked again. A backup carries it, so a restored portal knows the
+  cards.
+- **Rate limit:** `RATELIMIT_CARD_LINK` (20 an hour per account) for
+  linking by scanning.
 
 ## Stripe's fees
 

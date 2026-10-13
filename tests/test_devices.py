@@ -50,7 +50,7 @@ class TestManaging:
         # Shown shortened: its start and its last four characters, to tell keys apart.
         assert added["device"]["key_hint"] == f"jadev_{stored.key_id}_…{key[-4:]}"
         listed = client.get("/api/v1/admin/devices").get_json()
-        assert "key" not in listed["items"][0] and listed["types"][0]["slug"] == "test"
+        assert "key" not in listed["items"][0] and "test" in [t["slug"] for t in listed["types"]]
         assert db.session.query(AuditLog).filter_by(event_type="device_added").count() == 1
 
     def test_the_type_settings_default_and_are_checked(self, app, client, admin):

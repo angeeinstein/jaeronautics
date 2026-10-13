@@ -36,6 +36,13 @@ def account_section():
     return app_shell()
 
 
+@account_bp.route("/account/cards", methods=["GET"])
+@login_required
+def cards_page():
+    """One's cards for the readers (api/cards.py)."""
+    return app_shell()
+
+
 @account_bp.route("/account/credit", methods=["GET"])
 @login_required
 def credit_page():

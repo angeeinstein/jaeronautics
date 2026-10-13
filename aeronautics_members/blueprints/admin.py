@@ -105,6 +105,14 @@ def admin_account_detail(user_id):
     return app_shell()
 
 
+@admin_bp.route("/admin/cards", methods=["GET"])
+@login_required
+@requires(Permission.CARDS_MANAGE)
+def admin_cards():
+    """Every card linked now (frontend/src/pages/admin/Cards.tsx)."""
+    return app_shell()
+
+
 @admin_bp.route("/admin/credit", methods=["GET"])
 @admin_bp.route("/admin/credit/<int:user_id>", methods=["GET"])
 @login_required
