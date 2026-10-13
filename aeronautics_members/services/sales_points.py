@@ -105,6 +105,18 @@ def _keep(data):
     return {"card": f"…{tail}" if tail else None}
 
 
+def _summary(kept, answer):
+    """A tap in words, for the device's page."""
+    card = kept.get("card") or "A card"
+    result = answer.get("result")
+    if result == "sold":
+        return (f"{card} bought {answer.get('item')}, {credit._euros(answer.get('price_cents') or 0)}; "
+                f"{credit._euros(answer.get('balance_cents') or 0)} left")
+    if result == "linked":
+        return f"{card} linked"
+    return f"{card} refused: {answer.get('message') or answer.get('reason')}"
+
+
 def _tap(device, data, event_id):
     card_id = data.get("card")
     if not isinstance(card_id, str) or not card_id.strip():
@@ -158,6 +170,6 @@ device_types.register(device_types.DeviceType(
         help="What a tap sells, from a price list. Its seller is who the sale counts for."),),
     resources={"item": device_types.Resource(_item, "What a tap sells, at what price: for a label or a display.")},
     reports={"tap": device_types.Report(_tap, description="A card tapped: sells the item, or says why not.",
-                                        keep=_keep)},
+                                        keep=_keep, summary=_summary)},
     reads_cards=True,
 ))

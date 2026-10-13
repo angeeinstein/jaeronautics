@@ -153,6 +153,11 @@ class TestSalesPoint:
 
         event = db.session.query(DeviceEvent).filter_by(event_id="tap-1").one()
         assert event.data == {"card": "…E5F6"}
+        # Said in words on the device's page.
+        assert event.detail == "…E5F6 bought Beer, €1.50; €3.50 left"
+        _tap(app, key, event_id="tap-2")
+        refused = db.session.query(DeviceEvent).filter_by(event_id="tap-2").one()
+        assert refused.detail == "…E5F6 refused: Sold to this card a moment ago."
 
     def test_a_double_tap_is_one_sale(self, app, anna, reader):
         _device, key = reader

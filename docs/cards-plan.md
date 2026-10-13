@@ -144,7 +144,10 @@ later on we can expand this if this works and if this feels right."
   one reader are taken one at a time (a row lock on the device), so two
   copies of one tap are one sale.
 - **The device's page keeps a tap without the card's ID** (its last four
-  characters only); a report type can say what of its data is kept.
+  characters only), and says what came of it: "…E5F6 bought Beer, €1.50;
+  €3.50 left", "…E5F6 refused: Sold to this card a moment ago." (asked for
+  after testing, 2026-10-13). A report type says what of its data is kept
+  and how its event reads.
 - **A known card tapped while an admin waits at that reader buys as usual**;
   the wait goes on for the person's own, unknown card.
 - **Members see My Account › Cards** once a sales point exists, or when they

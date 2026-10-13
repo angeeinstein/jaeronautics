@@ -77,6 +77,9 @@ class Report:
     #: What of the data is kept with the event, for the device's page (a
     #: card's ID is not: only its last characters). Default: all of it.
     keep: Callable[[dict], dict] | None = None
+    #: The event in words for the device's page, from what was kept and the
+    #: answer ("…E5F6 bought Beer, €1.50"). Default: its event id.
+    summary: Callable[[dict, dict], str] | None = None
 
 
 @dataclass(frozen=True)

@@ -352,9 +352,10 @@ def report(device, *, event_id, name, data):
         raise NotFoundError(f"A {device.type} device does not report \"{name}\".", code="device_report_unknown")
     answer = handler.answer(device, data or {}, event_id)
     kept = handler.keep(data or {}) if handler.keep else data
+    detail = handler.summary(kept or {}, answer) if handler.summary else None
     try:
         with db.session.begin_nested():
-            _record(device, "reported", name=name, event_id=event_id, data=kept, answer=answer)
+            _record(device, "reported", name=name, event_id=event_id, detail=detail, data=kept, answer=answer)
     except IntegrityError:
         # The same report arriving twice at once: the other one was first.
         earlier = _earlier(device, event_id)
