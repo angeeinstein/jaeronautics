@@ -219,7 +219,7 @@ function TypedId({ userId, onLinked }: { userId: number; onLinked: (data: Person
         <TextInput
           label="Card ID"
           placeholder="04A1B2C3D4E5F6"
-          ff="monospace"
+          styles={{ input: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
           maxLength={40}
           value={cardId}
           error={error}

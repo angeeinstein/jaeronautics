@@ -296,6 +296,11 @@ function DeviceApi({
                     {request.description}
                   </Text>
                 ) : null}
+                {request.tryBody ? null : (
+                  <Text size="sm" c="dimmed">
+                    Not sent from here: it would really happen.
+                  </Text>
+                )}
               </Stack>
               {request.tryBody ? (
                 <Button
@@ -308,11 +313,7 @@ function DeviceApi({
                 >
                   Send
                 </Button>
-              ) : (
-                <Text size="sm" c="dimmed">
-                  Not sent from here: it would really happen.
-                </Text>
-              )}
+              ) : null}
             </Group>
             {request.report && request.tryBody ? (
               <Textarea
