@@ -13,7 +13,9 @@ test.describe('cards and sales points', () => {
     const name = `E2E fridge ${info.project.name} ${String(Date.now())}`;
     await page.goto('/admin/settings/devices');
     const form = page.getByRole('region', { name: 'Add a device' });
-    await form.getByRole('textbox', { name: 'Name' }).fill(name);
+    await form.getByRole('textbox', { name: /^Name/ }).fill(name);
+    await form.getByRole('combobox', { name: 'Owner' }).click();
+    await page.getByRole('option', { name: 'Rocket Team' }).click();
     await form.getByRole('combobox', { name: 'Type' }).click();
     await page.getByRole('option', { name: 'Sales point' }).click();
     await form.getByRole('combobox', { name: 'Item' }).click();
@@ -62,5 +64,13 @@ test.describe('cards and sales points', () => {
     await expect(list.getByRole('listitem', { name: 'Key fob' })).toContainText('Off');
     // No NFC in the test browser: it says where a card can be linked instead.
     await expect(page.getByText(/This browser cannot read cards/)).toBeVisible();
+  });
+
+  test("a lead runs the team's reader on the team's page", async ({ page }) => {
+    await signIn(page, 'active@example.org');
+    await page.goto('/teams/rocket-team/manage/devices');
+    const fridge = page.getByRole('region', { name: 'Rocket fridge' });
+    await expect(fridge).toContainText('Sales point');
+    await expect(fridge.getByRole('combobox', { name: 'Item' })).toHaveValue('Beer, €2.00');
   });
 });

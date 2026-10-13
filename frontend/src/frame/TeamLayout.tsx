@@ -23,6 +23,7 @@ import {
   IconMail,
   IconReceipt,
   IconTag,
+  IconCpu,
   IconUserShield,
   IconUsers,
 } from '@tabler/icons-react';
@@ -100,6 +101,9 @@ export function teamSidebar(team: Team): SidebarContent {
           may(team, 'team.view_money') ? { label: 'Money', to: `${base}/money`, icon: IconCoin } : null,
           team.sells_for_credit && may(team, 'team.edit_prices')
             ? { label: 'Prices', to: `${base}/manage/prices`, icon: IconTag }
+            : null,
+          team.has_devices && may(team, 'team.devices')
+            ? { label: 'Devices', to: `${base}/manage/devices`, icon: IconCpu }
             : null,
         ],
       },

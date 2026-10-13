@@ -45,6 +45,7 @@
     "/teams/:slug/manage/access-list",
     "/teams/:slug/manage/roles",
     "/teams/:slug/manage/prices",
+    "/teams/:slug/manage/devices",
     "/teams/:slug/manage/messages",
     "/teams/:slug/manage/details",
     "/teams/:slug/manage/fee",

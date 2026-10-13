@@ -41,22 +41,29 @@ export function statusOf(device: Device): { tone: Tone; label: string; detail: s
   return { tone: 'neutral', label: 'New', detail: 'Has not spoken yet.' };
 }
 
-/** Each setting of a type, as a field of its kind. */
+export type SettingField = DeviceType['settings'][number];
+
+/**
+ * Each setting, as a field of its kind. A choice offers what ``owner`` (the
+ * association, or a team's slug) may choose: a reader sells its owner's items.
+ */
 export function TypeSettingsFields({
-  type,
+  settings,
+  owner,
   values,
   errors,
   onChange,
 }: {
-  type: DeviceType;
+  settings: SettingField[];
+  owner: string;
   values: Settings;
   errors: Record<string, string>;
   onChange: (name: string, value: unknown) => void;
 }) {
-  if (!type.settings.length) return null;
+  if (!settings.length) return null;
   return (
     <Stack gap="sm">
-      {type.settings.map((setting) => {
+      {settings.map((setting) => {
         const error = errors[`settings.${setting.name}`] ?? null;
         const value = values[setting.name] ?? setting.default;
         if (setting.kind === 'switch')
@@ -73,7 +80,7 @@ export function TypeSettingsFields({
             />
           );
         if (setting.kind === 'choice') {
-          const choices = setting.choices ?? [];
+          const choices = (setting.choices ?? []).filter((choice) => choice.owner === owner);
           // Grouped under their heading (an item's seller); the value kept as the server gave it.
           const groups = [...new Set(choices.map((choice) => choice.group))];
           const data = groups.map((group) => ({
@@ -92,7 +99,7 @@ export function TypeSettingsFields({
               placeholder={choices.length ? 'Choose' : 'Nothing to choose yet'}
               data={data}
               value={known ? current : null}
-              error={error ?? (current !== null && !known ? 'No longer on sale: choose another.' : null)}
+              error={error ?? (current !== null && !known ? 'Not on sale: choose another.' : null)}
               clearable
               searchable
               nothingFoundMessage="Nothing found"
@@ -136,15 +143,11 @@ export function TypeSettingsFields({
   );
 }
 
-function fileName(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-  return `device-${slug || 'configuration'}.json`;
-}
-
-/** A key, the one time it can be read: to copy, or to download as the device's configuration. */
+/**
+ * A key, the one time it can be read: to copy, or to download as the
+ * device's configuration, or as the starter for its firmware -- everything
+ * firmware for it needs, with an example sketch (a Markdown file).
+ */
 export function KeyReveal({ result, onDone }: { result: DeviceKey; onDone: () => void }) {
   return (
     <Stack gap="md">
@@ -169,16 +172,25 @@ export function KeyReveal({ result, onDone }: { result: DeviceKey; onDone: () =>
             const file = new Blob([`${JSON.stringify(result.configuration, null, 2)}\n`], {
               type: 'application/json',
             });
-            saveFile(file, fileName(result.device.name));
+            saveFile(file, `device-${result.device.code}.json`);
           }}
         >
           Download configuration
         </Button>
+        <Button
+          variant="default"
+          onClick={() => {
+            saveFile(new Blob([result.starter], { type: 'text/markdown' }), result.starter_name);
+          }}
+        >
+          Download starter
+        </Button>
         <Button onClick={onDone}>Done</Button>
       </Group>
       <Text size="sm" c="dimmed">
-        The configuration file holds the portal&apos;s address, the device&apos;s number, its type and this
-        key.
+        The configuration holds the portal&apos;s address, the device&apos;s code, its type and this key. The
+        starter adds every request the device makes and an example sketch for an ESP32, to build its firmware
+        from.
       </Text>
     </Stack>
   );
@@ -187,7 +199,7 @@ export function KeyReveal({ result, onDone }: { result: DeviceKey; onDone: () =>
 /** A new device's key, where the form to add it was. */
 export function KeyShown({ result, onDone }: { result: DeviceKey; onDone: () => void }) {
   return (
-    <Panel title={`The key of ${result.device.name}`}>
+    <Panel title={`The key of ${result.device.label}`}>
       <KeyReveal result={result} onDone={onDone} />
     </Panel>
   );

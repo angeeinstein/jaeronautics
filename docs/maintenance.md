@@ -683,16 +683,27 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
 `docs/devices-plan.md`; the code: `services/devices.py`,
 `services/device_types.py`, `api/devices.py`.
 
-- **Adding one** shows its key once, with *Copy key* and *Download
-  configuration* (a JSON file: the portal's address, the device's number,
-  its type, the key). Only a SHA-256 hash of the key is kept, and its last
+- **Adding one:** its type and its **owner** -- the association or a team --
+  and, if wanted, a name (its random code, such as `K7MQ-2X9A`, stands in for
+  one). The owner runs it from then on: a team's leads and treasurer on the
+  team's page, *Devices*; the association's admins and treasurer on Admin ›
+  Credit. They name it, place it, describe it, choose what it does within its
+  type (a reader's item, from their own price list) and switch it off or on,
+  and see what it reported lately. The key, the type, the owner and removing
+  it stay with admins.
+- **Its key is shown once,** with *Copy key*, *Download configuration* (a
+  JSON file: the portal's address, the device's code, its type, the key) and
+  *Download starter*: a Markdown file with everything firmware for it needs
+  -- every request and answer of its type, the rules, an example sketch for
+  an ESP32 (Arduino) with the key in place. Only a SHA-256 hash of the key is kept, and its last
   four characters to tell keys apart. On the device's page: *Rotate* (a new
   key; the old one stops at once) and *Revoke* (no key works until a new one
   is made).
 - **Switching one off** refuses it whatever key it has. *Remove* deletes it,
   its key and its events.
 - **Its page** shows when it last spoke (written at most every 30 seconds),
-  from where, its firmware (`X-Device-Firmware`), its last 100 requests with
+  from where, its firmware (`X-Device-Firmware`), its board's MAC address
+  (`X-Device-Hardware`; another board with the same key is noted as an event), its last 100 requests with
   their answers, its recent events (kept 90 days, by the nightly
   `cleanup-logs`) -- both refreshed every 5 seconds while open -- and *What
   the device can send*: each request of its type, described, as a `curl`
@@ -722,9 +733,9 @@ Paying for a drink by tapping a card (docs/cards-plan.md). The code:
 `services/cards.py`, `services/sales_points.py`, `api/cards.py`.
 
 - **A reader at the fridge:** Admin › Settings › Devices › *Add*, type
-  *Sales point*, and the **item** a tap sells, chosen from any price list
-  (the association's on Admin › Credit, a team's on its Prices page). The
-  sale counts for the item's seller. The reader's firmware reports each tap:
+  *Sales point*, and its owner. Its owner chooses the **item** a tap sells
+  from their own price list (the association's on Admin › Credit, a team's on
+  its Prices page); the sale counts for the owner. The reader's firmware reports each tap:
   `POST /api/v1/device/events` with
   `{"event_id": "...", "kind": "tap", "data": {"card": "04A1B2C3D4E5F6"}}`,
   and shows the answer: `sold` (item, price, what is left), `linked`, or

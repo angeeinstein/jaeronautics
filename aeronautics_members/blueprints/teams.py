@@ -175,6 +175,15 @@ def team_prices(slug):
     return app_shell()
 
 
+@teams_bp.route("/teams/<slug>/manage/devices", methods=["GET"])
+@login_required
+def team_devices(slug):
+    """The team's devices (frontend/src/pages/teams/manage/Devices.tsx)."""
+    team = _team_or_404(slug)
+    _may(team, teams_service.TeamPermission.DEVICES)
+    return app_shell()
+
+
 @teams_bp.route("/teams/<slug>/manage/<any(details, fee, archive):section>", methods=["GET"])
 @login_required
 def team_admin_settings(slug, section):

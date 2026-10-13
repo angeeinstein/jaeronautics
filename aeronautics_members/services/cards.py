@@ -291,9 +291,9 @@ def reads_cards(device):
 
 def readers():
     """The devices a card can be tapped on, switched on."""
-    return [device for device in db.session.execute(
-        db.select(Device).filter_by(enabled=True).order_by(db.func.lower(Device.name))
-    ).scalars() if reads_cards(device)]
+    from . import devices
+
+    return [device for device in devices.devices() if device.enabled and reads_cards(device)]
 
 
 def in_use():
@@ -320,7 +320,7 @@ def wait_at_reader(actor, user, device, now=None):
                         created_at=now, expires_at=now + WAIT)
     db.session.add(wait)
     log_audit_event("cards", "card_wait_started", actor_user=actor, target_user=user,
-                    metadata={"device_id": device.id, "device": device.name})
+                    metadata={"device_id": device.id, "device": device.code})
     return wait
 
 

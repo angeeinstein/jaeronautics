@@ -1394,11 +1394,21 @@ class Device(db.Model):
     __tablename__ = "devices"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=False, unique=True)
+    #: Its ID as people see it, random and made when it is added: "K7MQ-2X9A".
+    #: It stays when the board in it is replaced.
+    code = db.Column(db.String(9), nullable=False, unique=True)
+    #: The name its owner gives it, if any; the code stands in for it.
+    name = db.Column(db.String(80), nullable=True, unique=True)
     #: A type registered in services/device_types.py.
     type = db.Column(db.String(40), nullable=False)
+    #: Whose it is: a team, or the association (none). The owner names it,
+    #: places it and chooses what it does within its type; admins add it.
+    team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
     #: Where it is, in words: "Workshop, beside the fridge".
     place = db.Column(db.String(120), nullable=True)
+    description = db.Column(db.String(300), nullable=True)
+    #: The board's MAC address, as it sends it (``X-Device-Hardware``).
+    hardware_id = db.Column(db.String(17), nullable=True)
     #: The settings its type has, as the admin set them.
     settings = db.Column(db.JSON, nullable=False, default=dict)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
@@ -1417,6 +1427,7 @@ class Device(db.Model):
     last_address = db.Column(db.String(45), nullable=True)
     firmware = db.Column(db.String(60), nullable=True)
 
+    team = db.relationship("Team")
     events = db.relationship("DeviceEvent", backref="device", cascade="all, delete-orphan",
                              passive_deletes=True, order_by="DeviceEvent.id.desc()", lazy="dynamic")
 

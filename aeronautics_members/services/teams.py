@@ -90,14 +90,18 @@ class TeamPermission:
     EDIT_PRICES = "team.edit_prices"
     #: Read the messages written to the team's leads, and write to its members.
     MESSAGES = "team.messages"
+    #: The team's own devices (a reader at its fridge): their names, places,
+    #: what they do within their type, on or off (docs/devices-plan.md).
+    DEVICES = "team.devices"
 
     ALL = frozenset({
         VIEW_MEMBERS, REVIEW_APPLICATIONS, REMOVE_MEMBERS,
         WRITE_NOTES, EXPORT, EDIT_SETTINGS, SEND_ACCESS_LIST,
-        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS, EDIT_PRICES, MESSAGES,
+        VIEW_MONEY, EDIT_BANK_DETAILS, APPOINT_TREASURER, APPOINT_LEADS, EDIT_PRICES, MESSAGES, DEVICES,
     })
-    #: The team's money, the account it is paid to, and its prices -- nothing about people.
-    MONEY = frozenset({VIEW_MONEY, EDIT_BANK_DETAILS, EDIT_PRICES})
+    #: The team's money, the account it is paid to, its prices and the readers
+    #: that sell them -- nothing about people.
+    MONEY = frozenset({VIEW_MONEY, EDIT_BANK_DETAILS, EDIT_PRICES, DEVICES})
 
 
 ROLE_LEAD = "lead"

@@ -5,7 +5,7 @@
  * treasurer (credit.manage). Data: GET /api/v1/admin/credit
  * (aeronautics_members/api/credit.py).
  */
-import { Alert, Anchor, Avatar, Group, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import { Alert, Anchor, Avatar, Group, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -13,6 +13,7 @@ import { api, call } from '../../../api/client';
 
 import { AppLink } from '../../../app/AppLink';
 import { PageHeader } from '../../../components/PageHeader';
+import { OwnedDeviceList } from '../../../components/devices/OwnedDevices';
 import { type ItemChange, PriceListPanel } from '../../../components/PriceList';
 import { Panel } from '../../../components/Panel';
 import { Pill } from '../../../components/Pill';
@@ -178,6 +179,38 @@ function AssociationPrices() {
   );
 }
 
+const associationDevicesKey = ['admin', 'credit', 'devices'] as const;
+
+/** The association's own devices -- a reader in the student area, say -- shown once it has one. */
+function AssociationDevices() {
+  const list = useQuery({
+    queryKey: associationDevicesKey,
+    queryFn: () => call(api.GET('/api/v1/admin/credit/devices')),
+  });
+  useLiveRefresh(associationDevicesKey, EVERY_MINUTE);
+  if (!list.data?.items.length) return null;
+  return (
+    <Stack gap="sm">
+      <Title order={2} size="h3">
+        The association&apos;s devices
+      </Title>
+      <OwnedDeviceList
+        devices={list.data}
+        owner="association"
+        queryKey={associationDevicesKey}
+        change={(id, body) =>
+          call(
+            api.PATCH('/api/v1/admin/credit/devices/{device_id}', {
+              params: { path: { device_id: id } },
+              body,
+            }),
+          )
+        }
+      />
+    </Stack>
+  );
+}
+
 export function Credit() {
   const overview = useQuery(creditOverviewQuery);
   useLiveRefresh(creditOverviewQuery.queryKey, EVERY_MINUTE);
@@ -228,6 +261,7 @@ export function Credit() {
           </SimpleGrid>
           <Sellers sellers={overview.data.sellers} />
           <AssociationPrices />
+          <AssociationDevices />
           <Panel title="Balances" flush>
             <div className={classes.inset}>
               <People people={overview.data.people} />

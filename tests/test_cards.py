@@ -244,17 +244,75 @@ class TestSalesPoint:
         db.session.commit()
         assert _tap(app, key)["reason"] == "credit_off"
 
-    def test_the_item_is_chosen_from_the_price_lists(self, app, beer, reader):
+    def test_the_item_is_chosen_from_its_owners_price_list(self, app, beer, reader):
         device, _key = reader
         from aeronautics_members.services import device_types
 
         setting = device_types.get("sales_point").settings[0]
-        assert [(choice.value, choice.label) for choice in setting.choices()] == [(beer.id, "Beer, €1.50")]
+        assert [(choice.value, choice.label) for choice in setting.choices(None)] == [(beer.id, "Beer, €1.50")]
         with pytest.raises(ValidationError):
             devices.change(None, device, settings={"item": 9999})
         # Kept as it was once switched off, though it cannot be chosen any more.
         credit_sales.update_item(None, beer, active=False)
         assert devices.change(None, device, settings={"item": beer.id}).settings == {"item": beer.id}
+
+    def test_a_team_reader_sells_only_the_teams_items(self, app, anna, beer, reader):
+        from test_teams_flow import _team
+
+        device, key = reader
+        rocket = _team("Rocket")
+        mate = credit_sales.add_item(None, team=rocket, name="Mate", price_cents=250)
+        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+
+        # Given to the team: the association's beer no longer fits, and is cleared.
+        devices.change(None, device, owner=rocket)
+        assert device.settings == {"item": None}
+        with pytest.raises(ValidationError):
+            devices.change(None, device, settings={"item": beer.id})
+        devices.change(None, device, settings={"item": mate.id})
+        db.session.commit()
+
+        assert _tap(app, key)["item"] == "Mate"
+        assert _sales_of(anna)[0].team_id == rocket.id
+
+
+class TestOwners:
+    def test_a_device_has_a_random_code_and_a_name_only_if_given(self, app):
+        device, _key = devices.add(None, type="test")
+        other, _key = devices.add(None, type="test", name="Fridge")
+
+        assert len(device.code) == 9 and device.code[4] == "-" and device.code != other.code
+        assert device.name is None and devices.label(device) == device.code
+        assert devices.label(other) == "Fridge"
+
+    def test_the_board_it_speaks_from(self, app):
+        device, key = devices.add(None, type="test")
+        db.session.commit()
+        client = app.test_client()
+
+        def hello(mac):
+            return client.get("/api/v1/device", headers={"Authorization": f"Bearer {key}",
+                                                         "X-Device-Hardware": mac}).get_json()
+
+        assert hello("24-6f-28-aa-bb-cc")["code"] == device.code
+        assert device.hardware_id == "24:6F:28:AA:BB:CC"
+        hello("24:6F:28:00:00:01")
+        moved = db.session.query(DeviceEvent).filter_by(device_id=device.id, kind="hardware").all()
+        assert moved[-1].detail == "Board 24:6F:28:00:00:01, was 24:6F:28:AA:BB:CC: the key is on another board"
+
+    def test_an_owner_changes_only_what_is_theirs(self, app, beer, reader):
+        device, _key = reader
+        devices.change(None, device, name="Workshop fridge", place="Workshop", description="By the door",
+                       enabled=False, settings={"item": beer.id}, by_owner=True)
+        assert (device.name, device.place, device.description, device.enabled) == (
+            "Workshop fridge", "Workshop", "By the door", False)
+        # Who owns it is an admin's to change, not the owner's.
+        from test_teams_flow import _team
+
+        devices.change(None, device, owner=_team("Rocket"), by_owner=True)
+        assert device.team_id is None
+
 
     def test_its_item_for_a_label(self, app, reader):
         _device, key = reader
@@ -394,3 +452,110 @@ class TestPages:
         exported = export_account_data(anna)["cards"]
         assert exported[0]["name"] == "Key fob" and exported[0]["id_ends_with"] == "…E5F6"
         assert CARD not in str(exported)
+
+
+class TestOwnersPages:
+    @pytest.fixture
+    def rocket(self, app):
+        from test_teams_flow import _led, switched_on  # noqa: F401
+
+        from aeronautics_members.services import teams
+
+        teams.save_team_settings(None, enabled=True, label_singular="", label_plural="")
+        team, lead = _led()
+        db.session.commit()
+        return team, lead
+
+    def test_a_lead_runs_the_teams_reader_and_sees_its_taps(self, app, client, anna, rocket):
+        from api_helpers import send, signed_in
+
+        team, lead = rocket
+        mate = credit_sales.add_item(None, team=team, name="Mate", price_cents=250)
+        device, key = devices.add(None, type="sales_point", owner=team)
+        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+        signed_in(client, lead)
+        assert client.get(f"/api/v1/teams/{team.slug}").get_json()["has_devices"] is True
+
+        url = f"/api/v1/teams/{team.slug}/manage/devices"
+        [owned] = client.get(url).get_json()["items"]
+        assert owned["label"] == device.code and owned["name"] is None
+        assert [c["label"] for c in owned["fields"][0]["choices"]] == ["Mate, €2.50"]
+
+        changed = send(client, "PATCH", f"{url}/{device.id}",
+                       {"name": "Rocket fridge", "place": "Hangar", "settings": {"item": mate.id}})
+        assert changed.status_code == 200, changed.get_json()
+        _tap(app, key)
+        [owned] = client.get(url).get_json()["items"]
+        assert owned["label"] == "Rocket fridge"
+        assert owned["recent"][0]["detail"] == "…E5F6 bought Mate, €2.50; €2.50 left"
+
+    def test_a_lead_cannot_reach_another_owners_device(self, app, client, rocket, reader):
+        from api_helpers import send, signed_in
+
+        team, lead = rocket
+        association_device, _key = reader
+        signed_in(client, lead)
+        answer = send(client, "PATCH", f"/api/v1/teams/{team.slug}/manage/devices/{association_device.id}",
+                      {"enabled": False})
+        assert answer.status_code == 404
+        assert send(client, "PATCH", f"/api/v1/teams/{team.slug}/manage/devices/{association_device.id}",
+                    {"settings": {"item": 1}}).status_code == 404
+
+    def test_an_owner_may_not_change_what_is_technical(self, app, client, rocket):
+        from api_helpers import send, signed_in
+
+        team, lead = rocket
+        device, _key = devices.add(None, type="test", owner=team)
+        db.session.commit()
+        signed_in(client, lead)
+        refused = send(client, "PATCH", f"/api/v1/teams/{team.slug}/manage/devices/{device.id}",
+                       {"settings": {"greeting": "Hi"}})
+        assert refused.status_code == 400 and refused.get_json()["error"]["code"] == "device_setting_admin"
+
+    def test_a_member_without_a_role_sees_no_devices(self, app, client, anna, rocket):
+        from api_helpers import signed_in
+
+        team, _lead = rocket
+        devices.add(None, type="sales_point", owner=team)
+        db.session.commit()
+        signed_in(client, anna)
+        assert client.get(f"/api/v1/teams/{team.slug}/manage/devices").status_code == 403
+
+    def test_the_association_s_devices_for_the_treasurer(self, app, client, reader):
+        from api_helpers import signed_in
+        from test_admin_reviews import _staff
+
+        signed_in(client, _staff("treasurer@example.org", "treasurer"))
+        items = client.get("/api/v1/admin/credit/devices").get_json()["items"]
+        assert [item["code"] for item in items] == [reader[0].code]
+
+    def test_admins_give_a_device_to_a_team(self, app, client, rocket):
+        from api_helpers import send, signed_in
+        from test_admin_reviews import _staff
+
+        team, _lead = rocket
+        signed_in(client, _staff("admin@example.org", "admin"))
+        added = send(client, "POST", "/api/v1/admin/devices", {"type": "sales_point", "owner": team.slug})
+        assert added.status_code == 201, added.get_json()
+        device = added.get_json()["device"]
+        assert (device["owner"], device["owner_label"], device["name"]) == (team.slug, team.name, None)
+        listed = client.get("/api/v1/admin/devices").get_json()
+        assert [o["value"] for o in listed["owners"]] == ["association", team.slug]
+        moved = send(client, "PATCH", f"/api/v1/admin/devices/{device['id']}", {"owner": "association"})
+        assert moved.get_json()["owner"] == "association"
+
+
+def test_the_key_comes_with_a_firmware_starter(app, client):
+    from api_helpers import send, signed_in
+    from test_admin_reviews import _staff
+
+    signed_in(client, _staff("admin@example.org", "admin"))
+    added = send(client, "POST", "/api/v1/admin/devices", {"type": "sales_point"}).get_json()
+    starter, key, code = added["starter"], added["key"], added["device"]["code"]
+
+    assert added["starter_name"] == f"device-{code}-starter.md"
+    assert f'const char* DEVICE_KEY = "{key}";' in starter
+    assert 'const char* SERVER = "https://members.test/api/v1/device";' in starter
+    assert "X-Device-Hardware" in starter and '"kind": "tap"' in starter and "too_soon" in starter
+    assert "setInsecure" not in starter.split("```cpp")[1]

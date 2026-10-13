@@ -498,9 +498,11 @@ def seed(app, app_module, subscriptions):
     # with her student card there, and an old card of hers blocked.
     from aeronautics_members.services import cards as cards_service
 
-    sales_point, _key = devices_service.add(admin_user, name="Rocket fridge", type="sales_point",
+    sales_point, _key = devices_service.add(admin_user, name="Rocket fridge", type="sales_point", owner=rocket,
                                             place="Workshop", settings={"item": beer.id})
-    devices_service.seen(sales_point, address="10.0.0.22", firmware="1.0.0", now=now)
+    devices_service.seen(sales_point, address="10.0.0.22", firmware="1.0.0", hardware="24:6F:28:AA:BB:CC",
+                         now=now)
+    devices_service.add(admin_user, type="sales_point", owner=rocket)
     student_card = cards_service.link(active.user, "04A1B2C3D4E5F6", name="Student card", by=active.user,
                                       how=cards_service.BY_PHONE)
     fob = cards_service.link(active.user, "04112233445566", name="Key fob", by=admin_user,
@@ -619,6 +621,7 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--settings-sales-point", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{sales_point.id}"},
         {"name": "admin--cards", "user": "admin@example.org", "path": "/admin/cards"},
+        {"name": "teams--devices", "user": "active@example.org", "path": "/teams/rocket-team/manage/devices"},
         {"name": "admin--account-cards", "user": "admin@example.org",
          "path": f"/admin/accounts/{active.user.id}#cards"},
         {"name": "teams--messages", "user": "active@example.org", "path": "/teams/rocket-team/manage/messages"},

@@ -15,7 +15,7 @@ from ..config import RATELIMIT_CARD_LINK
 from ..db_models import Device, User, db
 from ..permissions import Permission
 from ..services import NotFoundError
-from ..services import cards
+from ..services import cards, devices
 from ..services.pictures import picture_url
 from ._core import Model, UtcDateTime, endpoint
 
@@ -43,7 +43,7 @@ def _card(card):
     return CardOut(
         id=card.id, name=card.name, tail=cards.tail(card), state=cards.state(card), linked_at=card.linked_at,
         linked_how=cards.LINKED_HOW.get(card.linked_how, card.linked_how), last_used_at=card.last_used_at,
-        last_used_on=card.last_used_device.name if card.last_used_device is not None else None,
+        last_used_on=devices.label(card.last_used_device) if card.last_used_device is not None else None,
     )
 
 
@@ -167,7 +167,7 @@ class PersonCardsOut(Model):
 
 
 def _reader(device):
-    return CardReaderOut(id=device.id, name=device.name, place=device.place)
+    return CardReaderOut(id=device.id, name=devices.label(device), place=device.place)
 
 
 def _person(user_id):

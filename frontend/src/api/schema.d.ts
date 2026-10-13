@@ -726,6 +726,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/credit/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The association's own devices, what each does, and what they reported lately. */
+        get: operations["association_devices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Name, place or describe one of the association's devices, choose what it does, switch it on or off. */
+        patch: operations["association_device_change"];
+        trace?: never;
+    };
     "/api/v1/admin/credit/items": {
         parameters: {
             query?: never;
@@ -913,7 +947,7 @@ export interface paths {
         delete: operations["admin_device_remove"];
         options?: never;
         head?: never;
-        /** Change a device's name, place, settings, or switch it on or off. */
+        /** Change a device's owner, name, place, description, settings, or switch it on or off. */
         patch: operations["admin_device_change"];
         trace?: never;
     };
@@ -2348,6 +2382,40 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's devices, what each does, and what they reported lately. */
+        get: operations["team_devices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Name, place or describe one of the team's devices, choose what it does, switch it on or off. */
+        patch: operations["team_device_change"];
         trace?: never;
     };
     "/api/v1/teams/{slug}/manage/former": {
@@ -4370,6 +4438,11 @@ export interface components {
         /** DeviceChangeIn */
         DeviceChangeIn: {
             /**
+             * Description
+             * @default null
+             */
+            description?: string | null;
+            /**
              * Enabled
              * @default null
              */
@@ -4379,6 +4452,11 @@ export interface components {
              * @default null
              */
             name?: string | null;
+            /**
+             * Owner
+             * @default null
+             */
+            owner?: string | null;
             /**
              * Place
              * @default null
@@ -4398,6 +4476,8 @@ export interface components {
             group: string;
             /** Label */
             label: string;
+            /** Owner */
+            owner: string;
             /** Value */
             value: unknown;
         };
@@ -4436,10 +4516,14 @@ export interface components {
         };
         /** DeviceHelloOut */
         DeviceHelloOut: {
+            /** Code */
+            code: string;
             /** Device Id */
             device_id: number;
             /** Name */
             name: string;
+            /** Owner */
+            owner: string;
             /** Place */
             place: string | null;
             /** Reports */
@@ -4457,8 +4541,21 @@ export interface components {
         };
         /** DeviceIn */
         DeviceIn: {
-            /** Name */
-            name: string;
+            /**
+             * Description
+             * @default null
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * Owner
+             * @default association
+             */
+            owner?: string;
             /**
              * Place
              * @default null
@@ -4480,15 +4577,25 @@ export interface components {
             device: components["schemas"]["DeviceOut"];
             /** Key */
             key: string;
+            /** Starter */
+            starter: string;
+            /** Starter Name */
+            starter_name: string;
         };
         /** DeviceOut */
         DeviceOut: {
+            /** Code */
+            code: string;
             /** Created At */
             created_at: string;
+            /** Description */
+            description: string | null;
             /** Enabled */
             enabled: boolean;
             /** Firmware */
             firmware: string | null;
+            /** Hardware Id */
+            hardware_id: string | null;
             /** Id */
             id: number;
             /** Key Created At */
@@ -4499,14 +4606,20 @@ export interface components {
             key_last_used_at: string | null;
             /** Key Revoked At */
             key_revoked_at: string | null;
+            /** Label */
+            label: string;
             /** Last Address */
             last_address: string | null;
             /** Last Seen At */
             last_seen_at: string | null;
             /** Name */
-            name: string;
+            name: string | null;
             /** Online */
             online: boolean;
+            /** Owner */
+            owner: string;
+            /** Owner Label */
+            owner_label: string;
             /** Place */
             place: string | null;
             /** Settings */
@@ -4517,6 +4630,13 @@ export interface components {
             type: string;
             /** Type Label */
             type_label: string;
+        };
+        /** DeviceOwnerOut */
+        DeviceOwnerOut: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
         };
         /** DeviceReportIn */
         DeviceReportIn: {
@@ -4606,6 +4726,11 @@ export interface components {
             minimum: number | null;
             /** Name */
             name: string;
+            /**
+             * Owner May Change
+             * @default false
+             */
+            owner_may_change?: boolean;
         };
         /** DeviceTryIn */
         DeviceTryIn: {
@@ -4650,6 +4775,8 @@ export interface components {
         DevicesOut: {
             /** Items */
             items: components["schemas"]["DeviceOut"][];
+            /** Owners */
+            owners: components["schemas"]["DeviceOwnerOut"][];
             /** Server */
             server: string;
             /** Types */
@@ -5856,7 +5983,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices")[];
             /** Slug */
             slug: string;
         };
@@ -6484,6 +6611,79 @@ export interface components {
              * @default null
              */
             until?: string | null;
+        };
+        /** OwnedDeviceChangeIn */
+        OwnedDeviceChangeIn: {
+            /**
+             * Description
+             * @default null
+             */
+            description?: string | null;
+            /**
+             * Enabled
+             * @default null
+             */
+            enabled?: boolean | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * Place
+             * @default null
+             */
+            place?: string | null;
+            /**
+             * Settings
+             * @default null
+             */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** OwnedDeviceOut */
+        OwnedDeviceOut: {
+            /** Code */
+            code: string;
+            /** Description */
+            description: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Fields */
+            fields: components["schemas"]["DeviceSettingOut"][];
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Name */
+            name: string | null;
+            /** Online */
+            online: boolean;
+            /** Place */
+            place: string | null;
+            /** Recent */
+            recent: components["schemas"]["OwnedReportOut"][];
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Type Label */
+            type_label: string;
+        };
+        /** OwnedDevicesOut */
+        OwnedDevicesOut: {
+            /** Items */
+            items: components["schemas"]["OwnedDeviceOut"][];
+        };
+        /** OwnedReportOut */
+        OwnedReportOut: {
+            /** At */
+            at: string;
+            /** Detail */
+            detail: string;
         };
         /** PageIn */
         PageIn: {
@@ -7647,6 +7847,11 @@ export interface components {
             description: string | null;
             /** Fee */
             fee: string | null;
+            /**
+             * Has Devices
+             * @default false
+             */
+            has_devices?: boolean;
             /** Is Member */
             is_member: boolean;
             joining: components["schemas"]["JoiningOut"] | null;
@@ -7673,7 +7878,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
@@ -10718,6 +10923,115 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnedDevicesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_device_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnedDeviceChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnedDevicesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -16727,6 +17041,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplyingOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnedDevicesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_device_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnedDeviceChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnedDevicesOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

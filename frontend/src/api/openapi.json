@@ -4457,6 +4457,19 @@
       "DeviceChangeIn": {
         "additionalProperties": false,
         "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 600,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
           "enabled": {
             "anyOf": [
               {
@@ -4481,6 +4494,19 @@
             ],
             "default": null,
             "title": "Name"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner"
           },
           "place": {
             "anyOf": [
@@ -4523,6 +4549,10 @@
             "title": "Label",
             "type": "string"
           },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
           "value": {
             "title": "Value"
           }
@@ -4530,7 +4560,8 @@
         "required": [
           "value",
           "label",
-          "group"
+          "group",
+          "owner"
         ],
         "title": "DeviceChoiceOut",
         "type": "object"
@@ -4658,12 +4689,20 @@
       "DeviceHelloOut": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
           "device_id": {
             "title": "Device Id",
             "type": "integer"
           },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
             "type": "string"
           },
           "place": {
@@ -4707,8 +4746,10 @@
         },
         "required": [
           "device_id",
+          "code",
           "name",
           "type",
+          "owner",
           "place",
           "settings",
           "resources",
@@ -4721,9 +4762,36 @@
       "DeviceIn": {
         "additionalProperties": false,
         "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 600,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
           "name": {
-            "maxLength": 200,
-            "title": "Name",
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "owner": {
+            "default": "association",
+            "maxLength": 60,
+            "title": "Owner",
             "type": "string"
           },
           "place": {
@@ -4751,7 +4819,6 @@
           }
         },
         "required": [
-          "name",
           "type"
         ],
         "title": "DeviceIn",
@@ -4771,12 +4838,22 @@
           "key": {
             "title": "Key",
             "type": "string"
+          },
+          "starter": {
+            "title": "Starter",
+            "type": "string"
+          },
+          "starter_name": {
+            "title": "Starter Name",
+            "type": "string"
           }
         },
         "required": [
           "device",
           "key",
-          "configuration"
+          "configuration",
+          "starter",
+          "starter_name"
         ],
         "title": "DeviceKeyOut",
         "type": "object"
@@ -4784,9 +4861,24 @@
       "DeviceOut": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
           },
           "enabled": {
             "title": "Enabled",
@@ -4802,6 +4894,17 @@
               }
             ],
             "title": "Firmware"
+          },
+          "hardware_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hardware Id"
           },
           "id": {
             "title": "Id",
@@ -4844,6 +4947,10 @@
             ],
             "title": "Key Revoked At"
           },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
           "last_address": {
             "anyOf": [
               {
@@ -4867,12 +4974,27 @@
             "title": "Last Seen At"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           },
           "online": {
             "title": "Online",
             "type": "boolean"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "owner_label": {
+            "title": "Owner Label",
+            "type": "string"
           },
           "place": {
             "anyOf": [
@@ -4901,10 +5023,16 @@
         },
         "required": [
           "id",
+          "code",
           "name",
+          "label",
           "type",
           "type_label",
+          "owner",
+          "owner_label",
           "place",
+          "description",
+          "hardware_id",
           "settings",
           "enabled",
           "online",
@@ -4918,6 +5046,25 @@
           "created_at"
         ],
         "title": "DeviceOut",
+        "type": "object"
+      },
+      "DeviceOwnerOut": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "DeviceOwnerOut",
         "type": "object"
       },
       "DeviceReportIn": {
@@ -5158,6 +5305,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "owner_may_change": {
+            "default": false,
+            "title": "Owner May Change",
+            "type": "boolean"
           }
         },
         "required": [
@@ -5283,6 +5435,13 @@
             "title": "Items",
             "type": "array"
           },
+          "owners": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceOwnerOut"
+            },
+            "title": "Owners",
+            "type": "array"
+          },
           "server": {
             "title": "Server",
             "type": "string"
@@ -5298,6 +5457,7 @@
         "required": [
           "items",
           "types",
+          "owners",
           "server"
         ],
         "title": "DevicesOut",
@@ -8836,7 +8996,8 @@
                 "team.appoint_treasurer",
                 "team.appoint_leads",
                 "team.edit_prices",
-                "team.messages"
+                "team.messages",
+                "team.devices"
               ],
               "type": "string"
             },
@@ -10832,6 +10993,222 @@
           }
         },
         "title": "OverviewQuery",
+        "type": "object"
+      },
+      "OwnedDeviceChangeIn": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 600,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Enabled"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Place"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Settings"
+          }
+        },
+        "title": "OwnedDeviceChangeIn",
+        "type": "object"
+      },
+      "OwnedDeviceOut": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/DeviceSettingOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "online": {
+            "title": "Online",
+            "type": "boolean"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/OwnedReportOut"
+            },
+            "title": "Recent",
+            "type": "array"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          },
+          "type_label": {
+            "title": "Type Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "label",
+          "type_label",
+          "place",
+          "description",
+          "enabled",
+          "online",
+          "last_seen_at",
+          "settings",
+          "fields",
+          "recent"
+        ],
+        "title": "OwnedDeviceOut",
+        "type": "object"
+      },
+      "OwnedDevicesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OwnedDeviceOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OwnedDevicesOut",
+        "type": "object"
+      },
+      "OwnedReportOut": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "detail"
+        ],
+        "title": "OwnedReportOut",
         "type": "object"
       },
       "PageIn": {
@@ -14496,6 +14873,11 @@
             ],
             "title": "Fee"
           },
+          "has_devices": {
+            "default": false,
+            "title": "Has Devices",
+            "type": "boolean"
+          },
           "is_member": {
             "title": "Is Member",
             "type": "boolean"
@@ -14585,7 +14967,8 @@
                 "team.appoint_treasurer",
                 "team.appoint_leads",
                 "team.edit_prices",
-                "team.messages"
+                "team.messages",
+                "team.devices"
               ],
               "type": "string"
             },
@@ -19346,6 +19729,144 @@
         ]
       }
     },
+    "/api/v1/admin/credit/devices": {
+      "get": {
+        "operationId": "association_devices",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnedDevicesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "The association's own devices, what each does, and what they reported lately.",
+        "tags": [
+          "Devices"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
+    "/api/v1/admin/credit/devices/{device_id}": {
+      "patch": {
+        "operationId": "association_device_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnedDeviceChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnedDevicesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Name, place or describe one of the association's devices, choose what it does, switch it on or off.",
+        "tags": [
+          "Devices"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
     "/api/v1/admin/credit/items": {
       "get": {
         "operationId": "admin_credit_items",
@@ -20450,7 +20971,7 @@
             "description": "Not possible in the current state."
           }
         },
-        "summary": "Change a device's name, place, settings, or switch it on or off.",
+        "summary": "Change a device's owner, name, place, description, settings, or switch it on or off.",
         "tags": [
           "Admin"
         ],
@@ -27046,6 +27567,146 @@
         "summary": "Save how people join, how many the team takes, whether it takes new members and the question.",
         "tags": [
           "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/devices": {
+      "get": {
+        "operationId": "team_devices",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnedDevicesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "The team's devices, what each does, and what they reported lately.",
+        "tags": [
+          "Devices"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/devices/{device_id}": {
+      "patch": {
+        "operationId": "team_device_change",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnedDeviceChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnedDevicesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "The input is not valid (see error.fields)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not possible in the current state."
+          }
+        },
+        "summary": "Name, place or describe one of the team's devices, choose what it does, switch it on or off.",
+        "tags": [
+          "Devices"
         ]
       }
     },

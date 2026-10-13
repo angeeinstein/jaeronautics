@@ -39,7 +39,7 @@ this part ready then." Which uses come, and when, is decided later.
   of its own, `devices.manage`, which the admin and superadmin roles have.
 - **The menu name is "Devices"**, under Admin › Settings.
 
-## Owners (agreed 2026-10-13, not built yet)
+## Owners (agreed and built 2026-10-13)
 
 "An admin provisions the device and then just selects which team or the
 association it belongs to. Then in the management page of a team or the
@@ -54,8 +54,32 @@ association the admins or leaders can use their device however they like."
   or not, the recent taps in plain words ("so that they can actually see
   that this is working"), and freely its name, place, item and on/off.
 - **A reader sells only its owner's items**, so every sale counts for the
-  owner (today an admin could set a team's reader to an item of another
-  seller).
+  owner (before, an admin could set a team's reader to an item of another
+  seller). Given to another owner, a reader's item is cleared.
+- **A team permission of its own**, `team.devices`, held by leads and the
+  team treasurer (and so by admins and the association's treasurer); the
+  team's side menu shows *Devices* once the team owns one.
+- **Each device has a code,** random and made when it is added (`K7MQ-2X9A`,
+  no 0/O/1/I/L): "a unique ID of just random characters, so that this does
+  not seem like a name given by a person". A name is optional; the code
+  stands in for it. The maintainer suggested the ESP32's MAC address as the
+  ID; it was kept beside it instead, because the device is added in the
+  portal before it has ever spoken, and a replaced board would otherwise be
+  another device. The board sends its MAC address with every request
+  (`X-Device-Hardware`); the device's page shows it, and an event notes it
+  when the key turns up on another board.
+- **A firmware starter** comes with every key (*Download starter*, beside
+  *Download configuration*): one Markdown file with the server, the code and
+  the key, every request the device's type makes and what it is answered,
+  the rules (the headers, a new `event_id` per event kept for retries,
+  checking the certificate), and an example sketch for an ESP32 with the
+  Arduino framework -- "I could just hand this firmware example package to a
+  coding agent and ask it to build a firmware around this"
+  (`services/device_starter.py`; each type adds its notes,
+  `DeviceType.firmware_notes`). The sketch is a starting point, not compiled
+  here.
+- **The firmware's behaviour stays in the firmware for now**; the portal
+  driving simple devices (below) comes later.
 
 ## Direction: hardware once, its use set in the portal (discussed 2026-10-13)
 

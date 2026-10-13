@@ -37,7 +37,11 @@ class Setting:
     max_length: int = 200
     minimum: int | None = None
     maximum: int | None = None
-    choices: Callable[[], list] | None = None
+    #: ``choices(owner)``: what the device's owner (a team, or None for the
+    #: association) may choose from.
+    choices: Callable[[Any], list] | None = None
+    #: Its owner may change it on their own page; otherwise only admins.
+    owner_may_change: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,9 @@ class DeviceType:
     #: Cards are tapped on it (services/cards.py): an admin can link a card
     #: there, and members see My Account › Cards once one exists.
     reads_cards: bool = False
+    #: For whoever writes its firmware, in Markdown: what its answers mean and
+    #: what the device should do with them (services/device_starter.py).
+    firmware_notes: str = ""
 
 
 _TYPES: dict[str, DeviceType] = {}
@@ -111,9 +118,11 @@ def all_types():
     return sorted(_TYPES.values(), key=lambda device_type: device_type.label)
 
 
-def clean_settings(device_type, given, *, current=None):
+def clean_settings(device_type, given, *, current=None, owner=None, drop_unfitting=False):
     """The settings as kept: every setting of the type, from ``given``, else
-    from ``current``, else its default. Anything else is refused."""
+    from ``current``, else its default. Anything else is refused. A choice is
+    checked against what ``owner`` may choose; ``drop_unfitting``: a kept
+    choice that does not fit (a new owner) is cleared rather than kept."""
     given = dict(given or {})
     known = {setting.name: setting for setting in device_type.settings}
     unknown = sorted(set(given) - set(known))
@@ -123,13 +132,21 @@ def clean_settings(device_type, given, *, current=None):
     cleaned = {}
     for name, setting in known.items():
         value = given.get(name, current.get(name, setting.default))
-        if setting.kind == "choice" and name in current and value == current[name]:
+        unchanged = name in current and value == current[name]
+        if setting.kind == "choice" and unchanged:
             # Kept as it was, even when it could not be chosen any more (an
-            # item switched off since): the type decides what that means.
+            # item switched off since): the type decides what that means --
+            # unless the owner changed, and it fits the new one no more.
+            if drop_unfitting and value is not None and value not in _values(setting, owner):
+                value = None
             cleaned[name] = value
             continue
-        cleaned[name] = _checked(setting, value)
+        cleaned[name] = _checked(setting, value, owner)
     return cleaned
+
+
+def _values(setting, owner):
+    return {choice.value for choice in setting.choices(owner)}
 
 
 def _refuse(setting, message):
@@ -137,11 +154,11 @@ def _refuse(setting, message):
                           details={"fields": {f"settings.{setting.name}": message}})
 
 
-def _checked(setting, value):
+def _checked(setting, value, owner=None):
     if setting.kind == "choice":
         if value is None or value == "":
             return None
-        if value not in {choice.value for choice in setting.choices()}:
+        if value not in _values(setting, owner):
             _refuse(setting, f"{setting.label}: choose one of the list.")
         return value
     if setting.kind == "switch":
@@ -171,7 +188,7 @@ def _checked(setting, value):
 
 
 def _hello(device):
-    return {"greeting": (device.settings or {}).get("greeting") or "Hello", "device": device.name}
+    return {"greeting": (device.settings or {}).get("greeting") or "Hello", "device": device.name or device.code}
 
 
 def _ping(device, data, _event_id=None):
@@ -184,6 +201,9 @@ register(DeviceType(
     description="For trying a device out: answers what it is sent. Fetch \"hello\"; report \"ping\".",
     settings=(Setting("greeting", "Greeting", default="Hello", max_length=60,
                       help="Sent back with every answer, to see a change arrive."),),
+    firmware_notes="""\
+`ping` is answered `{"result": "ok", "message": <the greeting>, "echo": <the data sent>}`. Change the
+greeting on the device's page in the portal and watch it arrive.""",
     resources={"hello": Resource(_hello, "The greeting and the device's name.")},
     reports={"ping": Report(_ping, tryable=True,
                             description="Answered with the greeting and the data it was sent.")},

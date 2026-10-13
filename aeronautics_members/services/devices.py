@@ -15,6 +15,7 @@ which tells nothing useful about the other 39.
 import hashlib
 import hmac
 import json
+import re
 import secrets
 from datetime import timedelta, timezone
 
@@ -39,6 +40,15 @@ REQUESTS_KEPT = 100
 TAIL = 4
 NAME_MAX = 80
 PLACE_MAX = 120
+DESCRIPTION_MAX = 300
+#: A device's code: no 0/O, 1/I/L, so one read aloud is not misheard.
+CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+#: Who owns a device without a team.
+ASSOCIATION = "Joanneum Aeronautics"
+#: Leave as it is (``change``): None is a value there -- the association, no name.
+KEEP = object()
+#: A MAC address as a board sends it.
+MAC_PATTERN = re.compile(r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
 
 
 class DeviceRefused(ServiceError):
@@ -84,9 +94,10 @@ def _type_of(slug):
 
 
 def _clean_name(name, *, besides=None):
+    """A name, or none: the device's code stands in for it."""
     name = (name or "").strip()
     if not name:
-        raise ValidationError("Give it a name.", details={"fields": {"name": "Give it a name."}})
+        return None
     if len(name) > NAME_MAX:
         raise ValidationError(f"At most {NAME_MAX} characters.",
                               details={"fields": {"name": f"At most {NAME_MAX} characters."}})
@@ -97,6 +108,32 @@ def _clean_name(name, *, besides=None):
         raise ConflictError("Another device has this name.", code="device_name_taken",
                             details={"fields": {"name": "Another device has this name."}})
     return name
+
+
+def _clean_description(description):
+    description = " ".join((description or "").split())
+    if len(description) > DESCRIPTION_MAX:
+        raise ValidationError(f"At most {DESCRIPTION_MAX} characters.",
+                              details={"fields": {"description": f"At most {DESCRIPTION_MAX} characters."}})
+    return description or None
+
+
+def _new_code():
+    """A random code for a new device: "K7MQ-2X9A", unlike any other."""
+    while True:
+        raw = "".join(secrets.choice(CODE_ALPHABET) for _ in range(8))
+        code = f"{raw[:4]}-{raw[4:]}"
+        if db.session.execute(db.select(Device.id).filter_by(code=code)).first() is None:
+            return code
+
+
+def label(device):
+    """What a device is called: its name, else its code."""
+    return device.name or device.code
+
+
+def owner_name(device):
+    return device.team.name if device.team is not None else ASSOCIATION
 
 
 def _clean_place(place):
@@ -117,8 +154,13 @@ def _record(device, kind, *, name=None, event_id=None, detail=None, data=None, a
 # --- Managing them (Admin › Settings › Devices) ---------------------------------------------
 
 
-def devices():
-    return db.session.execute(db.select(Device).order_by(db.func.lower(Device.name))).scalars().all()
+def devices(owner=KEEP):
+    """Every device; with ``owner``, those of that team (None: the association's)."""
+    query = db.select(Device)
+    if owner is not KEEP:
+        query = query.where(Device.team_id.is_(None) if owner is None else Device.team_id == owner.id)
+    found = db.session.execute(query).scalars().all()
+    return sorted(found, key=lambda device: (device.name is None, label(device).lower()))
 
 
 def device_of(device_id):
@@ -128,42 +170,78 @@ def device_of(device_id):
     return device
 
 
-def add(actor, *, name, type, place=None, settings=None):
-    """A new device, and its key -- the only time the key can be read. ``(device, key)``."""
+def add(actor, *, type, name=None, place=None, description=None, settings=None, owner=None):
+    """A new device, its code made, and its key -- the only time the key can be
+    read. ``owner`` is a team, or None for the association. ``(device, key)``."""
     device_type = _type_of(type)
     key, key_id, key_hash, key_tail = _new_key()
     now = get_now_utc()
     device = Device(
-        name=_clean_name(name), type=device_type.slug, place=_clean_place(place),
-        settings=device_types.clean_settings(device_type, settings), enabled=True, auth_method="key",
-        key_id=key_id, key_hash=key_hash, key_tail=key_tail, key_created_at=now, created_at=now,
-        created_by_user_id=actor.id if actor is not None else None,
+        code=_new_code(), name=_clean_name(name), type=device_type.slug, team=owner, place=_clean_place(place),
+        description=_clean_description(description),
+        settings=device_types.clean_settings(device_type, settings, owner=owner), enabled=True,
+        auth_method="key", key_id=key_id, key_hash=key_hash, key_tail=key_tail, key_created_at=now,
+        created_at=now, created_by_user_id=actor.id if actor is not None else None,
     )
     db.session.add(device)
     db.session.flush()
-    _record(device, "added", detail=f"Added as {device_type.label}")
+    _record(device, "added", detail=f"Added as {device_type.label}, for {owner_name(device)}")
     log_audit_event("devices", "device_added", actor_user=actor,
-                    metadata={"device_id": device.id, "name": device.name, "type": device.type})
+                    metadata={"device_id": device.id, "code": device.code, "name": device.name,
+                              "type": device.type, "team_id": device.team_id})
     return device, key
 
 
-def change(actor, device, *, name=None, place=None, enabled=None, settings=None):
-    """Its name, place, switch or settings; what is not given stays."""
-    before = {"name": device.name, "place": device.place, "enabled": device.enabled, "settings": device.settings}
-    if name is not None:
+def _state(device):
+    return {"name": device.name, "place": device.place, "description": device.description,
+            "enabled": device.enabled, "settings": device.settings, "team_id": device.team_id}
+
+
+def change(actor, device, *, name=KEEP, place=KEEP, description=KEEP, enabled=None, settings=None, owner=KEEP,
+           by_owner=False):
+    """What is given changes; the rest stays. ``owner`` (a team, or None for
+    the association) only by admins; ``by_owner``: only what the owner may --
+    its name, place, description, switch, and the settings its type lets the
+    owner choose."""
+    before = _state(device)
+    device_type = _type_of(device.type)
+    if owner is not KEEP and not by_owner and (owner.id if owner else None) != device.team_id:
+        device.team = owner
+        device.team_id = owner.id if owner is not None else None
+        # What only fitted the old owner -- an item of its price list -- is cleared.
+        device.settings = device_types.clean_settings(device_type, {}, current=device.settings, owner=owner,
+                                                      drop_unfitting=True)
+        _record(device, "owner", detail=f"Now {owner_name(device)}'s")
+    if name is not KEEP:
         device.name = _clean_name(name, besides=device)
-    if place is not None:
+    if place is not KEEP:
         device.place = _clean_place(place)
+    if description is not KEEP:
+        device.description = _clean_description(description)
     if settings is not None:
-        device.settings = device_types.clean_settings(_type_of(device.type), settings, current=device.settings)
+        if by_owner:
+            allowed = {setting.name for setting in device_type.settings if setting.owner_may_change}
+            refused = sorted(set(settings) - allowed)
+            if refused:
+                raise ValidationError(f"Only an admin changes: {', '.join(refused)}.", code="device_setting_admin")
+        device.settings = device_types.clean_settings(device_type, settings, current=device.settings,
+                                                      owner=device.team)
     if enabled is not None and enabled != device.enabled:
         device.enabled = enabled
         _record(device, "switched", detail="Switched on" if enabled else "Switched off")
-    after = {"name": device.name, "place": device.place, "enabled": device.enabled, "settings": device.settings}
+    after = _state(device)
     if after != before:
         log_audit_event("devices", "device_changed", actor_user=actor, before=before, after=after,
-                        metadata={"device_id": device.id})
+                        metadata={"device_id": device.id, "by_owner": by_owner})
     return device
+
+
+def recent_reports(device, limit=20):
+    """What the device reported lately, newest first: for its owner's page."""
+    return db.session.execute(
+        db.select(DeviceEvent).filter_by(device_id=device.id, kind="reported")
+        .order_by(DeviceEvent.id.desc()).limit(limit)
+    ).scalars().all()
 
 
 def new_key(actor, device):
@@ -262,7 +340,8 @@ def is_online(device, now=None):
 
 def configuration(device, key, server):
     """What a device needs to talk to the portal: the file *Download configuration* gives."""
-    return {"server": server, "device_id": device.id, "name": device.name, "type": device.type, "key": key}
+    return {"server": server, "device_id": device.id, "code": device.code, "name": label(device),
+            "type": device.type, "key": key}
 
 
 # --- Being one (the device API) ---------------------------------------------------------------
@@ -297,13 +376,27 @@ def refused(device, exc):
         _record(device, "refused", detail="A wrong key")
 
 
-def seen(device, *, address=None, firmware=None, now=None):
-    """The device spoke: when, from where, with which firmware. Written at most
-    every half minute, unless something changed."""
+def normalize_mac(value):
+    """A MAC address as ``24:6F:28:AA:BB:CC``, however it was written; None if it is not one."""
+    digits = re.sub(r"[^0-9A-Fa-f]", "", value or "").upper()
+    if len(digits) != 12:
+        return None
+    return ":".join(digits[i:i + 2] for i in range(0, 12, 2))
+
+
+def seen(device, *, address=None, firmware=None, hardware=None, now=None):
+    """The device spoke: when, from where, with which firmware, on which board
+    (its MAC address). Written at most every half minute, unless something
+    changed. Another board with the same key is said as an event."""
     now = now or get_now_utc()
     firmware = (firmware or "").strip()[:60] or None
     address = (address or "")[:45] or None
+    hardware = normalize_mac(hardware)
     last = _aware(device.last_seen_at)
+    if hardware and hardware != device.hardware_id:
+        _record(device, "hardware", detail=(f"Board {hardware}, was {device.hardware_id}: the key is on another board"
+                                            if device.hardware_id else f"Board {hardware}"))
+        device.hardware_id = hardware
     if firmware and firmware != device.firmware:
         _record(device, "firmware", detail=f"Firmware {firmware}" + (f" (was {device.firmware})" if device.firmware else ""))
         device.firmware = firmware
@@ -318,8 +411,9 @@ def hello(device, now=None):
     """The answer to a sign of life: who it is, its settings, the time."""
     device_type = _type_of(device.type)
     return {
-        "device_id": device.id, "name": device.name, "type": device.type, "place": device.place,
-        "settings": device_types.clean_settings(device_type, {}, current=device.settings),
+        "device_id": device.id, "code": device.code, "name": label(device), "type": device.type,
+        "owner": owner_name(device), "place": device.place,
+        "settings": device_types.clean_settings(device_type, {}, current=device.settings, owner=device.team),
         "resources": sorted(device_type.resources), "reports": sorted(device_type.reports),
         "server_time": (now or get_now_utc()).astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
     }

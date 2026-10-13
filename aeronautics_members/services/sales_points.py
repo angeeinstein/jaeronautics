@@ -4,8 +4,9 @@ their credit, through the same sale as one booked by hand
 (services/credit_sales.py), and counts for the item's seller.
 
 "For a starter, I would only begin with a fixed item per reader": the item
-is the reader's one setting, chosen from any seller's price list; the seller
-is the item's. Readers with buttons or a display come later, with the same
+is the reader's one setting, chosen by its owner (a team, or the
+association) from the owner's own price list, so every sale counts for the
+owner. Readers with buttons or a display come later, with the same
 tap.
 
 The tap (``POST /api/v1/device/events``, kind ``tap``, data ``{"card":
@@ -28,7 +29,7 @@ same moment are one sale too.
 
 from datetime import timedelta, timezone
 
-from ..db_models import CreditEntry, CreditItem, Device, Team, db
+from ..db_models import CreditEntry, CreditItem, Device, db
 from . import ConflictError, ValidationError
 from . import cards, credit, credit_sales, device_types
 from .clock import get_now_utc
@@ -66,23 +67,19 @@ def _aware(moment):
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
-def _item_choices():
-    """Every item on sale, under its seller: the association's, then each active team's."""
-    choices = [device_types.Choice(item.id, f"{item.name}, {credit._euros(item.price_cents)}",
-                                   credit_sales.seller_name(None))
-               for item in credit_sales.items(None)]
-    teams = db.session.execute(
-        db.select(Team).filter_by(status="active").order_by(db.func.lower(Team.name))
-    ).scalars()
-    for team in teams:
-        choices += [device_types.Choice(item.id, f"{item.name}, {credit._euros(item.price_cents)}", team.name)
-                    for item in credit_sales.items(team)]
-    return choices
+def _item_choices(owner):
+    """The owner's items on sale: a reader sells only its owner's, so every
+    sale counts for the owner."""
+    return [device_types.Choice(item.id, f"{item.name}, {credit._euros(item.price_cents)}",
+                                credit_sales.seller_name(owner))
+            for item in credit_sales.items(owner)]
 
 
 def item_of(device):
+    """What it sells: its item, if it is its owner's (another's never sells here)."""
     item_id = (device.settings or {}).get("item")
-    return db.session.get(CreditItem, item_id) if item_id else None
+    item = db.session.get(CreditItem, item_id) if item_id else None
+    return item if item is not None and item.team_id == device.team_id else None
 
 
 def _refused(reason, **extra):
@@ -166,10 +163,29 @@ device_types.register(device_types.DeviceType(
     label="Sales point",
     description="A card reader beside the fridge or the coffee machine: a tap sells one item for credit.",
     settings=(device_types.Setting(
-        "item", "Item", kind="choice", choices=_item_choices,
-        help="What a tap sells, from a price list. Its seller is who the sale counts for."),),
+        "item", "Item", kind="choice", choices=_item_choices, owner_may_change=True,
+        help="What a tap sells, from the owner's price list."),),
     resources={"item": device_types.Resource(_item, "What a tap sells, at what price: for a label or a display.")},
     reports={"tap": device_types.Report(_tap, description="A card tapped: sells the item, or says why not.",
                                         keep=_keep, summary=_summary)},
     reads_cards=True,
+    firmware_notes="""\
+A tap reports the card's ID, as the reader reads it, in hex: `"data": {"card": "04A1B2C3D4E5F6"}`
+(separators and case do not matter). Report every tap: whether the card is known, linked or may buy
+is the portal's to decide. The `answer` is one of:
+
+- `{"result": "sold", "item": "Beer", "price_cents": 150, "balance_cents": 350}` -- give the item:
+  green light, one beep.
+- `{"result": "linked", "card": "Card"}` -- an admin was waiting at this reader for an unknown card,
+  and it is now linked to somebody: blue light, three short beeps.
+- `{"result": "refused", "reason": "...", "message": "..."}` -- red light, two beeps. `reason` is
+  one of `card_unknown`, `card_disabled`, `card_blocked`, `account_off`, `not_enough` (with
+  `balance_cents`), `item_off`, `credit_off`, `not_set_up` (no item chosen yet), `too_soon` (sold to
+  this card on this reader less than 5 seconds ago: a double tap). `message` says it in words, for
+  a display.
+
+`GET .../resources/item` answers what a tap sells, for a label or a display:
+`{"item": "Beer", "price_cents": 150, "seller": "Rocket Team", "on_sale": true}` (`"item": null`
+until its owner chooses one). The owner can change it at any time: fetch it again after each sign
+of life rather than keeping it.""",
 ))
