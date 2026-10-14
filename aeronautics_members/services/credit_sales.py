@@ -224,7 +224,7 @@ def sales_summary(team=None, since=None):
     """What a seller earned with credit, in cents, and by item: sales less what was taken back,
     and for a team less the association's share where it keeps one.
 
-    ``{"earned": int, "count": int, "by_item": [{"name", "count", "earned"}]}`` --
+    ``{"earned": int, "count": int, "by_item": [{"key", "name", "icon", "count", "earned"}]}`` --
     ``count`` is the sales that stand (a sale taken back counts for neither).
     """
     entries = db.session.execute(_sales_query(team, since)).scalars().all()
@@ -234,7 +234,8 @@ def sales_summary(team=None, since=None):
     count = 0
     for entry in entries:
         key = entry.item_id or f"name:{entry.description}"
-        row = by_item.setdefault(key, {"name": entry.item.name if entry.item else entry.description,
+        row = by_item.setdefault(key, {"key": key, "name": entry.item.name if entry.item else entry.description,
+                                       "icon": entry.item.icon if entry.item else "other",
                                        "count": 0, "earned": 0})
         # The seller's part: the price, less the association's share where it keeps one,
         # and the top-up fee's share where the teams carry Stripe's fees.

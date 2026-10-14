@@ -250,7 +250,7 @@ device_types.register(device_types.DeviceType(
     description="A card reader with a screen beside the fridge or the coffee machine: a card tapped opens a "
                 "menu of up to four items, bought for credit.",
     settings=(device_types.Setting(
-        "items", "Items", kind="choices", choices=_item_choices, owner_may_change=True, most=MOST_ITEMS,
+        "items", "Items", kind="choices", choices=_item_choices, owner_may_change=True, most=MOST_ITEMS, with_prices=True,
         default=[], help=f"What its menu offers, in this order: at most {MOST_ITEMS}, from the owner's price list."),),
     resources={"menu": device_types.Resource(_menu, "What its menu offers, for its screen while nobody uses it.")},
     reports={

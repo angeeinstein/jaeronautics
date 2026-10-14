@@ -420,6 +420,8 @@ class DeviceSettingOut(Model):
     owner_may_change: bool = False
     #: For "choices": at most this many.
     most: int | None = None
+    #: Set with the owner's price list, on their Sales page, not on the device's pages.
+    with_prices: bool = False
 
 
 class DeviceResourceInfoOut(Model):
@@ -636,7 +638,7 @@ def setting_out(setting, owners):
     return DeviceSettingOut(name=setting.name, label=setting.label, kind=setting.kind, default=setting.default,
                             help=setting.help, max_length=setting.max_length, minimum=setting.minimum,
                             maximum=setting.maximum, choices=choices, owner_may_change=setting.owner_may_change,
-                            most=setting.most)
+                            most=setting.most, with_prices=setting.with_prices)
 
 
 def _type_out(device_type, owners=None):

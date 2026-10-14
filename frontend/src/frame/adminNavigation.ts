@@ -15,6 +15,7 @@ import {
   IconListDetails,
   IconScale,
   IconSettings,
+  IconTag,
   IconUsers,
 } from '@tabler/icons-react';
 
@@ -62,8 +63,15 @@ export function adminSidebar(me: Me): SidebarContent {
                 count: me.counts.reviews_waiting,
               }
             : null,
-          me.credit_admin ? { label: 'Credit', to: '/admin/credit', icon: IconCoins } : null,
           can(me, 'cards.manage') ? { label: 'Cards', to: '/admin/cards', icon: IconId } : null,
+        ],
+      },
+      {
+        label: 'Money',
+        items: [
+          can(me, 'teams.money') ? { label: 'Money', to: '/admin/money', icon: IconCurrencyEuro } : null,
+          me.credit_admin ? { label: 'Credit', to: '/admin/credit', icon: IconCoins } : null,
+          me.credit_admin ? { label: 'Sales', to: '/admin/sales', icon: IconTag } : null,
         ],
       },
       {
@@ -83,7 +91,6 @@ export function adminSidebar(me: Me): SidebarContent {
           can(me, 'teams.manage')
             ? { label: me.team_labels.plural, to: '/admin/teams', icon: IconFlag }
             : null,
-          can(me, 'teams.money') ? { label: 'Money', to: '/admin/money', icon: IconCurrencyEuro } : null,
         ],
       },
       {

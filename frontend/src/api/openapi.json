@@ -4148,13 +4148,6 @@
             "title": "Recent",
             "type": "array"
           },
-          "sellers": {
-            "items": {
-              "$ref": "#/components/schemas/SellerOut"
-            },
-            "title": "Sellers",
-            "type": "array"
-          },
           "totals": {
             "$ref": "#/components/schemas/CreditTotalsOut"
           }
@@ -4162,7 +4155,6 @@
         "required": [
           "enabled",
           "totals",
-          "sellers",
           "people",
           "recent",
           "mismatched"
@@ -6091,6 +6083,11 @@
           "owner_may_change": {
             "default": false,
             "title": "Owner May Change",
+            "type": "boolean"
+          },
+          "with_prices": {
+            "default": false,
+            "title": "With Prices",
             "type": "boolean"
           }
         },
@@ -8679,6 +8676,45 @@
           "label"
         ],
         "title": "ItemIconOut",
+        "type": "object"
+      },
+      "ItemSalesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "earned": {
+            "title": "Earned",
+            "type": "integer"
+          },
+          "earned_30_days": {
+            "title": "Earned 30 Days",
+            "type": "integer"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sold": {
+            "title": "Sold",
+            "type": "integer"
+          },
+          "sold_30_days": {
+            "title": "Sold 30 Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "icon",
+          "sold_30_days",
+          "earned_30_days",
+          "sold",
+          "earned"
+        ],
+        "title": "ItemSalesOut",
         "type": "object"
       },
       "JoinIn": {
@@ -14238,6 +14274,23 @@
         "title": "SaleItemOut",
         "type": "object"
       },
+      "SalesOverviewOut": {
+        "additionalProperties": false,
+        "properties": {
+          "sellers": {
+            "items": {
+              "$ref": "#/components/schemas/SellerSalesOut"
+            },
+            "title": "Sellers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sellers"
+        ],
+        "title": "SalesOverviewOut",
+        "type": "object"
+      },
       "SchemaOut": {
         "additionalProperties": false,
         "properties": {
@@ -14300,7 +14353,7 @@
         "title": "SectionOut",
         "type": "object"
       },
-      "SellerOut": {
+      "SellerSalesOut": {
         "additionalProperties": false,
         "properties": {
           "earned": {
@@ -14312,12 +14365,27 @@
             "type": "integer"
           },
           "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemSalesOut"
+            },
             "title": "Items",
+            "type": "array"
+          },
+          "listed": {
+            "title": "Listed",
             "type": "integer"
           },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "sold": {
+            "title": "Sold",
+            "type": "integer"
+          },
+          "sold_30_days": {
+            "title": "Sold 30 Days",
+            "type": "integer"
           },
           "team_slug": {
             "anyOf": [
@@ -14334,11 +14402,14 @@
         "required": [
           "name",
           "team_slug",
+          "listed",
+          "sold_30_days",
           "earned_30_days",
+          "sold",
           "earned",
           "items"
         ],
-        "title": "SellerOut",
+        "title": "SellerSalesOut",
         "type": "object"
       },
       "SentOut": {
@@ -24812,6 +24883,50 @@
         ]
       }
     },
+    "/api/v1/admin/sales": {
+      "get": {
+        "operationId": "admin_sales",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesOverviewOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Signed in, without the permission."
+          }
+        },
+        "summary": "What was sold for credit, by seller and by item: the last 30 days and ever.",
+        "tags": [
+          "Credit"
+        ],
+        "x-permissions": [
+          "credit.manage"
+        ]
+      }
+    },
     "/api/v1/admin/settings/backup": {
       "get": {
         "operationId": "admin_backup",
@@ -32375,6 +32490,57 @@
         "summary": "The team's leads and its treasurer, and whom this person may appoint.",
         "tags": [
           "Teams"
+        ]
+      }
+    },
+    "/api/v1/teams/{slug}/manage/sales": {
+      "get": {
+        "operationId": "team_sales",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SellerSalesOut"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not signed in."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not found."
+          }
+        },
+        "summary": "What the team sold for credit, by item: the last 30 days and ever.",
+        "tags": [
+          "Credit"
         ]
       }
     },

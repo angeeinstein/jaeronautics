@@ -30,6 +30,8 @@ import {
   type Settings,
   statusOf,
   TypeSettingsFields,
+  deviceFields,
+  valuesOf,
 } from './deviceParts';
 
 const devicesQuery = {
@@ -146,7 +148,13 @@ function AddDevice({
     mutationFn: () =>
       call(
         api.POST('/api/v1/admin/devices', {
-          body: { name: name || null, type: typeSlug ?? '', owner, place, settings },
+          body: {
+            name: name || null,
+            type: typeSlug ?? '',
+            owner,
+            place,
+            settings: valuesOf(settings, deviceFields(type?.settings ?? [])),
+          },
         }),
       ),
     onSuccess: async (result) => {
@@ -219,7 +227,7 @@ function AddDevice({
               {type.description}
             </Text>
             <TypeSettingsFields
-              settings={type.settings}
+              settings={deviceFields(type.settings)}
               owner={owner}
               values={settings}
               errors={errors}

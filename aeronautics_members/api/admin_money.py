@@ -288,7 +288,8 @@ class CreditSales(Model):
 def credit_sales_out(found):
     sales = found["sales"]
     return CreditSales(earned=sales["earned"], count=sales["count"],
-                       by_item=[SoldItem(**row) for row in sales["by_item"]])
+                       by_item=[SoldItem(name=row["name"], count=row["count"], earned=row["earned"])
+                                for row in sales["by_item"]])
 
 
 def team_payment_out(payment, found):

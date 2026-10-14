@@ -100,7 +100,7 @@ export function teamSidebar(team: Team): SidebarContent {
         items: [
           may(team, 'team.view_money') ? { label: 'Money', to: `${base}/money`, icon: IconCoin } : null,
           team.sells_for_credit && may(team, 'team.edit_prices')
-            ? { label: 'Prices', to: `${base}/manage/prices`, icon: IconTag }
+            ? { label: 'Sales', to: `${base}/manage/sales`, icon: IconTag }
             : null,
           team.has_devices && may(team, 'team.devices')
             ? { label: 'Devices', to: `${base}/manage/devices`, icon: IconCpu }

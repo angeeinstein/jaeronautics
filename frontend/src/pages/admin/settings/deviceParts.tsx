@@ -74,6 +74,27 @@ export function statusOf(device: Device): { tone: Tone; label: string; detail: s
 
 export type SettingField = DeviceType['settings'][number];
 
+/** The settings a device's own pages show: the technical ones. Those chosen from the
+ * owner's price list (a sales point's menu) are set on the owner's Sales page. */
+export function deviceFields(settings: SettingField[]): SettingField[] {
+  return settings.filter((setting) => !setting.with_prices);
+}
+
+/** The settings set with the owner's price list, on their Sales page. */
+export function menuFields(settings: SettingField[]): SettingField[] {
+  return settings.filter((setting) => setting.with_prices);
+}
+
+/** Only these settings' values: what a form sends is what it shows. */
+export function valuesOf(values: Settings, fields: SettingField[]): Settings {
+  return Object.fromEntries(fields.map((field) => [field.name, values[field.name] ?? null]));
+}
+
+/** Where an owner ("association" or a team's slug) chooses its devices' menus. */
+export function salesPageOf(owner: string): string {
+  return owner === 'association' ? '/admin/sales' : `/teams/${owner}/manage/sales`;
+}
+
 /**
  * Each setting, as a field of its kind. A choice offers what ``owner`` (the
  * association, or a team's slug) may choose: a reader sells its owner's items.

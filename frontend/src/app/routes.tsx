@@ -233,8 +233,8 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Messages')).Messages }),
           },
           {
-            path: 'manage/prices',
-            lazy: async () => ({ Component: (await import('../pages/teams/manage/Prices')).Prices }),
+            path: 'manage/sales',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Sales')).Sales }),
           },
           {
             path: 'manage/devices',
@@ -404,6 +404,10 @@ export const routes: RouteObject[] = [
           {
             path: 'credit/:userId',
             lazy: async () => ({ Component: (await import('../pages/admin/credit/Holder')).Holder }),
+          },
+          {
+            path: 'sales',
+            lazy: async () => ({ Component: (await import('../pages/admin/credit/Sales')).Sales }),
           },
           {
             path: 'cards',

@@ -1,8 +1,8 @@
 /**
  * A team's devices (docs/devices-plan.md, "Owners"): the readers an admin
  * gave the team, run here by its leads and treasurer -- their names and
- * places, what each sells from the team's price list, on or off, and what
- * they reported lately. Data: GET /api/v1/teams/<slug>/manage/devices,
+ * places, on or off, and what they reported lately. What a sales point sells
+ * is chosen on the Sales page, with the price list. Data: GET /api/v1/teams/<slug>/manage/devices,
  * PATCH .../<id> (aeronautics_members/api/device_owners.py).
  */
 import { useQuery } from '@tanstack/react-query';
@@ -23,10 +23,7 @@ export function Devices() {
   useLiveRefresh(queryKey, EVERY_30_SECONDS);
   return (
     <>
-      <ManageHeader
-        title="Devices"
-        description="The team's card readers: what each sells, and how they are doing."
-      />
+      <ManageHeader title="Devices" description="The team's card readers, and how they are doing." />
       {list.isPending ? (
         <LoadingState />
       ) : list.isError ? (

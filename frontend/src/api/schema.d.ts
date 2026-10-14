@@ -1483,6 +1483,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/sales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What was sold for credit, by seller and by item: the last 30 days and ever. */
+        get: operations["admin_sales"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/settings/backup": {
         parameters: {
             query?: never;
@@ -3142,6 +3159,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/sales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What the team sold for credit, by item: the last 30 days and ever. */
+        get: operations["team_sales"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/treasurer": {
         parameters: {
             query?: never;
@@ -4604,8 +4638,6 @@ export interface components {
             people: components["schemas"]["CreditPersonOut"][];
             /** Recent */
             recent: components["schemas"]["AdminCreditEntryOut"][];
-            /** Sellers */
-            sellers: components["schemas"]["SellerOut"][];
             totals: components["schemas"]["CreditTotalsOut"];
         };
         /** CreditPersonOut */
@@ -5257,6 +5289,11 @@ export interface components {
              * @default false
              */
             owner_may_change?: boolean;
+            /**
+             * With Prices
+             * @default false
+             */
+            with_prices?: boolean;
         };
         /** DeviceTryIn */
         DeviceTryIn: {
@@ -6112,6 +6149,21 @@ export interface components {
             label: string;
             /** Value */
             value: string;
+        };
+        /** ItemSalesOut */
+        ItemSalesOut: {
+            /** Earned */
+            earned: number;
+            /** Earned 30 Days */
+            earned_30_days: number;
+            /** Icon */
+            icon: string;
+            /** Name */
+            name: string;
+            /** Sold */
+            sold: number;
+            /** Sold 30 Days */
+            sold_30_days: number;
         };
         /** JoinIn */
         JoinIn: {
@@ -7925,6 +7977,11 @@ export interface components {
             /** Seller */
             seller: string;
         };
+        /** SalesOverviewOut */
+        SalesOverviewOut: {
+            /** Sellers */
+            sellers: components["schemas"]["SellerSalesOut"][];
+        };
         /** SchemaOut */
         SchemaOut: {
             /** Applied */
@@ -7943,16 +8000,22 @@ export interface components {
             /** Level */
             level: number;
         };
-        /** SellerOut */
-        SellerOut: {
+        /** SellerSalesOut */
+        SellerSalesOut: {
             /** Earned */
             earned: number;
             /** Earned 30 Days */
             earned_30_days: number;
             /** Items */
-            items: number;
+            items: components["schemas"]["ItemSalesOut"][];
+            /** Listed */
+            listed: number;
             /** Name */
             name: string;
+            /** Sold */
+            sold: number;
+            /** Sold 30 Days */
+            sold_30_days: number;
             /** Team Slug */
             team_slug: string | null;
         };
@@ -14579,6 +14642,44 @@ export interface operations {
             };
         };
     };
+    admin_sales: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SalesOverviewOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_backup: {
         parameters: {
             query?: never;
@@ -20476,6 +20577,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeamRolesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_sales: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerSalesOut"];
                 };
             };
             /** @description Not signed in. */

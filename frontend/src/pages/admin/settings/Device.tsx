@@ -9,6 +9,7 @@
  * removing it. Data: /api/v1/admin/devices/<id> (aeronautics_members/api/devices.py).
  */
 import {
+  Anchor,
   Button,
   Code,
   Group,
@@ -23,7 +24,7 @@ import {
 } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 
 import { api, ApiError, call, type Schemas } from '../../../api/client';
 import { ConfirmButton } from '../../../components/ConfirmButton';
@@ -48,6 +49,10 @@ import {
   statusOf,
   TypeSettingsFields,
   typesFor,
+  deviceFields,
+  menuFields,
+  salesPageOf,
+  valuesOf,
 } from './deviceParts';
 
 type Detail = Schemas['DeviceDetailOut'];
@@ -216,7 +221,7 @@ function SettingsForm({
         />
         {type ? (
           <TypeSettingsFields
-            settings={type.settings}
+            settings={deviceFields(type.settings)}
             owner={owner}
             values={settings}
             errors={errors}
@@ -224,6 +229,15 @@ function SettingsForm({
               setSettings({ ...settings, [field]: value });
             }}
           />
+        ) : null}
+        {type && menuFields(type.settings).length ? (
+          <Text size="sm" c="dimmed">
+            What it sells is chosen with its owner&apos;s price list, on the{' '}
+            <Anchor component={Link} to={salesPageOf(device.owner)}>
+              Sales page
+            </Anchor>
+            .
+          </Text>
         ) : null}
         <Group justify="flex-end">
           <Button
@@ -234,7 +248,8 @@ function SettingsForm({
                 name,
                 place,
                 description,
-                settings,
+                // Only what this page shows: a menu is its owner's, on their Sales page.
+                settings: valuesOf(settings, deviceFields(type?.settings ?? [])),
                 ...(typeSlug !== device.type ? { type: typeSlug } : {}),
               });
             }}

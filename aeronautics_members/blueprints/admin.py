@@ -122,6 +122,15 @@ def admin_credit(user_id=None):
     return app_shell()
 
 
+@admin_bp.route("/admin/sales", methods=["GET"])
+@login_required
+@requires(Permission.CREDIT_MANAGE)
+def admin_sales():
+    """What is sold for credit: by seller and item, the association's price list and its
+    sales points' menus (frontend/src/pages/admin/credit/Sales.tsx)."""
+    return app_shell()
+
+
 @admin_bp.route("/admin/credit/receipt/<int:entry_id>", methods=["GET"])
 @login_required
 @requires(Permission.CREDIT_MANAGE)

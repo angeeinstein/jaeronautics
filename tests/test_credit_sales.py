@@ -128,7 +128,8 @@ class TestWhatSellersEarned:
 
         assert (money["fees"], money["sales"]["earned"], money["earned"], money["open"]) == (2500, 400, 2900, 2900)
         assert money["sales"]["count"] == 2
-        assert money["sales"]["by_item"] == [{"name": "Beer", "count": 2, "earned": 400}]
+        assert [{key: row[key] for key in ("name", "count", "earned")} for row in money["sales"]["by_item"]] == [
+            {"name": "Beer", "count": 2, "earned": 400}]
 
     def test_the_associations_sales_are_not_a_teams(self, anna, rocket):
         team, _lead = rocket
@@ -214,3 +215,49 @@ class TestThroughTheApi:
 
         assert funds["earned"] == 200 and funds["sales"]["earned"] == 200
         assert funds["sales"]["by_item"] == [{"name": "Beer", "count": 1, "earned": 200}]
+
+
+class TestWhatWasSold:
+    """Admin › Sales and a team's Sales page: by seller and item, the last 30 days and ever."""
+
+    def test_by_seller_and_item(self, client, anna, rocket):
+        team, lead = rocket
+        coffee = credit_sales.add_item(None, name="Coffee", price_cents=120, icon="coffee")
+        beer = credit_sales.add_item(lead, team=team, name="Beer", price_cents=200, icon="beer")
+        mate = credit_sales.add_item(lead, team=team, name="Mate", price_cents=250, icon="mate")
+        credit_sales.sell(anna, coffee)
+        credit_sales.sell(anna, beer)
+        credit_sales.sell(anna, beer)
+        taken = credit_sales.sell(anna, mate)
+        credit_sales.take_back(None, taken)
+        db.session.commit()
+        signed_in(client, _treasurer())
+
+        sellers = client.get("/api/v1/admin/sales").get_json()["sellers"]
+
+        association, rockets = sellers
+        assert association["name"] == "Joanneum Aeronautics" and association["team_slug"] is None
+        assert (association["sold"], association["earned"], association["listed"]) == (1, 120, 1)
+        assert rockets["team_slug"] == team.slug
+        assert (rockets["sold"], rockets["earned"], rockets["sold_30_days"], rockets["earned_30_days"]) == (
+            2, 400, 2, 400)
+        # Each item, what made most first; a sale taken back counts for neither.
+        assert [(item["name"], item["icon"], item["sold"], item["earned"]) for item in rockets["items"]] == [
+            ("Beer", "beer", 2, 400)]
+
+    def test_a_team_sees_its_own(self, client, anna, rocket):
+        team, lead = rocket
+        beer = credit_sales.add_item(lead, team=team, name="Beer", price_cents=200, icon="beer")
+        credit_sales.sell(anna, beer)
+        db.session.commit()
+        signed_in(client, lead)
+
+        own = client.get(f"/api/v1/teams/{team.slug}/manage/sales").get_json()
+        assert (own["name"], own["sold"], own["items"][0]["name"]) == ("Rocket", 1, "Beer")
+
+        _login(client, _person("someone@example.com", "Some", "One").id)
+        assert client.get(f"/api/v1/teams/{team.slug}/manage/sales").status_code in (403, 404)
+
+    def test_only_for_the_associations_treasurer_and_admins(self, client, credit_on):  # noqa: F811
+        signed_in(client, _person("someone@example.com", "Some", "One"))
+        assert client.get("/api/v1/admin/sales").status_code == 403

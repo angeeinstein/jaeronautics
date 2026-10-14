@@ -1,18 +1,22 @@
 /**
  * An owner's devices (docs/devices-plan.md, "Owners"): a team's on its
- * management page, the association's on Admin › Credit. Each device in a card
- * of its own -- online or not, its code -- with what its owner may change:
- * its name, place and description, what it does within its type (a
- * reader's item, from the owner's own price list), on or off; and what it
- * reported lately, in words, so they "can actually see that this is
- * working". What is technical stays with admins.
+ * management page. Each device in a card of its own -- online or not, its
+ * code -- with what its owner may change: its name, place and description,
+ * on or off; and what it reported lately, in words, so they "can actually
+ * see that this is working". What is technical stays with admins; what a
+ * sales point sells is chosen on the owner's Sales page (SalesPointMenus).
  */
 import { Button, Group, SimpleGrid, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
 import { type QueryKey, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ApiError, type Schemas } from '../../api/client';
-import { type Settings, TypeSettingsFields } from '../../pages/admin/settings/deviceParts';
+import {
+  deviceFields,
+  type Settings,
+  TypeSettingsFields,
+  valuesOf,
+} from '../../pages/admin/settings/deviceParts';
 import { formatDateTime } from '../../lib/format';
 import { notifyDone, notifyFailed } from '../../lib/notify';
 import { Panel } from '../Panel';
@@ -68,6 +72,7 @@ function DeviceCard({
     },
   });
   const shown = state(device);
+  const fields = deviceFields(device.fields);
 
   return (
     <Panel
@@ -93,11 +98,10 @@ function DeviceCard({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            // Only the settings its owner may change: the rest are an admin's, and refused here.
-            const own = Object.fromEntries(
-              device.fields.map((field) => [field.name, settings[field.name] ?? null]),
-            );
-            save.mutate({ name, place, description, ...(device.fields.length ? { settings: own } : {}) });
+            // Only the settings its owner may change here: the rest are an admin's, and a
+            // sales point's menu is chosen on the Sales page.
+            const own = valuesOf(settings, fields);
+            save.mutate({ name, place, description, ...(fields.length ? { settings: own } : {}) });
           }}
         >
           <Stack gap="sm">
@@ -133,7 +137,7 @@ function DeviceCard({
               }}
             />
             <TypeSettingsFields
-              settings={device.fields}
+              settings={fields}
               owner={owner}
               values={settings}
               errors={errors}

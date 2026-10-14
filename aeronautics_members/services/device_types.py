@@ -45,6 +45,10 @@ class Setting:
     owner_may_change: bool = False
     #: For "choices": at most this many.
     most: int | None = None
+    #: Chosen from the owner's price list, and so set with it -- on the owner's
+    #: Sales page -- rather than on the device's own pages, which keep to the
+    #: technical (a sales point's menu).
+    with_prices: bool = False
 
 
 @dataclass(frozen=True)
