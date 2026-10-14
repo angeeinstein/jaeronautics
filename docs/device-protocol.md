@@ -338,7 +338,7 @@ same). UIDs of 4, 7 or 10 bytes are accepted (8, 14 or 20 hex characters).
 Report every card. Whether it is known, linked or allowed is the portal's to
 decide.
 
-### 7.4 Linking an unknown card at the reader (planned)
+### 7.4 Linking an unknown card at the reader (built)
 
 A card nobody has linked can be linked by its owner right at the reader, with
 any phone: the reader shows a QR code, the phone opens it and links the card
@@ -366,6 +366,8 @@ refused with `card_unknown` and, on a reader that can show it, a `link`:
 - The QR code never holds the card's ID; nothing about the card is in it.
 - Show it for at most `show_for` seconds. Without `link`, show the message
   as for any refusal.
+- The same answer comes again for the same `event_id`, as with every report;
+  a new tap (a new `event_id`) gets a new link.
 
 **2. Ask about it while it is shown**, every `check_every` seconds:
 `GET /api/v1/device/card-links/<id>`, answered:
@@ -552,6 +554,6 @@ The list (`ICONS` in `aeronautics_members/services/credit_sales.py`):
   setting `items`, resource `menu`, icons on price-list items. **Replaces**
   `tap`, the `item` setting and resource, and the `too_soon` refusal; a
   device on the old firmware needs the update.
-- **2026-10-14:** planned: linking an unknown card at the reader with a QR
-  code (section 7.4) -- `link` in the `card_unknown` refusal, and
-  `GET /api/v1/device/card-links/<id>`.
+- **2026-10-14:** linking an unknown card at the reader with a QR code
+  (section 7.4) -- `link` in the `card_unknown` refusal, and
+  `GET /api/v1/device/card-links/<id>`. Built as first written down.

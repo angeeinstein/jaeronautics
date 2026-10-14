@@ -775,7 +775,10 @@ Paying for a drink by tapping a card (docs/cards-plan.md). The code:
   deleted after a day by the nightly clean-up.
 - **Cards:** members see theirs on My Account › Cards (once a sales point
   exists) and link one by scanning it with an Android phone in Chrome (Web
-  NFC). Admins (`cards.manage`) see every card under Admin › Cards and
+  NFC), or by tapping it on a sales point: an unknown card gets a QR code on
+  the reader's screen, and the phone that opens it links the card to the
+  account signed in there (`services/card_links.py`; the link works once,
+  for 10 minutes, on the first phone that opened it). Admins (`cards.manage`) see every card under Admin › Cards and
   manage a person's on their account page, tab *Cards*: block and unblock,
   remove, and link one -- scanned with their own phone, its ID typed in, or
   *Wait for a tap* on a reader, which links the next unknown card tapped

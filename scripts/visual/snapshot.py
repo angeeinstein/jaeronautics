@@ -504,6 +504,13 @@ def seed(app, app_module, subscriptions):
     devices_service.seen(sales_point, address="10.0.0.22", firmware="1.0.0", hardware="24:6F:28:AA:BB:CC",
                          now=now)
     devices_service.add(admin_user, type="sales_point", owner=rocket)
+    # A card tapped there that nobody has linked yet, its QR code opened on a
+    # phone: the page it leads to. Lasts the whole run, not its 10 minutes.
+    from aeronautics_members.services import card_links
+
+    qr_link = card_links.offer(sales_point, "04C0FFEE0000A1")
+    qr_link.expires_at = now + timedelta(days=1)
+    _opened, qr_claim = card_links.open_link(qr_link.token)
     student_card = cards_service.link(active.user, "04A1B2C3D4E5F6", name="Student card", by=active.user,
                                       how=cards_service.BY_PHONE)
     fob = cards_service.link(active.user, "04112233445566", name="Key fob", by=admin_user,
@@ -629,6 +636,11 @@ def seed(app, app_module, subscriptions):
         {"name": "public--contact", "path": "/contact"},
         {"name": "public--contact-signed-in", "user": "active@example.org", "path": "/contact"},
         {"name": "public--unsubscribe", "path": f"/unsubscribe/{mailings.unsubscribe_token(active.user)}"},
+        # The phone that opened the reader's QR code keeps its claim in the browser.
+        {"name": "public--link-card", "path": f"/link/{qr_link.token}",
+         "storage": {f"card-link:{qr_link.token}": qr_claim}},
+        {"name": "public--link-card-signed-in", "user": "active@example.org", "path": f"/link/{qr_link.token}",
+         "storage": {f"card-link:{qr_link.token}": qr_claim}},
         {"name": "admin--messages", "user": "admin@example.org", "path": "/admin/messages"},
         {"name": "admin--announcements", "user": "admin@example.org", "path": "/admin/announcements"},
         {"name": "admin--announcement", "user": "admin@example.org",

@@ -11,8 +11,9 @@ Codex's review comments that still held (`docs/review-fixes.md`, branch
 `claude/review-fixes`). What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
 The legal drafts below wait for the board. Cards and sales points
-(`docs/cards-plan.md`) are built; the sales point's menu with icons, device
-pairing and firmware updates on `claude/device-pairing`. Attendance with the
+(`docs/cards-plan.md`) are built; the sales point's menu with icons, linking a
+card with a reader's QR code, device pairing and firmware updates on
+`claude/device-pairing`. Attendance with the
 same cards comes next, needed around January (not to be started before the
 maintainer says so).
 
@@ -37,6 +38,9 @@ maintainer says so).
   the cards linked to accounts: a name, a keyed hash of the ID and its end,
   when linked and last used, and that they go with the account (§ 20). See
   `docs/cards-plan.md`.
+- **Also (added 2026-10-14, with linking a card by QR code):** a card not
+  linked yet, tapped on a reader with a screen, is kept as its hash for a day
+  (§ 20, the cards paragraph). See `docs/cards-plan.md`.
 - **Also (added 2026-10-11, with Stripe's book):** the privacy policy draft
   says that the portal keeps a copy of the Stripe account's bookings without
   names, and that a difference with Stripe names the payer's address and is
@@ -76,25 +80,6 @@ maintainer says so).
   settings by card and backup code, and firmware updates are built (branch
   `claude/device-pairing`); this is the part left for when the firmware
   side is settled. Signing the firmware: not planned.
-
-### Cards: linked at a reader with a QR code
-
-- **Added:** 2026-10-14
-- **What:** an unknown card tapped on a reader with a screen shows a QR code
-  for 30 seconds at most; the phone that opens it first links the card to
-  its signed-in account within 10 minutes and shows "Linked, hi Alex"; the
-  reader goes back to its normal screen as soon as a phone has opened it.
-- **Where:** `services/cards.py`, `services/sales_points.py` (the
-  `card_unknown` refusal), a new link page in the front end, the device API,
-  `docs/device-protocol.md`.
-- **Decided:** `docs/cards-plan.md`, "Linking a card at a reader with a QR
-  code" (a token, never the card's ID; 10 minutes, once, first phone keeps
-  it; the reader asks every 2 seconds while the code is shown; any signed-in
-  account). A new tap of the same card starts over with a new link and ends
-  the earlier one, even if a phone had opened it ("he just taps the card
-  again ... like it never happened before"); a card linked meanwhile another
-  way refuses the link.
-- **Open:** whether to build it now.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 

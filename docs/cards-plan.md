@@ -84,7 +84,7 @@ account -- ask an admin"). A card scanned with Web NFC is sent by the browser
 and so could be made up; accepted, since a card linked wrongly charges the
 person who linked it.
 
-### Linking a card at a reader with a QR code (agreed 2026-10-14, not built)
+### Linking a card at a reader with a QR code (agreed and built 2026-10-14)
 
 The member links their own card at a reader with a screen, with any phone
 (iPhones too), "proven by being there":
@@ -134,9 +134,15 @@ The member links their own card at a reader with a screen, with any phone
   someone's account): the link only exists on the reader's screen, just after
   that card was tapped, so nobody can start it from afar; and the first phone
   keeps it, so a photograph of the code taken a moment later is of no use.
-- **Firmware:** draws the QR code from `link_url` (ESP-IDF's `qrcode`
-  component) and asks about the link while it is shown;
-  `docs/device-protocol.md` gets both once built.
+- **Firmware:** draws the QR code from the link's `url` (ESP-IDF's `qrcode`
+  component) and asks about it while it is shown: `docs/device-protocol.md`,
+  section 7.4.
+- **Built** (`services/card_links.py`, the page
+  `frontend/src/pages/public/LinkCard.tsx` at `/link/<token>`): the page opens
+  the link before asking to sign in, so the reader moves on at once; the
+  phone keeps its claim in the browser, so signing in comes back to it. A
+  link's row is deleted the next day, and with the card's account at erasure;
+  the privacy policy draft says so.
 
 ### The sales point (the first version, replaced by the menu)
 
