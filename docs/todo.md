@@ -81,6 +81,26 @@ maintainer says so).
   `claude/device-pairing`); this is the part left for when the firmware
   side is settled. Signing the firmware: not planned.
 
+### Price lists: delete an item, sales figures in the list, shorter names
+
+- **Added:** 2026-10-14
+- **What:**
+  1. **Delete** an item from a price list (Admin › Sales, a team's Sales
+     page) -- "currently, that's not possible". Today an item can only be
+     switched off.
+  2. **The sales figures in the price list** instead of the separate *Sold by
+     item* table: "either there is a button to expand or add those numbers,
+     or we just add them all together ... maybe it could get a little
+     cramped. Or do you have a better idea".
+  3. **Pages easier to find one's way in:** "with our current UI design,
+     everything looks rather similar. All of the cards, so it's sometimes a
+     bit hard to see at a glance where something is that you are looking
+     for."
+  4. **Shorter names:** "limit the length of text for a item name as well as
+     for a card reader name to some sensible length" (now 60 characters for
+     an item, 80 for a device).
+- **Open:** the proposals of the conversation of 2026-10-14, to be agreed.
+
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
 - **Added:** 2026-10-12
