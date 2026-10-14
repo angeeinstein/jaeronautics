@@ -91,6 +91,27 @@ describe("a team's devices", () => {
     });
   });
 
+  it('a setting only an admin changes is not sent with its name', async () => {
+    const test = fridge({
+      type_label: 'Test',
+      settings: { greeting: 'Hello' },
+      fields: [],
+      recent: [],
+    });
+    const { calls } = show({
+      [API]: { body: { items: [test] } },
+      [`PATCH ${API}/7`]: { body: { items: [{ ...test, name: 'Bench', label: 'Bench' }] } },
+    });
+
+    const card = await screen.findByRole('region', { name: 'K7MQ-2X9A' });
+    await userEvent.type(within(card).getByRole('textbox', { name: /^Name/ }), 'Bench');
+    await userEvent.click(within(card).getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('region', { name: 'Bench' })).toBeInTheDocument();
+    const sent = calls.filter((call) => call.method === 'PATCH').at(-1);
+    expect(await sent?.clone().json()).toEqual({ name: 'Bench', place: '', description: '' });
+  });
+
   it('is switched off', async () => {
     const { calls } = show({ [`PATCH ${API}/7`]: { body: { items: [fridge({ enabled: false })] } } });
 
