@@ -32,6 +32,27 @@ LEAST_PRICE = 1
 NAME_LENGTH = 60
 MOST_ITEMS = 50
 
+#: The icons an item can have, shown beside it on a device's screen
+#: (docs/device-protocol.md, "Icons"). The firmware carries a picture for each
+#: name and shows ``other`` for one it does not know: a new icon is a new name
+#: here and a firmware update. Chosen when the item is added.
+ICONS = (
+    ("coffee", "Coffee"),
+    ("tea", "Tea"),
+    ("hot_chocolate", "Hot chocolate"),
+    ("beer", "Beer"),
+    ("soft_drink", "Soft drink"),
+    ("mate", "Mate"),
+    ("energy_drink", "Energy drink"),
+    ("juice", "Juice"),
+    ("water", "Water"),
+    ("snack", "Snack"),
+    ("sweets", "Sweets"),
+    ("ice_cream", "Ice cream"),
+    ("other", "Other"),
+)
+ICON_NAMES = frozenset(name for name, _label in ICONS)
+
 
 def _refuse(field, message, code="credit_item_invalid"):
     raise ValidationError(message, code=code, details={"fields": {field: message}})
@@ -71,12 +92,19 @@ def _clean(name, price_cents):
     return name, price
 
 
-def add_item(actor, *, team=None, name, price_cents):
+def _clean_icon(icon):
+    if icon not in ICON_NAMES:
+        _refuse("icon", "Choose an icon.")
+    return icon
+
+
+def add_item(actor, *, team=None, name, price_cents, icon="other"):
     name, price = _clean(name, price_cents)
+    icon = _clean_icon(icon)
     if len(items(team, include_inactive=True)) >= MOST_ITEMS:
         raise ConflictError(f"A price list holds at most {MOST_ITEMS} items.", code="credit_items_too_many")
     last = max((item.position for item in items(team, include_inactive=True)), default=-1)
-    item = CreditItem(team_id=team.id if team is not None else None, name=name, price_cents=price,
+    item = CreditItem(team_id=team.id if team is not None else None, name=name, price_cents=price, icon=icon,
                       active=True, position=last + 1)
     db.session.add(item)
     db.session.flush()
@@ -84,18 +112,20 @@ def add_item(actor, *, team=None, name, price_cents):
     return item
 
 
-def update_item(actor, item, *, name=None, price_cents=None, active=None):
-    """Rename it, change its price, or switch it off and on. Sales made stay at their price."""
+def update_item(actor, item, *, name=None, price_cents=None, active=None, icon=None):
+    """Rename it, change its price or icon, or switch it off and on. Sales made stay at their price."""
     new_name, new_price = _clean(item.name if name is None else name,
                                  item.price_cents if price_cents is None else price_cents)
-    before = (item.name, item.price_cents, item.active)
+    before = (item.name, item.price_cents, item.active, item.icon)
     item.name, item.price_cents = new_name, new_price
+    if icon is not None:
+        item.icon = _clean_icon(icon)
     if active is not None:
         item.active = bool(active)
     item.updated_at = get_now_utc()
-    if before != (item.name, item.price_cents, item.active):
+    if before != (item.name, item.price_cents, item.active, item.icon):
         _audit("credit_item_changed", actor, item, before={"name": before[0], "price_cents": before[1],
-                                                            "active": before[2]})
+                                                            "active": before[2], "icon": before[3]})
     return item
 
 
@@ -115,7 +145,7 @@ def move_item(actor, item, direction):
 def _audit(event, actor, item, **extra):
     log_audit_event("credit", event, actor_user=actor, metadata={
         "item_id": item.id, "team_id": item.team_id, "name": item.name, "price_cents": item.price_cents,
-        "active": item.active, **extra,
+        "icon": item.icon, "active": item.active, **extra,
     })
 
 

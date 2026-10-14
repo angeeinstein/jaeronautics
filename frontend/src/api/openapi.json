@@ -5880,7 +5880,8 @@
               "text",
               "number",
               "switch",
-              "choice"
+              "choice",
+              "choices"
             ],
             "title": "Kind",
             "type": "string"
@@ -5914,6 +5915,18 @@
               }
             ],
             "title": "Minimum"
+          },
+          "most": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Most"
           },
           "name": {
             "title": "Name",
@@ -8491,6 +8504,25 @@
           "meeting_details"
         ],
         "title": "InviteIn",
+        "type": "object"
+      },
+      "ItemIconOut": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ItemIconOut",
         "type": "object"
       },
       "JoinIn": {
@@ -12865,6 +12897,19 @@
             "default": null,
             "title": "Active"
           },
+          "icon": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Icon"
+          },
           "move": {
             "anyOf": [
               {
@@ -12913,6 +12958,11 @@
       "PriceItemIn": {
         "additionalProperties": false,
         "properties": {
+          "icon": {
+            "maxLength": 30,
+            "title": "Icon",
+            "type": "string"
+          },
           "name": {
             "maxLength": 200,
             "title": "Name",
@@ -12925,7 +12975,8 @@
         },
         "required": [
           "name",
-          "price_cents"
+          "price_cents",
+          "icon"
         ],
         "title": "PriceItemIn",
         "type": "object"
@@ -12936,6 +12987,10 @@
           "active": {
             "title": "Active",
             "type": "boolean"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
           },
           "id": {
             "title": "Id",
@@ -12954,6 +13009,7 @@
           "id",
           "name",
           "price_cents",
+          "icon",
           "active"
         ],
         "title": "PriceItemOut",
@@ -12966,6 +13022,13 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "icons": {
+            "items": {
+              "$ref": "#/components/schemas/ItemIconOut"
+            },
+            "title": "Icons",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/PriceItemOut"
@@ -12976,7 +13039,8 @@
         },
         "required": [
           "enabled",
-          "items"
+          "items",
+          "icons"
         ],
         "title": "PriceListOut",
         "type": "object"

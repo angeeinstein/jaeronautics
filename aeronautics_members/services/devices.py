@@ -355,9 +355,10 @@ def remove(actor, device):
     db.session.execute(db.delete(DeviceEvent).where(DeviceEvent.device_id == device.id))
     db.session.execute(db.delete(DeviceRequest).where(DeviceRequest.device_id == device.id))
     db.session.execute(db.delete(CardLinkWait).where(CardLinkWait.device_id == device.id))
-    from ..db_models import DevicePairing
+    from ..db_models import DevicePairing, SaleTicket
 
     db.session.execute(db.delete(DevicePairing).where(DevicePairing.device_id == device.id))
+    db.session.execute(db.delete(SaleTicket).where(SaleTicket.device_id == device.id))
     db.session.execute(db.update(CreditEntry).where(CreditEntry.device_id == device.id).values(device_id=None))
     db.session.execute(db.update(Card).where(Card.last_used_device_id == device.id).values(last_used_device_id=None))
     db.session.delete(device)
@@ -628,8 +629,9 @@ def try_out(actor, device, *, what, name=None, data=None):
 
 def forget_old(now=None):
     """Events older than 90 days deleted (the nightly clean-up). Returns how many."""
-    from . import device_pairing
+    from . import device_pairing, sales_points
 
     device_pairing.forget_expired(now)
+    sales_points.forget_old_tickets(now)
     cutoff = (now or get_now_utc()) - EVENTS_KEPT
     return db.session.query(DeviceEvent).filter(DeviceEvent.at < cutoff).delete(synchronize_session=False)

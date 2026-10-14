@@ -371,24 +371,36 @@ class PriceItemOut(Model):
     id: int
     name: str
     price_cents: int
+    #: Its picture on a device's screen: one of ``icons``.
+    icon: str
     #: Switched off: not sold, still named by the sales made.
     active: bool
+
+
+class ItemIconOut(Model):
+    #: The name the device knows it by: "coffee".
+    value: str
+    label: str
 
 
 class PriceListOut(Model):
     #: Credit is on: what is set here can be sold.
     enabled: bool
     items: list[PriceItemOut]
+    #: The icons an item can have.
+    icons: list[ItemIconOut]
 
 
 class PriceItemIn(Model):
     name: str = Field(max_length=200)
     price_cents: int
+    icon: str = Field(max_length=30)
 
 
 class PriceItemChangeIn(Model):
     name: str | None = Field(None, max_length=200)
     price_cents: int | None = None
+    icon: str | None = Field(None, max_length=30)
     active: bool | None = None
     #: One place up (-1) or down (1).
     move: Literal[-1, 1] | None = None
@@ -396,14 +408,15 @@ class PriceItemChangeIn(Model):
 
 def _price_list(team):
     return PriceListOut(enabled=credit.enabled(), items=[
-        PriceItemOut(id=item.id, name=item.name, price_cents=item.price_cents, active=item.active)
+        PriceItemOut(id=item.id, name=item.name, price_cents=item.price_cents, icon=item.icon, active=item.active)
         for item in credit_sales.items(team, include_inactive=True)
-    ])
+    ], icons=[ItemIconOut(value=value, label=label) for value, label in credit_sales.ICONS])
 
 
 def _change(team, item_id, body):
     item = credit_sales.item_of(item_id, team)
-    credit_sales.update_item(current_user, item, name=body.name, price_cents=body.price_cents, active=body.active)
+    credit_sales.update_item(current_user, item, name=body.name, price_cents=body.price_cents, active=body.active,
+                             icon=body.icon)
     if body.move:
         credit_sales.move_item(current_user, item, body.move)
     db.session.commit()
@@ -420,7 +433,7 @@ def admin_credit_items():
           tag=TAG)
 def admin_credit_item_add(body):
     """Add an item to the association's price list, at the end."""
-    credit_sales.add_item(current_user, name=body.name, price_cents=body.price_cents)
+    credit_sales.add_item(current_user, name=body.name, price_cents=body.price_cents, icon=body.icon)
     db.session.commit()
     return _price_list(None)
 
@@ -459,7 +472,7 @@ def team_prices(slug):
 def team_price_add(slug, body):
     """Add an item to the team's price list, at the end."""
     team = _priced_team(slug)
-    credit_sales.add_item(current_user, team=team, name=body.name, price_cents=body.price_cents)
+    credit_sales.add_item(current_user, team=team, name=body.name, price_cents=body.price_cents, icon=body.icon)
     db.session.commit()
     return _price_list(team)
 

@@ -322,7 +322,7 @@ class TestWhatTheDeviceSays:
         key, added = _paired(app, client, admin)
         changed = send(client, "PATCH", f"/api/v1/admin/devices/{added['id']}", {"type": "sales_point"})
 
-        assert changed.get_json()["type"] == "sales_point" and changed.get_json()["settings"] == {"item": None}
+        assert changed.get_json()["type"] == "sales_point" and changed.get_json()["settings"] == {"items": []}
         assert _hello(app, key).get_json()["type"] == "sales_point"
 
     def test_nothing_new_is_a_short_answer(self, app, client, admin):

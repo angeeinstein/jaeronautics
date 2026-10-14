@@ -24,10 +24,11 @@ from . import ValidationError
 
 @dataclass(frozen=True)
 class Setting:
-    """One setting of a type: ``kind`` is "text", "number", "switch" or
-    "choice". A choice's ``choices()`` returns what may be chosen now, as
-    ``Choice``s; its value is the chosen one's ``value``, or None while
-    nothing is chosen."""
+    """One setting of a type: ``kind`` is "text", "number", "switch",
+    "choice" or "choices". A choice's ``choices()`` returns what may be chosen
+    now, as ``Choice``s; its value is the chosen one's ``value``, or None while
+    nothing is chosen. "choices" is several of them, in the order chosen, at
+    most ``most``: a list, empty while nothing is chosen."""
 
     name: str
     label: str
@@ -42,6 +43,8 @@ class Setting:
     choices: Callable[[Any], list] | None = None
     #: Its owner may change it on their own page; otherwise only admins.
     owner_may_change: bool = False
+    #: For "choices": at most this many.
+    most: int | None = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +144,12 @@ def clean_settings(device_type, given, *, current=None, owner=None, drop_unfitti
                 value = None
             cleaned[name] = value
             continue
+        if setting.kind == "choices" and unchanged:
+            if drop_unfitting:
+                fitting = _values(setting, owner)
+                value = [chosen for chosen in value or [] if chosen in fitting]
+            cleaned[name] = list(value or [])
+            continue
         cleaned[name] = _checked(setting, value, owner)
     return cleaned
 
@@ -155,6 +164,19 @@ def _refuse(setting, message):
 
 
 def _checked(setting, value, owner=None):
+    if setting.kind == "choices":
+        if value is None or value == "":
+            return []
+        if not isinstance(value, list):
+            _refuse(setting, f"{setting.label}: a list.")
+        if setting.most is not None and len(value) > setting.most:
+            _refuse(setting, f"{setting.label}: at most {setting.most}.")
+        if len(set(map(repr, value))) != len(value):
+            _refuse(setting, f"{setting.label}: each one once.")
+        allowed = _values(setting, owner)
+        if any(chosen not in allowed for chosen in value):
+            _refuse(setting, f"{setting.label}: choose from the list.")
+        return list(value)
     if setting.kind == "choice":
         if value is None or value == "":
             return None

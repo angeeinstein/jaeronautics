@@ -410,10 +410,10 @@ def seed(app, app_module, subscriptions):
     credit.book_cash(admin_user, active.user, 500, note="Handed over at the office")
     from aeronautics_members.services import credit_sales
 
-    coffee = credit_sales.add_item(admin_user, name="Coffee", price_cents=120)
-    credit_sales.add_item(admin_user, name="Tea", price_cents=100)
-    beer = credit_sales.add_item(active.user, team=rocket, name="Beer", price_cents=200)
-    credit_sales.add_item(active.user, team=rocket, name="Mate", price_cents=250)
+    coffee = credit_sales.add_item(admin_user, name="Coffee", price_cents=120, icon="coffee")
+    credit_sales.add_item(admin_user, name="Tea", price_cents=100, icon="tea")
+    beer = credit_sales.add_item(active.user, team=rocket, name="Beer", price_cents=200, icon="beer")
+    credit_sales.add_item(active.user, team=rocket, name="Mate", price_cents=250, icon="mate")
     credit_sales.sell(active.user, coffee, by=admin_user)
     credit.book_cash(admin_user, carla, 1500)
     carla_beer = credit_sales.sell(carla, beer, by=admin_user)
@@ -500,7 +500,7 @@ def seed(app, app_module, subscriptions):
     from aeronautics_members.services import cards as cards_service
 
     sales_point, _key = devices_service.add(admin_user, name="Rocket fridge", type="sales_point", owner=rocket,
-                                            place="Workshop", settings={"item": beer.id})
+                                            place="Workshop", settings={"items": [beer.id]})
     devices_service.seen(sales_point, address="10.0.0.22", firmware="1.0.0", hardware="24:6F:28:AA:BB:CC",
                          now=now)
     devices_service.add(admin_user, type="sales_point", owner=rocket)

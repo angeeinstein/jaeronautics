@@ -36,18 +36,35 @@ def beer(credit_on):  # noqa: F811
 
 @pytest.fixture
 def reader(app, beer):
-    device, key = devices.add(None, name="Fridge reader", type="sales_point", settings={"item": beer.id})
+    device, key = devices.add(None, name="Fridge reader", type="sales_point", settings={"items": [beer.id]})
     db.session.commit()
     return device, key
 
 
-def _tap(app, key, card=CARD, event_id=None):
-    """A tap as the reader sends it; its answer."""
-    event_id = event_id or f"tap-{get_now_utc().timestamp()}"
+def _report(app, key, kind, data, event_id=None):
+    """A report as the device sends it; its answer."""
+    event_id = event_id or f"{kind}-{get_now_utc().timestamp()}"
     response = app.test_client().post("/api/v1/device/events", headers={"Authorization": f"Bearer {key}"},
-                                      json={"event_id": event_id, "kind": "tap", "data": {"card": card}})
+                                      json={"event_id": event_id, "kind": kind, "data": data})
     assert response.status_code == 200, response.get_json()
     return response.get_json()["answer"]
+
+
+def _card(app, key, card=CARD, event_id=None):
+    """A card tapped: the menu, or why not."""
+    return _report(app, key, "card", {"card": card}, event_id)
+
+
+def _buy(app, key, ticket, item, event_id=None):
+    return _report(app, key, "buy", {"ticket": ticket, "item": item}, event_id)
+
+
+def _tap(app, key, card=CARD):
+    """A card tapped and its menu's first item chosen: the sale's answer, or the refused tap's."""
+    menu = _card(app, key, card)
+    if menu["result"] != "menu":
+        return menu
+    return _buy(app, key, menu["ticket"], menu["items"][0]["id"])
 
 
 def _sales_of(person):
@@ -131,64 +148,92 @@ class TestCards:
 
 
 class TestSalesPoint:
-    def test_a_tap_sells_the_item_for_its_seller(self, app, anna, beer, reader):
+    def test_a_card_opens_the_menu_with_the_name_and_the_balance(self, app, anna, beer, reader):
+        device, key = reader
+        tea = credit_sales.add_item(None, name="Tea", price_cents=600, icon="tea")
+        devices.change(None, device, settings={"items": [tea.id, beer.id]})
+        cards.link(anna, CARD, name="Key fob", by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+
+        menu = _card(app, key)
+
+        assert menu["result"] == "menu" and menu["ticket"].startswith("t_") and menu["expires_in"] == 20
+        assert (menu["first_name"], menu["balance_cents"]) == ("Anna", 500)
+        assert menu["items"] == [
+            {"id": tea.id, "name": "Tea", "price_cents": 600, "icon": "tea", "affordable": False},
+            {"id": beer.id, "name": "Beer", "price_cents": 150, "icon": "other", "affordable": True},
+        ]
+        assert not _sales_of(anna)
+
+    def test_the_item_chosen_is_sold_for_its_seller(self, app, anna, beer, reader):
         device, key = reader
         card = cards.link(anna, CARD, name="Key fob", by=anna, how=cards.BY_PHONE)
         db.session.commit()
+        menu = _card(app, key)
 
-        answer = _tap(app, key)
+        answer = _buy(app, key, menu["ticket"], beer.id)
 
-        assert answer == {"result": "sold", "item": "Beer", "price_cents": 150, "balance_cents": 350}
+        assert answer == {"result": "sold", "item": "Beer", "price_cents": 150, "balance_cents": 350,
+                          "first_name": "Anna"}
         [sale] = _sales_of(anna)
         assert (sale.item_id, sale.card_id, sale.device_id, sale.channel) == (beer.id, card.id, device.id, "reader")
         assert sale.team_id is None
         assert card.last_used_device_id == device.id and card.last_used_at is not None
 
-    def test_the_cards_id_is_not_kept_with_the_event(self, app, anna, reader):
+    def test_one_ticket_buys_once(self, app, anna, beer, reader):
+        _device, key = reader
+        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+        ticket = _card(app, key)["ticket"]
+
+        assert _buy(app, key, ticket, beer.id)["result"] == "sold"
+        assert _buy(app, key, ticket, beer.id) == {"result": "refused", "reason": "ticket_used",
+                                                   "message": "Already bought: tap your card again."}
+        assert len(_sales_of(anna)) == 1
+        # Tapped again: another purchase.
+        assert _tap(app, key)["result"] == "sold" and len(_sales_of(anna)) == 2
+
+    def test_a_ticket_lasts_a_few_seconds_and_only_on_its_device(self, app, anna, beer, reader):
+        _device, key = reader
+        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        _other, other_key = devices.add(None, type="sales_point", settings={"items": [beer.id]})
+        db.session.commit()
+        ticket = _card(app, key)["ticket"]
+
+        assert _buy(app, other_key, ticket, beer.id)["reason"] == "ticket_expired"
+        from aeronautics_members.db_models import SaleTicket
+
+        stored = db.session.query(SaleTicket).filter_by(token=ticket).one()
+        stored.expires_at = get_now_utc() - timedelta(seconds=1)
+        db.session.commit()
+        assert _buy(app, key, ticket, beer.id)["reason"] == "ticket_expired"
+        assert not _sales_of(anna)
+
+    def test_the_cards_id_is_not_kept_with_the_event(self, app, anna, beer, reader):
         _device, key = reader
         cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
         db.session.commit()
 
-        _tap(app, key, event_id="tap-1")
+        ticket = _card(app, key, event_id="card-1")["ticket"]
+        _buy(app, key, ticket, beer.id, event_id="buy-1")
 
-        event = db.session.query(DeviceEvent).filter_by(event_id="tap-1").one()
-        assert event.data == {"card": "…E5F6"}
+        tapped = db.session.query(DeviceEvent).filter_by(event_id="card-1").one()
+        assert tapped.data == {"card": "…E5F6"}
         # Said in words on the device's page.
-        assert event.detail == "…E5F6 bought Beer, €1.50; €3.50 left"
-        _tap(app, key, event_id="tap-2")
-        refused = db.session.query(DeviceEvent).filter_by(event_id="tap-2").one()
-        assert refused.detail == "…E5F6 refused: Sold to this card a moment ago."
+        assert tapped.detail == "…E5F6 opened the menu (€5.00)"
+        bought = db.session.query(DeviceEvent).filter_by(event_id="buy-1").one()
+        assert bought.data == {"item": beer.id}
+        assert bought.detail == "Beer sold, €1.50; €3.50 left"
 
-    def test_a_double_tap_is_one_sale(self, app, anna, reader):
+    def test_the_same_report_again_is_answered_from_the_first(self, app, anna, beer, reader):
         _device, key = reader
         cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
         db.session.commit()
+        ticket = _card(app, key)["ticket"]
 
-        assert _tap(app, key)["result"] == "sold"
-        assert _tap(app, key) == {"result": "refused", "reason": "too_soon",
-                                  "message": "Sold to this card a moment ago."}
+        first = _buy(app, key, ticket, beer.id, event_id="buy-7")
+        assert _buy(app, key, ticket, beer.id, event_id="buy-7") == first
         assert len(_sales_of(anna)) == 1
-
-    def test_the_same_report_again_is_answered_from_the_first(self, app, anna, reader):
-        _device, key = reader
-        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
-        db.session.commit()
-
-        first = _tap(app, key, event_id="tap-7")
-        assert _tap(app, key, event_id="tap-7") == first
-        assert len(_sales_of(anna)) == 1
-
-    def test_after_a_few_seconds_it_sells_again(self, app, anna, reader):
-        _device, key = reader
-        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
-        db.session.commit()
-        _tap(app, key)
-        sale = _sales_of(anna)[0]
-        sale.created_at = sale.created_at - timedelta(seconds=10)
-        db.session.commit()
-
-        assert _tap(app, key)["result"] == "sold"
-        assert len(_sales_of(anna)) == 2
 
     @pytest.mark.parametrize("change, reason", [
         (lambda card, person: None, None),
@@ -202,37 +247,66 @@ class TestSalesPoint:
         change(card, anna)
         db.session.commit()
 
-        answer = _tap(app, key)
+        answer = _card(app, key)
 
         if reason is None:
-            assert answer["result"] == "sold"
+            assert answer["result"] == "menu"
         else:
-            assert (answer["result"], answer["reason"]) == ("refused", reason) and not _sales_of(anna)
+            assert (answer["result"], answer["reason"]) == ("refused", reason) and "ticket" not in answer
+
+    @pytest.mark.parametrize("change, reason", [
+        (lambda card, person: cards.block(None, card), "card_blocked"),
+        (lambda card, person: cards.remove(person, card), "card_unknown"),
+        (lambda card, person: setattr(person, "disabled_at", get_now_utc()), "account_off"),
+    ])
+    def test_a_card_stopped_while_the_menu_is_open(self, app, anna, beer, reader, change, reason):
+        _device, key = reader
+        card = cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+        ticket = _card(app, key)["ticket"]
+        change(card, anna)
+        db.session.commit()
+
+        assert _buy(app, key, ticket, beer.id)["reason"] == reason and not _sales_of(anna)
 
     def test_an_unknown_card(self, app, anna, reader):
         _device, key = reader
-        assert _tap(app, key)["reason"] == "card_unknown"
+        assert _card(app, key)["reason"] == "card_unknown"
 
-    def test_not_enough_credit_says_what_is_left(self, app, reader):
+    def test_not_enough_credit_says_what_is_left(self, app, beer, reader):
         _device, key = reader
         poor = _person("ben@example.com")
         credit.book_cash(None, poor, 100)
         cards.link(poor, CARD, by=poor, how=cards.BY_PHONE)
         db.session.commit()
 
-        answer = _tap(app, key)
+        menu = _card(app, key)
+        assert menu["items"][0]["affordable"] is False
+        answer = _buy(app, key, menu["ticket"], beer.id)
         assert (answer["reason"], answer["balance_cents"]) == ("not_enough", 100)
 
-    def test_an_item_switched_off_and_a_reader_without_one(self, app, anna, beer, reader):
+    def test_items_switched_off_leave_the_menu_and_none_left_is_not_set_up(self, app, anna, beer, reader):
         device, key = reader
         cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+        ticket = _card(app, key)["ticket"]
         credit_sales.update_item(None, beer, active=False)
         db.session.commit()
-        assert _tap(app, key)["reason"] == "item_off"
 
-        devices.change(None, device, settings={"item": None})
+        # Switched off while the menu was open.
+        assert _buy(app, key, ticket, beer.id)["reason"] == "item_off"
+        assert _card(app, key)["reason"] == "not_set_up"
+        devices.change(None, device, settings={"items": []})
         db.session.commit()
-        assert _tap(app, key)["reason"] == "not_set_up"
+        assert _card(app, key)["reason"] == "not_set_up"
+
+    def test_an_item_not_on_its_menu(self, app, anna, reader):
+        _device, key = reader
+        other = credit_sales.add_item(None, name="Wine", price_cents=300)
+        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+        ticket = _card(app, key)["ticket"]
+        assert _buy(app, key, ticket, other.id)["reason"] == "item_off"
 
     def test_credit_switched_off(self, app, anna, reader):
         _device, key = reader
@@ -242,39 +316,66 @@ class TestSalesPoint:
                              min_top_up_cents=settings.min_top_up_cents, max_balance_cents=settings.max_balance_cents,
                              suggested_cents=settings.suggested_cents, eps=settings.eps)
         db.session.commit()
-        assert _tap(app, key)["reason"] == "credit_off"
+        assert _card(app, key)["reason"] == "credit_off"
 
-    def test_the_item_is_chosen_from_its_owners_price_list(self, app, beer, reader):
+    def test_the_items_are_chosen_from_its_owners_price_list(self, app, beer, reader):
         device, _key = reader
         from aeronautics_members.services import device_types
 
         setting = device_types.get("sales_point").settings[0]
         assert [(choice.value, choice.label) for choice in setting.choices(None)] == [(beer.id, "Beer, €1.50")]
         with pytest.raises(ValidationError):
-            devices.change(None, device, settings={"item": 9999})
+            devices.change(None, device, settings={"items": [9999]})
+        with pytest.raises(ValidationError):
+            devices.change(None, device, settings={"items": [beer.id, beer.id]})
+        five = [credit_sales.add_item(None, name=f"Item {n}", price_cents=100).id for n in range(5)]
+        with pytest.raises(ValidationError, match="at most 4"):
+            devices.change(None, device, settings={"items": five})
+        assert devices.change(None, device, settings={"items": five[:4]}).settings == {"items": five[:4]}
         # Kept as it was once switched off, though it cannot be chosen any more.
+        devices.change(None, device, settings={"items": [beer.id]})
         credit_sales.update_item(None, beer, active=False)
-        assert devices.change(None, device, settings={"item": beer.id}).settings == {"item": beer.id}
+        assert devices.change(None, device, settings={"items": [beer.id]}).settings == {"items": [beer.id]}
 
-    def test_a_team_reader_sells_only_the_teams_items(self, app, anna, beer, reader):
+    def test_a_team_device_sells_only_the_teams_items(self, app, anna, beer, reader):
         from test_teams_flow import _team
 
         device, key = reader
         rocket = _team("Rocket")
-        mate = credit_sales.add_item(None, team=rocket, name="Mate", price_cents=250)
+        mate = credit_sales.add_item(None, team=rocket, name="Mate", price_cents=250, icon="mate")
         cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
         db.session.commit()
 
         # Given to the team: the association's beer no longer fits, and is cleared.
         devices.change(None, device, owner=rocket)
-        assert device.settings == {"item": None}
+        assert device.settings == {"items": []}
         with pytest.raises(ValidationError):
-            devices.change(None, device, settings={"item": beer.id})
-        devices.change(None, device, settings={"item": mate.id})
+            devices.change(None, device, settings={"items": [beer.id]})
+        devices.change(None, device, settings={"items": [mate.id]})
         db.session.commit()
 
         assert _tap(app, key)["item"] == "Mate"
         assert _sales_of(anna)[0].team_id == rocket.id
+
+    def test_its_menu_for_the_idle_screen(self, app, beer, reader):
+        _device, key = reader
+        answer = app.test_client().get("/api/v1/device/resources/menu",
+                                       headers={"Authorization": f"Bearer {key}"}).get_json()
+        assert answer == {"resource": "menu", "data": {"items": [
+            {"id": beer.id, "name": "Beer", "price_cents": 150, "icon": "other"}]}}
+
+    def test_old_tickets_go_with_the_nightly_clean_up(self, app, anna, reader):
+        from aeronautics_members.db_models import SaleTicket
+
+        _device, key = reader
+        cards.link(anna, CARD, by=anna, how=cards.BY_PHONE)
+        db.session.commit()
+        _card(app, key)
+        db.session.query(SaleTicket).one().created_at = get_now_utc() - timedelta(days=2)
+        db.session.commit()
+
+        devices.forget_old()
+        assert db.session.query(SaleTicket).count() == 0
 
 
 class TestOwners:
@@ -304,7 +405,7 @@ class TestOwners:
     def test_an_owner_changes_only_what_is_theirs(self, app, beer, reader):
         device, _key = reader
         devices.change(None, device, name="Workshop fridge", place="Workshop", description="By the door",
-                       enabled=False, settings={"item": beer.id}, by_owner=True)
+                       enabled=False, settings={"items": [beer.id]}, by_owner=True)
         assert (device.name, device.place, device.description, device.enabled) == (
             "Workshop fridge", "Workshop", "By the door", False)
         # Who owns it is an admin's to change, not the owner's.
@@ -313,13 +414,6 @@ class TestOwners:
         devices.change(None, device, owner=_team("Rocket"), by_owner=True)
         assert device.team_id is None
 
-
-    def test_its_item_for_a_label(self, app, reader):
-        _device, key = reader
-        answer = app.test_client().get("/api/v1/device/resources/item",
-                                       headers={"Authorization": f"Bearer {key}"}).get_json()
-        assert answer["data"] == {"item": "Beer", "price_cents": 150, "seller": "Joanneum Aeronautics",
-                                  "on_sale": True}
 
     def test_removing_the_reader_keeps_its_sales(self, app, anna, reader):
         device, key = reader
@@ -340,11 +434,11 @@ class TestLinkingAtAReader:
         cards.wait_at_reader(None, anna, device)
         db.session.commit()
 
-        assert _tap(app, key) == {"result": "linked", "card": "Card"}
+        assert _card(app, key) == {"result": "linked", "card": "Card"}
         [card] = cards.cards_of(anna)
         assert card.linked_how == cards.BY_READER and cards.waiting_for(anna) == []
-        # The wait is over: the next tap buys.
-        assert _tap(app, key, event_id="next")["result"] in ("sold", "refused")
+        # The wait is over: the next tap opens the menu.
+        assert _card(app, key, event_id="next")["result"] == "menu"
 
     def test_a_known_card_buys_while_waiting(self, app, anna, reader):
         device, key = reader
@@ -353,7 +447,7 @@ class TestLinkingAtAReader:
         cards.wait_at_reader(None, other, device)
         db.session.commit()
 
-        assert _tap(app, key)["result"] == "sold"
+        assert _card(app, key)["result"] == "menu"
         assert cards.waiting_for(other) != []
 
     def test_the_wait_ends_after_a_minute(self, app, anna, reader):
@@ -361,7 +455,7 @@ class TestLinkingAtAReader:
         cards.wait_at_reader(None, anna, device, now=get_now_utc() - timedelta(minutes=2))
         db.session.commit()
 
-        assert _tap(app, key)["reason"] == "card_unknown" and cards.cards_of(anna) == []
+        assert _card(app, key)["reason"] == "card_unknown" and cards.cards_of(anna) == []
 
 
 class TestPages:
@@ -483,12 +577,13 @@ class TestOwnersPages:
         assert [c["label"] for c in owned["fields"][0]["choices"]] == ["Mate, €2.50"]
 
         changed = send(client, "PATCH", f"{url}/{device.id}",
-                       {"name": "Rocket fridge", "place": "Hangar", "settings": {"item": mate.id}})
+                       {"name": "Rocket fridge", "place": "Hangar", "settings": {"items": [mate.id]}})
         assert changed.status_code == 200, changed.get_json()
         _tap(app, key)
         [owned] = client.get(url).get_json()["items"]
         assert owned["label"] == "Rocket fridge"
-        assert owned["recent"][0]["detail"] == "…E5F6 bought Mate, €2.50; €2.50 left"
+        assert owned["recent"][0]["detail"] == "Mate sold, €2.50; €2.50 left"
+        assert owned["recent"][1]["detail"] == "…E5F6 opened the menu (€5.00)"
 
     def test_a_lead_cannot_reach_another_owners_device(self, app, client, rocket, reader):
         from api_helpers import send, signed_in
@@ -500,7 +595,7 @@ class TestOwnersPages:
                       {"enabled": False})
         assert answer.status_code == 404
         assert send(client, "PATCH", f"/api/v1/teams/{team.slug}/manage/devices/{association_device.id}",
-                    {"settings": {"item": 1}}).status_code == 404
+                    {"settings": {"items": [1]}}).status_code == 404
 
     def test_an_owner_may_not_change_what_is_technical(self, app, client, rocket):
         from api_helpers import send, signed_in
@@ -557,5 +652,6 @@ def test_the_key_comes_with_a_firmware_starter(app, client):
     assert added["starter_name"] == f"device-{code}-starter.md"
     assert f'const char* DEVICE_KEY = "{key}";' in starter
     assert 'const char* SERVER = "https://members.test/api/v1/device";' in starter
-    assert "X-Device-Hardware" in starter and '"kind": "tap"' in starter and "too_soon" in starter
+    assert "X-Device-Hardware" in starter and 'report("card"' in starter and 'report("buy"' in starter
+    assert "ticket_expired" in starter
     assert "setInsecure" not in starter.split("```cpp")[1]

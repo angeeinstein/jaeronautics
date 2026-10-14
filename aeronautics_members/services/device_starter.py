@@ -212,8 +212,8 @@ def starter(device, key, server):
 
 
 def _sketch(device, device_type, key, server):
-    tap = "tap" in device_type.reports
-    report_kind = "tap" if tap else next(iter(sorted(device_type.reports)), "ping")
+    menu = "card" in device_type.reports and "buy" in device_type.reports
+    report_kind = next(iter(sorted(device_type.reports)), "ping")
     top = f"""// {devices_service.label(device)} ({device.code}): {device_type.label}
 // Made by the members' portal. Holds the device's key: keep it private.
 #include <WiFi.h>
@@ -322,7 +322,7 @@ bool report(const char* kind, JsonDocument& data, JsonDocument& answer) {{
   return false;
 }}
 """
-    if tap:
+    if menu:
         body = """
 // Read a card's ID (UID) as hex, upper case, without separators:
 // "04A1B2C3D4E5F6". Fill in with the reader's library (MFRC522, PN532, ...).
@@ -330,10 +330,15 @@ bool readCardId(String& cardId) {
   return false;
 }
 
-void showSold(JsonDocument& answer) { /* green LED, one beep */ }
-void showRefused(JsonDocument& answer) { /* red LED, two beeps; answer["reason"] says why */ }
-void showLinked(JsonDocument& answer) { /* three short beeps */ }
-void showOffline() { /* the portal cannot be reached: red LED blinking */ }
+// The menu on the screen: up to four items (name, price, icon -- greyed out
+// when not "affordable"), "Hi <first_name>" and the balance. Returns the id of
+// the item touched, or -1 when the menu closed after about 8 seconds (shorter
+// than answer["expires_in"]). Fill in with the display's library.
+long showMenu(JsonDocument& menu) { return -1; }
+void showSold(JsonDocument& answer) { /* "Coffee, €0.80 -- €11.70 left" */ }
+void showRefused(JsonDocument& answer) { /* answer["message"] says why */ }
+void showLinked(JsonDocument& answer) { /* "Card linked" */ }
+void showOffline() { /* the portal cannot be reached */ }
 
 unsigned long lastSignOfLife = 0;
 
@@ -355,18 +360,32 @@ void loop() {
   }
   String cardId;
   if (!readCardId(cardId)) return;
-  JsonDocument data, answer;
+  JsonDocument data, menu;
   data["card"] = cardId;
-  if (!report("tap", data, answer)) {
+  if (!report("card", data, menu)) {
+    showOffline();
+    return;
+  }
+  if (menu["result"] == "linked") {
+    showLinked(menu);
+    return;
+  }
+  if (menu["result"] != "menu") {
+    showRefused(menu);
+    return;
+  }
+  long item = showMenu(menu);
+  if (item < 0) return;  // closed without a choice: the ticket runs out by itself
+  JsonDocument chosen, answer;
+  chosen["ticket"] = menu["ticket"];
+  chosen["item"] = item;
+  if (!report("buy", chosen, answer)) {
     showOffline();
   } else if (answer["result"] == "sold") {
     showSold(answer);
-  } else if (answer["result"] == "linked") {
-    showLinked(answer);
   } else {
     showRefused(answer);
   }
-  delay(1500);  // one tap at a time; the portal also refuses a second sale within 5 s
 }"""
     else:
         body = f"""

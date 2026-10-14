@@ -5114,7 +5114,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "text" | "number" | "switch" | "choice";
+            kind: "text" | "number" | "switch" | "choice" | "choices";
             /** Label */
             label: string;
             /** Max Length */
@@ -5123,6 +5123,11 @@ export interface components {
             maximum: number | null;
             /** Minimum */
             minimum: number | null;
+            /**
+             * Most
+             * @default null
+             */
+            most?: number | null;
             /** Name */
             name: string;
             /**
@@ -5978,6 +5983,13 @@ export interface components {
         InviteIn: {
             /** Meeting Details */
             meeting_details: string;
+        };
+        /** ItemIconOut */
+        ItemIconOut: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
         };
         /** JoinIn */
         JoinIn: {
@@ -7401,6 +7413,11 @@ export interface components {
              */
             active?: boolean | null;
             /**
+             * Icon
+             * @default null
+             */
+            icon?: string | null;
+            /**
              * Move
              * @default null
              */
@@ -7418,6 +7435,8 @@ export interface components {
         };
         /** PriceItemIn */
         PriceItemIn: {
+            /** Icon */
+            icon: string;
             /** Name */
             name: string;
             /** Price Cents */
@@ -7427,6 +7446,8 @@ export interface components {
         PriceItemOut: {
             /** Active */
             active: boolean;
+            /** Icon */
+            icon: string;
             /** Id */
             id: number;
             /** Name */
@@ -7438,6 +7459,8 @@ export interface components {
         PriceListOut: {
             /** Enabled */
             enabled: boolean;
+            /** Icons */
+            icons: components["schemas"]["ItemIconOut"][];
             /** Items */
             items: components["schemas"]["PriceItemOut"][];
         };

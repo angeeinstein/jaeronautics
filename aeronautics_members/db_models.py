@@ -1174,12 +1174,34 @@ class CreditItem(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey("teams.id"), nullable=True, index=True)
     name = db.Column(db.String(60), nullable=False)
     price_cents = db.Column(db.Integer, nullable=False)
+    #: Its picture on a device's screen: a name of ``credit_sales.ICONS``.
+    icon = db.Column(db.String(30), nullable=False, default="other", server_default="other")
     active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     team = db.relationship("Team")
+
+
+class SaleTicket(db.Model):
+    """A card tapped on a sales point (services/sales_points.py): the device
+    showed its menu, and may buy one item with this ticket for a few seconds.
+    It belongs to the card, the device and one purchase. Deleted the next day."""
+
+    __tablename__ = "sale_tickets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(40), nullable=False, unique=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    card_id = db.Column(db.Integer, db.ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    #: Bought with: the sale it made.
+    used_at = db.Column(db.DateTime, nullable=True)
+    entry_id = db.Column(db.Integer, db.ForeignKey("credit_entries.id", ondelete="SET NULL"), nullable=True)
+
+    card = db.relationship("Card")
 
 
 class ContactMessage(db.Model):

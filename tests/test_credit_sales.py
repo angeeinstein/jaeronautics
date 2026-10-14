@@ -154,19 +154,33 @@ class TestThroughTheApi:
     def test_the_association_keeps_its_prices(self, client, credit_on):  # noqa: F811
         signed_in(client, _treasurer())
 
-        added = send(client, "POST", "/api/v1/admin/credit/items", {"name": "Coffee", "price_cents": 120})
+        added = send(client, "POST", "/api/v1/admin/credit/items",
+                     {"name": "Coffee", "price_cents": 120, "icon": "coffee"})
         assert added.status_code == 201, added.get_json()
+        assert added.get_json()["items"][0]["icon"] == "coffee"
         item_id = added.get_json()["items"][0]["id"]
-        changed = send(client, "PUT", f"/api/v1/admin/credit/items/{item_id}", {"price_cents": 150})
+        changed = send(client, "PUT", f"/api/v1/admin/credit/items/{item_id}", {"price_cents": 150, "icon": "tea"})
 
-        assert changed.get_json()["items"][0]["price_cents"] == 150
+        assert (changed.get_json()["items"][0]["price_cents"], changed.get_json()["items"][0]["icon"]) == (150, "tea")
+
+    def test_every_item_has_an_icon_of_the_list(self, client, credit_on):  # noqa: F811
+        signed_in(client, _treasurer())
+
+        listed = client.get("/api/v1/admin/credit/items").get_json()
+        assert {"value": "coffee", "label": "Coffee"} in listed["icons"]
+        assert listed["icons"][-1] == {"value": "other", "label": "Other"}
+        missing = send(client, "POST", "/api/v1/admin/credit/items", {"name": "Coffee", "price_cents": 120})
+        assert missing.status_code == 400 and "icon" in missing.get_json()["error"]["fields"]
+        unknown = send(client, "POST", "/api/v1/admin/credit/items",
+                       {"name": "Coffee", "price_cents": 120, "icon": "rocket"})
+        assert unknown.get_json()["error"]["fields"] == {"icon": "Choose an icon."}
 
     def test_a_lead_keeps_the_teams_prices_a_member_does_not(self, client, credit_on, rocket):  # noqa: F811
         team, lead = rocket
         signed_in(client, lead)
         path = f"/api/v1/teams/{team.slug}/manage/prices"
 
-        assert send(client, "POST", path, {"name": "Beer", "price_cents": 200}).status_code == 201
+        assert send(client, "POST", path, {"name": "Beer", "price_cents": 200, "icon": "beer"}).status_code == 201
         assert [item["name"] for item in client.get(path).get_json()["items"]] == ["Beer"]
 
         _login(client, _person("someone@example.com", "Some", "One").id)
