@@ -99,7 +99,19 @@ maintainer says so).
   4. **Shorter names:** "limit the length of text for a item name as well as
      for a card reader name to some sensible length" (now 60 characters for
      an item, 80 for a device).
-- **Open:** the proposals of the conversation of 2026-10-14, to be agreed.
+- **Agreed (2026-10-14), "I agree with all your points":**
+  1. A delete button on each row, asking first. Past sales keep the item's
+     name; a sales point's menu loses it at once.
+  2. One table: Item, Price, Sold, Made, On sale, actions -- with a
+     *30 days / Ever* switch in its header; a *Together* row; items sold but
+     deleted since below, greyed, "No longer on the list". *Sold by item*
+     goes; *Sold by seller* stays on Admin › Sales.
+  3. The Sales pages first: an icon in every panel's header (as in the
+     sidebar), and tabs -- *Price list* and *Sales points*. Icons on every
+     panel elsewhere: a later batch of its own.
+  4. Item names at most **20** characters (four on a small screen), a
+     reader's at most **30**, each with a counter; longer ones already saved
+     stay until edited.
 
 ### A device's page: "What the device can send" folded away; the key panel
 
@@ -117,8 +129,11 @@ maintainer says so).
      device is added by hand (*Add a device*, for development) or rotated;
      *Revoke* does what switching the device off does; a paired device that
      needs a new key is paired again ("replaces").
-- **Open:** whether the key panel goes, and whether adding by hand goes with
-  it (then pairing is the only way to a key).
+- **Agreed (2026-10-14):** *What the device can send* folded closed at the
+  bottom of the page, opened with a click. The key panel is **not shown for a
+  paired device**; *Add a device* by hand stays for now ("I would leave the
+  manual add a device functionality for now"), and a device added so keeps
+  its key panel.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 
