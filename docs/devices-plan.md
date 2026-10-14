@@ -104,6 +104,103 @@ dashboard. Talked through:
   reports itself, an admin accepts it), firmware updates over the air, a key
   bound to its chip.
 
+## One device for everything (agreed 2026-10-14)
+
+The maintainer built a reader with a touchscreen and an NFC reader below it,
+in a 3D-printed enclosure, and wants it for every use: "why not use this
+device for everything?" No devices with only a button or an LED.
+
+- **One device, one firmware.** Every use (sales point, attendance, ...) is
+  built into the firmware with its own screens: "this makes it a lot easier
+  to actually create nice looking menus ... and a nice UI on the device
+  itself". It costs more per device; the maintainer thinks it is worth it.
+  This replaces "simple devices driven by the portal" from the Direction
+  below; the screen devices' part of it (the portal gives data and results,
+  not screens) holds.
+- **The device says what it can do, the portal what it is for.** With its
+  sign of life the device reports its board, its firmware version and the
+  uses its firmware supports. The portal assigns one of them, with its
+  settings, and offers only uses the device's firmware has. Changing the use
+  needs no new key and nothing on the device. A new use is a firmware release
+  plus its module in the portal (`services/device_types.py`), which still
+  decides what a tap does.
+- **Changes reach the device at once** (long polling): the device asks for
+  what is new and the server holds the request up to about a minute,
+  answering the moment something changes. Works through the Cloudflare
+  tunnel.
+- **Wi-Fi is the firmware's**, including WPA2-Enterprise (it has joined the
+  university's network); nothing for the portal to do.
+
+### Pairing (agreed 2026-10-14)
+
+The device gets its key without anyone copying it (the scheme TVs use, "go
+to this address and enter the code"); proposed by the maintainer, worked out
+with the firmware:
+
+1. The unpaired device asks `POST /api/v1/device/pair/start` with its MAC
+   address and firmware version. It gets a short code for people (`K7Q-4X9`,
+   safe on the screen) and a long random pairing id that only the device and
+   the server know.
+2. The screen shows the code and a QR code linking to the portal's approval
+   page with the code filled in; whoever is not signed in signs in first and
+   lands back there.
+3. **An admin approves** -- admins only for now ("we could change this later
+   if necessary"; a team's sales point could charge any member's credit, and
+   card ids are not secret). The page shows the board (MAC), firmware and
+   when it asked, and asks what the device is: owner, use, name (optional);
+   or *Replaces device ...*, which moves that device to the new board and
+   stops the old board's key.
+4. The device polls `POST /api/v1/device/pair/poll` with its pairing id at
+   the interval the server sets. After approval it gets its key once, with
+   its code, owner and use; then the pairing is gone. Nobody ever sees the
+   key; *Download configuration* and the starter stay for development.
+
+Guards: a code works 10 minutes; few pairing requests per address.
+
+### Settings on the device (agreed 2026-10-14)
+
+- **A card opens them:** tapping a card on the device asks the portal whether
+  its holder may manage the device -- admins (`devices.manage`) for now.
+  "People that are admins in the membership portal are also admins for the
+  devices. And if I change roles in the portal, this also immediately changes
+  on the device."
+- **A backup code** for when the server cannot be reached or the Wi-Fi is
+  lost: one per device, shown to admins on the device's page and changeable
+  there; the device keeps it (as a hash) from its last contact.
+
+### Firmware updates (agreed 2026-10-14)
+
+The firmware can already update itself over the air.
+
+- **Admin › Settings › Devices › Firmware:** upload a firmware file. The
+  portal reads the version, project and build date from the file itself and
+  refuses a file that is not this firmware ("the server only accepts this
+  when I upload a firmware"); it keeps its SHA-256.
+- **One file for every device**, whatever it is used for.
+- **Which version the devices run** is chosen there -- first one device,
+  then all. The device learns of it with its next contact (at once, see long
+  polling), downloads it signed in with its key, checks the hash, installs
+  it when it is not in use, and reports the result. With ESP-IDF's rollback
+  on, a new version counts only once it has reached the server again;
+  otherwise the device goes back to the old one.
+- **The device installs only this firmware**: it checks the same marks the
+  server checks (below).
+
+### Open (2026-10-14)
+
+- **The marks of "our" firmware:** ESP-IDF's app description already holds
+  the project name and version; with a few bytes of our own (a marker and
+  the board) both the server and the device can tell this firmware from any
+  other. That guards against a wrong file, not against someone who takes over
+  an admin account or the server: anyone can copy the marker.
+- **Signing the firmware:** the maintainer is not sure yet. Signed
+  images (ESP-IDF's signature check on updates, the key kept on the
+  maintainer's computer) would guard against that too. It can be switched
+  on later with an ordinary update; the portal only stores and passes on the
+  file either way.
+- Which part first: pairing and the device reporting its uses, or firmware
+  updates.
+
 ## How it works
 
 ### In the portal
@@ -176,6 +273,6 @@ long random strings, so a slow hash adds nothing.
 - Not decided: doors and cabinets (with a list kept on the device for when
   the portal cannot be reached), what attendance records and who may see it
   (and the privacy policy for it).
-- Team leads managing their team's own devices.
+- Pairing by team leads for their own team (2026-10-14: admins only for now).
 - A stronger sign-in, and cards that prove themselves cryptographically
   (NTAG 424 DNA, DESFire) as well as plain card ids.
