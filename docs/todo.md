@@ -61,20 +61,19 @@ same cards comes next, needed around January.
   a least time), who may see it (team leads, whoever handles ECTS), and the
   privacy policy for it.
 
-### Devices: pairing, uses reported by the device, firmware updates
+### Devices: the marks of "our" firmware
 
 - **Added:** 2026-10-14
-- **What:** one device with a touchscreen and an NFC reader for every use,
-  one firmware: the device reports the uses its firmware supports and the
-  portal assigns one; pairing by a code on the screen, approved by an admin,
-  so nobody copies keys; device settings opened by an admin's card, with a
-  backup code; firmware files uploaded in the portal and installed by the
-  devices over the air.
-- **Where:** the device API (`api/devices.py`, `services/devices.py`), Admin ›
-  Settings › Devices (a pairing page, a Firmware page).
+- **What:** the check of an uploaded firmware file (and the device's own
+  check before installing) for the few bytes that mark it as this
+  association's firmware, once they are settled with the firmware.
+- **Where:** `services/device_firmware.py`, `_marks` (it checks the project
+  name now); the device's firmware.
 - **Why, decided, open questions:** `docs/devices-plan.md`, "One device for
-  everything". Bigger than a small change: built when the maintainer says,
-  not with a batch.
+  everything", "Open". Pairing, the device saying what it can be, the
+  settings by card and backup code, and firmware updates are built (branch
+  `claude/device-pairing`); this is the part left for when the firmware
+  side is settled. Signing the firmware: not planned.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 

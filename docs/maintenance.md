@@ -726,6 +726,34 @@ Devices (admins: `devices.manage`). The plan, and what is decided:
   `services/device_types.py` (or a module of its own it imports): its
   settings, what it may fetch, what it may report and the answers. There
   are *Test*, which answers what it is sent, and *Sales point* (below).
+- **Pairing** (`services/device_pairing.py`): a device without a key shows
+  a code and a QR code; *Pair a device* (or the waiting list on the Devices
+  page) shows what it says it is, and an admin pairs it as a new device or
+  as the new board of one -- the old board's key stops at once. The device
+  fetches its key itself; nobody sees it. A code works ten minutes;
+  `RATELIMIT_DEVICE_PAIR` (20 an hour per network) and at most 50 waiting.
+  A device that missed its answer starts again and is paired as replacing
+  itself.
+- **What a device says it is,** with every request: `X-Device-Board` and
+  `X-Device-Types` (the uses its firmware has). Only those types can be
+  chosen for it. Its sign of life has an `ETag`; asked again with it, it is
+  `304` while nothing changed, so a device asks every 10 seconds and sees a
+  change within seconds (304s are not listed with its requests).
+- **Its settings on the device** open with an admin's card
+  (`POST /api/v1/device/manager`, asked each time, so a role changed counts
+  at once) or, when the portal cannot be reached, its six-digit **backup
+  code**, shown on its page with *New code*.
+- **Firmware** (`services/device_firmware.py`, `services/firmware_image.py`):
+  Devices › *Firmware*. An upload is checked from the file itself -- a whole
+  ESP-IDF app image (its checksum and appended SHA-256), with an app
+  description, of the same project as the files before (16 MB at most) --
+  and kept in `storage/firmware/` (`FIRMWARE_DIR`). *Install on every device*
+  chooses the version; a device's page can give it one of its own. Devices
+  are offered it with their sign of life, download it with their key and say
+  how it went; a version a device reports failed is not offered to it again
+  until *Try again*. A version a device is to run cannot be deleted.
+  Uploading a version again, or another file with a version already there,
+  is refused: build it with a new version.
 
 ## Cards and sales points
 

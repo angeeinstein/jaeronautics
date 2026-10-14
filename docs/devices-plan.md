@@ -129,10 +129,13 @@ device for everything?" No devices with only a button or an LED.
   needs no new key and nothing on the device. A new use is a firmware release
   plus its module in the portal (`services/device_types.py`), which still
   decides what a tap does.
-- **Changes reach the device at once** (long polling): the device asks for
-  what is new and the server holds the request up to about a minute,
-  answering the moment something changes. Works through the Cloudflare
-  tunnel.
+- **Changes reach the device within seconds.** Long polling (the server
+  holding the device's request until something changes) was ruled out when
+  building it: the portal runs 3 workers × 4 threads, so each device would
+  hold one of 12 request slots, and a handful of devices could stall the
+  site. Instead the device asks every 10 seconds with the last answer's
+  `ETag` and is answered `304`, no body, while nothing changed -- cheap, and
+  not listed with its requests.
 - **Wi-Fi is the firmware's**, including WPA2-Enterprise (it has joined the
   university's network); nothing for the portal to do.
 
@@ -205,11 +208,13 @@ The firmware can already update itself over the air.
   signature check on updates); the portal only stores and passes on the
   file either way.
 - What else the firmware sends and needs is still being worked out with the
-  firmware. Built first (2026-10-14), as "the parts that are not really
-  dependent on this": pairing, the device reporting what it is and can do,
-  and the base of firmware updates -- uploading a file in the portal, its
-  checks (more to come), the device asking for its version and downloading
-  it.
+  firmware. Built first (2026-10-14, branch `claude/device-pairing`), as
+  "the parts that are not really dependent on this": pairing, the device
+  reporting what it is and can do, the backup code and the card opening the
+  settings, and the base of firmware updates -- uploading a file in the
+  portal, its checks (the marks above are a hook in
+  `services/device_firmware.py`, `_marks`), the device asking for its version,
+  downloading it and saying how it went.
 
 ## How it works
 
@@ -217,13 +222,33 @@ The firmware can already update itself over the air.
 
 Admin › Settings › Devices lists every device: its name, type and place, and
 whether it is on. It also shows when the device was last seen, its firmware
-version and its address.
+version (and the one it should install) and its address.
 
-- **Add a device:** name, type, place, and the settings its type has. The
-  key is shown once, with *Copy* and *Download configuration*: a small JSON
-  file with the portal's address, the device's id and its key.
+- **Pair a device** (the usual way): devices waiting to be paired are listed
+  above the devices, the list refreshing every 5 seconds while one waits. The
+  approval page (`/admin/settings/devices/pair?code=K7Q-4X9`, which the
+  device's QR code opens) shows what the device says it is -- board, MAC
+  address, firmware, what it can be, from where and when it asked -- and
+  pairs it as **a new device** (owner, type -- only one its firmware can be
+  --, name, place, settings) or as **the board of a device** (it keeps that
+  device's code, settings and history; the old board's key stops at once).
+  Or *Turn away*. Nobody sees the key.
+- **Add a device** by hand, for development: name, type, place, and the
+  settings its type has. The key is shown once, with *Copy*, *Download
+  configuration* and *Download starter*.
+- **Firmware** (`/admin/settings/devices/firmware`): upload a file (its
+  version, project, build, chip and ESP-IDF version are read from it), see
+  every version with how many devices run it, *Install on every device* or
+  *Stop offering*, delete a version no device is to run, and each device's
+  state: up to date, update waiting, update failed (with the device's
+  reason), refreshed every 5 seconds.
 - **One device's page:**
-  - its settings and the switch;
+  - its state, board (name and MAC address) and what its firmware can be;
+  - its settings and the switch, and its type (only one its firmware can
+    be; another type starts its settings afresh);
+  - its firmware: what it runs and should run, *Runs* to give it a version of
+    its own (to try one on one device first), *Try again* after a failure;
+  - its backup code, with *New code*;
   - its key on one line, shortened (`jadev_<key id>_…AbCd`: the last four
     characters are kept for that), when it was made and last used, with
     *Rotate* (a new key works at once, the old one stops; the new one is
@@ -247,17 +272,35 @@ version and its address.
 
 ### The device API (`/api/v1/device`)
 
-Every request carries `Authorization: Bearer <key>`, and may carry
-`X-Device-Firmware: <version>`. No session, no cookies, no CSRF token.
+Every request carries `Authorization: Bearer <key>`, and says what the device
+is: `X-Device-Firmware` (the app description's version), `X-Device-Hardware`
+(the MAC address), `X-Device-Board`, `X-Device-Types` (the uses its firmware
+has, comma-separated). No session, no cookies, no CSRF token.
 
 - `GET /api/v1/device` is the sign of life. It answers the device's id,
-  name, type, place, its settings for its type, and the server time.
+  code, name, type, owner, place, its settings for its type, the hash of its
+  backup code, firmware to install (version, size, SHA-256) if any, how
+  often to ask (`poll_every`, 10 s) and the server time. It has an `ETag`;
+  asked with `If-None-Match`, it is `304` while nothing but the time changed.
 - `GET /api/v1/device/resources/<name>` returns what the type offers, such as
   a dispenser's items.
 - `POST /api/v1/device/events` takes `{event_id, kind, data}`, something
   the device reports. The type's module decides and answers. `event_id` is
   the device's own (a counter or random), so a request sent again after a
   network error gets the first answer and is not counted twice.
+- `GET /api/v1/device/firmware`: the firmware it should run and whether to
+  install it; `GET /api/v1/device/firmware/file`: the file (`Range` resumes);
+  `POST /api/v1/device/firmware` with `{version, result: started|failed,
+  detail}`. A version it reports failed is not offered again until an admin
+  asks.
+- `POST /api/v1/device/manager` with `{card}`: whether that card's holder may
+  open the settings on the device (`devices.manage`), asked each time.
+- **Pairing, without a key:** `POST /api/v1/device/pair/start` (the usual
+  headers; 20 an hour per network) answers a code, a pairing id, the
+  approval page's address, how long the code works (10 minutes) and how
+  often to ask (5 s); `POST /api/v1/device/pair/poll` with `{pairing_id}`
+  answers `waiting`, `refused`, or `paired` with the key and the sign of
+  life, once. At most 50 wait at once.
 - **Refusals:** `401` for an unknown or revoked key, `403` for a device switched off,
   `404` for what its type does not offer, `429` above the limit (per device),
   `400` for a report carrying more than 4 KB of data (as UTF-8 JSON).
@@ -273,7 +316,12 @@ Every request carries `Authorization: Bearer <key>`, and may carry
 
 Events are kept 90 days (the nightly clean-up). A device's address is the
 device's, not a person's. Keys are stored only as SHA-256 hashes: they are
-long random strings, so a slow hash adds nothing.
+long random strings, so a slow hash adds nothing; so are pairing ids. A
+pairing is gone once answered, or after its ten minutes (the nightly
+clean-up deletes what is left). Firmware files are kept in
+`storage/firmware/<sha256>.bin`, in backups with the rest of the storage.
+The backup code is kept as it is, for admins to read; the device gets only
+its hash.
 
 ## Later
 
