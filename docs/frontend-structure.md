@@ -94,8 +94,8 @@ that appears when entering the admin area.
 | Admin | the admin sidebar | full |
 
 Sidebars are for the places where people *work* -- running a team, running
-the association -- and for My Account, which grows (credit, since October
-2026, is one more page in its side menu) and so gets one place to add a page.
+the association -- and for My Account, which grows (credit and cards, since
+October 2026, are pages in its side menu) and so gets one place to add a page.
 
 ### The footer
 
@@ -112,7 +112,8 @@ Entered with the **gear** at the right of the top bar; opens on the Dashboard.
 
 - **‹ Back to the portal** (to My Account)
 - *Overview* -- **Dashboard**
-- *People* -- **Accounts**, **Reviews** (count of what waits)
+- *People* -- **Accounts**, **Reviews** (count of what waits), **Credit**,
+  **Cards** (every card linked; with `cards.manage`)
 - *Teams* -- **Teams**, **Money**
 - *System* -- **Logs**, **Settings** ▸
   - Settings folds open in place (chevron) to its parts: **General**,
@@ -139,7 +140,7 @@ Treasurer, for example, sees only what touches the money they transfer
   rows are clickable (avatar + name, kind, status pill, paid until).
 - **An account** (Admin › Accounts › Name) -- the name with its status pill,
   the email under it, then **tabs**: *Profile*, *Membership*, *Forum*, *Teams*,
-  *Roles*, *Danger zone* (deactivate, erase -- outlined red, behind the
+  *Cards* (with `cards.manage`), *Roles*, *Danger zone* (deactivate, erase -- outlined red, behind the
   two-step confirm or the typed email). Each tab one card.
 - **Reviews** -- one card per item (picture or name change) with *Approve*
   (main) and *Reject* (outlined red, two-step).

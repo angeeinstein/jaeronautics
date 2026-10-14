@@ -106,6 +106,8 @@ class MeOut(Model):
     credit_area: bool = False
     #: Admin › Credit, for whoever may manage it while credit is on or somebody still has some.
     credit_admin: bool = False
+    #: My Account › Cards: once a device reads cards, or for somebody who has some.
+    cards_area: bool = False
     team_labels: TeamLabels
     counts: Counts
     admin_notices: list[Notice]
@@ -165,6 +167,12 @@ def _credit_admin():
     return credit.enabled() or db.session.execute(db.select(CreditAccount.user_id).limit(1)).first() is not None
 
 
+def _cards_area():
+    from ..services import cards
+
+    return cards.in_use() or bool(cards.cards_of(current_user))
+
+
 @endpoint("GET", "/me", response=MeOut, tag="Session")
 def me():
     """The signed-in person, what they may see, and the counts for their menus."""
@@ -186,6 +194,7 @@ def me():
         teams_area=teams_enabled(),
         credit_area=_credit_area(),
         credit_admin=_credit_admin(),
+        cards_area=_cards_area(),
         team_labels=TeamLabels(singular=singular, plural=plural),
         counts=Counts(reviews_waiting=waiting_for_review_count(current_user), messages_open=_messages_open()),
         admin_notices=_admin_notices() if admin_area else [],

@@ -415,7 +415,7 @@ def seed(app, app_module, subscriptions):
     credit_sales.add_item(active.user, team=rocket, name="Mate", price_cents=250)
     credit_sales.sell(active.user, coffee, by=admin_user)
     credit.book_cash(admin_user, carla, 1500)
-    credit_sales.sell(carla, beer, by=admin_user)
+    carla_beer = credit_sales.sell(carla, beer, by=admin_user)
     db.session.commit()
 
     # Stripe's book, as fetched (services/stripe_books.py): the payments above,
@@ -493,6 +493,31 @@ def seed(app, app_module, subscriptions):
     door, _key = devices_service.add(admin_user, name="Tool cabinet", type="test", place="Hangar")
     devices_service.change(admin_user, door, enabled=False)
 
+    # Cards and a sales point (docs/cards-plan.md): the member's student card,
+    # last used at the fridge, and a key fob switched off; Carla's beer paid
+    # with her student card there, and an old card of hers blocked.
+    from aeronautics_members.services import cards as cards_service
+
+    sales_point, _key = devices_service.add(admin_user, name="Rocket fridge", type="sales_point", owner=rocket,
+                                            place="Workshop", settings={"item": beer.id})
+    devices_service.seen(sales_point, address="10.0.0.22", firmware="1.0.0", hardware="24:6F:28:AA:BB:CC",
+                         now=now)
+    devices_service.add(admin_user, type="sales_point", owner=rocket)
+    student_card = cards_service.link(active.user, "04A1B2C3D4E5F6", name="Student card", by=active.user,
+                                      how=cards_service.BY_PHONE)
+    fob = cards_service.link(active.user, "04112233445566", name="Key fob", by=admin_user,
+                             how=cards_service.BY_ADMIN_PHONE)
+    cards_service.disable(active.user, fob)
+    carlas = cards_service.link(carla, "04998877665544", name="Student card", by=carla,
+                                how=cards_service.BY_PHONE)
+    old_card = cards_service.link(carla, "0499887766554433AABB", name="Old card", by=carla,
+                                  how=cards_service.BY_PHONE)
+    cards_service.block(admin_user, old_card)
+    carla_beer.channel, carla_beer.booked_by, carla_beer.card, carla_beer.device = (
+        credit_sales.READER, None, carlas, sales_point)
+    for card in (student_card, carlas):
+        card.last_used_at, card.last_used_device_id = now, sales_point.id
+
     reset_token = build_password_reset_token(new.user)
     delete_token = build_account_deletion_token(active.user)
     db.session.commit()
@@ -534,6 +559,7 @@ def seed(app, app_module, subscriptions):
                       {"name": "account--forum", "path": "/account/forum"},
                       {"name": "account--data", "path": "/account/data"},
                       {"name": "account--credit", "path": "/account/credit"},
+                      {"name": "account--cards", "path": "/account/cards"},
                       # Saving the profile: the success message with its tick.
                       {"name": "account--saved", "path": "/account/profile",
                        "open": "section[aria-label='Contact details'] button:has-text('Edit')",
@@ -592,6 +618,12 @@ def seed(app, app_module, subscriptions):
         {"name": "admin--settings-devices", "user": "admin@example.org", "path": "/admin/settings/devices"},
         {"name": "admin--settings-device", "user": "admin@example.org",
          "path": f"/admin/settings/devices/{fridge.id}"},
+        {"name": "admin--settings-sales-point", "user": "admin@example.org",
+         "path": f"/admin/settings/devices/{sales_point.id}"},
+        {"name": "admin--cards", "user": "admin@example.org", "path": "/admin/cards"},
+        {"name": "teams--devices", "user": "active@example.org", "path": "/teams/rocket-team/manage/devices"},
+        {"name": "admin--account-cards", "user": "admin@example.org",
+         "path": f"/admin/accounts/{active.user.id}#cards"},
         {"name": "teams--messages", "user": "active@example.org", "path": "/teams/rocket-team/manage/messages"},
     ]
 

@@ -120,6 +120,10 @@ export const routes: RouteObject[] = [
             lazy: async () => ({ Component: (await import('../pages/account/Credit')).Credit }),
           },
           {
+            path: 'cards',
+            lazy: async () => ({ Component: (await import('../pages/account/Cards')).Cards }),
+          },
+          {
             path: 'create-membership',
             lazy: async () => ({
               Component: (await import('../pages/account/CreateMembership')).CreateMembership,
@@ -227,6 +231,10 @@ export const routes: RouteObject[] = [
           {
             path: 'manage/prices',
             lazy: async () => ({ Component: (await import('../pages/teams/manage/Prices')).Prices }),
+          },
+          {
+            path: 'manage/devices',
+            lazy: async () => ({ Component: (await import('../pages/teams/manage/Devices')).Devices }),
           },
           // Site admins only: what used to be the team's page under Admin › Teams.
           {
@@ -382,6 +390,10 @@ export const routes: RouteObject[] = [
           {
             path: 'credit/:userId',
             lazy: async () => ({ Component: (await import('../pages/admin/credit/Holder')).Holder }),
+          },
+          {
+            path: 'cards',
+            lazy: async () => ({ Component: (await import('../pages/admin/Cards')).Cards }),
           },
         ],
       },

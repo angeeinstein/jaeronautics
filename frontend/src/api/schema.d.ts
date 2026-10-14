@@ -38,6 +38,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One's cards: their names, states and last use. */
+        get: operations["my_cards"];
+        put?: never;
+        /** Link a card one has just scanned with one's phone (Web NFC). */
+        post: operations["my_cards_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/cards/{card_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove one's card; it can be linked again later, by anybody. */
+        delete: operations["my_cards_remove"];
+        options?: never;
+        head?: never;
+        /** Rename one's card, or switch it off or on. */
+        patch: operations["my_cards_change"];
+        trace?: never;
+    };
     "/api/v1/account/change-request": {
         parameters: {
             query?: never;
@@ -363,6 +399,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/accounts/{user_id}/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A person's cards, and the readers one could be linked on. */
+        get: operations["admin_person_cards"];
+        put?: never;
+        /** Link a card to this person: scanned with the admin's phone, or its ID typed in. */
+        post: operations["admin_person_cards_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/accounts/{user_id}/cards/wait": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link the next unknown card tapped on this reader, within a minute, to this person. */
+        post: operations["admin_person_cards_wait"];
+        /** Stop waiting for this person's card. */
+        delete: operations["admin_person_cards_stop_waiting"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/accounts/{user_id}/disabled": {
         parameters: {
             query?: never;
@@ -602,6 +674,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every card linked now, the newest first, with whom it belongs to. */
+        get: operations["admin_cards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/cards/{card_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove anybody's card. */
+        delete: operations["admin_cards_remove"];
+        options?: never;
+        head?: never;
+        /** Rename anybody's card, switch it off or on, block it or lift the block. */
+        patch: operations["admin_cards_change"];
+        trace?: never;
+    };
     "/api/v1/admin/credit": {
         parameters: {
             query?: never;
@@ -617,6 +724,40 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The association's own devices, what each does, and what they reported lately. */
+        get: operations["association_devices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Name, place or describe one of the association's devices, choose what it does, switch it on or off. */
+        patch: operations["association_device_change"];
         trace?: never;
     };
     "/api/v1/admin/credit/items": {
@@ -806,7 +947,7 @@ export interface paths {
         delete: operations["admin_device_remove"];
         options?: never;
         head?: never;
-        /** Change a device's name, place, settings, or switch it on or off. */
+        /** Change a device's owner, name, place, description, settings, or switch it on or off. */
         patch: operations["admin_device_change"];
         trace?: never;
     };
@@ -2243,6 +2384,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{slug}/manage/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The team's devices, what each does, and what they reported lately. */
+        get: operations["team_devices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{slug}/manage/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Name, place or describe one of the team's devices, choose what it does, switch it on or off. */
+        patch: operations["team_device_change"];
+        trace?: never;
+    };
     "/api/v1/teams/{slug}/manage/former": {
         parameters: {
             query?: never;
@@ -3151,6 +3326,52 @@ export interface components {
             /** Target */
             target: string | null;
         };
+        /** AdminCardChangeIn */
+        AdminCardChangeIn: {
+            /**
+             * Blocked
+             * @default null
+             */
+            blocked?: boolean | null;
+            /**
+             * Enabled
+             * @default null
+             */
+            enabled?: boolean | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+        };
+        /** AdminCardOut */
+        AdminCardOut: {
+            /** Id */
+            id: number;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Last Used On */
+            last_used_on: string | null;
+            /** Linked At */
+            linked_at: string;
+            /** Linked How */
+            linked_how: string;
+            /** Name */
+            name: string;
+            owner: components["schemas"]["CardOwnerOut"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "disabled" | "blocked" | "removed";
+            /** Tail */
+            tail: string;
+        };
+        /** AdminCardsOut */
+        AdminCardsOut: {
+            /** Items */
+            items: components["schemas"]["AdminCardOut"][];
+        };
         /** AdminCreditEntryOut */
         AdminCreditEntryOut: {
             /** Amount Cents */
@@ -3161,6 +3382,11 @@ export interface components {
             balance_after_cents: number;
             /** Booked By */
             booked_by: string | null;
+            /**
+             * Card
+             * @default null
+             */
+            card?: string | null;
             /** Description */
             description: string;
             /** Id */
@@ -3179,6 +3405,11 @@ export interface components {
             may_take_back?: boolean;
             /** Name */
             name: string;
+            /**
+             * Reader
+             * @default null
+             */
+            reader?: string | null;
             /** Receipt Url */
             receipt_url: string | null;
             /**
@@ -3537,6 +3768,82 @@ export interface components {
              * @default
              */
             q?: string;
+        };
+        /** CardChangeIn */
+        CardChangeIn: {
+            /**
+             * Enabled
+             * @default null
+             */
+            enabled?: boolean | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+        };
+        /** CardLinkIn */
+        CardLinkIn: {
+            /** Card Id */
+            card_id: string;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+        };
+        /** CardOut */
+        CardOut: {
+            /** Id */
+            id: number;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Last Used On */
+            last_used_on: string | null;
+            /** Linked At */
+            linked_at: string;
+            /** Linked How */
+            linked_how: string;
+            /** Name */
+            name: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "disabled" | "blocked" | "removed";
+            /** Tail */
+            tail: string;
+        };
+        /** CardOwnerOut */
+        CardOwnerOut: {
+            /** Email */
+            email: string;
+            /** Name */
+            name: string;
+            /** Picture Url */
+            picture_url: string | null;
+            /** User Id */
+            user_id: number;
+        };
+        /** CardReaderOut */
+        CardReaderOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Place */
+            place: string | null;
+        };
+        /** CardWaitIn */
+        CardWaitIn: {
+            /** Device Id */
+            device_id: number;
+        };
+        /** CardWaitOut */
+        CardWaitOut: {
+            /** Expires At */
+            expires_at: string;
+            reader: components["schemas"]["CardReaderOut"];
         };
         /** CashIn */
         CashIn: {
@@ -3905,6 +4212,11 @@ export interface components {
             at: string;
             /** Balance After Cents */
             balance_after_cents: number;
+            /**
+             * Card
+             * @default null
+             */
+            card?: string | null;
             /** Description */
             description: string;
             /** Id */
@@ -3916,6 +4228,11 @@ export interface components {
             kind: "top_up" | "cash_in" | "cash_out" | "purchase" | "refund" | "reversal" | "correction" | "taken_back";
             /** Kind Label */
             kind_label: string;
+            /**
+             * Reader
+             * @default null
+             */
+            reader?: string | null;
             /** Receipt Url */
             receipt_url: string | null;
             /**
@@ -4121,6 +4438,11 @@ export interface components {
         /** DeviceChangeIn */
         DeviceChangeIn: {
             /**
+             * Description
+             * @default null
+             */
+            description?: string | null;
+            /**
              * Enabled
              * @default null
              */
@@ -4130,6 +4452,11 @@ export interface components {
              * @default null
              */
             name?: string | null;
+            /**
+             * Owner
+             * @default null
+             */
+            owner?: string | null;
             /**
              * Place
              * @default null
@@ -4142,6 +4469,17 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** DeviceChoiceOut */
+        DeviceChoiceOut: {
+            /** Group */
+            group: string;
+            /** Label */
+            label: string;
+            /** Owner */
+            owner: string;
+            /** Value */
+            value: unknown;
         };
         /** DeviceDetailOut */
         DeviceDetailOut: {
@@ -4178,10 +4516,14 @@ export interface components {
         };
         /** DeviceHelloOut */
         DeviceHelloOut: {
+            /** Code */
+            code: string;
             /** Device Id */
             device_id: number;
             /** Name */
             name: string;
+            /** Owner */
+            owner: string;
             /** Place */
             place: string | null;
             /** Reports */
@@ -4199,8 +4541,21 @@ export interface components {
         };
         /** DeviceIn */
         DeviceIn: {
-            /** Name */
-            name: string;
+            /**
+             * Description
+             * @default null
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * Owner
+             * @default association
+             */
+            owner?: string;
             /**
              * Place
              * @default null
@@ -4222,15 +4577,25 @@ export interface components {
             device: components["schemas"]["DeviceOut"];
             /** Key */
             key: string;
+            /** Starter */
+            starter: string;
+            /** Starter Name */
+            starter_name: string;
         };
         /** DeviceOut */
         DeviceOut: {
+            /** Code */
+            code: string;
             /** Created At */
             created_at: string;
+            /** Description */
+            description: string | null;
             /** Enabled */
             enabled: boolean;
             /** Firmware */
             firmware: string | null;
+            /** Hardware Id */
+            hardware_id: string | null;
             /** Id */
             id: number;
             /** Key Created At */
@@ -4241,14 +4606,20 @@ export interface components {
             key_last_used_at: string | null;
             /** Key Revoked At */
             key_revoked_at: string | null;
+            /** Label */
+            label: string;
             /** Last Address */
             last_address: string | null;
             /** Last Seen At */
             last_seen_at: string | null;
             /** Name */
-            name: string;
+            name: string | null;
             /** Online */
             online: boolean;
+            /** Owner */
+            owner: string;
+            /** Owner Label */
+            owner_label: string;
             /** Place */
             place: string | null;
             /** Settings */
@@ -4259,6 +4630,13 @@ export interface components {
             type: string;
             /** Type Label */
             type_label: string;
+        };
+        /** DeviceOwnerOut */
+        DeviceOwnerOut: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
         };
         /** DeviceReportIn */
         DeviceReportIn: {
@@ -4324,6 +4702,11 @@ export interface components {
         };
         /** DeviceSettingOut */
         DeviceSettingOut: {
+            /**
+             * Choices
+             * @default null
+             */
+            choices?: components["schemas"]["DeviceChoiceOut"][] | null;
             /** Default */
             default: unknown;
             /** Help */
@@ -4332,7 +4715,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "text" | "number" | "switch";
+            kind: "text" | "number" | "switch" | "choice";
             /** Label */
             label: string;
             /** Max Length */
@@ -4343,6 +4726,11 @@ export interface components {
             minimum: number | null;
             /** Name */
             name: string;
+            /**
+             * Owner May Change
+             * @default false
+             */
+            owner_may_change?: boolean;
         };
         /** DeviceTryIn */
         DeviceTryIn: {
@@ -4387,6 +4775,8 @@ export interface components {
         DevicesOut: {
             /** Items */
             items: components["schemas"]["DeviceOut"][];
+            /** Owners */
+            owners: components["schemas"]["DeviceOwnerOut"][];
             /** Server */
             server: string;
             /** Types */
@@ -5593,7 +5983,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices")[];
             /** Slug */
             slug: string;
         };
@@ -5603,6 +5993,11 @@ export interface components {
             admin_area: boolean;
             /** Admin Notices */
             admin_notices: components["schemas"]["Notice"][];
+            /**
+             * Cards Area
+             * @default false
+             */
+            cards_area?: boolean;
             counts: components["schemas"]["Counts"];
             /**
              * Credit Admin
@@ -5632,7 +6027,7 @@ export interface components {
             /** Last Name */
             last_name: string | null;
             /** Permissions */
-            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "credit.manage" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "logs.view" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
+            permissions: ("accounts.billing" | "accounts.privacy" | "accounts.view" | "admin.access" | "announcements.send" | "approvals.review" | "cards.manage" | "credit.manage" | "devices.manage" | "forum.admin" | "forum.moderate" | "forum.moderator" | "logs.view" | "messages.receive" | "notifications.manage" | "notifications.receive" | "roles.manage" | "settings.credentials" | "settings.general" | "system.backup" | "system.update" | "teams.manage" | "teams.money")[];
             /** Picture Url */
             picture_url: string | null;
             /** Roles */
@@ -5991,6 +6386,13 @@ export interface components {
             member: components["schemas"]["MemberAccountOut"] | null;
             to_confirm: components["schemas"]["NoteOut"] | null;
         };
+        /** MyCardsOut */
+        MyCardsOut: {
+            /** Items */
+            items: components["schemas"]["CardOut"][];
+            /** Most */
+            most: number;
+        };
         /** MyCreditOut */
         MyCreditOut: {
             /** Balance Cents */
@@ -6210,6 +6612,79 @@ export interface components {
              */
             until?: string | null;
         };
+        /** OwnedDeviceChangeIn */
+        OwnedDeviceChangeIn: {
+            /**
+             * Description
+             * @default null
+             */
+            description?: string | null;
+            /**
+             * Enabled
+             * @default null
+             */
+            enabled?: boolean | null;
+            /**
+             * Name
+             * @default null
+             */
+            name?: string | null;
+            /**
+             * Place
+             * @default null
+             */
+            place?: string | null;
+            /**
+             * Settings
+             * @default null
+             */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** OwnedDeviceOut */
+        OwnedDeviceOut: {
+            /** Code */
+            code: string;
+            /** Description */
+            description: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Fields */
+            fields: components["schemas"]["DeviceSettingOut"][];
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Name */
+            name: string | null;
+            /** Online */
+            online: boolean;
+            /** Place */
+            place: string | null;
+            /** Recent */
+            recent: components["schemas"]["OwnedReportOut"][];
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
+            /** Type Label */
+            type_label: string;
+        };
+        /** OwnedDevicesOut */
+        OwnedDevicesOut: {
+            /** Items */
+            items: components["schemas"]["OwnedDeviceOut"][];
+        };
+        /** OwnedReportOut */
+        OwnedReportOut: {
+            /** At */
+            at: string;
+            /** Detail */
+            detail: string;
+        };
         /** PageIn */
         PageIn: {
             /**
@@ -6291,6 +6766,18 @@ export interface components {
             earned: number;
             /** Paid Until */
             paid_until: string | null;
+        };
+        /** PersonCardsOut */
+        PersonCardsOut: {
+            /** Items */
+            items: components["schemas"]["CardOut"][];
+            /** Most */
+            most: number;
+            /** Readers */
+            readers: components["schemas"]["CardReaderOut"][];
+            /** User Id */
+            user_id: number;
+            waiting: components["schemas"]["CardWaitOut"] | null;
         };
         /** PhotoOut */
         PhotoOut: {
@@ -7360,6 +7847,11 @@ export interface components {
             description: string | null;
             /** Fee */
             fee: string | null;
+            /**
+             * Has Devices
+             * @default false
+             */
+            has_devices?: boolean;
             /** Is Member */
             is_member: boolean;
             joining: components["schemas"]["JoiningOut"] | null;
@@ -7386,7 +7878,7 @@ export interface components {
             /** Name */
             name: string;
             /** Permissions */
-            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages")[];
+            permissions: ("team.view_members" | "team.review_applications" | "team.remove_members" | "team.write_notes" | "team.export" | "team.edit_settings" | "team.send_access_list" | "team.view_money" | "team.edit_bank_details" | "team.appoint_treasurer" | "team.appoint_leads" | "team.edit_prices" | "team.messages" | "team.devices")[];
             /** Photos */
             photos: components["schemas"]["PhotoOut"][];
             /** Picture Url */
@@ -7891,6 +8383,197 @@ export interface operations {
             };
             /** @description Not signed in. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    my_cards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCardsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    my_cards_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardLinkIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCardsOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    my_cards_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCardsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    my_cards_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCardsOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8877,6 +9560,255 @@ export interface operations {
             };
         };
     };
+    admin_person_cards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonCardsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_person_cards_link: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardLinkIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonCardsOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_person_cards_wait: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardWaitIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonCardsOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_person_cards_stop_waiting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonCardsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_account_disabled: {
         parameters: {
             query?: never;
@@ -9795,6 +10727,173 @@ export interface operations {
             };
         };
     };
+    admin_cards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCardsOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_cards_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCardOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    admin_cards_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCardChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCardOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
     admin_credit: {
         parameters: {
             query?: never;
@@ -9824,6 +10923,115 @@ export interface operations {
             };
             /** @description Signed in, without the permission. */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnedDevicesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    association_device_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnedDeviceChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnedDevicesOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Signed in, without the permission. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -15833,6 +17041,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplyingOut"];
+                };
+            };
+            /** @description The input is not valid (see error.fields). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not possible in the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnedDevicesOut"];
+                };
+            };
+            /** @description Not signed in. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+        };
+    };
+    team_device_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnedDeviceChangeIn"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnedDevicesOut"];
                 };
             };
             /** @description The input is not valid (see error.fields). */

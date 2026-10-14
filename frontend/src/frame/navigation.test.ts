@@ -35,7 +35,7 @@ describe('the admin sidebar', () => {
   it('everything for somebody who may do everything', () => {
     expect(labels()).toEqual([
       ['Overview', ['Dashboard']],
-      ['People', ['Accounts', 'Reviews']],
+      ['People', ['Accounts', 'Reviews', 'Cards']],
       ['Teams', ['Teams', 'Money']],
       ['System', ['Logs', 'Legal texts', 'Settings']],
     ]);

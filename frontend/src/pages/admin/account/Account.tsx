@@ -9,13 +9,14 @@ import { Avatar, Button, Group, Tabs, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { useMe } from '../../../api/session';
+import { can, useMe } from '../../../api/session';
 import { AppLink } from '../../../app/AppLink';
 import { PageHeader } from '../../../components/PageHeader';
 import { Pill } from '../../../components/Pill';
 import { ErrorState, LoadingState } from '../../../components/States';
 import { ACCOUNT_STATE_PILL, MEMBERSHIP_PILL } from '../accountLabels';
 import { ActivityTab } from './ActivityTab';
+import { CardsTab } from './CardsTab';
 import { DangerZoneTab } from './DangerZoneTab';
 import { ForumTab } from './ForumTab';
 import { MembershipTab } from './MembershipTab';
@@ -26,7 +27,7 @@ import { TeamsTab } from './TeamsTab';
 import { formatEuros } from '../../../lib/format';
 import { EVERY_MINUTE, useLiveRefresh } from '../../../lib/live';
 
-const TABS = ['profile', 'membership', 'forum', 'teams', 'roles', 'danger', 'activity'] as const;
+const TABS = ['profile', 'membership', 'forum', 'teams', 'cards', 'roles', 'danger', 'activity'] as const;
 type Tab = (typeof TABS)[number];
 
 /** The one state worth saying beside the name: what stops the account, else the membership. */
@@ -38,9 +39,10 @@ function Status({ account }: { account: AccountData }) {
   return pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : null;
 }
 
-function shownTabs(account: AccountData): Tab[] {
+function shownTabs(account: AccountData, manageCards: boolean): Tab[] {
   return TABS.filter((tab) => {
     if (tab === 'teams') return account.teams !== null;
+    if (tab === 'cards') return manageCards && account.account_state !== 'erased';
     if (tab === 'danger') return account.actions.manage_access || account.actions.erase;
     return true;
   });
@@ -81,7 +83,7 @@ export function Account() {
   }
 
   const data = account.data;
-  const tabs = shownTabs(data);
+  const tabs = shownTabs(data, me.data ? can(me.data, 'cards.manage') : false);
   const wanted = hash.slice(1) as Tab;
   const current: Tab = tabs.includes(wanted) ? wanted : 'profile';
   const teamsTitle = me.data?.team_labels.plural ?? 'Teams';
@@ -90,6 +92,7 @@ export function Account() {
     membership: 'Membership',
     forum: 'Forum',
     teams: teamsTitle,
+    cards: 'Cards',
     roles: 'Roles',
     danger: 'Danger zone',
     activity: 'Activity',
@@ -157,6 +160,9 @@ export function Account() {
             <TeamsTab teams={data.teams} title={teamsTitle} />
           </Tabs.Panel>
         ) : null}
+        <Tabs.Panel value="cards">
+          <CardsTab userId={data.id} />
+        </Tabs.Panel>
         <Tabs.Panel value="roles">
           <RolesTab account={data} />
         </Tabs.Panel>

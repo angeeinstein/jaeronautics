@@ -1,9 +1,9 @@
 # Credit: a balance members top up and spend
 
 **Status:** built 2026-10-08; selling (price lists, sales booked by hand,
-team accounting) and who carries Stripe's fees built 2026-10-09. Card
-readers designed below, not built. Setting it up and running it:
-`docs/maintenance.md`, "Credit". Code:
+team accounting) and who carries Stripe's fees built 2026-10-09. Paying at
+a card reader: `docs/cards-plan.md` (agreed 2026-10-13, not built). Setting
+it up and running it: `docs/maintenance.md`, "Credit". Code:
 `services/credit.py`, `api/credit.py`, `frontend/src/pages/account/Credit.tsx`,
 `frontend/src/pages/admin/credit/`, `frontend/src/pages/admin/settings/CreditSettings.tsx`.
 
@@ -169,67 +169,16 @@ Money, kept by the treasurer and admins. Since 2026-10-11
   went on 2026-10-11, the exact top-up fee replacing it. A sale that kept one
   before still counts it (`kept_cents`).
 
-## Card readers (designed, not built -- "not something we need to build now")
+## Card readers
 
-The devices themselves -- their management, keys and API -- are built first,
-for every use alike (2026-10-12): `docs/devices-plan.md`. A sales reader
-would be a device type there.
-
-The maintainer's idea: an NFC reader on an ESP32 beside the beer fridge (or
-the coffee machine).
-- A member taps their student card. The reader asks the portal whether the
-  credit covers the item.
-- One beep and green if it does: take your beer. Two beeps and red if not.
-- Honesty-based, replacing the coin bowl or the tally sheet on paper.
-- Later perhaps an action on success, such as switching on the coffee
-  machine.
-- A reader with a display shows the prices and lets the member choose
-  (beer or Red Bull).
-
-How it fits what is built:
-
-- **Readers.** A table of readers, each with:
-  - a name;
-  - its seller (a team or the association);
-  - optionally a fixed item (a coffee machine sells one thing);
-  - a secret key, shown once when the reader is added and stored only as a
-    hash;
-  - when it was last seen.
-
-  Added and switched off under Admin › Credit, or a team's Prices page for
-  its own reader.
-- **Cards.** A member links their card once:
-  - either on their Credit page (tap it on any reader within a minute of
-    pressing "Link a card");
-  - or the treasurer types the number the reader shows.
-
-  The portal keeps a hash of the card's ID, never the ID itself. A card can
-  be unlinked; a member may have several.
-- **The reader's API** (`/api/v1/readers/…`, the key as a bearer token, over
-  HTTPS):
-  - `GET items`: the seller's price list, for a display. Cached on the
-    reader.
-  - `POST sale {card, item}`: answers `ok` (with what is left) or `refused`
-    (unknown card, not enough credit, item off, credit off). The ESP32 beeps
-    and lights accordingly.
-
-  Behind it is `credit_sales.sell(..., channel="reader")`, the same sale as
-  today's booked one.
-- **Safety.**
-  - Each reader's key only sells its seller's items, at most one sale every
-    few seconds per card (a double tap is one beer).
-  - Small amounts only: the most a person holds is 20 €.
-  - A lost card is unlinked by its owner or the treasurer.
-  - Sales from a reader can be taken back like any other.
-- **Offline.** The reader refuses while the portal cannot be reached. No
-  sales are queued on the device, so nothing is sold twice or without
-  credit.
-- **Open questions:**
-  - Whether student cards' IDs are readable and stable (the cards' NFC
-    chip type).
-  - Whether members should see their linked cards.
-  - Whether a coffee machine's relay needs a separate "dispense" step after
-    the sale.
+Agreed 2026-10-13 and written up in `docs/cards-plan.md`: cards as records of
+their own, linked to a person; a "Sales point" device type
+(`docs/devices-plan.md`) selling a fixed item per reader to start with. It
+replaces the first design that stood here (2026-10-09: a table of readers
+with their own keys and `/api/v1/readers/…`): the devices now bring the keys
+and the API, and its open questions are answered there -- the students'
+cards keep their ID, members see and manage their cards, and the coffee
+machine's relay comes later.
 
 ### Access control with the same readers (raised 2026-10-11, in discussion)
 

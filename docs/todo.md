@@ -10,7 +10,9 @@ line by line and the credit's top-up fees followed to each sale
 Codex's review comments that still held (`docs/review-fixes.md`, branch
 `claude/review-fixes`). What it
 was is in their pull requests and in git history (`git log -- docs/todo.md`).
-The legal drafts and the card readers below were put off by the maintainer.
+The legal drafts below wait for the board. Cards and sales points
+(`docs/cards-plan.md`) are built on `claude/card-sales`; attendance with the
+same cards comes next, needed around January.
 
 ## Open
 
@@ -29,6 +31,10 @@ The legal drafts and the card readers below were put off by the maintainer.
 - **Also (added 2026-10-09, with messages):** the privacy policy draft names
   the contact form, messages to team leads, announcements and team mailings
   (§ 27, § 31, § 40, § 41). See `docs/messages-plan.md`.
+- **Also (added 2026-10-13, with cards):** the privacy policy draft names
+  the cards linked to accounts: a name, a keyed hash of the ID and its end,
+  when linked and last used, and that they go with the account (§ 20). See
+  `docs/cards-plan.md`.
 - **Also (added 2026-10-11, with Stripe's book):** the privacy policy draft
   says that the portal keeps a copy of the Stripe account's bookings without
   names, and that a difference with Stripe names the payer's address and is
@@ -42,17 +48,33 @@ The legal drafts and the card readers below were put off by the maintainer.
   of publishing as `version`/`effective_from` (and the file names); check
   that nothing refers to the old § 31-36 of the membership terms.
 
-### Card readers for credit (later)
+### Attendance with the same cards (later)
 
-- **Added:** 2026-10-09
-- **Put off by the maintainer:** "this is not something we need to build now".
-- **What, how, open questions:** `docs/credit-plan.md`, "Card readers". The
-  base it builds on is done: price lists, `credit_sales.sell(...)`, the
-  accounting for teams and the association.
-- **Since 2026-10-12:** the devices themselves are built first, for every
-  use (readers, doors, attendance): their management, keys and API, branch
-  `claude/devices`, `docs/devices-plan.md`. Which uses come next is decided
-  later; the maintainer writes the ESP32 firmware (ESP-IDF) separately.
+- **Added:** 2026-10-13
+- **Put off by the maintainer:** needed "in January, maybe a bit before ...
+  not something that we need to build now immediately".
+- **What:** the flight team's members earn ECTS and must be there for a
+  number of hours; members tap their card on a reader there. The cards and
+  the readers exist (`docs/cards-plan.md`, `docs/devices-plan.md`); this is
+  a device type of its own.
+- **Open questions:** what counts (tapping in and out, a forgotten tap-out,
+  a least time), who may see it (team leads, whoever handles ECTS), and the
+  privacy policy for it.
+
+### Devices: pairing, uses reported by the device, firmware updates
+
+- **Added:** 2026-10-14
+- **What:** one device with a touchscreen and an NFC reader for every use,
+  one firmware: the device reports the uses its firmware supports and the
+  portal assigns one; pairing by a code on the screen, approved by an admin,
+  so nobody copies keys; device settings opened by an admin's card, with a
+  backup code; firmware files uploaded in the portal and installed by the
+  devices over the air.
+- **Where:** the device API (`api/devices.py`, `services/devices.py`), Admin ›
+  Settings › Devices (a pairing page, a Firmware page).
+- **Why, decided, open questions:** `docs/devices-plan.md`, "One device for
+  everything". Bigger than a small change: built when the maintainer says,
+  not with a batch.
 
 ### Ask how somebody pays before Stripe's page: card now, SEPA in a few days
 

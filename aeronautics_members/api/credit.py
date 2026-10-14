@@ -17,7 +17,7 @@ from pydantic import Field
 from ..db_models import User, db
 from ..permissions import Permission
 from ..services import ConflictError, ExternalServiceError, NotFoundError
-from ..services import credit, credit_sales
+from ..services import credit, credit_sales, devices
 from ..services.pictures import picture_url, picture_urls
 from ..services.teams import is_active_association_member
 from ._core import Model, UtcDateTime, endpoint
@@ -44,6 +44,9 @@ class CreditEntryOut(Model):
     team_name: str | None
     #: Who sold it, for a sale or a sale taken back: a team, or the association.
     seller: str | None = None
+    #: A sale at a card reader: the card it was paid with, and the reader.
+    card: str | None = None
+    reader: str | None = None
 
 
 def _entry(entry, receipt_endpoint="account.credit_receipt"):
@@ -57,6 +60,8 @@ def _entry(entry, receipt_endpoint="account.credit_receipt"):
         team_name=entry.team.name if entry.team is not None else None,
         seller=(credit_sales.seller_name(entry.team)
                 if entry.kind in (credit.PURCHASE, credit.TAKEN_BACK) else None),
+        card=entry.card.name if entry.card is not None else None,
+        reader=devices.label(entry.device) if entry.device is not None else None,
     )
 
 

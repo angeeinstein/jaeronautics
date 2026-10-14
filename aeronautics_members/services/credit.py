@@ -250,14 +250,14 @@ def _euros(cents):
 
 
 def _book(account, kind, amount_cents, description, *, payment=None, team=None, by=None, item=None, channel=None,
-          reverses=None):
+          reverses=None, card=None, device=None):
     account.balance_cents += amount_cents
     account.updated_at = get_now_utc()
     entry = CreditEntry(
         user_id=account.user_id, kind=kind, amount_cents=amount_cents,
         balance_after_cents=account.balance_cents, description=description[:140],
         payment=payment, team=team, booked_by=by, item=item, channel=channel, reverses=reverses,
-        created_at=get_now_utc(),
+        card=card, device=device, created_at=get_now_utc(),
     )
     db.session.add(entry)
     db.session.flush()  # its id, and a sale taken back twice refused here (reverses_id is unique)
@@ -267,6 +267,8 @@ def _book(account, kind, amount_cents, description, *, payment=None, team=None, 
         "team_id": team.id if team is not None else None,
         "item_id": item.id if item is not None else None,
         "channel": channel,
+        **({"card_id": card.id} if card is not None else {}),
+        **({"device_id": device.id} if device is not None else {}),
     })
     return entry
 
@@ -322,7 +324,8 @@ def correct(actor, user, amount_cents, *, note):
     return _book(account, CORRECTION, amount, reason, by=actor)
 
 
-def spend(user, amount_cents, description, *, team=None, by=None, item=None, channel=None):
+def spend(user, amount_cents, description, *, team=None, by=None, item=None, channel=None, card=None,
+          device=None):
     """Take something bought off the credit; refused when there is not enough.
 
     Sales from a price list go through services/credit_sales.py, which calls
@@ -335,7 +338,8 @@ def spend(user, amount_cents, description, *, team=None, by=None, item=None, cha
     if account.balance_cents < amount:
         raise ConflictError(f"Not enough credit: {_euros(max(account.balance_cents, 0))} left.",
                             code="credit_not_enough")
-    return _book(account, PURCHASE, -amount, description, team=team, by=by, item=item, channel=channel)
+    return _book(account, PURCHASE, -amount, description, team=team, by=by, item=item, channel=channel,
+                 card=card, device=device)
 
 
 # --- Topping up ------------------------------------------------------------------------

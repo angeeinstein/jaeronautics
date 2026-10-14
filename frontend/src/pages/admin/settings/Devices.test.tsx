@@ -13,6 +13,10 @@ afterEach(() => {
 });
 
 const API = '/api/v1/admin/devices';
+const OWNERS = [
+  { value: 'association', label: 'Joanneum Aeronautics' },
+  { value: 'rocket', label: 'Rocket' },
+];
 const SERVER = 'https://members.test/api/v1/device';
 
 const testType: Schemas['DeviceTypeOut'] = {
@@ -40,10 +44,16 @@ const testType: Schemas['DeviceTypeOut'] = {
 
 const reader: Schemas['DeviceOut'] = {
   id: 3,
+  code: 'K7MQ-2X9A',
   name: 'Fridge reader',
+  label: 'Fridge reader',
   type: 'test',
   type_label: 'Test',
+  owner: 'association',
+  owner_label: 'Joanneum Aeronautics',
   place: 'Workshop',
+  description: null,
+  hardware_id: '24:6F:28:AA:BB:CC',
   settings: { greeting: 'Hello' },
   enabled: true,
   online: true,
@@ -61,7 +71,7 @@ function show(element: React.ReactNode, answers: Answers, route?: { route: strin
   const fetched = mockFetch({
     '/api/v1/session': { body: { signed_in: true, csrf_token: 'token' } },
     '/api/v1/me': { body: makeMe() },
-    [API]: { body: { items: [reader], types: [testType], server: SERVER } },
+    [API]: { body: { items: [reader], types: [testType], owners: OWNERS, server: SERVER } },
     ...answers,
   });
   renderPage(element, route);
@@ -73,14 +83,16 @@ describe('devices', () => {
     show(<Devices />, {});
 
     const table = await screen.findByRole('table', { name: 'Devices' });
-    expect(within(table).getAllByRole('row')[1]).toHaveTextContent('Fridge readerWorkshopTestOnline');
+    expect(within(table).getAllByRole('row')[1]).toHaveTextContent(
+      'Fridge readerK7MQ-2X9A · WorkshopTestJoanneum AeronauticsOnline',
+    );
     expect(within(table).getByRole('link', { name: 'Fridge reader' })).toHaveAttribute(
       'href',
       '/admin/settings/devices/3',
     );
   });
 
-  it('adding one shows its key once, to copy or download', async () => {
+  it('adding one, for an owner: its key shown once, to copy, or download with a starter for its firmware', async () => {
     const { calls } = show(<Devices />, {
       [`POST ${API}`]: {
         status: 201,
@@ -94,18 +106,29 @@ describe('devices', () => {
             type: 'test',
             key: 'jadev_aaaaaaaaaaaa_secret',
           },
+          starter: '# Firmware starter',
+          starter_name: 'device-K7MQ-2X9A-starter.md',
         },
       },
     });
 
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Name' }), 'Door');
+    await userEvent.type(await screen.findByRole('textbox', { name: /^Name/ }), 'Door');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Owner' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Rocket' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     expect(await screen.findByTestId('device-key')).toHaveTextContent('jadev_aaaaaaaaaaaa_secret');
     expect(screen.getByRole('button', { name: 'Copy key' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download configuration' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download starter' })).toBeInTheDocument();
     const sent = calls.filter((call) => call.method === 'POST' && new URL(call.url).pathname === API).at(-1);
-    expect(await sent?.clone().json()).toEqual({ name: 'Door', type: 'test', place: '', settings: {} });
+    expect(await sent?.clone().json()).toEqual({
+      name: 'Door',
+      type: 'test',
+      owner: 'rocket',
+      place: '',
+      settings: {},
+    });
 
     await userEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(screen.queryByTestId('device-key')).not.toBeInTheDocument();
@@ -227,5 +250,66 @@ describe('one device', () => {
     expect(
       await screen.findByText(/The device itself would be refused now: it is switched off/),
     ).toBeInTheDocument();
+  });
+
+  it('another owner clears only what depends on the owner', async () => {
+    const { calls } = show(
+      <DeviceDetail />,
+      {
+        [`${API}/3`]: { body: detail },
+        [`PATCH ${API}/3`]: { body: { ...reader, owner: 'rocket', owner_label: 'Rocket' } },
+      },
+      route,
+    );
+
+    const settings = await screen.findByRole('region', { name: 'Settings' });
+    await userEvent.click(within(settings).getByRole('combobox', { name: 'Owner' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Rocket' }));
+    await userEvent.click(within(settings).getByRole('button', { name: 'Save' }));
+
+    await vi.waitFor(() => {
+      expect(calls.some((call) => call.method === 'PATCH')).toBe(true);
+    });
+    const sent = calls.filter((call) => call.method === 'PATCH').at(-1);
+    expect(await sent?.clone().json()).toMatchObject({ owner: 'rocket', settings: { greeting: 'Hello' } });
+  });
+
+  it('a sales point sells an item chosen from the price lists, under its seller', async () => {
+    const salesPoint: Schemas['DeviceTypeOut'] = {
+      slug: 'sales_point',
+      label: 'Sales point',
+      description: 'A card reader that sells one item.',
+      settings: [
+        {
+          name: 'item',
+          label: 'Item',
+          kind: 'choice',
+          default: null,
+          help: '',
+          max_length: 200,
+          minimum: null,
+          maximum: null,
+          choices: [
+            { value: 4, label: 'Beer, €1.50', group: 'Joanneum Aeronautics', owner: 'association' },
+            { value: 9, label: 'Club-Mate, €2.00', group: 'Rocket', owner: 'rocket' },
+          ],
+        },
+      ],
+      resources: [],
+      reports: [{ name: 'tap', description: 'A card tapped.', tryable: false }],
+    };
+    const fridge = { ...reader, type: 'sales_point', type_label: 'Sales point', settings: { item: 4 } };
+    show(
+      <DeviceDetail />,
+      {
+        [API]: { body: { items: [fridge], types: [testType, salesPoint], owners: OWNERS, server: SERVER } },
+        [`${API}/3`]: { body: { ...detail, device: fridge } },
+      },
+      route,
+    );
+
+    expect(await screen.findByDisplayValue('Beer, €1.50')).toBeInTheDocument();
+    const report = screen.getByRole('group', { name: 'Report “tap”' });
+    expect(report).toHaveTextContent('Not sent from here');
   });
 });

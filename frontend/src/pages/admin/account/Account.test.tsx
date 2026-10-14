@@ -156,6 +156,7 @@ describe('the head of the page', () => {
       'Profile',
       'Membership',
       'Forum',
+      'Cards',
       'Roles',
       'Activity',
     ]);

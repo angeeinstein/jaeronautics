@@ -17,12 +17,15 @@ from pydantic import Field
 
 from ..app import limiter, rate_limit_network
 from ..config import RATELIMIT_DEVICE, RATELIMIT_DEVICE_PER_IP
-from ..db_models import db
+from ..db_models import Team, db
 from ..permissions import Permission
 from ..security_utils import build_public_url
-from ..services import ServiceError, device_types
+from ..services import ServiceError, ValidationError, credit_sales, device_starter, device_types
 from ..services import devices as devices_service
 from ._core import Model, UtcDateTime, endpoint
+
+#: The owner value for the association (a team's is its slug).
+ASSOCIATION = "association"
 
 
 def device_rate_key():
@@ -42,7 +45,8 @@ def _as_device(answer):
     try:
         device = devices_service.authenticate(request.headers.get("Authorization"))
         devices_service.seen(device, address=request.remote_addr,
-                             firmware=request.headers.get("X-Device-Firmware"))
+                             firmware=request.headers.get("X-Device-Firmware"),
+                             hardware=request.headers.get("X-Device-Hardware"))
         result = answer(device)
         _record_request(device, 200)
         db.session.commit()
@@ -94,9 +98,14 @@ def _record_request(device, status, code=None):
 
 class DeviceHelloOut(Model):
     device_id: int
+    #: Its random ID: "K7MQ-2X9A".
+    code: str
+    #: Its name, else its code.
     name: str
     #: Its type, which its firmware is written for.
     type: str
+    #: Whose it is: a team's name, or the association's.
+    owner: str
     place: str | None
     #: The settings of its type, as set on its page.
     settings: dict[str, Any]
@@ -169,15 +178,28 @@ DEVICE_ENDPOINTS = frozenset(f"api.{view.__name__}" for view in DEVICE_VIEWS)
 # --- Managing them ------------------------------------------------------------------------------
 
 
+class DeviceChoiceOut(Model):
+    value: Any
+    label: str
+    #: The heading it is listed under: the seller of an item.
+    group: str
+    #: Whose devices may choose it: "association" or a team's slug.
+    owner: str
+
+
 class DeviceSettingOut(Model):
     name: str
     label: str
-    kind: Literal["text", "number", "switch"]
+    kind: Literal["text", "number", "switch", "choice"]
     default: Any
     help: str
     max_length: int
     minimum: int | None
     maximum: int | None
+    #: For a choice: what may be chosen now, for each owner.
+    choices: list[DeviceChoiceOut] | None = None
+    #: Its owner changes it on their own page; otherwise only admins.
+    owner_may_change: bool = False
 
 
 class DeviceResourceInfoOut(Model):
@@ -205,10 +227,20 @@ class DeviceTypeOut(Model):
 
 class DeviceOut(Model):
     id: int
-    name: str
+    #: Its random ID: "K7MQ-2X9A".
+    code: str
+    name: str | None
+    #: Its name, else its code.
+    label: str
     type: str
     type_label: str
+    #: "association" or the owning team's slug.
+    owner: str
+    owner_label: str
     place: str | None
+    description: str | None
+    #: The MAC address of the board it last spoke from.
+    hardware_id: str | None
     settings: dict[str, Any]
     enabled: bool
     #: Seen in the last five minutes.
@@ -247,9 +279,17 @@ class DeviceRequestOut(Model):
     address: str | None
 
 
+class DeviceOwnerOut(Model):
+    #: "association" or a team's slug.
+    value: str
+    label: str
+
+
 class DevicesOut(Model):
     items: list[DeviceOut]
     types: list[DeviceTypeOut]
+    #: Who a device can belong to: the association, and each active team.
+    owners: list[DeviceOwnerOut]
     #: Where devices talk to: the device API's address.
     server: str
 
@@ -263,15 +303,22 @@ class DeviceDetailOut(Model):
 
 
 class DeviceIn(Model):
-    name: str = Field(max_length=200)
+    #: Optional: its code stands in for a name.
+    name: str | None = Field(default=None, max_length=200)
     type: str = Field(max_length=40)
+    #: "association" or a team's slug.
+    owner: str = Field(default=ASSOCIATION, max_length=60)
     place: str | None = Field(default=None, max_length=300)
+    description: str | None = Field(default=None, max_length=600)
     settings: dict[str, Any] = Field(default_factory=dict)
 
 
 class DeviceChangeIn(Model):
+    #: Left out: as it is; "": none.
     name: str | None = Field(default=None, max_length=200)
     place: str | None = Field(default=None, max_length=300)
+    description: str | None = Field(default=None, max_length=600)
+    owner: str | None = Field(default=None, max_length=60)
     enabled: bool | None = None
     settings: dict[str, Any] | None = None
 
@@ -282,6 +329,10 @@ class DeviceKeyOut(Model):
     key: str
     #: The file *Download configuration* gives: server, device_id, name, type, key.
     configuration: dict[str, Any]
+    #: *Download starter*: everything firmware for it needs, with the key, as
+    #: Markdown (services/device_starter.py).
+    starter: str
+    starter_name: str
 
 
 #: The event id a report tried from the device's page is shown with.
@@ -302,12 +353,45 @@ def _server():
     return build_public_url("api.device_hello")
 
 
-def _type_out(device_type):
+def owner_value(team):
+    return team.slug if team is not None else ASSOCIATION
+
+
+def _owners():
+    """Who a device can belong to: the association, then each active team."""
+    teams = db.session.execute(
+        db.select(Team).filter_by(status="active").order_by(db.func.lower(Team.name))
+    ).scalars().all()
+    return [None, *teams]
+
+
+def owner_of(value):
+    """The team an owner value names (None for the association), or a refusal."""
+    if value in (None, "", ASSOCIATION):
+        return None
+    team = db.session.execute(db.select(Team).filter_by(slug=value, status="active")).scalar_one_or_none()
+    if team is None:
+        raise ValidationError("Choose who it belongs to.", code="device_owner_unknown",
+                              details={"fields": {"owner": "Choose who it belongs to."}})
+    return team
+
+
+def setting_out(setting, owners):
+    """A setting as a form shows it, its choices for each of ``owners``."""
+    choices = None
+    if setting.choices:
+        choices = [DeviceChoiceOut(value=c.value, label=c.label, group=c.group, owner=owner_value(owner))
+                   for owner in owners for c in setting.choices(owner)]
+    return DeviceSettingOut(name=setting.name, label=setting.label, kind=setting.kind, default=setting.default,
+                            help=setting.help, max_length=setting.max_length, minimum=setting.minimum,
+                            maximum=setting.maximum, choices=choices, owner_may_change=setting.owner_may_change)
+
+
+def _type_out(device_type, owners=None):
+    owners = _owners() if owners is None else owners
     return DeviceTypeOut(
         slug=device_type.slug, label=device_type.label, description=device_type.description,
-        settings=[DeviceSettingOut(name=s.name, label=s.label, kind=s.kind, default=s.default, help=s.help,
-                                   max_length=s.max_length, minimum=s.minimum, maximum=s.maximum)
-                  for s in device_type.settings],
+        settings=[setting_out(s, owners) for s in device_type.settings],
         resources=[DeviceResourceInfoOut(name=name, description=offered.description)
                    for name, offered in sorted(device_type.resources.items())],
         reports=[DeviceReportInfoOut(name=name, description=report.description, tryable=report.tryable)
@@ -318,9 +402,11 @@ def _type_out(device_type):
 def device_out(device):
     device_type = device_types.get(device.type)
     return DeviceOut(
-        id=device.id, name=device.name, type=device.type,
+        id=device.id, code=device.code, name=device.name, label=devices_service.label(device), type=device.type,
         type_label=device_type.label if device_type is not None else device.type,
-        place=device.place, settings=device.settings or {}, enabled=device.enabled,
+        owner=owner_value(device.team), owner_label=devices_service.owner_name(device),
+        place=device.place, description=device.description, hardware_id=device.hardware_id,
+        settings=device.settings or {}, enabled=device.enabled,
         online=devices_service.is_online(device), last_seen_at=device.last_seen_at,
         last_address=device.last_address, firmware=device.firmware,
         key_hint=devices_service.key_hint(device), key_created_at=device.key_created_at,
@@ -335,8 +421,11 @@ def _event_out(event):
 
 
 def _key_out(device, key):
+    server = _server()
     return DeviceKeyOut(device=device_out(device), key=key,
-                        configuration=devices_service.configuration(device, key, _server()))
+                        configuration=devices_service.configuration(device, key, server),
+                        starter=device_starter.starter(device, key, server),
+                        starter_name=device_starter.file_name(device))
 
 
 MANAGE = [Permission.DEVICES_MANAGE]
@@ -345,8 +434,11 @@ MANAGE = [Permission.DEVICES_MANAGE]
 @endpoint("GET", "/admin/devices", response=DevicesOut, permissions=MANAGE, tag="Admin")
 def admin_devices():
     """Every device, the types there are, and where devices talk to."""
+    owners = _owners()
     return DevicesOut(items=[device_out(device) for device in devices_service.devices()],
-                      types=[_type_out(t) for t in device_types.all_types()], server=_server())
+                      types=[_type_out(t, owners) for t in device_types.all_types()],
+                      owners=[DeviceOwnerOut(value=owner_value(o), label=credit_sales.seller_name(o)) for o in owners],
+                      server=_server())
 
 
 @endpoint("POST", "/admin/devices", response=DeviceKeyOut, body=DeviceIn,
@@ -354,7 +446,8 @@ def admin_devices():
 def admin_device_add(body):
     """Add a device. Its key is in the answer, the only time it can be read."""
     device, key = devices_service.add(current_user, name=body.name, type=body.type, place=body.place,
-                                      settings=body.settings)
+                                      description=body.description, settings=body.settings,
+                                      owner=owner_of(body.owner))
     db.session.commit()
     return _key_out(device, key)
 
@@ -375,9 +468,13 @@ def admin_device(device_id):
 @endpoint("PATCH", "/admin/devices/<int:device_id>", response=DeviceOut, body=DeviceChangeIn,
           permissions=MANAGE, tag="Admin")
 def admin_device_change(device_id, body):
-    """Change a device's name, place, settings, or switch it on or off."""
-    device = devices_service.change(current_user, devices_service.device_of(device_id), name=body.name,
-                                    place=body.place, enabled=body.enabled, settings=body.settings)
+    """Change a device's owner, name, place, description, settings, or switch it on or off."""
+    keep = devices_service.KEEP
+    device = devices_service.change(
+        current_user, devices_service.device_of(device_id),
+        name=keep if body.name is None else body.name, place=keep if body.place is None else body.place,
+        description=keep if body.description is None else body.description,
+        owner=keep if body.owner is None else owner_of(body.owner), enabled=body.enabled, settings=body.settings)
     db.session.commit()
     return device_out(device)
 

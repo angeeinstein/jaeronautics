@@ -10,6 +10,7 @@ import {
   Button,
   Code,
   Group,
+  Select,
   SimpleGrid,
   Stack,
   Switch,
@@ -71,9 +72,12 @@ function State({ device }: { device: Device }) {
               </Text>
             </Group>,
           ],
+          ['Code', device.code],
           ['Type', device.type_label],
+          ['Owner', device.owner_label],
           ['Last seen', device.last_seen_at ? formatDateTime(device.last_seen_at) : 'Never'],
           ['From', device.last_address ?? '–'],
+          ['Board', device.hardware_id ?? '–'],
           ['Firmware', device.firmware ?? '–'],
           ['Added', formatDateTime(device.created_at)],
         ]}
@@ -82,10 +86,20 @@ function State({ device }: { device: Device }) {
   );
 }
 
-function SettingsForm({ device, type }: { device: Device; type: DeviceType | undefined }) {
+function SettingsForm({
+  device,
+  type,
+  owners,
+}: {
+  device: Device;
+  type: DeviceType | undefined;
+  owners: Schemas['DeviceOwnerOut'][];
+}) {
   const client = useQueryClient();
-  const [name, setName] = useState(device.name);
+  const [owner, setOwner] = useState(device.owner);
+  const [name, setName] = useState(device.name ?? '');
   const [place, setPlace] = useState(device.place ?? '');
+  const [description, setDescription] = useState(device.description ?? '');
   const [settings, setSettings] = useState<Settings>(device.settings);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useMutation({
@@ -117,9 +131,30 @@ function SettingsForm({ device, type }: { device: Device; type: DeviceType | und
             save.mutate({ enabled: event.currentTarget.checked });
           }}
         />
+        <Select
+          label="Owner"
+          description="Its owner names it and chooses what it does, on their own page. A new owner's device sells only the new owner's items."
+          data={owners}
+          value={owner}
+          allowDeselect={false}
+          onChange={(next) => {
+            const chosen = next ?? 'association';
+            if (chosen !== owner) {
+              // What fitted the old owner (an item of its price list) does not fit the new one;
+              // the rest -- a greeting -- stays.
+              const byOwner = (type?.settings ?? []).filter((setting) => setting.kind === 'choice');
+              setSettings({
+                ...settings,
+                ...Object.fromEntries(byOwner.map((setting) => [setting.name, null])),
+              });
+            }
+            setOwner(chosen);
+          }}
+        />
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <TextInput
-            label="Name"
+            label="Name (optional)"
+            placeholder={device.code}
             maxLength={80}
             value={name}
             error={errors.name ?? null}
@@ -137,9 +172,19 @@ function SettingsForm({ device, type }: { device: Device; type: DeviceType | und
             }}
           />
         </SimpleGrid>
+        <TextInput
+          label="Description (optional)"
+          maxLength={300}
+          value={description}
+          error={errors.description ?? null}
+          onChange={(event) => {
+            setDescription(event.currentTarget.value);
+          }}
+        />
         {type ? (
           <TypeSettingsFields
-            type={type}
+            settings={type.settings}
+            owner={owner}
             values={settings}
             errors={errors}
             onChange={(field, value) => {
@@ -151,7 +196,7 @@ function SettingsForm({ device, type }: { device: Device; type: DeviceType | und
           <Button
             loading={save.isPending}
             onClick={() => {
-              save.mutate({ name, place, settings });
+              save.mutate({ owner, name, place, description, settings });
             }}
           >
             Save
@@ -296,6 +341,11 @@ function DeviceApi({
                     {request.description}
                   </Text>
                 ) : null}
+                {request.tryBody ? null : (
+                  <Text size="sm" c="dimmed">
+                    Not sent from here: it would really happen.
+                  </Text>
+                )}
               </Stack>
               {request.tryBody ? (
                 <Button
@@ -308,11 +358,7 @@ function DeviceApi({
                 >
                   Send
                 </Button>
-              ) : (
-                <Text size="sm" c="dimmed">
-                  Not sent from here: it would really happen.
-                </Text>
-              )}
+              ) : null}
             </Group>
             {request.report && request.tryBody ? (
               <Textarea
@@ -559,7 +605,15 @@ function RemoveDevice({ device }: { device: Device }) {
   );
 }
 
-function DevicePage({ detail, types }: { detail: Detail; types: DeviceType[] }) {
+function DevicePage({
+  detail,
+  types,
+  owners,
+}: {
+  detail: Detail;
+  types: DeviceType[];
+  owners: Schemas['DeviceOwnerOut'][];
+}) {
   const { device } = detail;
   const type = types.find((item) => item.slug === device.type);
   return (
@@ -568,9 +622,10 @@ function DevicePage({ detail, types }: { detail: Detail; types: DeviceType[] }) 
         <State device={device} />
         {/* Keyed by what was saved, so it starts afresh after a save, not after every refresh. */}
         <SettingsForm
-          key={JSON.stringify([device.name, device.place, device.settings])}
+          key={JSON.stringify([device.owner, device.name, device.place, device.description, device.settings])}
           device={device}
           type={type}
+          owners={owners}
         />
       </SimpleGrid>
       <KeyCard device={device} />
@@ -598,7 +653,7 @@ export function DeviceDetail() {
   });
   // Every few seconds: watching a device while its firmware is written.
   useLiveRefresh(key, EVERY_5_SECONDS);
-  const title = detail.data?.device.name ?? 'Device';
+  const title = detail.data?.device.label ?? 'Device';
   return (
     <>
       <PageHeader
@@ -618,7 +673,7 @@ export function DeviceDetail() {
       ) : list.isError ? (
         <ErrorState error={list.error} onRetry={() => void list.refetch()} />
       ) : (
-        <DevicePage detail={detail.data} types={list.data.types} />
+        <DevicePage detail={detail.data} types={list.data.types} owners={list.data.owners} />
       )}
     </>
   );

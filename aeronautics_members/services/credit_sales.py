@@ -10,10 +10,10 @@ association's -- unless the teams carry Stripe's fees: then each team sale
 carries its share of the fee of the top-up that paid for it
 (services/credit_fees.py).
 
-How a sale is made is left open on purpose (docs/credit-plan.md, "Card
-readers"): today an admin or the treasurer books one by hand; later a card
-reader beside the fridge will, through the same :func:`sell`. A sale taken
-back gives the credit back and stops counting for the seller -- once.
+A sale is made in two ways, through the same :func:`sell`: an admin or the
+treasurer books one by hand, or a member taps their card on a sales point
+beside the fridge (services/sales_points.py, docs/cards-plan.md). A sale
+taken back gives the credit back and stops counting for the seller -- once.
 """
 
 from ..db_models import CreditEntry, CreditItem, db
@@ -22,10 +22,11 @@ from . import credit
 from .audit import log_audit_event
 from .clock import get_now_utc
 
-#: How a sale was made. ``booked``: by somebody in the portal, for the member.
-#: A card reader will be another.
+#: How a sale was made. ``booked``: by somebody in the portal, for the
+#: member; ``reader``: with the member's card at a sales point.
 BOOKED = "booked"
-CHANNELS = (BOOKED,)
+READER = "reader"
+CHANNELS = (BOOKED, READER)
 
 LEAST_PRICE = 1
 NAME_LENGTH = 60
@@ -125,16 +126,18 @@ def seller_name(team):
     return team.name if team is not None else "Joanneum Aeronautics"
 
 
-def sell(user, item, *, by=None, channel=BOOKED):
+def sell(user, item, *, by=None, channel=BOOKED, card=None, device=None):
     """Sell ``item`` to ``user`` for credit, at its price now. Refused when the
-    credit does not cover it, the item is switched off, or credit is."""
+    credit does not cover it, the item is switched off, or credit is. At a
+    reader, ``card`` and ``device`` are what it was paid with, and where."""
     if channel not in CHANNELS:
         raise ValidationError("Unknown way of selling.", code="credit_channel_invalid")
     if not item.active:
         raise ConflictError(f"{item.name} is not sold any more.", code="credit_item_inactive")
     if item.team is not None and item.team.status != "active":
         raise ConflictError(f"{item.team.name} is archived.", code="credit_seller_archived")
-    return credit.spend(user, item.price_cents, item.name, team=item.team, by=by, item=item, channel=channel)
+    return credit.spend(user, item.price_cents, item.name, team=item.team, by=by, item=item, channel=channel,
+                        card=card, device=device)
 
 
 def take_back(actor, entry, *, note=None):
@@ -147,7 +150,8 @@ def take_back(actor, entry, *, note=None):
     reason = " ".join((note or "").split())[:100]
     description = f"{entry.description} taken back" + (f": {reason}" if reason else "")
     undone = credit._book(account, credit.TAKEN_BACK, -entry.amount_cents, description, team=entry.team,
-                          by=actor, item=entry.item, channel=entry.channel, reverses=entry)
+                          by=actor, item=entry.item, channel=entry.channel, reverses=entry, card=entry.card,
+                          device=entry.device)
     undone.kept_cents = -entry.kept_cents if entry.kept_cents else None
     return undone
 

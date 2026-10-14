@@ -1,8 +1,9 @@
 /**
  * Settings -> Devices: card readers and whatever else talks to the portal
- * (docs/devices-plan.md). Every device with its state, refreshed while the
- * page is open, and adding one -- whose key is then shown the one time it can
- * be. One device's page: Device.tsx. Data: /api/v1/admin/devices
+ * (docs/devices-plan.md). Every device with its owner and state, refreshed
+ * while the page is open, and adding one: its type and its owner (the
+ * association or a team), whose page then runs it -- the key is shown the one
+ * time it can be. One device's page: Device.tsx. Data: /api/v1/admin/devices
  * (aeronautics_members/api/devices.py).
  */
 import { Button, Group, Select, SimpleGrid, Stack, Table, Text, TextInput } from '@mantine/core';
@@ -38,15 +39,14 @@ function DeviceRow({ device }: { device: Device }) {
     <Table.Tr>
       <Table.Td>
         <Text component={Link} to={`/admin/settings/devices/${String(device.id)}`} fw={600} size="sm">
-          {device.name}
+          {device.label}
         </Text>
-        {device.place ? (
-          <Text size="xs" c="dimmed">
-            {device.place}
-          </Text>
-        ) : null}
+        <Text size="xs" c="dimmed">
+          {[device.name ? device.code : null, device.place].filter(Boolean).join(' · ') || null}
+        </Text>
       </Table.Td>
       <Table.Td>{device.type_label}</Table.Td>
+      <Table.Td>{device.owner_label}</Table.Td>
       <Table.Td>
         <Pill tone={status.tone}>{status.label}</Pill>
         <Text size="xs" c="dimmed">
@@ -60,13 +60,16 @@ function DeviceRow({ device }: { device: Device }) {
 
 function AddDevice({
   types,
+  owners,
   onAdded,
 }: {
   types: Schemas['DeviceTypeOut'][];
+  owners: Schemas['DeviceOwnerOut'][];
   onAdded: (key: DeviceKey) => void;
 }) {
   const client = useQueryClient();
   const [name, setName] = useState('');
+  const [owner, setOwner] = useState('association');
   const [typeSlug, setTypeSlug] = useState<string | null>(
     types.length === 1 ? (types[0]?.slug ?? null) : null,
   );
@@ -76,7 +79,11 @@ function AddDevice({
   const type = types.find((item) => item.slug === typeSlug);
   const add = useMutation({
     mutationFn: () =>
-      call(api.POST('/api/v1/admin/devices', { body: { name, type: typeSlug ?? '', place, settings } })),
+      call(
+        api.POST('/api/v1/admin/devices', {
+          body: { name: name || null, type: typeSlug ?? '', owner, place, settings },
+        }),
+      ),
     onSuccess: async (result) => {
       setErrors({});
       setName('');
@@ -94,9 +101,22 @@ function AddDevice({
   return (
     <Panel title="Add a device">
       <Stack gap="md">
-        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+          <Select
+            label="Owner"
+            description="Its owner names it and chooses what it does."
+            data={owners}
+            value={owner}
+            error={errors.owner ?? null}
+            allowDeselect={false}
+            onChange={(next) => {
+              setOwner(next ?? 'association');
+              setSettings({});
+            }}
+          />
           <TextInput
-            label="Name"
+            label="Name (optional)"
+            description="Its code stands in for it."
             placeholder="Fridge reader"
             maxLength={80}
             value={name}
@@ -134,7 +154,8 @@ function AddDevice({
               {type.description}
             </Text>
             <TypeSettingsFields
-              type={type}
+              settings={type.settings}
+              owner={owner}
               values={settings}
               errors={errors}
               onChange={(field, value) => {
@@ -166,12 +187,13 @@ function DeviceList({ data }: { data: Schemas['DevicesOut'] }) {
     <Stack gap="lg">
       <Panel title="Devices" flush>
         {data.items.length ? (
-          <Table.ScrollContainer minWidth={560} type="native">
+          <Table.ScrollContainer minWidth={680} type="native">
             <Table verticalSpacing="sm" aria-label="Devices">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th scope="col">Name</Table.Th>
                   <Table.Th scope="col">Type</Table.Th>
+                  <Table.Th scope="col">Owner</Table.Th>
                   <Table.Th scope="col">State</Table.Th>
                   <Table.Th scope="col">Firmware</Table.Th>
                 </Table.Tr>
@@ -197,7 +219,7 @@ function DeviceList({ data }: { data: Schemas['DevicesOut'] }) {
           }}
         />
       ) : (
-        <AddDevice types={data.types} onAdded={setShown} />
+        <AddDevice types={data.types} owners={data.owners} onAdded={setShown} />
       )}
       <Text size="sm" c="dimmed">
         Devices talk to <code>{data.server}</code>, each with its own key.
